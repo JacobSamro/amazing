@@ -1,0 +1,11 @@
+[package]
+name = "ferric-layout"
+description = "Block/inline formatting-context layout engine"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ferric-dom = { path = "../ferric-dom" }
+ferric-css = { path = "../ferric-css" }

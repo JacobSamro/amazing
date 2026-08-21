@@ -1,0 +1,10 @@
+[package]
+name = "ferric-paint"
+description = "Pure-Rust software rasterizer (scanline fill, anti-aliasing)"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ferric-layout = { path = "../ferric-layout" }
