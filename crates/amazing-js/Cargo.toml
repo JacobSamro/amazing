@@ -1,0 +1,10 @@
+[package]
+name = "amazing-js"
+description = "ECMA-262 lexer, parser, and tree-walking interpreter"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+amazing-common = { path = "../amazing-common" }

@@ -1,0 +1,11 @@
+[package]
+name = "amazing-layout"
+description = "Block/inline formatting-context layout engine"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+amazing-dom = { path = "../amazing-dom" }
+amazing-css = { path = "../amazing-css" }

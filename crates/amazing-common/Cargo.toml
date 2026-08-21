@@ -1,0 +1,7 @@
+[package]
+name = "amazing-common"
+description = "Shared byte-stream/text utilities for hand-written Amazing tokenizers"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
