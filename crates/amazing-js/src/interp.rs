@@ -11,7 +11,8 @@ use std::rc::Rc;
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
-    number_to_string, Exotic, FunctionBody, JsFunction, JsObject, JsValue, Obj, Throw,
+    number_to_string, Exotic, FunctionBody, JsFunction, JsObject, JsValue, MapKey, MapState, Obj,
+    SetState, Throw,
 };
 
 pub const MAX_CALL_DEPTH: u32 = 512;
@@ -29,6 +30,8 @@ pub struct Interpreter {
     pub object_proto: Obj,
     pub function_proto: Obj,
     pub array_proto: Obj,
+    pub map_proto: Obj,
+    pub set_proto: Obj,
     pub output: RefCell<Vec<String>>,
     depth: u32,
 }
@@ -46,6 +49,16 @@ impl Interpreter {
             o.proto = Some(object_proto.clone());
             o
         })));
+        let map_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
+        let set_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let global_obj = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
@@ -58,6 +71,8 @@ impl Interpreter {
             object_proto,
             function_proto,
             array_proto,
+            map_proto,
+            set_proto,
             output: RefCell::new(Vec::new()),
             depth: 0,
         };
@@ -1026,6 +1041,16 @@ impl Interpreter {
     fn get_prop(&mut self, v: &JsValue, k: &str) -> Result<JsValue, Throw> {
         match v {
             JsValue::Object(o) => {
+                if k == "size" {
+                    let size = match &o.borrow().exotic {
+                        Exotic::Map(state) => Some(state.entries.len()),
+                        Exotic::Set(state) => Some(state.entries.len()),
+                        _ => None,
+                    };
+                    if let Some(size) = size {
+                        return Ok(JsValue::num(size as f64));
+                    }
+                }
                 if let Some(x) = o.borrow().get_own(k) {
                     Ok(x)
                 } else if let Some(p) = o.borrow().proto.clone() {
@@ -1234,6 +1259,9 @@ impl Interpreter {
         JsValue::Object(Obj(Rc::new(RefCell::new(o))))
     }
     fn install_builtins(&mut self) {
+        self.define_global("undefined", JsValue::Undefined);
+        self.define_global("NaN", JsValue::Num(f64::NAN));
+        self.define_global("Infinity", JsValue::Num(f64::INFINITY));
         let object_ctor = Self::native("Object", native_object, &self.function_proto);
         if let JsValue::Object(o) = &object_ctor {
             let _ = self.set_prop(
@@ -1247,6 +1275,8 @@ impl Interpreter {
             "Array",
             Self::native("Array", native_array, &self.function_proto),
         );
+        self.define_global("Map", Self::native("Map", native_map, &self.function_proto));
+        self.define_global("Set", Self::native("Set", native_set, &self.function_proto));
         let _ = self.set_prop(
             &JsValue::Object(self.object_proto.clone()),
             "toString",
@@ -1264,6 +1294,37 @@ impl Interpreter {
         ] {
             let _ = self.set_prop(
                 &JsValue::Object(self.array_proto.clone()),
+                n,
+                Self::native(n, f, &self.function_proto),
+            );
+        }
+        for (n, f) in [
+            ("get", native_map_get as crate::value::NativeFn),
+            ("set", native_map_set as crate::value::NativeFn),
+            ("has", native_map_has as crate::value::NativeFn),
+            ("delete", native_map_delete as crate::value::NativeFn),
+            ("clear", native_map_clear as crate::value::NativeFn),
+            ("keys", native_map_keys as crate::value::NativeFn),
+            ("values", native_map_values as crate::value::NativeFn),
+            ("entries", native_map_entries as crate::value::NativeFn),
+        ] {
+            let _ = self.set_prop(
+                &JsValue::Object(self.map_proto.clone()),
+                n,
+                Self::native(n, f, &self.function_proto),
+            );
+        }
+        for (n, f) in [
+            ("add", native_set_add as crate::value::NativeFn),
+            ("has", native_set_has as crate::value::NativeFn),
+            ("delete", native_set_delete as crate::value::NativeFn),
+            ("clear", native_set_clear as crate::value::NativeFn),
+            ("keys", native_set_values as crate::value::NativeFn),
+            ("values", native_set_values as crate::value::NativeFn),
+            ("entries", native_set_entries as crate::value::NativeFn),
+        ] {
+            let _ = self.set_prop(
+                &JsValue::Object(self.set_proto.clone()),
                 n,
                 Self::native(n, f, &self.function_proto),
             );
@@ -1308,6 +1369,320 @@ fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsV
         .next()
         .filter(|v| v.is_object())
         .unwrap_or_else(|| i.object_value()))
+}
+
+fn map_key(value: &JsValue) -> MapKey {
+    match value {
+        JsValue::Undefined => MapKey::Undefined,
+        JsValue::Null => MapKey::Null,
+        JsValue::Bool(v) => MapKey::Bool(*v),
+        JsValue::Num(v) => MapKey::Num(*v),
+        JsValue::Str(v) => MapKey::Str(v.clone()),
+        JsValue::Object(v) => MapKey::Object(v.clone()),
+    }
+}
+
+fn require_map(value: &JsValue) -> Result<Obj, Throw> {
+    match value {
+        JsValue::Object(o) if matches!(o.borrow().exotic, Exotic::Map(_)) => Ok(o.clone()),
+        _ => Err(Throw::type_error("Map method called on a non-Map object")),
+    }
+}
+
+fn require_set(value: &JsValue) -> Result<Obj, Throw> {
+    match value {
+        JsValue::Object(o) if matches!(o.borrow().exotic, Exotic::Set(_)) => Ok(o.clone()),
+        _ => Err(Throw::type_error("Set method called on a non-Set object")),
+    }
+}
+
+fn array_values(i: &mut Interpreter, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let out = JsValue::object({
+        let mut o = JsObject::array();
+        o.proto = Some(i.array_proto.clone());
+        o
+    });
+    for (n, value) in values.into_iter().enumerate() {
+        i.set_prop(&out, &n.to_string(), value)?;
+    }
+    Ok(out)
+}
+
+fn map_set_raw(map: &Obj, key: MapKey, value: JsValue) {
+    let mut object = map.borrow_mut();
+    if let Exotic::Map(state) = &mut object.exotic {
+        if let Some((_, slot)) = state.entries.iter_mut().find(|(k, _)| k.same(&key)) {
+            *slot = value;
+        } else {
+            state.entries.push((key, value));
+        }
+    }
+}
+
+fn native_map(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let map = Obj(Rc::new(RefCell::new({
+        let mut o = JsObject::ordinary();
+        o.exotic = Exotic::Map(MapState::default());
+        o.proto = Some(i.map_proto.clone());
+        o
+    })));
+    if let Some(source) = args.first() {
+        if !source.is_null() && !source.is_undefined() {
+            for entry in i.iterate(source)? {
+                let key = i.get_prop(&entry, "0")?;
+                let value = i.get_prop(&entry, "1")?;
+                map_set_raw(&map, map_key(&key), value);
+            }
+        }
+    }
+    Ok(JsValue::Object(map))
+}
+
+fn native_map_get(
+    _: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let map = require_map(&this)?;
+    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
+    let object = map.borrow();
+    if let Exotic::Map(state) = &object.exotic {
+        if let Some((_, value)) = state.entries.iter().find(|(k, _)| k.same(&key)) {
+            return Ok(value.clone());
+        }
+    }
+    Ok(JsValue::Undefined)
+}
+
+fn native_map_set(
+    _: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let map = require_map(&this)?;
+    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
+    let value = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    map_set_raw(&map, key, value);
+    Ok(this)
+}
+
+fn native_map_has(
+    _: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let map = require_map(&this)?;
+    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
+    let object = map.borrow();
+    let found = matches!(&object.exotic, Exotic::Map(state) if state.entries.iter().any(|(k, _)| k.same(&key)));
+    Ok(JsValue::Bool(found))
+}
+
+fn native_map_delete(
+    _: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let map = require_map(&this)?;
+    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
+    let mut object = map.borrow_mut();
+    let deleted = if let Exotic::Map(state) = &mut object.exotic {
+        if let Some(pos) = state.entries.iter().position(|(k, _)| k.same(&key)) {
+            state.entries.remove(pos);
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    Ok(JsValue::Bool(deleted))
+}
+
+fn native_map_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let map = require_map(&this)?;
+    if let Exotic::Map(state) = &mut map.borrow_mut().exotic {
+        state.entries.clear();
+    }
+    Ok(JsValue::Undefined)
+}
+
+fn native_map_keys(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let map = require_map(&this)?;
+    let values = if let Exotic::Map(state) = &map.borrow().exotic {
+        state
+            .entries
+            .iter()
+            .map(|(key, _)| key_value(key))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    array_values(i, values)
+}
+
+fn native_map_values(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let map = require_map(&this)?;
+    let values = if let Exotic::Map(state) = &map.borrow().exotic {
+        state
+            .entries
+            .iter()
+            .map(|(_, value)| value.clone())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    array_values(i, values)
+}
+
+fn native_map_entries(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let map = require_map(&this)?;
+    let entries = if let Exotic::Map(state) = &map.borrow().exotic {
+        state
+            .entries
+            .iter()
+            .map(|(key, value)| {
+                array_values(i, vec![key_value(key), value.clone()]).unwrap_or(JsValue::Undefined)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    array_values(i, entries)
+}
+
+fn key_value(key: &MapKey) -> JsValue {
+    match key {
+        MapKey::Undefined => JsValue::Undefined,
+        MapKey::Null => JsValue::Null,
+        MapKey::Bool(v) => JsValue::Bool(*v),
+        MapKey::Num(v) => JsValue::Num(*v),
+        MapKey::Str(v) => JsValue::Str(v.clone()),
+        MapKey::Object(v) => JsValue::Object(v.clone()),
+    }
+}
+
+fn native_set(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let set = Obj(Rc::new(RefCell::new({
+        let mut o = JsObject::ordinary();
+        o.exotic = Exotic::Set(SetState::default());
+        o.proto = Some(i.set_proto.clone());
+        o
+    })));
+    if let Some(source) = args.first() {
+        if !source.is_null() && !source.is_undefined() {
+            for value in i.iterate(source)? {
+                let key = map_key(&value);
+                if let Exotic::Set(state) = &mut set.borrow_mut().exotic {
+                    if !state.entries.iter().any(|existing| existing.same(&key)) {
+                        state.entries.push(key);
+                    }
+                }
+            }
+        }
+    }
+    Ok(JsValue::Object(set))
+}
+
+fn native_set_add(
+    _: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let set = require_set(&this)?;
+    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
+    if let Exotic::Set(state) = &mut set.borrow_mut().exotic {
+        if !state.entries.iter().any(|existing| existing.same(&key)) {
+            state.entries.push(key);
+        }
+    }
+    Ok(this)
+}
+
+fn native_set_has(
+    _: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let set = require_set(&this)?;
+    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
+    let found = matches!(&set.borrow().exotic, Exotic::Set(state) if state.entries.iter().any(|existing| existing.same(&key)));
+    Ok(JsValue::Bool(found))
+}
+
+fn native_set_delete(
+    _: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let set = require_set(&this)?;
+    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
+    let mut object = set.borrow_mut();
+    let deleted = if let Exotic::Set(state) = &mut object.exotic {
+        if let Some(pos) = state
+            .entries
+            .iter()
+            .position(|existing| existing.same(&key))
+        {
+            state.entries.remove(pos);
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    Ok(JsValue::Bool(deleted))
+}
+
+fn native_set_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let set = require_set(&this)?;
+    if let Exotic::Set(state) = &mut set.borrow_mut().exotic {
+        state.entries.clear();
+    }
+    Ok(JsValue::Undefined)
+}
+
+fn native_set_values(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let set = require_set(&this)?;
+    let values = if let Exotic::Set(state) = &set.borrow().exotic {
+        state.entries.iter().map(key_value).collect()
+    } else {
+        Vec::new()
+    };
+    array_values(i, values)
+}
+
+fn native_set_entries(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let set = require_set(&this)?;
+    let entries = if let Exotic::Set(state) = &set.borrow().exotic {
+        state
+            .entries
+            .iter()
+            .map(|key| {
+                array_values(i, vec![key_value(key), key_value(key)]).unwrap_or(JsValue::Undefined)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    array_values(i, entries)
 }
 fn native_object_keys(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let src = a.first().cloned().unwrap_or(JsValue::Undefined);
@@ -1480,6 +1855,38 @@ mod tests {
         assert_eq!(i.to_string(&v).unwrap(), "1-2-3");
         let v = i.run_script("Object.keys({a:1,b:2}).length").unwrap();
         assert_eq!(num(v), 2.0);
+    }
+
+    #[test]
+    fn map_uses_same_value_zero_and_preserves_insertion_order() {
+        let mut i = Interpreter::new();
+        let v = i
+            .run_script(
+                "let m=new Map([['a',1],['b',2]]); m.set('a',9).set('c',3); m.get('a') + m.size;",
+            )
+            .unwrap();
+        assert_eq!(num(v), 12.0);
+        let v = i
+            .run_script("new Map([['a',1],['b',2]]).keys().join(',');")
+            .unwrap();
+        assert_eq!(i.to_string(&v).unwrap(), "a,b");
+        let v = i
+            .run_script("let m2=new Map(); m2.set(NaN,1); m2.has(NaN);")
+            .unwrap();
+        assert!(matches!(v, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn set_deduplicates_same_value_zero_and_supports_mutation() {
+        let mut i = Interpreter::new();
+        let v = i
+            .run_script("let s=new Set([1,1,2,NaN,NaN]); s.add(3); s.delete(2); s.size;")
+            .unwrap();
+        assert_eq!(num(v), 3.0);
+        let v = i
+            .run_script("new Set(['x','y']).values().join('-');")
+            .unwrap();
+        assert_eq!(i.to_string(&v).unwrap(), "x-y");
     }
 
     #[test]
