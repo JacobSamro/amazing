@@ -278,7 +278,8 @@ relational/equality operators, unary/update/delete/typeof, conditionals,
 loops, switch, try/catch/finally, throw, `for-in`/`for-of`, templates,
 optional chaining, and captured `console.log`. Built-ins include `Object`,
 `Array`, `Map`, `Set`, `Promise`, `Date`, `Math.abs/max/min`, `Number`,
-`String`, `Boolean`, `Function.call/apply/bind`, `Object.keys/values`, `Object.assign`, `JSON.parse/stringify`,
+`String`, `Boolean`, `Function.call/apply/bind`, `Object.keys/values`, `Object.assign`, `Array.from/of`,
+`Number.isNaN/isFinite`, `JSON.parse/stringify`,
 `eval`, numeric parsing globals, and array `push`/`pop`/`join`/`slice`/
 `concat`/`includes`/`indexOf`/`map`/`filter`/`reduce`/`forEach`, plus common
 string utilities. Map and Set use

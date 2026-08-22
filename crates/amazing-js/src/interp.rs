@@ -2179,6 +2179,16 @@ impl Interpreter {
                 "isArray",
                 Self::native("isArray", native_array_is_array, &self.function_proto),
             );
+            let _ = self.set_prop(
+                &array,
+                "from",
+                Self::native("from", native_array_from, &self.function_proto),
+            );
+            let _ = self.set_prop(
+                &array,
+                "of",
+                Self::native("of", native_array_of, &self.function_proto),
+            );
         }
         self.define_global("Map", Self::native("Map", native_map, &self.function_proto));
         self.define_global("Set", Self::native("Set", native_set, &self.function_proto));
@@ -2389,6 +2399,16 @@ impl Interpreter {
             let _ = self.set_prop(&number, "NaN", JsValue::Num(f64::NAN));
             let _ = self.set_prop(&number, "MAX_VALUE", JsValue::Num(f64::MAX));
             let _ = self.set_prop(&number, "MIN_VALUE", JsValue::Num(f64::from_bits(1)));
+            let _ = self.set_prop(
+                &number,
+                "isNaN",
+                Self::native("isNaN", native_number_is_nan, &self.function_proto),
+            );
+            let _ = self.set_prop(
+                &number,
+                "isFinite",
+                Self::native("isFinite", native_number_is_finite, &self.function_proto),
+            );
         }
     }
     fn define_global(&self, n: &str, v: JsValue) {
@@ -2540,6 +2560,52 @@ fn native_array_is_array(
 ) -> Result<JsValue, Throw> {
     Ok(JsValue::Bool(
         matches!(args.first(), Some(JsValue::Object(object)) if matches!(object.borrow().exotic, Exotic::Array)),
+    ))
+}
+
+fn native_array_from(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let mut values = i.iterate(&source)?;
+    if let Some(callback) = args.get(1) {
+        if callable_function(callback).is_none() {
+            return Err(Throw::type_error("Array.from mapFn is not callable"));
+        }
+        for (index, value) in values.iter_mut().enumerate() {
+            *value = i.call_value(
+                callback,
+                JsValue::Undefined,
+                vec![value.clone(), JsValue::num(index as f64)],
+            )?;
+        }
+    }
+    array_values(i, values)
+}
+
+fn native_array_of(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    array_values(i, args)
+}
+
+fn native_number_is_nan(
+    _: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(JsValue::Bool(
+        matches!(args.first(), Some(JsValue::Num(value)) if value.is_nan()),
+    ))
+}
+
+fn native_number_is_finite(
+    _: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(JsValue::Bool(
+        matches!(args.first(), Some(JsValue::Num(value)) if value.is_finite()),
     ))
 }
 
@@ -4418,6 +4484,11 @@ mod tests {
         assert_eq!(i.to_string(&value).unwrap(), "1,2");
         let value = i
             .run_script("[1,2,3,4].slice(1,3).concat([5]).includes(5) && [1,2,3].indexOf(2)===1 && 'abcdef'.replace('cd','X')==='abXef' && 'abc'.startsWith('a') && 'abc'.endsWith('c');")
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+        let mut k = Interpreter::new();
+        let value = k
+            .run_script("Array.from('ab').concat(Array.of(3)).join(',') === 'a,b,3' && Number.isNaN(NaN) && Number.isFinite(3);")
             .unwrap();
         assert!(matches!(value, JsValue::Bool(true)));
         let mut j = Interpreter::new();
