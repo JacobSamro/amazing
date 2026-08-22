@@ -303,7 +303,7 @@ covered by the runtime milestone.
 Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
 script, prints captured console lines, then its completion value. The
 interpreter's focused runtime coverage is included in the `amazing-js` suite;
-`cargo test --workspace` is green on win-001 (140 tests in `amazing-js`).
+`cargo test --workspace` is green on win-001 (142 tests in `amazing-js`).
 
 Conformance evidence: the official Test262 repository was shallow-sparsely
 checked out on win-001 with 641 tests across the selected classic-language
@@ -314,8 +314,8 @@ for modules/async/negative tests, BigInt/Symbol/private/accessor/destructuring
 features, and unavailable harness hooks. This is a focused slice, not whole-suite
 coverage.
 
-Known gaps: there is no browser event loop or Promise timing/job integration
-surface yet, and generators, symbols, modules, real Symbol identity, regex
+Known gaps: the browser loop is cooperative and currently lacks network event
+sources, and generators, symbols, modules, real Symbol identity, regex
 literals, and full class semantics are deferred. Basic
 `super` property and constructor calls now work.
 The `Symbol.iterator` key bridge, lazy `next()` consumption, and abrupt-body
