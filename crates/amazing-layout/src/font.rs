@@ -357,9 +357,13 @@ impl ParsedFont {
     }
 
     /// Character -> glyph id; 0 means unmapped/.notdef.
+    ///
+    /// Ids the cmap produces beyond `numGlyphs` (filler segments in
+    /// hand-built or damaged subtables) are treated as unmapped, matching
+    /// [`Self::advance`].
     pub fn glyph_index(&self, c: char) -> u16 {
         let code = c as u32;
-        match &self.cmap {
+        let gid = match &self.cmap {
             CmapTable::Format4(d) => {
                 if code > 0xFFFF {
                     0 // format 4 is BMP-only by construction
@@ -368,6 +372,11 @@ impl ParsedFont {
                 }
             }
             CmapTable::Format12(d) => glyph_index_fmt12(d, code).unwrap_or(0),
+        };
+        if gid >= self.num_glyphs {
+            0
+        } else {
+            gid
         }
     }
 
@@ -601,7 +610,7 @@ pub struct GlyphOutline {
 /// Slices the raw glyf record for `gid` out of the retained tables.
 /// Bounds-checks the loca pair against the glyf length; a pair with
 /// `end < start` is malformed and yields `None`.
-fn glyph_record<'a>(t: &GlyphTables, gid: u16) -> Option<&'a [u8]> {
+fn glyph_record<'a>(t: &'a GlyphTables, gid: u16) -> Option<&'a [u8]> {
     let i = gid as usize;
     let (start, end) = if t.long_format {
         (
@@ -764,11 +773,11 @@ fn close_quadratic(pts: &[OutlinePoint]) -> Option<Vec<OutlinePoint>> {
             // Emit mid(c[n-1], c[0]), then each control followed by the
             // midpoint to its successor; the chain closes cyclically.
             for k in 0..n {
+                let prev = pts[(k + n - 1) % n];
                 let cur = pts[k];
-                let next = pts[(k + 1) % n];
                 out.push(OutlinePoint {
-                    x: (cur.x + next.x) / 2.0,
-                    y: (cur.y + next.y) / 2.0,
+                    x: (prev.x + cur.x) / 2.0,
+                    y: (prev.y + cur.y) / 2.0,
                     on_curve: true,
                 });
                 out.push(cur);
@@ -1464,8 +1473,11 @@ mod tests {
         let glyf: Vec<u8> = padded.concat();
         let n = records.len() as u16;
         let advances: Vec<(u16, i16)> = (0..n).map(|i| (500 + 100 * i, 0)).collect();
+        // indexToLocFormat lives at head offset 50: 0 = short, 1 = long.
+        let mut hd = head(1000);
+        hd[50..52].copy_from_slice(&be16(u16::from(long_loca)));
         assemble(&[
-            (b"head", head(1000)),
+            (b"head", hd),
             (b"hhea", hhea(800, -200, 300, n)),
             (b"maxp", maxp_v1(n)),
             (b"hmtx", hmtx(&advances)),
@@ -1545,10 +1557,11 @@ mod tests {
         let f = ParsedFont::parse(&font).unwrap();
         let o = f.glyph_outline(2).expect("composite");
         assert_eq!(o.contours.len(), 2);
-        // Component 1: (100,100)*0.5 + (50,0) = (100,50); (600,800)*0.5 = (350,450).
+        // Component 1: (100,100)*0.5 + (50,0) = (100,50); (600,800)*0.5 + (50,0)
+        // = (350,400).
         let p = &o.contours[0].points;
         assert_eq!((p[0].x, p[0].y), (100.0, 50.0));
-        assert_eq!((p[2].x, p[2].y), (350.0, 450.0));
+        assert_eq!((p[2].x, p[2].y), (350.0, 400.0));
         assert!(p.iter().all(|q| q.on_curve));
         // Component 2: pure translation.
         let q = &o.contours[1].points;
@@ -1558,17 +1571,18 @@ mod tests {
 
     #[test]
     fn composite_x_y_scale_and_2x2() {
-        // One component with WE_HAVE_AN_X_AND_Y_SCALE (x2, y0.5), then one
-        // with WE_HAVE_A_TWO_BY_TWO [[2,0],[0,1]] reading scale01/scale10.
+        // One component with WE_HAVE_AN_X_AND_Y_SCALE (x1.5, y0.5 — F2Dot14
+        // cannot encode 2.0), then one with WE_HAVE_A_TWO_BY_TWO
+        // [[1,0],[0,1]] reading scale01/scale10.
         let mut rec = vec![0u8; 10];
         rec[0..2].copy_from_slice(&(-1i16).to_be_bytes());
         let mut comp = Vec::new();
         comp.extend_from_slice(&be16(0x0040 | 0x0020 | 0x0002)); // X_Y_SCALE | MORE | XY
         comp.extend_from_slice(&be16(1));
         comp.extend_from_slice(&[10, 10]);
-        comp.extend_from_slice(&f2d(2.0));
+        comp.extend_from_slice(&f2d(1.5));
         comp.extend_from_slice(&f2d(0.5));
-        comp.extend_from_slice(&be16(0x0080 | 0x0002)); // TWO_BY_TWO | XY_VALUES
+        comp.extend_from_slice(&be16(0x0080 | 0x0001 | 0x0002)); // TWO_BY_TWO | WORD_ARGS | XY_VALUES
         comp.extend_from_slice(&be16(1));
         comp.extend_from_slice(&be16(0));
         comp.extend_from_slice(&be16(0));
@@ -1581,9 +1595,9 @@ mod tests {
         let font = outline_font(&[Vec::new(), square_glyph(), rec], true);
         let f = ParsedFont::parse(&font).unwrap();
         let o = f.glyph_outline(2).expect("composite");
-        let p = &o.contours[0].points; // x*2+10, y*0.5+10
-        assert_eq!((p[0].x, p[0].y), (210.0, 60.0));
-        assert_eq!((p[1].x, p[1].y), (1210.0, 60.0));
+        let p = &o.contours[0].points; // x*1.5+10, y*0.5+10
+        assert_eq!((p[0].x, p[0].y), (160.0, 60.0));
+        assert_eq!((p[1].x, p[1].y), (910.0, 60.0));
         let q = &o.contours[1].points; // identity 2x2 + zero offset
         assert_eq!((q[2].x, q[2].y), (600.0, 800.0));
     }
@@ -1682,7 +1696,7 @@ mod tests {
         rec[8..10].copy_from_slice(&be16(60)); // xmax
         rec.extend_from_slice(&be16(5)); // endPtsOfContours[0] = 5
         rec.extend_from_slice(&be16(0)); // instructions
-        rec.extend_from_slice(&[0x33, 5]); // flag 0x33 repeated 5+1 times
+        rec.extend_from_slice(&[0x33 | 0x08, 5]); // flag 0x33, REPEAT count 5
         for _ in 0..6 {
             rec.push(10); // x short positives
         }
