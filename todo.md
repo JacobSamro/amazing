@@ -346,9 +346,9 @@ listener wrote a second attribute, and a new `<span>` child was appended.
 Full `cargo test --workspace` remains green on win-001.
 
 Known gaps: selector coverage is intentionally limited to a single simple
-selector; styles are represented as inline declarations but do not yet
-trigger layout/paint invalidation; there is no HTML parser script scheduling
-or browser window/global object yet.
+selector; script execution is classic/document-order rather than full HTML
+parser scheduling; and the browser global/window surface remains a bounded
+subset of the web platform.
 
 ## Phase 8 (GUI shell) — Windows native first slice landed (win-001 green)
 
