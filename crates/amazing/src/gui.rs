@@ -344,7 +344,7 @@ mod windows {
         }
 
         fn navigate(&mut self, input: String, record: bool) {
-            let input = input.trim().to_owned();
+            let input = self.resolve_navigation(input.trim());
             if input.is_empty() {
                 return;
             }
@@ -382,6 +382,35 @@ mod windows {
                     eprintln!("amazing gui: {error}");
                     set_window_text(self.hwnd, &format!("Ferric — error loading {input}"));
                 }
+            }
+        }
+
+        fn resolve_navigation(&self, input: &str) -> String {
+            if input.contains("://") || input.starts_with("file:") || input.starts_with("about:") {
+                return input.to_owned();
+            }
+            let Some(base) = self.tab().current_url() else {
+                return input.to_owned();
+            };
+            if base == input {
+                return input.to_owned();
+            }
+            if base.starts_with("http://") || base.starts_with("https://") || base.starts_with("file:") {
+                if let Ok(base_url) = amazing_net::Url::parse(base) {
+                    if let Ok(resolved) = amazing_net::resolve(input, &base_url) {
+                        return resolved.to_string();
+                    }
+                }
+            }
+            let path = std::path::Path::new(base);
+            if std::path::Path::new(input).is_absolute() {
+                input.to_owned()
+            } else {
+                path.parent()
+                    .unwrap_or_else(|| std::path::Path::new("."))
+                    .join(input)
+                    .to_string_lossy()
+                    .into_owned()
             }
         }
 

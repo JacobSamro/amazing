@@ -374,6 +374,8 @@ load through the existing fetcher; `setTimeout` and Promise microtasks use the
 cooperative GUI timer pump. `document.addEventListener("DOMContentLoaded", …)`
 is dispatched after classic scripts complete; DOM events bubble through arena
 parents and expose `currentTarget`, `stopPropagation`, and `preventDefault`.
+`window.location.href`/`assign`/`replace` requests resolve relative to the
+active tab and enter its history.
 
 ## Later phases (unchanged from goal prompt)
 
