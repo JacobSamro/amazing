@@ -2049,6 +2049,15 @@ impl Interpreter {
         dataset.proto = Some(self.object_proto.clone());
         dataset.set_own("[[DomDatasetNode]]", JsValue::num(id as f64));
         element.set_own("dataset", JsValue::Object(Obj(Rc::new(RefCell::new(dataset)))));
+        let mut class_list = JsObject::ordinary();
+        class_list.proto = Some(self.object_proto.clone());
+        class_list.set_own("[[DomClassListNode]]", JsValue::num(id as f64));
+        class_list.set_own("contains", Self::native("contains", native_class_list_contains, &self.function_proto));
+        class_list.set_own("add", Self::native("add", native_class_list_add, &self.function_proto));
+        class_list.set_own("remove", Self::native("remove", native_class_list_remove, &self.function_proto));
+        class_list.set_own("toggle", Self::native("toggle", native_class_list_toggle, &self.function_proto));
+        class_list.set_own("toString", Self::native("toString", native_class_list_to_string, &self.function_proto));
+        element.set_own("classList", JsValue::Object(Obj(Rc::new(RefCell::new(class_list)))));
         let onclick_getter = Self::native("get onclick", native_dom_onclick_get, &self.function_proto);
         let onclick_setter = Self::native("set onclick", native_dom_onclick_set, &self.function_proto);
         let onclick_getter = match onclick_getter {
@@ -2084,6 +2093,13 @@ impl Interpreter {
 
     fn dom_dataset_id(object: &Obj) -> Option<u32> {
         match object.borrow().get_own("[[DomDatasetNode]]") {
+            Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => Some(n as u32),
+            _ => None,
+        }
+    }
+
+    fn dom_class_list_id(object: &Obj) -> Option<u32> {
+        match object.borrow().get_own("[[DomClassListNode]]") {
             Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => Some(n as u32),
             _ => None,
         }
@@ -3366,6 +3382,99 @@ fn native_dom_remove(
     let node = dom_id(&this)?;
     dom_host(i)?.borrow_mut().remove_node(node).map_err(Throw::type_error)?;
     Ok(JsValue::Undefined)
+}
+
+fn class_tokens(i: &mut Interpreter, node: u32) -> Result<Vec<String>, Throw> {
+    let value = dom_host(i)?
+        .borrow()
+        .get_attribute(node, "class")
+        .flatten()
+        .unwrap_or_default();
+    Ok(value.split_ascii_whitespace().map(str::to_owned).collect())
+}
+
+fn write_class_tokens(i: &mut Interpreter, node: u32, tokens: &[String]) -> Result<(), Throw> {
+    dom_host(i)?
+        .borrow_mut()
+        .set_attribute(node, "class", &tokens.join(" "))
+        .map_err(Throw::type_error)
+}
+
+fn class_list_node(this: &JsValue) -> Result<u32, Throw> {
+    let JsValue::Object(object) = this else {
+        return Err(Throw::type_error("classList method receiver is not an object"));
+    };
+    Interpreter::dom_class_list_id(object)
+        .ok_or_else(|| Throw::type_error("classList method receiver is not a DOM element"))
+}
+
+fn native_class_list_contains(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = class_list_node(&this)?;
+    let token = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::Bool(class_tokens(i, node)?.iter().any(|item| item == &token)))
+}
+
+fn native_class_list_add(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = class_list_node(&this)?;
+    let mut tokens = class_tokens(i, node)?;
+    for arg in args {
+        let token = i.to_string(&arg)?;
+        if !token.is_empty() && !tokens.iter().any(|item| item == &token) {
+            tokens.push(token);
+        }
+    }
+    write_class_tokens(i, node, &tokens)?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_class_list_remove(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = class_list_node(&this)?;
+    let removals: Vec<String> = args
+        .iter()
+        .map(|arg| i.to_string(arg))
+        .collect::<Result<_, _>>()?;
+    let mut tokens = class_tokens(i, node)?;
+    tokens.retain(|item| !removals.iter().any(|remove| remove == item));
+    write_class_tokens(i, node, &tokens)?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_class_list_toggle(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = class_list_node(&this)?;
+    let token = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let force = args.get(1).map(JsValue::to_boolean);
+    let mut tokens = class_tokens(i, node)?;
+    let present = tokens.iter().any(|item| item == &token);
+    let enabled = force.unwrap_or(!present);
+    if enabled && !present { tokens.push(token.clone()); }
+    if !enabled { tokens.retain(|item| item != &token); }
+    write_class_tokens(i, node, &tokens)?;
+    Ok(JsValue::Bool(enabled))
+}
+
+fn native_class_list_to_string(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = class_list_node(&this)?;
+    Ok(JsValue::str(class_tokens(i, node)?.join(" ")))
 }
 
 fn native_dom_add_event_listener(

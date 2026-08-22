@@ -331,7 +331,7 @@ mutation-capable surface: `document.querySelector`/`querySelectorAll`,
 `document.createElement`, element `textContent`, `id`/`className`,
 `getAttribute`, `setAttribute`, `append`/`appendChild`/`remove`,
 `innerHTML`, `document.title`, the `window`/`globalThis` aliases, and
-`element.dataset` and `element.style` inline properties,
+`element.dataset`, `element.classList`, and `element.style` inline properties,
 `onclick`, `addEventListener`, `removeEventListener`, and `click()` event
 dispatch. Detached nodes are reparented through the arena's existing
 attach/detach API; callbacks remain JS values owned by the interpreter.

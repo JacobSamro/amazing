@@ -1,6 +1,8 @@
 const title = document.querySelector('#title');
 title.dataset.mode = 'ready';
 if (title.dataset.mode === 'ready') title.setAttribute('data-dataset', 'yes');
+title.classList.add('ready');
+if (title.classList.contains('ready') && title.classList.toggle('active', true)) title.setAttribute('data-classlist', title.classList.toString());
 document.title = 'Ferric test';
 if (document.title === 'Ferric test' && window === globalThis) title.setAttribute('data-window', 'yes');
 document.addEventListener('DOMContentLoaded', () => title.setAttribute('data-ready', 'yes'));
