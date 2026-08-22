@@ -527,6 +527,15 @@ mod windows {
                 self.navigate(url, true);
                 return;
             }
+            if let Some(delta) = self
+                .tab_mut()
+                .runtime
+                .as_mut()
+                .and_then(|runtime| runtime.js.take_history_delta())
+            {
+                self.apply_history_delta(delta);
+                return;
+            }
             let default_allowed = self
                 .tab()
                 .runtime
@@ -563,6 +572,15 @@ mod windows {
             } else {
                 false
             };
+            if let Some(delta) = self
+                .tab_mut()
+                .runtime
+                .as_mut()
+                .and_then(|runtime| runtime.js.take_history_delta())
+            {
+                self.apply_history_delta(delta);
+                return;
+            }
             let navigation = self
                 .tab_mut()
                 .runtime
@@ -577,6 +595,14 @@ mod windows {
                 // SAFETY: hwnd is the live top-level window owned by the
                 // message loop; invalidating it schedules a repaint only.
                 unsafe { InvalidateRect(self.hwnd, null(), 0) };
+            }
+        }
+
+        fn apply_history_delta(&mut self, delta: i32) {
+            if delta < 0 {
+                for _ in 0..delta.unsigned_abs() { self.go_back(); }
+            } else {
+                for _ in 0..delta as u32 { self.go_forward(); }
             }
         }
 

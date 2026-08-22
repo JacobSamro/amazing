@@ -116,6 +116,7 @@ pub struct Interpreter {
     next_timer_id: u32,
     location_url: String,
     pending_navigation: Option<String>,
+    pending_history_delta: Option<i32>,
     last_event_default_prevented: bool,
 }
 
@@ -180,6 +181,7 @@ impl Interpreter {
             next_timer_id: 1,
             location_url: String::new(),
             pending_navigation: None,
+            pending_history_delta: None,
             last_event_default_prevented: false,
         };
         i.global_obj
@@ -192,7 +194,19 @@ impl Interpreter {
         let _ = i.global_env.declare_var("window", window);
         i.install_builtins();
         i.install_location();
+        i.install_history();
         i
+    }
+
+    fn install_history(&mut self) {
+        let mut history = JsObject::ordinary();
+        history.proto = Some(self.object_proto.clone());
+        history.set_own("back", Self::native("back", native_history_back, &self.function_proto));
+        history.set_own("forward", Self::native("forward", native_history_forward, &self.function_proto));
+        history.set_own("go", Self::native("go", native_history_go, &self.function_proto));
+        let history = JsValue::Object(Obj(Rc::new(RefCell::new(history))));
+        self.global_obj.borrow_mut().set_own("history", history.clone());
+        let _ = self.global_env.declare_var("history", history);
     }
 
     fn install_location(&mut self) {
@@ -291,6 +305,10 @@ impl Interpreter {
 
     pub fn take_navigation(&mut self) -> Option<String> {
         self.pending_navigation.take()
+    }
+
+    pub fn take_history_delta(&mut self) -> Option<i32> {
+        self.pending_history_delta.take()
     }
 
     pub fn install_inline_handler(
@@ -3355,6 +3373,28 @@ fn native_window_location_set(
     native_location_href_set(i, JsValue::Undefined, args)
 }
 
+fn native_history_back(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    i.pending_history_delta = Some(-1);
+    Ok(JsValue::Undefined)
+}
+
+fn native_history_forward(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    i.pending_history_delta = Some(1);
+    Ok(JsValue::Undefined)
+}
+
+fn native_history_go(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let delta = i.to_number(args.first().unwrap_or(&JsValue::num(0.0)))?;
+    if delta.is_finite() {
+        i.pending_history_delta = Some(delta.trunc().clamp(i32::MIN as f64, i32::MAX as f64) as i32);
+    }
+    Ok(JsValue::Undefined)
+}
+
 fn native_fetch(
     i: &mut Interpreter,
     _: JsValue,
@@ -6216,5 +6256,7 @@ mod tests {
         assert_eq!(i.take_navigation().as_deref(), Some("next.html"));
         i.run_script("window.location='other.html';").unwrap();
         assert_eq!(i.take_navigation().as_deref(), Some("other.html"));
+        i.run_script("history.back();").unwrap();
+        assert_eq!(i.take_history_delta(), Some(-1));
     }
 }
