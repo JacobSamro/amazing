@@ -2362,6 +2362,13 @@ impl Interpreter {
             ("abs", native_abs as crate::value::NativeFn),
             ("max", native_max as crate::value::NativeFn),
             ("min", native_min as crate::value::NativeFn),
+            ("floor", native_math_floor as crate::value::NativeFn),
+            ("ceil", native_math_ceil as crate::value::NativeFn),
+            ("round", native_math_round as crate::value::NativeFn),
+            ("sqrt", native_math_sqrt as crate::value::NativeFn),
+            ("pow", native_math_pow as crate::value::NativeFn),
+            ("trunc", native_math_trunc as crate::value::NativeFn),
+            ("sign", native_math_sign as crate::value::NativeFn),
         ] {
             let _ = self.set_prop(&math, n, Self::native(n, f, &self.function_proto));
         }
@@ -4067,6 +4074,58 @@ fn native_abs(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValu
         i.to_number(a.first().unwrap_or(&JsValue::Undefined))?.abs(),
     ))
 }
+fn math_arg(i: &mut Interpreter, args: &[JsValue]) -> Result<f64, Throw> {
+    i.to_number(args.first().unwrap_or(&JsValue::Undefined))
+}
+fn native_math_floor(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(JsValue::num(math_arg(i, &args)?.floor()))
+}
+fn native_math_ceil(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(JsValue::num(math_arg(i, &args)?.ceil()))
+}
+fn native_math_round(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let value = math_arg(i, &args)?;
+    Ok(JsValue::num(if value.fract() == -0.5 {
+        value.ceil()
+    } else {
+        value.round()
+    }))
+}
+fn native_math_sqrt(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(JsValue::num(math_arg(i, &args)?.sqrt()))
+}
+fn native_math_pow(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let base = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
+    let exponent = i.to_number(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::num(base.powf(exponent)))
+}
+fn native_math_trunc(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(JsValue::num(math_arg(i, &args)?.trunc()))
+}
+fn native_math_sign(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let value = math_arg(i, &args)?;
+    Ok(JsValue::num(if value.is_nan() {
+        f64::NAN
+    } else if value == 0.0 {
+        value
+    } else if value < 0.0 {
+        -1.0
+    } else {
+        1.0
+    }))
+}
 fn native_max(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let mut n = f64::NEG_INFINITY;
     for x in &a {
@@ -4489,6 +4548,10 @@ mod tests {
         let mut k = Interpreter::new();
         let value = k
             .run_script("Array.from('ab').concat(Array.of(3)).join(',') === 'a,b,3' && Number.isNaN(NaN) && Number.isFinite(3);")
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+        let value = k
+            .run_script("Math.floor(1.9)===1 && Math.ceil(1.1)===2 && Math.round(1.5)===2 && Math.sqrt(9)===3 && Math.pow(2,3)===8 && Math.trunc(-1.9)===-1 && Math.sign(-2)===-1;")
             .unwrap();
         assert!(matches!(value, JsValue::Bool(true)));
         let mut j = Interpreter::new();
