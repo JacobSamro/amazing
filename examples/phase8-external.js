@@ -8,3 +8,4 @@ if (title.innerHTML === 'before') { title.innerHTML = 'before'; title.setAttribu
 title.onclick = (event) => { title.textContent = event.type + '!'; title.style.color = 'red'; };
 title.addEventListener('click', () => title.setAttribute('data-clicked', 'yes'));
 setTimeout(() => title.setAttribute('data-timer', 'yes'), 0);
+fetch('phase8-data.txt').then((response) => response.text()).then((text) => title.setAttribute('data-fetch', text));

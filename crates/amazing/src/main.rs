@@ -279,6 +279,28 @@ impl amazing_js::DomHost for BrowserDomHost {
         Ok(())
     }
 
+    fn fetch(
+        &mut self,
+        base_url: &str,
+        input: &str,
+    ) -> Result<amazing_js::HostResponse, String> {
+        let target = if base_url.is_empty() {
+            input.to_owned()
+        } else {
+            resolve_script_url(base_url, input)
+        };
+        let response = amazing_net::fetch(&target, &amazing_net::FetchOptions::default())
+            .map_err(|error| error.to_string())?;
+        let body = response
+            .text()
+            .ok_or_else(|| "fetch response was not text".to_string())?;
+        Ok(amazing_js::HostResponse {
+            url: response.url,
+            status: response.status,
+            body,
+        })
+    }
+
     fn get_inner_html(&self, node: u32) -> Option<String> {
         if node as usize >= self.dom.node_count() || self.dom.name(amazing_dom::NodeIdx(node)).is_none() {
             return None;

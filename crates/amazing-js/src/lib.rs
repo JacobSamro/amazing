@@ -47,7 +47,7 @@ pub mod value;
 
 pub use ast::Program;
 pub use errors::SyntaxError;
-pub use interp::{DomHost, Interpreter};
+pub use interp::{DomHost, HostResponse, Interpreter};
 pub use parser::parse_script;
 
 #[cfg(test)]

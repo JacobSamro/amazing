@@ -40,6 +40,13 @@ struct TimerJob {
     args: Vec<JsValue>,
 }
 
+#[derive(Clone, Debug)]
+pub struct HostResponse {
+    pub url: String,
+    pub status: u16,
+    pub body: String,
+}
+
 struct CallFrame {
     this: JsValue,
     home: Option<Obj>,
@@ -71,6 +78,7 @@ pub trait DomHost {
     fn set_text_content(&mut self, node: u32, text: &str) -> Result<(), String>;
     fn get_document_title(&self) -> String;
     fn set_document_title(&mut self, title: &str) -> Result<(), String>;
+    fn fetch(&mut self, base_url: &str, input: &str) -> Result<HostResponse, String>;
     fn get_inner_html(&self, node: u32) -> Option<String>;
     fn set_inner_html(&mut self, node: u32, html: &str) -> Result<(), String>;
     fn get_attribute(&self, node: u32, name: &str) -> Option<Option<String>>;
@@ -2581,6 +2589,10 @@ impl Interpreter {
             Self::native("eval", native_eval, &self.function_proto),
         );
         self.define_global(
+            "fetch",
+            Self::native("fetch", native_fetch, &self.function_proto),
+        );
+        self.define_global(
             "setTimeout",
             Self::native("setTimeout", native_set_timeout, &self.function_proto),
         );
@@ -3144,6 +3156,56 @@ fn native_location_assign(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     native_location_href_set(i, JsValue::Undefined, args)
+}
+
+fn native_fetch(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let input = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let base = i.location_url.clone();
+    let result = dom_host(i)?.borrow_mut().fetch(&base, &input);
+    match result {
+        Ok(response) => {
+            let value = fetch_response(i, response);
+            Ok(new_promise(i, PromiseFate::Fulfilled(value)))
+        }
+        Err(error) => Ok(new_promise(
+            i,
+            PromiseFate::Rejected(JsValue::str(error)),
+        )),
+    }
+}
+
+fn fetch_response(i: &mut Interpreter, response: HostResponse) -> JsValue {
+    let object = i.object_value();
+    if let JsValue::Object(object) = &object {
+        object.borrow_mut().set_own("ok", JsValue::Bool((200..300).contains(&response.status)));
+        object.borrow_mut().set_own("status", JsValue::num(response.status as f64));
+        object.borrow_mut().set_own("url", JsValue::str(response.url));
+        object.borrow_mut().set_own("[[Body]]", JsValue::str(response.body));
+        object.borrow_mut().set_own(
+            "text",
+            Interpreter::native("text", native_response_text, &i.function_proto),
+        );
+    }
+    object
+}
+
+fn native_response_text(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = this else {
+        return Err(Throw::type_error("Response.text receiver is not an object"));
+    };
+    let body = object
+        .borrow()
+        .get_own("[[Body]]")
+        .unwrap_or(JsValue::str(""));
+    Ok(new_promise(i, PromiseFate::Fulfilled(body)))
 }
 
 fn native_dom_get_attribute(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -3864,7 +3926,62 @@ fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut In
         (None, PromiseFate::Rejected(value)) => PromiseFate::Rejected(value),
         (_, PromiseFate::Pending) => PromiseFate::Pending,
     };
+    if let PromiseFate::Fulfilled(value) = &result {
+        if adopt_promise_result(&reaction.capability, value, i) {
+            return;
+        }
+    }
     settle_promise(&reaction.capability, result, i);
+}
+
+fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) -> bool {
+    let Ok(source) = promise_object(value) else { return false };
+    if Rc::ptr_eq(&source.0, &capability.0) {
+        settle_promise(
+            capability,
+            PromiseFate::Rejected(JsValue::str("promise resolution cycle")),
+            i,
+        );
+        return true;
+    }
+    let state = match &source.borrow().exotic {
+        Exotic::Promise(state) => state.state.clone(),
+        _ => return false,
+    };
+    match state {
+        PromiseFate::Pending => {
+            let mut object = source.borrow_mut();
+            if let Exotic::Promise(state) = &mut object.exotic {
+                state.fulfill_reactions.push(PendingReaction {
+                    handler: None,
+                    capability: capability.clone(),
+                    is_reject_handler: false,
+                });
+                state.reject_reactions.push(PendingReaction {
+                    handler: None,
+                    capability: capability.clone(),
+                    is_reject_handler: true,
+                });
+            }
+        }
+        PromiseFate::Fulfilled(value) => i.jobs.push_back(PromiseJob {
+            reaction: PendingReaction {
+                handler: None,
+                capability: capability.clone(),
+                is_reject_handler: false,
+            },
+            fate: PromiseFate::Fulfilled(value),
+        }),
+        PromiseFate::Rejected(value) => i.jobs.push_back(PromiseJob {
+            reaction: PendingReaction {
+                handler: None,
+                capability: capability.clone(),
+                is_reject_handler: true,
+            },
+            fate: PromiseFate::Rejected(value),
+        }),
+    }
+    true
 }
 
 fn native_promise_then(

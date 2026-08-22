@@ -1155,6 +1155,7 @@ mod windows {
             assert_eq!(host.get_attribute(node, "data-window"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-dom-api"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-inner"), Some(Some("yes".into())));
+            assert_eq!(host.get_attribute(node, "data-fetch"), Some(Some("fetched\n".into())));
             assert_eq!(host.get_attribute(node, "data-clicked"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-bubbled"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-timer"), Some(Some("yes".into())));
