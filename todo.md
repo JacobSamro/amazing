@@ -379,8 +379,8 @@ load through the existing fetcher; `setTimeout`, `setInterval`,
 pump. `document.addEventListener("DOMContentLoaded", …)`
 is dispatched after classic scripts complete; DOM events bubble through arena
 parents and expose `currentTarget`, `stopPropagation`, and `preventDefault`;
-`DOMContentLoaded` and `load` dispatch on both `document`/`window` after
-classic scripts and author stylesheets are fetched.
+`DOMContentLoaded` and `load` dispatch on `document`/`window`, with a body
+load dispatch, after classic scripts and author stylesheets are fetched.
 Classic inline `on*="…"` attributes install into the same bubbling event
 registry as `addEventListener`.
 `window.location.href`/`assign`/`replace` requests resolve relative to the

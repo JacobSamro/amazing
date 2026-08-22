@@ -831,6 +831,11 @@ mod windows {
         }
         js.dispatch_dom_event(0, "load")
             .map_err(|error| format!("load listener failed: {}", error.describe()))?;
+        let body = host.borrow_mut().query_selector("body");
+        if let Some(body) = body {
+            js.dispatch_dom_event(body, "load")
+                .map_err(|error| format!("body load listener failed: {}", error.describe()))?;
+        }
         css.clear();
         {
             let host_ref = host.borrow();
@@ -1248,6 +1253,7 @@ mod windows {
             assert_eq!(host.get_text_content(node).as_deref(), Some("click!"));
             assert_eq!(host.get_attribute(node, "data-ready"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-load"), Some(Some("yes".into())));
+            assert_eq!(host.get_attribute(node, "data-body-load"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-window"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-dom-api"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-selector-list"), Some(Some("yes".into())));

@@ -722,6 +722,11 @@ fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &str) -> Res
         .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
     js.dispatch_dom_event(0, "load")
         .map_err(|error| format!("load listener failed: {}", error.describe()))?;
+    let body = host.borrow_mut().query_selector("body");
+    if let Some(body) = body {
+        js.dispatch_dom_event(body, "load")
+            .map_err(|error| format!("body load listener failed: {}", error.describe()))?;
+    }
     Ok(())
 }
 
