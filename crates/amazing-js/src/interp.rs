@@ -2045,6 +2045,10 @@ impl Interpreter {
         style.proto = Some(self.object_proto.clone());
         style.set_own("[[DomStyleNode]]", JsValue::num(id as f64));
         element.set_own("style", JsValue::Object(Obj(Rc::new(RefCell::new(style)))));
+        let mut dataset = JsObject::ordinary();
+        dataset.proto = Some(self.object_proto.clone());
+        dataset.set_own("[[DomDatasetNode]]", JsValue::num(id as f64));
+        element.set_own("dataset", JsValue::Object(Obj(Rc::new(RefCell::new(dataset)))));
         let onclick_getter = Self::native("get onclick", native_dom_onclick_get, &self.function_proto);
         let onclick_setter = Self::native("set onclick", native_dom_onclick_set, &self.function_proto);
         let onclick_getter = match onclick_getter {
@@ -2078,9 +2082,38 @@ impl Interpreter {
         }
     }
 
+    fn dom_dataset_id(object: &Obj) -> Option<u32> {
+        match object.borrow().get_own("[[DomDatasetNode]]") {
+            Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => Some(n as u32),
+            _ => None,
+        }
+    }
+
+    fn dataset_attribute_name(property: &str) -> String {
+        let mut name = String::from("data-");
+        for ch in property.chars() {
+            if ch.is_ascii_uppercase() {
+                name.push('-');
+                name.push(ch.to_ascii_lowercase());
+            } else {
+                name.push(ch);
+            }
+        }
+        name
+    }
+
     fn get_prop(&mut self, v: &JsValue, k: &str) -> Result<JsValue, Throw> {
         match v {
             JsValue::Object(o) => {
+                if let Some(node) = Self::dom_dataset_id(o) {
+                    let name = Self::dataset_attribute_name(k);
+                    return Ok(dom_host(self)?
+                        .borrow()
+                        .get_attribute(node, &name)
+                        .flatten()
+                        .map(JsValue::str)
+                        .unwrap_or(JsValue::Undefined));
+                }
                 if let Some(node) = Self::dom_style_id(o) {
                     if let Some(value) = dom_host(self)?.borrow().get_style(node, k) {
                         return Ok(JsValue::str(value));
@@ -2202,6 +2235,15 @@ impl Interpreter {
             dom_host(self)?
                 .borrow_mut()
                 .set_style(node, k, &value)
+                .map_err(Throw::type_error)?;
+            return Ok(());
+        }
+        if let Some(node) = Self::dom_dataset_id(&o) {
+            let name = Self::dataset_attribute_name(k);
+            let value = self.to_string(&x)?;
+            dom_host(self)?
+                .borrow_mut()
+                .set_attribute(node, &name, &value)
                 .map_err(Throw::type_error)?;
             return Ok(());
         }
