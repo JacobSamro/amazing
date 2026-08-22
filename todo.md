@@ -8,8 +8,8 @@
 
 | Phase | Status |
 |-------|--------|
-| 0 — skeleton | ✅ done, all exit criteria met on win-001 (18 tests green) |
-| 1 — HTML parser | 🚧 ~35% — see "Phase 1 in-flight" below |
+| 0 — skeleton | ✅ done, all exit criteria met on win-001 |
+| 1 — HTML parser | ✅ done on win-001 (51 workspace tests green) — see report gaps |
 | 2–9 | not started |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
@@ -126,6 +126,21 @@ Use the new Dom low-level API added in Phase 1: `alloc_unattached`,
 
 What's implemented vs deferred, demo command (`amazing parse page.html`),
 correctness gaps, then ask before Phase 2. Do not auto-proceed.
+
+## Phase 1 — DONE (win-001, all tests green)
+
+Shipped: rewritten `tokenizer.rs` (full §13.2.5 state machine, RAWTEXT/RCDATA,
+entities incl. numeric + C1 table, EOF-in-tag literal fallback), fixed
+`entities.rs` (window 12, uppercase semicolon forms), new `tree.rs`
+(§13.2.6: 15 insertion modes, adoption agency + reconstruction + Noah's Ark,
+foster parenting, implicit tbody, scope sets), `amazing_html::parse` +
+`amazing parse [file|stdin]` demo subcommand, CRLF normalization in parse(),
+README.md.
+
+Known gaps (deferred, listed in module docs): full 2 231-entry named-entity
+table; template/frameset/select modes; foreign content; foster parenting
+ignores reconstructed formatting elements; PUBLIC/SYSTEM ids not captured;
+quirks flag approximated. WPT tracking starts Phase 3 per plan.
 
 ## Later phases (unchanged from goal prompt)
 
