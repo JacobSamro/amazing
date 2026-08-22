@@ -2232,6 +2232,17 @@ impl Interpreter {
             "valueOf",
             Self::native("valueOf", native_object_value_of, &self.function_proto),
         );
+        for (name, function) in [
+            ("call", native_function_call as crate::value::NativeFn),
+            ("apply", native_function_apply as crate::value::NativeFn),
+            ("bind", native_function_bind as crate::value::NativeFn),
+        ] {
+            let _ = self.set_prop(
+                &JsValue::Object(self.function_proto.clone()),
+                name,
+                Self::native(name, function, &self.function_proto),
+            );
+        }
         for (n, f) in [
             ("push", native_array_push as crate::value::NativeFn),
             ("pop", native_array_pop as crate::value::NativeFn),
@@ -2388,6 +2399,81 @@ fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsV
 
 fn native_symbol(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     Ok(JsValue::str("@@symbol"))
+}
+
+fn native_function_call(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if callable_function(&this).is_none() {
+        return Err(Throw::type_error(
+            "Function.prototype.call receiver is not callable",
+        ));
+    }
+    let receiver = args.first().cloned().unwrap_or(JsValue::Undefined);
+    i.call_value(&this, receiver, args.into_iter().skip(1).collect())
+}
+
+fn native_function_apply(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if callable_function(&this).is_none() {
+        return Err(Throw::type_error(
+            "Function.prototype.apply receiver is not callable",
+        ));
+    }
+    let receiver = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let arguments = match args.get(1) {
+        None | Some(JsValue::Undefined) | Some(JsValue::Null) => Vec::new(),
+        Some(value) => i.iterate(value)?,
+    };
+    i.call_value(&this, receiver, arguments)
+}
+
+fn native_function_bind(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if callable_function(&this).is_none() {
+        return Err(Throw::type_error(
+            "Function.prototype.bind receiver is not callable",
+        ));
+    }
+    let data = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
+    data.borrow_mut().set_own("target", this);
+    data.borrow_mut()
+        .set_own("this", args.first().cloned().unwrap_or(JsValue::Undefined));
+    data.borrow_mut()
+        .set_own("args", array_values(i, args.into_iter().skip(1).collect())?);
+    let bound = Interpreter::native("bound", native_bound, &i.function_proto);
+    if let JsValue::Object(function) = &bound {
+        function.borrow_mut().func.as_mut().unwrap().home = Some(data);
+    }
+    Ok(bound)
+}
+
+fn native_bound(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let data = native_data(i)?;
+    let target = data
+        .borrow()
+        .get_own("target")
+        .ok_or_else(|| Throw::type_error("invalid bound function"))?;
+    let receiver = data.borrow().get_own("this").unwrap_or(JsValue::Undefined);
+    let bound_args = data
+        .borrow()
+        .get_own("args")
+        .map(|value| i.iterate(&value))
+        .transpose()?
+        .unwrap_or_default();
+    i.call_value(
+        &target,
+        receiver,
+        bound_args.into_iter().chain(args).collect(),
+    )
 }
 
 fn native_define_property(
@@ -4072,6 +4158,15 @@ mod tests {
             .run_script("JSON.stringify({a:1,b:[2]}) === '{\"a\":1,\"b\":[2]}' && JSON.parse('{\"x\":4}').x === 4 && parseInt('0x10') === 16 && parseFloat('1.5px') === 1.5;")
             .unwrap();
         assert!(matches!(value, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn function_call_apply_and_bind_preserve_receiver_and_arguments() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script("function f(a,b){return this.x+a+b;} let o={x:1}; f.call(o,2,3)+f.apply(o,[2,3])+f.bind(o,2)(3);")
+            .unwrap();
+        assert_eq!(num(value), 18.0);
     }
 
     #[test]

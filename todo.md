@@ -16,7 +16,7 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (138 crate tests); focused Test262 slice measured at 196/196 (100%) |
+| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (139 crate tests); focused Test262 slice measured at 196/196 (100%) |
 | 7–9 | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
@@ -278,7 +278,7 @@ relational/equality operators, unary/update/delete/typeof, conditionals,
 loops, switch, try/catch/finally, throw, `for-in`/`for-of`, templates,
 optional chaining, and captured `console.log`. Built-ins include `Object`,
 `Array`, `Map`, `Set`, `Promise`, `Date`, `Math.abs/max/min`, `Number`,
-`String`, `Boolean`, `Object.keys/values`, `Object.assign`, `JSON.parse/stringify`,
+`String`, `Boolean`, `Function.call/apply/bind`, `Object.keys/values`, `Object.assign`, `JSON.parse/stringify`,
 `eval`, numeric parsing globals, and array `push`/`pop`/`join`/
 `map`/`filter`/`reduce`/`forEach`, plus common string utilities. Map and Set use
 SameValueZero keys, preserve insertion order, expose `size`, and return
@@ -299,8 +299,8 @@ covered by the runtime milestone.
 
 Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
 script, prints captured console lines, then its completion value. The
-interpreter has 21 focused runtime tests; `cargo test --workspace` is green
-on win-001 (138 tests in `amazing-js`).
+interpreter has 22 focused runtime tests; `cargo test --workspace` is green
+on win-001 (139 tests in `amazing-js`).
 
 Conformance evidence: the official Test262 repository was shallow-sparsely
 checked out on win-001 with 641 tests across the selected classic-language
