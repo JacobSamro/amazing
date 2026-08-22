@@ -227,6 +227,11 @@ mod windows {
         runtime: PageRuntime,
     }
 
+    struct PageScript {
+        src: Option<String>,
+        body: String,
+    }
+
     struct GuiState {
         hwnd: Hwnd,
         instance: Hinstance,
@@ -554,7 +559,7 @@ mod windows {
         }
     }
 
-    fn collect_script_text(dom: &Dom, node: NodeIdx, scripts: &mut Vec<String>) {
+    fn collect_scripts(dom: &Dom, node: NodeIdx, scripts: &mut Vec<PageScript>) {
         if dom.name(node) == Some("script") {
             let mut source = String::new();
             for child in dom.children(node) {
@@ -562,14 +567,37 @@ mod windows {
                     source.push_str(data);
                 }
             }
-            if !source.trim().is_empty() {
-                scripts.push(source);
+            let src = dom
+                .attrs_of(node)
+                .and_then(|attrs| attrs.iter().find(|(name, _)| name == "src"))
+                .map(|(_, value)| value.clone());
+            if src.is_some() || !source.trim().is_empty() {
+                scripts.push(PageScript { src, body: source });
             }
             return;
         }
         for child in dom.children(node) {
-            collect_script_text(dom, child, scripts);
+            collect_scripts(dom, child, scripts);
         }
+    }
+
+    fn resolve_script_url(page: &str, source: &str) -> String {
+        if source.contains("://") || source.starts_with("file:") {
+            return source.to_owned();
+        }
+        if page.starts_with("http://") || page.starts_with("https://") || page.starts_with("file:") {
+            if let Ok(base) = amazing_net::Url::parse(page) {
+                if let Ok(resolved) = amazing_net::resolve(source, &base) {
+                    return resolved.to_string();
+                }
+            }
+        }
+        std::path::Path::new(page)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join(source)
+            .to_string_lossy()
+            .into_owned()
     }
 
     fn render_page(input: &str, width: u32) -> Result<RenderedPage, String> {
@@ -584,13 +612,27 @@ mod windows {
         let scripts = {
             let host_ref = host.borrow();
             let mut scripts = Vec::new();
-            collect_script_text(&host_ref.dom, NodeIdx(0), &mut scripts);
+            collect_scripts(&host_ref.dom, NodeIdx(0), &mut scripts);
             scripts
         };
         let mut js = amazing_js::Interpreter::new();
         js.set_dom_host(host.clone());
         for script in scripts {
-            js.run_script(&script)
+            let source = match script.src {
+                Some(src) => {
+                    let script_url = resolve_script_url(input, &src);
+                    let response = amazing_net::fetch(
+                        &script_url,
+                        &amazing_net::FetchOptions::default(),
+                    )
+                    .map_err(|error| format!("external script {src}: {error}"))?;
+                    response
+                        .text()
+                        .ok_or_else(|| format!("external script {src} was not text"))?
+                }
+                None => script.body,
+            };
+            js.run_script(&source)
                 .map_err(|error| format!("page script failed: {}", error.describe()))?;
         }
         let host_ref = host.borrow();

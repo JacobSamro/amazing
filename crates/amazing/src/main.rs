@@ -385,10 +385,15 @@ fn collect_style_text(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &
     }
 }
 
+struct PageScript {
+    src: Option<String>,
+    body: String,
+}
+
 fn collect_script_text(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
-    scripts: &mut Vec<String>,
+    scripts: &mut Vec<PageScript>,
 ) {
     if dom.name(node) == Some("script") {
         let mut source = String::new();
@@ -397,8 +402,12 @@ fn collect_script_text(
                 source.push_str(data);
             }
         }
-        if !source.trim().is_empty() {
-            scripts.push(source);
+        let src = dom
+            .attrs_of(node)
+            .and_then(|attrs| attrs.iter().find(|(name, _)| name == "src"))
+            .map(|(_, value)| value.clone());
+        if src.is_some() || !source.trim().is_empty() {
+            scripts.push(PageScript { src, body: source });
         }
         return;
     }
@@ -407,7 +416,7 @@ fn collect_script_text(
     }
 }
 
-fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>) -> Result<(), String> {
+fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &str) -> Result<(), String> {
     let scripts = {
         let host_ref = host.borrow();
         let mut scripts = Vec::new();
@@ -420,10 +429,43 @@ fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>) -> Result<(), Stri
     let mut js = amazing_js::Interpreter::new();
     js.set_dom_host(host.clone());
     for script in scripts {
-        js.run_script(&script)
-            .map_err(|error| format!("inline script failed: {}", error.describe()))?;
+        let source = match script.src {
+            Some(src) => {
+                let script_url = resolve_script_url(page, &src);
+                let response = amazing_net::fetch(
+                    &script_url,
+                    &amazing_net::FetchOptions::default(),
+                )
+                .map_err(|error| format!("external script {src}: {error}"))?;
+                response
+                    .text()
+                    .ok_or_else(|| format!("external script {src} was not text"))?
+            }
+            None => script.body,
+        };
+        js.run_script(&source)
+            .map_err(|error| format!("page script failed: {}", error.describe()))?;
     }
     Ok(())
+}
+
+fn resolve_script_url(page: &str, source: &str) -> String {
+    if source.contains("://") || source.starts_with("file:") {
+        return source.to_owned();
+    }
+    if page.starts_with("http://") || page.starts_with("https://") || page.starts_with("file:") {
+        if let Ok(base) = amazing_net::Url::parse(page) {
+            if let Ok(resolved) = amazing_net::resolve(source, &base) {
+                return resolved.to_string();
+            }
+        }
+    }
+    std::path::Path::new(page)
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join(source)
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn print_styled(
@@ -518,7 +560,7 @@ fn cmd_render(args: &[String]) -> ExitCode {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse(&html),
     }));
-    if let Err(error) = execute_inline_scripts(&host) {
+    if let Err(error) = execute_inline_scripts(&host, html_path) {
         eprintln!("amazing render: {error}");
         return ExitCode::FAILURE;
     }
