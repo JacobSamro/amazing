@@ -100,6 +100,15 @@ impl BrowserDomHost {
         None
     }
 
+    fn find_all(&self, node: amazing_dom::NodeIdx, selector: &str, out: &mut Vec<u32>) {
+        if self.matches_selector(node, selector) {
+            out.push(node.0);
+        }
+        for child in self.dom.children(node) {
+            self.find_all(child, selector, out);
+        }
+    }
+
     fn css_property_name(name: &str) -> String {
         let mut out = String::new();
         for ch in name.chars() {
@@ -148,6 +157,12 @@ impl BrowserDomHost {
 impl amazing_js::DomHost for BrowserDomHost {
     fn query_selector(&mut self, selector: &str) -> Option<u32> {
         self.find(amazing_dom::NodeIdx(0), selector)
+    }
+
+    fn query_selector_all(&mut self, selector: &str) -> Vec<u32> {
+        let mut nodes = Vec::new();
+        self.find_all(amazing_dom::NodeIdx(0), selector, &mut nodes);
+        nodes
     }
 
     fn parent_node(&self, node: u32) -> Option<u32> {
@@ -223,6 +238,18 @@ impl amazing_js::DomHost for BrowserDomHost {
         if parent.0 as usize >= self.dom.node_count() { return Err("unknown DOM node".into()) }
         if self.dom.name(parent).is_none() { return Err("append target is not an element".into()) }
         self.dom.create_text(parent, text);
+        Ok(())
+    }
+
+    fn remove_node(&mut self, node: u32) -> Result<(), String> {
+        if node as usize >= self.dom.node_count() {
+            return Err("unknown DOM node".into());
+        }
+        let idx = amazing_dom::NodeIdx(node);
+        if idx.0 == 0 {
+            return Err("cannot remove the document node".into());
+        }
+        self.dom.detach(idx);
         Ok(())
     }
 

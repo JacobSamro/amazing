@@ -63,6 +63,7 @@ enum Reference {
 /// resulting live nodes as ordinary JavaScript objects.
 pub trait DomHost {
     fn query_selector(&mut self, selector: &str) -> Option<u32>;
+    fn query_selector_all(&mut self, selector: &str) -> Vec<u32>;
     fn parent_node(&self, node: u32) -> Option<u32>;
     fn get_text_content(&self, node: u32) -> Option<String>;
     fn set_text_content(&mut self, node: u32, text: &str) -> Result<(), String>;
@@ -71,6 +72,7 @@ pub trait DomHost {
     fn create_element(&mut self, name: &str) -> Result<u32, String>;
     fn append_child(&mut self, parent: u32, child: u32) -> Result<(), String>;
     fn append_text(&mut self, parent: u32, text: &str) -> Result<(), String>;
+    fn remove_node(&mut self, node: u32) -> Result<(), String>;
     fn get_style(&self, node: u32, property: &str) -> Option<String>;
     fn set_style(&mut self, node: u32, property: &str, value: &str) -> Result<(), String>;
 }
@@ -1812,6 +1814,14 @@ impl Interpreter {
             Self::native("querySelector", native_dom_query_selector, &self.function_proto),
         );
         document.set_own(
+            "querySelectorAll",
+            Self::native("querySelectorAll", native_dom_query_selector_all, &self.function_proto),
+        );
+        document.set_own(
+            "getElementById",
+            Self::native("getElementById", native_dom_get_element_by_id, &self.function_proto),
+        );
+        document.set_own(
             "createElement",
             Self::native("createElement", native_dom_create_element, &self.function_proto),
         );
@@ -1862,6 +1872,14 @@ impl Interpreter {
         element.set_own(
             "append",
             Self::native("append", native_dom_append, &self.function_proto),
+        );
+        element.set_own(
+            "appendChild",
+            Self::native("appendChild", native_dom_append_child, &self.function_proto),
+        );
+        element.set_own(
+            "remove",
+            Self::native("remove", native_dom_remove, &self.function_proto),
         );
         element.set_own(
             "addEventListener",
@@ -1917,6 +1935,24 @@ impl Interpreter {
             JsValue::Object(o) => {
                 if let Some(node) = Self::dom_style_id(o) {
                     if let Some(value) = dom_host(self)?.borrow().get_style(node, k) {
+                        return Ok(JsValue::str(value));
+                    }
+                }
+                if let Some(node) = dom_node_id(o) {
+                    if node == 0 && (k == "body" || k == "documentElement") {
+                        let selector = if k == "body" { "body" } else { "html" };
+                        let id = dom_host(self)?.borrow_mut().query_selector(selector);
+                        return Ok(id
+                            .map(|id| self.make_dom_element(id))
+                            .unwrap_or(JsValue::Null));
+                    }
+                    if node != 0 && (k == "id" || k == "className") {
+                        let name = if k == "className" { "class" } else { "id" };
+                        let value = dom_host(self)?
+                            .borrow()
+                            .get_attribute(node, name)
+                            .flatten()
+                            .unwrap_or_default();
                         return Ok(JsValue::str(value));
                     }
                 }
@@ -2020,6 +2056,17 @@ impl Interpreter {
                 .set_style(node, k, &value)
                 .map_err(Throw::type_error)?;
             return Ok(());
+        }
+        if let Some(node) = dom_node_id(&o) {
+            if node != 0 && (k == "id" || k == "className") {
+                let name = if k == "className" { "class" } else { "id" };
+                let value = self.to_string(&x)?;
+                dom_host(self)?
+                    .borrow_mut()
+                    .set_attribute(node, name, &value)
+                    .map_err(Throw::type_error)?;
+                return Ok(());
+            }
         }
         if let Some(property) = o.borrow().own_prop(k).cloned() {
             if let Some(setter) = property.setter {
@@ -2796,9 +2843,16 @@ fn dom_id(this: &JsValue) -> Result<u32, Throw> {
     let JsValue::Object(object) = this else {
         return Err(Throw::type_error("DOM method called on non-element"));
     };
+    match dom_node_id(object) {
+        Some(id) => Ok(id),
+        None => Err(Throw::type_error("DOM method called on non-element")),
+    }
+}
+
+fn dom_node_id(object: &Obj) -> Option<u32> {
     match object.borrow().get_own("[[DomNode]]") {
-        Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => Ok(n as u32),
-        _ => Err(Throw::type_error("DOM method called on non-element")),
+        Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => Some(n as u32),
+        _ => None,
     }
 }
 
@@ -2817,6 +2871,28 @@ fn native_dom_query_selector(
     let selector = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let id = dom_host(i)?.borrow_mut().query_selector(&selector);
     Ok(id.map(|id| i.make_dom_element(id)).unwrap_or(JsValue::Null))
+}
+
+fn native_dom_query_selector_all(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let selector = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let ids = dom_host(i)?.borrow_mut().query_selector_all(&selector);
+    let values = ids.into_iter().map(|id| i.make_dom_element(id)).collect();
+    array_values(i, values)
+}
+
+fn native_dom_get_element_by_id(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let id = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let selector = format!("#{id}");
+    let node = dom_host(i)?.borrow_mut().query_selector(&selector);
+    Ok(node.map(|node| i.make_dom_element(node)).unwrap_or(JsValue::Null))
 }
 
 fn native_dom_create_element(
@@ -2881,6 +2957,29 @@ fn native_dom_append(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
             }
         }
     }
+    Ok(JsValue::Undefined)
+}
+
+fn native_dom_append_child(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let child = args
+        .first()
+        .cloned()
+        .ok_or_else(|| Throw::type_error("appendChild requires a node"))?;
+    native_dom_append(i, this, vec![child.clone()])?;
+    Ok(child)
+}
+
+fn native_dom_remove(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    dom_host(i)?.borrow_mut().remove_node(node).map_err(Throw::type_error)?;
     Ok(JsValue::Undefined)
 }
 

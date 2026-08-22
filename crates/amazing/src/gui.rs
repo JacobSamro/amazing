@@ -1075,6 +1075,7 @@ mod windows {
             let host = host.borrow();
             assert_eq!(host.get_text_content(node).as_deref(), Some("click!"));
             assert_eq!(host.get_attribute(node, "data-ready"), Some(Some("yes".into())));
+            assert_eq!(host.get_attribute(node, "data-dom-api"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-clicked"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-bubbled"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-timer"), Some(Some("yes".into())));

@@ -326,9 +326,11 @@ a milestone, not Phase 6 exit-criteria completion.
 
 Shipped: `amazing_js::DomHost` keeps the JS core independent of arena DOM
 types while exposing live node wrappers. The driver implements a bounded,
-mutation-capable surface: `document.querySelector` (tag/id/class selectors),
-`document.createElement`, element `textContent`, `getAttribute`,
-`setAttribute`, `append` for nodes or text, `element.style` inline properties,
+mutation-capable surface: `document.querySelector`/`querySelectorAll`,
+`getElementById` (tag/id/class selectors), `document.body`,
+`document.createElement`, element `textContent`, `id`/`className`,
+`getAttribute`, `setAttribute`, `append`/`appendChild`/`remove`,
+`element.style` inline properties,
 `onclick`, `addEventListener`, `removeEventListener`, and `click()` event
 dispatch. Detached nodes are reparented through the arena's existing
 attach/detach API; callbacks remain JS values owned by the interpreter.
