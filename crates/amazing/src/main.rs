@@ -650,11 +650,13 @@ fn collect_script_text(
 fn collect_inline_handlers(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
-    handlers: &mut Vec<(u32, String)>,
+    handlers: &mut Vec<(u32, String, String)>,
 ) {
     if let Some(attrs) = dom.attrs_of(node) {
-        if let Some((_, body)) = attrs.iter().find(|(name, _)| name == "onclick") {
-            handlers.push((node.0, body.clone()));
+        for (name, body) in attrs {
+            if let Some(event) = name.strip_prefix("on").filter(|event| !event.is_empty()) {
+                handlers.push((node.0, event.to_owned(), body.clone()));
+            }
         }
     }
     for child in dom.children(node) {
@@ -681,8 +683,8 @@ fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &str) -> Res
         collect_inline_handlers(&host_ref.dom, amazing_dom::NodeIdx(0), &mut handlers);
         handlers
     };
-    for (node, body) in handlers {
-        js.install_inline_handler(node, "click", &body)
+    for (node, event, body) in handlers {
+        js.install_inline_handler(node, &event, &body)
             .map_err(|error| format!("inline onclick failed: {}", error.describe()))?;
     }
     for script in scripts {

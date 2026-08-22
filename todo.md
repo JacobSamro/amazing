@@ -379,7 +379,7 @@ is dispatched after classic scripts complete; DOM events bubble through arena
 parents and expose `currentTarget`, `stopPropagation`, and `preventDefault`;
 `DOMContentLoaded` and `load` dispatch on both `document`/`window` after
 classic scripts and author stylesheets are fetched.
-Classic inline `onclick="…"` attributes install into the same bubbling event
+Classic inline `on*="…"` attributes install into the same bubbling event
 registry as `addEventListener`.
 `window.location.href`/`assign`/`replace` requests resolve relative to the
 active tab and enter its history. GUI anchor clicks perform the same default
