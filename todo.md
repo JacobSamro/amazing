@@ -13,6 +13,7 @@
 | 2 — CSS | ✅ done on win-001 (88 workspace tests green) — see Phase 2 section |
 | 3 — Layout | ✅ done on win-001 (workspace green; curated css/CSS2 subset 17/17) |
 | 3.5 — Flexbox | ✅ done on win-001 (13 flex tests; row/column/wrap/grow/shrink/justify/align/gaps/auto-margins/order) |
+| 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
 | 6 — JS | 🔄 lexer/tokens/ast landing (agent authoring parser) |
@@ -216,6 +217,25 @@ box_tree (they are neither Block nor inline). Deviations: baseline≈start,
 no shrink floors, column grow/shrink needs definite height, cross-axis auto
 margins = 0. Tests: 13 unit tests in flex.rs through the real pipeline.
 Demo: `cargo run -p amazing -- layout examples/layout.html`.
+
+## Phase 3.6 (grid) — DONE (integrated, win-001 green)
+
+Shipped: `amazing-layout/src/grid.rs` — track lists (px/em/%, auto,
+min/max-content conflated as max-content, `<number>fr`,
+`repeat(int | auto-fill, …)` nested), `grid-auto-columns/rows` cycling onto
+implicit tracks, gaps, auto-flow row/column/dense (column = transpose),
+placement via grid-row/-column + longhands with negative lines anchored to
+the explicit-grid end and §8.5 sparse cursor (+dense backflow), two-phase
+track sizing (definite bases → intrinsic contributions → weighted fr split
+of leftover), justify/align-content ×6, items/self alignment with stretch
+materialization. Integration: `Flow::Grid` variant, Display::Grid
+classification, block dispatch; bring-up fixes: auto-placement wrap limit
+must count COLUMNS for row flow (transposed for column flow); outer_h +
+End/Center alignment no longer double-count padding/border inside
+border_box. Deviations: named areas / grid-area / span-to-line-name;
+row-track % resolves against width; fr rows need definite height. Tests:
+16 in grid.rs through the real pipeline. Demo: gridprobe-style pages via
+`cargo run -p amazing -- layout page.html`.
 
 ## Phase 4 (paint) — DONE (crate integrated, win-001 green)
 
