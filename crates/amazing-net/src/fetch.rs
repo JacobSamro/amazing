@@ -1,0 +1,330 @@
+//! The [`fetch`] dispatcher: URL-or-path in, fully-buffered [`Response`]
+//! out.
+//!
+//! Routing:
+//! - `http://…`      → HTTP/1.1 GET ([`crate::http`]) with redirect following
+//! - `https://…`     → [`NetError::UnsupportedScheme`] (TLS decision in
+//!   [`crate`] docs; parsing still works, connecting refuses fast)
+//! - `file://…`      → filesystem read of the decoded URL path
+//! - anything else without an `http`/`https`/`file` scheme → treated as a
+//!   bare filesystem path, because earlier phases load local pages that way
+//!   (a one-letter pseudo-scheme like `C:` counts as a drive path, not a URL)
+//!
+//! Redirects (RFC 9110 §15.4): 301, 302, 303, 307, 308 are followed up to
+//! [`MAX_REDIRECTS`] hops, each `Location` resolved against the *response*
+//! URL (so relative locations work through chains). Method semantics are
+//! trivially satisfied for v1: we only ever issue GET, which is exactly what
+//! 302/303 demand, and what 301/307/308 preserve. Redirect response bodies
+//! are discarded. Exceeding the hop cap or a redirect without a resolvable
+//! `Location` is an error, never an infinite loop.
+//!
+//! Deferred: cross-origin cookie/state tracking across redirects, method
+//! rewriting rules beyond GET, `Refresh`-style meta redirection.
+
+use std::path::Path;
+use std::time::Duration;
+
+use crate::headers::Headers;
+use crate::http;
+use crate::response::Response;
+use crate::url::{self, resolve, Url, UrlError};
+use crate::NetError;
+
+/// Maximum number of redirect hops after the initial request.
+pub const MAX_REDIRECTS: usize = 5;
+
+/// Knobs for a single fetch. Defaults suit interactive browsing.
+#[derive(Debug, Clone)]
+pub struct FetchOptions {
+    /// Socket read/write timeout applied per connection. Default: 10 s.
+    /// Note this bounds each blocking read, not total transfer time.
+    pub timeout: Duration,
+}
+
+impl Default for FetchOptions {
+    fn default() -> Self {
+        Self {
+            timeout: Duration::from_secs(10),
+        }
+    }
+}
+
+/// Fetches `input` (an `http`/`https`/`file` URL, or a bare filesystem
+/// path) into a buffered [`Response`].
+pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> {
+    let trimmed = input.trim();
+    if !looks_like_url(trimmed) {
+        return read_file_response(Path::new(trimmed), trimmed.to_string());
+    }
+
+    // Surface unknown-scheme errors directly (not wrapped in NetError::Url)
+    // so callers can distinguish "no such scheme" from malformed URLs.
+    let mut current = Url::parse(trimmed).map_err(|e| match e {
+        UrlError::UnsupportedScheme(s) => NetError::UnsupportedScheme(s),
+        other => NetError::Url(other),
+    })?;
+    let mut redirects = 0usize;
+    loop {
+        let response = match current.scheme.as_str() {
+            "http" => http::get(&current, options)?,
+            "https" => {
+                return Err(NetError::UnsupportedScheme(
+                    "https — TLS is the documented Phase 5 exception (see lib.rs)".into(),
+                ))
+            },
+            "file" => {
+                let fs_path = current.to_file_path()?;
+                let reported = current.to_string();
+                return read_file_response(&fs_path, reported);
+            },
+            other => return Err(NetError::UnsupportedScheme(other.to_string())),
+        };
+
+        if !is_redirect(response.status) {
+            return Ok(response);
+        }
+        redirects += 1;
+        if redirects > MAX_REDIRECTS {
+            return Err(NetError::TooManyRedirects);
+        }
+        let location = response
+            .headers
+            .get("location")
+            .ok_or(NetError::MissingLocation)?
+            .to_string();
+        current = resolve(&location, &current)?;
+    }
+}
+
+/// True when `input` should go down the URL parser instead of the
+/// filesystem. A valid scheme of length ≥ 2 (`http:`, `ftp:`, …) marks a
+/// URL; a single letter before `:` is a Windows drive path.
+fn looks_like_url(input: &str) -> bool {
+    match url::split_scheme(input) {
+        Some((scheme, _)) => scheme.len() >= 2,
+        None => false,
+    }
+}
+
+fn is_redirect(status: u16) -> bool {
+    matches!(status, 301 | 302 | 303 | 307 | 308)
+}
+
+fn read_file_response(fs_path: &Path, reported_url: String) -> Result<Response, NetError> {
+    let body = std::fs::read(fs_path)?;
+    let mut headers = Headers::new();
+    headers.insert("Content-Type", content_type_for(fs_path).to_string());
+    Ok(Response {
+        url: reported_url,
+        status: 200,
+        reason: "OK".into(),
+        headers,
+        body,
+    })
+}
+
+/// Minimal extension sniff so later phases can pick a parser for local
+/// files without server help. Unknown extensions stay octet-stream.
+fn content_type_for(path: &Path) -> &'static str {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
+    match ext.as_deref() {
+        Some("html") | Some("htm") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
+        Some("json") => "application/json",
+        Some("txt") | Some("md") => "text/plain; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("ico") => "image/x-icon",
+        _ => "application/octet-stream",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use std::process;
+
+    use crate::http::tests::serve;
+
+    /// Builds a `file:///` URL from a local path on any platform.
+    fn file_url_of(path: &Path) -> String {
+        let s = path.to_string_lossy().replace('\\', "/");
+        if s.starts_with('/') {
+            format!("file://{s}")
+        } else {
+            format!("file:///{s}")
+        }
+    }
+
+    fn temp_file(label: &str, ext: &str, contents: &[u8]) -> std::path::PathBuf {
+        let mut path = env::temp_dir();
+        path.push(format!(
+            "ferric-net-{label}-{}-{}.{ext}",
+            process::id(),
+            line!(),
+        ));
+        fs::write(&path, contents).expect("write temp file");
+        path
+    }
+
+    #[test]
+    fn follows_a_302_then_301_chain_to_the_final_url_and_body() {
+        let script = vec![
+            b"HTTP/1.1 302 Found\r\nLocation: /b\r\nContent-Length: 0\r\n\r\n".to_vec(),
+            b"HTTP/1.1 301 Moved Permanently\r\nLocation: /final\r\nContent-Length: 0\r\n\r\n"
+                .to_vec(),
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 6\r\n\r\nfinal!"
+                .to_vec(),
+        ];
+        let (port, rx) = serve(script);
+        let resp = fetch(
+            &format!("http://127.0.0.1:{port}/start"),
+            &FetchOptions::default(),
+        )
+        .expect("fetch");
+        assert_eq!(resp.status, 200);
+        assert_eq!(resp.text().as_deref(), Some("final!"));
+        assert_eq!(resp.content_type(), Some("text/html"));
+        assert_eq!(resp.url, format!("http://127.0.0.1:{port}/final"));
+        // Three sequential connections (Connection: close), three served
+        // request heads seen by the harness.
+        for expected_path in ["/start", "/b", "/final"] {
+            let req =
+                String::from_utf8(rx.recv_timeout(Duration::from_secs(5)).expect("request"))
+                    .expect("utf-8");
+            assert!(req.starts_with(&format!("GET {expected_path} HTTP/1.1\r\n")));
+        }
+    }
+
+    #[test]
+    fn exceeding_five_redirect_hops_is_an_error() {
+        let script: Vec<Vec<u8>> = (0..7)
+            .map(|i| {
+                format!(
+                    "HTTP/1.1 302 Found\r\nLocation: /hop-{i}\r\nContent-Length: 0\r\n\r\n"
+                )
+                .into_bytes()
+            })
+            .collect();
+        let (port, _rx) = serve(script);
+        match fetch(
+            &format!("http://127.0.0.1:{port}/start"),
+            &FetchOptions::default(),
+        ) {
+            Err(NetError::TooManyRedirects) => {},
+            other => panic!("expected TooManyRedirects, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn redirect_without_location_header_is_an_error() {
+        let script = vec![
+            b"HTTP/1.1 302 Found\r\nContent-Length: 0\r\n\r\n".to_vec(),
+        ];
+        let (port, _rx) = serve(script);
+        match fetch(
+            &format!("http://127.0.0.1:{port}/nowhere"),
+            &FetchOptions::default(),
+        ) {
+            Err(NetError::MissingLocation) => {},
+            other => panic!("expected MissingLocation, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn five_redirects_are_still_followed() {
+        // Exactly 5 hops then success must NOT trip the cap.
+        let mut script: Vec<Vec<u8>> = (0..5)
+            .map(|i| {
+                format!("HTTP/1.1 302 Found\r\nLocation: /h{i}\r\nContent-Length: 0\r\n\r\n")
+                    .into_bytes()
+            })
+            .collect();
+        script.push(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec());
+        let (port, _rx) = serve(script);
+        let resp = fetch(
+            &format!("http://127.0.0.1:{port}/start"),
+            &FetchOptions::default(),
+        )
+        .expect("five hops must succeed");
+        assert_eq!(resp.status, 200);
+        assert_eq!(resp.url, format!("http://127.0.0.1:{port}/h4"));
+    }
+
+    #[test]
+    fn https_is_parsed_but_connections_refuse_fast() {
+        match fetch("https://example.com/", &FetchOptions::default()) {
+            Err(NetError::UnsupportedScheme(s)) => assert!(s.starts_with("https")),
+            other => panic!("expected UnsupportedScheme, got {other:?}"),
+        }
+        // The URL itself still parses fine when used directly.
+        let url = Url::parse("https://example.com/x?q#f").expect("https parses");
+        assert_eq!(url.port, 443);
+    }
+
+    #[test]
+    fn unknown_network_schemes_are_rejected_not_mistaken_for_paths() {
+        match fetch("ftp://example.com/file", &FetchOptions::default()) {
+            Err(NetError::UnsupportedScheme(s)) => assert_eq!(s, "ftp"),
+            other => panic!("expected UnsupportedScheme, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn file_url_roundtrip_through_temp_dir() {
+        let path = temp_file("fileurl", "html", b"<p>hi</p>");
+        let resp = fetch(&file_url_of(&path), &FetchOptions::default()).expect("fetch");
+        assert_eq!(resp.status, 200);
+        assert_eq!(resp.reason, "OK");
+        assert_eq!(resp.text().as_deref(), Some("<p>hi</p>"));
+        assert_eq!(resp.content_type(), Some("text/html"));
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn bare_filesystem_path_is_read_as_a_local_file() {
+        let path = temp_file("bare", "txt", b"plain");
+        let reported = path.to_string_lossy().into_owned();
+        let resp = fetch(&reported, &FetchOptions::default()).expect("fetch");
+        assert_eq!(resp.status, 200);
+        assert_eq!(resp.text().as_deref(), Some("plain"));
+        assert_eq!(resp.url, reported);
+        assert_eq!(resp.content_type(), Some("text/plain"));
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn missing_bare_path_surfaces_io_error_not_url_error() {
+        let mut path = env::temp_dir();
+        path.push(format!("ferric-net-missing-{}", process::id()));
+        match fetch(path.to_str().expect("temp path utf-8"), &FetchOptions::default()) {
+            Err(NetError::Io(e)) => assert_eq!(e.kind(), std::io::ErrorKind::NotFound),
+            other => panic!("expected Io error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn windows_drive_paths_are_dispatched_to_the_filesystem() {
+        if !cfg!(windows) {
+            return; // meaningful only on win-001; harmless elsewhere
+        }
+        match fetch(r"C:\ferric-net-definitely-missing.txt", &FetchOptions::default()) {
+            Err(NetError::Io(e)) => assert_eq!(e.kind(), std::io::ErrorKind::NotFound),
+            other => panic!("expected Io error (not UnsupportedScheme), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn empty_input_fails_without_panicking() {
+        assert!(fetch("", &FetchOptions::default()).is_err());
+        assert!(fetch("   ", &FetchOptions::default()).is_err());
+    }
+}

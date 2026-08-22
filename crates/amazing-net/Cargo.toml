@@ -1,9 +1,10 @@
 [package]
 name = "amazing-net"
-description = "HTTP/1.1 client over std::net::TcpStream"
-edition.workspace = true
+description = "Hand-written HTTP/1.1 client over std::net::TcpStream, plus URL parsing and file:// fetching"
+edition = "2021"
 version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+# Zero dependencies by project constraint: engine cores are `std` only.
 [dependencies]

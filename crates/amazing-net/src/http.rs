@@ -1,0 +1,457 @@
+//! HTTP/1.1 GET over plain `std::net::TcpStream`.
+//!
+//! One connection per request (`Connection: close`), fully-buffered
+//! response. Request line + four fixed headers; response parsing covers the
+//! status line, the header block, and all three body framings.
+//!
+//! Implemented:
+//! - `GET` with `Host`, `User-Agent: Ferric/0.1`, `Accept: */*`,
+//!   `Connection: close`
+//! - status-line validation (`HTTP/1.x NNN [reason]`), case-insensitive
+//!   header names via [`crate::headers::Headers`]
+//! - body framing priority: `Transfer-Encoding: chunked` (chunk extensions
+//!   and trailer section consumed, contents ignored) > `Content-Length`
+//!   (short reads are errors, overlong data truncated) > read-to-EOF
+//! - read/write timeouts from [`crate::FetchOptions::timeout`]
+//! - 32 MiB buffering cap so a hostile peer cannot exhaust memory
+//!
+//! Deferred: keep-alive/pipelining, other methods, `Expect: 100-continue`,
+//! gzip/deflate/br decoding, obs-fold header lines, bare-LF line endings in
+//! the framing layer (header *values* tolerate them), HTTP/2+.
+
+use std::io::{Read, Write};
+use std::net::TcpStream;
+
+use crate::fetch::FetchOptions;
+use crate::headers::Headers;
+use crate::response::Response;
+use crate::url::Url;
+use crate::NetError;
+
+/// Upper bound on buffered response bytes, enforced during both raw reads
+/// and dechunking.
+pub(crate) const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
+
+const USER_AGENT: &str = "Ferric/0.1";
+
+/// Performs one GET against `url` (scheme must be http). The socket gets
+/// `options.timeout` as both read and write timeout.
+pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetError> {
+    // ToSocketAddrs for (&str, u16) parses IP literals itself, but bracketed
+    // IPv6 ("[::1]") does not parse — hand it the bare address instead.
+    let connect_host = url.host.trim_start_matches('[').trim_end_matches(']');
+    let mut stream = TcpStream::connect((connect_host, url.port))?;
+    stream.set_read_timeout(Some(options.timeout))?;
+    stream.set_write_timeout(Some(options.timeout))?;
+
+    let request = format!(
+        "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nConnection: close\r\n\r\n",
+        url.request_target(),
+        url.host_header(),
+        USER_AGENT,
+    );
+    stream.write_all(request.as_bytes())?;
+    stream.flush()?;
+
+    let raw = read_to_eof(&stream)?;
+    let head_end = find_header_end(&raw)
+        .ok_or_else(|| NetError::MalformedResponse("no \\r\\n\\r\\n header terminator".into()))?;
+    let (status, reason, headers) = parse_head(&raw[..head_end])?;
+    let body = decode_body(&raw[head_end + 4..], &headers)?;
+
+    Ok(Response {
+        url: url.to_string(),
+        status,
+        reason,
+        headers,
+        body,
+    })
+}
+
+/// Reads until the peer closes (we always send `Connection: close`), with
+/// the size cap applied incrementally. A read-timeout fires here as a plain
+/// I/O error — partial data is discarded rather than served truncated.
+fn read_to_eof(mut stream: &TcpStream) -> Result<Vec<u8>, NetError> {
+    let mut buf = [0u8; 8192];
+    let mut raw: Vec<u8> = Vec::with_capacity(8 * 1024);
+    loop {
+        let n = stream.read(&mut buf)?;
+        if n == 0 {
+            return Ok(raw);
+        }
+        if raw.len().saturating_add(n) > MAX_BODY_BYTES {
+            return Err(NetError::ResponseTooLarge);
+        }
+        raw.extend_from_slice(&buf[..n]);
+    }
+}
+
+/// Byte offset of the `\r\n\r\n` separator ending the head.
+fn find_header_end(raw: &[u8]) -> Option<usize> {
+    if raw.len() < 4 {
+        return None;
+    }
+    raw.windows(4).position(|w| w == b"\r\n\r\n")
+}
+
+/// Parses the status line and header block (the bytes before `\r\n\r\n`).
+/// Header lines may use bare `\n`; their trailing `\r` is trimmed.
+fn parse_head(head: &[u8]) -> Result<(u16, String, Headers), NetError> {
+    let head_str = std::str::from_utf8(head)
+        .map_err(|_| NetError::MalformedResponse("non-UTF-8 header block".into()))?;
+    let mut lines = head_str.split('\n');
+    let status_line = lines.next().unwrap_or("").trim_end_matches('\r');
+    let (status, reason) = parse_status_line(status_line)?;
+
+    let mut headers = Headers::new();
+    for line in lines {
+        let line = line.trim_end_matches('\r');
+        if line.is_empty() {
+            continue;
+        }
+        let (name, value) = match line.split_once(':') {
+            Some((n, v)) => (n, v),
+            None => {
+                return Err(NetError::MalformedResponse(format!(
+                    "header line without ':': {line:?}"
+                )))
+            },
+        };
+        if name.is_empty() || name.contains(char::is_whitespace) {
+            return Err(NetError::MalformedResponse(format!(
+                "invalid header name: {name:?}"
+            )));
+        }
+        headers.insert(name, value.trim_matches(|c| c == ' ' || c == '\t').to_string());
+    }
+    Ok((status, reason, headers))
+}
+
+/// Accepts exactly `HTTP/1.<digit> <3 digits>[ reason]`.
+fn parse_status_line(line: &str) -> Result<(u16, String), NetError> {
+    let malformed = || NetError::MalformedResponse(format!("bad status line: {line:?}"));
+    let mut parts = line.splitn(3, ' ');
+    let version = parts.next().unwrap_or("");
+    let minor_ok = version.len() == 8 && version.as_bytes()[7].is_ascii_digit();
+    if !version.starts_with("HTTP/1.") || !minor_ok {
+        return Err(malformed());
+    }
+    let code = parts.next().unwrap_or("");
+    if code.len() != 3 || !code.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(malformed());
+    }
+    let status: u16 = code.parse().map_err(|_| malformed())?;
+    let reason = parts.next().unwrap_or("").trim().to_string();
+    Ok((status, reason))
+}
+
+/// Applies the framing rules to the bytes received after the head.
+fn decode_body(body: &[u8], headers: &Headers) -> Result<Vec<u8>, NetError> {
+    let chunked = headers.get_all("transfer-encoding").iter().any(|v| {
+        v.split(',')
+            .any(|t| t.trim().eq_ignore_ascii_case("chunked"))
+    });
+    if chunked {
+        Ok(dechunk(body)?.0)
+    } else if let Some(cl) = headers.get("content-length") {
+        let len: usize = cl
+            .trim()
+            .parse()
+            .map_err(|_| NetError::MalformedResponse(format!("bad Content-Length: {cl:?}")))?;
+        if len > MAX_BODY_BYTES {
+            return Err(NetError::ResponseTooLarge);
+        }
+        if body.len() < len {
+            return Err(NetError::IncompleteBody);
+        }
+        Ok(body[..len].to_vec())
+    } else {
+        // Neither CL nor chunked: with Connection: close the body is
+        // everything up to EOF (RFC 9112 §6.3 rule 7).
+        Ok(body.to_vec())
+    }
+}
+
+/// Decoded chunks plus whatever trailer section followed the last-chunk.
+///
+/// Grammar enforced: `size [;ext] CRLF data CRLF` repeated, then
+/// `0 CRLF trailer-lines…`. Chunk extensions are skipped; trailer field
+/// contents are ignored (connection closes anyway, so there is nothing to
+/// keep alive about them). Bare-LF size lines are rejected deliberately —
+/// real-world servers that dechunk correctly always send CRLF.
+fn dechunk(input: &[u8]) -> Result<(Vec<u8>, &[u8]), NetError> {
+    let malformed = |d: &str| NetError::MalformedResponse(format!("chunked: {d}"));
+    let mut out = Vec::new();
+    let mut pos = 0usize;
+    loop {
+        let line_end = find_crlf(input, pos)
+            .ok_or_else(|| malformed("unterminated chunk-size line"))?;
+        let size_field = std::str::from_utf8(&input[pos..line_end])
+            .map_err(|_| malformed("non-UTF-8 chunk-size line"))?;
+        // Everything after ';' is a chunk extension; ignore it.
+        let size_digits = size_field.split(';').next().unwrap_or("").trim();
+        let size = usize::from_str_radix(size_digits, 16)
+            .map_err(|_| malformed(&format!("invalid chunk size {size_digits:?}")))?;
+        pos = line_end + 2;
+        if size == 0 {
+            break;
+        }
+        if out.len().saturating_add(size) > MAX_BODY_BYTES {
+            return Err(NetError::ResponseTooLarge);
+        }
+        let data_end = pos.saturating_add(size);
+        let data = input
+            .get(pos..data_end)
+            .ok_or_else(|| malformed("truncated chunk data"))?;
+        out.extend_from_slice(data);
+        pos = data_end;
+        if input.get(pos..pos.saturating_add(2)) != Some(&b"\r\n"[..]) {
+            return Err(malformed("missing CRLF after chunk data"));
+        }
+        pos += 2;
+    }
+    // Rest of the buffer is the trailer section (possibly empty); we do not
+    // interpret it.
+    Ok((out, &input[pos.min(input.len())..]))
+}
+
+fn find_crlf(buf: &[u8], from: usize) -> Option<usize> {
+    let mut i = from;
+    while i + 1 < buf.len() {
+        if buf[i] == b'\r' && buf[i + 1] == b'\n' {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use std::net::TcpListener;
+    use std::sync::mpsc::Receiver;
+    use std::time::Duration;
+
+    /// Binds an ephemeral loopback listener and spawns a thread that serves
+    /// one canned response per incoming connection (draining each request
+    /// first so the client's write can never block). Every received request
+    /// byte-block is forwarded on the returned receiver. Port 0 only, so
+    /// tests never clash; no traffic leaves loopback.
+    pub(crate) fn serve(script: Vec<Vec<u8>>) -> (u16, Receiver<Vec<u8>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind 127.0.0.1:0");
+        let port = listener.local_addr().expect("local_addr").port();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for (i, incoming) in listener.incoming().enumerate() {
+                let Ok(mut stream) = incoming else { continue };
+                if let Some(resp) = script.get(i) {
+                    let mut buf = [0u8; 4096];
+                    let mut seen: Vec<u8> = Vec::new();
+                    loop {
+                        match stream.read(&mut buf) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                seen.extend_from_slice(&buf[..n]);
+                                if seen.windows(4).any(|w| w == b"\r\n\r\n") {
+                                    break;
+                                }
+                            },
+                            Err(_) => break,
+                        }
+                    }
+                    let _ = tx.send(seen);
+                    if stream.write_all(resp).and_then(|_| stream.flush()).is_err() {
+                        break;
+                    }
+                }
+                // Dropping `stream` closes the socket → client sees EOF.
+            }
+        });
+        (port, rx)
+    }
+
+    fn fetch_loopback(script: Vec<Vec<u8>>, path: &str) -> Result<Response, NetError> {
+        let (port, _rx) = serve(script);
+        let url = format!("http://127.0.0.1:{port}{path}");
+        crate::fetch::fetch(&url, &FetchOptions::default())
+    }
+
+    #[test]
+    fn fetches_content_length_body_and_sends_required_headers() {
+        let script = vec![
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello"
+                .to_vec(),
+        ];
+        let (port, rx) = serve(script);
+        let resp = crate::fetch::fetch(
+            &format!("http://127.0.0.1:{port}/a"),
+            &FetchOptions::default(),
+        )
+        .expect("fetch");
+        assert_eq!(resp.status, 200);
+        assert_eq!(resp.reason, "OK");
+        assert_eq!(resp.text().as_deref(), Some("hello"));
+        assert_eq!(resp.content_type(), Some("text/plain"));
+        assert_eq!(resp.url, format!("http://127.0.0.1:{port}/a"));
+
+        let request = String::from_utf8(rx.recv_timeout(Duration::from_secs(5)).expect("request"))
+            .expect("utf-8 request");
+        assert!(request.starts_with(&format!("GET /a HTTP/1.1\r\n")));
+        assert!(request.contains(&format!("Host: 127.0.0.1:{port}\r\n")));
+        assert!(request.contains("User-Agent: Ferric/0.1\r\n"));
+        assert!(request.contains("Accept: */*\r\n"));
+        assert!(request.contains("Connection: close\r\n"));
+    }
+
+    #[test]
+    fn header_lookup_is_case_insensitive_across_the_wire() {
+        let resp = fetch_loopback(
+            vec![b"HTTP/1.1 204 No Content\r\nX-WeIrD-NaMe: v\r\nContent-Length: 0\r\n\r\n"
+                .to_vec()],
+            "/",
+        )
+        .expect("fetch");
+        assert_eq!(resp.status, 204);
+        assert_eq!(resp.headers.get("x-weird-name"), Some("v"));
+        assert_eq!(resp.body.len(), 0);
+        assert_eq!(resp.content_type(), None);
+    }
+
+    #[test]
+    fn repeated_set_cookie_headers_survive_parsing() {
+        let resp = fetch_loopback(
+            vec![b"HTTP/1.1 200 OK\r\nSet-Cookie: a=1\r\nSet-Cookie: b=2\r\nContent-Length: 0\r\n\r\n"
+                .to_vec()],
+            "/",
+        )
+        .expect("fetch");
+        assert_eq!(resp.headers.get_all("set-cookie"), vec!["a=1", "b=2"]);
+    }
+
+    #[test]
+    fn reassembles_chunked_body_with_extensions_and_trailer() {
+        // Three chunks (one carrying a chunk extension), then the 0-chunk
+        // with a trailer field before the final blank line.
+        let raw = concat!(
+            "HTTP/1.1 200 OK\r\n",
+            "Transfer-Encoding: chunked\r\n",
+            "\r\n",
+            "4\r\nWiki\r\n",
+            "5\r\npedia\r\n",
+            "E;ext=1\r\n in\r\n\r\nchunks.\r\n",
+            "0\r\n",
+            "X-Trailer: ignored\r\n",
+            "\r\n",
+        );
+        let resp = fetch_loopback(vec![raw.as_bytes().to_vec()], "/").expect("fetch");
+        assert_eq!(resp.text().as_deref(), Some("Wikipedia in\r\n\r\nchunks."));
+        assert!(!resp.headers.contains("content-length"));
+    }
+
+    #[test]
+    fn content_length_truncates_overlong_stream_data() {
+        // Only CL present: the trailing garbage byte past the declared
+        // length must not leak into the body.
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nabZ";
+        let resp = fetch_loopback(vec![raw.to_vec()], "/").expect("fetch");
+        assert_eq!(resp.text().as_deref(), Some("ab"));
+    }
+
+    #[test]
+    fn short_content_length_body_is_an_error_not_a_truncation() {
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc";
+        match fetch_loopback(vec![raw.to_vec()], "/") {
+            Err(NetError::IncompleteBody) => {},
+            other => panic!("expected IncompleteBody, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn eof_delimited_body_is_accepted_without_cl_or_chunked() {
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<body>to eof";
+        let resp = fetch_loopback(vec![raw.to_vec()], "/").expect("fetch");
+        assert_eq!(resp.text().as_deref(), Some("<body>to eof"));
+    }
+
+    #[test]
+    fn malformed_status_line_is_rejected() {
+        let raw = b"NOT-HTTP AT ALL\r\n\r\n";
+        match fetch_loopback(vec![raw.to_vec()], "/") {
+            Err(NetError::MalformedResponse(_)) => {},
+            other => panic!("expected MalformedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn missing_header_terminator_is_rejected() {
+        let raw = b"HTTP/1.1 200 OK\r\nnever-terminated";
+        match fetch_loopback(vec![raw.to_vec()], "/") {
+            Err(NetError::MalformedResponse(_)) => {},
+            other => panic!("expected MalformedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn header_line_without_colon_is_rejected() {
+        let raw = b"HTTP/1.1 200 OK\r\nBadHeaderLine\r\nContent-Length: 0\r\n\r\n";
+        match fetch_loopback(vec![raw.to_vec()], "/") {
+            Err(NetError::MalformedResponse(_)) => {},
+            other => panic!("expected MalformedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn status_line_without_reason_phrase_is_accepted() {
+        let resp =
+            fetch_loopback(vec![b"HTTP/1.1 404\r\nContent-Length: 0\r\n\r\n".to_vec()], "/")
+                .expect("fetch");
+        assert_eq!(resp.status, 404);
+        assert_eq!(resp.reason, "");
+    }
+
+    // ---- direct dechunk unit tests (no sockets involved) ----
+
+    #[test]
+    fn dechunk_handles_multiple_chunks_and_returns_trailer_slice() {
+        let input = b"3\r\none\r\n4\r\ntwo!\r\n0\r\nX-T: v\r\n\r\n";
+        let (body, trailer) = dechunk(input).expect("dechunk");
+        assert_eq!(body, b"onetwo!");
+        assert_eq!(trailer, b"X-T: v\r\n\r\n");
+    }
+
+    #[test]
+    fn dechunk_skips_chunk_extensions() {
+        let (body, _) = dechunk(b"2;name=value\r\nhi\r\n0\r\n\r\n").expect("dechunk");
+        assert_eq!(body, b"hi");
+    }
+
+    #[test]
+    fn dechunk_rejects_bad_sizes_and_truncation() {
+        assert!(dechunk(b"zz\r\nab\r\n0\r\n\r\n").is_err()); // not hex
+        assert!(dechunk(b"5\r\nabc").is_err()); // truncated data
+        assert!(dechunk(b"1\r\na").is_err()); // missing final CRLF + last-chunk
+        assert!(dechunk(b"\r\n").is_err()); // empty size field
+        let (body, trailer) = dechunk(b"0\r\n\r\n").expect("empty chunked body");
+        assert!(body.is_empty());
+        assert_eq!(trailer, b"\r\n");
+    }
+
+    #[test]
+    fn oversized_chunk_is_refused_by_the_cap() {
+        // A 4 GiB chunk claim must hit the cap long before any allocation.
+        let input = b"FFFFFFFF\r\nx".to_vec();
+        match dechunk(&input) {
+            Err(NetError::ResponseTooLarge) => {},
+            other => panic!("expected ResponseTooLarge, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn connect_refused_maps_to_io_error() {
+        // Port 1 on loopback: reserved, virtually guaranteed closed.
+        let url = Url::parse("http://127.0.0.1:1/x").expect("url");
+        let err = get(&url, &FetchOptions::default()).expect_err("must fail");
+        assert!(matches!(err, NetError::Io(_)), "got {err:?}");
+    }
+}
