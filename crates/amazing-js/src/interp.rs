@@ -148,8 +148,7 @@ impl Interpreter {
             match &s.kind {
                 StmtKind::Var(d) if d.kind == ast::VarKind::Var => {
                     for x in &d.decls {
-                        let Binding::Ident(id) = &x.binding;
-                        env.declare_var(&id.name, JsValue::Undefined)?;
+                        self.hoist_binding(&x.binding, env)?;
                     }
                 }
                 StmtKind::Function(f) => {
@@ -199,11 +198,108 @@ impl Interpreter {
     fn hoist_var(&self, d: &ast::VarDecl, env: &EnvHandle) -> Result<(), Throw> {
         if d.kind == ast::VarKind::Var {
             for x in &d.decls {
-                let Binding::Ident(id) = &x.binding;
-                env.declare_var(&id.name, JsValue::Undefined)?;
+                self.hoist_binding(&x.binding, env)?;
             }
         }
         Ok(())
+    }
+
+    fn hoist_binding(&self, binding: &Binding, env: &EnvHandle) -> Result<(), Throw> {
+        match binding {
+            Binding::Ident(identifier) => env.declare_var(&identifier.name, JsValue::Undefined)?,
+            Binding::Array(elements) => {
+                for element in elements.iter().flatten() {
+                    self.hoist_binding(element, env)?;
+                }
+            }
+            Binding::Object(properties) => {
+                for (_, property) in properties {
+                    self.hoist_binding(property, env)?;
+                }
+            }
+            Binding::Rest(inner) | Binding::Default(inner, _) => self.hoist_binding(inner, env)?,
+        }
+        Ok(())
+    }
+
+    fn bind_pattern(
+        &mut self,
+        binding: &Binding,
+        value: JsValue,
+        kind: ast::VarKind,
+        env: &EnvHandle,
+    ) -> Result<(), Throw> {
+        match binding {
+            Binding::Ident(identifier) => match kind {
+                ast::VarKind::Var => {
+                    if !env.assign(&identifier.name, value.clone())? {
+                        self.global_env.declare_var(&identifier.name, value)?;
+                    }
+                }
+                ast::VarKind::Let => env.declare_lexical(&identifier.name, value, true)?,
+                ast::VarKind::Const => env.declare_lexical(&identifier.name, value, false)?,
+            },
+            Binding::Default(inner, expression) => {
+                let value = if value.is_undefined() {
+                    self.eval_expr(expression, env)?
+                } else {
+                    value
+                };
+                self.bind_pattern(inner, value, kind, env)?;
+            }
+            Binding::Rest(inner) => self.bind_pattern(inner, value, kind, env)?,
+            Binding::Array(elements) => {
+                let items = self.iterate(&value).unwrap_or_default();
+                let mut index = 0usize;
+                for element in elements {
+                    if let Some(element) = element {
+                        if let Binding::Rest(rest) = element.as_ref() {
+                            let rest_value = array_values(self, items[index..].to_vec())?;
+                            self.bind_pattern(rest, rest_value, kind, env)?;
+                            index = items.len();
+                        } else {
+                            let item = items.get(index).cloned().unwrap_or(JsValue::Undefined);
+                            self.bind_pattern(element, item, kind, env)?;
+                            index += 1;
+                        }
+                    } else {
+                        index += 1;
+                    }
+                }
+            }
+            Binding::Object(properties) => {
+                let source = match value {
+                    JsValue::Object(_) | JsValue::Str(_) => value,
+                    JsValue::Null | JsValue::Undefined => {
+                        return Err(Throw::type_error("cannot destructure nullish value"))
+                    }
+                    other => other,
+                };
+                let mut used = Vec::new();
+                for (key, property) in properties {
+                    if key == "..." {
+                        let rest = self.object_rest(&source, &used)?;
+                        self.bind_pattern(property, rest, kind, env)?;
+                    } else {
+                        used.push(key.clone());
+                        let item = self.get_prop(&source, key)?;
+                        self.bind_pattern(property, item, kind, env)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn object_rest(&mut self, source: &JsValue, used: &[String]) -> Result<JsValue, Throw> {
+        let rest = self.object_value();
+        for key in self.enumerable_keys(source) {
+            if !used.iter().any(|used_key| used_key == &key) {
+                let value = self.get_prop(source, &key)?;
+                self.set_prop(&rest, &key, value)?;
+            }
+        }
+        Ok(rest)
     }
 
     fn exec_stmt(&mut self, s: &ast::Stmt, env: &EnvHandle) -> Result<Flow, Throw> {
@@ -221,21 +317,10 @@ impl Interpreter {
                         .map(|e| self.eval_expr(e, env))
                         .transpose()?
                         .unwrap_or(JsValue::Undefined);
-                    let Binding::Ident(id) = &x.binding;
-                    match d.kind {
-                        ast::VarKind::Var => {
-                            if !env.assign(&id.name, v.clone())? {
-                                self.global_env.declare_var(&id.name, v)?;
-                            }
-                        }
-                        ast::VarKind::Let => env.declare_lexical(&id.name, v, true)?,
-                        ast::VarKind::Const => {
-                            if x.init.is_none() {
-                                return Err(Throw::syntax_error("const requires an initializer"));
-                            }
-                            env.declare_lexical(&id.name, v, false)?;
-                        }
+                    if d.kind == ast::VarKind::Const && x.init.is_none() {
+                        return Err(Throw::syntax_error("const requires an initializer"));
                     }
+                    self.bind_pattern(&x.binding, v, d.kind, env)?;
                 }
                 Ok(Flow::Normal)
             }
@@ -463,13 +548,11 @@ impl Interpreter {
                 }
             }
         }
-        let per_iteration_names: Vec<String> = match init {
+        let per_iteration_names = match init {
             Some(ForInit::Decl(decl)) if decl.kind != ast::VarKind::Var => decl
                 .decls
                 .iter()
-                .map(|declarator| match &declarator.binding {
-                    Binding::Ident(identifier) => identifier.name.clone(),
-                })
+                .flat_map(|declarator| binding_names(&declarator.binding))
                 .collect(),
             _ => Vec::new(),
         };
@@ -533,20 +616,15 @@ impl Interpreter {
     fn bind_for(&mut self, left: &ForLeft, value: JsValue, env: &EnvHandle) -> Result<(), Throw> {
         match left {
             ForLeft::Target(t) => self.assign_target(t, value, env),
-            ForLeft::Decl(d) => {
-                let id = match d.decls.first().map(|x| &x.binding) {
-                    Some(Binding::Ident(i)) => &i.name,
-                    _ => return Err(Throw::syntax_error("destructuring is deferred")),
-                };
-                if d.kind == ast::VarKind::Var {
-                    if !env.assign(id, value.clone())? {
-                        env.declare_var(id, value)?;
-                    }
-                } else {
-                    env.declare_lexical(id, value, true)?;
-                }
-                Ok(())
-            }
+            ForLeft::Decl(d) => self.bind_pattern(
+                &d.decls
+                    .first()
+                    .ok_or_else(|| Throw::syntax_error("missing loop binding"))?
+                    .binding,
+                value,
+                d.kind,
+                env,
+            ),
         }
     }
     fn exec_try(&mut self, t: &ast::TryStmt, env: &EnvHandle) -> Result<Flow, Throw> {
@@ -1171,7 +1249,6 @@ impl Interpreter {
         args: Vec<JsValue>,
     ) -> Result<(), Throw> {
         for (i, p) in ps.iter().enumerate() {
-            let Binding::Ident(id) = &p.binding;
             let v = if let Some(v) = args.get(i) {
                 v.clone()
             } else if let Some(d) = &p.default {
@@ -1179,7 +1256,7 @@ impl Interpreter {
             } else {
                 JsValue::Undefined
             };
-            e.declare_lexical(&id.name, v, true)?;
+            self.bind_pattern(&p.binding, v, ast::VarKind::Let, e)?;
         }
         let a = JsValue::object(JsObject::array());
         for (i, v) in args.into_iter().enumerate() {
@@ -1847,6 +1924,22 @@ fn reference_name(reference: &Reference) -> Option<String> {
     match reference {
         Reference::Binding(name) => Some(name.clone()),
         Reference::Property(_, key) => Some(key.clone()),
+    }
+}
+
+fn binding_names(binding: &Binding) -> Vec<String> {
+    match binding {
+        Binding::Ident(identifier) => vec![identifier.name.clone()],
+        Binding::Array(elements) => elements
+            .iter()
+            .flatten()
+            .flat_map(|element| binding_names(element))
+            .collect(),
+        Binding::Object(properties) => properties
+            .iter()
+            .flat_map(|(_, property)| binding_names(property))
+            .collect(),
+        Binding::Rest(inner) | Binding::Default(inner, _) => binding_names(inner),
     }
 }
 
@@ -3334,6 +3427,24 @@ mod tests {
                 "5".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn array_object_and_for_of_patterns_bind_values_defaults_and_rest() {
+        let mut i = Interpreter::new();
+        let value = match i.run_script(
+            "let [a,b=3,...tail]=[1,undefined,4,5]; let {x,y:z=4,...rest}={x:1,y:undefined,q:2}; a+b+tail.length+x+z+Object.keys(rest).length;",
+        ) {
+            Ok(value) => value,
+            Err(Throw(JsValue::Object(object))) => panic!("pattern error: {:?}", object.borrow().get_own("message")),
+            Err(error) => panic!("pattern error: {:?}", error.0),
+        };
+        assert_eq!(num(value), 12.0);
+        let mut j = Interpreter::new();
+        let value = j
+            .run_script("let total=0; for (const [a,b] of [[2,3]]) { total=a+b; } total;")
+            .unwrap();
+        assert_eq!(num(value), 5.0);
     }
 
     #[test]

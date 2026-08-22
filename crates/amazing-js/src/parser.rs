@@ -37,7 +37,9 @@
 //!
 //! Deferred (documented, not implemented):
 //! - Modules (`import`/`export`) and top-level `await`.
-//! - Destructuring in declarations, parameters, and assignment targets.
+//! - Destructuring assignment targets, computed pattern keys, and full
+//!   iterator-closing/error semantics (basic declaration/parameter/for-head
+//!   array/object patterns are implemented).
 //! - Regex literals (division always; see `lexer` docs), tagged templates.
 //! - `with`, `new.target`, `import.meta`, labels-on-non-loop `continue`
 //!   subtleties beyond loop/switch depth checks, strict-mode early errors,
@@ -173,7 +175,11 @@ impl Parser {
         if self.at_punct(p) {
             Ok(self.bump().span)
         } else {
-            Err(self.err(format!("expected `{}`, found {}", p.spelling(), self.cur().kind.describe())))
+            Err(self.err(format!(
+                "expected `{}`, found {}",
+                p.spelling(),
+                self.cur().kind.describe()
+            )))
         }
     }
 
@@ -224,7 +230,10 @@ impl Parser {
                 self.bump();
                 Ok(id)
             }
-            _ => Err(self.err(format!("expected property name, found {}", t.kind.describe()))),
+            _ => Err(self.err(format!(
+                "expected property name, found {}",
+                t.kind.describe()
+            ))),
         }
     }
 
@@ -296,10 +305,14 @@ impl Parser {
             }
             TokenKind::Keyword(crate::tokens::Keyword::Class) => {
                 let c = self.parse_class_rest()?;
-                let name = c.name.clone().ok_or_else(|| {
-                    self.err_at(start, "class declarations must have a name")
-                })?;
-                StmtKind::Class(Box::new(ClassItem { name: Some(name), ..c }))
+                let name = c
+                    .name
+                    .clone()
+                    .ok_or_else(|| self.err_at(start, "class declarations must have a name"))?;
+                StmtKind::Class(Box::new(ClassItem {
+                    name: Some(name),
+                    ..c
+                }))
             }
             TokenKind::Keyword(crate::tokens::Keyword::If) => self.parse_if_stmt()?,
             TokenKind::Keyword(crate::tokens::Keyword::For) => self.parse_for_stmt()?,
@@ -326,8 +339,7 @@ impl Parser {
             _ => {
                 // Labeled statement: `name :` (colon on any line? Spec
                 // requires the colon to follow; keep it simple and accept).
-                if matches!(self.cur().kind, TokenKind::Ident(_))
-                    && self.nth_punct(1, Punct::Colon)
+                if matches!(self.cur().kind, TokenKind::Ident(_)) && self.nth_punct(1, Punct::Colon)
                 {
                     return self.parse_labeled_stmt();
                 }
@@ -349,15 +361,21 @@ impl Parser {
     }
 
     fn nth_is_function(&self, n: usize) -> bool {
-        matches!(self.nth(n).kind, TokenKind::Keyword(crate::tokens::Keyword::Function))
-            && !self.nth(n).newline_before
+        matches!(
+            self.nth(n).kind,
+            TokenKind::Keyword(crate::tokens::Keyword::Function)
+        ) && !self.nth(n).newline_before
     }
 
     /// Parses one `var`/`let`/`const` declarator list. `allow_missing_init`
     /// relaxes the const-requires-initializer rule for for-heads, where the
     /// deciding context (`in`/`of` vs `;`) is only known afterwards; the
     /// C-style path re-checks explicitly.
-    fn parse_var_decl(&mut self, kind: VarKind, allow_missing_init: bool) -> Result<VarDecl, SyntaxError> {
+    fn parse_var_decl(
+        &mut self,
+        kind: VarKind,
+        allow_missing_init: bool,
+    ) -> Result<VarDecl, SyntaxError> {
         self.bump(); // var/let/const keyword
         let mut decls = Vec::new();
         loop {
@@ -384,10 +402,81 @@ impl Parser {
     }
 
     fn parse_binding(&mut self) -> Result<Binding, SyntaxError> {
-        if matches!(self.cur().kind, TokenKind::Punct(Punct::Lbrace | Punct::LBracket)) {
-            return Err(self.err("destructuring declarations are deferred"));
+        self.parse_binding_inner(false)
+    }
+
+    fn parse_binding_inner(&mut self, allow_default: bool) -> Result<Binding, SyntaxError> {
+        let mut binding = match self.cur().kind {
+            TokenKind::Punct(Punct::LBracket) => {
+                self.bump();
+                let mut elements = Vec::new();
+                while !self.at_punct(Punct::RBracket) {
+                    if self.eat_punct(Punct::Comma) {
+                        elements.push(None);
+                        continue;
+                    }
+                    if self.eat_punct(Punct::Ellipsis) {
+                        elements.push(Some(Box::new(Binding::Rest(Box::new(
+                            self.parse_binding_inner(false)?,
+                        )))));
+                        if self.eat_punct(Punct::Comma) && !self.at_punct(Punct::RBracket) {
+                            return Err(self.err("rest element must be last in an array pattern"));
+                        }
+                        break;
+                    }
+                    elements.push(Some(Box::new(self.parse_binding_inner(true)?)));
+                    if !self.eat_punct(Punct::Comma) {
+                        break;
+                    }
+                }
+                self.expect_punct(Punct::RBracket)?;
+                Binding::Array(elements)
+            }
+            TokenKind::Punct(Punct::Lbrace) => {
+                self.bump();
+                let mut properties = Vec::new();
+                while !self.at_punct(Punct::Rbrace) {
+                    if self.eat_punct(Punct::Ellipsis) {
+                        let rest = self.parse_binding_inner(false)?;
+                        properties
+                            .push(("...".to_string(), Box::new(Binding::Rest(Box::new(rest)))));
+                        if self.eat_punct(Punct::Comma) && !self.at_punct(Punct::Rbrace) {
+                            return Err(self.err("rest property must be last in an object pattern"));
+                        }
+                        break;
+                    }
+                    let key = self.prop_name()?;
+                    let value = if self.eat_punct(Punct::Colon) {
+                        self.parse_binding_inner(true)?
+                    } else {
+                        let mut shorthand = Binding::Ident(key.clone());
+                        if self.eat_punct(Punct::Eq) {
+                            let saved = self.no_in;
+                            self.no_in = true;
+                            let default = self.parse_assignment_expr()?;
+                            self.no_in = saved;
+                            shorthand = Binding::Default(Box::new(shorthand), Box::new(default));
+                        }
+                        shorthand
+                    };
+                    properties.push((key.name, Box::new(value)));
+                    if !self.eat_punct(Punct::Comma) {
+                        break;
+                    }
+                }
+                self.expect_punct(Punct::Rbrace)?;
+                Binding::Object(properties)
+            }
+            _ => Binding::Ident(self.expect_ident()?),
+        };
+        if allow_default && self.eat_punct(Punct::Eq) {
+            let saved = self.no_in;
+            self.no_in = true;
+            let default = self.parse_assignment_expr()?;
+            self.no_in = saved;
+            binding = Binding::Default(Box::new(binding), Box::new(default));
         }
-        Ok(Binding::Ident(self.expect_ident()?))
+        Ok(binding)
     }
 
     fn parse_block_stmt(&mut self) -> Result<Stmt, SyntaxError> {
@@ -483,7 +572,11 @@ impl Parser {
                     self.loop_depth += 1;
                     let body = Box::new(self.parse_stmt()?);
                     self.loop_depth -= 1;
-                    StmtKind::ForOf { left: ForLeft::Decl(Box::new(decl)), right, body }
+                    StmtKind::ForOf {
+                        left: ForLeft::Decl(Box::new(decl)),
+                        right,
+                        body,
+                    }
                 } else {
                     self.bump(); // in
                     let right = self.parse_expression_no_in(true)?;
@@ -491,7 +584,11 @@ impl Parser {
                     self.loop_depth += 1;
                     let body = Box::new(self.parse_stmt()?);
                     self.loop_depth -= 1;
-                    StmtKind::ForIn { left: ForLeft::Decl(Box::new(decl)), right, body }
+                    StmtKind::ForIn {
+                        left: ForLeft::Decl(Box::new(decl)),
+                        right,
+                        body,
+                    }
                 };
                 return Ok(stmt);
             }
@@ -504,8 +601,7 @@ impl Parser {
         // Expression head: `for (x in y)` / `for (x of y)` / C-style.
         let expr = self.parse_expression_no_in(true)?;
         if self.at_kw(crate::tokens::Keyword::In) || self.word("of") {
-            ensure_assignable(&expr)
-                .map_err(|e| self.err_at(self.cur_loc(), e.message))?;
+            ensure_assignable(&expr).map_err(|e| self.err_at(self.cur_loc(), e.message))?;
             let stmt = if self.word("of") {
                 self.bump();
                 let right = self.parse_assignment_expr()?;
@@ -513,7 +609,11 @@ impl Parser {
                 self.loop_depth += 1;
                 let body = Box::new(self.parse_stmt()?);
                 self.loop_depth -= 1;
-                StmtKind::ForOf { left: ForLeft::Target(expr), right, body }
+                StmtKind::ForOf {
+                    left: ForLeft::Target(expr),
+                    right,
+                    body,
+                }
             } else {
                 self.bump(); // in
                 let right = self.parse_expression_no_in(true)?;
@@ -521,7 +621,11 @@ impl Parser {
                 self.loop_depth += 1;
                 let body = Box::new(self.parse_stmt()?);
                 self.loop_depth -= 1;
-                StmtKind::ForIn { left: ForLeft::Target(expr), right, body }
+                StmtKind::ForIn {
+                    left: ForLeft::Target(expr),
+                    right,
+                    body,
+                }
             };
             return Ok(stmt);
         }
@@ -547,7 +651,12 @@ impl Parser {
         self.loop_depth += 1;
         let body = Box::new(self.parse_stmt()?);
         self.loop_depth -= 1;
-        Ok(StmtKind::For { init, test, update, body })
+        Ok(StmtKind::For {
+            init,
+            test,
+            update,
+            body,
+        })
     }
 
     /// Like [`Parser::parse_var_decl`] but parses initializers with the
@@ -922,9 +1031,8 @@ impl Parser {
         }
         // Modifier order is fixed by the grammar: `async` precedes `*`
         // (`async *ag() {}`; bare `*g()` and `async m()` are the other combos).
-        let is_async = self.word("async")
-            && !self.cur().newline_before
-            && self.nth_starts_member_key(1);
+        let is_async =
+            self.word("async") && !self.cur().newline_before && self.nth_starts_member_key(1);
         if is_async {
             self.bump();
         }
@@ -942,12 +1050,14 @@ impl Parser {
         let key = self.parse_prop_key()?;
         if self.at_punct(Punct::LParen) {
             let params = self.parse_params()?;
-            let actual_kind =
-                if kind == MethodKind::Method && !is_static && prop_key_name(&key) == Some("constructor") {
-                    MethodKind::Constructor
-                } else {
-                    kind
-                };
+            let actual_kind = if kind == MethodKind::Method
+                && !is_static
+                && prop_key_name(&key) == Some("constructor")
+            {
+                MethodKind::Constructor
+            } else {
+                kind
+            };
             let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block())?;
             return Ok(ClassMember::Method(ClassMethod {
                 key,
@@ -962,7 +1072,9 @@ impl Parser {
         }
         // Field definition (storage only).
         if is_generator || is_async || kind != MethodKind::Method {
-            return Err(self.err("only methods may use `*`, `async`, `get`, or `set` without a parameter list"));
+            return Err(self.err(
+                "only methods may use `*`, `async`, `get`, or `set` without a parameter list",
+            ));
         }
         let init = if self.eat_punct(Punct::Eq) {
             let saved = self.no_in;
@@ -1011,7 +1123,10 @@ impl Parser {
                 self.expect_punct(Punct::RBracket)?;
                 Ok(PropKey::Computed(Box::new(e)))
             }
-            other => Err(self.err(format!("expected property name, found {}", other.describe()))),
+            other => Err(self.err(format!(
+                "expected property name, found {}",
+                other.describe()
+            ))),
         }
     }
 }
@@ -1129,7 +1244,7 @@ impl Parser {
             return Ok(test);
         }
         self.bump(); // ?
-        // The middle operand allows `in` even inside for-heads.
+                     // The middle operand allows `in` even inside for-heads.
         let saved = self.no_in;
         self.no_in = false;
         let consequent = self.parse_assignment_expr();
@@ -1181,24 +1296,24 @@ impl Parser {
             match kind {
                 BinKind::Logical(LogicalOp::Coalesce) => {
                     if saw_logical {
-                        return Err(self.err(
-                            "`??` cannot be mixed with `||`/`&&` without parentheses",
-                        ));
+                        return Err(
+                            self.err("`??` cannot be mixed with `||`/`&&` without parentheses")
+                        );
                     }
                     saw_coalesce = true;
                 }
                 BinKind::Logical(_) => {
                     if saw_coalesce {
-                        return Err(self.err(
-                            "`||`/`&&` cannot be mixed with `??` without parentheses",
-                        ));
+                        return Err(
+                            self.err("`||`/`&&` cannot be mixed with `??` without parentheses")
+                        );
                     }
                     saw_logical = true;
                 }
                 BinKind::Arithmetic(_) => {}
             }
             self.bump(); // operator
-            // `**` is right-associative; everything else left-assoc.
+                         // `**` is right-associative; everything else left-assoc.
             let next_min = if kind == BinKind::Arithmetic(BinOp::Pow) {
                 prec
             } else {
@@ -1214,12 +1329,13 @@ impl Parser {
             if kind == BinKind::Logical(LogicalOp::Coalesce)
                 && matches!(
                     right.kind,
-                    ExprKind::Logical { op: LogicalOp::And | LogicalOp::Or, .. }
+                    ExprKind::Logical {
+                        op: LogicalOp::And | LogicalOp::Or,
+                        ..
+                    }
                 )
             {
-                return Err(self.err(
-                    "`??` cannot be mixed with `||`/`&&` without parentheses",
-                ));
+                return Err(self.err("`??` cannot be mixed with `||`/`&&` without parentheses"));
             }
             let span = Span::new(start, right.span.end);
             left = match kind {
@@ -1379,7 +1495,13 @@ impl Parser {
             } else {
                 Vec::new()
             };
-            let node = Expr::new(ExprKind::New { callee: Box::new(callee), args }, self.span_from(start));
+            let node = Expr::new(
+                ExprKind::New {
+                    callee: Box::new(callee),
+                    args,
+                },
+                self.span_from(start),
+            );
             return self.parse_member_suffix(node, true);
         }
         self.parse_member_chain(true)
@@ -1426,7 +1548,11 @@ impl Parser {
                     let args = self.parse_args()?;
                     let span = Span::new(e.span.start, self.last_end);
                     e = Expr::new(
-                        ExprKind::Call { callee: Box::new(e), args, optional: true },
+                        ExprKind::Call {
+                            callee: Box::new(e),
+                            args,
+                            optional: true,
+                        },
                         span,
                     );
                 } else if self.at_punct(Punct::LBracket) {
@@ -1458,7 +1584,11 @@ impl Parser {
                 let args = self.parse_args()?;
                 let span = Span::new(e.span.start, self.last_end);
                 e = Expr::new(
-                    ExprKind::Call { callee: Box::new(e), args, optional: false },
+                    ExprKind::Call {
+                        callee: Box::new(e),
+                        args,
+                        optional: false,
+                    },
                     span,
                 );
             } else if matches!(self.cur().kind, TokenKind::TemplatePart { .. }) {
@@ -1539,11 +1669,17 @@ impl Parser {
             }
             TokenKind::Keyword(K::Function) => {
                 let f = self.parse_function_rest(false)?;
-                Ok(Expr::new(ExprKind::Function(Box::new(f)), self.span_from(start)))
+                Ok(Expr::new(
+                    ExprKind::Function(Box::new(f)),
+                    self.span_from(start),
+                ))
             }
             TokenKind::Keyword(K::Class) => {
                 let c = self.parse_class_rest()?;
-                Ok(Expr::new(ExprKind::Class(Box::new(c)), self.span_from(start)))
+                Ok(Expr::new(
+                    ExprKind::Class(Box::new(c)),
+                    self.span_from(start),
+                ))
             }
             TokenKind::Keyword(K::Yield) => self.parse_yield_expr(),
             TokenKind::Punct(Punct::LParen) => self.parse_paren_or_arrow(),
@@ -1563,7 +1699,10 @@ impl Parser {
         if self.word("async") && self.nth_is_function(1) {
             self.bump(); // async
             let f = self.parse_function_rest(true)?;
-            return Ok(Expr::new(ExprKind::Function(Box::new(f)), self.span_from(start)));
+            return Ok(Expr::new(
+                ExprKind::Function(Box::new(f)),
+                self.span_from(start),
+            ));
         }
         // async single-param arrow: `async x => …`
         if self.word("async")
@@ -1578,10 +1717,7 @@ impl Parser {
             return self.finish_arrow(start, vec![plain_param(param)], true);
         }
         // async parenthesized arrow: speculate `(params) =>`.
-        if self.word("async")
-            && self.nth_punct(1, Punct::LParen)
-            && !self.nth(1).newline_before
-        {
+        if self.word("async") && self.nth_punct(1, Punct::LParen) && !self.nth(1).newline_before {
             let save_pos = self.pos;
             let save_end = self.last_end;
             let save_noin = self.no_in;
@@ -1633,7 +1769,10 @@ impl Parser {
         }
         let inner = self.parse_expression()?;
         self.expect_punct(Punct::RParen)?;
-        Ok(Expr::new(ExprKind::Paren(Box::new(inner)), self.span_from(start)))
+        Ok(Expr::new(
+            ExprKind::Paren(Box::new(inner)),
+            self.span_from(start),
+        ))
     }
 
     /// Consumes `( binding (= default)? , … ) =>` or errors (caller
@@ -1717,9 +1856,10 @@ impl Parser {
                     tail = t2;
                 }
                 other => {
-                    return Err(
-                        self.err(format!("expected template continuation, found {}", other.describe()))
-                    );
+                    return Err(self.err(format!(
+                        "expected template continuation, found {}",
+                        other.describe()
+                    )));
                 }
             }
         }
@@ -1790,9 +1930,8 @@ impl Parser {
         // Modifiers (no `static` in object literals).
         // Modifier order is fixed by the grammar: `async` precedes `*`
         // (`async *ag() {}`; bare `*g()` and `async m()` are the other combos).
-        let is_async = self.word("async")
-            && !self.cur().newline_before
-            && self.nth_starts_member_key(1);
+        let is_async =
+            self.word("async") && !self.cur().newline_before && self.nth_starts_member_key(1);
         if is_async {
             self.bump();
         }
@@ -1971,7 +2110,10 @@ mod tests {
         assert_eq!(p.body.len(), 2);
         assert!(matches!(
             p.body[1].kind,
-            StmtKind::Expression(Expr { kind: ExprKind::Update { prefix: true, .. }, .. })
+            StmtKind::Expression(Expr {
+                kind: ExprKind::Update { prefix: true, .. },
+                ..
+            })
         ));
     }
 
@@ -1997,7 +2139,10 @@ mod tests {
             StmtKind::Switch { cases, .. } => cases,
             other => panic!("expected switch, got {other:?}"),
         };
-        assert!(matches!(cases[0].body[0].kind, StmtKind::Break { label: None }));
+        assert!(matches!(
+            cases[0].body[0].kind,
+            StmtKind::Break { label: None }
+        ));
         // `break\ncase` must NOT have consumed `case` as a label.
         assert_eq!(cases.len(), 2);
     }
@@ -2011,7 +2156,10 @@ mod tests {
         };
         assert!(matches!(
             body[0].kind,
-            StmtKind::Expression(Expr { kind: ExprKind::Yield { argument: None, .. }, .. })
+            StmtKind::Expression(Expr {
+                kind: ExprKind::Yield { argument: None, .. },
+                ..
+            })
         ));
         assert_eq!(body.len(), 2);
     }
@@ -2035,7 +2183,12 @@ mod tests {
     #[test]
     fn multiplication_binds_tighter_than_addition() {
         let e = expr_kind("1 + 2 * 3");
-        let ExprKind::Binary { op: BinOp::Add, left, right } = e else {
+        let ExprKind::Binary {
+            op: BinOp::Add,
+            left,
+            right,
+        } = e
+        else {
             panic!("expected + at top")
         };
         assert!(matches!(left.kind, ExprKind::Num(_)));
@@ -2048,7 +2201,12 @@ mod tests {
     #[test]
     fn parentheses_override_precedence_and_stay_marked() {
         let e = expr_kind("(1 + 2) * 3");
-        let ExprKind::Binary { op: BinOp::Mul, left, .. } = e else {
+        let ExprKind::Binary {
+            op: BinOp::Mul,
+            left,
+            ..
+        } = e
+        else {
             panic!("expected * at top")
         };
         assert!(matches!(left.kind, ExprKind::Paren(_)));
@@ -2060,10 +2218,18 @@ mod tests {
     #[test]
     fn exponentiation_is_right_associative() {
         let e = expr_kind("2 ** 3 ** 2");
-        let ExprKind::Binary { op: BinOp::Pow, right, .. } = e else {
+        let ExprKind::Binary {
+            op: BinOp::Pow,
+            right,
+            ..
+        } = e
+        else {
             panic!("expected ** at top")
         };
-        assert!(matches!(right.kind, ExprKind::Binary { op: BinOp::Pow, .. }));
+        assert!(matches!(
+            right.kind,
+            ExprKind::Binary { op: BinOp::Pow, .. }
+        ));
     }
 
     #[test]
@@ -2086,16 +2252,25 @@ mod tests {
         // Parenthesized mixes are fine in both orders.
         assert!(matches!(
             expr_kind("(a ?? b) || c"),
-            ExprKind::Logical { op: LogicalOp::Or, .. }
+            ExprKind::Logical {
+                op: LogicalOp::Or,
+                ..
+            }
         ));
         assert!(matches!(
             expr_kind("a ?? (b || c)"),
-            ExprKind::Logical { op: LogicalOp::Coalesce, .. }
+            ExprKind::Logical {
+                op: LogicalOp::Coalesce,
+                ..
+            }
         ));
         // Chained `??` is legal.
         assert!(matches!(
             expr_kind("a ?? b ?? c"),
-            ExprKind::Logical { op: LogicalOp::Coalesce, .. }
+            ExprKind::Logical {
+                op: LogicalOp::Coalesce,
+                ..
+            }
         ));
     }
 
@@ -2115,26 +2290,42 @@ mod tests {
         }
         assert!(matches!(
             expr_kind("a **= b"),
-            ExprKind::Assign { op: AssignOp::Pow, .. }
+            ExprKind::Assign {
+                op: AssignOp::Pow,
+                ..
+            }
         ));
     }
 
     #[test]
     fn typeof_binds_tighter_than_equality() {
         let e = expr_kind("typeof a === 'string'");
-        let ExprKind::Binary { op: BinOp::StrictEq, left, .. } = e else {
+        let ExprKind::Binary {
+            op: BinOp::StrictEq,
+            left,
+            ..
+        } = e
+        else {
             panic!("expected === at top")
         };
         assert!(matches!(
             left.kind,
-            ExprKind::Unary { op: UnOp::Typeof, .. }
+            ExprKind::Unary {
+                op: UnOp::Typeof,
+                ..
+            }
         ));
     }
 
     #[test]
     fn relational_binds_tighter_than_equality() {
         let e = expr_kind("1 < 2 === 3 > 2");
-        let ExprKind::Binary { op: BinOp::StrictEq, left, right } = e else {
+        let ExprKind::Binary {
+            op: BinOp::StrictEq,
+            left,
+            right,
+        } = e
+        else {
             panic!("expected === at top")
         };
         assert!(matches!(left.kind, ExprKind::Binary { op: BinOp::Lt, .. }));
@@ -2144,17 +2335,31 @@ mod tests {
     #[test]
     fn and_binds_tighter_than_or() {
         let e = expr_kind("a || b && c");
-        let ExprKind::Logical { op: LogicalOp::Or, right, .. } = e else {
+        let ExprKind::Logical {
+            op: LogicalOp::Or,
+            right,
+            ..
+        } = e
+        else {
             panic!("expected || at top")
         };
-        assert!(matches!(right.kind, ExprKind::Logical { op: LogicalOp::And, .. }));
+        assert!(matches!(
+            right.kind,
+            ExprKind::Logical {
+                op: LogicalOp::And,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn instance_of_and_in_parse_as_relational_operators() {
         assert!(matches!(
             expr_kind("a instanceof B"),
-            ExprKind::Binary { op: BinOp::InstanceOf, .. }
+            ExprKind::Binary {
+                op: BinOp::InstanceOf,
+                ..
+            }
         ));
         assert!(matches!(
             expr_kind("'k' in obj"),
@@ -2192,7 +2397,9 @@ mod tests {
     #[test]
     fn single_param_arrow_with_expression_body() {
         let e = expr_kind("x => x * 2");
-        let ExprKind::Arrow(a) = e else { panic!("expected arrow") };
+        let ExprKind::Arrow(a) = e else {
+            panic!("expected arrow")
+        };
         assert_eq!(a.params.len(), 1);
         assert!(matches!(a.body, ArrowBody::Expr(_)));
         assert!(!a.is_async);
@@ -2201,7 +2408,9 @@ mod tests {
     #[test]
     fn parenthesized_params_with_defaults_and_rest() {
         let e = expr_kind("(a, b = 1, ...rest) => a");
-        let ExprKind::Arrow(a) = e else { panic!("expected arrow") };
+        let ExprKind::Arrow(a) = e else {
+            panic!("expected arrow")
+        };
         assert_eq!(a.params.len(), 3);
         assert!(a.params[1].default.is_some());
         assert!(a.params[2].rest);
@@ -2211,28 +2420,40 @@ mod tests {
     fn empty_param_arrow_block_body_vs_object_body() {
         // `() => {}` is a BLOCK body (empty), never an object literal.
         let e = expr_kind("() => {}");
-        let ExprKind::Arrow(a) = e else { panic!("expected arrow") };
+        let ExprKind::Arrow(a) = e else {
+            panic!("expected arrow")
+        };
         assert!(matches!(a.body, ArrowBody::Block(_)));
         // Object literal body needs explicit parens.
         let e = expr_kind("() => ({ x: 1 })");
-        let ExprKind::Arrow(a) = e else { panic!("expected arrow") };
+        let ExprKind::Arrow(a) = e else {
+            panic!("expected arrow")
+        };
         assert!(matches!(a.body, ArrowBody::Expr(_)));
     }
 
     #[test]
     fn async_arrows_in_all_shapes() {
         let e = expr_kind("async x => x");
-        let ExprKind::Arrow(a) = e else { panic!("expected arrow") };
+        let ExprKind::Arrow(a) = e else {
+            panic!("expected arrow")
+        };
         assert!(a.is_async);
         let e = expr_kind("async () => 1");
-        let ExprKind::Arrow(a) = e else { panic!("expected arrow") };
+        let ExprKind::Arrow(a) = e else {
+            panic!("expected arrow")
+        };
         assert!(a.is_async);
         let e = expr_kind("async (a, b) => a + b");
-        let ExprKind::Arrow(a) = e else { panic!("expected arrow") };
+        let ExprKind::Arrow(a) = e else {
+            panic!("expected arrow")
+        };
         assert!(a.is_async && a.params.len() == 2);
         // `async => 1` is a NON-async arrow whose parameter is `async`.
         let e = expr_kind("async => 1");
-        let ExprKind::Arrow(a) = e else { panic!("expected arrow") };
+        let ExprKind::Arrow(a) = e else {
+            panic!("expected arrow")
+        };
         assert!(!a.is_async && a.params.len() == 1);
     }
 
@@ -2270,7 +2491,13 @@ mod tests {
         };
         assert!(matches!(
             body[0].kind,
-            StmtKind::Expression(Expr { kind: ExprKind::Unary { op: UnOp::Await, .. }, .. })
+            StmtKind::Expression(Expr {
+                kind: ExprKind::Unary {
+                    op: UnOp::Await,
+                    ..
+                },
+                ..
+            })
         ));
         // Sloppy-mode deferral: outside async functions `await` stays a
         // plain identifier (see module docs).
@@ -2284,16 +2511,23 @@ mod tests {
     #[test]
     fn template_with_substitution_shapes_quasis_and_exprs() {
         let e = expr_kind("`a${1 + 2}c`");
-        let ExprKind::Template(t) = e else { panic!("expected template") };
+        let ExprKind::Template(t) = e else {
+            panic!("expected template")
+        };
         assert_eq!(t.quasis, vec!["a".to_string(), "c".to_string()]);
         assert_eq!(t.exprs.len(), 1);
-        assert!(matches!(t.exprs[0].kind, ExprKind::Binary { op: BinOp::Add, .. }));
+        assert!(matches!(
+            t.exprs[0].kind,
+            ExprKind::Binary { op: BinOp::Add, .. }
+        ));
     }
 
     #[test]
     fn plain_template_is_one_quasi_no_exprs() {
         let e = expr_kind("`hello`");
-        let ExprKind::Template(t) = e else { panic!("expected template") };
+        let ExprKind::Template(t) = e else {
+            panic!("expected template")
+        };
         assert_eq!(t.quasis, vec!["hello".to_string()]);
         assert!(t.exprs.is_empty());
     }
@@ -2301,7 +2535,9 @@ mod tests {
     #[test]
     fn nested_templates_parse_recursively() {
         let e = expr_kind("`a${`b${x}`}c`");
-        let ExprKind::Template(outer) = e else { panic!("expected template") };
+        let ExprKind::Template(outer) = e else {
+            panic!("expected template")
+        };
         assert_eq!(outer.quasis.len(), 2);
         assert_eq!(outer.exprs.len(), 1);
         let ExprKind::Template(inner) = &outer.exprs[0].kind else {
@@ -2313,11 +2549,10 @@ mod tests {
     #[test]
     fn template_substitutions_hold_object_braces_and_calls() {
         let e = expr_kind("`x${ {k: 1}.k }y`");
-        let ExprKind::Template(t) = e else { panic!("expected template") };
-        assert!(matches!(
-            t.exprs[0].kind,
-            ExprKind::Member { .. }
-        ));
+        let ExprKind::Template(t) = e else {
+            panic!("expected template")
+        };
+        assert!(matches!(t.exprs[0].kind, ExprKind::Member { .. }));
         assert!(parse_script("`v${f(a, b)}w`").is_ok());
     }
 
@@ -2409,10 +2644,14 @@ mod construct_tests {
     #[test]
     fn function_expressions_may_be_anonymous_and_named() {
         let e = expr_kind("(function named() {})");
-        let ExprKind::Paren(inner) = e else { panic!("expected paren") };
+        let ExprKind::Paren(inner) = e else {
+            panic!("expected paren")
+        };
         assert!(matches!(inner.kind, ExprKind::Function(f) if f.name.is_some()));
         let e = expr_kind("(function* () { yield 1; })");
-        let ExprKind::Paren(inner) = e else { panic!("expected paren") };
+        let ExprKind::Paren(inner) = e else {
+            panic!("expected paren")
+        };
         assert!(matches!(
             inner.kind,
             ExprKind::Function(f) if f.name.is_none() && f.is_generator
@@ -2458,7 +2697,11 @@ mod construct_tests {
                 ClassMember::Field(f) => {
                     saw.5 = true;
                     let is_tag = matches!(&f.key, PropKey::Ident(id) if id.name == "tag");
-                    assert_eq!(f.init.is_some(), !is_tag, "`count` initialized, bare `static tag;` not");
+                    assert_eq!(
+                        f.init.is_some(),
+                        !is_tag,
+                        "`count` initialized, bare `static tag;` not"
+                    );
                 }
             }
         }
@@ -2470,8 +2713,12 @@ mod construct_tests {
         // (`let C = class …` would be a *declaration*, not an expression
         // statement, so the test assigns through an existing binding.)
         let e = expr_kind("C = class extends Object {};");
-        let ExprKind::Assign { value, .. } = e else { panic!("expected assignment") };
-        let ExprKind::Class(c) = value.kind else { panic!("expected class expr") };
+        let ExprKind::Assign { value, .. } = e else {
+            panic!("expected assignment")
+        };
+        let ExprKind::Class(c) = value.kind else {
+            panic!("expected class expr")
+        };
         assert!(c.name.is_none());
         assert!(c.super_class.is_some());
         assert!(c.members.is_empty());
@@ -2495,7 +2742,9 @@ mod construct_tests {
     #[test]
     fn dangling_else_binds_to_the_nearest_if() {
         let s = stmt_kind("if (a) if (b) ; else ;");
-        let StmtKind::If { els, .. } = s else { panic!("expected if") };
+        let StmtKind::If { els, .. } = s else {
+            panic!("expected if")
+        };
         assert!(els.is_none(), "outer if must have no else");
     }
 
@@ -2503,7 +2752,9 @@ mod construct_tests {
     fn while_and_do_while_shapes() {
         assert!(matches!(stmt_kind("while (x) ;"), StmtKind::While { .. }));
         let s = stmt_kind("do ; while (x)");
-        let StmtKind::DoWhile { body, test } = s else { panic!("expected do-while") };
+        let StmtKind::DoWhile { body, test } = s else {
+            panic!("expected do-while")
+        };
         assert!(matches!(body.kind, StmtKind::Empty));
         assert!(matches!(test.kind, ExprKind::Ident(_)));
     }
@@ -2512,7 +2763,12 @@ mod construct_tests {
     fn c_style_for_with_all_parts_optional() {
         assert!(matches!(stmt_kind("for (;;) ;"), StmtKind::For { .. }));
         let s = stmt_kind("for (var i = 0, j = 1; i < j; i++, j--) ;");
-        let StmtKind::For { init, test, update, .. } = s else { panic!("expected for") };
+        let StmtKind::For {
+            init, test, update, ..
+        } = s
+        else {
+            panic!("expected for")
+        };
         assert!(matches!(
             init,
             Some(ForInit::Decl(d)) if d.decls.len() == 2
@@ -2528,29 +2784,31 @@ mod construct_tests {
     #[test]
     fn switch_cases_store_fall_through_bodies_and_single_default() {
         let s = stmt_kind("switch (x) { case 1: a; b; case 2: ; default: c; }");
-        let StmtKind::Switch { disc, cases } = s else { panic!("expected switch") };
+        let StmtKind::Switch { disc, cases } = s else {
+            panic!("expected switch")
+        };
         assert!(matches!(disc.kind, ExprKind::Ident(_)));
         assert_eq!(cases.len(), 3);
         assert_eq!(cases[0].body.len(), 2, "fall-through body kept in one case");
         assert!(cases[2].test.is_none());
-        assert!(err("switch (x) { default: ; default: ; }").message.contains("default"));
+        assert!(err("switch (x) { default: ; default: ; }")
+            .message
+            .contains("default"));
     }
 
     #[test]
     fn try_catch_finally_combinations() {
         let s = stmt_kind("try { a(); } catch (e) { log(e); } finally { done(); }");
-        let StmtKind::Try(t) = s else { panic!("expected try") };
-        assert!(matches!(
-            t.catch,
-            Some(CatchClause { param: Some(_), .. })
-        ));
+        let StmtKind::Try(t) = s else {
+            panic!("expected try")
+        };
+        assert!(matches!(t.catch, Some(CatchClause { param: Some(_), .. })));
         assert!(t.finally.is_some());
         let s = stmt_kind("try {} catch {}");
-        let StmtKind::Try(t) = s else { panic!("expected try") };
-        assert!(matches!(
-            t.catch,
-            Some(CatchClause { param: None, .. })
-        ));
+        let StmtKind::Try(t) = s else {
+            panic!("expected try")
+        };
+        assert!(matches!(t.catch, Some(CatchClause { param: None, .. })));
         assert!(t.finally.is_none());
         assert!(err("try {}").message.contains("catch"));
     }
@@ -2559,9 +2817,15 @@ mod construct_tests {
     fn throw_return_debugger_empty_block_statements() {
         assert!(matches!(
             stmt_kind("throw new Error('x');"),
-            StmtKind::Throw(Expr { kind: ExprKind::New { .. }, .. })
+            StmtKind::Throw(Expr {
+                kind: ExprKind::New { .. },
+                ..
+            })
         ));
-        assert!(matches!(stmt_kind("function f() { return 1; }"), StmtKind::Function(_)));
+        assert!(matches!(
+            stmt_kind("function f() { return 1; }"),
+            StmtKind::Function(_)
+        ));
         assert!(matches!(stmt_kind("debugger;"), StmtKind::Debugger));
         assert!(matches!(stmt_kind(";"), StmtKind::Empty));
         assert!(matches!(stmt_kind("{ ; ; }"), StmtKind::Block(_)));
@@ -2575,26 +2839,54 @@ mod construct_tests {
     #[test]
     fn for_in_of_accept_ident_member_and_single_decl_targets() {
         let s = stmt_kind("for (x in obj) ;");
-        let StmtKind::ForIn { left, .. } = s else { panic!("expected for-in") };
-        assert!(matches!(left, ForLeft::Target(Expr { kind: ExprKind::Ident(_), .. })));
+        let StmtKind::ForIn { left, .. } = s else {
+            panic!("expected for-in")
+        };
+        assert!(matches!(
+            left,
+            ForLeft::Target(Expr {
+                kind: ExprKind::Ident(_),
+                ..
+            })
+        ));
 
         let s = stmt_kind("for (const k of items) ;");
-        let StmtKind::ForOf { left, .. } = s else { panic!("expected for-of") };
+        let StmtKind::ForOf { left, .. } = s else {
+            panic!("expected for-of")
+        };
         assert!(matches!(left, ForLeft::Decl(_)));
 
         let s = stmt_kind("for (a.b of items) ;");
-        let StmtKind::ForOf { left, .. } = s else { panic!("expected for-of") };
-        assert!(matches!(left, ForLeft::Target(Expr { kind: ExprKind::Member { .. }, .. })));
+        let StmtKind::ForOf { left, .. } = s else {
+            panic!("expected for-of")
+        };
+        assert!(matches!(
+            left,
+            ForLeft::Target(Expr {
+                kind: ExprKind::Member { .. },
+                ..
+            })
+        ));
 
-        assert!(matches!(stmt_kind("for (var i in o) ;"), StmtKind::ForIn { .. }));
-        assert!(matches!(stmt_kind("for (let x of y) ;"), StmtKind::ForOf { .. }));
+        assert!(matches!(
+            stmt_kind("for (var i in o) ;"),
+            StmtKind::ForIn { .. }
+        ));
+        assert!(matches!(
+            stmt_kind("for (let x of y) ;"),
+            StmtKind::ForOf { .. }
+        ));
     }
 
     #[test]
     fn for_in_of_reject_initializers_and_multi_declarators() {
-        assert!(err("for (let i = 0 of x) ;").message.contains("initializer"));
+        assert!(err("for (let i = 0 of x) ;")
+            .message
+            .contains("initializer"));
         assert!(err("for (let i, j of x) ;").message.contains("exactly one"));
-        assert!(err("for (a, b of x) ;").message.contains("invalid assignment target"));
+        assert!(err("for (a, b of x) ;")
+            .message
+            .contains("invalid assignment target"));
     }
 
     // =========================================================================
@@ -2604,9 +2896,16 @@ mod construct_tests {
     #[test]
     fn labeled_break_matches_registered_loop_label() {
         let s = stmt_kind("outer: for (;;) break outer;");
-        let StmtKind::Labeled { label, body } = s else { panic!("expected labeled") };
+        let StmtKind::Labeled { label, body } = s else {
+            panic!("expected labeled")
+        };
         assert_eq!(label.name, "outer");
-        let StmtKind::For { body: loop_body, .. } = body.kind else { panic!("expected for") };
+        let StmtKind::For {
+            body: loop_body, ..
+        } = body.kind
+        else {
+            panic!("expected for")
+        };
         assert!(matches!(
             loop_body.kind,
             StmtKind::Break { label: Some(Ident { ref name, .. }) } if name == "outer"
@@ -2623,10 +2922,16 @@ mod construct_tests {
     #[test]
     fn continue_rejects_non_loop_labels_and_unregistered_labels() {
         // `lbl` goes out of label scope once its statement ends.
-        assert!(err("lbl: x = 1;\nfor (;;) { continue lbl; }").message.contains("undefined label"));
+        assert!(err("lbl: x = 1;\nfor (;;) { continue lbl; }")
+            .message
+            .contains("undefined label"));
         // A live label whose statement is a block is not a continue target.
-        assert!(err("lbl: { for (;;) { continue lbl; } }").message.contains("not a loop"));
-        assert!(err("for (;;) continue nope;").message.contains("undefined label"));
+        assert!(err("lbl: { for (;;) { continue lbl; } }")
+            .message
+            .contains("not a loop"));
+        assert!(err("for (;;) continue nope;")
+            .message
+            .contains("undefined label"));
         assert!(err("continue;").message.contains("loop"));
         assert!(err("break;").message.contains("loop or switch"));
         assert!(parse_script("switch (1) { case 1: break; }").is_ok());
@@ -2645,44 +2950,71 @@ mod construct_tests {
     fn this_super_and_member_chains() {
         assert!(matches!(expr_kind("this"), ExprKind::This));
         let e = expr_kind("super.method()");
-        let ExprKind::Call { callee, .. } = e else { panic!("expected call") };
-        let ExprKind::Member { obj, .. } = &callee.kind else { panic!("expected member callee") };
-        assert!(matches!(obj.kind, ExprKind::Super), "`super.m()` callee object");
+        let ExprKind::Call { callee, .. } = e else {
+            panic!("expected call")
+        };
+        let ExprKind::Member { obj, .. } = &callee.kind else {
+            panic!("expected member callee")
+        };
+        assert!(
+            matches!(obj.kind, ExprKind::Super),
+            "`super.m()` callee object"
+        );
         assert!(parse_script("super[key] = 1;").is_ok());
     }
 
     #[test]
     fn new_expressions_with_and_without_arguments() {
-        assert!(matches!(
-            expr_kind("new Foo()"),
-            ExprKind::New { .. }
-        ));
+        assert!(matches!(expr_kind("new Foo()"), ExprKind::New { .. }));
         let e = expr_kind("new Foo");
-        let ExprKind::New { args, .. } = e else { panic!("expected new") };
+        let ExprKind::New { args, .. } = e else {
+            panic!("expected new")
+        };
         assert!(args.is_empty());
         // `new a.b.c(x)` keeps the whole chain as the callee.
         let e = expr_kind("new a.b.c(x)");
-        let ExprKind::New { callee, .. } = e else { panic!("expected new") };
+        let ExprKind::New { callee, .. } = e else {
+            panic!("expected new")
+        };
         assert!(matches!(callee.kind, ExprKind::Member { .. }));
         // `new Foo().bar` — member on the constructed object.
-        assert!(matches!(expr_kind("new Foo().bar"), ExprKind::Member { .. }));
+        assert!(matches!(
+            expr_kind("new Foo().bar"),
+            ExprKind::Member { .. }
+        ));
         assert!(matches!(expr_kind("new (Sized)()"), ExprKind::New { .. }));
     }
 
     #[test]
     fn optional_chaining_flags_each_link() {
         let e = expr_kind("a?.b");
-        let ExprKind::Member { optional, obj, .. } = e else { panic!("expected member") };
+        let ExprKind::Member { optional, obj, .. } = e else {
+            panic!("expected member")
+        };
         assert!(optional);
         assert!(matches!(obj.kind, ExprKind::Ident(_)));
         // `a?.b.c` — inner link optional, outer link plain.
         let e = expr_kind("a?.b.c");
-        let ExprKind::Member { optional, obj, .. } = e else { panic!("expected member") };
+        let ExprKind::Member { optional, obj, .. } = e else {
+            panic!("expected member")
+        };
         assert!(!optional);
-        let ExprKind::Member { optional: inner_opt, .. } = obj.kind else { panic!("expected member") };
+        let ExprKind::Member {
+            optional: inner_opt,
+            ..
+        } = obj.kind
+        else {
+            panic!("expected member")
+        };
         assert!(inner_opt);
-        assert!(matches!(expr_kind("f?.()"), ExprKind::Call { optional: true, .. }));
-        assert!(matches!(expr_kind("a?.[k]"), ExprKind::Member { optional: true, .. }));
+        assert!(matches!(
+            expr_kind("f?.()"),
+            ExprKind::Call { optional: true, .. }
+        ));
+        assert!(matches!(
+            expr_kind("a?.[k]"),
+            ExprKind::Member { optional: true, .. }
+        ));
     }
 
     #[test]
@@ -2695,31 +3027,55 @@ mod construct_tests {
             ("typeof a", UnOp::Typeof),
             ("void a", UnOp::Void),
         ] {
-            assert!(matches!(
-                expr_kind(src),
-                ExprKind::Unary { op: got, .. } if got == op
-            ), "{src}");
+            assert!(
+                matches!(
+                    expr_kind(src),
+                    ExprKind::Unary { op: got, .. } if got == op
+                ),
+                "{src}"
+            );
         }
         assert!(matches!(
             expr_kind("delete a.b"),
-            ExprKind::Unary { op: UnOp::Delete, .. }
+            ExprKind::Unary {
+                op: UnOp::Delete,
+                ..
+            }
         ));
-        assert!(matches!(expr_kind("++a"), ExprKind::Update { prefix: true, .. }));
-        assert!(matches!(expr_kind("a--"), ExprKind::Update { prefix: false, .. }));
+        assert!(matches!(
+            expr_kind("++a"),
+            ExprKind::Update { prefix: true, .. }
+        ));
+        assert!(matches!(
+            expr_kind("a--"),
+            ExprKind::Update { prefix: false, .. }
+        ));
         assert!(err("++1").message.contains("target"));
     }
 
     #[test]
     fn object_literals_cover_shorthand_computed_methods_and_spread() {
         let e = expr_kind("({ a, b: 1, ['k']: 2, m() { return 3; }, get g() { return 4; }, set s(v) {}, async *ag() {}, ...rest })");
-        let ExprKind::Paren(inner) = e else { panic!("expected paren") };
-        let ExprKind::Object(elems) = inner.kind else { panic!("expected object") };
+        let ExprKind::Paren(inner) = e else {
+            panic!("expected paren")
+        };
+        let ExprKind::Object(elems) = inner.kind else {
+            panic!("expected object")
+        };
         assert_eq!(elems.len(), 8);
-        assert!(matches!(&elems[0], ObjElem::Prop(p) if matches!(p.value, PropValue::Shorthand(_))));
+        assert!(
+            matches!(&elems[0], ObjElem::Prop(p) if matches!(p.value, PropValue::Shorthand(_)))
+        );
         assert!(matches!(&elems[2], ObjElem::Prop(p) if matches!(p.key, PropKey::Computed(_))));
-        assert!(matches!(&elems[3], ObjElem::Prop(p) if matches!(p.value, PropValue::Method(ClassMethod { kind: MethodKind::Method, .. }))));
-        assert!(matches!(&elems[4], ObjElem::Prop(p) if matches!(p.value, PropValue::Method(ClassMethod { kind: MethodKind::Get, .. }))));
-        assert!(matches!(&elems[5], ObjElem::Prop(p) if matches!(p.value, PropValue::Method(ClassMethod { kind: MethodKind::Set, .. }))));
+        assert!(
+            matches!(&elems[3], ObjElem::Prop(p) if matches!(p.value, PropValue::Method(ClassMethod { kind: MethodKind::Method, .. })))
+        );
+        assert!(
+            matches!(&elems[4], ObjElem::Prop(p) if matches!(p.value, PropValue::Method(ClassMethod { kind: MethodKind::Get, .. })))
+        );
+        assert!(
+            matches!(&elems[5], ObjElem::Prop(p) if matches!(p.value, PropValue::Method(ClassMethod { kind: MethodKind::Set, .. })))
+        );
         let m = match &elems[5] {
             ObjElem::Prop(p) => match &p.value {
                 PropValue::Method(m) => m,
@@ -2747,18 +3103,27 @@ mod construct_tests {
     #[test]
     fn array_literals_cover_holes_spread_and_trailing_comma() {
         let e = expr_kind("[1, , 3]");
-        let ExprKind::Array(items) = e else { panic!("expected array") };
+        let ExprKind::Array(items) = e else {
+            panic!("expected array")
+        };
         assert_eq!(items.len(), 3);
         assert!(items[0].is_some() && items[1].is_none() && items[2].is_some());
         let e = expr_kind("[1,]");
-        let ExprKind::Array(items) = e else { panic!("expected array") };
+        let ExprKind::Array(items) = e else {
+            panic!("expected array")
+        };
         assert_eq!(items.len(), 1, "trailing comma adds no hole");
         let e = expr_kind("[...a, ...b]");
-        let ExprKind::Array(items) = e else { panic!("expected array") };
+        let ExprKind::Array(items) = e else {
+            panic!("expected array")
+        };
         assert_eq!(items.len(), 2);
         assert!(matches!(
             items[0],
-            Some(Expr { kind: ExprKind::Spread(_), .. })
+            Some(Expr {
+                kind: ExprKind::Spread(_),
+                ..
+            })
         ));
         assert!(matches!(expr_kind("[]"), ExprKind::Array(items) if items.is_empty()));
     }
@@ -2766,7 +3131,9 @@ mod construct_tests {
     #[test]
     fn sequence_statements_and_generator_yield_forms() {
         let e = expr_kind("a, b, c");
-        let ExprKind::Sequence(items) = e else { panic!("expected sequence") };
+        let ExprKind::Sequence(items) = e else {
+            panic!("expected sequence")
+        };
         assert_eq!(items.len(), 3);
 
         let p = program("function* g() { yield; yield 1; yield* iter; }");
@@ -2776,15 +3143,30 @@ mod construct_tests {
         };
         assert!(matches!(
             body[0].kind,
-            StmtKind::Expression(Expr { kind: ExprKind::Yield { argument: None, delegate: false }, .. })
+            StmtKind::Expression(Expr {
+                kind: ExprKind::Yield {
+                    argument: None,
+                    delegate: false
+                },
+                ..
+            })
         ));
         assert!(matches!(
             body[1].kind,
-            StmtKind::Expression(Expr { kind: ExprKind::Yield { argument: Some(_), delegate: false }, .. })
+            StmtKind::Expression(Expr {
+                kind: ExprKind::Yield {
+                    argument: Some(_),
+                    delegate: false
+                },
+                ..
+            })
         ));
         assert!(matches!(
             body[2].kind,
-            StmtKind::Expression(Expr { kind: ExprKind::Yield { delegate: true, .. }, .. })
+            StmtKind::Expression(Expr {
+                kind: ExprKind::Yield { delegate: true, .. },
+                ..
+            })
         ));
         assert!(err("yield 1;").message.contains("generator"));
     }
@@ -2797,10 +3179,19 @@ mod construct_tests {
     }
 
     #[test]
-    fn destructuring_is_deferred_everywhere_it_would_appear() {
-        assert!(err("var [a] = b;").message.contains("deferred"));
-        assert!(err("var {a} = b;").message.contains("deferred"));
-        assert!(err("function f([a]) {}").message.contains("deferred"));
+    fn binding_patterns_parse_in_declarations_and_heads() {
+        assert!(matches!(
+            stmt_kind("var [a] = b;"),
+            StmtKind::Var(VarDecl { decls, .. }) if matches!(decls[0].binding, Binding::Array(_))
+        ));
+        assert!(matches!(
+            stmt_kind("var {a} = b;"),
+            StmtKind::Var(VarDecl { decls, .. }) if matches!(decls[0].binding, Binding::Object(_))
+        ));
+        assert!(matches!(
+            stmt_kind("function f([a]) {}"),
+            StmtKind::Function(_)
+        ));
         assert!(err("[a] = [1];").message.contains("deferred"));
         assert!(err("({a} = obj);").message.contains("deferred"));
         assert!(err("for ([a] of x) ;").message.contains("deferred"));
