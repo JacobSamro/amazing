@@ -310,10 +310,10 @@ features, and unavailable harness hooks. This is a focused slice, not whole-suit
 coverage.
 
 Known gaps: there is no browser event loop or full Promise combinator/timing
-surface yet, and generators, symbols, modules, custom `Symbol.iterator`
-semantics and body-abrupt iterator closing, regex literals, class accessors,
-and full class/super semantics are deferred. `next()`-error closing is
-implemented. The runtime is
+surface yet, and generators, symbols, modules, real Symbol identity, regex
+literals, class accessors, and full class/super semantics are deferred.
+The `Symbol.iterator` key bridge, lazy `next()` consumption, and abrupt-body
+closing are implemented. The runtime is
 a milestone, not Phase 6 exit-criteria completion.
 
 ## Later phases (unchanged from goal prompt)

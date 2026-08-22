@@ -1624,6 +1624,14 @@ impl Interpreter {
                     .map(|n| self.get_prop(v, &n.to_string()))
                     .collect::<Result<_, _>>()?);
             }
+            let iterator_method = self.get_prop(v, "@@iterator")?;
+            if callable_function(&iterator_method).is_some() {
+                let iterator = self.call_value(&iterator_method, v.clone(), Vec::new())?;
+                let same = matches!((v, &iterator), (JsValue::Object(left), JsValue::Object(right)) if Rc::ptr_eq(&left.0, &right.0));
+                if !same {
+                    return self.iterate(&iterator);
+                }
+            }
             let next = self.get_prop(v, "next")?;
             if !callable_function(&next).is_some() {
                 return Err(Throw::type_error("value is not iterable"));
@@ -1683,14 +1691,8 @@ impl Interpreter {
         body: &ast::Stmt,
         env: &EnvHandle,
     ) -> Result<Flow, Throw> {
-        let custom_next = match iterable {
-            JsValue::Object(object) if !matches!(object.borrow().exotic, Exotic::Array) => {
-                let next = self.get_prop(iterable, "next")?;
-                callable_function(&next).is_some()
-            }
-            _ => false,
-        };
-        if !custom_next {
+        let custom_iterator = self.custom_iterator(iterable)?;
+        let Some(iterator) = custom_iterator else {
             for value in self.iterate(iterable)? {
                 let iteration_env = for_iteration_env(left, env);
                 self.bind_for(left, value, &iteration_env)?;
@@ -1701,20 +1703,20 @@ impl Interpreter {
                 }
             }
             return Ok(Flow::Normal);
-        }
+        };
         loop {
-            let next = self.get_prop(iterable, "next")?;
-            let result = match self.call_value(&next, iterable.clone(), Vec::new()) {
+            let next = self.get_prop(&iterator, "next")?;
+            let result = match self.call_value(&next, iterator.clone(), Vec::new()) {
                 Ok(result) => result,
                 Err(error) => {
-                    self.close_iterator(iterable);
+                    self.close_iterator(&iterator);
                     return Err(error);
                 }
             };
             let result_object = match result {
                 JsValue::Object(object) => object,
                 _ => {
-                    self.close_iterator(iterable);
+                    self.close_iterator(&iterator);
                     return Err(Throw::type_error("iterator result is not an object"));
                 }
             };
@@ -1735,20 +1737,46 @@ impl Interpreter {
             match self.exec_stmt(body, &iteration_env) {
                 Ok(Flow::Normal | Flow::Continue(None)) => {}
                 Ok(Flow::Break(None)) => {
-                    self.close_iterator(iterable);
+                    self.close_iterator(&iterator);
                     break;
                 }
                 Ok(flow) => {
-                    self.close_iterator(iterable);
+                    self.close_iterator(&iterator);
                     return Ok(flow);
                 }
                 Err(error) => {
-                    self.close_iterator(iterable);
+                    self.close_iterator(&iterator);
                     return Err(error);
                 }
             }
         }
         Ok(Flow::Normal)
+    }
+
+    fn custom_iterator(&mut self, value: &JsValue) -> Result<Option<JsValue>, Throw> {
+        let JsValue::Object(object) = value else {
+            return Ok(None);
+        };
+        if matches!(object.borrow().exotic, Exotic::Array) {
+            return Ok(None);
+        }
+        let method = self.get_prop(value, "@@iterator")?;
+        if callable_function(&method).is_some() {
+            let iterator = self.call_value(&method, value.clone(), Vec::new())?;
+            let next = self.get_prop(&iterator, "next")?;
+            if callable_function(&next).is_none() {
+                return Err(Throw::type_error(
+                    "iterator method did not return an iterator",
+                ));
+            }
+            return Ok(Some(iterator));
+        }
+        let next = self.get_prop(value, "next")?;
+        if callable_function(&next).is_some() {
+            Ok(Some(value.clone()))
+        } else {
+            Ok(None)
+        }
     }
     fn typeof_value(&self, v: &JsValue) -> &'static str {
         match v {
@@ -1967,6 +1995,15 @@ impl Interpreter {
         );
         self.define_global("Map", Self::native("Map", native_map, &self.function_proto));
         self.define_global("Set", Self::native("Set", native_set, &self.function_proto));
+        let symbol_ctor = Self::native("Symbol", native_symbol, &self.function_proto);
+        if let JsValue::Object(symbol) = &symbol_ctor {
+            let _ = self.set_prop(
+                &JsValue::Object(symbol.clone()),
+                "iterator",
+                JsValue::str("@@iterator"),
+            );
+        }
+        self.define_global("Symbol", symbol_ctor);
         let date_ctor = Self::native("Date", native_date, &self.function_proto);
         if let JsValue::Object(object) = &date_ctor {
             object
@@ -2175,6 +2212,10 @@ fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsV
         .next()
         .filter(|v| v.is_object())
         .unwrap_or_else(|| i.object_value()))
+}
+
+fn native_symbol(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(JsValue::str("@@symbol"))
 }
 
 fn native_define_property(
@@ -3709,6 +3750,11 @@ mod tests {
             .run_script("let closed=0; let n=0; let it={next:function(){n++;return {value:n,done:n>3};},return:function(){closed++;}}; try { for (const x of it) { if (x===2) throw 'stop'; } } catch(e) {} closed;")
             .unwrap();
         assert_eq!(num(value), 1.0);
+        let mut t = Interpreter::new();
+        let value = t
+            .run_script("let it={n:0,next:function(){this.n++;return {value:this.n,done:this.n>2};}}; let iterable={ [Symbol.iterator]:function(){return it;} }; [...iterable].join(',');")
+            .unwrap();
+        assert_eq!(t.to_string(&value).unwrap(), "1,2");
     }
 
     #[test]
