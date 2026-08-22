@@ -6,9 +6,10 @@
 //! `hhea`, `maxp`, `hmtx` and `cmap`. All multi-byte integers in an sfnt
 //! container are big-endian; every accessor below decodes them explicitly.
 //!
-//! The parser is deliberately narrow: it extracts only what text layout
-//! needs (vertical metrics, per-character horizontal advances) and nothing
-//! about outlines, hinting, kerning or shaping.
+//! The parser extracts what text layout needs (vertical metrics,
+//! per-character horizontal advances) plus TrueType glyph outlines for the
+//! paint stage's rasterizer ([`GlyphOutline`]). Nothing about hinting,
+//! kerning or shaping.
 //!
 //! # Implemented
 //!
@@ -31,6 +32,20 @@
 //!   is defined behaviour, not an out-of-bounds bug — see
 //!   `glyph_index_fmt4`). Format 12 is implemented as an optional bonus
 //!   and is the only path that resolves non-BMP characters.
+//! - `loca` + `glyf`: TrueType quadratic outlines (optional tables; a font
+//!   without them still parses for metrics). Short (offset*2) and long
+//!   loca formats both supported via `head.indexToLocFormat`. Simple
+//!   glyphs decode on/off-curve flags, x/y short deltas, same-value and
+//!   repeat flag runs. Composite glyphs are resolved recursively with a
+//!   depth cap of 8 and a total point budget: `ARG_1_AND_2_ARE_WORDS`,
+//!   `MORE_COMPONENTS`, `WE_HAVE_A_SCALE` / `WE_HAVE_AN_X_AND_Y_SCALE` /
+//!   `WE_HAVE_A_TWO_BY_TWO` (F2Dot14), and xy offsets
+//!   (`ARGS_ARE_XY_VALUES`). Quadratic runs get the spec's implied
+//!   on-curve midpoints inserted between consecutive off-curve points, so
+//!   every contour is a closed cyclic chain of on-curve anchors and
+//!   quadratic control points ([`OutlinePoint`]) ready for flattening.
+//! - [`ParsedFont::glyph_outline`] / [`FontSource::glyph_outline`] hand
+//!   the decomposed outline to the rasterizer in font units (y up).
 //! - [`FallbackFont`]: average-width heuristic so layout works before a
 //!   real font is supplied. This is an *approximation*, not metrics.
 //! - [`ScaledMetrics`] with a line-height floor of 1.2 x pixel size.
@@ -43,8 +58,22 @@
 //! # Deferred / deviations
 //!
 //! - Checksums are never verified (neither the directory nor head.adjustment).
-//! - No `glyf`/`loca`/`CFF ` parsing; no rasterization; no kern/GPOS, so
-//!   advances are unshaped and unkerned.
+//! - CFF outlines (`OTTO` fonts): metrics tables parse but there is no
+//!   `glyf`, so `glyph_outline` returns `None`; no rasterization happens
+//!   in this crate (see `amazing-paint`); glyph instructions (hinting) are
+//!   skipped, not interpreted; no kern/GPOS, so advances are unshaped and
+//!   unkerned.
+//! - `OutlinePoint` carries an `on_curve` bit rather than being a bare
+//!   `(f32, f32)`: the rasterizer must tell quadratic control points from
+//!   segment joints, and a points-only view loses that. Dropping the bit
+//!   (`(p.x, p.y)`) recovers the plain-coordinate view.
+//! - Composite components using point-matching attachment (args are point
+//!   indices, i.e. `ARGS_ARE_XY_VALUES` unset) are attached at offset
+//!   (0, 0) instead of doing point matching; `ROUND_XY_TO_GRID`,
+//!   `USE_MY_METRICS` and composite instructions are ignored.
+//! - A composite nesting deeper than 8 or a glyph decomposing to more
+//!   than `POINT_BUDGET` (2^16) points is treated as malformed and yields
+//!   `None` (guards recursive/exponential blow-up from hostile fonts).
 //! - cmap formats 0, 2, 6, 13 and 14 are unsupported; if the best-ranked
 //!   subtable is neither format 4 nor 12 the next candidate is tried and,
 //!   failing all, `parse` returns `None`.
@@ -80,8 +109,19 @@ enum CmapTable {
     Format12(Vec<u8>),
 }
 
-/// A parsed font: owns copies of the `hmtx` bytes and the selected `cmap`
-/// subtable so lookups never borrow the caller's input buffer.
+/// Retained `loca` + `glyf` bytes for lazy outline decoding. Built only
+/// when BOTH tables exist and `head.indexToLocFormat` is 0 (short) or
+/// 1 (long); anything else leaves the font metrics-only.
+#[derive(Debug, Clone)]
+struct GlyphTables {
+    loca: Vec<u8>,
+    glyf: Vec<u8>,
+    long_format: bool,
+}
+
+/// A parsed font: owns copies of the `hmtx` bytes, the selected `cmap`
+/// subtable and (when present) the `loca`/`glyf` outline tables, so
+/// lookups never borrow the caller's input buffer.
 #[derive(Debug, Clone)]
 pub struct ParsedFont {
     metrics: FontMetrics,
@@ -89,6 +129,7 @@ pub struct ParsedFont {
     num_h_metrics: u16,
     hmtx: Vec<u8>,
     cmap: CmapTable,
+    outlines: Option<GlyphTables>,
 }
 
 impl ParsedFont {
@@ -239,6 +280,26 @@ impl ParsedFont {
         }
         let cmap = selected?;
 
+        // --- loca + glyf (optional): retained raw, decoded per lookup ---
+        // A missing pair, a head too short for indexToLocFormat or an
+        // indexToLocFormat outside {0, 1} degrades to metrics-only instead
+        // of failing the whole font.
+        let outlines = (|| {
+            if head.len() < 52 {
+                return None; // no room for indexToLocFormat @50
+            }
+            let long_format = match be_i16(head, 50)? {
+                0 => false,
+                1 => true,
+                _ => return None, // spec allows only short/long loca
+            };
+            let (lo_off, lo_len) = find(*b"loca")?;
+            let loca = data.get(lo_off..lo_off + lo_len)?.to_vec();
+            let (gl_off, gl_len) = find(*b"glyf")?;
+            let glyf = data.get(gl_off..gl_off + gl_len)?.to_vec();
+            Some(GlyphTables { loca, glyf, long_format })
+        })();
+
         Some(ParsedFont {
             metrics: FontMetrics {
                 units_per_em,
@@ -250,6 +311,7 @@ impl ParsedFont {
             num_h_metrics,
             hmtx,
             cmap,
+            outlines,
         })
     }
 
@@ -295,7 +357,7 @@ impl ParsedFont {
     }
 
     /// Character -> glyph id; 0 means unmapped/.notdef.
-    fn glyph_index(&self, c: char) -> u16 {
+    pub fn glyph_index(&self, c: char) -> u16 {
         let code = c as u32;
         match &self.cmap {
             CmapTable::Format4(d) => {
@@ -306,6 +368,34 @@ impl ParsedFont {
                 }
             }
             CmapTable::Format12(d) => glyph_index_fmt12(d, code).unwrap_or(0),
+        }
+    }
+
+    /// Decomposed TrueType outline of one glyph, in font units (y up).
+    ///
+    /// `None` when the font has no usable `loca`/`glyf`, the id is out of
+    /// range, the glyph is blank (`loca[i] == loca[i+1]`, e.g. space), or
+    /// its record is malformed (including composite recursion past the
+    /// depth cap or past [`POINT_BUDGET`]). Never panics on hostile bytes.
+    pub fn glyph_outline(&self, glyph_id: u16) -> Option<GlyphOutline> {
+        let tables = self.outlines.as_ref()?;
+        if glyph_id >= self.num_glyphs {
+            return None;
+        }
+        let rec = glyph_record(tables, glyph_id)?;
+        // Header: numberOfContours + 4 x bbox i16 = 10 bytes minimum.
+        if rec.len() < 10 {
+            return None;
+        }
+        let n_contours = be_i16(rec, 0)?;
+        let mut budget = POINT_BUDGET;
+        if n_contours >= 0 {
+            if n_contours == 0 {
+                return None; // declared empty: no outline
+            }
+            decode_simple(rec, n_contours as usize, &mut budget)
+        } else {
+            decode_composite(tables, rec, 0, &mut budget)
         }
     }
 }
@@ -454,6 +544,354 @@ fn glyph_index_fmt12(sub: &[u8], code: u32) -> Option<u16> {
 }
 
 // ---------------------------------------------------------------------------
+// TrueType glyph outlines (`loca` + `glyf`)
+// ---------------------------------------------------------------------------
+
+/// Total decoded-point cap across one glyph's whole composite tree. A
+/// hostile font nesting composites could otherwise explode memory
+/// exponentially; exceeding the budget yields `None`.
+const POINT_BUDGET: usize = 1 << 16;
+
+/// Composite component recursion depth cap (spec fonts nest 1-2 deep).
+const COMPOSITE_DEPTH_CAP: u8 = 8;
+
+// simple-glyph flag bits (glyf spec)
+const F_ON_CURVE: u8 = 0x01;
+const F_X_SHORT: u8 = 0x02;
+const F_Y_SHORT: u8 = 0x04;
+const F_REPEAT: u8 = 0x08;
+const F_X_SAME_OR_POS: u8 = 0x10;
+const F_Y_SAME_OR_POS: u8 = 0x20;
+
+// composite component flag bits
+const C_ARG_1_AND_2_ARE_WORDS: u16 = 0x0001;
+const C_ARGS_ARE_XY_VALUES: u16 = 0x0002;
+const C_WE_HAVE_A_SCALE: u16 = 0x0008;
+const C_MORE_COMPONENTS: u16 = 0x0020;
+const C_WE_HAVE_AN_X_AND_Y_SCALE: u16 = 0x0040;
+const C_WE_HAVE_A_TWO_BY_TWO: u16 = 0x0080;
+
+/// One vertex of a decomposed outline, in font units, y up.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OutlinePoint {
+    pub x: f32,
+    pub y: f32,
+    /// `true`: on-curve anchor. `false`: quadratic B-spline control
+    /// point; per the TrueType convention the curve continues through the
+    /// implied midpoint of two consecutive control points.
+    pub on_curve: bool,
+}
+
+/// One closed contour: a cyclic chain of [`OutlinePoint`]s. Walking the
+/// chain cyclically, an off-curve point followed by an on-curve point is
+/// a quadratic segment (anchor, control, anchor); two consecutive
+/// off-curve points carry an implied midpoint between them; two
+/// consecutive on-curve points form a straight line.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Contour {
+    pub points: Vec<OutlinePoint>,
+}
+
+/// Decomposed outline of one glyph: its contours, in font units.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct GlyphOutline {
+    pub contours: Vec<Contour>,
+}
+
+/// Slices the raw glyf record for `gid` out of the retained tables.
+/// Bounds-checks the loca pair against the glyf length; a pair with
+/// `end < start` is malformed and yields `None`.
+fn glyph_record<'a>(t: &GlyphTables, gid: u16) -> Option<&'a [u8]> {
+    let i = gid as usize;
+    let (start, end) = if t.long_format {
+        (
+            be_u32(&t.loca, i.checked_mul(4)?)? as usize,
+            be_u32(&t.loca, i.checked_mul(4)?.checked_add(4)?)? as usize,
+        )
+    } else {
+        // Short loca stores offset/2; odd stored values are undefined by
+        // the spec — we shift and let the range checks below catch junk.
+        let s = be_u16(&t.loca, i.checked_mul(2)?)? as usize;
+        let e = be_u16(&t.loca, i.checked_mul(2)?.checked_add(2)?)? as usize;
+        (s * 2, e * 2)
+    };
+    if end < start || end > t.glyf.len() {
+        return None;
+    }
+    t.glyf.get(start..end)
+}
+
+/// Decodes a simple (non-composite) glyph record.
+///
+/// Layout: i16 nContours, 4 x i16 bbox, u16 endPts[n], u16 instructionLen,
+/// u8 instructions[], flag bytes (with REPEAT runs), x deltas, y deltas.
+/// All reads are bounds-checked; a truncated stream returns `None`.
+fn decode_simple(rec: &[u8], n_contours: usize, budget: &mut usize) -> Option<GlyphOutline> {
+    let ends_end = 10usize.checked_add(n_contours.checked_mul(2)?)?;
+    if rec.len() < ends_end.checked_add(2)? {
+        return None;
+    }
+    // Point count = last end point + 1 (end points are inclusive indices).
+    let n_points = be_u16(rec, ends_end - 2)? as usize + 1;
+    let instr_len = be_u16(rec, ends_end)? as usize;
+    let flags_off = ends_end.checked_add(2)?.checked_add(instr_len)?;
+    if n_points == 0 {
+        return None;
+    }
+    if n_points > *budget {
+        return None;
+    }
+
+    // Expand the flag stream (REPEAT runs add `count` extra copies).
+    let mut flags: Vec<u8> = Vec::with_capacity(n_points);
+    let mut pos = flags_off;
+    while flags.len() < n_points {
+        let f = *rec.get(pos)?;
+        pos = pos.checked_add(1)?;
+        flags.push(f);
+        if f & F_REPEAT != 0 {
+            let rep = *rec.get(pos)? as usize;
+            pos = pos.checked_add(1)?;
+            for _ in 0..rep {
+                if flags.len() == n_points {
+                    break; // overlong run: clamp (hostile input)
+                }
+                flags.push(f);
+            }
+        }
+    }
+
+    // X deltas first, then Y deltas, each cumulative over the glyph.
+    let mut xs = vec![0i32; n_points];
+    let mut ys = vec![0i32; n_points];
+    decode_deltas(rec, &mut pos, &flags, true, &mut xs)?;
+    decode_deltas(rec, &mut pos, &flags, false, &mut ys)?;
+    *budget -= n_points;
+
+    // Split points into contours at the end points, inserting implied
+    // quadratic midpoints per contour.
+    let mut ends = Vec::with_capacity(n_contours);
+    for k in 0..n_contours {
+        ends.push(be_u16(rec, 10usize.checked_add(k.checked_mul(2)?)?)?);
+    }
+    let mut out = GlyphOutline::default();
+    let mut start = 0usize;
+    for end in ends {
+        let end = end as usize;
+        if end < start || end >= n_points {
+            return None; // end points must be ascending indices
+        }
+        let raw: Vec<OutlinePoint> = (start..=end)
+            .map(|i| OutlinePoint {
+                x: xs[i] as f32,
+                y: ys[i] as f32,
+                on_curve: flags[i] & F_ON_CURVE != 0,
+            })
+            .collect();
+        if let Some(closed) = close_quadratic(&raw) {
+            out.contours.push(Contour { points: closed });
+        }
+        start = end + 1;
+    }
+    if out.contours.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+/// Decodes one axis of packed delta coordinates, writing ABSOLUTE
+/// coordinates into `out` (deltas accumulate left-to-right).
+/// `is_x` selects which flag bits apply. Advances `pos` past the axis.
+fn decode_deltas(
+    rec: &[u8],
+    pos: &mut usize,
+    flags: &[u8],
+    is_x: bool,
+    out: &mut [i32],
+) -> Option<()> {
+    let (short, same_or_pos) = if is_x {
+        (F_X_SHORT, F_X_SAME_OR_POS)
+    } else {
+        (F_Y_SHORT, F_Y_SAME_OR_POS)
+    };
+    let mut v: i32 = 0;
+    for (i, &f) in flags.iter().enumerate() {
+        if f & short != 0 {
+            let d = *rec.get(*pos)? as i32;
+            *pos = pos.checked_add(1)?;
+            v += if f & same_or_pos != 0 { d } else { -d };
+        } else if f & same_or_pos == 0 {
+            v += be_i16(rec, *pos)? as i32; // 16-bit signed delta
+            *pos = pos.checked_add(2)?;
+        }
+        // else: same-or-positive with no short bit means delta 0
+        out[i] = v;
+    }
+    Some(())
+}
+
+/// Normalizes one raw contour into the closed flagged chain documented on
+/// [`Contour`]: rotates to start at an on-curve anchor, inserts implied
+/// on-curve midpoints between consecutive off-curve points, and
+/// synthesizes a midpoint anchor for all-off-curve (fully curved) loops.
+/// Returns `None` for degenerate (< 2 point) contours.
+fn close_quadratic(pts: &[OutlinePoint]) -> Option<Vec<OutlinePoint>> {
+    let n = pts.len();
+    if n < 2 {
+        return None;
+    }
+    let mut out: Vec<OutlinePoint> = Vec::with_capacity(n + n / 2 + 2);
+    match pts.iter().position(|p| p.on_curve) {
+        Some(s) => {
+            // Rotate so an on-curve anchor leads; the chain then closes
+            // cyclically back onto out[0].
+            for k in 0..n {
+                let cur = pts[(s + k) % n];
+                out.push(cur);
+                let next = pts[(s + k + 1) % n];
+                if !cur.on_curve && !next.on_curve {
+                    out.push(OutlinePoint {
+                        x: (cur.x + next.x) / 2.0,
+                        y: (cur.y + next.y) / 2.0,
+                        on_curve: true, // implied midpoint
+                    });
+                }
+            }
+        }
+        None => {
+            // No on-curve point: anchors are the implied midpoints.
+            // Emit mid(c[n-1], c[0]), then each control followed by the
+            // midpoint to its successor; the chain closes cyclically.
+            for k in 0..n {
+                let cur = pts[k];
+                let next = pts[(k + 1) % n];
+                out.push(OutlinePoint {
+                    x: (cur.x + next.x) / 2.0,
+                    y: (cur.y + next.y) / 2.0,
+                    on_curve: true,
+                });
+                out.push(cur);
+            }
+        }
+    }
+    Some(out)
+}
+
+/// Decodes a composite glyph: a list of component records, each placing a
+/// referenced glyph with an optional affine transform (F2Dot14 scale /
+/// x-y scale / full 2x2) plus an xy offset. Recursion is capped at
+/// [`COMPOSITE_DEPTH_CAP`] and the shared point budget bounds total size.
+/// Point-matching attachment (ARGS_ARE_XY_VALUES unset) is approximated
+/// as offset (0, 0) — see module docs.
+fn decode_composite(
+    tables: &GlyphTables,
+    rec: &[u8],
+    depth: u8,
+    budget: &mut usize,
+) -> Option<GlyphOutline> {
+    if depth > COMPOSITE_DEPTH_CAP {
+        return None;
+    }
+    let mut out = GlyphOutline::default();
+    let mut pos = 10usize; // past the i16 numberOfContours + bbox header
+    loop {
+        if rec.len() < pos.checked_add(4)? {
+            return None;
+        }
+        let flags = be_u16(rec, pos)?;
+        let comp_gid = be_u16(rec, pos + 2)?;
+        pos = pos.checked_add(4)?;
+        let (arg1, arg2) = if flags & C_ARG_1_AND_2_ARE_WORDS != 0 {
+            let a = be_i16(rec, pos)?;
+            let b = be_i16(rec, pos + 2)?;
+            pos = pos.checked_add(4)?;
+            (a as f32, b as f32)
+        } else {
+            let a = *rec.get(pos)? as i8;
+            let b = *rec.get(pos.checked_add(1)?)? as i8;
+            pos = pos.checked_add(2)?;
+            (a as f32, b as f32)
+        };
+        // 2x2 in file order: xscale, scale01, scale10, yscale; applied as
+        // x' = a*x + c*y, y' = b*x + d*y (spec's composite transform).
+        let (mut a, mut b, mut c, mut d) = (1.0f32, 0.0f32, 0.0f32, 1.0f32);
+        if flags & C_WE_HAVE_A_SCALE != 0 {
+            let s = f2dot14(rec, pos)?;
+            pos = pos.checked_add(2)?;
+            a = s;
+            d = s;
+        } else if flags & C_WE_HAVE_AN_X_AND_Y_SCALE != 0 {
+            a = f2dot14(rec, pos)?;
+            d = f2dot14(rec, pos.checked_add(2)?)?;
+            pos = pos.checked_add(4)?;
+        } else if flags & C_WE_HAVE_A_TWO_BY_TWO != 0 {
+            a = f2dot14(rec, pos)?;
+            c = f2dot14(rec, pos.checked_add(2)?)?;
+            b = f2dot14(rec, pos.checked_add(4)?)?;
+            d = f2dot14(rec, pos.checked_add(6)?)?;
+            pos = pos.checked_add(8)?;
+        }
+        let (dx, dy) = if flags & C_ARGS_ARE_XY_VALUES != 0 {
+            (arg1, arg2)
+        } else {
+            (0.0, 0.0) // point matching unsupported (documented deviation)
+        };
+        let sub = decode_glyph_rec(tables, comp_gid, depth + 1, budget)?;
+        for contour in sub.contours {
+            let mapped: Vec<OutlinePoint> = contour
+                .points
+                .iter()
+                .map(|p| OutlinePoint {
+                    x: a * p.x + c * p.y + dx,
+                    y: b * p.x + d * p.y + dy,
+                    on_curve: p.on_curve,
+                })
+                .collect();
+            out.contours.push(Contour { points: mapped });
+        }
+        if flags & C_MORE_COMPONENTS == 0 {
+            break;
+        }
+    }
+    if out.contours.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+/// Depth-carrying recursive step for composite components (also used for
+/// the top-level glyph, which shares the same header layout).
+fn decode_glyph_rec(
+    tables: &GlyphTables,
+    gid: u16,
+    depth: u8,
+    budget: &mut usize,
+) -> Option<GlyphOutline> {
+    if depth > COMPOSITE_DEPTH_CAP {
+        return None;
+    }
+    let rec = glyph_record(tables, gid)?;
+    if rec.len() < 10 {
+        return None;
+    }
+    let n_contours = be_i16(rec, 0)?;
+    if n_contours > 0 {
+        decode_simple(rec, n_contours as usize, budget)
+    } else if n_contours < 0 {
+        decode_composite(tables, rec, depth, budget)
+    } else {
+        None // blank component
+    }
+}
+
+/// F2Dot14: 16-bit signed fixed point with 14 fraction bits.
+fn f2dot14(d: &[u8], off: usize) -> Option<f32> {
+    Some(be_i16(d, off)? as f32 / 16384.0)
+}
+
+// ---------------------------------------------------------------------------
 // Fallback heuristic font
 // ---------------------------------------------------------------------------
 
@@ -556,6 +994,25 @@ impl FontSource {
                 }
             }
             FontSource::Fallback(_) => FALLBACK.scaled_metrics(px_size),
+        }
+    }
+
+    /// Character -> glyph id (0 = unmapped/.notdef). Always 0 under the
+    /// fallback font, which has no glyph space.
+    pub fn glyph_index(&self, c: char) -> u16 {
+        match self {
+            FontSource::Ttf(f) => f.glyph_index(c),
+            FontSource::Fallback(_) => 0,
+        }
+    }
+
+    /// Decomposed outline of one glyph in font units (see
+    /// [`ParsedFont::glyph_outline`]). Always `None` under the fallback
+    /// font.
+    pub fn glyph_outline(&self, glyph_id: u16) -> Option<GlyphOutline> {
+        match self {
+            FontSource::Ttf(f) => f.glyph_outline(glyph_id),
+            FontSource::Fallback(_) => None,
         }
     }
 }
@@ -918,6 +1375,342 @@ mod tests {
         let fb = FontSource::fallback().scaled_metrics(10.0);
         assert!(fb.ascent > 0.0 && fb.descent < 0.0);
         assert!((fb.line_height - 12.0).abs() < 1e-3);
+    }
+
+    // --- glyph outline builders -------------------------------------------
+
+    /// Emits one packed coordinate delta, choosing between zero / short /
+    /// 16-bit encodings and setting the matching flag bits.
+    fn push_delta(stream: &mut Vec<u8>, flag: &mut u8, d: i32, is_x: bool) {
+        let (short_bit, pos_bit) = if is_x {
+            (0x02u8, 0x10u8)
+        } else {
+            (0x04u8, 0x20u8)
+        };
+        if d == 0 {
+            *flag |= pos_bit; // not short + same-bit => delta 0
+        } else if d.abs() <= 255 {
+            *flag |= short_bit;
+            if d > 0 {
+                *flag |= pos_bit; // positive short
+            }
+            stream.push(d.abs() as u8);
+        } else {
+            stream.extend_from_slice(&(d as i16).to_be_bytes()); // 16-bit signed
+        }
+    }
+
+    /// Simple-glyph record from one or more contours of `(x, y, on_curve)`
+    /// points; deltas are auto-encoded (mixed short/16-bit/zero paths).
+    fn simple_glyph_record(contours: &[&[(i32, i32, bool)]]) -> Vec<u8> {
+        let flat: Vec<(i32, i32, bool)> =
+            contours.iter().flat_map(|c| c.iter().copied()).collect();
+        let mut rec = vec![0u8; 10];
+        rec[0..2].copy_from_slice(&be16(contours.len() as u16));
+        let xmin = flat.iter().map(|p| p.0).min().unwrap_or(0) as i16;
+        let xmax = flat.iter().map(|p| p.0).max().unwrap_or(0) as i16;
+        let ymin = flat.iter().map(|p| p.1).min().unwrap_or(0) as i16;
+        let ymax = flat.iter().map(|p| p.1).max().unwrap_or(0) as i16;
+        rec[2..4].copy_from_slice(&(xmin as u16).to_be_bytes());
+        rec[4..6].copy_from_slice(&(ymin as u16).to_be_bytes());
+        rec[6..8].copy_from_slice(&(xmax as u16).to_be_bytes());
+        rec[8..10].copy_from_slice(&(ymax as u16).to_be_bytes());
+        let mut acc = 0u16;
+        for c in contours {
+            acc += c.len() as u16;
+            rec.extend_from_slice(&be16(acc.wrapping_sub(1))); // inclusive end pt
+        }
+        rec.extend_from_slice(&be16(0)); // instructionLength
+        let mut flags = Vec::new();
+        let (mut xs, mut ys) = (Vec::new(), Vec::new());
+        let (mut px, mut py) = (0i32, 0i32);
+        for &(x, y, on) in &flat {
+            let mut f = if on { 0x01u8 } else { 0u8 };
+            push_delta(&mut xs, &mut f, x - px, true);
+            push_delta(&mut ys, &mut f, y - py, false);
+            flags.push(f);
+            px = x;
+            py = y;
+        }
+        rec.extend_from_slice(&flags);
+        rec.extend_from_slice(&xs);
+        rec.extend_from_slice(&ys);
+        rec
+    }
+
+    fn f2d(v: f32) -> Vec<u8> {
+        ((v * 16384.0) as i16).to_be_bytes().to_vec() // F2Dot14
+    }
+
+    /// sfnt font whose glyphs are `records`, mapped by the shared delta
+    /// cmap (A->1, B->2, C->3). loca is short or long per `long_loca`.
+    /// Record 0 is expected to be blank (.notdef).
+    fn outline_font(records: &[Vec<u8>], long_loca: bool) -> Vec<u8> {
+        let mut padded: Vec<Vec<u8>> = records.to_vec();
+        for g in padded.iter_mut() {
+            if g.len() % 2 == 1 {
+                g.push(0); // short loca needs even offsets
+            }
+        }
+        let mut offs = vec![0usize];
+        for g in &padded {
+            offs.push(offs.last().unwrap() + g.len());
+        }
+        let loca: Vec<u8> = if long_loca {
+            offs.iter().flat_map(|&o| be32(o as u32)).collect()
+        } else {
+            offs.iter().flat_map(|&o| be16((o / 2) as u16)).collect()
+        };
+        let glyf: Vec<u8> = padded.concat();
+        let n = records.len() as u16;
+        let advances: Vec<(u16, i16)> = (0..n).map(|i| (500 + 100 * i, 0)).collect();
+        assemble(&[
+            (b"head", head(1000)),
+            (b"hhea", hhea(800, -200, 300, n)),
+            (b"maxp", maxp_v1(n)),
+            (b"hmtx", hmtx(&advances)),
+            (b"cmap", cmap_wrapper(&cmap_fmt4_delta())),
+            (b"loca", loca),
+            (b"glyf", glyf),
+        ])
+    }
+
+    const SQUARE: &[(i32, i32, bool)] = &[
+        (100, 100, true),
+        (600, 100, true),
+        (600, 800, true),
+        (100, 800, true),
+    ];
+
+    fn square_glyph() -> Vec<u8> {
+        simple_glyph_record(&[SQUARE])
+    }
+
+    /// Standard fixture: blank .notdef, square@1 (A), triangle@2 (B).
+    fn shape_font(long_loca: bool) -> Vec<u8> {
+        outline_font(
+            &[
+                Vec::new(),
+                square_glyph(),
+                simple_glyph_record(&[&[(0, 0, true), (500, 700, true), (1000, 0, true)]]),
+            ],
+            long_loca,
+        )
+    }
+
+    #[test]
+    fn square_outline_decoded() {
+        let f = ParsedFont::parse(&shape_font(false)).unwrap();
+        let o = f.glyph_outline(1).expect("square");
+        assert_eq!(o.contours.len(), 1);
+        let pts = &o.contours[0].points;
+        assert_eq!(pts.len(), 4);
+        assert!(pts.iter().all(|p| p.on_curve));
+        for (got, want) in pts.iter().zip(SQUARE) {
+            assert_eq!((got.x, got.y), (want.0 as f32, want.1 as f32));
+        }
+    }
+
+    #[test]
+    fn triangle_outline_decoded() {
+        let f = ParsedFont::parse(&shape_font(true)).unwrap();
+        let o = f.glyph_outline(2).expect("triangle");
+        assert_eq!(o.contours.len(), 1);
+        assert_eq!(o.contours[0].points.len(), 3);
+        assert_eq!(
+            o.contours[0].points[1],
+            OutlinePoint { x: 500.0, y: 700.0, on_curve: true }
+        );
+    }
+
+    #[test]
+    fn composite_of_two_squares() {
+        // Two components referencing the square glyph (gid 1):
+        //  - byte args (offset 50, 0), uniform scale 0.5
+        //  - word args (offset 400, 200), identity transform
+        let mut rec = vec![0u8; 10]; // header: nContours = -1 + bbox zeros
+        rec[0..2].copy_from_slice(&(-1i16).to_be_bytes());
+        let mut comp = Vec::new();
+        comp.extend_from_slice(&be16(0x0008 | 0x0020 | 0x0002)); // SCALE | MORE | XY
+        comp.extend_from_slice(&be16(1));
+        comp.extend_from_slice(&[50, 0]); // int8 args (xy values)
+        comp.extend_from_slice(&f2d(0.5));
+        comp.extend_from_slice(&be16(0x0001 | 0x0002)); // WORD_ARGS | XY_VALUES
+        comp.extend_from_slice(&be16(1));
+        comp.extend_from_slice(&be16(400));
+        comp.extend_from_slice(&be16(200));
+        rec.extend_from_slice(&comp);
+
+        let font = outline_font(&[Vec::new(), square_glyph(), rec], false);
+        let f = ParsedFont::parse(&font).unwrap();
+        let o = f.glyph_outline(2).expect("composite");
+        assert_eq!(o.contours.len(), 2);
+        // Component 1: (100,100)*0.5 + (50,0) = (100,50); (600,800)*0.5 = (350,450).
+        let p = &o.contours[0].points;
+        assert_eq!((p[0].x, p[0].y), (100.0, 50.0));
+        assert_eq!((p[2].x, p[2].y), (350.0, 450.0));
+        assert!(p.iter().all(|q| q.on_curve));
+        // Component 2: pure translation.
+        let q = &o.contours[1].points;
+        assert_eq!((q[0].x, q[0].y), (500.0, 300.0));
+        assert_eq!((q[3].x, q[3].y), (500.0, 1000.0));
+    }
+
+    #[test]
+    fn composite_x_y_scale_and_2x2() {
+        // One component with WE_HAVE_AN_X_AND_Y_SCALE (x2, y0.5), then one
+        // with WE_HAVE_A_TWO_BY_TWO [[2,0],[0,1]] reading scale01/scale10.
+        let mut rec = vec![0u8; 10];
+        rec[0..2].copy_from_slice(&(-1i16).to_be_bytes());
+        let mut comp = Vec::new();
+        comp.extend_from_slice(&be16(0x0040 | 0x0020 | 0x0002)); // X_Y_SCALE | MORE | XY
+        comp.extend_from_slice(&be16(1));
+        comp.extend_from_slice(&[10, 10]);
+        comp.extend_from_slice(&f2d(2.0));
+        comp.extend_from_slice(&f2d(0.5));
+        comp.extend_from_slice(&be16(0x0080 | 0x0002)); // TWO_BY_TWO | XY_VALUES
+        comp.extend_from_slice(&be16(1));
+        comp.extend_from_slice(&be16(0));
+        comp.extend_from_slice(&be16(0));
+        comp.extend_from_slice(&f2d(1.0)); // xscale
+        comp.extend_from_slice(&f2d(0.0)); // scale01
+        comp.extend_from_slice(&f2d(0.0)); // scale10
+        comp.extend_from_slice(&f2d(1.0)); // yscale
+        rec.extend_from_slice(&comp);
+
+        let font = outline_font(&[Vec::new(), square_glyph(), rec], true);
+        let f = ParsedFont::parse(&font).unwrap();
+        let o = f.glyph_outline(2).expect("composite");
+        let p = &o.contours[0].points; // x*2+10, y*0.5+10
+        assert_eq!((p[0].x, p[0].y), (210.0, 60.0));
+        assert_eq!((p[1].x, p[1].y), (1210.0, 60.0));
+        let q = &o.contours[1].points; // identity 2x2 + zero offset
+        assert_eq!((q[2].x, q[2].y), (600.0, 800.0));
+    }
+
+    #[test]
+    fn implied_midpoints_between_off_curve_points() {
+        // On(0,0) -> Off(40,80) -> Off(80,0): an implied on-curve midpoint
+        // (60,40) sits between the two controls.
+        let g = simple_glyph_record(&[&[(0, 0, true), (40, 80, false), (80, 0, false)]]);
+        let font = outline_font(&[Vec::new(), g], false);
+        let f = ParsedFont::parse(&font).unwrap();
+        let o = f.glyph_outline(1).expect("curve");
+        let pts = &o.contours[0].points;
+        assert_eq!(
+            pts,
+            &[
+                OutlinePoint { x: 0.0, y: 0.0, on_curve: true },
+                OutlinePoint { x: 40.0, y: 80.0, on_curve: false },
+                OutlinePoint { x: 60.0, y: 40.0, on_curve: true },
+                OutlinePoint { x: 80.0, y: 0.0, on_curve: false },
+            ]
+        );
+    }
+
+    #[test]
+    fn all_off_curve_contour_gets_synthetic_anchor() {
+        // Fully-curved loop: anchors are the pairwise midpoints.
+        let g = simple_glyph_record(&[
+            &[(0, 10, false), (10, 20, false), (20, 10, false)],
+        ]);
+        let font = outline_font(&[Vec::new(), g], false);
+        let f = ParsedFont::parse(&font).unwrap();
+        let pts = &f.glyph_outline(1).unwrap().contours[0].points;
+        assert_eq!(pts.len(), 6); // 3 anchors + 3 controls, alternating
+        assert!(pts[0].on_curve);
+        assert_eq!((pts[0].x, pts[0].y), (10.0, 10.0)); // mid(c2, c0)
+        assert!(!pts[1].on_curve);
+        assert_eq!((pts[1].x, pts[1].y), (0.0, 10.0));
+        assert_eq!((pts[2].x, pts[2].y), (5.0, 15.0)); // mid(c0, c1)
+        assert!(pts.iter().skip(1).step_by(2).all(|p| !p.on_curve));
+        assert!(pts.iter().step_by(2).all(|p| p.on_curve));
+    }
+
+    #[test]
+    fn short_and_long_loca_agree() {
+        let short = ParsedFont::parse(&shape_font(false)).unwrap();
+        let long = ParsedFont::parse(&shape_font(true)).unwrap();
+        assert_eq!(short.glyph_outline(1), long.glyph_outline(1));
+        assert_eq!(short.glyph_outline(2), long.glyph_outline(2));
+    }
+
+    #[test]
+    fn blank_and_missing_outlines_are_none() {
+        let f = ParsedFont::parse(&shape_font(false)).unwrap();
+        assert!(f.glyph_outline(0).is_none()); // blank .notdef record
+        assert!(f.glyph_outline(99).is_none()); // beyond numGlyphs
+        // The metrics-only fixture has no loca/glyf at all.
+        assert!(parsed().glyph_outline(1).is_none());
+        assert!(parsed().glyph_outline(0).is_none());
+    }
+
+    #[test]
+    fn truncated_glyf_rejected_while_font_parses() {
+        let mut fx = shape_font(false).to_vec();
+        fx.truncate(fx.len() - 4); // bites into glyf only (last table)
+        let f = ParsedFont::parse(&fx).expect("font still parses");
+        // glyf is the last table: the tail cut lands in the triangle
+        // record (gid 2), while the square (gid 1) survives untouched.
+        assert!(f.glyph_outline(2).is_none()); // record cut mid-stream
+        assert!(f.glyph_outline(1).is_some());
+    }
+
+    #[test]
+    fn self_referential_composite_hits_depth_cap() {
+        // A composite that includes itself must terminate (depth cap) and
+        // yield None instead of recursing forever.
+        let mut rec = vec![0u8; 10];
+        rec[0..2].copy_from_slice(&(-1i16).to_be_bytes());
+        let mut comp = Vec::new();
+        comp.extend_from_slice(&be16(0x0002)); // XY_VALUES, no MORE
+        comp.extend_from_slice(&be16(1)); // points at ITSELF (gid 1)
+        comp.extend_from_slice(&be16(0));
+        comp.extend_from_slice(&be16(0));
+        rec.extend_from_slice(&comp);
+        let font = outline_font(&[Vec::new(), rec], false);
+        let f = ParsedFont::parse(&font).unwrap();
+        assert!(f.glyph_outline(1).is_none());
+    }
+
+    #[test]
+    fn repeat_flag_run_decodes() {
+        // Six points sharing one flag byte via REPEAT: on-curve, +10 x
+        // steps, y unchanged (flags 0x33 = ON | X_SHORT | X_POS | Y_SAME).
+        let mut rec = vec![0u8; 10];
+        rec[0..2].copy_from_slice(&be16(1));
+        rec[8..10].copy_from_slice(&be16(60)); // xmax
+        rec.extend_from_slice(&be16(5)); // endPtsOfContours[0] = 5
+        rec.extend_from_slice(&be16(0)); // instructions
+        rec.extend_from_slice(&[0x33, 5]); // flag 0x33 repeated 5+1 times
+        for _ in 0..6 {
+            rec.push(10); // x short positives
+        }
+        // no y bytes
+        let font = outline_font(&[Vec::new(), rec], true);
+        let f = ParsedFont::parse(&font).unwrap();
+        let pts = &f.glyph_outline(1).unwrap().contours[0].points;
+        assert_eq!(pts.len(), 6);
+        for (i, p) in pts.iter().enumerate() {
+            assert_eq!((p.x, p.y), (((i + 1) * 10) as f32, 0.0));
+            assert!(p.on_curve);
+        }
+    }
+
+    #[test]
+    fn char_to_outline_end_to_end() {
+        let src = FontSource::Ttf(ParsedFont::parse(&shape_font(false)).unwrap());
+        assert_eq!(src.glyph_index('A'), 1);
+        assert_eq!(src.glyph_index('B'), 2);
+        assert_eq!(src.glyph_index('Q'), 0);
+        let o = src.glyph_outline(src.glyph_index('A')).expect("A outline");
+        assert_eq!(o.contours.len(), 1);
+        assert_eq!(o.contours[0].points.len(), 4);
+        // Unmapped char resolves to glyph 0 (blank here) -> no outline.
+        assert!(src.glyph_outline(src.glyph_index('Q')).is_none());
+        // Fallback source never has outlines.
+        assert_eq!(FontSource::fallback().glyph_index('A'), 0);
+        assert!(FontSource::fallback().glyph_outline(1).is_none());
     }
 }
 

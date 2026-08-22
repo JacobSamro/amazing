@@ -12,17 +12,31 @@
 //!   rectangle, height ≈ 0.7 × font_size, sitting ON the line baseline
 //!   (spanning baseline − ink_height ..= baseline), width matching the
 //!   fallback font's per-class advance estimate; whitespace draws no ink
+//! - [`OutlineGlyphProvider`]: REAL TrueType letterforms. Takes a
+//!   [`FontSource`]; under `FontSource::Ttf` it decomposes the glyph
+//!   outline (via `amazing_layout`), flattens the quadratic B-splines
+//!   (fixed 4 subdivisions per segment), scales to pixel space with the
+//!   baseline at y=0 and scanline-fills with NONZERO winding and 4x4
+//!   per-pixel supersampling (16 coverage levels, deterministic integer
+//!   alpha). Under `FontSource::Fallback` (or an unmapped character) it
+//!   delegates to [`RectInkProvider`] so the no-font path is unchanged.
 //! - alpha-compositing blit (`src over dst`, integer-only, deterministic)
 //!   so ink can land on colored backgrounds
 //!
 //! # Deferred / deviations
 //!
-//! - REAL GLYPH OUTLINES are deferred: no TTF glyf/CFF flattening, no
-//!   hinting, no anti-aliasing. [`GlyphBitmap`] is shaped like a real
-//!   rasterization (RGBA + bearings + advance) so a future outline
-//!   rasterizer can implement [`GlyphProvider`] without touching callers.
+//! - No hinting (glyph instructions ignored upstream), no subpixel
+//!   positioning, no gamma-correct blending; anti-aliasing is plain 16-level
+//!   box supersampling. Curves flatten at a FIXED 4 subdivisions per
+//!   quadratic segment — large display sizes may show faint faceting.
+//! - Winding rule is NONZERO (TrueType's native rule): outer contours and
+//!   counter-oriented holes cancel correctly. Even-odd would also work for
+//!   well-formed TrueType but nonzero tolerates overlapping components.
+//! - Characters that map to glyph 0 (.notdef) or have zero advance draw
+//!   NO ink (advances and ink must agree so words never overlap).
 //! - Under a TTF [`FontSource`], RectInkProvider's bar widths will not
-//!   match true advances exactly (bars are heuristic; advances are not).
+//!   match true advances exactly (bars are heuristic; advances are not) —
+//!   use [`OutlineGlyphProvider`] for real letterforms.
 
 use amazing_layout::font::FontSource;
 use crate::surface::Surface;

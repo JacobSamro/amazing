@@ -6,5 +6,8 @@ version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+# Phase 6 front half (lexer + parser) is deliberately std-only: no
+# third-party crates per the engine's hard constraint, and no
+# workspace-internal dependencies either — the interpreter back half may
+# re-introduce amazing-common when it lands.
 [dependencies]
-amazing-common = { path = "../amazing-common" }
