@@ -385,8 +385,9 @@ impl Interpreter {
                 self.completion = JsValue::Undefined;
                 let v = self.eval_expr(right, env)?;
                 for k in self.enumerable_keys(&v) {
-                    self.bind_for(left, JsValue::str(k), env)?;
-                    match self.exec_stmt(body, env)? {
+                    let iteration_env = for_iteration_env(left, env);
+                    self.bind_for(left, JsValue::str(k), &iteration_env)?;
+                    match self.exec_stmt(body, &iteration_env)? {
                         Flow::Normal | Flow::Continue(None) => {}
                         Flow::Break(None) => break,
                         x => return Ok(x),
@@ -398,8 +399,9 @@ impl Interpreter {
                 self.completion = JsValue::Undefined;
                 let v = self.eval_expr(right, env)?;
                 for x in self.iterate(&v)? {
-                    self.bind_for(left, x, env)?;
-                    match self.exec_stmt(body, env)? {
+                    let iteration_env = for_iteration_env(left, env);
+                    self.bind_for(left, x, &iteration_env)?;
+                    match self.exec_stmt(body, &iteration_env)? {
                         Flow::Normal | Flow::Continue(None) => {}
                         Flow::Break(None) => break,
                         x => return Ok(x),
@@ -2046,6 +2048,15 @@ fn is_destructuring_expr(expression: &ast::Expr) -> bool {
     }
 }
 
+fn for_iteration_env(left: &ForLeft, env: &EnvHandle) -> EnvHandle {
+    match left {
+        ForLeft::Decl(declaration) if declaration.kind != ast::VarKind::Var => {
+            EnvHandle::new(EnvKind::Block, Some(env.clone()))
+        }
+        _ => env.clone(),
+    }
+}
+
 fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     Ok(a.into_iter()
         .next()
@@ -3563,6 +3574,13 @@ mod tests {
             .run_script("let a=0,b=0; [a=3,b]=[undefined,4]; ({a,b}={a:5,b:6}); a+b;")
             .unwrap();
         assert_eq!(num(value), 11.0);
+        let mut p = Interpreter::new();
+        let value = p
+            .run_script(
+                "let out=[]; for (const [a,b] of [[1,2],[3,4]]) { out.push(a+b); } out.join(',');",
+            )
+            .unwrap();
+        assert_eq!(p.to_string(&value).unwrap(), "3,7");
     }
 
     #[test]
