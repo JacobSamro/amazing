@@ -1,0 +1,9 @@
+[package]
+name = "amazing-net"
+description = "HTTP/1.1 client over std::net::TcpStream"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

@@ -1,4 +1,4 @@
-# Ferric Architecture
+# Amazing Architecture
 
 A from-scratch, zero-dependency (std-only) web browser engine. This document
 records decisions that are **locked** — changing them later is a project-level
@@ -7,18 +7,18 @@ event, not a refactor.
 ## Component graph
 
 ```
-ferric-net ──bytes──▶ ferric-html ──tree ops──▶ ferric-dom
+amazing-net ──bytes──▶ amazing-html ──tree ops──▶ amazing-dom
                                                    │
                                      styles        │ tree mutations
                                         ▼          ▼
-                                    ferric-css   ferric-js  ◀── DOM/JS bridge (Phase 7)
+                                    amazing-css   amazing-js  ◀── DOM/JS bridge (Phase 7)
                                         │
                                         ▼ computed style tree
-                                   ferric-layout ──layout tree──▶ ferric-paint ──pixels──▶ GUI shell
+                                   amazing-layout ──layout tree──▶ amazing-paint ──pixels──▶ GUI shell
 ```
 
 Dependency direction always points "downward" in the pipeline; nothing in a
-lower layer may import a higher one except through the `ferric` driver binary.
+lower layer may import a higher one except through the `amazing` driver binary.
 
 ## Locked decisions
 
@@ -49,7 +49,7 @@ v1 features:
 
 ### 3. Arena-allocated DOM
 
-`ferric_dom::Dom` = flat `Vec<Node>`, references are `NodeIdx(u32)`.
+`amazing_dom::Dom` = flat `Vec<Node>`, references are `NodeIdx(u32)`.
 No `Rc<RefCell<..>>` anywhere in the engine core. Consequences we accept:
 
 - Node removal = freelist insertion; indices stay stable until reused.
@@ -71,8 +71,8 @@ denied (enforced via workspace lint config as crates appear).
 
 ### 6. TLS exception (decided at Phase 5)
 
-Working assumption: Ferric uses a vetted TLS implementation rather than
-hand-rolled TLS 1.3. Rationale lives in `crates/ferric-net/src/lib.rs`;
+Working assumption: Amazing uses a vetted TLS implementation rather than
+hand-rolled TLS 1.3. Rationale lives in `crates/amazing-net/src/lib.rs`;
 revisit only if the constraint set changes.
 
 ## Conformance tracking

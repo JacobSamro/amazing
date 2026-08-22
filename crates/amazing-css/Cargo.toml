@@ -1,0 +1,11 @@
+[package]
+name = "amazing-css"
+description = "Hand-written CSS Syntax 3 tokenizer, parser, selector matching, cascade"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+amazing-common = { path = "../amazing-common" }
+amazing-dom = { path = "../amazing-dom" }

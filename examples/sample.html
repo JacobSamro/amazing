@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Amazing Phase 2 sample page</title>
+<style>
+  /* Type, class, id, attribute, pseudo-class, and combinator coverage. */
+  body { font-family: serif; color: #222222; }
+  h1 { text-align: center; letter-spacing: 2px; }
+  .intro { font-style: italic; }
+  #toc { background-color: #f0f0f0; padding-left: 20px; }
+  a[href^="https"] { color: darkgreen; }
+  li:nth-child(odd) { color: steelblue; }
+  ul > li:first-child { font-weight: bold; }
+  p.warn { color: darkred !important; }
+  div.note span { text-decoration: underline; }
+</style>
+</head>
+<body>
+<h1>Sample Document</h1>
+<p class="intro">This paragraph is italic via <code>.intro</code>.</p>
+<div class="note"><span>Underlined span inside a noted div.</span></div>
+<ul id="toc">
+  <li>First item (bold + odd → steelblue)</li>
+  <li>Second item (even → inherits)</li>
+  <li>Third item (odd → steelblue)</li>
+</ul>
+<p style="color: purple">Inline style beats the type rule.</p>
+<p class="warn" style="color: purple">!important class rule beats inline.</p>
+<p><a href="https://example.org">Secure link</a> vs
+   <a href="/relative">relative link</a>.</p>
+</body>
+</html>

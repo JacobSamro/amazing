@@ -1,0 +1,21 @@
+[package]
+name = "amazing"
+description = "Amazing browser driver binary"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+amazing-common = { path = "../amazing-common" }
+amazing-dom = { path = "../amazing-dom" }
+amazing-html = { path = "../amazing-html" }
+amazing-css = { path = "../amazing-css" }
+amazing-layout = { path = "../amazing-layout" }
+amazing-paint = { path = "../amazing-paint" }
+amazing-net = { path = "../amazing-net" }
+amazing-js = { path = "../amazing-js" }
+
+[[bin]]
+name = "amazing"
+path = "src/main.rs"

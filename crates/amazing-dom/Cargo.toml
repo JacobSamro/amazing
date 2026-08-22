@@ -1,0 +1,7 @@
+[package]
+name = "amazing-dom"
+description = "Arena-allocated DOM tree (u32 indices, no Rc<RefCell>)"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
