@@ -204,6 +204,7 @@ impl Interpreter {
         history.set_own("back", Self::native("back", native_history_back, &self.function_proto));
         history.set_own("forward", Self::native("forward", native_history_forward, &self.function_proto));
         history.set_own("go", Self::native("go", native_history_go, &self.function_proto));
+        history.set_own("length", JsValue::num(1.0));
         let history = JsValue::Object(Obj(Rc::new(RefCell::new(history))));
         self.global_obj.borrow_mut().set_own("history", history.clone());
         let _ = self.global_env.declare_var("history", history);
@@ -310,6 +311,12 @@ impl Interpreter {
 
     pub fn take_history_delta(&mut self) -> Option<i32> {
         self.pending_history_delta.take()
+    }
+
+    pub fn set_history_length(&mut self, length: usize) {
+        if let Some(JsValue::Object(history)) = self.global_obj.borrow().get_own("history") {
+            history.borrow_mut().set_own("length", JsValue::num(length as f64));
+        }
     }
 
     pub fn install_inline_handler(
@@ -6270,5 +6277,8 @@ mod tests {
         assert_eq!(i.take_history_delta(), Some(-1));
         i.run_script("location.reload();").unwrap();
         assert_eq!(i.take_navigation().as_deref(), Some("other.html"));
+        i.set_history_length(3);
+        let length = i.run_script("history.length;").unwrap();
+        assert_eq!(length, JsValue::num(3.0));
     }
 }

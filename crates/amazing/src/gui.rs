@@ -361,6 +361,10 @@ mod windows {
                         tab.history.push(input.clone());
                         tab.history_pos = tab.history.len().saturating_sub(1);
                     }
+                    let history_length = self.tab().history.len();
+                    if let Some(runtime) = self.tab_mut().runtime.as_mut() {
+                        runtime.js.set_history_length(history_length);
+                    }
                     let script_navigation = self
                         .tab_mut()
                         .runtime
