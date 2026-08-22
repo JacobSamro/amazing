@@ -314,7 +314,7 @@ for modules/async/negative tests, BigInt/Symbol/private/accessor/destructuring
 features, and unavailable harness hooks. This is a focused slice, not whole-suite
 coverage.
 
-Known gaps: there is no browser event loop or full Promise combinator/timing
+Known gaps: there is no browser event loop or Promise timing/job integration
 surface yet, and generators, symbols, modules, real Symbol identity, regex
 literals, class accessors, and full class semantics are deferred. Basic
 `super` property and constructor calls now work.
