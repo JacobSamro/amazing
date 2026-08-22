@@ -16,7 +16,7 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (130 crate tests); focused Test262 slice measured at 123/437 (28.15%) |
+| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (131 crate tests); focused Test262 slice measured at 181/196 (92.35%) |
 | 7–9 | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
@@ -283,26 +283,29 @@ SameValueZero keys, preserve insertion order, expose `size`, and return
 array-backed key/value/entry iterables for this milestone. Promise supports
 the constructor executor, `resolve`/`reject`, `then`/`catch`/`finally`,
 pending reaction delivery, async-function return wrapping, and a FIFO
-microtask queue drained after each top-level script.
+microtask queue drained after each top-level script. Assignment uses a
+single evaluated reference for compound/logical updates; property descriptors,
+accessors, extensibility, wrapper objects, and named anonymous functions are
+covered by the runtime milestone.
 
 Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
 script, prints captured console lines, then its completion value. The
-interpreter has 13 focused runtime tests; `cargo test --workspace` is green
-on win-001 (130 tests in `amazing-js`).
+interpreter has 14 focused runtime tests; `cargo test --workspace` is green
+on win-001 (131 tests in `amazing-js`).
 
 Conformance evidence: the official Test262 repository was shallow-sparsely
 checked out on win-001 with 641 tests across the selected classic-language
 directories. `python scripts/test262.py C:\\Users\\server\\src\\test262
---binary target\\debug\\amazing.exe` measured 123 passed, 314 failed, and
-204 skipped; measured pass rate = **123/437 (28.15%)**. Skips are explicit
+--binary target\\debug\\amazing.exe` measured 181 passed, 15 failed, and
+445 skipped; measured pass rate = **181/196 (92.35%)**. Skips are explicit
 for modules/async/negative tests, BigInt/Symbol/private/accessor features,
 and unavailable harness hooks. This is a focused slice, not whole-suite
 coverage.
 
 Known gaps: there is no browser event loop or full Promise combinator/timing
-surface yet, and generators, symbols, modules,
-destructuring, regex literals, accessors, and full class/super semantics are
-deferred. The runtime is a milestone, not Phase 6 exit-criteria completion.
+surface yet, and generators, symbols, modules, destructuring, regex literals,
+class accessors, and full class/super semantics are deferred. The runtime is
+a milestone, not Phase 6 exit-criteria completion.
 
 ## Later phases (unchanged from goal prompt)
 

@@ -13,7 +13,7 @@ use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey,
 use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
     number_to_string, Exotic, FunctionBody, JsFunction, JsObject, JsValue, MapKey, MapState, Obj,
-    PendingReaction, PromiseFate, PromiseState, SetState, Throw,
+    PendingReaction, PromiseFate, PromiseState, Property, SetState, Throw,
 };
 
 pub const MAX_CALL_DEPTH: u32 = 512;
@@ -30,6 +30,11 @@ struct PromiseJob {
     fate: PromiseFate,
 }
 
+enum Reference {
+    Binding(String),
+    Property(JsValue, String),
+}
+
 pub struct Interpreter {
     pub global_env: EnvHandle,
     pub global_obj: Obj,
@@ -44,6 +49,7 @@ pub struct Interpreter {
     depth: u32,
     native_stack: Vec<Obj>,
     jobs: VecDeque<PromiseJob>,
+    completion: JsValue,
 }
 
 impl Interpreter {
@@ -99,6 +105,7 @@ impl Interpreter {
             depth: 0,
             native_stack: Vec::new(),
             jobs: VecDeque::new(),
+            completion: JsValue::Undefined,
         };
         i.global_obj
             .borrow_mut()
@@ -113,24 +120,27 @@ impl Interpreter {
     }
 
     pub fn run_program(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
+        let previous_completion = self.completion.clone();
+        self.completion = JsValue::Undefined;
         let env = self.global_env.clone();
         self.hoist(&p.body, &env)?;
-        let mut last = JsValue::Undefined;
         for s in &p.body {
             if let StmtKind::Expression(e) = &s.kind {
-                last = self.eval_expr(e, &env)?;
+                self.completion = self.eval_expr(e, &env)?;
                 continue;
             }
             match self.exec_stmt(s, &env)? {
                 Flow::Normal => {}
-                Flow::Return(v) => last = v,
+                Flow::Return(v) => self.completion = v,
                 Flow::Break(_) | Flow::Continue(_) => {
                     return Err(Throw::syntax_error("illegal break or continue"))
                 }
             }
         }
         self.drain_jobs()?;
-        Ok(last)
+        let result = self.completion.clone();
+        self.completion = previous_completion;
+        Ok(result)
     }
 
     fn hoist(&mut self, body: &[ast::Stmt], env: &EnvHandle) -> Result<(), Throw> {
@@ -191,7 +201,7 @@ impl Interpreter {
         match &s.kind {
             StmtKind::Empty | StmtKind::Debugger => Ok(Flow::Normal),
             StmtKind::Expression(e) => {
-                self.eval_expr(e, env)?;
+                self.completion = self.eval_expr(e, env)?;
                 Ok(Flow::Normal)
             }
             StmtKind::Var(d) => {
@@ -229,11 +239,13 @@ impl Interpreter {
                 Ok(Flow::Normal)
             }
             StmtKind::Block(b) => {
+                self.completion = JsValue::Undefined;
                 let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                 self.hoist(&b.body, &e)?;
                 self.exec_stmts(&b.body, &e)
             }
             StmtKind::If { cond, then, els } => {
+                self.completion = JsValue::Undefined;
                 if self.eval_expr(cond, env)?.to_boolean() {
                     self.exec_stmt(then, env)
                 } else if let Some(e) = els {
@@ -242,21 +254,13 @@ impl Interpreter {
                     Ok(Flow::Normal)
                 }
             }
-            StmtKind::While { test, body } => self.loop_while(test, body, env),
+            StmtKind::While { test, body } => {
+                self.completion = JsValue::Undefined;
+                self.loop_while(test, body, env, None)
+            }
             StmtKind::DoWhile { body, test } => {
-                loop {
-                    match self.exec_stmt(body, env)? {
-                        Flow::Break(None) => break,
-                        Flow::Break(x) => return Ok(Flow::Break(x)),
-                        Flow::Continue(None) | Flow::Normal => {}
-                        Flow::Continue(x) => return Ok(Flow::Continue(x)),
-                        Flow::Return(v) => return Ok(Flow::Return(v)),
-                    }
-                    if !self.eval_expr(test, env)?.to_boolean() {
-                        break;
-                    }
-                }
-                Ok(Flow::Normal)
+                self.completion = JsValue::Undefined;
+                self.loop_do_while(body, test, env, None)
             }
             StmtKind::For {
                 init,
@@ -264,6 +268,7 @@ impl Interpreter {
                 update,
                 body,
             } => {
+                self.completion = JsValue::Undefined;
                 let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                 if let Some(i) = init {
                     match i {
@@ -296,6 +301,7 @@ impl Interpreter {
                 Ok(Flow::Normal)
             }
             StmtKind::ForIn { left, right, body } => {
+                self.completion = JsValue::Undefined;
                 let v = self.eval_expr(right, env)?;
                 for k in self.enumerable_keys(&v) {
                     self.bind_for(left, JsValue::str(k), env)?;
@@ -308,6 +314,7 @@ impl Interpreter {
                 Ok(Flow::Normal)
             }
             StmtKind::ForOf { left, right, body } => {
+                self.completion = JsValue::Undefined;
                 let v = self.eval_expr(right, env)?;
                 for x in self.iterate(&v)? {
                     self.bind_for(left, x, env)?;
@@ -320,6 +327,7 @@ impl Interpreter {
                 Ok(Flow::Normal)
             }
             StmtKind::Switch { disc, cases } => {
+                self.completion = JsValue::Undefined;
                 let d = self.eval_expr(disc, env)?;
                 let mut start = None;
                 let mut def = None;
@@ -350,9 +358,17 @@ impl Interpreter {
             StmtKind::Continue { label: l } => {
                 Ok(Flow::Continue(l.as_ref().map(|x| x.name.clone())))
             }
-            StmtKind::Labeled { label, body } => match self.exec_stmt(body, env)? {
-                Flow::Break(Some(x)) if x == label.name => Ok(Flow::Normal),
-                x => Ok(x),
+            StmtKind::Labeled { label, body } => match &body.kind {
+                StmtKind::While { test, body } => {
+                    self.loop_while(test, body, env, Some(&label.name))
+                }
+                StmtKind::DoWhile { body, test } => {
+                    self.loop_do_while(body, test, env, Some(&label.name))
+                }
+                _ => match self.exec_stmt(body, env)? {
+                    Flow::Break(Some(x)) if x == label.name => Ok(Flow::Normal),
+                    x => Ok(x),
+                },
             },
             StmtKind::Return(e) => Ok(Flow::Return(
                 e.as_ref()
@@ -361,7 +377,10 @@ impl Interpreter {
                     .unwrap_or(JsValue::Undefined),
             )),
             StmtKind::Throw(e) => Err(Throw(self.eval_expr(e, env)?)),
-            StmtKind::Try(t) => self.exec_try(t, env),
+            StmtKind::Try(t) => {
+                self.completion = JsValue::Undefined;
+                self.exec_try(t, env)
+            }
         }
     }
 
@@ -386,12 +405,39 @@ impl Interpreter {
         test: &ast::Expr,
         body: &ast::Stmt,
         env: &EnvHandle,
+        label: Option<&str>,
     ) -> Result<Flow, Throw> {
         while self.eval_expr(test, env)?.to_boolean() {
             match self.exec_stmt(body, env)? {
                 Flow::Normal | Flow::Continue(None) => {}
                 Flow::Break(None) => break,
+                Flow::Break(Some(name)) if label == Some(name.as_str()) => break,
+                Flow::Continue(Some(name)) if label == Some(name.as_str()) => continue,
                 x => return Ok(x),
+            }
+        }
+        Ok(Flow::Normal)
+    }
+
+    fn loop_do_while(
+        &mut self,
+        body: &ast::Stmt,
+        test: &ast::Expr,
+        env: &EnvHandle,
+        label: Option<&str>,
+    ) -> Result<Flow, Throw> {
+        loop {
+            match self.exec_stmt(body, env)? {
+                Flow::Break(None) => break,
+                Flow::Break(Some(name)) if label == Some(name.as_str()) => break,
+                Flow::Continue(None) | Flow::Normal => {}
+                Flow::Continue(Some(name)) if label == Some(name.as_str()) => {}
+                Flow::Continue(name) => return Ok(Flow::Continue(name)),
+                Flow::Break(name) => return Ok(Flow::Break(name)),
+                Flow::Return(value) => return Ok(Flow::Return(value)),
+            }
+            if !self.eval_expr(test, env)?.to_boolean() {
+                break;
             }
         }
         Ok(Flow::Normal)
@@ -685,9 +731,9 @@ impl Interpreter {
         x: &ast::Expr,
         env: &EnvHandle,
     ) -> Result<JsValue, Throw> {
-        let old = self.eval_expr(x, env)?;
+        let (reference, old) = self.resolve_reference(x, env)?;
         let n = self.to_number(&old)? + if op == ast::UpdateOp::Inc { 1.0 } else { -1.0 };
-        self.assign_target(x, JsValue::num(n), env)?;
+        self.put_reference(reference, JsValue::num(n), env)?;
         Ok(if prefix { JsValue::num(n) } else { old })
     }
     fn binary(&mut self, op: ast::BinOp, a: JsValue, b: JsValue) -> Result<JsValue, Throw> {
@@ -767,12 +813,20 @@ impl Interpreter {
         r: &ast::Expr,
         e: &EnvHandle,
     ) -> Result<JsValue, Throw> {
+        let (reference, old) = self.resolve_reference(t, e)?;
         if op == ast::AssignOp::Assign {
-            let v = self.eval_expr(r, e)?;
-            self.assign_target(t, v.clone(), e)?;
+            let mut v = self.eval_expr(r, e)?;
+            if let Some(name) = reference_name(&reference) {
+                self.infer_function_name(&mut v, &name);
+            }
+            self.put_reference(reference, v.clone(), e)?;
             return Ok(v);
         }
-        let old = self.eval_expr(t, e)?;
+        if matches!(&reference, Reference::Binding(name) if !e.has(name)) {
+            return Err(Throw::reference_error(
+                "assignment to an unresolved binding",
+            ));
+        }
         if op == ast::AssignOp::And && !old.to_boolean() {
             return Ok(old);
         }
@@ -782,7 +836,17 @@ impl Interpreter {
         if op == ast::AssignOp::Nullish && !old.is_null() && !old.is_undefined() {
             return Ok(old);
         }
-        let v = self.eval_expr(r, e)?;
+        let mut v = self.eval_expr(r, e)?;
+        if let Some(name) = reference_name(&reference) {
+            self.infer_function_name(&mut v, &name);
+        }
+        if matches!(
+            op,
+            ast::AssignOp::And | ast::AssignOp::Or | ast::AssignOp::Nullish
+        ) {
+            self.put_reference(reference, v.clone(), e)?;
+            return Ok(v);
+        }
         let bop = match op {
             ast::AssignOp::Add => ast::BinOp::Add,
             ast::AssignOp::Sub => ast::BinOp::Sub,
@@ -799,25 +863,78 @@ impl Interpreter {
             _ => ast::BinOp::Add,
         };
         let out = self.binary(bop, old, v)?;
-        self.assign_target(t, out.clone(), e)?;
+        self.put_reference(reference, out.clone(), e)?;
         Ok(out)
     }
-    fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
-        match &t.kind {
-            ExprKind::Ident(i) => {
-                if !e.assign(&i.name, v.clone())? {
-                    self.global_env.declare_var(&i.name, v)?;
+
+    fn infer_function_name(&self, value: &mut JsValue, name: &str) {
+        if let JsValue::Object(object) = value {
+            let mut object = object.borrow_mut();
+            if let Some(function) = &mut object.func {
+                if function.name.is_empty() {
+                    function.name = name.to_string();
+                    object.set_own("name", JsValue::str(name));
+                }
+            }
+        }
+    }
+
+    fn resolve_reference(
+        &mut self,
+        target: &ast::Expr,
+        env: &EnvHandle,
+    ) -> Result<(Reference, JsValue), Throw> {
+        match &target.kind {
+            ExprKind::Ident(identifier) => Ok((
+                Reference::Binding(identifier.name.clone()),
+                env.resolve(&identifier.name).unwrap_or(JsValue::Undefined),
+            )),
+            ExprKind::Member { obj, prop, .. } => {
+                let base = self.eval_expr(obj, env)?;
+                let key = match prop {
+                    MemberProp::Ident(identifier) => identifier.name.clone(),
+                    MemberProp::Computed(expression) => {
+                        let property_value = self.eval_expr(expression, env)?;
+                        if base.is_null() || base.is_undefined() {
+                            return Err(Throw::type_error(
+                                "cannot access a property on nullish value",
+                            ));
+                        }
+                        self.to_property_key(&property_value)?
+                    }
+                };
+                if base.is_null() || base.is_undefined() {
+                    return Err(Throw::type_error(
+                        "cannot access a property on nullish value",
+                    ));
+                }
+                let value = self.get_prop(&base, &key)?;
+                Ok((Reference::Property(base, key), value))
+            }
+            ExprKind::Paren(inner) => self.resolve_reference(inner, env),
+            _ => Err(Throw::reference_error("invalid assignment target")),
+        }
+    }
+
+    fn put_reference(
+        &mut self,
+        reference: Reference,
+        value: JsValue,
+        env: &EnvHandle,
+    ) -> Result<(), Throw> {
+        match reference {
+            Reference::Binding(name) => {
+                if !env.assign(&name, value.clone())? {
+                    self.global_env.declare_var(&name, value)?;
                 }
                 Ok(())
             }
-            ExprKind::Member { obj, prop, .. } => {
-                let o = self.eval_expr(obj, e)?;
-                let k = self.member_key(prop, e)?;
-                self.set_prop(&o, &k, v)
-            }
-            ExprKind::Paren(x) => self.assign_target(x, v, e),
-            _ => Err(Throw::reference_error("invalid assignment target")),
+            Reference::Property(base, key) => self.set_prop(&base, &key, value),
         }
+    }
+    fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
+        let (reference, _) = self.resolve_reference(t, e)?;
+        self.put_reference(reference, v, e)
     }
     fn call_expr(
         &mut self,
@@ -899,38 +1016,43 @@ impl Interpreter {
             return Err(Throw::range_error("maximum call stack size exceeded"));
         }
         self.depth += 1;
-        let r = match fun.body {
-            FunctionBody::Native(n) => {
-                self.native_stack.push(o.clone());
-                let result = n(self, this, args);
-                self.native_stack.pop();
-                result
-            }
-            FunctionBody::Expr(x) => {
-                let e = EnvHandle::new(EnvKind::Function, Some(fun.env.clone()));
-                e.bind_this(if fun.is_arrow {
-                    fun.env.resolve_this()
-                } else {
-                    this
-                });
-                self.bind_params(&e, &fun.params, args)?;
-                self.eval_expr(&x, &e)
-            }
-            FunctionBody::Block(b) => {
-                let e = EnvHandle::new(EnvKind::Function, Some(fun.env.clone()));
-                e.bind_this(if fun.is_arrow {
-                    fun.env.resolve_this()
-                } else {
-                    this
-                });
-                self.bind_params(&e, &fun.params, args)?;
-                self.hoist(&b.body, &e)?;
-                match self.exec_stmts(&b.body, &e)? {
-                    Flow::Return(v) => Ok(v),
-                    _ => Ok(JsValue::Undefined),
+        let previous_completion = self.completion.clone();
+        self.completion = JsValue::Undefined;
+        let r = (|| -> Result<JsValue, Throw> {
+            match fun.body {
+                FunctionBody::Native(n) => {
+                    self.native_stack.push(o.clone());
+                    let result = n(self, this, args);
+                    self.native_stack.pop();
+                    result
+                }
+                FunctionBody::Expr(x) => {
+                    let e = EnvHandle::new(EnvKind::Function, Some(fun.env.clone()));
+                    e.bind_this(if fun.is_arrow {
+                        fun.env.resolve_this()
+                    } else {
+                        this
+                    });
+                    self.bind_params(&e, &fun.params, args)?;
+                    self.eval_expr(&x, &e)
+                }
+                FunctionBody::Block(b) => {
+                    let e = EnvHandle::new(EnvKind::Function, Some(fun.env.clone()));
+                    e.bind_this(if fun.is_arrow {
+                        fun.env.resolve_this()
+                    } else {
+                        this
+                    });
+                    self.bind_params(&e, &fun.params, args)?;
+                    self.hoist(&b.body, &e)?;
+                    match self.exec_stmts(&b.body, &e)? {
+                        Flow::Return(v) => Ok(v),
+                        _ => Ok(JsValue::Undefined),
+                    }
                 }
             }
-        };
+        })();
+        self.completion = previous_completion;
         self.depth -= 1;
         if fun.is_async {
             match r {
@@ -1016,6 +1138,15 @@ impl Interpreter {
         })));
         h.borrow_mut()
             .set_own("prototype", JsValue::Object(p.clone()));
+        h.borrow_mut().set_own(
+            "name",
+            JsValue::str(
+                f.name
+                    .as_ref()
+                    .map(|name| name.name.clone())
+                    .unwrap_or_default(),
+            ),
+        );
         h.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(p);
         JsValue::Object(h)
     }
@@ -1036,7 +1167,9 @@ impl Interpreter {
             proto_for_new: None,
         });
         o.proto = Some(self.function_proto.clone());
-        JsValue::Object(Obj(Rc::new(RefCell::new(o))))
+        let handle = Obj(Rc::new(RefCell::new(o)));
+        handle.borrow_mut().set_own("name", JsValue::str(""));
+        JsValue::Object(handle)
     }
     fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle) -> JsValue {
         let mut o = JsObject::function(JsFunction {
@@ -1051,7 +1184,9 @@ impl Interpreter {
             proto_for_new: None,
         });
         o.proto = Some(self.function_proto.clone());
-        JsValue::Object(Obj(Rc::new(RefCell::new(o))))
+        let handle = Obj(Rc::new(RefCell::new(o)));
+        handle.borrow_mut().set_own("name", JsValue::str(""));
+        JsValue::Object(handle)
     }
     fn eval_class(&mut self, c: &ast::ClassItem, e: &EnvHandle) -> Result<JsValue, Throw> {
         let ctor = c.members.iter().find_map(|m| {
@@ -1118,8 +1253,15 @@ impl Interpreter {
                         return Ok(JsValue::num(size as f64));
                     }
                 }
-                if let Some(x) = o.borrow().get_own(k) {
-                    Ok(x)
+                if let Some(property) = o.borrow().own_prop(k).cloned() {
+                    if let Some(getter) = property.getter {
+                        let function = JsValue::Object(Obj(Rc::new(RefCell::new(
+                            JsObject::function(*getter),
+                        ))));
+                        self.call_value(&function, JsValue::Object(o.clone()), Vec::new())
+                    } else {
+                        Ok(property.value)
+                    }
                 } else if let Some(p) = o.borrow().proto.clone() {
                     self.get_prop(&JsValue::Object(p), k)
                 } else {
@@ -1146,6 +1288,22 @@ impl Interpreter {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("cannot set property on primitive")),
         };
+        if let Some(property) = o.borrow().own_prop(k).cloned() {
+            if let Some(setter) = property.setter {
+                let function =
+                    JsValue::Object(Obj(Rc::new(RefCell::new(JsObject::function(*setter)))));
+                self.call_value(&function, JsValue::Object(o.clone()), vec![x])?;
+                return Ok(());
+            }
+            if !property.writable {
+                return Err(Throw::type_error("cannot assign to a read-only property"));
+            }
+            if property.getter.is_some() {
+                return Err(Throw::type_error("property has no setter"));
+            }
+        } else if !o.borrow().extensible {
+            return Err(Throw::type_error("object is not extensible"));
+        }
         if k == "length" && matches!(o.borrow().exotic, Exotic::Array) {
             let n = self.to_number(&x)?;
             if !n.is_finite() || n < 0.0 || n.fract() != 0.0 {
@@ -1342,6 +1500,7 @@ impl Interpreter {
         handle
             .borrow_mut()
             .set_own("prototype", JsValue::Object(prototype));
+        handle.borrow_mut().set_own("name", JsValue::str(name));
         JsValue::Object(handle)
     }
     fn install_builtins(&mut self) {
@@ -1382,6 +1541,29 @@ impl Interpreter {
                 &JsValue::Object(o.clone()),
                 "keys",
                 Self::native("keys", native_object_keys, &self.function_proto),
+            );
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
+                "defineProperty",
+                Self::native(
+                    "defineProperty",
+                    native_define_property,
+                    &self.function_proto,
+                ),
+            );
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
+                "preventExtensions",
+                Self::native(
+                    "preventExtensions",
+                    native_prevent_extensions,
+                    &self.function_proto,
+                ),
+            );
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
+                "isExtensible",
+                Self::native("isExtensible", native_is_extensible, &self.function_proto),
             );
         }
         self.define_global("Object", object_ctor);
@@ -1530,11 +1712,135 @@ impl Interpreter {
     }
 }
 
+fn reference_name(reference: &Reference) -> Option<String> {
+    match reference {
+        Reference::Binding(name) => Some(name.clone()),
+        Reference::Property(_, key) => Some(key.clone()),
+    }
+}
+
 fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     Ok(a.into_iter()
         .next()
         .filter(|v| v.is_object())
         .unwrap_or_else(|| i.object_value()))
+}
+
+fn native_define_property(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let target = match args.first() {
+        Some(JsValue::Object(object)) => object.clone(),
+        _ => return Err(Throw::type_error("defineProperty target is not an object")),
+    };
+    let descriptor = match args.get(2) {
+        Some(JsValue::Object(object)) => object.clone(),
+        _ => return Err(Throw::type_error("property descriptor is not an object")),
+    };
+    let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    let has = |name: &str| descriptor.borrow().has_property(name);
+    let accessor = has("get") || has("set");
+    let data = has("value") || has("writable");
+    if accessor && data {
+        return Err(Throw::type_error(
+            "descriptor mixes data and accessor fields",
+        ));
+    }
+    if target.borrow().own_prop(&key).is_none() && !target.borrow().extensible {
+        return Err(Throw::type_error("object is not extensible"));
+    }
+    let value = if has("value") {
+        i.get_prop(&JsValue::Object(descriptor.clone()), "value")?
+    } else {
+        JsValue::Undefined
+    };
+    let writable = if has("writable") {
+        i.get_prop(&JsValue::Object(descriptor.clone()), "writable")?
+            .to_boolean()
+    } else {
+        false
+    };
+    let enumerable = if has("enumerable") {
+        i.get_prop(&JsValue::Object(descriptor.clone()), "enumerable")?
+            .to_boolean()
+    } else {
+        false
+    };
+    let configurable = if has("configurable") {
+        i.get_prop(&JsValue::Object(descriptor.clone()), "configurable")?
+            .to_boolean()
+    } else {
+        false
+    };
+    let getter = if has("get") {
+        match i.get_prop(&JsValue::Object(descriptor.clone()), "get")? {
+            JsValue::Undefined => None,
+            value => Some(
+                callable_function(&value)
+                    .map(Box::new)
+                    .ok_or_else(|| Throw::type_error("property getter is not callable"))?,
+            ),
+        }
+    } else {
+        None
+    };
+    let setter = if has("set") {
+        match i.get_prop(&JsValue::Object(descriptor.clone()), "set")? {
+            JsValue::Undefined => None,
+            value => Some(
+                callable_function(&value)
+                    .map(Box::new)
+                    .ok_or_else(|| Throw::type_error("property setter is not callable"))?,
+            ),
+        }
+    } else {
+        None
+    };
+    target
+        .borrow_mut()
+        .define(
+            &key,
+            Property {
+                value,
+                writable: if accessor { false } else { writable },
+                enumerable,
+                configurable,
+                getter,
+                setter,
+            },
+        )
+        .map_err(|_| Throw::type_error("could not define property"))?;
+    Ok(JsValue::Object(target))
+}
+
+fn native_prevent_extensions(
+    _: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let target = args.first().cloned().unwrap_or(this);
+    match target {
+        JsValue::Object(object) => {
+            object.borrow_mut().extensible = false;
+            Ok(JsValue::Object(object))
+        }
+        _ => Err(Throw::type_error(
+            "preventExtensions target is not an object",
+        )),
+    }
+}
+
+fn native_is_extensible(
+    _: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    match args.first() {
+        Some(JsValue::Object(object)) => Ok(JsValue::Bool(object.borrow().extensible)),
+        _ => Err(Throw::type_error("isExtensible target is not an object")),
+    }
 }
 
 fn native_date(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -2466,6 +2772,17 @@ mod tests {
         assert!(matches!(value, JsValue::Bool(true)));
         let value = i.run_script("'x' in {x: 1};").unwrap();
         assert!(matches!(value, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn compound_assignment_evaluates_member_reference_once() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script(
+                "let calls=0; function base(){calls++; return {x:0};} base().x ||= 2; calls;",
+            )
+            .unwrap();
+        assert_eq!(num(value), 1.0);
     }
 
     #[test]

@@ -74,8 +74,7 @@ impl PartialEq for JsValue {
     /// implemented at operator level; this impl is strict equality).
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (JsValue::Undefined, JsValue::Undefined)
-            | (JsValue::Null, JsValue::Null) => true,
+            (JsValue::Undefined, JsValue::Undefined) | (JsValue::Null, JsValue::Null) => true,
             (JsValue::Bool(a), JsValue::Bool(b)) => a == b,
             (JsValue::Num(a), JsValue::Num(b)) => a == b, // f64 eq: NaN!=NaN, +0==-0
             (JsValue::Str(a), JsValue::Str(b)) => a == b,
@@ -183,10 +182,10 @@ pub fn string_to_number(s: &str) -> f64 {
         _ => {
             // Strict: reject hex, trailing junk, etc. Rust's parser accepts
             // "inf", "nan", "+3" — all invalid JS strings — so filter them.
-            let ok = t.as_bytes().iter().all(|&b| {
-                b.is_ascii_digit()
-                    || matches!(b, b'.' | b'e' | b'E' | b'+' | b'-')
-            });
+            let ok = t
+                .as_bytes()
+                .iter()
+                .all(|&b| b.is_ascii_digit() || matches!(b, b'.' | b'e' | b'E' | b'+' | b'-'));
             if ok && t.bytes().any(|b| b.is_ascii_digit()) {
                 t.parse::<f64>().unwrap_or(f64::NAN)
             } else {
@@ -206,20 +205,14 @@ impl JsWs for char {
     fn is_ws_js(&self) -> bool {
         matches!(
             self,
-            '\t' | '\n'
-                | '\u{B}'
-                | '\u{C}'
-                | '\r'
-                | ' '
-                | '\u{A0}'
-                | '\u{1680}'
-                | '\u{2000}'..='\u{200A}'
-                | '\u{2028}'
-                | '\u{2029}'
-                | '\u{202F}'
-                | '\u{205F}'
-                | '\u{3000}'
-                | '\u{FEFF}'
+            '\t' | '\n' | '\u{B}' | '\u{C}' | '\r' | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'
+                ..='\u{200A}'
+                    | '\u{2028}'
+                    | '\u{2029}'
+                    | '\u{202F}'
+                    | '\u{205F}'
+                    | '\u{3000}'
+                    | '\u{FEFF}'
         )
     }
 }
@@ -409,7 +402,8 @@ pub enum FunctionBody {
 }
 
 /// Signature of built-in implementations: receiver (`this`), arguments.
-pub type NativeFn = fn(&mut crate::interp::Interpreter, JsValue, Vec<JsValue>) -> Result<JsValue, Throw>;
+pub type NativeFn =
+    fn(&mut crate::interp::Interpreter, JsValue, Vec<JsValue>) -> Result<JsValue, Throw>;
 
 /// Exotic object flavors. Everything not listed is Ordinary.
 #[derive(Debug, Clone, Default)]
@@ -450,9 +444,7 @@ impl MapKey {
         match (self, other) {
             (MapKey::Str(a), MapKey::Str(b)) => a == b,
             // NaN === NaN under SameValueZero; -0 and +0 are one key.
-            (MapKey::Num(a), MapKey::Num(b)) => {
-                (a.is_nan() && b.is_nan()) || (*a == *b)
-            }
+            (MapKey::Num(a), MapKey::Num(b)) => (a.is_nan() && b.is_nan()) || (*a == *b),
             (MapKey::Bool(a), MapKey::Bool(b)) => a == b,
             (MapKey::Null, MapKey::Null) => true,
             (MapKey::Undefined, MapKey::Undefined) => true,
@@ -522,6 +514,8 @@ pub struct JsObject {
     props: Vec<(String, Property)>,
     pub proto: Option<Obj>,
     pub exotic: Exotic,
+    /// Whether new own properties may be created.
+    pub extensible: bool,
     /// Callable payload; `Some` iff this object is a function.
     pub func: Option<JsFunction>,
     /// True once this object has been invoked via `new` as a constructor
@@ -541,6 +535,7 @@ impl JsObject {
             props: Vec::new(),
             proto: None,
             exotic: Exotic::Ordinary,
+            extensible: true,
             func: None,
             constructed: false,
         }
@@ -647,7 +642,10 @@ impl JsObject {
     /// Whether the key exists anywhere on the chain (the `in` operator).
     pub fn has_property(&self, key: &str) -> bool {
         self.get_own(key).is_some()
-            || self.proto.as_ref().is_some_and(|p| p.borrow().has_property(key))
+            || self
+                .proto
+                .as_ref()
+                .is_some_and(|p| p.borrow().has_property(key))
     }
 }
 

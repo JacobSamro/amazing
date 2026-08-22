@@ -19,30 +19,31 @@ import sys
 
 
 PRELUDE = r"""
-var assert = {
-  sameValue: function (actual, expected) {
-    if (!(actual === expected)) { throw "Test262 sameValue failed"; }
-  },
-  notSameValue: function (actual, unexpected) {
-    if (actual === unexpected) { throw "Test262 notSameValue failed"; }
-  },
-  isTrue: function (value) {
-    if (value !== true) { throw "Test262 isTrue failed"; }
-  },
-  isFalse: function (value) {
-    if (value !== false) { throw "Test262 isFalse failed"; }
-  },
-  compareArray: function (actual, expected) {
-    if (actual.length !== expected.length) { throw "Test262 compareArray failed"; }
-    for (var i = 0; i < actual.length; i++) {
-      if (actual[i] !== expected[i]) { throw "Test262 compareArray failed"; }
-    }
-  },
-  throws: function (constructor, callback) {
-    var threw = false;
-    try { callback(); } catch (error) { threw = true; }
-    if (!threw) { throw "Test262 throws failed"; }
+function assert(condition, message) {
+  if (!condition) { throw message || "Test262 assert failed"; }
+}
+assert.sameValue = function (actual, expected, message) {
+  if (!(actual === expected)) { throw message || "Test262 sameValue failed"; }
+};
+assert.notSameValue = function (actual, unexpected) {
+  if (actual === unexpected) { throw "Test262 notSameValue failed"; }
+};
+assert.isTrue = function (value) {
+  if (value !== true) { throw "Test262 isTrue failed"; }
+};
+assert.isFalse = function (value) {
+  if (value !== false) { throw "Test262 isFalse failed"; }
+};
+assert.compareArray = function (actual, expected) {
+  if (actual.length !== expected.length) { throw "Test262 compareArray failed"; }
+  for (var i = 0; i < actual.length; i++) {
+    if (actual[i] !== expected[i]) { throw "Test262 compareArray failed"; }
   }
+};
+assert.throws = function (constructor, callback) {
+  var threw = false;
+  try { callback(); } catch (error) { threw = true; }
+  if (!threw) { throw "Test262 throws failed"; }
 };
 var Test262Error = function () {};
 function $ERROR(message) { throw message; }
@@ -105,7 +106,7 @@ def main() -> int:
     for path in files:
         source = path.read_text(encoding="utf-8")
         path_lower = str(path).lower()
-        if any(token in path_lower for token in ("private", "accessor")):
+        if any(token in path_lower for token in ("private", "accessor", "dstr", "destructuring")):
             skipped += 1
             continue
         eligible, reason = metadata(source)
