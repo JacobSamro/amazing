@@ -67,6 +67,8 @@ pub trait DomHost {
     fn parent_node(&self, node: u32) -> Option<u32>;
     fn get_text_content(&self, node: u32) -> Option<String>;
     fn set_text_content(&mut self, node: u32, text: &str) -> Result<(), String>;
+    fn get_inner_html(&self, node: u32) -> Option<String>;
+    fn set_inner_html(&mut self, node: u32, html: &str) -> Result<(), String>;
     fn get_attribute(&self, node: u32, name: &str) -> Option<Option<String>>;
     fn set_attribute(&mut self, node: u32, name: &str, value: &str) -> Result<(), String>;
     fn create_element(&mut self, name: &str) -> Result<u32, String>;
@@ -1861,6 +1863,27 @@ impl Interpreter {
                 setter: Some(Box::new(setter)),
             },
         );
+        let inner_getter = Self::native("get innerHTML", native_dom_inner_html_get, &self.function_proto);
+        let inner_setter = Self::native("set innerHTML", native_dom_inner_html_set, &self.function_proto);
+        let inner_getter = match inner_getter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native innerHTML getter"),
+            _ => unreachable!(),
+        };
+        let inner_setter = match inner_setter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native innerHTML setter"),
+            _ => unreachable!(),
+        };
+        let _ = element.define(
+            "innerHTML",
+            Property {
+                value: JsValue::Undefined,
+                writable: false,
+                enumerable: true,
+                configurable: true,
+                getter: Some(Box::new(inner_getter)),
+                setter: Some(Box::new(inner_setter)),
+            },
+        );
         element.set_own(
             "getAttribute",
             Self::native("getAttribute", native_dom_get_attribute, &self.function_proto),
@@ -2921,6 +2944,33 @@ fn native_dom_text_set(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
     let id = dom_id(&this)?;
     let text = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     dom_host(i)?.borrow_mut().set_text_content(id, &text).map_err(Throw::type_error)?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_dom_inner_html_get(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    Ok(dom_host(i)?
+        .borrow()
+        .get_inner_html(node)
+        .map(JsValue::str)
+        .unwrap_or(JsValue::Undefined))
+}
+
+fn native_dom_inner_html_set(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    let html = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    dom_host(i)?
+        .borrow_mut()
+        .set_inner_html(node, &html)
+        .map_err(Throw::type_error)?;
     Ok(JsValue::Undefined)
 }
 

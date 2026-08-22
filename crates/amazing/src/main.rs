@@ -54,6 +54,74 @@ pub(crate) struct BrowserDomHost {
 }
 
 impl BrowserDomHost {
+    fn serialize_node(&self, node: amazing_dom::NodeIdx, out: &mut String) {
+        match &self.dom.get(node).kind {
+            amazing_dom::NodeKind::Document => {
+                for child in self.dom.children(node) { self.serialize_node(child, out); }
+            }
+            amazing_dom::NodeKind::Element { name, attrs } => {
+                out.push('<');
+                out.push_str(name);
+                for (key, value) in attrs {
+                    out.push(' ');
+                    out.push_str(key);
+                    out.push_str("=\"");
+                    out.push_str(value);
+                    out.push('"');
+                }
+                out.push('>');
+                for child in self.dom.children(node) { self.serialize_node(child, out); }
+                out.push_str("</");
+                out.push_str(name);
+                out.push('>');
+            }
+            amazing_dom::NodeKind::Text { data } => out.push_str(data),
+            amazing_dom::NodeKind::Comment { data } => {
+                out.push_str("<!--");
+                out.push_str(data);
+                out.push_str("-->");
+            }
+        }
+    }
+
+    fn find_named_in(
+        dom: &amazing_dom::Dom,
+        node: amazing_dom::NodeIdx,
+        name: &str,
+    ) -> Option<amazing_dom::NodeIdx> {
+        if dom.name(node) == Some(name) { return Some(node); }
+        for child in dom.children(node) {
+            if let Some(found) = Self::find_named_in(dom, child, name) { return Some(found); }
+        }
+        None
+    }
+
+    fn clone_from(
+        &mut self,
+        source: &amazing_dom::Dom,
+        source_node: amazing_dom::NodeIdx,
+        parent: amazing_dom::NodeIdx,
+    ) {
+        let kind = source.get(source_node).kind.clone();
+        let created = match kind {
+            amazing_dom::NodeKind::Element { name, attrs } => {
+                let node = self.dom.create_element(parent, &name);
+                self.dom.set_attrs(node, attrs);
+                node
+            }
+            amazing_dom::NodeKind::Text { data } => self.dom.create_text(parent, &data),
+            amazing_dom::NodeKind::Comment { data } => self.dom.append_child(
+                parent,
+                amazing_dom::NodeKind::Comment { data },
+            ),
+            amazing_dom::NodeKind::Document => return,
+        };
+        let children: Vec<_> = source.children(source_node).collect();
+        for child in children {
+            self.clone_from(source, child, created);
+        }
+    }
+
     fn text_content(&self, node: amazing_dom::NodeIdx, out: &mut String) {
         if let amazing_dom::NodeKind::Text { data } = &self.dom.get(node).kind {
             out.push_str(data);
@@ -188,6 +256,34 @@ impl amazing_js::DomHost for BrowserDomHost {
         let children: Vec<_> = self.dom.children(idx).collect();
         for child in children { self.dom.detach(child); }
         self.dom.create_text(idx, text);
+        Ok(())
+    }
+
+    fn get_inner_html(&self, node: u32) -> Option<String> {
+        if node as usize >= self.dom.node_count() || self.dom.name(amazing_dom::NodeIdx(node)).is_none() {
+            return None;
+        }
+        let mut output = String::new();
+        for child in self.dom.children(amazing_dom::NodeIdx(node)) {
+            self.serialize_node(child, &mut output);
+        }
+        Some(output)
+    }
+
+    fn set_inner_html(&mut self, node: u32, html: &str) -> Result<(), String> {
+        let target = amazing_dom::NodeIdx(node);
+        if node as usize >= self.dom.node_count() || self.dom.name(target).is_none() {
+            return Err("innerHTML requires an element".into());
+        }
+        let parsed = amazing_html::parse(html);
+        let fragment_root = Self::find_named_in(&parsed, amazing_dom::NodeIdx(0), "body")
+            .unwrap_or(amazing_dom::NodeIdx(0));
+        let children: Vec<_> = self.dom.children(target).collect();
+        for child in children { self.dom.detach(child); }
+        let source_children: Vec<_> = parsed.children(fragment_root).collect();
+        for child in source_children {
+            self.clone_from(&parsed, child, target);
+        }
         Ok(())
     }
 
