@@ -2004,6 +2004,11 @@ impl Interpreter {
             );
             let _ = self.set_prop(
                 &JsValue::Object(o.clone()),
+                "assign",
+                Self::native("assign", native_object_assign, &self.function_proto),
+            );
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
                 "preventExtensions",
                 Self::native(
                     "preventExtensions",
@@ -2040,6 +2045,30 @@ impl Interpreter {
                 .set_own("prototype", JsValue::Object(self.date_proto.clone()));
         }
         self.define_global("Date", date_ctor);
+        let json = self.object_value();
+        let _ = self.set_prop(
+            &json,
+            "parse",
+            Self::native("parse", native_json_parse, &self.function_proto),
+        );
+        let _ = self.set_prop(
+            &json,
+            "stringify",
+            Self::native("stringify", native_json_stringify, &self.function_proto),
+        );
+        self.define_global("JSON", json);
+        self.define_global(
+            "parseInt",
+            Self::native("parseInt", native_parse_int, &self.function_proto),
+        );
+        self.define_global(
+            "parseFloat",
+            Self::native("parseFloat", native_parse_float, &self.function_proto),
+        );
+        self.define_global(
+            "isFinite",
+            Self::native("isFinite", native_is_finite, &self.function_proto),
+        );
         let promise_ctor = Self::native("Promise", native_promise, &self.function_proto);
         if let JsValue::Object(o) = &promise_ctor {
             let _ = self.set_prop(
@@ -3398,6 +3427,157 @@ fn native_object_values(
         .collect::<Result<Vec<_>, _>>()?;
     array_values(i, values)
 }
+
+fn native_object_assign(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let target = match args.first() {
+        Some(JsValue::Object(_)) => args[0].clone(),
+        _ => return Err(Throw::type_error("Object.assign target is not an object")),
+    };
+    for source in args.iter().skip(1) {
+        for key in i.enumerable_keys(source) {
+            let value = i.get_prop(source, &key)?;
+            i.set_prop(&target, &key, value)?;
+        }
+    }
+    Ok(target)
+}
+
+fn native_json_parse(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let program = crate::parse_script(&format!("({source})"))
+        .map_err(|error| Throw::syntax_error(error.to_string()))?;
+    i.run_program(&program)
+}
+
+fn json_escape(value: &str) -> String {
+    let mut output = String::from("\"");
+    for ch in value.chars() {
+        match ch {
+            '"' => output.push_str("\\\""),
+            '\\' => output.push_str("\\\\"),
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '\t' => output.push_str("\\t"),
+            c if c.is_control() => output.push_str(&format!("\\u{:04x}", c as u32)),
+            c => output.push(c),
+        }
+    }
+    output.push('"');
+    output
+}
+
+fn json_stringify_value(i: &mut Interpreter, value: &JsValue) -> Result<Option<String>, Throw> {
+    Ok(match value {
+        JsValue::Undefined => None,
+        JsValue::Null => Some("null".into()),
+        JsValue::Bool(value) => Some(value.to_string()),
+        JsValue::Num(value) if value.is_finite() => Some(crate::value::number_to_string(*value)),
+        JsValue::Num(_) => Some("null".into()),
+        JsValue::Str(value) => Some(json_escape(value)),
+        JsValue::Object(object) if object.borrow().func.is_some() => None,
+        JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Array) => {
+            let mut parts = Vec::new();
+            for index in 0..i.array_length(value) {
+                let element = i.get_prop(value, &index.to_string())?;
+                parts.push(json_stringify_value(i, &element)?.unwrap_or_else(|| "null".into()));
+            }
+            Some(format!("[{}]", parts.join(",")))
+        }
+        JsValue::Object(object) => {
+            let mut parts = Vec::new();
+            for key in object.borrow().own_keys_enumerable() {
+                let property = i.get_prop(value, &key)?;
+                if let Some(value) = json_stringify_value(i, &property)? {
+                    parts.push(format!("{}:{}", json_escape(&key), value));
+                }
+            }
+            Some(format!("{{{}}}", parts.join(",")))
+        }
+    })
+}
+
+fn native_json_stringify(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let value = args.first().unwrap_or(&JsValue::Undefined);
+    Ok(json_stringify_value(i, value)?
+        .map(JsValue::str)
+        .unwrap_or(JsValue::Undefined))
+}
+
+fn native_parse_int(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let mut source = i
+        .to_string(args.first().unwrap_or(&JsValue::Undefined))?
+        .trim()
+        .to_string();
+    let negative = source.starts_with('-');
+    if negative || source.starts_with('+') {
+        source.remove(0);
+    }
+    let mut radix = i.to_number(args.get(1).unwrap_or(&JsValue::num(0.0)))? as i32;
+    if radix == 0 {
+        radix = if source.starts_with("0x") || source.starts_with("0X") {
+            16
+        } else {
+            10
+        };
+    }
+    if !(2..=36).contains(&radix) {
+        return Ok(JsValue::num(f64::NAN));
+    }
+    if radix == 16 && (source.starts_with("0x") || source.starts_with("0X")) {
+        source.drain(..2);
+    }
+    let digits: String = source
+        .chars()
+        .take_while(|ch| ch.to_digit(radix as u32).is_some())
+        .collect();
+    if digits.is_empty() {
+        return Ok(JsValue::num(f64::NAN));
+    }
+    let number = u128::from_str_radix(&digits, radix as u32).unwrap_or(0) as f64;
+    Ok(JsValue::num(if negative { -number } else { number }))
+}
+
+fn native_parse_float(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let trimmed = source.trim();
+    if trimmed.starts_with("Infinity") {
+        return Ok(JsValue::num(f64::INFINITY));
+    }
+    let mut end = 0usize;
+    for (index, ch) in trimmed.char_indices() {
+        if ch.is_ascii_digit() || matches!(ch, '+' | '-' | '.' | 'e' | 'E') {
+            end = index + ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    Ok(JsValue::num(
+        trimmed[..end].parse::<f64>().unwrap_or(f64::NAN),
+    ))
+}
+
+fn native_is_finite(_: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    match args.first().unwrap_or(&JsValue::Undefined) {
+        JsValue::Num(value) => Ok(JsValue::Bool(value.is_finite())),
+        _ => Ok(JsValue::Bool(false)),
+    }
+}
 fn native_object_to_string(
     i: &mut Interpreter,
     this: JsValue,
@@ -3777,6 +3957,11 @@ mod tests {
         assert!(matches!(value, JsValue::Bool(true)));
         let value = i.run_script("Object.values({a:1,b:2}).join(',');").unwrap();
         assert_eq!(i.to_string(&value).unwrap(), "1,2");
+        let mut j = Interpreter::new();
+        let value = j
+            .run_script("JSON.stringify({a:1,b:[2]}) === '{\"a\":1,\"b\":[2]}' && JSON.parse('{\"x\":4}').x === 4 && parseInt('0x10') === 16 && parseFloat('1.5px') === 1.5;")
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
     }
 
     #[test]
