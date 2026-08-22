@@ -775,9 +775,19 @@ mod windows {
         }
         js.dispatch_dom_event(0, "DOMContentLoaded")
             .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
-        let host_ref = host.borrow();
         let mut css = String::new();
-        collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut css)?;
+        {
+            let host_ref = host.borrow();
+            collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut css)?;
+        }
+        js.dispatch_dom_event(0, "load")
+            .map_err(|error| format!("load listener failed: {}", error.describe()))?;
+        css.clear();
+        {
+            let host_ref = host.borrow();
+            collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut css)?;
+        }
+        let host_ref = host.borrow();
         let fonts = amazing_layout::font::FontSource::fallback();
         let root = amazing_layout::layout_dom_document(&host_ref.dom, &css, width.max(1) as f32, &fonts);
         let height = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
@@ -1188,6 +1198,7 @@ mod windows {
             let host = host.borrow();
             assert_eq!(host.get_text_content(node).as_deref(), Some("click!"));
             assert_eq!(host.get_attribute(node, "data-ready"), Some(Some("yes".into())));
+            assert_eq!(host.get_attribute(node, "data-load"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-window"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-dom-api"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-dataset"), Some(Some("yes".into())));

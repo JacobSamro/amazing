@@ -374,7 +374,9 @@ external `script[src]` resources now resolve relative to the page URL/path and
 load through the existing fetcher; `setTimeout` and Promise microtasks use the
 cooperative GUI timer pump. `document.addEventListener("DOMContentLoaded", …)`
 is dispatched after classic scripts complete; DOM events bubble through arena
-parents and expose `currentTarget`, `stopPropagation`, and `preventDefault`.
+parents and expose `currentTarget`, `stopPropagation`, and `preventDefault`;
+`DOMContentLoaded` and `load` dispatch on both `document`/`window` after
+classic scripts and author stylesheets are fetched.
 `window.location.href`/`assign`/`replace` requests resolve relative to the
 active tab and enter its history. GUI anchor clicks perform the same default
 navigation unless a handler prevents the default. Page `fetch()` is host

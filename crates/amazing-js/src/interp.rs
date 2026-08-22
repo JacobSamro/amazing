@@ -226,6 +226,15 @@ impl Interpreter {
         self.dom_host = Some(host);
         let window = JsValue::Object(self.global_obj.clone());
         self.global_obj.borrow_mut().set_own("window", window.clone());
+        self.global_obj.borrow_mut().set_own("[[DomNode]]", JsValue::num(0.0));
+        self.global_obj.borrow_mut().set_own(
+            "addEventListener",
+            Self::native("addEventListener", native_dom_add_event_listener, &self.function_proto),
+        );
+        self.global_obj.borrow_mut().set_own(
+            "removeEventListener",
+            Self::native("removeEventListener", native_dom_remove_event_listener, &self.function_proto),
+        );
         let _ = self.global_env.declare_var("window", window);
         self.install_location();
         let document = self.make_dom_document();

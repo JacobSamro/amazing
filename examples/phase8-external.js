@@ -7,6 +7,7 @@ if (window.innerWidth === 640 && devicePixelRatio === 1) title.setAttribute('dat
 document.title = 'Ferric test';
 if (document.title === 'Ferric test' && window === globalThis) title.setAttribute('data-window', 'yes');
 document.addEventListener('DOMContentLoaded', () => title.setAttribute('data-ready', 'yes'));
+window.addEventListener('load', () => title.setAttribute('data-load', 'yes'));
 document.querySelector('main').addEventListener('click', (event) => title.setAttribute('data-bubbled', event.currentTarget.getAttribute('id') === 'root' ? 'yes' : 'no'));
 if (document.querySelectorAll('p').length === 1 && document.getElementById('title') !== null) title.setAttribute('data-dom-api', 'yes');
 if (title.innerHTML === 'before') { title.innerHTML = 'before'; title.setAttribute('data-inner', 'yes'); }
