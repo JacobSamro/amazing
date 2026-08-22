@@ -277,13 +277,23 @@ impl Interpreter {
                 };
                 let mut used = Vec::new();
                 for (key, property) in properties {
-                    if key == "..." {
-                        let rest = self.object_rest(&source, &used)?;
-                        self.bind_pattern(property, rest, kind, env)?;
-                    } else {
-                        used.push(key.clone());
-                        let item = self.get_prop(&source, key)?;
-                        self.bind_pattern(property, item, kind, env)?;
+                    match key {
+                        ast::BindingKey::Static(name) if name == "..." => {
+                            let rest = self.object_rest(&source, &used)?;
+                            self.bind_pattern(property, rest, kind, env)?;
+                        }
+                        ast::BindingKey::Static(name) => {
+                            used.push(name.clone());
+                            let item = self.get_prop(&source, name)?;
+                            self.bind_pattern(property, item, kind, env)?;
+                        }
+                        ast::BindingKey::Computed(expression) => {
+                            let computed_value = self.eval_expr(expression, env)?;
+                            let computed = self.to_property_key(&computed_value)?;
+                            used.push(computed.clone());
+                            let item = self.get_prop(&source, &computed)?;
+                            self.bind_pattern(property, item, kind, env)?;
+                        }
                     }
                 }
             }
@@ -3531,6 +3541,11 @@ mod tests {
             .run_script("let a=0,b=0; [a,b]=[3,4]; ({a,b}={a:5,b:6}); a+b;")
             .unwrap();
         assert_eq!(num(value), 11.0);
+        let mut m = Interpreter::new();
+        let value = m
+            .run_script("let key='x'; let {[key]: value}={x:9}; value;")
+            .unwrap();
+        assert_eq!(num(value), 9.0);
     }
 
     #[test]

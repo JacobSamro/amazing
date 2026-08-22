@@ -166,9 +166,15 @@ pub struct Declarator {
 pub enum Binding {
     Ident(Ident),
     Array(Vec<Option<Box<Binding>>>),
-    Object(Vec<(String, Box<Binding>)>),
+    Object(Vec<(BindingKey, Box<Binding>)>),
     Rest(Box<Binding>),
     Default(Box<Binding>, Box<Expr>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BindingKey {
+    Static(String),
+    Computed(Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

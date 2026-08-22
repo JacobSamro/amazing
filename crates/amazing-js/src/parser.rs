@@ -438,18 +438,30 @@ impl Parser {
                 while !self.at_punct(Punct::Rbrace) {
                     if self.eat_punct(Punct::Ellipsis) {
                         let rest = self.parse_binding_inner(false)?;
-                        properties
-                            .push(("...".to_string(), Box::new(Binding::Rest(Box::new(rest)))));
+                        properties.push((
+                            BindingKey::Static("...".to_string()),
+                            Box::new(Binding::Rest(Box::new(rest))),
+                        ));
                         if self.eat_punct(Punct::Comma) && !self.at_punct(Punct::Rbrace) {
                             return Err(self.err("rest property must be last in an object pattern"));
                         }
                         break;
                     }
-                    let key = self.prop_name()?;
+                    let (key, shorthand_ident) = if self.eat_punct(Punct::LBracket) {
+                        let expression = self.parse_assignment_expr()?;
+                        self.expect_punct(Punct::RBracket)?;
+                        (BindingKey::Computed(Box::new(expression)), None)
+                    } else {
+                        let identifier = self.prop_name()?;
+                        (
+                            BindingKey::Static(identifier.name.clone()),
+                            Some(identifier),
+                        )
+                    };
                     let value = if self.eat_punct(Punct::Colon) {
                         self.parse_binding_inner(true)?
-                    } else {
-                        let mut shorthand = Binding::Ident(key.clone());
+                    } else if let Some(identifier) = shorthand_ident {
+                        let mut shorthand = Binding::Ident(identifier);
                         if self.eat_punct(Punct::Eq) {
                             let saved = self.no_in;
                             self.no_in = true;
@@ -458,8 +470,10 @@ impl Parser {
                             shorthand = Binding::Default(Box::new(shorthand), Box::new(default));
                         }
                         shorthand
+                    } else {
+                        return Err(self.err("computed binding keys require a target"));
                     };
-                    properties.push((key.name, Box::new(value)));
+                    properties.push((key, Box::new(value)));
                     if !self.eat_punct(Punct::Comma) {
                         break;
                     }
