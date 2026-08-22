@@ -45,6 +45,11 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | Phase 6 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | Phase 7/8 |
 
+The Windows GUI shell includes tabs, address/history navigation, live DOM
+events and mutation, classic scripts/external resources, and software-paint
+reflow. CI runs the workspace build and test gate on every push and pull
+request via `.github/workflows/ci.yml`.
+
 ## Usage
 
 ```sh
