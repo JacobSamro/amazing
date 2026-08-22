@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Amazing Phase 3 layout sample</title>
+<style>
+  /* Block/inline formatting coverage for `amazing layout examples/layout.html`. */
+  body { font-family: serif; }
+  h1 { font-size: 28px; margin: 12px 0; }
+  p { line-height: 1.6; }
+  .card {
+    width: 400px;
+    margin: 0 auto;      /* §10.3.3 centering */
+    padding: 16px;
+    border: 2px solid #333333;
+  }
+  .big { font-size: 200%; }
+  .tiny em { font-size: .75em; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<h1>Layout Sample</h1>
+<p>This first paragraph wraps across several lines when the viewport is
+narrow, exercising the greedy line breaker and the half-leading strut.</p>
+<div class="card">
+  <p>A centered card: fixed width, auto side margins, padding and a
+     border contribute to the border box.</p>
+  <p class="big">Nested spans scale: <span>double</span> size here,
+     while <span class="tiny">this one is <em>three quarters</em></span>.</p>
+</div>
+<p>Sibling margins collapse to the max of the pair, not the sum.</p>
+<p style="margin-bottom: 40px">A taller gap follows this paragraph.</p>
+<p style="margin-top: 25px">…and meets it with a 40px collapse.</p>
+<p>Line breaks work too:<br>second line after an explicit br.</p>
+<p class="hidden">This paragraph never generates a box.</p>
+<p>Done.</p>
+</body>
+</html>
