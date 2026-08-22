@@ -16,7 +16,7 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (128 crate tests); Test262 measurement still pending |
+| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (130 crate tests); focused Test262 slice measured at 123/437 (28.15%) |
 | 7–9 | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
@@ -277,8 +277,8 @@ arrays with length/index bookkeeping, member assignment, arithmetic/logical/
 relational/equality operators, unary/update/delete/typeof, conditionals,
 loops, switch, try/catch/finally, throw, `for-in`/`for-of`, templates,
 optional chaining, and captured `console.log`. Built-ins include `Object`,
-`Array`, `Map`, `Set`, `Promise`, `Math.abs/max/min`, `Number`, `String`,
-`Boolean`, `Object.keys`, and array `push`/`pop`/`join`. Map and Set use
+`Array`, `Map`, `Set`, `Promise`, `Date`, `Math.abs/max/min`, `Number`,
+`String`, `Boolean`, `Object.keys`, `eval`, and array `push`/`pop`/`join`. Map and Set use
 SameValueZero keys, preserve insertion order, expose `size`, and return
 array-backed key/value/entry iterables for this milestone. Promise supports
 the constructor executor, `resolve`/`reject`, `then`/`catch`/`finally`,
@@ -287,11 +287,19 @@ microtask queue drained after each top-level script.
 
 Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
 script, prints captured console lines, then its completion value. The
-interpreter has 11 focused runtime tests; `cargo test --workspace` is green
-on win-001 (128 tests in `amazing-js`).
+interpreter has 13 focused runtime tests; `cargo test --workspace` is green
+on win-001 (130 tests in `amazing-js`).
 
-Known gaps: Test262 has not been vendored or run yet (pass rate therefore
-unmeasured); there is no browser event loop or full Promise combinator/timing
+Conformance evidence: the official Test262 repository was shallow-sparsely
+checked out on win-001 with 641 tests across the selected classic-language
+directories. `python scripts/test262.py C:\\Users\\server\\src\\test262
+--binary target\\debug\\amazing.exe` measured 123 passed, 314 failed, and
+204 skipped; measured pass rate = **123/437 (28.15%)**. Skips are explicit
+for modules/async/negative tests, BigInt/Symbol/private/accessor features,
+and unavailable harness hooks. This is a focused slice, not whole-suite
+coverage.
+
+Known gaps: there is no browser event loop or full Promise combinator/timing
 surface yet, and generators, symbols, modules,
 destructuring, regex literals, accessors, and full class/super semantics are
 deferred. The runtime is a milestone, not Phase 6 exit-criteria completion.

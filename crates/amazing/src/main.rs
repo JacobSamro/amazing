@@ -21,9 +21,18 @@ const PIPELINE: &[(&str, &str)] = &[
         "amazing-layout",
         "Phase 3: block/inline FC layout — `layout` subcommand",
     ),
-    ("amazing-paint", "Phase 4: software rasterizer — `render` subcommand"),
-    ("amazing-net", "Phase 5: HTTP/1.1 fetcher (library; TLS deferred)"),
-    ("amazing-js", "Phase 6: ECMA-262 parser + tree-walking interpreter — `run` subcommand"),
+    (
+        "amazing-paint",
+        "Phase 4: software rasterizer — `render` subcommand",
+    ),
+    (
+        "amazing-net",
+        "Phase 5: HTTP/1.1 fetcher (library; TLS deferred)",
+    ),
+    (
+        "amazing-js",
+        "Phase 6: ECMA-262 parser + tree-walking interpreter — `run` subcommand",
+    ),
 ];
 
 fn main() -> ExitCode {
@@ -37,7 +46,7 @@ fn main() -> ExitCode {
             }
             println!("dom: arena skeleton present (u32 indices, no Rc<RefCell>)");
             ExitCode::SUCCESS
-        },
+        }
         Some("parse") => cmd_parse(args.get(2).map(String::as_str)),
         Some("style") => cmd_style(&args[2..]),
         Some("layout") => cmd_layout(&args[2..]),
@@ -48,7 +57,7 @@ fn main() -> ExitCode {
             eprintln!("unknown command: {other}");
             eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|run [script.js]]");
             ExitCode::FAILURE
-        },
+        }
     }
 }
 
@@ -62,18 +71,18 @@ fn read_source(path: Option<&str>, what: &str) -> Result<String, ExitCode> {
                     eprintln!("amazing {what}: cannot read {p}: {e}");
                     return Err(ExitCode::FAILURE);
                 }
-            },
+            }
             Err(e) => {
                 eprintln!("amazing {what}: cannot open {p}: {e}");
                 return Err(ExitCode::FAILURE);
-            },
+            }
         },
         None => {
             if let Err(e) = std::io::stdin().read_to_end(&mut bytes) {
                 eprintln!("amazing {what}: cannot read stdin: {e}");
                 return Err(ExitCode::FAILURE);
             }
-        },
+        }
     }
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
@@ -88,7 +97,7 @@ fn cmd_parse(path: Option<&str>) -> ExitCode {
             let dom = amazing_html::parse(&src);
             print!("{}", dom.dump(amazing_dom::NodeIdx(0)));
             ExitCode::SUCCESS
-        },
+        }
         Err(code) => code,
     }
 }
@@ -108,7 +117,7 @@ fn cmd_style(args: &[String]) -> ExitCode {
         None => {
             eprintln!("usage: amazing style <page.html> [extra.css…]");
             return ExitCode::FAILURE;
-        },
+        }
     };
 
     let html = match read_source(Some(html_path), "style") {
@@ -125,7 +134,7 @@ fn cmd_style(args: &[String]) -> ExitCode {
             Ok(s) => {
                 css.push('\n');
                 css.push_str(&s);
-            },
+            }
             Err(code) => return code,
         }
     }
@@ -137,7 +146,8 @@ fn cmd_style(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn collect_style_text(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut String) {    if dom.name(node) == Some("style") {
+fn collect_style_text(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut String) {
+    if dom.name(node) == Some("style") {
         for child in dom.children(node) {
             if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
                 out.push_str(data);
@@ -166,10 +176,9 @@ fn print_styled(
         match styled.delta_from_parent(node, dom.get(node).parent) {
             delta if delta.is_empty() => println!("<{name}>"),
             delta => {
-                let decls: Vec<String> =
-                    delta.iter().map(|(k, v)| format!("{k}:{v}")).collect();
+                let decls: Vec<String> = delta.iter().map(|(k, v)| format!("{k}:{v}")).collect();
                 println!("<{name} style=\"{}\">", decls.join("; "));
-            },
+            }
         }
     }
     // Unprinted nodes (document/text/comments) don't advance the indent.
@@ -193,7 +202,7 @@ fn cmd_layout(args: &[String]) -> ExitCode {
         None => {
             eprintln!("usage: amazing layout <page.html> [viewport_width]");
             return ExitCode::FAILURE;
-        },
+        }
     };
     let width: f32 = args.get(1).and_then(|w| w.parse().ok()).unwrap_or(800.0);
 
@@ -211,7 +220,7 @@ fn cmd_layout(args: &[String]) -> ExitCode {
             Ok(s) => {
                 css.push('\n');
                 css.push_str(&s);
-            },
+            }
             Err(code) => return code,
         }
     }
@@ -232,7 +241,7 @@ fn cmd_render(args: &[String]) -> ExitCode {
         None => {
             eprintln!("usage: amazing render <page.html> <out.bmp> [viewport_width] [extra.css…]");
             return ExitCode::FAILURE;
-        },
+        }
     };
     let out_path = args.get(1).map(String::as_str).unwrap_or("render.bmp");
     let width: f32 = args.get(2).and_then(|w| w.parse().ok()).unwrap_or(800.0);
@@ -250,7 +259,7 @@ fn cmd_render(args: &[String]) -> ExitCode {
             Ok(s) => {
                 css.push('\n');
                 css.push_str(&s);
-            },
+            }
             Err(code) => return code,
         }
     }
@@ -262,8 +271,7 @@ fn cmd_render(args: &[String]) -> ExitCode {
     let page_h = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
         .ceil()
         .clamp(1.0, 8192.0) as u32;
-    let surface =
-        amazing_paint::paint_document(&root, width.max(1.0) as u32, page_h, &fonts);
+    let surface = amazing_paint::paint_document(&root, width.max(1.0) as u32, page_h, &fonts);
 
     if let Err(e) = surface.save_bmp(out_path) {
         eprintln!("amazing render: cannot write {out_path}: {e}");
@@ -293,7 +301,7 @@ fn cmd_fetch(args: &[String]) -> ExitCode {
         _ => {
             eprintln!("usage: amazing fetch <url|file> [-i]");
             return ExitCode::FAILURE;
-        },
+        }
     };
     let show_headers = args.iter().any(|a| a == "-i");
 
@@ -308,11 +316,11 @@ fn cmd_fetch(args: &[String]) -> ExitCode {
             }
             print!("{}", resp.text().unwrap_or_default());
             ExitCode::SUCCESS
-        },
+        }
         Err(e) => {
             eprintln!("amazing fetch: {e}");
             ExitCode::FAILURE
-        },
+        }
     }
 }
 
@@ -333,8 +341,38 @@ fn cmd_run(path: Option<&str>) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(thrown) => {
-            eprintln!("amazing run: {:?}", thrown.0);
+            eprintln!("amazing run: {}", format_js_error(&thrown.0));
             ExitCode::FAILURE
         }
+    }
+}
+
+fn format_js_error(value: &amazing_js::value::JsValue) -> String {
+    match value {
+        amazing_js::value::JsValue::Object(object) => {
+            let name = object
+                .borrow()
+                .get_own("name")
+                .and_then(|v| match v {
+                    amazing_js::value::JsValue::Str(s) => Some(s.to_string()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "Error".to_string());
+            let message = object
+                .borrow()
+                .get_own("message")
+                .and_then(|v| match v {
+                    amazing_js::value::JsValue::Str(s) => Some(s.to_string()),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            if message.is_empty() {
+                name
+            } else {
+                format!("{name}: {message}")
+            }
+        }
+        amazing_js::value::JsValue::Str(s) => s.to_string(),
+        other => format!("{other:?}"),
     }
 }

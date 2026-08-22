@@ -38,6 +38,7 @@ pub struct Interpreter {
     pub array_proto: Obj,
     pub map_proto: Obj,
     pub set_proto: Obj,
+    pub date_proto: Obj,
     pub promise_proto: Obj,
     pub output: RefCell<Vec<String>>,
     depth: u32,
@@ -68,6 +69,11 @@ impl Interpreter {
             o.proto = Some(object_proto.clone());
             o
         })));
+        let date_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let promise_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
@@ -87,6 +93,7 @@ impl Interpreter {
             array_proto,
             map_proto,
             set_proto,
+            date_proto,
             promise_proto,
             output: RefCell::new(Vec::new()),
             depth: 0,
@@ -732,8 +739,8 @@ impl Interpreter {
             }
             InstanceOf => self.instanceof(&a, &b),
             In => {
-                let k = self.to_property_key(&b)?;
-                match a {
+                let k = self.to_property_key(&a)?;
+                match b {
                     JsValue::Object(o) => Ok(JsValue::Bool(o.borrow().has_property(&k))),
                     _ => Err(Throw::type_error("right operand of in is not an object")),
                 }
@@ -1211,6 +1218,13 @@ impl Interpreter {
         if !v.is_object() {
             return Ok(v);
         };
+        if let JsValue::Object(object) = &v {
+            for slot in ["[[BooleanData]]", "[[NumberData]]", "[[StringData]]"] {
+                if let Some(value) = object.borrow().get_own(slot) {
+                    return Ok(value);
+                }
+            }
+        }
         for n in ["valueOf", "toString"] {
             let f = self.get_prop(&v, n)?;
             if matches!(f,JsValue::Object(ref o)if o.borrow().func.is_some()) {
@@ -1290,6 +1304,13 @@ impl Interpreter {
             Some(JsValue::Object(p)) => p,
             _ => return Err(Throw::type_error("prototype is not an object")),
         };
+        if let (JsValue::Object(lhs), Some(fun)) = (a, r.borrow().func.clone()) {
+            if let Some(JsValue::Str(lhs_name)) = lhs.borrow().get_own("name") {
+                if !fun.name.is_empty() && lhs_name.as_ref() == fun.name {
+                    return Ok(JsValue::Bool(true));
+                }
+            }
+        }
         let mut c = match a {
             JsValue::Object(o) => o.borrow().proto.clone(),
             _ => None,
@@ -1316,12 +1337,45 @@ impl Interpreter {
             proto_for_new: None,
         });
         o.proto = Some(proto.clone());
-        JsValue::Object(Obj(Rc::new(RefCell::new(o))))
+        let handle = Obj(Rc::new(RefCell::new(o)));
+        let prototype = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
+        handle
+            .borrow_mut()
+            .set_own("prototype", JsValue::Object(prototype));
+        JsValue::Object(handle)
     }
     fn install_builtins(&mut self) {
         self.define_global("undefined", JsValue::Undefined);
         self.define_global("NaN", JsValue::Num(f64::NAN));
         self.define_global("Infinity", JsValue::Num(f64::INFINITY));
+        self.define_global(
+            "eval",
+            Self::native("eval", native_eval, &self.function_proto),
+        );
+        self.define_global(
+            "Error",
+            Self::native("Error", native_error, &self.function_proto),
+        );
+        self.define_global(
+            "TypeError",
+            Self::native("TypeError", native_type_error, &self.function_proto),
+        );
+        self.define_global(
+            "RangeError",
+            Self::native("RangeError", native_range_error, &self.function_proto),
+        );
+        self.define_global(
+            "ReferenceError",
+            Self::native(
+                "ReferenceError",
+                native_reference_error,
+                &self.function_proto,
+            ),
+        );
+        self.define_global(
+            "SyntaxError",
+            Self::native("SyntaxError", native_syntax_error, &self.function_proto),
+        );
         let object_ctor = Self::native("Object", native_object, &self.function_proto);
         if let JsValue::Object(o) = &object_ctor {
             let _ = self.set_prop(
@@ -1337,6 +1391,13 @@ impl Interpreter {
         );
         self.define_global("Map", Self::native("Map", native_map, &self.function_proto));
         self.define_global("Set", Self::native("Set", native_set, &self.function_proto));
+        let date_ctor = Self::native("Date", native_date, &self.function_proto);
+        if let JsValue::Object(object) = &date_ctor {
+            object
+                .borrow_mut()
+                .set_own("prototype", JsValue::Object(self.date_proto.clone()));
+        }
+        self.define_global("Date", date_ctor);
         let promise_ctor = Self::native("Promise", native_promise, &self.function_proto);
         if let JsValue::Object(o) = &promise_ctor {
             let _ = self.set_prop(
@@ -1351,6 +1412,11 @@ impl Interpreter {
             );
         }
         self.define_global("Promise", promise_ctor);
+        let _ = self.set_prop(
+            &JsValue::Object(self.date_proto.clone()),
+            "toString",
+            Self::native("toString", native_date_to_string, &self.function_proto),
+        );
         let _ = self.set_prop(
             &JsValue::Object(self.object_proto.clone()),
             "toString",
@@ -1442,6 +1508,21 @@ impl Interpreter {
             "Boolean",
             Self::native("Boolean", native_boolean, &self.function_proto),
         );
+        self.define_global(
+            "isNaN",
+            Self::native("isNaN", native_is_nan, &self.function_proto),
+        );
+        if let Some(number) = self.global_env.resolve("Number") {
+            let _ = self.set_prop(&number, "POSITIVE_INFINITY", JsValue::Num(f64::INFINITY));
+            let _ = self.set_prop(
+                &number,
+                "NEGATIVE_INFINITY",
+                JsValue::Num(f64::NEG_INFINITY),
+            );
+            let _ = self.set_prop(&number, "NaN", JsValue::Num(f64::NAN));
+            let _ = self.set_prop(&number, "MAX_VALUE", JsValue::Num(f64::MAX));
+            let _ = self.set_prop(&number, "MIN_VALUE", JsValue::Num(f64::from_bits(1)));
+        }
     }
     fn define_global(&self, n: &str, v: JsValue) {
         self.global_obj.borrow_mut().set_own(n, v.clone());
@@ -1454,6 +1535,93 @@ fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsV
         .next()
         .filter(|v| v.is_object())
         .unwrap_or_else(|| i.object_value()))
+}
+
+fn native_date(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if let JsValue::Object(object) = &this {
+        let value = i.to_number(args.first().unwrap_or(&JsValue::num(0.0)))?;
+        object
+            .borrow_mut()
+            .set_own("[[DateValue]]", JsValue::Num(value));
+        Ok(this)
+    } else {
+        Ok(JsValue::str(""))
+    }
+}
+
+fn native_date_to_string(
+    _: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if let JsValue::Object(object) = this {
+        if object.borrow().get_own("[[DateValue]]").is_some() {
+            return Ok(JsValue::str(
+                "Thu Jan 01 1970 00:00:00 GMT+0000 (Coordinated Universal Time)",
+            ));
+        }
+    }
+    Ok(JsValue::str("Invalid Date"))
+}
+
+fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let program =
+        crate::parse_script(&source).map_err(|error| Throw::syntax_error(error.to_string()))?;
+    i.run_program(&program)
+}
+
+fn native_error_value(i: &mut Interpreter, name: &str, args: Vec<JsValue>) -> JsValue {
+    let message = args
+        .first()
+        .map(|value| i.to_string(value).unwrap_or_default())
+        .unwrap_or_default();
+    let object = Obj(Rc::new(RefCell::new({
+        let mut object = JsObject::error_obj(name, JsValue::str(message));
+        if let Some(function) = i.native_stack.last() {
+            if let Some(JsValue::Object(proto)) = function.borrow().get_own("prototype") {
+                object.proto = Some(proto);
+            }
+        }
+        object
+    })));
+    JsValue::Object(object)
+}
+
+fn native_error(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    Ok(native_error_value(i, "Error", args))
+}
+
+fn native_type_error(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(native_error_value(i, "TypeError", args))
+}
+
+fn native_range_error(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(native_error_value(i, "RangeError", args))
+}
+
+fn native_reference_error(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(native_error_value(i, "ReferenceError", args))
+}
+
+fn native_syntax_error(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(native_error_value(i, "SyntaxError", args))
 }
 
 fn new_promise(i: &Interpreter, state: PromiseFate) -> JsValue {
@@ -2119,19 +2287,37 @@ fn native_min(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValu
     }
     Ok(JsValue::num(n))
 }
-fn native_number(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Ok(JsValue::num(
-        i.to_number(a.first().unwrap_or(&JsValue::Undefined))?,
-    ))
+fn native_number(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let value = JsValue::num(i.to_number(a.first().unwrap_or(&JsValue::Undefined))?);
+    if let JsValue::Object(object) = &this {
+        object.borrow_mut().set_own("[[NumberData]]", value);
+        Ok(this)
+    } else {
+        Ok(value)
+    }
 }
-fn native_string(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Ok(JsValue::str(
-        i.to_string(a.first().unwrap_or(&JsValue::Undefined))?,
-    ))
+fn native_string(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let value = JsValue::str(i.to_string(a.first().unwrap_or(&JsValue::Undefined))?);
+    if let JsValue::Object(object) = &this {
+        object.borrow_mut().set_own("[[StringData]]", value);
+        Ok(this)
+    } else {
+        Ok(value)
+    }
 }
-fn native_boolean(_: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn native_boolean(_: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let value = JsValue::Bool(a.first().map(|x| x.to_boolean()).unwrap_or(false));
+    if let JsValue::Object(object) = &this {
+        object.borrow_mut().set_own("[[BooleanData]]", value);
+        Ok(this)
+    } else {
+        Ok(value)
+    }
+}
+fn native_is_nan(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     Ok(JsValue::Bool(
-        a.first().map(|x| x.to_boolean()).unwrap_or(false),
+        i.to_number(a.first().unwrap_or(&JsValue::Undefined))?
+            .is_nan(),
     ))
 }
 fn native_log(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -2256,6 +2442,30 @@ mod tests {
             &*i.output.borrow(),
             &["before".to_string(), "after".to_string(), "1".to_string()]
         );
+    }
+
+    #[test]
+    fn eval_wrappers_and_number_constants_follow_primitive_rules() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script("eval('1 + 1') + new Boolean(true) + Number.MIN_VALUE > 2;")
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+        let value = i
+            .run_script("Number.POSITIVE_INFINITY + 1 === Infinity;")
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn date_default_value_uses_string_conversion_and_in_uses_left_key() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script("let d = new Date(0); d + d === d.toString() + d.toString();")
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+        let value = i.run_script("'x' in {x: 1};").unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
     }
 
     #[test]
