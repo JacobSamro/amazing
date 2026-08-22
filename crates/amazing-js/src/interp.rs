@@ -185,6 +185,9 @@ impl Interpreter {
             .set_own("globalThis", JsValue::Object(i.global_obj.clone()));
         let global_this = JsValue::Object(i.global_obj.clone());
         let _ = i.global_env.declare_var("globalThis", global_this);
+        let window = JsValue::Object(i.global_obj.clone());
+        i.global_obj.borrow_mut().set_own("window", window.clone());
+        let _ = i.global_env.declare_var("window", window);
         i.install_builtins();
         i.install_location();
         i
@@ -217,7 +220,28 @@ impl Interpreter {
         location.set_own("assign", Self::native("assign", native_location_assign, &self.function_proto));
         location.set_own("replace", Self::native("replace", native_location_assign, &self.function_proto));
         let location = JsValue::Object(Obj(Rc::new(RefCell::new(location))));
-        self.global_obj.borrow_mut().set_own("location", location.clone());
+        self.global_obj.borrow_mut().set_own("[[LocationObject]]", location.clone());
+        let location_getter = Self::native("get location", native_window_location_get, &self.function_proto);
+        let location_setter = Self::native("set location", native_window_location_set, &self.function_proto);
+        let location_getter = match location_getter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native location getter"),
+            _ => unreachable!(),
+        };
+        let location_setter = match location_setter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native location setter"),
+            _ => unreachable!(),
+        };
+        let _ = self.global_obj.borrow_mut().define(
+            "location",
+            Property {
+                value: JsValue::Undefined,
+                writable: false,
+                enumerable: true,
+                configurable: true,
+                getter: Some(Box::new(location_getter)),
+                setter: Some(Box::new(location_setter)),
+            },
+        );
         let _ = self.global_env.declare_var("location", location);
     }
 
@@ -3270,6 +3294,25 @@ fn native_location_assign(
     native_location_href_set(i, JsValue::Undefined, args)
 }
 
+fn native_window_location_get(
+    _: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(window) = this else {
+        return Err(Throw::type_error("location getter receiver is not an object"));
+    };
+    Ok(window.borrow().get_own("[[LocationObject]]").unwrap_or(JsValue::Undefined))
+}
+
+fn native_window_location_set(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    native_location_href_set(i, JsValue::Undefined, args)
+}
+
 fn native_fetch(
     i: &mut Interpreter,
     _: JsValue,
@@ -6108,5 +6151,7 @@ mod tests {
             .unwrap();
         assert_eq!(i.to_string(&value).unwrap(), "next.html");
         assert_eq!(i.take_navigation().as_deref(), Some("next.html"));
+        i.run_script("window.location='other.html';").unwrap();
+        assert_eq!(i.take_navigation().as_deref(), Some("other.html"));
     }
 }
