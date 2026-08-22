@@ -12,7 +12,7 @@ use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey,
 use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
     number_to_string, Exotic, FunctionBody, JsFunction, JsObject, JsValue, MapKey, MapState, Obj,
-    SetState, Throw,
+    PendingReaction, PromiseFate, PromiseState, SetState, Throw,
 };
 
 pub const MAX_CALL_DEPTH: u32 = 512;
@@ -32,8 +32,10 @@ pub struct Interpreter {
     pub array_proto: Obj,
     pub map_proto: Obj,
     pub set_proto: Obj,
+    pub promise_proto: Obj,
     pub output: RefCell<Vec<String>>,
     depth: u32,
+    native_stack: Vec<Obj>,
 }
 
 impl Interpreter {
@@ -59,6 +61,11 @@ impl Interpreter {
             o.proto = Some(object_proto.clone());
             o
         })));
+        let promise_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let global_obj = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
@@ -73,8 +80,10 @@ impl Interpreter {
             array_proto,
             map_proto,
             set_proto,
+            promise_proto,
             output: RefCell::new(Vec::new()),
             depth: 0,
+            native_stack: Vec::new(),
         };
         i.global_obj
             .borrow_mut()
@@ -607,7 +616,30 @@ impl Interpreter {
                     Ok(JsValue::Bool(true))
                 }
             },
-            ast::UnOp::Await => self.eval_expr(x, env),
+            ast::UnOp::Await => {
+                let value = self.eval_expr(x, env)?;
+                match value {
+                    JsValue::Object(o) => {
+                        let exotic = o.borrow().exotic.clone();
+                        match exotic {
+                            Exotic::Promise(PromiseState {
+                                state: PromiseFate::Fulfilled(value),
+                                ..
+                            }) => Ok(value),
+                            Exotic::Promise(PromiseState {
+                                state: PromiseFate::Rejected(value),
+                                ..
+                            }) => Err(Throw(value)),
+                            Exotic::Promise(PromiseState {
+                                state: PromiseFate::Pending,
+                                ..
+                            }) => Ok(JsValue::Undefined),
+                            _ => Ok(JsValue::Object(o)),
+                        }
+                    }
+                    other => Ok(other),
+                }
+            }
             ast::UnOp::Not => Ok(JsValue::Bool(!self.eval_expr(x, env)?.to_boolean())),
             ast::UnOp::BitNot => {
                 let v = self.eval_expr(x, env)?;
@@ -845,7 +877,12 @@ impl Interpreter {
         }
         self.depth += 1;
         let r = match fun.body {
-            FunctionBody::Native(n) => n(self, this, args),
+            FunctionBody::Native(n) => {
+                self.native_stack.push(o.clone());
+                let result = n(self, this, args);
+                self.native_stack.pop();
+                result
+            }
             FunctionBody::Expr(x) => {
                 let e = EnvHandle::new(EnvKind::Function, Some(fun.env.clone()));
                 e.bind_this(if fun.is_arrow {
@@ -872,7 +909,14 @@ impl Interpreter {
             }
         };
         self.depth -= 1;
-        r
+        if fun.is_async {
+            match r {
+                Ok(value) => Ok(new_promise(self, PromiseFate::Fulfilled(value))),
+                Err(Throw(value)) => Ok(new_promise(self, PromiseFate::Rejected(value))),
+            }
+        } else {
+            r
+        }
     }
     fn bind_params(
         &mut self,
@@ -1277,6 +1321,20 @@ impl Interpreter {
         );
         self.define_global("Map", Self::native("Map", native_map, &self.function_proto));
         self.define_global("Set", Self::native("Set", native_set, &self.function_proto));
+        let promise_ctor = Self::native("Promise", native_promise, &self.function_proto);
+        if let JsValue::Object(o) = &promise_ctor {
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
+                "resolve",
+                Self::native("resolve", native_promise_resolve, &self.function_proto),
+            );
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
+                "reject",
+                Self::native("reject", native_promise_reject, &self.function_proto),
+            );
+        }
+        self.define_global("Promise", promise_ctor);
         let _ = self.set_prop(
             &JsValue::Object(self.object_proto.clone()),
             "toString",
@@ -1294,6 +1352,17 @@ impl Interpreter {
         ] {
             let _ = self.set_prop(
                 &JsValue::Object(self.array_proto.clone()),
+                n,
+                Self::native(n, f, &self.function_proto),
+            );
+        }
+        for (n, f) in [
+            ("then", native_promise_then as crate::value::NativeFn),
+            ("catch", native_promise_catch as crate::value::NativeFn),
+            ("finally", native_promise_finally as crate::value::NativeFn),
+        ] {
+            let _ = self.set_prop(
+                &JsValue::Object(self.promise_proto.clone()),
                 n,
                 Self::native(n, f, &self.function_proto),
             );
@@ -1369,6 +1438,246 @@ fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsV
         .next()
         .filter(|v| v.is_object())
         .unwrap_or_else(|| i.object_value()))
+}
+
+fn new_promise(i: &Interpreter, state: PromiseFate) -> JsValue {
+    let promise = Obj(Rc::new(RefCell::new({
+        let mut o = JsObject::ordinary();
+        o.exotic = Exotic::Promise(PromiseState {
+            state,
+            ..PromiseState::default()
+        });
+        o.proto = Some(i.promise_proto.clone());
+        o
+    })));
+    JsValue::Object(promise)
+}
+
+fn promise_object(value: &JsValue) -> Result<Obj, Throw> {
+    match value {
+        JsValue::Object(o) if matches!(o.borrow().exotic, Exotic::Promise(_)) => Ok(o.clone()),
+        _ => Err(Throw::type_error(
+            "Promise method called on a non-Promise object",
+        )),
+    }
+}
+
+fn callable_function(value: &JsValue) -> Option<JsFunction> {
+    match value {
+        JsValue::Object(o) => o.borrow().func.clone(),
+        _ => None,
+    }
+}
+
+fn promise_callback(
+    i: &Interpreter,
+    name: &str,
+    target: &Obj,
+    f: crate::value::NativeFn,
+) -> JsValue {
+    let value = Interpreter::native(name, f, &i.function_proto);
+    if let JsValue::Object(o) = &value {
+        o.borrow_mut()
+            .set_own("[[PromiseTarget]]", JsValue::Object(target.clone()));
+    }
+    value
+}
+
+fn native_promise(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let executor = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if callable_function(&executor).is_none() {
+        return Err(Throw::type_error("Promise resolver is not a function"));
+    }
+    let promise = promise_object(&new_promise(i, PromiseFate::Pending))?;
+    let resolve = promise_callback(i, "resolve", &promise, native_promise_resolve);
+    let reject = promise_callback(i, "reject", &promise, native_promise_reject);
+    if let Err(Throw(value)) = i.call_value(&executor, JsValue::Undefined, vec![resolve, reject]) {
+        settle_promise(&promise, PromiseFate::Rejected(value), i);
+    }
+    Ok(JsValue::Object(promise))
+}
+
+fn current_promise_target(i: &Interpreter) -> Option<Obj> {
+    let function = i.native_stack.last()?;
+    match function.borrow().get_own("[[PromiseTarget]]") {
+        Some(JsValue::Object(target)) => Some(target),
+        _ => None,
+    }
+}
+
+fn native_promise_resolve(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if let Some(target) = current_promise_target(i) {
+        settle_promise(
+            &target,
+            PromiseFate::Fulfilled(args.first().cloned().unwrap_or(JsValue::Undefined)),
+            i,
+        );
+        return Ok(JsValue::Undefined);
+    }
+    let value = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if matches!(value, JsValue::Object(ref o) if matches!(o.borrow().exotic, Exotic::Promise(_))) {
+        Ok(value)
+    } else {
+        Ok(new_promise(i, PromiseFate::Fulfilled(value)))
+    }
+}
+
+fn native_promise_reject(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if let Some(target) = current_promise_target(i) {
+        settle_promise(
+            &target,
+            PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)),
+            i,
+        );
+        return Ok(JsValue::Undefined);
+    }
+    Ok(new_promise(
+        i,
+        PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)),
+    ))
+}
+
+fn settle_promise(target: &Obj, fate: PromiseFate, i: &mut Interpreter) {
+    let reactions = {
+        let mut object = target.borrow_mut();
+        let state = match &mut object.exotic {
+            Exotic::Promise(state) if matches!(state.state, PromiseFate::Pending) => state,
+            _ => return,
+        };
+        let fulfilled = matches!(fate, PromiseFate::Fulfilled(_));
+        state.state = fate.clone();
+        if fulfilled {
+            std::mem::take(&mut state.fulfill_reactions)
+        } else {
+            std::mem::take(&mut state.reject_reactions)
+        }
+    };
+    for reaction in reactions {
+        run_promise_reaction(reaction, fate.clone(), i);
+    }
+}
+
+fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut Interpreter) {
+    let result = match (reaction.handler, fate) {
+        (Some(handler), PromiseFate::Fulfilled(value)) => {
+            let function = JsValue::Object(Obj(Rc::new(RefCell::new(JsObject::function(handler)))));
+            match i.call_value(&function, JsValue::Undefined, vec![value]) {
+                Ok(value) => PromiseFate::Fulfilled(value),
+                Err(Throw(value)) => PromiseFate::Rejected(value),
+            }
+        }
+        (Some(handler), PromiseFate::Rejected(value)) if reaction.is_reject_handler => {
+            let function = JsValue::Object(Obj(Rc::new(RefCell::new(JsObject::function(handler)))));
+            match i.call_value(&function, JsValue::Undefined, vec![value]) {
+                Ok(value) => PromiseFate::Fulfilled(value),
+                Err(Throw(value)) => PromiseFate::Rejected(value),
+            }
+        }
+        (Some(_), PromiseFate::Rejected(value)) => PromiseFate::Rejected(value),
+        (None, PromiseFate::Fulfilled(value)) => PromiseFate::Fulfilled(value),
+        (None, PromiseFate::Rejected(value)) => PromiseFate::Rejected(value),
+        (_, PromiseFate::Pending) => PromiseFate::Pending,
+    };
+    settle_promise(&reaction.capability, result, i);
+}
+
+fn native_promise_then(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let promise = promise_object(&this)?;
+    let result = promise_object(&new_promise(i, PromiseFate::Pending))?;
+    let fulfilled = args.get(0).and_then(callable_function);
+    let rejected = args.get(1).and_then(callable_function);
+    let state = {
+        let mut object = promise.borrow_mut();
+        let state = match &mut object.exotic {
+            Exotic::Promise(state) => state,
+            _ => unreachable!(),
+        };
+        match &state.state {
+            PromiseFate::Pending => {
+                state.fulfill_reactions.push(PendingReaction {
+                    handler: fulfilled.clone(),
+                    capability: result.clone(),
+                    is_reject_handler: false,
+                });
+                state.reject_reactions.push(PendingReaction {
+                    handler: rejected.clone(),
+                    capability: result.clone(),
+                    is_reject_handler: true,
+                });
+                None
+            }
+            PromiseFate::Fulfilled(value) => Some(PromiseFate::Fulfilled(value.clone())),
+            PromiseFate::Rejected(value) => Some(PromiseFate::Rejected(value.clone())),
+        }
+    };
+    if let Some(fate) = state {
+        let reaction = if matches!(fate, PromiseFate::Fulfilled(_)) {
+            PendingReaction {
+                handler: fulfilled.clone(),
+                capability: result.clone(),
+                is_reject_handler: false,
+            }
+        } else {
+            PendingReaction {
+                handler: rejected.clone(),
+                capability: result.clone(),
+                is_reject_handler: true,
+            }
+        };
+        run_promise_reaction(reaction, fate, i);
+    }
+    Ok(JsValue::Object(result))
+}
+
+fn native_promise_catch(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    native_promise_then(
+        i,
+        this,
+        vec![
+            JsValue::Undefined,
+            args.first().cloned().unwrap_or(JsValue::Undefined),
+        ],
+    )
+}
+
+fn native_promise_finally(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let promise = promise_object(&this)?;
+    let callback = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let state = match &promise.borrow().exotic {
+        Exotic::Promise(state) => state.state.clone(),
+        _ => unreachable!(),
+    };
+    if matches!(state, PromiseFate::Pending) {
+        return Ok(this);
+    }
+    if callable_function(&callback).is_some() {
+        i.call_value(&callback, JsValue::Undefined, Vec::new())?;
+    }
+    Ok(match state {
+        PromiseFate::Fulfilled(value) => new_promise(i, PromiseFate::Fulfilled(value)),
+        PromiseFate::Rejected(value) => new_promise(i, PromiseFate::Rejected(value)),
+        PromiseFate::Pending => unreachable!(),
+    })
 }
 
 fn map_key(value: &JsValue) -> MapKey {
@@ -1887,6 +2196,34 @@ mod tests {
             .run_script("new Set(['x','y']).values().join('-');")
             .unwrap();
         assert_eq!(i.to_string(&v).unwrap(), "x-y");
+    }
+
+    #[test]
+    fn settled_promises_chain_and_catch_synchronously() {
+        let mut i = Interpreter::new();
+        i.run_script(
+            "Promise.resolve(2).then(x=>x+1).then(x=>console.log(x)); Promise.reject('bad').catch(e=>console.log(e));",
+        )
+        .unwrap();
+        assert_eq!(&*i.output.borrow(), &["3".to_string(), "bad".to_string()]);
+    }
+
+    #[test]
+    fn pending_promise_reactions_run_when_resolved() {
+        let mut i = Interpreter::new();
+        i.run_script(
+            "let resolve; let p=new Promise(r=>{resolve=r;}); p.then(x=>console.log(x)); resolve(5);",
+        )
+        .unwrap();
+        assert_eq!(&*i.output.borrow(), &["5".to_string()]);
+    }
+
+    #[test]
+    fn async_function_returns_a_promise() {
+        let mut i = Interpreter::new();
+        i.run_script("async function f(){ return 4; } f().then(x=>console.log(x+1));")
+            .unwrap();
+        assert_eq!(&*i.output.borrow(), &["5".to_string()]);
     }
 
     #[test]

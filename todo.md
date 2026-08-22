@@ -16,7 +16,7 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (124 crate tests); Test262 measurement still pending |
+| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (127 crate tests); Test262 measurement still pending |
 | 7–9 | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
@@ -277,19 +277,21 @@ arrays with length/index bookkeeping, member assignment, arithmetic/logical/
 relational/equality operators, unary/update/delete/typeof, conditionals,
 loops, switch, try/catch/finally, throw, `for-in`/`for-of`, templates,
 optional chaining, and captured `console.log`. Built-ins include `Object`,
-`Array`, `Map`, `Set`, `Math.abs/max/min`, `Number`, `String`, `Boolean`,
-`Object.keys`, and array `push`/`pop`/`join`. Map and Set use SameValueZero
-keys, preserve insertion order, expose `size`, and return array-backed key/
-value/entry iterables for this milestone.
+`Array`, `Map`, `Set`, `Promise`, `Math.abs/max/min`, `Number`, `String`,
+`Boolean`, `Object.keys`, and array `push`/`pop`/`join`. Map and Set use
+SameValueZero keys, preserve insertion order, expose `size`, and return
+array-backed key/value/entry iterables for this milestone. Promise supports
+the constructor executor, `resolve`/`reject`, `then`/`catch`/`finally`,
+pending reaction delivery, and async-function return wrapping synchronously.
 
 Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
 script, prints captured console lines, then its completion value. The
-interpreter has 7 focused runtime tests; `cargo test --workspace` is green
-on win-001 (124 tests in `amazing-js`).
+interpreter has 10 focused runtime tests; `cargo test --workspace` is green
+on win-001 (127 tests in `amazing-js`).
 
 Known gaps: Test262 has not been vendored or run yet (pass rate therefore
-unmeasured); async functions/Promises are not wired into the runtime yet,
-and generators, symbols, modules,
+unmeasured); there is no event-loop/microtask scheduler or full Promise
+combinator/timing surface yet, and generators, symbols, modules,
 destructuring, regex literals, accessors, and full class/super semantics are
 deferred. The runtime is a milestone, not Phase 6 exit-criteria completion.
 
