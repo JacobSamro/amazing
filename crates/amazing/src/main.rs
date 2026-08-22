@@ -446,6 +446,8 @@ fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &str) -> Res
         js.run_script(&source)
             .map_err(|error| format!("page script failed: {}", error.describe()))?;
     }
+    js.dispatch_dom_event(0, "DOMContentLoaded")
+        .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
     Ok(())
 }
 

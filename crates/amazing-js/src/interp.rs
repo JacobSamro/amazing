@@ -1773,6 +1773,7 @@ impl Interpreter {
     fn make_dom_document(&self) -> JsValue {
         let mut document = JsObject::ordinary();
         document.proto = Some(self.object_proto.clone());
+        document.set_own("[[DomNode]]", JsValue::num(0.0));
         document.set_own(
             "querySelector",
             Self::native("querySelector", native_dom_query_selector, &self.function_proto),
@@ -1780,6 +1781,14 @@ impl Interpreter {
         document.set_own(
             "createElement",
             Self::native("createElement", native_dom_create_element, &self.function_proto),
+        );
+        document.set_own(
+            "addEventListener",
+            Self::native("addEventListener", native_dom_add_event_listener, &self.function_proto),
+        );
+        document.set_own(
+            "removeEventListener",
+            Self::native("removeEventListener", native_dom_remove_event_listener, &self.function_proto),
         );
         JsValue::Object(Obj(Rc::new(RefCell::new(document))))
     }

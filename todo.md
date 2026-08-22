@@ -368,7 +368,8 @@ navigation during fetch/paint, no native scrollbar thumb, no interval/network
 event sources, and no module/async script scheduling. Classic
 external `script[src]` resources now resolve relative to the page URL/path and
 load through the existing fetcher; `setTimeout` and Promise microtasks use the
-cooperative GUI timer pump.
+cooperative GUI timer pump. `document.addEventListener("DOMContentLoaded", …)`
+is dispatched after classic scripts complete.
 
 ## Later phases (unchanged from goal prompt)
 

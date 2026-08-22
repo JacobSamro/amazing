@@ -659,6 +659,8 @@ mod windows {
             js.run_script(&source)
                 .map_err(|error| format!("page script failed: {}", error.describe()))?;
         }
+        js.dispatch_dom_event(0, "DOMContentLoaded")
+            .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
         let host_ref = host.borrow();
         let mut css = String::new();
         collect_style_text(&host_ref.dom, NodeIdx(0), &mut css);
@@ -1072,6 +1074,7 @@ mod windows {
             let host = state.tab().runtime.as_ref().unwrap().host.clone();
             let host = host.borrow();
             assert_eq!(host.get_text_content(node).as_deref(), Some("click!"));
+            assert_eq!(host.get_attribute(node, "data-ready"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-clicked"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-timer"), Some(Some("yes".into())));
             assert_eq!(host.get_style(node, "color").as_deref(), Some("red"));
