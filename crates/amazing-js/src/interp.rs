@@ -1639,10 +1639,19 @@ impl Interpreter {
             }
             let mut values = Vec::new();
             for _ in 0..1_000_000usize {
-                let result = self.call_value(&next, v.clone(), Vec::new())?;
+                let result = match self.call_value(&next, v.clone(), Vec::new()) {
+                    Ok(result) => result,
+                    Err(error) => {
+                        self.close_iterator(v);
+                        return Err(error);
+                    }
+                };
                 let result_object = match result {
                     JsValue::Object(result) => result,
-                    _ => return Err(Throw::type_error("iterator result is not an object")),
+                    _ => {
+                        self.close_iterator(v);
+                        return Err(Throw::type_error("iterator result is not an object"));
+                    }
                 };
                 let done = result_object
                     .borrow()
@@ -1659,11 +1668,20 @@ impl Interpreter {
                         .unwrap_or(JsValue::Undefined),
                 );
             }
+            self.close_iterator(v);
             return Err(Throw::range_error("iterator exceeded the iteration limit"));
         }
         match v {
             JsValue::Str(s) => Ok(s.chars().map(|c| JsValue::str(c.to_string())).collect()),
             _ => Err(Throw::type_error("value is not iterable")),
+        }
+    }
+    fn close_iterator(&mut self, iterator: &JsValue) {
+        let Ok(return_method) = self.get_prop(iterator, "return") else {
+            return;
+        };
+        if callable_function(&return_method).is_some() {
+            let _ = self.call_value(&return_method, iterator.clone(), Vec::new());
         }
     }
     fn typeof_value(&self, v: &JsValue) -> &'static str {
@@ -3615,6 +3633,11 @@ mod tests {
             .run_script("let out=[]; let it={n:0,next:function(){this.n++;return {value:this.n,done:this.n>2};}}; for (const x of it) out.push(x); out.join(',');")
             .unwrap();
         assert_eq!(q.to_string(&value).unwrap(), "1,2");
+        let mut r = Interpreter::new();
+        let value = r
+            .run_script("let closed=0; let it={next:function(){throw 'stop';},return:function(){closed++;}}; try {[...it];} catch(e) {} closed;")
+            .unwrap();
+        assert_eq!(num(value), 1.0);
     }
 
     #[test]
