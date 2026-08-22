@@ -91,6 +91,11 @@ impl Dom {
         &self.nodes[idx.0 as usize]
     }
 
+    /// Number of arena slots, including detached nodes.
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
     // ---- convenience constructors ----
 
     /// Creates an element under `parent`, appended as the last child.

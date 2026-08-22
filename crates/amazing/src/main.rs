@@ -4,8 +4,10 @@
 //! Each phase replaces one line of "not started" with a real capability
 //! plus its demo subcommand (`parse` in Phase 1, `style` in Phase 2).
 
+use std::cell::RefCell;
 use std::io::Read;
 use std::process::ExitCode;
+use std::rc::Rc;
 
 const PIPELINE: &[(&str, &str)] = &[
     ("amazing-common", "byte streams + text utils"),
@@ -33,7 +35,127 @@ const PIPELINE: &[(&str, &str)] = &[
         "amazing-js",
         "Phase 6: ECMA-262 parser + tree-walking interpreter — `run` subcommand",
     ),
+    (
+        "amazing-dom-js",
+        "Phase 7: live DOM/JS bridge — `domrun` subcommand",
+    ),
 ];
+
+struct BrowserDomHost {
+    dom: amazing_dom::Dom,
+}
+
+impl BrowserDomHost {
+    fn text_content(&self, node: amazing_dom::NodeIdx, out: &mut String) {
+        if let amazing_dom::NodeKind::Text { data } = &self.dom.get(node).kind {
+            out.push_str(data);
+        }
+        for child in self.dom.children(node) {
+            self.text_content(child, out);
+        }
+    }
+
+    fn matches_selector(&self, node: amazing_dom::NodeIdx, selector: &str) -> bool {
+        let Some(name) = self.dom.name(node) else { return false };
+        let selector = selector.trim();
+        if selector.is_empty() || selector.contains(char::is_whitespace) { return false }
+        let (tag, id, class) = if let Some(rest) = selector.strip_prefix('#') {
+            (None, Some(rest), None)
+        } else if let Some(rest) = selector.strip_prefix('.') {
+            (None, None, Some(rest))
+        } else if let Some((tag, rest)) = selector.split_once('#') {
+            (Some(tag), Some(rest), None)
+        } else if let Some((tag, rest)) = selector.split_once('.') {
+            (Some(tag), None, Some(rest))
+        } else {
+            (Some(selector), None, None)
+        };
+        if tag.is_some_and(|tag| !tag.eq_ignore_ascii_case(name)) { return false }
+        let attrs = self.dom.attrs_of(node).unwrap_or(&[]);
+        if let Some(want) = id {
+            if attrs.iter().find(|(k, _)| k == "id").map(|(_, v)| v.as_str()) != Some(want) {
+                return false;
+            }
+        }
+        if let Some(want) = class {
+            let classes = attrs.iter().find(|(k, _)| k == "class").map(|(_, v)| v.as_str()).unwrap_or("");
+            if !classes.split_ascii_whitespace().any(|item| item == want) { return false }
+        }
+        true
+    }
+
+    fn find(&self, node: amazing_dom::NodeIdx, selector: &str) -> Option<u32> {
+        if self.matches_selector(node, selector) { return Some(node.0) }
+        for child in self.dom.children(node) {
+            if let Some(found) = self.find(child, selector) { return Some(found) }
+        }
+        None
+    }
+}
+
+impl amazing_js::DomHost for BrowserDomHost {
+    fn query_selector(&mut self, selector: &str) -> Option<u32> {
+        self.find(amazing_dom::NodeIdx(0), selector)
+    }
+
+    fn get_text_content(&self, node: u32) -> Option<String> {
+        let idx = amazing_dom::NodeIdx(node);
+        if idx.0 as usize >= self.dom.node_count() { return None }
+        let mut text = String::new();
+        self.text_content(idx, &mut text);
+        Some(text)
+    }
+
+    fn set_text_content(&mut self, node: u32, text: &str) -> Result<(), String> {
+        let idx = amazing_dom::NodeIdx(node);
+        if idx.0 as usize >= self.dom.node_count() || self.dom.name(idx).is_none() {
+            return Err("textContent requires an element".into());
+        }
+        let children: Vec<_> = self.dom.children(idx).collect();
+        for child in children { self.dom.detach(child); }
+        self.dom.create_text(idx, text);
+        Ok(())
+    }
+
+    fn get_attribute(&self, node: u32, name: &str) -> Option<Option<String>> {
+        let attrs = self.dom.attrs_of(amazing_dom::NodeIdx(node))?;
+        Some(attrs.iter().find(|(key, _)| key == name).map(|(_, value)| value.clone()))
+    }
+
+    fn set_attribute(&mut self, node: u32, name: &str, value: &str) -> Result<(), String> {
+        let idx = amazing_dom::NodeIdx(node);
+        let mut attrs = self.dom.attrs_of(idx).ok_or_else(|| "attribute requires an element".to_string())?.to_vec();
+        if let Some((_, current)) = attrs.iter_mut().find(|(key, _)| key == name) {
+            *current = value.to_string();
+        } else {
+            attrs.push((name.to_string(), value.to_string()));
+        }
+        self.dom.set_attrs(idx, attrs);
+        Ok(())
+    }
+
+    fn create_element(&mut self, name: &str) -> Result<u32, String> {
+        Ok(self.dom.alloc_unattached(amazing_dom::NodeKind::Element {
+            name: name.to_ascii_lowercase(), attrs: Vec::new(),
+        }).0)
+    }
+
+    fn append_child(&mut self, parent: u32, child: u32) -> Result<(), String> {
+        let parent = amazing_dom::NodeIdx(parent);
+        let child = amazing_dom::NodeIdx(child);
+        if self.dom.name(parent).is_none() { return Err("append target is not an element".into()) }
+        if self.dom.get(child).parent.is_some() { self.dom.detach(child); }
+        self.dom.attach_last(parent, child);
+        Ok(())
+    }
+
+    fn append_text(&mut self, parent: u32, text: &str) -> Result<(), String> {
+        let parent = amazing_dom::NodeIdx(parent);
+        if self.dom.name(parent).is_none() { return Err("append target is not an element".into()) }
+        self.dom.create_text(parent, text);
+        Ok(())
+    }
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
@@ -53,9 +175,10 @@ fn main() -> ExitCode {
         Some("render") => cmd_render(&args[2..]),
         Some("fetch") => cmd_fetch(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
+        Some("domrun") => cmd_domrun(&args[2..]),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|run [script.js]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|run [script.js]|domrun <page.html> <script.js>]");
             ExitCode::FAILURE
         }
     }
@@ -342,6 +465,42 @@ fn cmd_run(path: Option<&str>) -> ExitCode {
         }
         Err(thrown) => {
             eprintln!("amazing run: {}", format_js_error(&thrown.0));
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Phase 7 demo: execute a script against a live arena DOM and print the
+/// resulting tree. The bridge intentionally starts with the high-value DOM
+/// surface: querySelector, textContent, attributes, createElement, append.
+fn cmd_domrun(args: &[String]) -> ExitCode {
+    let (html_path, script_path) = match (args.first(), args.get(1)) {
+        (Some(html), Some(script)) => (html, script),
+        _ => {
+            eprintln!("usage: amazing domrun <page.html> <script.js>");
+            return ExitCode::FAILURE;
+        }
+    };
+    let html = match read_source(Some(html_path), "domrun html") {
+        Ok(source) => source,
+        Err(code) => return code,
+    };
+    let script = match read_source(Some(script_path), "domrun script") {
+        Ok(source) => source,
+        Err(code) => return code,
+    };
+    let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(&html) }));
+    let mut js = amazing_js::Interpreter::new();
+    js.set_dom_host(host.clone());
+    match js.run_script(&script) {
+        Ok(value) => {
+            for line in js.output.borrow().iter() { println!("{line}"); }
+            println!("=> {:?}", value);
+            print!("{}", host.borrow().dom.dump(amazing_dom::NodeIdx(0)));
+            ExitCode::SUCCESS
+        }
+        Err(thrown) => {
+            eprintln!("amazing domrun: {}", format_js_error(&thrown.0));
             ExitCode::FAILURE
         }
     }

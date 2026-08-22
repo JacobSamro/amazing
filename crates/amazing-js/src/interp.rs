@@ -40,6 +40,22 @@ enum Reference {
     Property(JsValue, String),
 }
 
+/// Host hooks for the small browser-facing DOM surface.
+///
+/// The JS core deliberately knows nothing about the arena DOM types. A
+/// higher-level driver supplies this trait and the interpreter exposes the
+/// resulting live nodes as ordinary JavaScript objects.
+pub trait DomHost {
+    fn query_selector(&mut self, selector: &str) -> Option<u32>;
+    fn get_text_content(&self, node: u32) -> Option<String>;
+    fn set_text_content(&mut self, node: u32, text: &str) -> Result<(), String>;
+    fn get_attribute(&self, node: u32, name: &str) -> Option<Option<String>>;
+    fn set_attribute(&mut self, node: u32, name: &str, value: &str) -> Result<(), String>;
+    fn create_element(&mut self, name: &str) -> Result<u32, String>;
+    fn append_child(&mut self, parent: u32, child: u32) -> Result<(), String>;
+    fn append_text(&mut self, parent: u32, text: &str) -> Result<(), String>;
+}
+
 pub struct Interpreter {
     pub global_env: EnvHandle,
     pub global_obj: Obj,
@@ -56,6 +72,7 @@ pub struct Interpreter {
     jobs: VecDeque<PromiseJob>,
     completion: JsValue,
     frames: Vec<CallFrame>,
+    dom_host: Option<Rc<RefCell<dyn DomHost>>>,
 }
 
 impl Interpreter {
@@ -113,12 +130,23 @@ impl Interpreter {
             jobs: VecDeque::new(),
             completion: JsValue::Undefined,
             frames: Vec::new(),
+            dom_host: None,
         };
         i.global_obj
             .borrow_mut()
             .set_own("globalThis", JsValue::Object(i.global_obj.clone()));
         i.install_builtins();
         i
+    }
+
+    /// Attach a live host and install the browser-facing `document` global.
+    pub fn set_dom_host(&mut self, host: Rc<RefCell<dyn DomHost>>) {
+        self.dom_host = Some(host);
+        let document = self.make_dom_document();
+        self.global_obj
+            .borrow_mut()
+            .set_own("document", document.clone());
+        let _ = self.global_env.declare_lexical("document", document, false);
     }
 
     pub fn run_script(&mut self, source: &str) -> Result<JsValue, Throw> {
@@ -1616,6 +1644,60 @@ impl Interpreter {
         o.proto = Some(self.object_proto.clone());
         JsValue::object(o)
     }
+
+    fn make_dom_document(&self) -> JsValue {
+        let mut document = JsObject::ordinary();
+        document.proto = Some(self.object_proto.clone());
+        document.set_own(
+            "querySelector",
+            Self::native("querySelector", native_dom_query_selector, &self.function_proto),
+        );
+        document.set_own(
+            "createElement",
+            Self::native("createElement", native_dom_create_element, &self.function_proto),
+        );
+        JsValue::Object(Obj(Rc::new(RefCell::new(document))))
+    }
+
+    fn make_dom_element(&self, id: u32) -> JsValue {
+        let mut element = JsObject::ordinary();
+        element.proto = Some(self.object_proto.clone());
+        element.set_own("[[DomNode]]", JsValue::num(id as f64));
+        let getter = Self::native("get textContent", native_dom_text_get, &self.function_proto);
+        let setter = Self::native("set textContent", native_dom_text_set, &self.function_proto);
+        let getter = match getter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native getter"),
+            _ => unreachable!(),
+        };
+        let setter = match setter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native setter"),
+            _ => unreachable!(),
+        };
+        let _ = element.define(
+            "textContent",
+            Property {
+                value: JsValue::Undefined,
+                writable: false,
+                enumerable: true,
+                configurable: true,
+                getter: Some(Box::new(getter)),
+                setter: Some(Box::new(setter)),
+            },
+        );
+        element.set_own(
+            "getAttribute",
+            Self::native("getAttribute", native_dom_get_attribute, &self.function_proto),
+        );
+        element.set_own(
+            "setAttribute",
+            Self::native("setAttribute", native_dom_set_attribute, &self.function_proto),
+        );
+        element.set_own(
+            "append",
+            Self::native("append", native_dom_append, &self.function_proto),
+        );
+        JsValue::Object(Obj(Rc::new(RefCell::new(element))))
+    }
     fn get_prop(&mut self, v: &JsValue, k: &str) -> Result<JsValue, Throw> {
         match v {
             JsValue::Object(o) => {
@@ -2473,6 +2555,98 @@ fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsV
 
 fn native_symbol(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     Ok(JsValue::str("@@symbol"))
+}
+
+fn dom_id(this: &JsValue) -> Result<u32, Throw> {
+    let JsValue::Object(object) = this else {
+        return Err(Throw::type_error("DOM method called on non-element"));
+    };
+    match object.borrow().get_own("[[DomNode]]") {
+        Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => Ok(n as u32),
+        _ => Err(Throw::type_error("DOM method called on non-element")),
+    }
+}
+
+fn dom_host(i: &mut Interpreter) -> Result<Rc<RefCell<dyn DomHost>>, Throw> {
+    i.dom_host
+        .as_ref()
+        .cloned()
+        .ok_or_else(|| Throw::type_error("DOM host is not attached"))
+}
+
+fn native_dom_query_selector(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let selector = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let id = dom_host(i)?.borrow_mut().query_selector(&selector);
+    Ok(id.map(|id| i.make_dom_element(id)).unwrap_or(JsValue::Null))
+}
+
+fn native_dom_create_element(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let id = dom_host(i)?
+        .borrow_mut()
+        .create_element(&name)
+        .map_err(Throw::type_error)?;
+    Ok(i.make_dom_element(id))
+}
+
+fn native_dom_text_get(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let id = dom_id(&this)?;
+    Ok(dom_host(i)?
+        .borrow()
+        .get_text_content(id)
+        .map(JsValue::str)
+        .unwrap_or(JsValue::Undefined))
+}
+
+fn native_dom_text_set(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let id = dom_id(&this)?;
+    let text = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    dom_host(i)?.borrow_mut().set_text_content(id, &text).map_err(Throw::type_error)?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_dom_get_attribute(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let id = dom_id(&this)?;
+    let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    match dom_host(i)?.borrow().get_attribute(id, &name) {
+        Some(Some(value)) => Ok(JsValue::str(value)),
+        Some(None) => Ok(JsValue::Null),
+        None => Ok(JsValue::Undefined),
+    }
+}
+
+fn native_dom_set_attribute(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let id = dom_id(&this)?;
+    let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let value = i.to_string(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    dom_host(i)?.borrow_mut().set_attribute(id, &name, &value).map_err(Throw::type_error)?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_dom_append(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let parent = dom_id(&this)?;
+    let host = dom_host(i)?;
+    for arg in args {
+        match arg {
+            JsValue::Object(_) => {
+                let child = dom_id(&arg)?;
+                host.borrow_mut().append_child(parent, child).map_err(Throw::type_error)?;
+            }
+            other => {
+                let text = i.to_string(&other)?;
+                host.borrow_mut().append_text(parent, &text).map_err(Throw::type_error)?;
+            }
+        }
+    }
+    Ok(JsValue::Undefined)
 }
 
 fn native_object_create(

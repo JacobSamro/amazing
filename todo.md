@@ -316,11 +316,31 @@ coverage.
 
 Known gaps: there is no browser event loop or Promise timing/job integration
 surface yet, and generators, symbols, modules, real Symbol identity, regex
-literals, class accessors, and full class semantics are deferred. Basic
+literals, and full class semantics are deferred. Basic
 `super` property and constructor calls now work.
 The `Symbol.iterator` key bridge, lazy `next()` consumption, and abrupt-body
 closing are implemented. The runtime is
 a milestone, not Phase 6 exit-criteria completion.
+
+## Phase 7 (DOM/JS bridge) — tracer slice landed (win-001 green)
+
+Shipped: `amazing_js::DomHost` keeps the JS core independent of arena DOM
+types while exposing live node wrappers. The driver implements a bounded,
+mutation-capable surface: `document.querySelector` (tag/id/class selectors),
+`document.createElement`, element `textContent`, `getAttribute`,
+`setAttribute`, and `append` for nodes or text. Detached nodes are reparented
+through the arena's existing attach/detach API.
+
+Driver: `amazing domrun <page.html> <script.js>` executes a classic script,
+prints captured console output and the completion value, then dumps the
+mutated DOM. The end-to-end fixture `examples/phase7.html` +
+`examples/phase7.js` was run on win-001: `before` became `after`, an
+attribute was written, and a new `<span>` child was appended. Full
+`cargo test --workspace` remains green on win-001.
+
+Known gaps: selector coverage is intentionally limited to a single simple
+selector; there is no event dispatch, style/layout invalidation, HTML parser
+script scheduling, or browser window/global object yet.
 
 ## Later phases (unchanged from goal prompt)
 
