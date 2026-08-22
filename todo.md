@@ -313,8 +313,8 @@ coverage.
 
 Known gaps: there is no browser event loop or full Promise combinator/timing
 surface yet, and generators, symbols, modules, real Symbol identity, regex
-literals, class accessors, constructors/super calls, and full class semantics
-are deferred.
+literals, class accessors, and full class semantics are deferred. Basic
+`super` property and constructor calls now work.
 The `Symbol.iterator` key bridge, lazy `next()` consumption, and abrupt-body
 closing are implemented. The runtime is
 a milestone, not Phase 6 exit-criteria completion.

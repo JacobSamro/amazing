@@ -1229,7 +1229,25 @@ impl Interpreter {
         optional: bool,
         e: &EnvHandle,
     ) -> Result<JsValue, Throw> {
-        let (f, this) = if let ExprKind::Member {
+        let (f, this) = if matches!(&c.kind, ExprKind::Super) {
+            let home = self
+                .frames
+                .last()
+                .and_then(|frame| frame.home.clone())
+                .ok_or_else(|| Throw::syntax_error("super() used outside a method"))?;
+            let super_prototype = home
+                .borrow()
+                .proto
+                .clone()
+                .ok_or_else(|| Throw::type_error("super constructor has no prototype"))?;
+            let constructor = self.get_prop(&JsValue::Object(super_prototype), "constructor")?;
+            let receiver = self
+                .frames
+                .last()
+                .map(|frame| frame.this.clone())
+                .unwrap_or(JsValue::Undefined);
+            (constructor, receiver)
+        } else if let ExprKind::Member {
             obj,
             prop,
             optional: m,
@@ -1515,8 +1533,19 @@ impl Interpreter {
             )
         };
         if let JsValue::Object(o) = &f {
+            if o.borrow().get_own("prototype").is_none() {
+                let prototype = Obj(Rc::new(RefCell::new({
+                    let mut object = JsObject::ordinary();
+                    object.proto = Some(self.object_proto.clone());
+                    object
+                })));
+                o.borrow_mut()
+                    .set_own("prototype", JsValue::Object(prototype.clone()));
+                o.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(prototype);
+            }
             let prototype = o.borrow().get_own("prototype");
             if let Some(JsValue::Object(p)) = prototype {
+                p.borrow_mut().set_own("constructor", f.clone());
                 if let Some(super_class) = &c.super_class {
                     let super_value = self.eval_expr(super_class, e)?;
                     let super_prototype = match super_value {
@@ -4023,6 +4052,15 @@ mod tests {
         let mut i = Interpreter::new();
         let value = i
             .run_script("class A { value(){ return 4; } } class B extends A { value(){ return super.value()+1; } } new B().value();")
+            .unwrap();
+        assert_eq!(num(value), 5.0);
+    }
+
+    #[test]
+    fn derived_constructor_can_call_super() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script("class A { constructor(value){ this.value=value; } } class B extends A { constructor(value){ super(value+1); } } new B(4).value;")
             .unwrap();
         assert_eq!(num(value), 5.0);
     }
