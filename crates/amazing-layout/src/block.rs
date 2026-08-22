@@ -111,7 +111,7 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
     // whenever their host's metrics weren't in scope during tree building;
     // they inherit the host's line-height now.
     match &mut b.flow {
-        Flow::Blocks(children) | Flow::Flex(children) => {
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for c in children.iter_mut() {
                 if c.node.is_none() && c.line_height == 0.0 {
                     c.line_height = b.line_height;
@@ -125,6 +125,16 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
     let def_h = specified_height(b, font_px);
     let content_h = match &mut b.flow {
         Flow::Flex(children) => crate::flex::layout_flex(
+            children,
+            &b.style,
+            font_px,
+            content_x,
+            content_y,
+            content_w,
+            def_h,
+            fonts,
+        ),
+        Flow::Grid(children) => crate::grid::layout_grid(
             children,
             &b.style,
             font_px,

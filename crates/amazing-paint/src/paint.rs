@@ -85,7 +85,7 @@ fn paint_box(
 
     // Children come AFTER this box's own painting (painter's algorithm).
     match &box_.flow {
-        Flow::Blocks(children) | Flow::Flex(children) => {
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for child in children {
                 paint_box(surface, child, fonts, glyphs);
             }

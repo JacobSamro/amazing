@@ -77,6 +77,9 @@ fn parse_display(style: &ComputedStyle) -> Display {
         {
             Display::Flex
         },
+        Some(v) if v.eq_ignore_ascii_case("grid") || v.eq_ignore_ascii_case("inline-grid") => {
+            Display::Grid
+        },
         _ => Display::Inline,
     }
 }
@@ -114,12 +117,12 @@ fn classify_children(
     font_size: f32,
     fonts: &FontSource,
 ) -> Flow {
-    // Flex containers take every non-`none` element child as a flex ITEM
-    // (css-flexbox-1 §3 blockification); contiguous text runs become one
-    // anonymous item each.
+    // Flex/grid containers take every non-`none` element child as an ITEM
+    // (css-flexbox-1 §3 / css-grid-1 §3 blockification); contiguous text
+    // runs become one anonymous item each.
     let own_display =
         parse_display(&styled.get(idx).cloned().unwrap_or_default());
-    if own_display == Display::Flex {
+    if matches!(own_display, Display::Flex | Display::Grid) {
         let mut items: Vec<LayoutBox> = Vec::new();
         let mut run: Vec<InlineNode> = Vec::new();
         for child in dom.children(idx) {
@@ -142,7 +145,11 @@ fn classify_children(
             }
         }
         flush_anonymous_into(&mut items, &mut run, font_size, fonts);
-        return Flow::Flex(items);
+        return if own_display == Display::Grid {
+            Flow::Grid(items)
+        } else {
+            Flow::Flex(items)
+        };
     }
 
     let mut blocks: Vec<LayoutBox> = Vec::new();
@@ -170,7 +177,7 @@ fn classify_children(
                     Some("br") => inlines.push(InlineNode::Break),
                     _ if matches!(
                         parse_display(&child_style),
-                        Display::Block | Display::Flex
+                        Display::Block | Display::Flex | Display::Grid
                     ) =>
                     {
                         // Flush pending inline content into an anonymous block.
@@ -257,7 +264,10 @@ fn flatten_inline(
                 }
                 match dom.name(child) {
                     Some("br") => inlines.push(InlineNode::Break),
-                    _ if matches!(parse_display(&cs), Display::Block | Display::Flex) => {
+                    _ if matches!(
+                        parse_display(&cs),
+                        Display::Block | Display::Flex | Display::Grid
+                    ) => {
                         // Hoist: end the current inline run here.
                         flush_anonymous_into(blocks_out, inlines, parent_font_px, fonts);
                         blocks_out.push(build_element(dom, styled, child, parent_font_px, fonts));
