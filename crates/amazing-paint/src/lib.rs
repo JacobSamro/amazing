@@ -4,8 +4,8 @@
 //!
 //! Pipeline: layout tree → painter's-algorithm traversal
 //! ([`paint::paint_document`]) → background fills, solid border strips and
-//! rect-ink text ([`text`]) onto one opaque canvas, everything clipped to
-//! the viewport.
+//! text (rect-ink bars or real outline rasters, see [`text`]) onto one
+//! opaque canvas, everything clipped to the viewport.
 //!
 //! # Implemented
 //!
@@ -20,15 +20,17 @@
 //!   styles painted solid), then its line-box text fragments, then its
 //!   children; flex children like block children
 //! - [`text`]: per-character advances from the same `FontSource::measure`
-//!   numbers layout used, ink rectangles sitting on the line baseline,
-//!   integer alpha compositing; [`text::GlyphProvider`] is the seam for
-//!   future real glyph rasters
+//!   numbers layout used, integer alpha compositing, and two
+//!   [`text::GlyphProvider`] implementations: [`text::RectInkProvider`]
+//!   (tidy ink bars on the baseline, the no-font default) and
+//!   [`text::OutlineGlyphProvider`] (real TrueType letterforms — outline
+//!   decomposition via `amazing-layout`, quadratic flattening, nonzero-
+//!   winding scanline fill with 4x4 supersampled coverage)
 //!
 //! # Deferred / deviations (documented at module level too)
 //!
-//! - REAL GLYPH OUTLINES deferred: no TTF glyf/CFF flattening, no
-//!   anti-aliasing/scanline coverage yet — text renders as tidy ink bars
-//!   via the default [`text::RectInkProvider`]
+//! - Outline text has no hinting and flattens curves at a fixed 4
+//!   subdivisions per segment; coverage is 16-level box supersampling.
 //! - all border styles render solid; no radius/shadows/images/markers/
 //!   opacity/stacking contexts; word-level colors inside one line use the
 //!   containing block's color (`WordFrag` carries no style)
@@ -42,4 +44,6 @@ pub mod text;
 pub use color::parse_css_color;
 pub use paint::{paint_document, paint_document_with};
 pub use surface::Surface;
-pub use text::{draw_fragment, GlyphBitmap, GlyphProvider, RectInkProvider};
+pub use text::{
+    draw_fragment, GlyphBitmap, GlyphProvider, OutlineGlyphProvider, RectInkProvider,
+};
