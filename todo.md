@@ -369,7 +369,8 @@ event sources, and no module/async script scheduling. Classic
 external `script[src]` resources now resolve relative to the page URL/path and
 load through the existing fetcher; `setTimeout` and Promise microtasks use the
 cooperative GUI timer pump. `document.addEventListener("DOMContentLoaded", …)`
-is dispatched after classic scripts complete.
+is dispatched after classic scripts complete; DOM events bubble through arena
+parents and expose `currentTarget`, `stopPropagation`, and `preventDefault`.
 
 ## Later phases (unchanged from goal prompt)
 

@@ -150,6 +150,13 @@ impl amazing_js::DomHost for BrowserDomHost {
         self.find(amazing_dom::NodeIdx(0), selector)
     }
 
+    fn parent_node(&self, node: u32) -> Option<u32> {
+        if node as usize >= self.dom.node_count() {
+            return None;
+        }
+        self.dom.get(amazing_dom::NodeIdx(node)).parent.map(|parent| parent.0)
+    }
+
     fn get_text_content(&self, node: u32) -> Option<String> {
         let idx = amazing_dom::NodeIdx(node);
         if idx.0 as usize >= self.dom.node_count() { return None }

@@ -63,6 +63,7 @@ enum Reference {
 /// resulting live nodes as ordinary JavaScript objects.
 pub trait DomHost {
     fn query_selector(&mut self, selector: &str) -> Option<u32>;
+    fn parent_node(&self, node: u32) -> Option<u32>;
     fn get_text_content(&self, node: u32) -> Option<String>;
     fn set_text_content(&mut self, node: u32, text: &str) -> Result<(), String>;
     fn get_attribute(&self, node: u32, name: &str) -> Option<Option<String>>;
@@ -230,15 +231,47 @@ impl Interpreter {
         event_obj.set_own("type", JsValue::str(event_type));
         event_obj.set_own("target", target.clone());
         event_obj.set_own("currentTarget", target.clone());
+        event_obj.set_own("defaultPrevented", JsValue::Bool(false));
+        event_obj.set_own(
+            "stopPropagation",
+            Self::native("stopPropagation", native_event_stop_propagation, &self.function_proto),
+        );
+        event_obj.set_own(
+            "preventDefault",
+            Self::native("preventDefault", native_event_prevent_default, &self.function_proto),
+        );
         let event = JsValue::Object(Obj(Rc::new(RefCell::new(event_obj))));
-        let callbacks: Vec<JsValue> = self
-            .dom_listeners
-            .iter()
-            .filter(|listener| listener.node == node && listener.event == event_type)
-            .map(|listener| listener.callback.clone())
-            .collect();
-        for callback in callbacks {
-            self.call_value(&callback, target.clone(), vec![event.clone()])?;
+        let mut current = Some(node);
+        while let Some(current_node) = current {
+            let current_target = self.make_dom_element(current_node);
+            if let JsValue::Object(event_object) = &event {
+                event_object
+                    .borrow_mut()
+                    .set_own("currentTarget", current_target.clone());
+            }
+            let callbacks: Vec<JsValue> = self
+                .dom_listeners
+                .iter()
+                .filter(|listener| listener.node == current_node && listener.event == event_type)
+                .map(|listener| listener.callback.clone())
+                .collect();
+            for callback in callbacks {
+                self.call_value(&callback, current_target.clone(), vec![event.clone()])?;
+            }
+            let stopped = match &event {
+                JsValue::Object(event_object) => matches!(
+                    event_object.borrow().get_own("cancelBubble"),
+                    Some(JsValue::Bool(true))
+                ),
+                _ => false,
+            };
+            if stopped {
+                break;
+            }
+            current = self
+                .dom_host
+                .as_ref()
+                .and_then(|host| host.borrow().parent_node(current_node));
         }
         self.drain_jobs()?;
         Ok(())
@@ -2914,6 +2947,30 @@ fn native_dom_onclick_set(
         Some(callback)
     };
     i.set_dom_handler(node, "click", callback);
+    Ok(JsValue::Undefined)
+}
+
+fn native_event_stop_propagation(
+    _: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(event) = this else {
+        return Err(Throw::type_error("stopPropagation receiver is not an event"));
+    };
+    event.borrow_mut().set_own("cancelBubble", JsValue::Bool(true));
+    Ok(JsValue::Undefined)
+}
+
+fn native_event_prevent_default(
+    _: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(event) = this else {
+        return Err(Throw::type_error("preventDefault receiver is not an event"));
+    };
+    event.borrow_mut().set_own("defaultPrevented", JsValue::Bool(true));
     Ok(JsValue::Undefined)
 }
 
