@@ -757,7 +757,7 @@ pub(crate) fn translate(b: &mut LayoutBox, dx: f32, dy: f32) {
         }
     }
     match &mut b.flow {
-        Flow::Blocks(children) | Flow::Flex(children) => {
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for c in children {
                 translate(c, dx, dy);
             }
@@ -780,7 +780,7 @@ pub(crate) fn max_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     let chrome = pad.left + pad.right + bor.left + bor.right;
     let inner = match &b.flow {
         Flow::Inlines(items) => inline_run_width(items, fonts),
-        Flow::Blocks(children) | Flow::Flex(children) => children
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children
             .iter()
             .map(|c| {
                 let m = values::resolve_margins(&c.style, c.font_size, 0.0);

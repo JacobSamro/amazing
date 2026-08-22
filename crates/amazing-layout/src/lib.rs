@@ -44,11 +44,18 @@
 //! Deviations: baseline alignment ≈ flex-start; min-content floors during
 //! shrink are not applied; column-mode non-stretch items keep their
 //! hypothetical-measure height; definite-height align-content only.
+//!
+//! Phase 3.5 additions — grid ([`grid`], css-grid-1 subset): track lists
+//! (px/%/auto/min-max-content/fr/repeat incl. auto-fill), auto-flow row |
+//! column | dense, line-number + span placement with implicit tracks,
+//! content/item alignment; see the module docs for deviations (percent
+//! rows resolve against width, no subgrids/named areas).
 
 pub mod block;
 pub mod box_tree;
 pub mod flex;
 pub mod font;
+pub mod grid;
 pub mod inline;
 pub mod values;
 
@@ -73,6 +80,8 @@ pub enum Display {
     Inline,
     /// Flex container (css-flexbox-1); children become flex items.
     Flex,
+    /// Grid container (css-grid-1); children become grid items.
+    Grid,
 }
 
 /// One box of the layout tree. Spec fields are filled by
@@ -136,6 +145,8 @@ pub enum Flow {
     Blocks(Vec<LayoutBox>),
     /// Flex items of a `display:flex` container (see [`flex`]).
     Flex(Vec<LayoutBox>),
+    /// Grid items of a `display:grid` container (see [`grid`]).
+    Grid(Vec<LayoutBox>),
     Inlines(Vec<InlineNode>),
     Empty,
 }
@@ -235,7 +246,7 @@ fn dump_rec(dom: &amazing_dom::Dom, b: &LayoutBox, depth: usize, out: &mut Strin
         out.push('\n');
     }
     match &b.flow {
-        Flow::Blocks(children) | Flow::Flex(children) => {
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for c in children {
                 dump_rec(dom, c, depth + 1, out);
             }
