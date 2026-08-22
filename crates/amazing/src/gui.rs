@@ -462,12 +462,21 @@ mod windows {
 
         fn repaint_runtime(&mut self) {
             let width = self.width;
+            let page = self.tab().current_url().unwrap_or("").to_owned();
             let tab = self.tab_mut();
             let Some(runtime) = tab.runtime.as_mut() else { return };
             let host = runtime.host.clone();
             let host_ref = host.borrow();
             let mut css = String::new();
-            collect_style_text(&host_ref.dom, NodeIdx(0), &mut css);
+            if let Err(error) = collect_author_css(
+                &host_ref.dom,
+                NodeIdx(0),
+                &page,
+                &mut css,
+            ) {
+                eprintln!("amazing gui: stylesheet refresh failed: {error}");
+                return;
+            }
             let fonts = amazing_layout::font::FontSource::fallback();
             let layout = amazing_layout::layout_dom_document(
                 &host_ref.dom,
@@ -645,7 +654,12 @@ mod windows {
         String::from_utf16_lossy(&buffer[..written.max(0) as usize])
     }
 
-    fn collect_style_text(dom: &Dom, node: NodeIdx, out: &mut String) {
+    fn collect_author_css(
+        dom: &Dom,
+        node: NodeIdx,
+        page: &str,
+        out: &mut String,
+    ) -> Result<(), String> {
         if dom.name(node) == Some("style") {
             for child in dom.children(node) {
                 if let NodeKind::Text { data } = &dom.get(child).kind {
@@ -653,11 +667,32 @@ mod windows {
                     out.push('\n');
                 }
             }
-            return;
+            return Ok(());
+        }
+        if dom.name(node) == Some("link") {
+            let attrs = dom.attrs_of(node).unwrap_or(&[]);
+            let rel = attrs
+                .iter()
+                .find(|(name, _)| name == "rel")
+                .map(|(_, value)| value.to_ascii_lowercase())
+                .unwrap_or_default();
+            if rel.split_ascii_whitespace().any(|token| token == "stylesheet") {
+                if let Some(href) = attrs.iter().find(|(name, _)| name == "href").map(|(_, value)| value) {
+                    let url = resolve_script_url(page, href);
+                    let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
+                        .map_err(|error| format!("stylesheet {href}: {error}"))?;
+                    let css = response
+                        .text()
+                        .ok_or_else(|| format!("stylesheet {href} was not text"))?;
+                    out.push_str(&css);
+                    out.push('\n');
+                }
+            }
         }
         for child in dom.children(node) {
-            collect_style_text(dom, child, out);
+            collect_author_css(dom, child, page, out)?;
         }
+        Ok(())
     }
 
     fn collect_scripts(dom: &Dom, node: NodeIdx, scripts: &mut Vec<PageScript>) {
@@ -742,7 +777,7 @@ mod windows {
             .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
         let host_ref = host.borrow();
         let mut css = String::new();
-        collect_style_text(&host_ref.dom, NodeIdx(0), &mut css);
+        collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut css)?;
         let fonts = amazing_layout::font::FontSource::fallback();
         let root = amazing_layout::layout_dom_document(&host_ref.dom, &css, width.max(1) as f32, &fonts);
         let height = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))

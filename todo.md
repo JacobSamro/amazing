@@ -381,6 +381,8 @@ navigation unless a handler prevents the default. Page `fetch()` is host
 mediated and returns a minimal Promise-backed Response (`ok`, `status`, `url`,
 `headers.get/has`, `text()`/`json()`); Promise resolution now adopts returned
 Promises for normal chains.
+External `<link rel="stylesheet" href="…">` resources are fetched and merged
+into the author cascade before layout.
 
 ## Later phases (unchanged from goal prompt)
 

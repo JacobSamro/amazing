@@ -562,6 +562,36 @@ fn collect_style_text(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &
     }
 }
 
+fn collect_author_css(
+    dom: &amazing_dom::Dom,
+    node: amazing_dom::NodeIdx,
+    page: &str,
+    out: &mut String,
+) -> Result<(), String> {
+    if dom.name(node) == Some("style") {
+        collect_style_text(dom, node, out);
+        return Ok(())
+    }
+    if dom.name(node) == Some("link") {
+        let attrs = dom.attrs_of(node).unwrap_or(&[]);
+        let rel = attrs.iter().find(|(name, _)| name == "rel")
+            .map(|(_, value)| value.to_ascii_lowercase()).unwrap_or_default();
+        if rel.split_ascii_whitespace().any(|token| token == "stylesheet") {
+            if let Some(href) = attrs.iter().find(|(name, _)| name == "href").map(|(_, value)| value) {
+                let url = resolve_script_url(page, href);
+                let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
+                    .map_err(|error| format!("stylesheet {href}: {error}"))?;
+                out.push_str(&response.text().ok_or_else(|| format!("stylesheet {href} was not text"))?);
+                out.push('\n');
+            }
+        }
+    }
+    for child in dom.children(node) {
+        collect_author_css(dom, child, page, out)?;
+    }
+    Ok(())
+}
+
 struct PageScript {
     src: Option<String>,
     body: String,
@@ -747,7 +777,10 @@ fn cmd_render(args: &[String]) -> ExitCode {
 
     let mut css = String::new();
     let dom = host.borrow();
-    collect_style_text(&dom.dom, amazing_dom::NodeIdx(0), &mut css);
+    if let Err(error) = collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut css) {
+        eprintln!("amazing render: {error}");
+        return ExitCode::FAILURE;
+    }
     for extra in args.get(3..).unwrap_or(&[]) {
         match read_source(Some(extra), "render") {
             Ok(s) => {
