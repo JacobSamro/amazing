@@ -375,7 +375,8 @@ cooperative GUI timer pump. `document.addEventListener("DOMContentLoaded", …)`
 is dispatched after classic scripts complete; DOM events bubble through arena
 parents and expose `currentTarget`, `stopPropagation`, and `preventDefault`.
 `window.location.href`/`assign`/`replace` requests resolve relative to the
-active tab and enter its history.
+active tab and enter its history. GUI anchor clicks perform the same default
+navigation unless a handler prevents the default.
 
 ## Later phases (unchanged from goal prompt)
 

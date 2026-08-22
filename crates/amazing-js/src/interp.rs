@@ -103,6 +103,7 @@ pub struct Interpreter {
     next_timer_id: u32,
     location_url: String,
     pending_navigation: Option<String>,
+    last_event_default_prevented: bool,
 }
 
 impl Interpreter {
@@ -166,6 +167,7 @@ impl Interpreter {
             next_timer_id: 1,
             location_url: String::new(),
             pending_navigation: None,
+            last_event_default_prevented: false,
         };
         i.global_obj
             .borrow_mut()
@@ -230,6 +232,10 @@ impl Interpreter {
         self.pending_navigation.take()
     }
 
+    pub fn last_event_default_prevented(&self) -> bool {
+        self.last_event_default_prevented
+    }
+
     /// Runs promise reactions queued by a host callback. Browser integrations
     /// call this after dispatching an input event or timer task.
     pub fn drain_microtasks(&mut self) -> Result<(), Throw> {
@@ -281,6 +287,7 @@ impl Interpreter {
     /// node. The driver uses this for its first interactive tracer; a later
     /// window shell can call the same API from native input handling.
     pub fn dispatch_dom_event(&mut self, node: u32, event_type: &str) -> Result<(), Throw> {
+        self.last_event_default_prevented = false;
         let target = self.make_dom_element(node);
         let mut event_obj = JsObject::ordinary();
         event_obj.proto = Some(self.object_proto.clone());
@@ -329,6 +336,13 @@ impl Interpreter {
                 .as_ref()
                 .and_then(|host| host.borrow().parent_node(current_node));
         }
+        self.last_event_default_prevented = match &event {
+            JsValue::Object(event_object) => matches!(
+                event_object.borrow().get_own("defaultPrevented"),
+                Some(JsValue::Bool(true))
+            ),
+            _ => false,
+        };
         self.drain_jobs()?;
         Ok(())
     }

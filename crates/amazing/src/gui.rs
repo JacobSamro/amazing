@@ -20,6 +20,7 @@ mod windows {
     use std::rc::Rc;
 
     use amazing_dom::{Dom, NodeIdx, NodeKind};
+    use amazing_js::DomHost;
     use amazing_layout::{Flow, LayoutBox};
     use amazing_paint::Surface;
 
@@ -516,6 +517,24 @@ mod windows {
             if let Some(url) = navigation {
                 self.navigate(url, true);
                 return;
+            }
+            let default_allowed = self
+                .tab()
+                .runtime
+                .as_ref()
+                .map(|runtime| !runtime.js.last_event_default_prevented())
+                .unwrap_or(true);
+            if default_allowed {
+                let href = self
+                    .tab()
+                    .runtime
+                    .as_ref()
+                    .and_then(|runtime| runtime.host.borrow().get_attribute(node.0, "href"))
+                    .flatten();
+                if let Some(href) = href {
+                    self.navigate(href, true);
+                    return;
+                }
             }
             self.repaint_runtime();
             // SAFETY: hwnd is the live top-level window owned by the message
@@ -1091,7 +1110,6 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use amazing_js::DomHost;
 
         #[test]
         fn page_click_runtime_mutates_dom_and_repaints() {
