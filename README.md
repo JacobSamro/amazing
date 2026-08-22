@@ -43,7 +43,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-paint` | software rasterizer | Phase 4 |
 | `amazing-net` | HTTP/1.1 client | Phase 5 |
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | Phase 6 |
-| `amazing` | DOM/JS tracer (`domrun`) | Phase 7 slice |
+| `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | Phase 7/8 |
 
 ## Usage
 
@@ -61,6 +61,9 @@ cat script.js | amazing run
 
 # execute a script against a live parsed DOM and dump the mutation result
 amazing domrun page.html script.js
+
+# open the native Windows shell (optional initial local file or http URL)
+amazing gui [url]
 ```
 
 ```sh

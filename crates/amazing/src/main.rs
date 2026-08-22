@@ -11,6 +11,8 @@ use std::rc::Rc;
 
 use amazing_js::DomHost;
 
+mod gui;
+
 const PIPELINE: &[(&str, &str)] = &[
     ("amazing-common", "byte streams + text utils"),
     (
@@ -40,6 +42,10 @@ const PIPELINE: &[(&str, &str)] = &[
     (
         "amazing-dom-js",
         "Phase 7: live DOM/JS bridge — `domrun` subcommand",
+    ),
+    (
+        "amazing-gui",
+        "Phase 8: native Windows shell — `gui` subcommand",
     ),
 ];
 
@@ -270,9 +276,10 @@ fn main() -> ExitCode {
         Some("fetch") => cmd_fetch(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd_domrun(&args[2..]),
+        Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|run [script.js]|domrun <page.html> <script.js>]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
             ExitCode::FAILURE
         }
     }

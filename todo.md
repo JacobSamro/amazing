@@ -346,6 +346,23 @@ selector; styles are represented as inline declarations but do not yet
 trigger layout/paint invalidation; there is no HTML parser script scheduling
 or browser window/global object yet.
 
+## Phase 8 (GUI shell) — Windows native first slice landed (win-001 green)
+
+Shipped: `crates/amazing/src/gui.rs` isolates the only `unsafe` code in a
+hand-written Win32 FFI module. `amazing gui [url]` creates a native top-level
+window with an address bar, Go, Back, and Forward controls. Navigation uses
+the existing `amazing-net` fetcher, then runs the existing HTML → CSS → layout
+→ software paint pipeline and blits the RGBA surface through a top-down GDI
+bitmap. Local files and plain `http://` URLs use the same fetch path as the
+headless driver; unsupported TLS remains the documented Phase 5 exception.
+
+The shell compiles and the complete workspace suite passes on win-001. The
+interactive window itself requires a Windows desktop session (not available
+to the headless SSH service), so visual GUI proof is still pending. Current
+limitations are blocking navigation during fetch/paint, no tab strip, no
+keyboard Enter shortcut, no scroll bar, and no event-loop integration for
+page scripts.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
