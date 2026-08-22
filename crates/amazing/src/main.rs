@@ -259,6 +259,26 @@ impl amazing_js::DomHost for BrowserDomHost {
         Ok(())
     }
 
+    fn get_document_title(&self) -> String {
+        let Some(title) = Self::find_named_in(&self.dom, amazing_dom::NodeIdx(0), "title") else {
+            return String::new();
+        };
+        let mut text = String::new();
+        self.text_content(title, &mut text);
+        text
+    }
+
+    fn set_document_title(&mut self, title: &str) -> Result<(), String> {
+        if let Some(node) = Self::find_named_in(&self.dom, amazing_dom::NodeIdx(0), "title") {
+            return self.set_text_content(node.0, title);
+        }
+        let head = Self::find_named_in(&self.dom, amazing_dom::NodeIdx(0), "head")
+            .ok_or_else(|| "document has no head element".to_string())?;
+        let title_node = self.dom.create_element(head, "title");
+        self.dom.create_text(title_node, title);
+        Ok(())
+    }
+
     fn get_inner_html(&self, node: u32) -> Option<String> {
         if node as usize >= self.dom.node_count() || self.dom.name(amazing_dom::NodeIdx(node)).is_none() {
             return None;

@@ -1,4 +1,6 @@
 const title = document.querySelector('#title');
+document.title = 'Ferric test';
+if (document.title === 'Ferric test' && window === globalThis) title.setAttribute('data-window', 'yes');
 document.addEventListener('DOMContentLoaded', () => title.setAttribute('data-ready', 'yes'));
 document.querySelector('main').addEventListener('click', (event) => title.setAttribute('data-bubbled', event.currentTarget.getAttribute('id') === 'root' ? 'yes' : 'no'));
 if (document.querySelectorAll('p').length === 1 && document.getElementById('title') !== null) title.setAttribute('data-dom-api', 'yes');

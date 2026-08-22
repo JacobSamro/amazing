@@ -67,6 +67,8 @@ pub trait DomHost {
     fn parent_node(&self, node: u32) -> Option<u32>;
     fn get_text_content(&self, node: u32) -> Option<String>;
     fn set_text_content(&mut self, node: u32, text: &str) -> Result<(), String>;
+    fn get_document_title(&self) -> String;
+    fn set_document_title(&mut self, title: &str) -> Result<(), String>;
     fn get_inner_html(&self, node: u32) -> Option<String>;
     fn set_inner_html(&mut self, node: u32, html: &str) -> Result<(), String>;
     fn get_attribute(&self, node: u32, name: &str) -> Option<Option<String>>;
@@ -164,6 +166,8 @@ impl Interpreter {
         i.global_obj
             .borrow_mut()
             .set_own("globalThis", JsValue::Object(i.global_obj.clone()));
+        let global_this = JsValue::Object(i.global_obj.clone());
+        let _ = i.global_env.declare_var("globalThis", global_this);
         i.install_builtins();
         i
     }
@@ -171,6 +175,9 @@ impl Interpreter {
     /// Attach a live host and install the browser-facing `document` global.
     pub fn set_dom_host(&mut self, host: Rc<RefCell<dyn DomHost>>) {
         self.dom_host = Some(host);
+        let window = JsValue::Object(self.global_obj.clone());
+        self.global_obj.borrow_mut().set_own("window", window.clone());
+        let _ = self.global_env.declare_var("window", window);
         let document = self.make_dom_document();
         self.global_obj
             .borrow_mut()
@@ -1835,6 +1842,27 @@ impl Interpreter {
             "removeEventListener",
             Self::native("removeEventListener", native_dom_remove_event_listener, &self.function_proto),
         );
+        let title_getter = Self::native("get title", native_dom_title_get, &self.function_proto);
+        let title_setter = Self::native("set title", native_dom_title_set, &self.function_proto);
+        let title_getter = match title_getter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native title getter"),
+            _ => unreachable!(),
+        };
+        let title_setter = match title_setter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native title setter"),
+            _ => unreachable!(),
+        };
+        let _ = document.define(
+            "title",
+            Property {
+                value: JsValue::Undefined,
+                writable: false,
+                enumerable: true,
+                configurable: true,
+                getter: Some(Box::new(title_getter)),
+                setter: Some(Box::new(title_setter)),
+            },
+        );
         JsValue::Object(Obj(Rc::new(RefCell::new(document))))
     }
 
@@ -2970,6 +2998,27 @@ fn native_dom_inner_html_set(
     dom_host(i)?
         .borrow_mut()
         .set_inner_html(node, &html)
+        .map_err(Throw::type_error)?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_dom_title_get(
+    i: &mut Interpreter,
+    _: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(JsValue::str(dom_host(i)?.borrow().get_document_title()))
+}
+
+fn native_dom_title_set(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let title = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    dom_host(i)?
+        .borrow_mut()
+        .set_document_title(&title)
         .map_err(Throw::type_error)?;
     Ok(JsValue::Undefined)
 }
