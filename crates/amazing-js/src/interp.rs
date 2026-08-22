@@ -1541,6 +1541,30 @@ impl Interpreter {
                         native_string_split,
                         &self.function_proto,
                     ))
+                } else if k == "trim" {
+                    Ok(Self::native(
+                        "trim",
+                        native_string_trim,
+                        &self.function_proto,
+                    ))
+                } else if k == "charAt" {
+                    Ok(Self::native(
+                        "charAt",
+                        native_string_char_at,
+                        &self.function_proto,
+                    ))
+                } else if k == "indexOf" {
+                    Ok(Self::native(
+                        "indexOf",
+                        native_string_index_of,
+                        &self.function_proto,
+                    ))
+                } else if k == "includes" {
+                    Ok(Self::native(
+                        "includes",
+                        native_string_includes,
+                        &self.function_proto,
+                    ))
                 } else if k == "length" {
                     Ok(JsValue::num(s.chars().count() as f64))
                 } else if let Ok(n) = k.parse::<usize>() {
@@ -1975,6 +1999,11 @@ impl Interpreter {
             );
             let _ = self.set_prop(
                 &JsValue::Object(o.clone()),
+                "values",
+                Self::native("values", native_object_values, &self.function_proto),
+            );
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
                 "preventExtensions",
                 Self::native(
                     "preventExtensions",
@@ -2068,6 +2097,10 @@ impl Interpreter {
             ("push", native_array_push as crate::value::NativeFn),
             ("pop", native_array_pop as crate::value::NativeFn),
             ("join", native_array_join as crate::value::NativeFn),
+            ("map", native_array_map as crate::value::NativeFn),
+            ("filter", native_array_filter as crate::value::NativeFn),
+            ("forEach", native_array_for_each as crate::value::NativeFn),
+            ("reduce", native_array_reduce as crate::value::NativeFn),
         ] {
             let _ = self.set_prop(
                 &JsValue::Object(self.array_proto.clone()),
@@ -3351,6 +3384,20 @@ fn native_object_keys(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Resul
     }
     Ok(out)
 }
+
+fn native_object_values(
+    i: &mut Interpreter,
+    _: JsValue,
+    a: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = a.first().cloned().unwrap_or(JsValue::Undefined);
+    let values = i
+        .enumerable_keys(&source)
+        .into_iter()
+        .map(|key| i.get_prop(&source, &key))
+        .collect::<Result<Vec<_>, _>>()?;
+    array_values(i, values)
+}
 fn native_object_to_string(
     i: &mut Interpreter,
     this: JsValue,
@@ -3491,6 +3538,166 @@ fn native_string_split(
     let values = parts.into_iter().map(JsValue::str).collect();
     array_values(i, values)
 }
+
+fn string_this(i: &mut Interpreter, this: JsValue) -> Result<String, Throw> {
+    match this {
+        JsValue::Str(value) => Ok(value.to_string()),
+        value => i.to_string(&value),
+    }
+}
+
+fn native_string_trim(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(JsValue::str(string_this(i, this)?.trim().to_string()))
+}
+
+fn native_string_char_at(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = string_this(i, this)?;
+    let index = i.to_number(args.first().unwrap_or(&JsValue::num(0.0)))?;
+    if !index.is_finite() || index < 0.0 {
+        return Ok(JsValue::str(""));
+    }
+    Ok(source
+        .chars()
+        .nth(index.trunc() as usize)
+        .map(|c| JsValue::str(c.to_string()))
+        .unwrap_or_else(|| JsValue::str("")))
+}
+
+fn native_string_index_of(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = string_this(i, this)?;
+    let needle = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::num(
+        source.find(&needle).map(|n| n as f64).unwrap_or(-1.0),
+    ))
+}
+
+fn native_string_includes(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = string_this(i, this)?;
+    let needle = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::Bool(source.contains(&needle)))
+}
+
+fn array_callback(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: &[JsValue],
+    mut each: impl FnMut(&mut Interpreter, usize, JsValue, JsValue) -> Result<(), Throw>,
+) -> Result<JsValue, Throw> {
+    let callback = args
+        .first()
+        .ok_or_else(|| Throw::type_error("array callback is not a function"))?;
+    if callable_function(callback).is_none() {
+        return Err(Throw::type_error("array callback is not a function"));
+    }
+    let length = i.array_length(&this);
+    for index in 0..length {
+        let value = i.get_prop(&this, &index.to_string())?;
+        let result = i.call_value(
+            callback,
+            args.get(1).cloned().unwrap_or(JsValue::Undefined),
+            vec![value.clone(), JsValue::num(index as f64), this.clone()],
+        )?;
+        each(i, index, value, result)?;
+    }
+    Ok(JsValue::Undefined)
+}
+
+fn native_array_map(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let out = JsValue::object({
+        let mut object = JsObject::array();
+        object.proto = Some(i.array_proto.clone());
+        object
+    });
+    array_callback(i, this, &args, |i, index, _, result| {
+        i.set_prop(&out, &index.to_string(), result)
+    })?;
+    Ok(out)
+}
+
+fn native_array_filter(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let out = JsValue::object({
+        let mut object = JsObject::array();
+        object.proto = Some(i.array_proto.clone());
+        object
+    });
+    let mut next = 0usize;
+    array_callback(i, this, &args, |i, _, value, selected| {
+        if selected.to_boolean() {
+            i.set_prop(&out, &next.to_string(), value)?;
+            next += 1;
+        }
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+fn native_array_for_each(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    array_callback(i, this, &args, |_, _, _, _| Ok(()))
+}
+
+fn native_array_reduce(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let callback = args
+        .first()
+        .ok_or_else(|| Throw::type_error("array reducer is not a function"))?;
+    if callable_function(callback).is_none() {
+        return Err(Throw::type_error("array reducer is not a function"));
+    }
+    let length = i.array_length(&this);
+    let mut index = 0usize;
+    let mut accumulator = if args.len() > 1 {
+        args[1].clone()
+    } else if length > 0 {
+        let value = i.get_prop(&this, "0")?;
+        index = 1;
+        value
+    } else {
+        return Err(Throw::type_error(
+            "reduce of empty array with no initial value",
+        ));
+    };
+    while index < length {
+        let value = i.get_prop(&this, &index.to_string())?;
+        accumulator = i.call_value(
+            callback,
+            JsValue::Undefined,
+            vec![accumulator, value, JsValue::num(index as f64), this.clone()],
+        )?;
+        index += 1;
+    }
+    Ok(accumulator)
+}
 fn native_boolean(_: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let value = JsValue::Bool(a.first().map(|x| x.to_boolean()).unwrap_or(false));
     if let JsValue::Object(object) = &this {
@@ -3555,6 +3762,21 @@ mod tests {
         assert_eq!(i.to_string(&v).unwrap(), "1-2-3");
         let v = i.run_script("Object.keys({a:1,b:2}).length").unwrap();
         assert_eq!(num(v), 2.0);
+    }
+
+    #[test]
+    fn common_array_string_and_object_utilities_work() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script("[1,2,3].map(x=>x*2).filter(x=>x>2).reduce((a,b)=>a+b,0);")
+            .unwrap();
+        assert_eq!(num(value), 10.0);
+        let value = i
+            .run_script("'  hello  '.trim().includes('ell') && 'abc'.charAt(1)==='b' && 'abc'.indexOf('c')===2;")
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
+        let value = i.run_script("Object.values({a:1,b:2}).join(',');").unwrap();
+        assert_eq!(i.to_string(&value).unwrap(), "1,2");
     }
 
     #[test]
