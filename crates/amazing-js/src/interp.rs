@@ -84,6 +84,7 @@ pub trait DomHost {
     fn set_inner_html(&mut self, node: u32, html: &str) -> Result<(), String>;
     fn get_attribute(&self, node: u32, name: &str) -> Option<Option<String>>;
     fn set_attribute(&mut self, node: u32, name: &str, value: &str) -> Result<(), String>;
+    fn remove_attribute(&mut self, node: u32, name: &str) -> Result<(), String>;
     fn create_element(&mut self, name: &str) -> Result<u32, String>;
     fn create_text_node(&mut self, text: &str) -> Result<u32, String>;
     fn append_child(&mut self, parent: u32, child: u32) -> Result<(), String>;
@@ -2107,6 +2108,14 @@ impl Interpreter {
             Self::native("setAttribute", native_dom_set_attribute, &self.function_proto),
         );
         element.set_own(
+            "hasAttribute",
+            Self::native("hasAttribute", native_dom_has_attribute, &self.function_proto),
+        );
+        element.set_own(
+            "removeAttribute",
+            Self::native("removeAttribute", native_dom_remove_attribute, &self.function_proto),
+        );
+        element.set_own(
             "append",
             Self::native("append", native_dom_append, &self.function_proto),
         );
@@ -3469,6 +3478,27 @@ fn native_dom_set_attribute(i: &mut Interpreter, this: JsValue, args: Vec<JsValu
     let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let value = i.to_string(args.get(1).unwrap_or(&JsValue::Undefined))?;
     dom_host(i)?.borrow_mut().set_attribute(id, &name, &value).map_err(Throw::type_error)?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_dom_has_attribute(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::Bool(dom_host(i)?.borrow().get_attribute(node, &name).is_some_and(|value| value.is_some())))
+}
+
+fn native_dom_remove_attribute(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    dom_host(i)?.borrow_mut().remove_attribute(node, &name).map_err(Throw::type_error)?;
     Ok(JsValue::Undefined)
 }
 

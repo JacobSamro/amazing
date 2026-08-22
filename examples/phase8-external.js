@@ -1,6 +1,8 @@
 const title = document.querySelector('#title');
 title.dataset.mode = 'ready';
 if (title.dataset.mode === 'ready') title.setAttribute('data-dataset', 'yes');
+title.setAttribute('data-temp', 'yes');
+if (title.hasAttribute('data-temp')) { title.removeAttribute('data-temp'); title.setAttribute('data-attr-api', 'yes'); }
 title.classList.add('ready');
 if (title.classList.contains('ready') && title.classList.toggle('active', true)) title.setAttribute('data-classlist', title.classList.toString());
 if (window.innerWidth === 640 && devicePixelRatio === 1) title.setAttribute('data-viewport', 'yes');
