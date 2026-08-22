@@ -13,6 +13,7 @@ window.addEventListener('load', () => title.setAttribute('data-load', 'yes'));
 document.querySelector('main').addEventListener('click', (event) => title.setAttribute('data-bubbled', event.currentTarget.getAttribute('id') === 'root' ? 'yes' : 'no'));
 if (document.querySelectorAll('p').length === 1 && document.getElementById('title') !== null) title.setAttribute('data-dom-api', 'yes');
 if (document.querySelectorAll('p, main').length === 2) title.setAttribute('data-selector-list', 'yes');
+if (title.matches('#title') && title.closest('main').getAttribute('id') === 'root') title.setAttribute('data-matches', 'yes');
 if (title.innerHTML === 'before') { title.innerHTML = 'before'; title.setAttribute('data-inner', 'yes'); }
 if (title.innerText === 'before') title.setAttribute('data-inner-text', 'yes');
 const textNode = document.createTextNode('text-node');

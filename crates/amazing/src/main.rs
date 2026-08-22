@@ -257,6 +257,13 @@ impl amazing_js::DomHost for BrowserDomHost {
         nodes
     }
 
+    fn matches_selector(&self, node: u32, selector: &str) -> bool {
+        let Some(selectors) = Self::parse_selector_list(selector) else { return false };
+        selectors.iter().any(|selector| {
+            amazing_css::selectors::matches(&self.dom, amazing_dom::NodeIdx(node), selector)
+        })
+    }
+
     fn parent_node(&self, node: u32) -> Option<u32> {
         if node as usize >= self.dom.node_count() {
             return None;

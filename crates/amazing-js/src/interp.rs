@@ -74,6 +74,7 @@ enum Reference {
 pub trait DomHost {
     fn query_selector(&mut self, selector: &str) -> Option<u32>;
     fn query_selector_all(&mut self, selector: &str) -> Vec<u32>;
+    fn matches_selector(&self, node: u32, selector: &str) -> bool;
     fn parent_node(&self, node: u32) -> Option<u32>;
     fn get_text_content(&self, node: u32) -> Option<String>;
     fn set_text_content(&mut self, node: u32, text: &str) -> Result<(), String>;
@@ -2171,6 +2172,8 @@ impl Interpreter {
             "remove",
             Self::native("remove", native_dom_remove, &self.function_proto),
         );
+        element.set_own("matches", Self::native("matches", native_dom_matches, &self.function_proto));
+        element.set_own("closest", Self::native("closest", native_dom_closest, &self.function_proto));
         element.set_own(
             "addEventListener",
             Self::native("addEventListener", native_dom_add_event_listener, &self.function_proto),
@@ -3650,6 +3653,33 @@ fn native_dom_remove(
     let node = dom_id(&this)?;
     dom_host(i)?.borrow_mut().remove_node(node).map_err(Throw::type_error)?;
     Ok(JsValue::Undefined)
+}
+
+fn native_dom_matches(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    let selector = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::Bool(dom_host(i)?.borrow().matches_selector(node, &selector)))
+}
+
+fn native_dom_closest(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let mut node = dom_id(&this)?;
+    let selector = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    loop {
+        let matches = dom_host(i)?.borrow().matches_selector(node, &selector);
+        if matches { return Ok(i.make_dom_element(node)); }
+        let parent = dom_host(i)?.borrow().parent_node(node);
+        let Some(parent) = parent else { break };
+        node = parent;
+    }
+    Ok(JsValue::Null)
 }
 
 fn class_tokens(i: &mut Interpreter, node: u32) -> Result<Vec<String>, Throw> {

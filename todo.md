@@ -341,6 +341,7 @@ mutation-capable surface: `document.querySelector`/`querySelectorAll`,
 `document.createTextNode`,
 `getAttribute`, `setAttribute`, `append`/`appendChild`/`remove`,
 `hasAttribute`/`removeAttribute`,
+`matches`/`closest`,
 `innerHTML`/`innerText`, `document.title`, the `window`/`globalThis` aliases, and
 `element.dataset`, `element.classList`, and `element.style` inline properties,
 viewport globals (`innerWidth`, `innerHeight`, `devicePixelRatio`),

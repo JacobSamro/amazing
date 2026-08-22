@@ -1305,6 +1305,7 @@ mod windows {
             assert_eq!(host.get_attribute(node, "data-window"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-dom-api"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-selector-list"), Some(Some("yes".into())));
+            assert_eq!(host.get_attribute(node, "data-matches"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-dataset"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-attr-api"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-temp"), Some(None));
