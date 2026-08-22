@@ -20,6 +20,7 @@ mod windows {
     use std::rc::Rc;
 
     use amazing_dom::{Dom, NodeIdx, NodeKind};
+    use amazing_layout::{Flow, LayoutBox};
     use amazing_paint::Surface;
 
     use crate::BrowserDomHost;
@@ -53,6 +54,7 @@ mod windows {
     const WM_COMMAND: Uint = 0x0111;
     const WM_MOUSEWHEEL: Uint = 0x020a;
     const WM_KEYDOWN: Uint = 0x0100;
+    const WM_LBUTTONUP: Uint = 0x0202;
     const BN_CLICKED: u16 = 0;
     const GWLP_USERDATA: i32 = -21;
     const GWLP_WNDPROC: i32 = -4;
@@ -192,6 +194,7 @@ mod windows {
 
     struct Tab {
         surface: Option<Surface>,
+        runtime: Option<PageRuntime>,
         history: Vec<String>,
         history_pos: usize,
         scroll_y: i32,
@@ -201,6 +204,7 @@ mod windows {
         fn blank() -> Self {
             Self {
                 surface: None,
+                runtime: None,
                 history: Vec::new(),
                 history_pos: 0,
                 scroll_y: 0,
@@ -210,6 +214,17 @@ mod windows {
         fn current_url(&self) -> Option<&str> {
             self.history.get(self.history_pos).map(String::as_str)
         }
+    }
+
+    struct PageRuntime {
+        host: Rc<RefCell<BrowserDomHost>>,
+        js: amazing_js::Interpreter,
+        layout: LayoutBox,
+    }
+
+    struct RenderedPage {
+        surface: Surface,
+        runtime: PageRuntime,
     }
 
     struct GuiState {
@@ -325,9 +340,11 @@ mod windows {
                 return;
             }
             match render_page(&input, self.width) {
-                Ok(surface) => {
-                    self.tab_mut().surface = Some(surface);
-                    self.tab_mut().scroll_y = 0;
+                Ok(rendered) => {
+                    let tab = self.tab_mut();
+                    tab.surface = Some(rendered.surface);
+                    tab.runtime = Some(rendered.runtime);
+                    tab.scroll_y = 0;
                     if record {
                         let tab = self.tab_mut();
                         tab.history.truncate(tab.history_pos.saturating_add(1));
@@ -393,6 +410,61 @@ mod windows {
             unsafe { InvalidateRect(self.hwnd, null(), 0) };
         }
 
+        fn repaint_runtime(&mut self) {
+            let width = self.width;
+            let tab = self.tab_mut();
+            let Some(runtime) = tab.runtime.as_mut() else { return };
+            let host = runtime.host.clone();
+            let host_ref = host.borrow();
+            let mut css = String::new();
+            collect_style_text(&host_ref.dom, NodeIdx(0), &mut css);
+            let fonts = amazing_layout::font::FontSource::fallback();
+            let layout = amazing_layout::layout_dom_document(
+                &host_ref.dom,
+                &css,
+                width.max(1) as f32,
+                &fonts,
+            );
+            let height = (layout.border_box.y
+                + layout.border_box.h
+                + layout.margin.bottom.unwrap_or(0.0))
+                .ceil()
+                .clamp(1.0, 8192.0) as u32;
+            let surface = amazing_paint::paint_document(
+                &layout,
+                width.max(1),
+                height,
+                &fonts,
+            );
+            runtime.layout = layout;
+            tab.surface = Some(surface);
+            tab.scroll_y = 0;
+            self.clamp_scroll();
+        }
+
+        fn click(&mut self, x: i32, y: i32) {
+            let page_y = y - CONTROL_HEIGHT + self.tab().scroll_y;
+            if page_y < 0 {
+                return;
+            }
+            let node = self
+                .tab()
+                .runtime
+                .as_ref()
+                .and_then(|runtime| hit_test(&runtime.layout, x as f32, page_y as f32));
+            let Some(node) = node else { return };
+            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
+                if let Err(error) = runtime.js.dispatch_dom_event(node.0, "click") {
+                    eprintln!("amazing gui: click handler failed: {}", error.describe());
+                    return;
+                }
+            }
+            self.repaint_runtime();
+            // SAFETY: hwnd is the live top-level window owned by the message
+            // loop; invalidating it schedules a repaint only.
+            unsafe { InvalidateRect(self.hwnd, null(), 0) };
+        }
+
         fn go_back(&mut self) {
             if self.tab().history_pos == 0 || self.tab().history.is_empty() {
                 return;
@@ -412,6 +484,23 @@ mod windows {
                 self.navigate(url, false);
             }
         }
+    }
+
+    fn hit_test(layout: &LayoutBox, x: f32, y: f32) -> Option<NodeIdx> {
+        let rect = layout.border_box;
+        if x < rect.x || y < rect.y || x >= rect.x + rect.w || y >= rect.y + rect.h {
+            return None;
+        }
+        let children: &[LayoutBox] = match &layout.flow {
+            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children,
+            Flow::Inlines(_) | Flow::Empty => &[],
+        };
+        for child in children.iter().rev() {
+            if let Some(node) = hit_test(child, x, y) {
+                return Some(node);
+            }
+        }
+        layout.node
     }
 
     fn wide(value: &str) -> Vec<u16> {
@@ -483,7 +572,7 @@ mod windows {
         }
     }
 
-    fn render_page(input: &str, width: u32) -> Result<Surface, String> {
+    fn render_page(input: &str, width: u32) -> Result<RenderedPage, String> {
         let response = amazing_net::fetch(input, &amazing_net::FetchOptions::default())
             .map_err(|error| error.to_string())?;
         let html = response
@@ -512,7 +601,12 @@ mod windows {
         let height = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
             .ceil()
             .clamp(1.0, 8192.0) as u32;
-        Ok(amazing_paint::paint_document(&root, width.max(1), height, &fonts))
+        let surface = amazing_paint::paint_document(&root, width.max(1), height, &fonts);
+        drop(host_ref);
+        Ok(RenderedPage {
+            surface,
+            runtime: PageRuntime { host, js, layout: root },
+        })
     }
 
     fn paint(hwnd: Hwnd, state: &GuiState) {
@@ -648,6 +742,12 @@ mod windows {
             WM_MOUSEWHEEL if !state_ptr.is_null() => {
                 let delta = ((w_param >> 16) & 0xffff) as u16 as i16;
                 unsafe { &mut *state_ptr }.scroll(if delta > 0 { -96 } else { 96 });
+                0
+            }
+            WM_LBUTTONUP if !state_ptr.is_null() => {
+                let x = (l_param as usize & 0xffff) as u16 as i16 as i32;
+                let y = ((l_param as usize >> 16) & 0xffff) as u16 as i16 as i32;
+                unsafe { &mut *state_ptr }.click(x, y);
                 0
             }
             WM_PAINT if !state_ptr.is_null() => {
@@ -851,6 +951,48 @@ mod windows {
         // state pointer; reclaim the Box exactly once.
         unsafe { drop(Box::from_raw(state_ptr)) };
         ExitCode::SUCCESS
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use amazing_js::DomHost;
+
+        #[test]
+        fn page_click_runtime_mutates_dom_and_repaints() {
+            let rendered = render_page("../../examples/phase8.html", 640).expect("fixture renders");
+            let RenderedPage { surface, runtime } = rendered;
+            let mut state = GuiState::new(null_mut(), null_mut());
+            state.width = 640;
+            state.tabs.push(Tab {
+                surface: Some(surface),
+                runtime: Some(runtime),
+                history: vec!["../../examples/phase8.html".into()],
+                history_pos: 0,
+                scroll_y: 0,
+            });
+            let node = {
+                let host = state.tab().runtime.as_ref().unwrap().host.clone();
+                host.borrow_mut()
+                    .query_selector("#title")
+                    .expect("fixture target")
+            };
+            state
+                .tab_mut()
+                .runtime
+                .as_mut()
+                .unwrap()
+                .js
+                .dispatch_dom_event(node, "click")
+                .expect("click dispatch");
+            state.repaint_runtime();
+            let host = state.tab().runtime.as_ref().unwrap().host.clone();
+            let host = host.borrow();
+            assert_eq!(host.get_text_content(node).as_deref(), Some("click!"));
+            assert_eq!(host.get_attribute(node, "data-clicked"), Some(Some("yes".into())));
+            assert_eq!(host.get_style(node, "color").as_deref(), Some("red"));
+            assert!(state.tab().surface.as_ref().unwrap().height > 0);
+        }
     }
 
 }

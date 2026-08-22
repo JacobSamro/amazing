@@ -362,9 +362,10 @@ The shell compiles and the complete workspace suite passes on win-001. The
 interactive window itself requires a Windows desktop session (not available
 to the headless SSH service), so visual GUI proof is still pending. Current
 Inline page scripts now execute against the live DOM before the first layout
-and repaint; limitations are blocking navigation during fetch/paint, no
-native scrollbar thumb, no persistent JS event loop for later user events,
-and no external-script loading.
+and repaint. Each tab retains its JS runtime; layout-box hit testing dispatches
+mouse clicks and repaints DOM/style mutations. Limitations are blocking
+navigation during fetch/paint, no native scrollbar thumb, no timer/network
+event-loop jobs after load, and no external-script loading.
 
 ## Later phases (unchanged from goal prompt)
 
