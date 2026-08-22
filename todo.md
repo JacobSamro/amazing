@@ -285,6 +285,7 @@ the constructor executor, `resolve`/`reject`, `then`/`catch`/`finally`,
 pending reaction delivery, async-function return wrapping, and a FIFO
 microtask queue drained after each top-level script. Promise combinators
 `all`/`race`/`allSettled`/`any` preserve input order and settlement kind.
+`for-of` and destructuring also consume bounded `next()` iterator objects.
 Recursive array/object binding patterns with defaults/rest now work in
 declarations, parameters, and `for` declaration heads.
 Assignment uses a
@@ -309,9 +310,9 @@ features, and unavailable harness hooks. This is a focused slice, not whole-suit
 coverage.
 
 Known gaps: there is no browser event loop or full Promise combinator/timing
-surface yet, and generators, symbols, modules, full iterator/error
-destructuring semantics, regex literals, class accessors, and full class/super
-semantics are deferred. The runtime is
+surface yet, and generators, symbols, modules, iterator closing/custom
+`Symbol.iterator` semantics, regex literals, class accessors, and full
+class/super semantics are deferred. The runtime is
 a milestone, not Phase 6 exit-criteria completion.
 
 ## Later phases (unchanged from goal prompt)

@@ -1623,16 +1623,45 @@ impl Interpreter {
         }
     }
     fn iterate(&mut self, v: &JsValue) -> Result<Vec<JsValue>, Throw> {
-        match v {
-            JsValue::Object(o) if matches!(o.borrow().exotic, Exotic::Array) => {
-                let n = match o.borrow().get_own("length") {
+        if let JsValue::Object(object) = v {
+            if matches!(object.borrow().exotic, Exotic::Array) {
+                let n = match object.borrow().get_own("length") {
                     Some(JsValue::Num(n)) => n as usize,
                     _ => 0,
                 };
-                Ok((0..n)
+                return Ok((0..n)
                     .map(|n| self.get_prop(v, &n.to_string()))
-                    .collect::<Result<_, _>>()?)
+                    .collect::<Result<_, _>>()?);
             }
+            let next = self.get_prop(v, "next")?;
+            if !callable_function(&next).is_some() {
+                return Err(Throw::type_error("value is not iterable"));
+            }
+            let mut values = Vec::new();
+            for _ in 0..1_000_000usize {
+                let result = self.call_value(&next, v.clone(), Vec::new())?;
+                let result_object = match result {
+                    JsValue::Object(result) => result,
+                    _ => return Err(Throw::type_error("iterator result is not an object")),
+                };
+                let done = result_object
+                    .borrow()
+                    .get_own("done")
+                    .map(|value| value.to_boolean())
+                    .unwrap_or(false);
+                if done {
+                    return Ok(values);
+                }
+                values.push(
+                    result_object
+                        .borrow()
+                        .get_own("value")
+                        .unwrap_or(JsValue::Undefined),
+                );
+            }
+            return Err(Throw::range_error("iterator exceeded the iteration limit"));
+        }
+        match v {
             JsValue::Str(s) => Ok(s.chars().map(|c| JsValue::str(c.to_string())).collect()),
             _ => Err(Throw::type_error("value is not iterable")),
         }
@@ -3581,6 +3610,11 @@ mod tests {
             )
             .unwrap();
         assert_eq!(p.to_string(&value).unwrap(), "3,7");
+        let mut q = Interpreter::new();
+        let value = q
+            .run_script("let out=[]; let it={n:0,next:function(){this.n++;return {value:this.n,done:this.n>2};}}; for (const x of it) out.push(x); out.join(',');")
+            .unwrap();
+        assert_eq!(q.to_string(&value).unwrap(), "1,2");
     }
 
     #[test]
