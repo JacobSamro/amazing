@@ -42,10 +42,12 @@
 //! any input.
 
 pub mod ast;
+pub mod env;
 pub mod errors;
 pub mod lexer;
 pub mod parser;
 pub mod tokens;
+pub mod value;
 
 pub use ast::Program;
 pub use errors::SyntaxError;
