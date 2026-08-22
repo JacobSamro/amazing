@@ -2692,6 +2692,14 @@ impl Interpreter {
             Self::native("clearInterval", native_clear_timeout, &self.function_proto),
         );
         self.define_global(
+            "requestAnimationFrame",
+            Self::native("requestAnimationFrame", native_request_animation_frame, &self.function_proto),
+        );
+        self.define_global(
+            "cancelAnimationFrame",
+            Self::native("cancelAnimationFrame", native_clear_timeout, &self.function_proto),
+        );
+        self.define_global(
             "Error",
             Self::native("Error", native_error, &self.function_proto),
         );
@@ -5703,6 +5711,19 @@ fn native_set_interval(
         .max(0.0)
         .min(u64::MAX as f64) as u64;
     let id = i.schedule_interval(callback, delay, args.into_iter().skip(2).collect());
+    Ok(JsValue::num(id as f64))
+}
+
+fn native_request_animation_frame(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let callback = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if callable_function(&callback).is_none() {
+        return Err(Throw::type_error("requestAnimationFrame callback is not callable"));
+    }
+    let id = i.schedule_timer(callback, 16, vec![JsValue::num(0.0)]);
     Ok(JsValue::num(id as f64))
 }
 
