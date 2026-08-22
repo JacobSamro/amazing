@@ -16,7 +16,7 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | 🔄 lexer/tokens/ast landing (agent authoring parser) |
+| 6 — JS | 🔄 front half landed: lexer/tokens/ast/parser/errors, parse_script green (50 tests); interpreter back half next |
 | 7–9 | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
@@ -247,7 +247,13 @@ rect-ink placeholder rasterizer, alpha-composited blit),
 paint_document (backgrounds → border strips → line-box words → children,
 viewport-clipped, currentcolor resolution). Driver: `amazing render
 page.html out.bmp [width] [extra.css…]` writes BMP + PPM twin of the page.
-Deviations: glyph ink is placeholder bars until TTF outlines land; borders
+Follow-up (post-phase): real glyph ink — `amazing-layout/font.rs` now decodes
+TTF `loca`/`glyf` outlines (simple + composite glyphs, F2Dot14 transforms,
+implied quadratic midpoints, depth-capped recursion, hostile-input safe) and
+`amazing-paint/text.rs` rasterizes them (curve flattening, 4x4 supersampled
+nonzero-winding scanline fill, bearing/advance blit); fallback rect-ink kept
+for fonts without outlines. Deviations: glyph ink is placeholder bars until TTF
+outlines land; borders
 always solid; no radius/shadows/images.
 
 ## Phase 5 (net) — DONE (crate integrated, win-001 green)
