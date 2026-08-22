@@ -345,8 +345,9 @@ attribute was written, a click handler changed text and inline color, a
 listener wrote a second attribute, and a new `<span>` child was appended.
 Full `cargo test --workspace` remains green on win-001.
 
-Known gaps: selector coverage is intentionally limited to a single simple
-selector; script execution is classic/document-order rather than full HTML
+Known gaps: selector coverage follows the CSS engine's supported subset and
+does not yet accept selector lists in one query; script execution is
+classic/document-order rather than full HTML
 parser scheduling; and the browser global/window surface remains a bounded
 subset of the web platform.
 

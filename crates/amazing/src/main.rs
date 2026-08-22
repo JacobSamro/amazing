@@ -131,49 +131,39 @@ impl BrowserDomHost {
         }
     }
 
-    fn matches_selector(&self, node: amazing_dom::NodeIdx, selector: &str) -> bool {
-        let Some(name) = self.dom.name(node) else { return false };
-        let selector = selector.trim();
-        if selector.is_empty() || selector.contains(char::is_whitespace) { return false }
-        let (tag, id, class) = if let Some(rest) = selector.strip_prefix('#') {
-            (None, Some(rest), None)
-        } else if let Some(rest) = selector.strip_prefix('.') {
-            (None, None, Some(rest))
-        } else if let Some((tag, rest)) = selector.split_once('#') {
-            (Some(tag), Some(rest), None)
-        } else if let Some((tag, rest)) = selector.split_once('.') {
-            (Some(tag), None, Some(rest))
-        } else {
-            (Some(selector), None, None)
-        };
-        if tag.is_some_and(|tag| !tag.eq_ignore_ascii_case(name)) { return false }
-        let attrs = self.dom.attrs_of(node).unwrap_or(&[]);
-        if let Some(want) = id {
-            if attrs.iter().find(|(k, _)| k == "id").map(|(_, v)| v.as_str()) != Some(want) {
-                return false;
-            }
-        }
-        if let Some(want) = class {
-            let classes = attrs.iter().find(|(k, _)| k == "class").map(|(_, v)| v.as_str()).unwrap_or("");
-            if !classes.split_ascii_whitespace().any(|item| item == want) { return false }
-        }
-        true
+    fn find(&self, node: amazing_dom::NodeIdx, selector: &str) -> Option<u32> {
+        let selector = amazing_css::selectors::parse_selector(selector.trim())?;
+        self.find_parsed(node, &selector)
     }
 
-    fn find(&self, node: amazing_dom::NodeIdx, selector: &str) -> Option<u32> {
-        if self.matches_selector(node, selector) { return Some(node.0) }
+    fn find_parsed(
+        &self,
+        node: amazing_dom::NodeIdx,
+        selector: &amazing_css::selectors::Selector,
+    ) -> Option<u32> {
+        if amazing_css::selectors::matches(&self.dom, node, selector) {
+            return Some(node.0);
+        }
         for child in self.dom.children(node) {
-            if let Some(found) = self.find(child, selector) { return Some(found) }
+            if let Some(found) = self.find_parsed(child, selector) { return Some(found) }
         }
         None
     }
 
     fn find_all(&self, node: amazing_dom::NodeIdx, selector: &str, out: &mut Vec<u32>) {
-        if self.matches_selector(node, selector) {
-            out.push(node.0);
-        }
+        let Ok(selector) = amazing_css::selectors::parse_selector(selector.trim()).ok_or(()) else { return };
+        self.find_all_parsed(node, &selector, out);
+    }
+
+    fn find_all_parsed(
+        &self,
+        node: amazing_dom::NodeIdx,
+        selector: &amazing_css::selectors::Selector,
+        out: &mut Vec<u32>,
+    ) {
+        if amazing_css::selectors::matches(&self.dom, node, selector) { out.push(node.0); }
         for child in self.dom.children(node) {
-            self.find_all(child, selector, out);
+            self.find_all_parsed(child, selector, out);
         }
     }
 
