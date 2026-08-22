@@ -2038,6 +2038,14 @@ impl Interpreter {
             Self::native("getElementById", native_dom_get_element_by_id, &self.function_proto),
         );
         document.set_own(
+            "getElementsByTagName",
+            Self::native("getElementsByTagName", native_dom_get_elements_by_tag, &self.function_proto),
+        );
+        document.set_own(
+            "getElementsByClassName",
+            Self::native("getElementsByClassName", native_dom_get_elements_by_class, &self.function_proto),
+        );
+        document.set_own(
             "createElement",
             Self::native("createElement", native_dom_create_element, &self.function_proto),
         );
@@ -3264,6 +3272,31 @@ fn native_dom_get_element_by_id(
     let selector = format!("#{id}");
     let node = dom_host(i)?.borrow_mut().query_selector(&selector);
     Ok(node.map(|node| i.make_dom_element(node)).unwrap_or(JsValue::Null))
+}
+
+fn native_dom_get_elements_by_tag(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let tag = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let ids = dom_host(i)?.borrow_mut().query_selector_all(&tag);
+    array_values(i, ids.into_iter().map(|id| i.make_dom_element(id)).collect())
+}
+
+fn native_dom_get_elements_by_class(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let classes = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let selector = classes
+        .split_ascii_whitespace()
+        .filter(|class| !class.is_empty())
+        .map(|class| format!(".{class}"))
+        .collect::<String>();
+    let ids = dom_host(i)?.borrow_mut().query_selector_all(&selector);
+    array_values(i, ids.into_iter().map(|id| i.make_dom_element(id)).collect())
 }
 
 fn native_dom_create_element(

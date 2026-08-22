@@ -336,7 +336,8 @@ a milestone, not Phase 6 exit-criteria completion.
 Shipped: `amazing_js::DomHost` keeps the JS core independent of arena DOM
 types while exposing live node wrappers. The driver implements a bounded,
 mutation-capable surface: `document.querySelector`/`querySelectorAll`,
-`getElementById` (tag/id/class selectors), `document.body`,
+`getElementById`/`getElementsByTagName`/`getElementsByClassName`
+(tag/id/class selectors), `document.body`,
 `document.createElement`, element `textContent`, `id`/`className`,
 `document.createTextNode`,
 `getAttribute`, `setAttribute`, `append`/`appendChild`/`remove`,
