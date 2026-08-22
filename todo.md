@@ -12,7 +12,11 @@
 | 1 — HTML parser | ✅ done on win-001 (51 workspace tests green) — see report gaps |
 | 2 — CSS | ✅ done on win-001 (88 workspace tests green) — see Phase 2 section |
 | 3 — Layout | ✅ done on win-001 (workspace green; curated css/CSS2 subset 17/17) |
-| 3.5–9 | in progress (paint/net/js crates being authored) |
+| 3.5 — Flexbox | ✅ done on win-001 (13 flex tests; row/column/wrap/grow/shrink/justify/align/gaps/auto-margins/order) |
+| 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
+| 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
+| 6 — JS | 🔄 lexer/tokens/ast landing (agent authoring parser) |
+| 7–9 | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -197,6 +201,46 @@ metrics beyond word widths); percentage heights stay auto; TTF glyph
 OUTLINES not parsed (advance/metrics only — paint draws placeholder ink).
 WPT css/CSS2 pass-rate tracking = this curated subset until full WPT
 harness lands.
+
+## Phase 3.5 (flexbox) — DONE (win-001, all tests green)
+
+Shipped: `amazing-layout/src/flex.rs` — `display:flex`/`inline-flex`,
+flex-direction ×4 (column-reverse stacks top-down as documented), wrap,
+grow/shrink/basis + full `flex` shorthand grammar (`none`, `auto`, number →
+basis 0%, one-value length), order sort, gaps, justify-content ×6,
+align-items/self, align-content vs definite height, auto-margin absorption
+on the main axis (materialized via `ComputedStyle::set` so the box-model
+resolver agrees), cross-axis stretch incl. single-line growth into a
+definite container cross size. Flex containers hoist like blocks in
+box_tree (they are neither Block nor inline). Deviations: baseline≈start,
+no shrink floors, column grow/shrink needs definite height, cross-axis auto
+margins = 0. Tests: 13 unit tests in flex.rs through the real pipeline.
+Demo: `cargo run -p amazing -- layout examples/layout.html`.
+
+## Phase 4 (paint) — DONE (crate integrated, win-001 green)
+
+Shipped: `amazing-paint` — color parser (hex/named/rgb·rgba legacy+modern
+syntax, overflow clamps, hostile-input safe), Surface framebuffer
+(fill_rect with NaN/degenerate guards, PPM + BMP encoders incl. correct
+14-byte BMP file header + row padding), text layer (GlyphProvider trait +
+rect-ink placeholder rasterizer, alpha-composited blit),
+paint_document (backgrounds → border strips → line-box words → children,
+viewport-clipped, currentcolor resolution). Driver: `amazing render
+page.html out.bmp [width] [extra.css…]` writes BMP + PPM twin of the page.
+Deviations: glyph ink is placeholder bars until TTF outlines land; borders
+always solid; no radius/shadows/images.
+
+## Phase 5 (net) — DONE (crate integrated, win-001 green)
+
+Shipped: `amazing-net` — Url parser/resolver (http/https/file, IPv6,
+percent-decode, dot-segment removal, file↔Windows path), case-insensitive
+multi-value Headers, Response (+text/content_type/is_success), HTTP/1.1
+GET client (chunked > Content-Length > EOF framing, 32 MiB cap,
+bare-\n tolerance), fetch() dispatcher with ≤5 redirect hops and loopback
+integration tests (exact request bytes, chunk extensions+trailers, redirect
+chains). TLS deliberately unsupported (`https` fails fast; documented).
+Driver: `amazing fetch <url|file> [-i]`. Deferred: keep-alive, non-GET,
+gzip/br, cookies/caching/auth, HTTP/2.
 
 ## Later phases (unchanged from goal prompt)
 
