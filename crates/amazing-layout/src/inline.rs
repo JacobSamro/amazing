@@ -30,17 +30,17 @@ impl Strut {
 }
 
 /// One measured word queued for placement.
-struct Token {
-    text: String,
-    node: NodeIdx,
-    font_size: f32,
+pub(crate) struct Token {
+    pub text: String,
+    pub node: NodeIdx,
+    pub font_size: f32,
     /// A collapsible space precedes this word in the source flow.
-    space_before: bool,
+    pub space_before: bool,
 }
 
 /// Splits flattened inline items into word tokens, tracking whether a
 /// collapsible space sits between consecutive words across item boundaries.
-fn tokenize(items: &[InlineNode]) -> (Vec<Token>, Vec<usize>) {
+pub(crate) fn tokenize(items: &[InlineNode]) -> (Vec<Token>, Vec<usize>) {
     let mut tokens = Vec::new();
     let mut breaks = Vec::new();
     let mut pending_space = false;

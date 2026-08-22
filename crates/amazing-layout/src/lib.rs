@@ -35,9 +35,19 @@
 //!   text-align beyond left, no replaced elements (img) yet
 //! - line boxes use the block's strut (font + line-height) for height and
 //!   baseline; per-fragment line-height differences don't grow lines
+//!
+//! Phase 3.5 additions — flexbox ([`flex`], css-flexbox-1 subset):
+//! - `display:flex`/`inline-flex`, flex-direction (all four), flex-wrap,
+//!   flex-grow/shrink/basis + `flex` shorthand, order
+//! - justify-content (5 values), align-items/align-self, align-content,
+//!   gap/row-gap/column-gap, auto-margin absorption on both axes
+//! Deviations: baseline alignment ≈ flex-start; min-content floors during
+//! shrink are not applied; column-mode non-stretch items keep their
+//! hypothetical-measure height; definite-height align-content only.
 
 pub mod block;
 pub mod box_tree;
+pub mod flex;
 pub mod font;
 pub mod inline;
 pub mod values;
@@ -61,6 +71,8 @@ pub struct Rect {
 pub enum Display {
     Block,
     Inline,
+    /// Flex container (css-flexbox-1); children become flex items.
+    Flex,
 }
 
 /// One box of the layout tree. Spec fields are filled by
@@ -122,6 +134,8 @@ impl LayoutBox {
 #[derive(Debug)]
 pub enum Flow {
     Blocks(Vec<LayoutBox>),
+    /// Flex items of a `display:flex` container (see [`flex`]).
+    Flex(Vec<LayoutBox>),
     Inlines(Vec<InlineNode>),
     Empty,
 }
@@ -221,7 +235,7 @@ fn dump_rec(dom: &amazing_dom::Dom, b: &LayoutBox, depth: usize, out: &mut Strin
         out.push('\n');
     }
     match &b.flow {
-        Flow::Blocks(children) => {
+        Flow::Blocks(children) | Flow::Flex(children) => {
             for c in children {
                 dump_rec(dom, c, depth + 1, out);
             }

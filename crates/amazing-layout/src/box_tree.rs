@@ -55,7 +55,8 @@ fn build_element(
         font_size,
         normal_lh,
     );
-    let mut box_ = LayoutBox::new(Some(idx), parse_display(&style), style, font_size, line_height);
+    let display = parse_display(&style);
+    let mut box_ = LayoutBox::new(Some(idx), display, style, font_size, line_height);
     box_.flow = classify_children(dom, styled, idx, font_size, fonts);
     box_
 }
@@ -69,6 +70,12 @@ fn parse_display(style: &ComputedStyle) -> Display {
             || v.eq_ignore_ascii_case("table") =>
         {
             Display::Block
+        },
+        Some(v) if v.eq_ignore_ascii_case("flex")
+            || v.eq_ignore_ascii_case("inline-flex")
+            || v.eq_ignore_ascii_case("-webkit-flex") =>
+        {
+            Display::Flex
         },
         _ => Display::Inline,
     }
@@ -107,6 +114,37 @@ fn classify_children(
     font_size: f32,
     fonts: &FontSource,
 ) -> Flow {
+    // Flex containers take every non-`none` element child as a flex ITEM
+    // (css-flexbox-1 §3 blockification); contiguous text runs become one
+    // anonymous item each.
+    let own_display =
+        parse_display(&styled.get(idx).cloned().unwrap_or_default());
+    if own_display == Display::Flex {
+        let mut items: Vec<LayoutBox> = Vec::new();
+        let mut run: Vec<InlineNode> = Vec::new();
+        for child in dom.children(idx) {
+            match &dom.get(child).kind {
+                NodeKind::Text { data } => {
+                    let collapsed = collapse_whitespace(data);
+                    if !collapsed.is_empty() {
+                        run.push(InlineNode::Text { node: child, text: collapsed, font_size });
+                    }
+                },
+                NodeKind::Comment { .. } | NodeKind::Document => {},
+                NodeKind::Element { .. } => {
+                    let child_style = styled.get(child).cloned().unwrap_or_default();
+                    if is_display_none(&child_style) {
+                        continue;
+                    }
+                    flush_anonymous_into(&mut items, &mut run, font_size, fonts);
+                    items.push(build_element(dom, styled, child, font_size, fonts));
+                },
+            }
+        }
+        flush_anonymous_into(&mut items, &mut run, font_size, fonts);
+        return Flow::Flex(items);
+    }
+
     let mut blocks: Vec<LayoutBox> = Vec::new();
     let mut inlines: Vec<InlineNode> = Vec::new();
 
@@ -130,7 +168,11 @@ fn classify_children(
                     // Void line-break element: emits a marker itself (it has
                     // no children, so flatten_inline would see nothing).
                     Some("br") => inlines.push(InlineNode::Break),
-                    _ if parse_display(&child_style) == Display::Block => {
+                    _ if matches!(
+                        parse_display(&child_style),
+                        Display::Block | Display::Flex
+                    ) =>
+                    {
                         // Flush pending inline content into an anonymous block.
                         flush_anonymous_into(&mut blocks, &mut inlines, font_size, fonts);
                         blocks.push(build_element(dom, styled, child, font_size, fonts));
@@ -215,7 +257,7 @@ fn flatten_inline(
                 }
                 match dom.name(child) {
                     Some("br") => inlines.push(InlineNode::Break),
-                    _ if parse_display(&cs) == Display::Block => {
+                    _ if matches!(parse_display(&cs), Display::Block | Display::Flex) => {
                         // Hoist: end the current inline run here.
                         flush_anonymous_into(blocks_out, inlines, parent_font_px, fonts);
                         blocks_out.push(build_element(dom, styled, child, parent_font_px, fonts));

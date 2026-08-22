@@ -37,7 +37,7 @@ fn find<'a>(b: &'a LayoutBox, dom: &Dom, tag: &str) -> Option<&'a LayoutBox> {
         return Some(b);
     }
     match &b.flow {
-        Flow::Blocks(kids) => kids.iter().find_map(|k| find(k, dom, tag)),
+        Flow::Blocks(kids) | Flow::Flex(kids) => kids.iter().find_map(|k| find(k, dom, tag)),
         Flow::Inlines(_) | Flow::Empty => None,
     }
 }

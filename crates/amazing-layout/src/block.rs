@@ -110,16 +110,30 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
     // Anonymous blocks were built with an unresolved strut (line_height 0)
     // whenever their host's metrics weren't in scope during tree building;
     // they inherit the host's line-height now.
-    if let Flow::Blocks(children) = &mut b.flow {
-        for c in children.iter_mut() {
-            if c.node.is_none() && c.line_height == 0.0 {
-                c.line_height = b.line_height;
+    match &mut b.flow {
+        Flow::Blocks(children) | Flow::Flex(children) => {
+            for c in children.iter_mut() {
+                if c.node.is_none() && c.line_height == 0.0 {
+                    c.line_height = b.line_height;
+                }
             }
-        }
+        },
+        Flow::Inlines(_) | Flow::Empty => {},
     }
 
     // --- children ------------------------------------------------------
+    let def_h = specified_height(b, font_px);
     let content_h = match &mut b.flow {
+        Flow::Flex(children) => crate::flex::layout_flex(
+            children,
+            &b.style,
+            font_px,
+            content_x,
+            content_y,
+            content_w,
+            def_h,
+            fonts,
+        ),
         Flow::Blocks(children) if !children.is_empty() => {
             stack_blocks(children, content_x, content_y, content_w, ctx, fonts)
         },

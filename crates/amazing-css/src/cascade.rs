@@ -49,6 +49,14 @@ impl ComputedStyle {
     fn insert(&mut self, prop: String, value: String) {
         self.props.insert(prop, value);
     }
+
+    /// Public mutation for layout-time synthesis: flexbox materializes
+    /// absorbed auto margins and flexed widths back into the style so the
+    /// box-model resolver sees concrete values.
+    pub fn set(&mut self, prop: &str, value: &str) {
+        self.props
+            .insert(prop.to_ascii_lowercase(), value.to_owned());
+    }
 }
 
 /// Collecting (property, value) pairs into a style — used by callers that
