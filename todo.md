@@ -390,6 +390,10 @@ Promises for normal chains.
 External `<link rel="stylesheet" href="…">` resources are fetched and merged
 into the author cascade before layout.
 
+Release artifact evidence: `cargo build --release` on win-001 produced
+`target/release/amazing.exe` (1,667,072 bytes); its `version` command reports
+the GUI subcommand and its release `render` command produced a 640×54 raster.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
