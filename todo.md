@@ -330,7 +330,7 @@ mutation-capable surface: `document.querySelector`/`querySelectorAll`,
 `getElementById` (tag/id/class selectors), `document.body`,
 `document.createElement`, element `textContent`, `id`/`className`,
 `getAttribute`, `setAttribute`, `append`/`appendChild`/`remove`,
-`innerHTML`, `document.title`, the `window`/`globalThis` aliases, and
+`innerHTML`/`innerText`, `document.title`, the `window`/`globalThis` aliases, and
 `element.dataset`, `element.classList`, and `element.style` inline properties,
 viewport globals (`innerWidth`, `innerHeight`, `devicePixelRatio`),
 `onclick`, `addEventListener`, `removeEventListener`, and `click()` event

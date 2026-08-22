@@ -2012,6 +2012,27 @@ impl Interpreter {
                 setter: Some(Box::new(setter)),
             },
         );
+        let inner_getter = Self::native("get innerText", native_dom_text_get, &self.function_proto);
+        let inner_setter = Self::native("set innerText", native_dom_text_set, &self.function_proto);
+        let inner_getter = match inner_getter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native innerText getter"),
+            _ => unreachable!(),
+        };
+        let inner_setter = match inner_setter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native innerText setter"),
+            _ => unreachable!(),
+        };
+        let _ = element.define(
+            "innerText",
+            Property {
+                value: JsValue::Undefined,
+                writable: false,
+                enumerable: true,
+                configurable: true,
+                getter: Some(Box::new(inner_getter)),
+                setter: Some(Box::new(inner_setter)),
+            },
+        );
         let inner_getter = Self::native("get innerHTML", native_dom_inner_html_get, &self.function_proto);
         let inner_setter = Self::native("set innerHTML", native_dom_inner_html_set, &self.function_proto);
         let inner_getter = match inner_getter {
