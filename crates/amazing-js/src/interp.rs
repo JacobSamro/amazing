@@ -6,6 +6,7 @@
 //! real asynchronous job queue remain explicit later milestones.
 
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
@@ -24,6 +25,11 @@ enum Flow {
     Return(JsValue),
 }
 
+struct PromiseJob {
+    reaction: PendingReaction,
+    fate: PromiseFate,
+}
+
 pub struct Interpreter {
     pub global_env: EnvHandle,
     pub global_obj: Obj,
@@ -36,6 +42,7 @@ pub struct Interpreter {
     pub output: RefCell<Vec<String>>,
     depth: u32,
     native_stack: Vec<Obj>,
+    jobs: VecDeque<PromiseJob>,
 }
 
 impl Interpreter {
@@ -84,6 +91,7 @@ impl Interpreter {
             output: RefCell::new(Vec::new()),
             depth: 0,
             native_stack: Vec::new(),
+            jobs: VecDeque::new(),
         };
         i.global_obj
             .borrow_mut()
@@ -114,6 +122,7 @@ impl Interpreter {
                 }
             }
         }
+        self.drain_jobs()?;
         Ok(last)
     }
 
@@ -357,6 +366,13 @@ impl Interpreter {
             }
         }
         Ok(Flow::Normal)
+    }
+
+    fn drain_jobs(&mut self) -> Result<(), Throw> {
+        while let Some(job) = self.jobs.pop_front() {
+            run_promise_reaction(job.reaction, job.fate, self);
+        }
+        Ok(())
     }
     fn loop_while(
         &mut self,
@@ -1561,7 +1577,10 @@ fn settle_promise(target: &Obj, fate: PromiseFate, i: &mut Interpreter) {
         }
     };
     for reaction in reactions {
-        run_promise_reaction(reaction, fate.clone(), i);
+        i.jobs.push_back(PromiseJob {
+            reaction,
+            fate: fate.clone(),
+        });
     }
 }
 
@@ -1636,7 +1655,7 @@ fn native_promise_then(
                 is_reject_handler: true,
             }
         };
-        run_promise_reaction(reaction, fate, i);
+        i.jobs.push_back(PromiseJob { reaction, fate });
     }
     Ok(JsValue::Object(result))
 }
@@ -2205,7 +2224,7 @@ mod tests {
             "Promise.resolve(2).then(x=>x+1).then(x=>console.log(x)); Promise.reject('bad').catch(e=>console.log(e));",
         )
         .unwrap();
-        assert_eq!(&*i.output.borrow(), &["3".to_string(), "bad".to_string()]);
+        assert_eq!(&*i.output.borrow(), &["bad".to_string(), "3".to_string()]);
     }
 
     #[test]
@@ -2224,6 +2243,19 @@ mod tests {
         i.run_script("async function f(){ return 4; } f().then(x=>console.log(x+1));")
             .unwrap();
         assert_eq!(&*i.output.borrow(), &["5".to_string()]);
+    }
+
+    #[test]
+    fn promise_reactions_run_after_current_script_turn() {
+        let mut i = Interpreter::new();
+        i.run_script(
+            "console.log('before'); Promise.resolve(1).then(x=>console.log(x)); console.log('after');",
+        )
+        .unwrap();
+        assert_eq!(
+            &*i.output.borrow(),
+            &["before".to_string(), "after".to_string(), "1".to_string()]
+        );
     }
 
     #[test]
