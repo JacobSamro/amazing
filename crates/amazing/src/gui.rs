@@ -540,6 +540,15 @@ mod windows {
                 self.apply_history_delta(delta);
                 return;
             }
+            if let Some((url, replace)) = self
+                .tab_mut()
+                .runtime
+                .as_mut()
+                .and_then(|runtime| runtime.js.take_history_update())
+            {
+                self.apply_history_update(url, replace);
+                return;
+            }
             let default_allowed = self
                 .tab()
                 .runtime
@@ -585,6 +594,15 @@ mod windows {
                 self.apply_history_delta(delta);
                 return;
             }
+            if let Some((url, replace)) = self
+                .tab_mut()
+                .runtime
+                .as_mut()
+                .and_then(|runtime| runtime.js.take_history_update())
+            {
+                self.apply_history_update(url, replace);
+                return;
+            }
             let navigation = self
                 .tab_mut()
                 .runtime
@@ -608,6 +626,31 @@ mod windows {
             } else {
                 for _ in 0..delta as u32 { self.go_forward(); }
             }
+        }
+
+        fn apply_history_update(&mut self, url: String, replace: bool) {
+            let url = self.resolve_navigation(&url);
+            {
+                let tab = self.tab_mut();
+                if replace && !tab.history.is_empty() {
+                    tab.history[tab.history_pos] = url.clone();
+                } else {
+                    tab.history.truncate(tab.history_pos.saturating_add(1));
+                    tab.history.push(url.clone());
+                    tab.history_pos = tab.history.len().saturating_sub(1);
+                }
+                let history_length = tab.history.len();
+                if let Some(runtime) = tab.runtime.as_mut() {
+                    runtime.js.set_location_url(&url);
+                    runtime.js.set_history_length(history_length);
+                }
+            }
+            set_window_text(self.address, &url);
+            set_window_text(self.hwnd, &format!("Ferric — {url}"));
+            self.update_tab_button();
+            // SAFETY: hwnd is the live top-level window owned by the message
+            // loop; invalidating it schedules a repaint only.
+            unsafe { InvalidateRect(self.hwnd, null(), 0) };
         }
 
         fn go_back(&mut self) {

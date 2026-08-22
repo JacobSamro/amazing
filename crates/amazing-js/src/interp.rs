@@ -117,6 +117,7 @@ pub struct Interpreter {
     location_url: String,
     pending_navigation: Option<String>,
     pending_history_delta: Option<i32>,
+    pending_history_update: Option<(String, bool)>,
     last_event_default_prevented: bool,
 }
 
@@ -182,6 +183,7 @@ impl Interpreter {
             location_url: String::new(),
             pending_navigation: None,
             pending_history_delta: None,
+            pending_history_update: None,
             last_event_default_prevented: false,
         };
         i.global_obj
@@ -204,6 +206,8 @@ impl Interpreter {
         history.set_own("back", Self::native("back", native_history_back, &self.function_proto));
         history.set_own("forward", Self::native("forward", native_history_forward, &self.function_proto));
         history.set_own("go", Self::native("go", native_history_go, &self.function_proto));
+        history.set_own("pushState", Self::native("pushState", native_history_push_state, &self.function_proto));
+        history.set_own("replaceState", Self::native("replaceState", native_history_replace_state, &self.function_proto));
         history.set_own("length", JsValue::num(1.0));
         let history = JsValue::Object(Obj(Rc::new(RefCell::new(history))));
         self.global_obj.borrow_mut().set_own("history", history.clone());
@@ -311,6 +315,10 @@ impl Interpreter {
 
     pub fn take_history_delta(&mut self) -> Option<i32> {
         self.pending_history_delta.take()
+    }
+
+    pub fn take_history_update(&mut self) -> Option<(String, bool)> {
+        self.pending_history_update.take()
     }
 
     pub fn set_history_length(&mut self, length: usize) {
@@ -3412,6 +3420,36 @@ fn native_history_go(
     Ok(JsValue::Undefined)
 }
 
+fn native_history_push_state(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let url = args
+        .get(2)
+        .map(|value| i.to_string(value))
+        .transpose()?
+        .unwrap_or_else(|| i.location_url.clone());
+    i.location_url = url.clone();
+    i.pending_history_update = Some((url, false));
+    Ok(JsValue::Undefined)
+}
+
+fn native_history_replace_state(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let url = args
+        .get(2)
+        .map(|value| i.to_string(value))
+        .transpose()?
+        .unwrap_or_else(|| i.location_url.clone());
+    i.location_url = url.clone();
+    i.pending_history_update = Some((url, true));
+    Ok(JsValue::Undefined)
+}
+
 fn native_fetch(
     i: &mut Interpreter,
     _: JsValue,
@@ -6280,5 +6318,9 @@ mod tests {
         i.set_history_length(3);
         let length = i.run_script("history.length;").unwrap();
         assert_eq!(length, JsValue::num(3.0));
+        i.run_script("history.pushState({}, '', 'spa.html');").unwrap();
+        assert_eq!(i.take_history_update(), Some(("spa.html".into(), false)));
+        i.run_script("history.replaceState({}, '', 'spa2.html');").unwrap();
+        assert_eq!(i.take_history_update(), Some(("spa2.html".into(), true)));
     }
 }
