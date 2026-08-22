@@ -540,13 +540,13 @@ mod windows {
                 self.apply_history_delta(delta);
                 return;
             }
-            if let Some((url, replace)) = self
+            if let Some((url, replace, state)) = self
                 .tab_mut()
                 .runtime
                 .as_mut()
                 .and_then(|runtime| runtime.js.take_history_update())
             {
-                self.apply_history_update(url, replace);
+                self.apply_history_update(url, replace, state);
                 return;
             }
             let default_allowed = self
@@ -594,13 +594,13 @@ mod windows {
                 self.apply_history_delta(delta);
                 return;
             }
-            if let Some((url, replace)) = self
+            if let Some((url, replace, state)) = self
                 .tab_mut()
                 .runtime
                 .as_mut()
                 .and_then(|runtime| runtime.js.take_history_update())
             {
-                self.apply_history_update(url, replace);
+                self.apply_history_update(url, replace, state);
                 return;
             }
             let navigation = self
@@ -628,7 +628,7 @@ mod windows {
             }
         }
 
-        fn apply_history_update(&mut self, url: String, replace: bool) {
+        fn apply_history_update(&mut self, url: String, replace: bool, state: amazing_js::value::JsValue) {
             let url = self.resolve_navigation(&url);
             {
                 let tab = self.tab_mut();
@@ -643,6 +643,7 @@ mod windows {
                 if let Some(runtime) = tab.runtime.as_mut() {
                     runtime.js.set_location_url(&url);
                     runtime.js.set_history_length(history_length);
+                    runtime.js.set_history_state(state);
                 }
             }
             set_window_text(self.address, &url);

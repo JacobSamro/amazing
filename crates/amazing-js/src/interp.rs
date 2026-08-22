@@ -117,7 +117,8 @@ pub struct Interpreter {
     location_url: String,
     pending_navigation: Option<String>,
     pending_history_delta: Option<i32>,
-    pending_history_update: Option<(String, bool)>,
+    pending_history_update: Option<(String, bool, JsValue)>,
+    history_state: JsValue,
     last_event_default_prevented: bool,
 }
 
@@ -184,6 +185,7 @@ impl Interpreter {
             pending_navigation: None,
             pending_history_delta: None,
             pending_history_update: None,
+            history_state: JsValue::Null,
             last_event_default_prevented: false,
         };
         i.global_obj
@@ -209,6 +211,7 @@ impl Interpreter {
         history.set_own("pushState", Self::native("pushState", native_history_push_state, &self.function_proto));
         history.set_own("replaceState", Self::native("replaceState", native_history_replace_state, &self.function_proto));
         history.set_own("length", JsValue::num(1.0));
+        history.set_own("state", JsValue::Null);
         let history = JsValue::Object(Obj(Rc::new(RefCell::new(history))));
         self.global_obj.borrow_mut().set_own("history", history.clone());
         let _ = self.global_env.declare_var("history", history);
@@ -317,13 +320,20 @@ impl Interpreter {
         self.pending_history_delta.take()
     }
 
-    pub fn take_history_update(&mut self) -> Option<(String, bool)> {
+    pub fn take_history_update(&mut self) -> Option<(String, bool, JsValue)> {
         self.pending_history_update.take()
     }
 
     pub fn set_history_length(&mut self, length: usize) {
         if let Some(JsValue::Object(history)) = self.global_obj.borrow().get_own("history") {
             history.borrow_mut().set_own("length", JsValue::num(length as f64));
+        }
+    }
+
+    pub fn set_history_state(&mut self, state: JsValue) {
+        self.history_state = state.clone();
+        if let Some(JsValue::Object(history)) = self.global_obj.borrow().get_own("history") {
+            history.borrow_mut().set_own("state", state);
         }
     }
 
@@ -3425,13 +3435,15 @@ fn native_history_push_state(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    let state = args.first().cloned().unwrap_or(JsValue::Null);
     let url = args
         .get(2)
         .map(|value| i.to_string(value))
         .transpose()?
         .unwrap_or_else(|| i.location_url.clone());
     i.location_url = url.clone();
-    i.pending_history_update = Some((url, false));
+    i.set_history_state(state.clone());
+    i.pending_history_update = Some((url, false, state));
     Ok(JsValue::Undefined)
 }
 
@@ -3440,13 +3452,15 @@ fn native_history_replace_state(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    let state = args.first().cloned().unwrap_or(JsValue::Null);
     let url = args
         .get(2)
         .map(|value| i.to_string(value))
         .transpose()?
         .unwrap_or_else(|| i.location_url.clone());
     i.location_url = url.clone();
-    i.pending_history_update = Some((url, true));
+    i.set_history_state(state.clone());
+    i.pending_history_update = Some((url, true, state));
     Ok(JsValue::Undefined)
 }
 
@@ -6318,9 +6332,12 @@ mod tests {
         i.set_history_length(3);
         let length = i.run_script("history.length;").unwrap();
         assert_eq!(length, JsValue::num(3.0));
-        i.run_script("history.pushState({}, '', 'spa.html');").unwrap();
-        assert_eq!(i.take_history_update(), Some(("spa.html".into(), false)));
-        i.run_script("history.replaceState({}, '', 'spa2.html');").unwrap();
-        assert_eq!(i.take_history_update(), Some(("spa2.html".into(), true)));
+        let state_value = i.run_script("history.pushState({id:7}, '', 'spa.html'); history.state.id;").unwrap();
+        assert_eq!(state_value, JsValue::num(7.0));
+        let update = i.take_history_update().unwrap();
+        assert_eq!((&update.0, update.1), (&"spa.html".to_string(), false));
+        i.run_script("history.replaceState({id:8}, '', 'spa2.html');").unwrap();
+        let update = i.take_history_update().unwrap();
+        assert_eq!((&update.0, update.1), (&"spa2.html".to_string(), true));
     }
 }
