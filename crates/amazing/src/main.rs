@@ -298,6 +298,11 @@ impl amazing_js::DomHost for BrowserDomHost {
             url: response.url,
             status: response.status,
             body,
+            headers: response
+                .headers
+                .iter()
+                .map(|(name, value)| (name.to_string(), value.to_string()))
+                .collect(),
         })
     }
 

@@ -378,8 +378,8 @@ parents and expose `currentTarget`, `stopPropagation`, and `preventDefault`.
 active tab and enter its history. GUI anchor clicks perform the same default
 navigation unless a handler prevents the default. Page `fetch()` is host
 mediated and returns a minimal Promise-backed Response (`ok`, `status`, `url`,
-`text()`/`json()`); Promise resolution now adopts returned Promises for normal
-chains.
+`headers.get/has`, `text()`/`json()`); Promise resolution now adopts returned
+Promises for normal chains.
 
 ## Later phases (unchanged from goal prompt)
 

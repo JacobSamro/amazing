@@ -45,6 +45,7 @@ pub struct HostResponse {
     pub url: String,
     pub status: u16,
     pub body: String,
+    pub headers: Vec<(String, String)>,
 }
 
 struct CallFrame {
@@ -3185,6 +3186,20 @@ fn fetch_response(i: &mut Interpreter, response: HostResponse) -> JsValue {
         object.borrow_mut().set_own("status", JsValue::num(response.status as f64));
         object.borrow_mut().set_own("url", JsValue::str(response.url));
         object.borrow_mut().set_own("[[Body]]", JsValue::str(response.body));
+        let mut headers = JsObject::ordinary();
+        headers.proto = Some(i.object_proto.clone());
+        for (name, value) in response.headers {
+            headers.set_own(&name.to_ascii_lowercase(), JsValue::str(value));
+        }
+        headers.set_own(
+            "get",
+            Interpreter::native("get", native_response_headers_get, &i.function_proto),
+        );
+        headers.set_own(
+            "has",
+            Interpreter::native("has", native_response_headers_has, &i.function_proto),
+        );
+        object.borrow_mut().set_own("headers", JsValue::object(headers));
         object.borrow_mut().set_own(
             "text",
             Interpreter::native("text", native_response_text, &i.function_proto),
@@ -3226,6 +3241,30 @@ fn native_response_json(
         .unwrap_or(JsValue::str(""));
     let value = native_json_parse(i, JsValue::Undefined, vec![body])?;
     Ok(new_promise(i, PromiseFate::Fulfilled(value)))
+}
+
+fn native_response_headers_get(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(headers) = this else {
+        return Err(Throw::type_error("Headers.get receiver is not an object"));
+    };
+    let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?.to_ascii_lowercase();
+    Ok(headers.borrow().get_own(&name).unwrap_or(JsValue::Null))
+}
+
+fn native_response_headers_has(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(headers) = this else {
+        return Err(Throw::type_error("Headers.has receiver is not an object"));
+    };
+    let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?.to_ascii_lowercase();
+    Ok(JsValue::Bool(headers.borrow().get_own(&name).is_some()))
 }
 
 fn native_dom_get_attribute(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {

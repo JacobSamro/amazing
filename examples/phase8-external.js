@@ -8,5 +8,5 @@ if (title.innerHTML === 'before') { title.innerHTML = 'before'; title.setAttribu
 title.onclick = (event) => { title.textContent = event.type + '!'; title.style.color = 'red'; };
 title.addEventListener('click', () => title.setAttribute('data-clicked', 'yes'));
 setTimeout(() => title.setAttribute('data-timer', 'yes'), 0);
-fetch('phase8-data.txt').then((response) => response.text()).then((text) => title.setAttribute('data-fetch', text));
+fetch('phase8-data.txt').then((response) => { if (response.headers.has('content-type')) title.setAttribute('data-header', response.headers.get('content-type')); return response.text(); }).then((text) => title.setAttribute('data-fetch', text));
 fetch('phase8-data.json').then((response) => response.json()).then((value) => title.setAttribute('data-json', value.value));

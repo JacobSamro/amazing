@@ -1156,6 +1156,7 @@ mod windows {
             assert_eq!(host.get_attribute(node, "data-dom-api"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-inner"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-fetch"), Some(Some("fetched\n".into())));
+            assert_eq!(host.get_attribute(node, "data-header"), Some(Some("text/plain; charset=utf-8".into())));
             assert_eq!(host.get_attribute(node, "data-json"), Some(Some("json-ok".into())));
             assert_eq!(host.get_attribute(node, "data-clicked"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-bubbled"), Some(Some("yes".into())));
