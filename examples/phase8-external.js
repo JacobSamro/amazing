@@ -9,3 +9,4 @@ title.onclick = (event) => { title.textContent = event.type + '!'; title.style.c
 title.addEventListener('click', () => title.setAttribute('data-clicked', 'yes'));
 setTimeout(() => title.setAttribute('data-timer', 'yes'), 0);
 fetch('phase8-data.txt').then((response) => response.text()).then((text) => title.setAttribute('data-fetch', text));
+fetch('phase8-data.json').then((response) => response.json()).then((value) => title.setAttribute('data-json', value.value));

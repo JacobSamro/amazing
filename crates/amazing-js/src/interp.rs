@@ -3189,6 +3189,10 @@ fn fetch_response(i: &mut Interpreter, response: HostResponse) -> JsValue {
             "text",
             Interpreter::native("text", native_response_text, &i.function_proto),
         );
+        object.borrow_mut().set_own(
+            "json",
+            Interpreter::native("json", native_response_json, &i.function_proto),
+        );
     }
     object
 }
@@ -3206,6 +3210,22 @@ fn native_response_text(
         .get_own("[[Body]]")
         .unwrap_or(JsValue::str(""));
     Ok(new_promise(i, PromiseFate::Fulfilled(body)))
+}
+
+fn native_response_json(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = this else {
+        return Err(Throw::type_error("Response.json receiver is not an object"));
+    };
+    let body = object
+        .borrow()
+        .get_own("[[Body]]")
+        .unwrap_or(JsValue::str(""));
+    let value = native_json_parse(i, JsValue::Undefined, vec![body])?;
+    Ok(new_promise(i, PromiseFate::Fulfilled(value)))
 }
 
 fn native_dom_get_attribute(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
