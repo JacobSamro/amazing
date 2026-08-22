@@ -302,8 +302,8 @@ covered by the runtime milestone.
 
 Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
 script, prints captured console lines, then its completion value. The
-interpreter has 23 focused runtime tests; `cargo test --workspace` is green
-on win-001 (140 tests in `amazing-js`).
+interpreter's focused runtime coverage is included in the `amazing-js` suite;
+`cargo test --workspace` is green on win-001 (140 tests in `amazing-js`).
 
 Conformance evidence: the official Test262 repository was shallow-sparsely
 checked out on win-001 with 641 tests across the selected classic-language
