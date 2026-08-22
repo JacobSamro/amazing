@@ -398,16 +398,7 @@ impl Interpreter {
             StmtKind::ForOf { left, right, body } => {
                 self.completion = JsValue::Undefined;
                 let v = self.eval_expr(right, env)?;
-                for x in self.iterate(&v)? {
-                    let iteration_env = for_iteration_env(left, env);
-                    self.bind_for(left, x, &iteration_env)?;
-                    match self.exec_stmt(body, &iteration_env)? {
-                        Flow::Normal | Flow::Continue(None) => {}
-                        Flow::Break(None) => break,
-                        x => return Ok(x),
-                    }
-                }
-                Ok(Flow::Normal)
+                self.exec_for_of(left, &v, body, env)
             }
             StmtKind::Switch { disc, cases } => {
                 self.completion = JsValue::Undefined;
@@ -1683,6 +1674,81 @@ impl Interpreter {
         if callable_function(&return_method).is_some() {
             let _ = self.call_value(&return_method, iterator.clone(), Vec::new());
         }
+    }
+
+    fn exec_for_of(
+        &mut self,
+        left: &ForLeft,
+        iterable: &JsValue,
+        body: &ast::Stmt,
+        env: &EnvHandle,
+    ) -> Result<Flow, Throw> {
+        let custom_next = match iterable {
+            JsValue::Object(object) if !matches!(object.borrow().exotic, Exotic::Array) => {
+                let next = self.get_prop(iterable, "next")?;
+                callable_function(&next).is_some()
+            }
+            _ => false,
+        };
+        if !custom_next {
+            for value in self.iterate(iterable)? {
+                let iteration_env = for_iteration_env(left, env);
+                self.bind_for(left, value, &iteration_env)?;
+                match self.exec_stmt(body, &iteration_env)? {
+                    Flow::Normal | Flow::Continue(None) => {}
+                    Flow::Break(None) => break,
+                    flow => return Ok(flow),
+                }
+            }
+            return Ok(Flow::Normal);
+        }
+        loop {
+            let next = self.get_prop(iterable, "next")?;
+            let result = match self.call_value(&next, iterable.clone(), Vec::new()) {
+                Ok(result) => result,
+                Err(error) => {
+                    self.close_iterator(iterable);
+                    return Err(error);
+                }
+            };
+            let result_object = match result {
+                JsValue::Object(object) => object,
+                _ => {
+                    self.close_iterator(iterable);
+                    return Err(Throw::type_error("iterator result is not an object"));
+                }
+            };
+            if result_object
+                .borrow()
+                .get_own("done")
+                .map(|value| value.to_boolean())
+                .unwrap_or(false)
+            {
+                break;
+            }
+            let value = result_object
+                .borrow()
+                .get_own("value")
+                .unwrap_or(JsValue::Undefined);
+            let iteration_env = for_iteration_env(left, env);
+            self.bind_for(left, value, &iteration_env)?;
+            match self.exec_stmt(body, &iteration_env) {
+                Ok(Flow::Normal | Flow::Continue(None)) => {}
+                Ok(Flow::Break(None)) => {
+                    self.close_iterator(iterable);
+                    break;
+                }
+                Ok(flow) => {
+                    self.close_iterator(iterable);
+                    return Ok(flow);
+                }
+                Err(error) => {
+                    self.close_iterator(iterable);
+                    return Err(error);
+                }
+            }
+        }
+        Ok(Flow::Normal)
     }
     fn typeof_value(&self, v: &JsValue) -> &'static str {
         match v {
@@ -3636,6 +3702,11 @@ mod tests {
         let mut r = Interpreter::new();
         let value = r
             .run_script("let closed=0; let it={next:function(){throw 'stop';},return:function(){closed++;}}; try {[...it];} catch(e) {} closed;")
+            .unwrap();
+        assert_eq!(num(value), 1.0);
+        let mut s = Interpreter::new();
+        let value = s
+            .run_script("let closed=0; let n=0; let it={next:function(){n++;return {value:n,done:n>3};},return:function(){closed++;}}; try { for (const x of it) { if (x===2) throw 'stop'; } } catch(e) {} closed;")
             .unwrap();
         assert_eq!(num(value), 1.0);
     }
