@@ -17,7 +17,10 @@ const PIPELINE: &[(&str, &str)] = &[
         "amazing-css",
         "Phase 2: syntax 3 + selectors + cascade — `style` subcommand",
     ),
-    ("amazing-layout", "Phase 3: block/inline FC — not started"),
+    (
+        "amazing-layout",
+        "Phase 3: block/inline FC layout — `layout` subcommand",
+    ),
     ("amazing-paint", "Phase 4: software rasterizer — not started"),
     ("amazing-net", "Phase 5: HTTP/1.1 — not started"),
     ("amazing-js", "Phase 6: ECMA-262 interpreter — not started"),
@@ -37,9 +40,10 @@ fn main() -> ExitCode {
         },
         Some("parse") => cmd_parse(args.get(2).map(String::as_str)),
         Some("style") => cmd_style(&args[2..]),
+        Some("layout") => cmd_layout(&args[2..]),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]]");
             ExitCode::FAILURE
         },
     }
@@ -130,8 +134,7 @@ fn cmd_style(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn collect_style_text(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut String) {
-    if dom.name(node) == Some("style") {
+fn collect_style_text(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut String) {    if dom.name(node) == Some("style") {
         for child in dom.children(node) {
             if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
                 out.push_str(data);
@@ -171,4 +174,47 @@ fn print_styled(
     for child in dom.children(node) {
         print_styled(dom, child, child_depth, styled);
     }
+}
+
+/// Phase 3 demo artifact: lay out an HTML page and print the layout tree —
+/// every box with its absolute border/content rectangles, plus line boxes
+/// with placed word fragments.
+///
+/// Viewport width comes from the second argument (default 800px).
+/// Stylesheets: inline `<style>` elements + extra CSS file arguments, same
+/// as `amazing style`. Text measurement uses the built-in fallback font
+/// metrics (a real TTF can be plugged in later phases).
+fn cmd_layout(args: &[String]) -> ExitCode {
+    let html_path = match args.first() {
+        Some(p) => p,
+        None => {
+            eprintln!("usage: amazing layout <page.html> [viewport_width]");
+            return ExitCode::FAILURE;
+        },
+    };
+    let width: f32 = args.get(1).and_then(|w| w.parse().ok()).unwrap_or(800.0);
+
+    let html = match read_source(Some(html_path), "layout") {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let dom = amazing_html::parse(&html);
+
+    // Author CSS: <style> elements + extra files (same policy as `style`).
+    let mut css = String::new();
+    collect_style_text(&dom, amazing_dom::NodeIdx(0), &mut css);
+    for extra in args.get(2..).unwrap_or(&[]) {
+        match read_source(Some(extra), "layout") {
+            Ok(s) => {
+                css.push('\n');
+                css.push_str(&s);
+            },
+            Err(code) => return code,
+        }
+    }
+
+    let fonts = amazing_layout::font::FontSource::fallback();
+    let root = amazing_layout::layout_document(&html, &css, width, &fonts);
+    print!("{}", amazing_layout::dump_layout(&dom, &root));
+    ExitCode::SUCCESS
 }

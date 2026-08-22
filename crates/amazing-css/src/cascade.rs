@@ -51,6 +51,18 @@ impl ComputedStyle {
     }
 }
 
+/// Collecting (property, value) pairs into a style — used by callers that
+/// synthesize styles (tests, demos) rather than cascading them.
+impl FromIterator<(String, String)> for ComputedStyle {
+    fn from_iter<I: IntoIterator<Item = (String, String)>>(iter: I) -> Self {
+        let mut s = ComputedStyle::default();
+        for (prop, value) in iter {
+            s.insert(prop.to_ascii_lowercase(), value);
+        }
+        s
+    }
+}
+
 /// Computed styles for a whole document, keyed by arena index.
 #[derive(Debug, Default)]
 pub struct StyledDom {
@@ -213,10 +225,24 @@ fn compute_one(
     ua_rules: &[CompiledRule],
     author_rules: &[CompiledRule],
 ) -> ComputedStyle {
-    // Collect champions per property. Keys borrow from the rule/inline
-    // declarations below; both outlive this function's use of `champs`.
-    let mut champs: BTreeMap<&str, Candidate<'_>> = BTreeMap::new();
+    /// One declaration after shorthand expansion, flattened with the
+    /// cascade metadata inherited from its source.
+    struct FlatDecl {
+        prop: String,
+        value: String,
+        important: bool,
+        inline: bool,
+        ua: bool,
+        spec: Specificity,
+        order: u32,
+    }
 
+    // Collect declarations from every matching rule plus the inline
+    // style="" attribute into one owned pool, expanding box/border
+    // shorthands so each longhand cascades independently — an author
+    // `border: 5px solid` must beat a UA `border-top-style: none`
+    // even though the computed map is flat.
+    let mut pool: Vec<FlatDecl> = Vec::new();
     for rule in ua_rules.iter().chain(author_rules.iter()) {
         let matched = rule
             .selectors
@@ -226,33 +252,50 @@ fn compute_one(
             continue;
         }
         for decl in &rule.decls {
-            let cand = Candidate {
-                value: &decl.value,
-                important: decl.important,
-                inline: false,
-                ua: rule.ua,
-                spec: rule.selectors.iter().map(|(_, s)| *s).max().unwrap_or_default(),
-                order: rule.order,
-            };
-            consider(&mut champs, &decl.property, cand);
+            for (p, v) in expand_shorthand(&decl.property, &decl.value) {
+                pool.push(FlatDecl {
+                    prop: p,
+                    value: v,
+                    important: decl.important,
+                    inline: false,
+                    ua: rule.ua,
+                    spec: rule.selectors.iter().map(|(_, s)| *s).max().unwrap_or_default(),
+                    order: rule.order,
+                });
+            }
         }
     }
-
-    // Inline style="" attribute: author origin, beats every sheet rule.
-    // Bound first so the candidates can borrow from it for the function body.
+    // Inline style="": author origin, beats every sheet rule.
     let inline_decls = attr_of(dom, el, "style")
         .map(parse_declarations)
         .unwrap_or_default();
     for decl in &inline_decls {
+        for (p, v) in expand_shorthand(&decl.property, &decl.value) {
+            pool.push(FlatDecl {
+                prop: p,
+                value: v,
+                important: decl.important,
+                inline: true,
+                ua: false,
+                spec: Specificity::default(),
+                order: 0,
+            });
+        }
+    }
+
+    // Collect champions per property. Keys/values borrow from `pool`,
+    // which is frozen from here on and outlives the loop below.
+    let mut champs: BTreeMap<&str, Candidate<'_>> = BTreeMap::new();
+    for d in &pool {
         let cand = Candidate {
-            value: &decl.value,
-            important: decl.important,
-            inline: true,
-            ua: false,
-            spec: Specificity::default(),
-            order: 0,
+            value: &d.value,
+            important: d.important,
+            inline: d.inline,
+            ua: d.ua,
+            spec: d.spec,
+            order: d.order,
         };
-        consider(&mut champs, &decl.property, cand);
+        consider(&mut champs, &d.prop, cand);
     }
 
     // Merge: cascaded winner > inherited (inheritable props only) > initial.
@@ -291,6 +334,103 @@ fn attr_of<'d>(dom: &'d Dom, el: NodeIdx, name: &str) -> Option<&'d str> {
         .iter()
         .find(|kv| kv.0 == name)
         .map(|(_, v)| v.as_str())
+}
+
+// ---------------------------------------------------------------------------
+// Shorthand expansion
+// ---------------------------------------------------------------------------
+
+/// Expands the box/border shorthands this engine tracks into their
+/// longhand (property, value) pairs; every other property passes through
+/// unchanged. Expansion happens BEFORE cascading so each longhand competes
+/// with its source's origin and specificity (CSS2.1 §8.1–§8.5 shorthand
+/// semantics), which the flat computed-value map could not express.
+fn expand_shorthand(prop: &str, value: &str) -> Vec<(String, String)> {
+    const SIDES: [&str; 4] = ["top", "right", "bottom", "left"];
+    let parts: Vec<&str> = value.split_ascii_whitespace().collect();
+    match prop {
+        // 1–4 value replication (CSS2.1 §8.3): t | t r | t r b | t r b l.
+        "margin" | "padding" | "border-width" | "border-style" | "border-color" => {
+            if parts.is_empty() {
+                return vec![(prop.to_owned(), value.to_owned())];
+            }
+            SIDES
+                .iter()
+                .enumerate()
+                .map(|(i, side)| {
+                    let v = parts[replicate_index(parts.len(), i)];
+                    (longhand_name(prop, side), v.to_owned())
+                })
+                .collect()
+        },
+        // `border: <line-width> || <line-style> || <color>` — components in
+        // any order; omitted ones reset to their initial values on all sides.
+        "border" if !parts.is_empty() => {
+            let mut w = "medium";
+            let mut st = "none";
+            let mut co = "currentcolor";
+            for p in &parts {
+                if is_border_style(p) {
+                    st = p;
+                } else if is_border_width(p) {
+                    w = p;
+                } else {
+                    co = p;
+                }
+            }
+            let mut out = Vec::with_capacity(12);
+            for side in SIDES {
+                out.push((format!("border-{side}-width"), w.to_owned()));
+                out.push((format!("border-{side}-style"), st.to_owned()));
+                out.push((format!("border-{side}-color"), co.to_owned()));
+            }
+            out
+        },
+        _ => vec![(prop.to_owned(), value.to_owned())],
+    }
+}
+
+/// Replication of a 1–4 component list onto side `i` (t r b l).
+fn replicate_index(n: usize, i: usize) -> usize {
+    match n {
+        0 => 0,
+        1 => 0,
+        2 => i % 2,
+        3 if i == 3 => 1,
+        3 => i.min(2),
+        _ => i.min(3),
+    }
+}
+
+/// `margin` → `margin-top`; `border-width` → `border-top-width`.
+fn longhand_name(shorthand: &str, side: &str) -> String {
+    match shorthand.rsplit_once('-') {
+        Some((head, tail)) => format!("{head}-{side}-{tail}"),
+        None => format!("{shorthand}-{side}"),
+    }
+}
+
+fn is_border_style(s: &str) -> bool {
+    matches!(
+        s.to_ascii_lowercase().as_str(),
+        "none" | "hidden" | "dotted" | "dashed" | "solid"
+            | "double" | "groove" | "ridge" | "inset" | "outset"
+    )
+}
+
+/// Width keywords or anything that starts like a length/percentage
+/// (no color keyword begins with a digit or sign).
+fn is_border_width(s: &str) -> bool {
+    if matches!(
+        s.to_ascii_lowercase().as_str(),
+        "thin" | "medium" | "thick"
+    ) {
+        return true;
+    }
+    matches!(
+        s.chars().next(),
+        Some('0'..='9') | Some('.') | Some('-') | Some('+')
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -467,7 +607,10 @@ mod tests {
         let styled = compute(&dom, &[]);
         let body = styled.get(els[3]).unwrap();
         assert_eq!(body.get("display"), Some("block"));
-        assert_eq!(body.get("margin"), Some("8px"));
+        // The UA `margin: 8px` shorthand expands into per-side longhands.
+        for side in ["top", "right", "bottom", "left"] {
+            assert_eq!(body.get(&format!("margin-{side}")), Some("8px"));
+        }
         // Inherited from html's UA rule.
         assert_eq!(body.get("font-family"), Some("serif"));
         assert_eq!(body.get("font-size"), Some("16px"));
@@ -478,6 +621,23 @@ mod tests {
         assert_eq!(styled.get(els[1]).unwrap().get("display"), Some("none"));
         // Heading picked up its UA font-size.
         assert_eq!(styled.get(els[4]).unwrap().get("font-size"), Some("2em"));
+    }
+
+    #[test]
+    fn author_border_shorthand_beats_ua_longhands() {
+        // Regression: the UA sheet declares border-*-style:none longhands;
+        // without pre-cascade expansion they would outrank an author
+        // `border:` shorthand in the flat computed map.
+        let (mut dom, els) = fixture();
+        dom.set_attrs(
+            els[5],
+            vec![("style".into(), "border: 5px solid black".into())],
+        );
+        let styled = compute(&dom, &[]);
+        let p = styled.get(els[5]).unwrap();
+        assert_eq!(p.get("border-top-width"), Some("5px"));
+        assert_eq!(p.get("border-top-style"), Some("solid"));
+        assert_eq!(p.get("border-left-color"), Some("black"));
     }
 
     #[test]
@@ -618,13 +778,13 @@ mod tests {
 
         let body_delta = styled.delta_from_parent(els[3], Some(els[0]));
         // body differs from html by display/margin; font props are equal.
-        assert!(body_delta.iter().any(|(k, v)| k == "margin" && v == "8px"));
+        assert!(body_delta.iter().any(|(k, v)| k == "margin-top" && v == "8px"));
         assert!(body_delta.iter().all(|(k, _)| k != "font-family"));
 
         // p vs body: color override + UA margin difference. Both are
         // display:block per the UA sheet, so display is not a delta.
         let p_delta = styled.delta_from_parent(els[5], Some(els[3]));
-        for (prop, want) in [("color", "red"), ("margin", "1em 0")] {
+        for (prop, want) in [("color", "red"), ("margin-top", "1em")] {
             assert!(
                 p_delta.iter().any(|(k, v)| k == prop && v == want),
                 "p delta missing {prop}: {want} — got {p_delta:?}"

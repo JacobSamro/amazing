@@ -11,7 +11,8 @@
 | 0 — skeleton | ✅ done, all exit criteria met on win-001 |
 | 1 — HTML parser | ✅ done on win-001 (51 workspace tests green) — see report gaps |
 | 2 — CSS | ✅ done on win-001 (88 workspace tests green) — see Phase 2 section |
-| 3–9 | not started |
+| 3 — Layout | ✅ done on win-001 (workspace green; curated css/CSS2 subset 17/17) |
+| 3.5–9 | in progress (paint/net/js crates being authored) |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -164,6 +165,38 @@ Known gaps (deferred, in module docs): no shorthand→longhand expansion;
 at-rule bodies not interpreted (`@media` etc. dropped); custom properties,
 `var()`, pseudo-elements, namespaces, `:lang()`, `nth- of S` unsupported;
 presentational attributes ignored; interactive pseudos never match.
+*(Update, Phase 3: margin/padding/border-width/style/color and the full
+`border:` shorthand now DO expand into longhands before cascading —
+see cascade.rs `expand_shorthand`.)*
+
+## Phase 3 — DONE (win-001, all tests green)
+
+Shipped: `amazing-layout` (std-only) with `values.rs` (lengths px…rem/%,
+auto, font-size ladder, line-height forms, shorthand+longhand layering for
+margin/padding/border), `box_tree.rs` (§9.2 display classification,
+anonymous blocks around inline runs, span flattening at own font size,
+block-hoisting, display:none pruning, `<br>` markers), `font.rs` (panic-free
+sfnt/TTF metrics parser: head/hhea/maxp/hmtx, cmap format 4 incl.
+idRangeOffset cross-segment addressing and format 12 bonus, plus a fallback
+metric font so layout works without a real font file), `block.rs`
+(§10.3.3 constraint equation with auto-margin centering, auto/specified
+heights, sibling max-rule collapse, first/last-child collapse
+approximation vs parent margins, padding/border separation),
+`inline.rs` (strut-based line boxes, whitespace collapse, greedy wrap,
+`<br>` handling, half-leading baselines). Driver: `amazing layout
+page.html [width] [extra.css…]` demo subcommand +
+`crates/amazing/tests/phase3_layout.rs` curated WPT css/CSS2-subset gate
+(17 named cases, prints PASS/FAIL report). Demo: `cargo run -p amazing --
+layout examples/layout.html`.
+
+Known gaps (deferred, in module docs): floats/abs-pos none; parent-child
+margin collapse approximated inside the parent instead of propagating
+through; inline-block flattened as plain inline; min/max-width, box-sizing,
+text-align, images ignored; one strut per block (no per-line mixed-font
+metrics beyond word widths); percentage heights stay auto; TTF glyph
+OUTLINES not parsed (advance/metrics only — paint draws placeholder ink).
+WPT css/CSS2 pass-rate tracking = this curated subset until full WPT
+harness lands.
 
 ## Later phases (unchanged from goal prompt)
 
