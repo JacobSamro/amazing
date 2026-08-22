@@ -47,14 +47,20 @@ mod windows {
     const WM_PAINT: Uint = 0x000f;
     const WM_SIZE: Uint = 0x0005;
     const WM_COMMAND: Uint = 0x0111;
+    const WM_MOUSEWHEEL: Uint = 0x020a;
+    const WM_KEYDOWN: Uint = 0x0100;
     const BN_CLICKED: u16 = 0;
     const GWLP_USERDATA: i32 = -21;
+    const GWLP_WNDPROC: i32 = -4;
+    const VK_RETURN: usize = 0x0d;
     const DIB_RGB_COLORS: u32 = 0;
     const ID_ADDRESS: usize = 101;
     const ID_GO: usize = 102;
     const ID_BACK: usize = 103;
     const ID_FORWARD: usize = 104;
-    const CONTROL_HEIGHT: i32 = 28;
+    const ID_NEW_TAB: usize = 105;
+    const ID_TAB_BASE: usize = 200;
+    const CONTROL_HEIGHT: i32 = 58;
 
     #[repr(C)]
     struct Point {
@@ -145,10 +151,12 @@ mod windows {
         fn DispatchMessageW(message: *const Msg) -> Lresult;
         fn GetMessageW(message: *mut Msg, hwnd: Hwnd, min: Uint, max: Uint) -> i32;
         fn GetModuleHandleW(name: *const u16) -> Hinstance;
+        fn GetParent(hwnd: Hwnd) -> Hwnd;
         fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
         fn InvalidateRect(hwnd: Hwnd, rect: *const Rect, erase: i32) -> i32;
         fn MoveWindow(hwnd: Hwnd, x: i32, y: i32, width: i32, height: i32, repaint: i32) -> i32;
         fn PostQuitMessage(code: i32);
+        fn CallWindowProcW(previous: isize, hwnd: Hwnd, message: Uint, w_param: Wparam, l_param: Lparam) -> Lresult;
         fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
         fn SetWindowTextW(hwnd: Hwnd, text: *const u16) -> i32;
         fn ShowWindow(hwnd: Hwnd, command: i32) -> i32;
@@ -178,31 +186,133 @@ mod windows {
         ) -> i32;
     }
 
+    struct Tab {
+        surface: Option<Surface>,
+        history: Vec<String>,
+        history_pos: usize,
+        scroll_y: i32,
+    }
+
+    impl Tab {
+        fn blank() -> Self {
+            Self {
+                surface: None,
+                history: Vec::new(),
+                history_pos: 0,
+                scroll_y: 0,
+            }
+        }
+
+        fn current_url(&self) -> Option<&str> {
+            self.history.get(self.history_pos).map(String::as_str)
+        }
+    }
+
     struct GuiState {
         hwnd: Hwnd,
+        instance: Hinstance,
         address: Hwnd,
         go: Hwnd,
         back: Hwnd,
         forward: Hwnd,
+        new_tab: Hwnd,
+        tab_buttons: Vec<Hwnd>,
+        tabs: Vec<Tab>,
+        active_tab: usize,
         width: u32,
-        surface: Option<Surface>,
-        history: Vec<String>,
-        history_pos: usize,
+        viewport_height: i32,
+        edit_previous_proc: isize,
     }
 
     impl GuiState {
-        fn new(hwnd: Hwnd) -> Self {
+        fn new(hwnd: Hwnd, instance: Hinstance) -> Self {
             Self {
                 hwnd,
+                instance,
                 address: null_mut(),
                 go: null_mut(),
                 back: null_mut(),
                 forward: null_mut(),
+                new_tab: null_mut(),
+                tab_buttons: Vec::new(),
+                tabs: Vec::new(),
+                active_tab: 0,
                 width: 1024,
-                surface: None,
-                history: Vec::new(),
-                history_pos: 0,
+                viewport_height: 700,
+                edit_previous_proc: 0,
             }
+        }
+
+        fn tab(&self) -> &Tab {
+            &self.tabs[self.active_tab]
+        }
+
+        fn tab_mut(&mut self) -> &mut Tab {
+            &mut self.tabs[self.active_tab]
+        }
+
+        fn active_button(&self) -> Hwnd {
+            self.tab_buttons
+                .get(self.active_tab)
+                .copied()
+                .unwrap_or(null_mut())
+        }
+
+        fn update_tab_button(&self) {
+            let label = self
+                .tab()
+                .current_url()
+                .map(|url| format!("{}: {}", self.active_tab + 1, url))
+                .unwrap_or_else(|| format!("{}: New tab", self.active_tab + 1));
+            set_window_text(self.active_button(), &label);
+        }
+
+        fn add_tab(&mut self) -> bool {
+            let index = self.tabs.len();
+            let class = wide("BUTTON");
+            let label = wide(&format!("{}: New tab", index + 1));
+            // SAFETY: the tab button is a child of the live top-level window;
+            // its UTF-16 buffers stay alive through the synchronous call.
+            let button = unsafe {
+                CreateWindowExW(
+                    0,
+                    class.as_ptr(),
+                    label.as_ptr(),
+                    WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                    4 + (index as i32 * 154),
+                    4,
+                    150,
+                    22,
+                    self.hwnd,
+                    (ID_TAB_BASE + index) as Hmenu,
+                    self.instance,
+                    null_mut(),
+                )
+            };
+            if button.is_null() {
+                return false;
+            }
+            self.tabs.push(Tab::blank());
+            self.tab_buttons.push(button);
+            true
+        }
+
+        fn activate_tab(&mut self, index: usize) {
+            if index >= self.tabs.len() {
+                return;
+            }
+            self.active_tab = index;
+            if let Some(url) = self.tab().current_url() {
+                set_window_text(self.address, url);
+                set_window_text(self.hwnd, &format!("Ferric — {url}"));
+            } else {
+                set_window_text(self.address, "about:blank");
+                set_window_text(self.hwnd, "Ferric — New tab");
+            }
+            self.update_tab_button();
+            // SAFETY: hwnd is the live top-level window owned by the message
+            // loop; invalidating it schedules a repaint only.
+            unsafe { InvalidateRect(self.hwnd, null(), 0) };
         }
 
         fn navigate(&mut self, input: String, record: bool) {
@@ -212,14 +322,17 @@ mod windows {
             }
             match render_page(&input, self.width) {
                 Ok(surface) => {
-                    self.surface = Some(surface);
+                    self.tab_mut().surface = Some(surface);
+                    self.tab_mut().scroll_y = 0;
                     if record {
-                        self.history.truncate(self.history_pos.saturating_add(1));
-                        self.history.push(input.clone());
-                        self.history_pos = self.history.len().saturating_sub(1);
+                        let tab = self.tab_mut();
+                        tab.history.truncate(tab.history_pos.saturating_add(1));
+                        tab.history.push(input.clone());
+                        tab.history_pos = tab.history.len().saturating_sub(1);
                     }
                     set_window_text(self.address, &input);
                     set_window_text(self.hwnd, &format!("Ferric — {input}"));
+                    self.update_tab_button();
                     // SAFETY: hwnd is the live top-level window owned by the
                     // message loop; invalidating it schedules a repaint only.
                     unsafe { InvalidateRect(self.hwnd, null(), 0) };
@@ -237,32 +350,61 @@ mod windows {
             // SAFETY: child handles were created by this state and remain
             // valid until the parent window is destroyed.
             unsafe {
-                MoveWindow(self.address, 4, 4, control_width - 300, 22, 1);
-                MoveWindow(self.go, control_width - 290, 4, 65, 22, 1);
-                MoveWindow(self.back, control_width - 215, 4, 65, 22, 1);
-                MoveWindow(self.forward, control_width - 140, 4, 65, 22, 1);
+                MoveWindow(self.address, 4, 32, control_width - 300, 22, 1);
+                MoveWindow(self.go, control_width - 290, 32, 65, 22, 1);
+                MoveWindow(self.back, control_width - 215, 32, 65, 22, 1);
+                MoveWindow(self.forward, control_width - 140, 32, 65, 22, 1);
+                MoveWindow(self.new_tab, control_width - 65, 4, 55, 22, 1);
+                for (index, button) in self.tab_buttons.iter().enumerate() {
+                    MoveWindow(*button, 4 + index as i32 * 154, 4, 150, 22, 1);
+                }
             }
-            if let Some(current) = self.history.get(self.history_pos).cloned() {
+            if let Some(current) = self.tab().current_url().map(str::to_owned) {
                 self.navigate(current, false);
             }
         }
 
+        fn set_viewport_height(&mut self, height: i32) {
+            self.viewport_height = (height - CONTROL_HEIGHT).max(1);
+            self.clamp_scroll();
+        }
+
+        fn clamp_scroll(&mut self) {
+            let max_scroll = self
+                .tab()
+                .surface
+                .as_ref()
+                .map(|surface| surface.height as i32 - self.viewport_height)
+                .unwrap_or(0)
+                .max(0);
+            let scroll = self.tab().scroll_y.clamp(0, max_scroll);
+            self.tab_mut().scroll_y = scroll;
+        }
+
+        fn scroll(&mut self, delta: i32) {
+            self.tab_mut().scroll_y = self.tab().scroll_y.saturating_add(delta);
+            self.clamp_scroll();
+            // SAFETY: hwnd is the live top-level window owned by the message
+            // loop; invalidating it schedules a repaint only.
+            unsafe { InvalidateRect(self.hwnd, null(), 0) };
+        }
+
         fn go_back(&mut self) {
-            if self.history_pos == 0 || self.history.is_empty() {
+            if self.tab().history_pos == 0 || self.tab().history.is_empty() {
                 return;
             }
-            self.history_pos -= 1;
-            if let Some(url) = self.history.get(self.history_pos).cloned() {
+            self.tab_mut().history_pos -= 1;
+            if let Some(url) = self.tab().current_url().map(str::to_owned) {
                 self.navigate(url, false);
             }
         }
 
         fn go_forward(&mut self) {
-            if self.history_pos + 1 >= self.history.len() {
+            if self.tab().history_pos + 1 >= self.tab().history.len() {
                 return;
             }
-            self.history_pos += 1;
-            if let Some(url) = self.history.get(self.history_pos).cloned() {
+            self.tab_mut().history_pos += 1;
+            if let Some(url) = self.tab().current_url().map(str::to_owned) {
                 self.navigate(url, false);
             }
         }
@@ -345,7 +487,7 @@ mod windows {
             return;
         }
         let paint = unsafe { paint.assume_init() };
-        if let Some(surface) = &state.surface {
+        if let Some(surface) = &state.tab().surface {
             let mut bgra = Vec::with_capacity(surface.pixels.len());
             for pixel in surface.pixels.chunks_exact(4) {
                 bgra.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
@@ -365,20 +507,28 @@ mod windows {
                     clr_important: 0,
                 },
             };
+            let scroll = state.tab().scroll_y.max(0) as usize;
+            let stride = surface.width as usize * 4;
+            let skip = scroll.saturating_mul(stride).min(bgra.len());
+            let visible = surface
+                .height
+                .saturating_sub(scroll as u32)
+                .min(state.viewport_height.max(1) as u32);
             // SAFETY: bgra and info remain alive for the synchronous GDI call;
-            // dimensions and stride match the owned Surface pixel buffer.
+            // the source pointer starts at the selected top row and dimensions
+            // match the owned Surface pixel buffer.
             unsafe {
                 SetDIBitsToDevice(
                     hdc,
                     0,
                     CONTROL_HEIGHT,
                     surface.width,
-                    surface.height,
+                    visible,
                     0,
                     0,
                     0,
-                    surface.height,
-                    bgra.as_ptr().cast(),
+                    visible,
+                    bgra[skip..].as_ptr().cast(),
                     &info,
                     DIB_RGB_COLORS,
                 );
@@ -386,6 +536,38 @@ mod windows {
         }
         // SAFETY: paint was initialized by BeginPaint and belongs to hwnd.
         unsafe { EndPaint(hwnd, &paint) };
+    }
+
+    unsafe extern "system" fn edit_proc(
+        hwnd: Hwnd,
+        message: Uint,
+        w_param: Wparam,
+        l_param: Lparam,
+    ) -> Lresult {
+        if message == WM_KEYDOWN && w_param == VK_RETURN {
+            // SAFETY: the EDIT control's parent is the top-level window that
+            // owns the GUI state; both handles are live during the message.
+            let parent = unsafe { GetParent(hwnd) };
+            let state_ptr = unsafe { GetWindowLongPtrW(parent, GWLP_USERDATA) as *mut GuiState };
+            if !state_ptr.is_null() {
+                let state = unsafe { &mut *state_ptr };
+                state.navigate(window_text(hwnd), true);
+                return 0;
+            }
+        }
+        let parent = unsafe { GetParent(hwnd) };
+        let state_ptr = unsafe { GetWindowLongPtrW(parent, GWLP_USERDATA) as *mut GuiState };
+        let previous = if state_ptr.is_null() {
+            0
+        } else {
+            unsafe { (*state_ptr).edit_previous_proc }
+        };
+        if previous == 0 {
+            return unsafe { DefWindowProcW(hwnd, message, w_param, l_param) };
+        }
+        // SAFETY: previous is the original EDIT window procedure returned by
+        // SetWindowLongPtrW; forwarding preserves native edit behavior.
+        unsafe { CallWindowProcW(previous, hwnd, message, w_param, l_param) }
     }
 
     unsafe extern "system" fn window_proc(
@@ -398,17 +580,37 @@ mod windows {
         match message {
             WM_COMMAND if !state_ptr.is_null() && high_word(w_param) == BN_CLICKED => {
                 let state = unsafe { &mut *state_ptr };
-                match low_word(w_param) {
+                let command = low_word(w_param);
+                match command {
                     ID_GO => state.navigate(window_text(state.address), true),
                     ID_BACK => state.go_back(),
                     ID_FORWARD => state.go_forward(),
+                    ID_NEW_TAB => {
+                        if state.add_tab() {
+                            let index = state.tabs.len() - 1;
+                            state.active_tab = index;
+                            state.resize(state.width);
+                            state.activate_tab(index);
+                        }
+                    }
+                    id if id >= ID_TAB_BASE && id < ID_TAB_BASE + state.tabs.len() => {
+                        state.activate_tab(id - ID_TAB_BASE);
+                    }
                     _ => {}
                 }
                 0
             }
             WM_SIZE if !state_ptr.is_null() => {
                 let width = (l_param as usize & 0xffff) as u32;
-                unsafe { &mut *state_ptr }.resize(width);
+                let height = ((l_param as usize >> 16) & 0xffff) as i32;
+                let state = unsafe { &mut *state_ptr };
+                state.set_viewport_height(height);
+                state.resize(width);
+                0
+            }
+            WM_MOUSEWHEEL if !state_ptr.is_null() => {
+                let delta = ((w_param >> 16) & 0xffff) as u16 as i16;
+                unsafe { &mut *state_ptr }.scroll(if delta > 0 { -96 } else { 96 });
                 0
             }
             WM_PAINT if !state_ptr.is_null() => {
@@ -475,13 +677,14 @@ mod windows {
             return ExitCode::FAILURE;
         }
 
-        let mut state = Box::new(GuiState::new(hwnd));
+        let mut state = Box::new(GuiState::new(hwnd, instance));
         let edit_class = wide("EDIT");
         let button_class = wide("BUTTON");
         let address_text = wide(initial.unwrap_or("examples/sample.html"));
         let go_text = wide("Go");
         let back_text = wide("Back");
         let forward_text = wide("Forward");
+        let new_tab_text = wide("+");
         // SAFETY: child controls use the just-created parent and stable UTF-16
         // class/text buffers; handles are retained in GuiState for the loop.
         unsafe {
@@ -541,15 +744,43 @@ mod windows {
                 instance,
                 null_mut(),
             );
+            state.new_tab = CreateWindowExW(
+                0,
+                button_class.as_ptr(),
+                new_tab_text.as_ptr(),
+                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                1035,
+                4,
+                55,
+                22,
+                hwnd,
+                ID_NEW_TAB as Hmenu,
+                instance,
+                null_mut(),
+            );
         }
-        if state.address.is_null() || state.go.is_null() || state.back.is_null() || state.forward.is_null() {
+        if state.address.is_null() || state.go.is_null() || state.back.is_null() || state.forward.is_null() || state.new_tab.is_null() {
             eprintln!("amazing gui: could not create navigation controls");
+            return ExitCode::FAILURE;
+        }
+        if !state.add_tab() {
+            eprintln!("amazing gui: could not create the initial tab control");
             return ExitCode::FAILURE;
         }
         let state_ptr = Box::into_raw(state);
         // SAFETY: state_ptr remains allocated until the message loop exits;
         // GWLP_USERDATA stores it only as an opaque per-window value.
         unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, state_ptr as isize) };
+        // SAFETY: edit_proc is an ABI-compatible subclass procedure and the
+        // returned value is retained so unhandled edit messages can be
+        // forwarded to the stock EDIT procedure.
+        unsafe {
+            (*state_ptr).edit_previous_proc = SetWindowLongPtrW(
+                (*state_ptr).address,
+                GWLP_WNDPROC,
+                edit_proc as *const () as usize as isize,
+            );
+        }
         unsafe { &mut *state_ptr }.navigate(initial.unwrap_or("examples/sample.html").to_owned(), true);
         // SAFETY: hwnd is a valid top-level window and the message-loop calls
         // follow the Win32 lifetime contract.
