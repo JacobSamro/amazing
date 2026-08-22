@@ -322,25 +322,29 @@ The `Symbol.iterator` key bridge, lazy `next()` consumption, and abrupt-body
 closing are implemented. The runtime is
 a milestone, not Phase 6 exit-criteria completion.
 
-## Phase 7 (DOM/JS bridge) — tracer slice landed (win-001 green)
+## Phase 7 (DOM/JS bridge) — interactive tracer slice landed (win-001 green)
 
 Shipped: `amazing_js::DomHost` keeps the JS core independent of arena DOM
 types while exposing live node wrappers. The driver implements a bounded,
 mutation-capable surface: `document.querySelector` (tag/id/class selectors),
 `document.createElement`, element `textContent`, `getAttribute`,
-`setAttribute`, and `append` for nodes or text. Detached nodes are reparented
-through the arena's existing attach/detach API.
+`setAttribute`, `append` for nodes or text, `element.style` inline properties,
+`onclick`, `addEventListener`, `removeEventListener`, and `click()` event
+dispatch. Detached nodes are reparented through the arena's existing
+attach/detach API; callbacks remain JS values owned by the interpreter.
 
 Driver: `amazing domrun <page.html> <script.js>` executes a classic script,
 prints captured console output and the completion value, then dumps the
 mutated DOM. The end-to-end fixture `examples/phase7.html` +
 `examples/phase7.js` was run on win-001: `before` became `after`, an
-attribute was written, and a new `<span>` child was appended. Full
-`cargo test --workspace` remains green on win-001.
+attribute was written, a click handler changed text and inline color, a
+listener wrote a second attribute, and a new `<span>` child was appended.
+Full `cargo test --workspace` remains green on win-001.
 
 Known gaps: selector coverage is intentionally limited to a single simple
-selector; there is no event dispatch, style/layout invalidation, HTML parser
-script scheduling, or browser window/global object yet.
+selector; styles are represented as inline declarations but do not yet
+trigger layout/paint invalidation; there is no HTML parser script scheduling
+or browser window/global object yet.
 
 ## Later phases (unchanged from goal prompt)
 

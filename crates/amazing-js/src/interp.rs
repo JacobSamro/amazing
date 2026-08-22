@@ -35,6 +35,14 @@ struct CallFrame {
     home: Option<Obj>,
 }
 
+#[derive(Clone)]
+struct DomListener {
+    node: u32,
+    event: String,
+    callback: JsValue,
+    property: bool,
+}
+
 enum Reference {
     Binding(String),
     Property(JsValue, String),
@@ -54,6 +62,8 @@ pub trait DomHost {
     fn create_element(&mut self, name: &str) -> Result<u32, String>;
     fn append_child(&mut self, parent: u32, child: u32) -> Result<(), String>;
     fn append_text(&mut self, parent: u32, text: &str) -> Result<(), String>;
+    fn get_style(&self, node: u32, property: &str) -> Option<String>;
+    fn set_style(&mut self, node: u32, property: &str, value: &str) -> Result<(), String>;
 }
 
 pub struct Interpreter {
@@ -73,6 +83,7 @@ pub struct Interpreter {
     completion: JsValue,
     frames: Vec<CallFrame>,
     dom_host: Option<Rc<RefCell<dyn DomHost>>>,
+    dom_listeners: Vec<DomListener>,
 }
 
 impl Interpreter {
@@ -131,6 +142,7 @@ impl Interpreter {
             completion: JsValue::Undefined,
             frames: Vec::new(),
             dom_host: None,
+            dom_listeners: Vec::new(),
         };
         i.global_obj
             .borrow_mut()
@@ -147,6 +159,59 @@ impl Interpreter {
             .borrow_mut()
             .set_own("document", document.clone());
         let _ = self.global_env.declare_lexical("document", document, false);
+    }
+
+    /// Dispatch a browser-style event to listeners registered on a live DOM
+    /// node. The driver uses this for its first interactive tracer; a later
+    /// window shell can call the same API from native input handling.
+    pub fn dispatch_dom_event(&mut self, node: u32, event_type: &str) -> Result<(), Throw> {
+        let target = self.make_dom_element(node);
+        let mut event_obj = JsObject::ordinary();
+        event_obj.proto = Some(self.object_proto.clone());
+        event_obj.set_own("type", JsValue::str(event_type));
+        event_obj.set_own("target", target.clone());
+        event_obj.set_own("currentTarget", target.clone());
+        let event = JsValue::Object(Obj(Rc::new(RefCell::new(event_obj))));
+        let callbacks: Vec<JsValue> = self
+            .dom_listeners
+            .iter()
+            .filter(|listener| listener.node == node && listener.event == event_type)
+            .map(|listener| listener.callback.clone())
+            .collect();
+        for callback in callbacks {
+            self.call_value(&callback, target.clone(), vec![event.clone()])?;
+        }
+        Ok(())
+    }
+
+    fn register_dom_listener(&mut self, node: u32, event: String, callback: JsValue) {
+        self.dom_listeners.push(DomListener {
+            node,
+            event,
+            callback,
+            property: false,
+        });
+    }
+
+    fn set_dom_handler(&mut self, node: u32, event: &str, callback: Option<JsValue>) {
+        self.dom_listeners
+            .retain(|listener| !(listener.node == node && listener.event == event && listener.property));
+        if let Some(callback) = callback {
+            self.dom_listeners.push(DomListener {
+                node,
+                event: event.to_owned(),
+                callback,
+                property: true,
+            });
+        }
+    }
+
+    fn dom_handler(&self, node: u32, event: &str) -> Option<JsValue> {
+        self.dom_listeners
+            .iter()
+            .rev()
+            .find(|listener| listener.node == node && listener.event == event && listener.property)
+            .map(|listener| listener.callback.clone())
     }
 
     pub fn run_script(&mut self, source: &str) -> Result<JsValue, Throw> {
@@ -1696,11 +1761,63 @@ impl Interpreter {
             "append",
             Self::native("append", native_dom_append, &self.function_proto),
         );
+        element.set_own(
+            "addEventListener",
+            Self::native("addEventListener", native_dom_add_event_listener, &self.function_proto),
+        );
+        element.set_own(
+            "removeEventListener",
+            Self::native("removeEventListener", native_dom_remove_event_listener, &self.function_proto),
+        );
+        element.set_own(
+            "click",
+            Self::native("click", native_dom_click, &self.function_proto),
+        );
+        let mut style = JsObject::ordinary();
+        style.proto = Some(self.object_proto.clone());
+        style.set_own("[[DomStyleNode]]", JsValue::num(id as f64));
+        element.set_own("style", JsValue::Object(Obj(Rc::new(RefCell::new(style)))));
+        let onclick_getter = Self::native("get onclick", native_dom_onclick_get, &self.function_proto);
+        let onclick_setter = Self::native("set onclick", native_dom_onclick_set, &self.function_proto);
+        let onclick_getter = match onclick_getter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native onclick getter"),
+            _ => unreachable!(),
+        };
+        let onclick_setter = match onclick_setter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native onclick setter"),
+            _ => unreachable!(),
+        };
+        let _ = element.define(
+            "onclick",
+            Property {
+                value: JsValue::Null,
+                writable: false,
+                enumerable: true,
+                configurable: true,
+                getter: Some(Box::new(onclick_getter)),
+                setter: Some(Box::new(onclick_setter)),
+            },
+        );
         JsValue::Object(Obj(Rc::new(RefCell::new(element))))
     }
+
+    fn dom_style_id(object: &Obj) -> Option<u32> {
+        match object.borrow().get_own("[[DomStyleNode]]") {
+            Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => {
+                Some(n as u32)
+            }
+            _ => None,
+        }
+    }
+
     fn get_prop(&mut self, v: &JsValue, k: &str) -> Result<JsValue, Throw> {
         match v {
             JsValue::Object(o) => {
+                if let Some(node) = Self::dom_style_id(o) {
+                    if let Some(value) = dom_host(self)?.borrow().get_style(node, k) {
+                        return Ok(JsValue::str(value));
+                    }
+                }
                 if k == "size" {
                     let size = match &o.borrow().exotic {
                         Exotic::Map(state) => Some(state.entries.len()),
@@ -1794,6 +1911,14 @@ impl Interpreter {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("cannot set property on primitive")),
         };
+        if let Some(node) = Self::dom_style_id(&o) {
+            let value = self.to_string(&x)?;
+            dom_host(self)?
+                .borrow_mut()
+                .set_style(node, k, &value)
+                .map_err(Throw::type_error)?;
+            return Ok(());
+        }
         if let Some(property) = o.borrow().own_prop(k).cloned() {
             if let Some(setter) = property.setter {
                 let function =
@@ -2646,6 +2771,72 @@ fn native_dom_append(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
             }
         }
     }
+    Ok(JsValue::Undefined)
+}
+
+fn native_dom_add_event_listener(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    let event = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let callback = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    if callable_function(&callback).is_none() {
+        return Err(Throw::type_error("event listener must be callable"));
+    }
+    i.register_dom_listener(node, event, callback);
+    Ok(JsValue::Undefined)
+}
+
+fn native_dom_remove_event_listener(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    let event = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let callback = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    i.dom_listeners.retain(|listener| {
+        listener.property
+            || listener.node != node
+            || listener.event != event
+            || listener.callback != callback
+    });
+    Ok(JsValue::Undefined)
+}
+
+fn native_dom_click(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    i.dispatch_dom_event(node, "click")?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_dom_onclick_get(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    Ok(i.dom_handler(node, "click").unwrap_or(JsValue::Null))
+}
+
+fn native_dom_onclick_set(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let node = dom_id(&this)?;
+    let callback = args.first().cloned().unwrap_or(JsValue::Null);
+    if !callback.is_null() && !callback.is_undefined() && callable_function(&callback).is_none() {
+        return Err(Throw::type_error("onclick must be callable or null"));
+    }
+    let callback = if callback.is_null() || callback.is_undefined() {
+        None
+    } else {
+        Some(callback)
+    };
+    i.set_dom_handler(node, "click", callback);
     Ok(JsValue::Undefined)
 }
 

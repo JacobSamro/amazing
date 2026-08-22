@@ -252,6 +252,15 @@ impl Dom {
             NodeKind::Element { name, .. } => {
                 out.push('<');
                 out.push_str(name);
+                if let NodeKind::Element { attrs, .. } = &self.get(idx).kind {
+                    for (key, value) in attrs {
+                        out.push(' ');
+                        out.push_str(key);
+                        out.push_str("=\"");
+                        out.push_str(value);
+                        out.push('"');
+                    }
+                }
                 out.push_str(">\n");
             },
             NodeKind::Text { data } => {

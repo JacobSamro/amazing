@@ -9,6 +9,8 @@ use std::io::Read;
 use std::process::ExitCode;
 use std::rc::Rc;
 
+use amazing_js::DomHost;
+
 const PIPELINE: &[(&str, &str)] = &[
     ("amazing-common", "byte streams + text utils"),
     (
@@ -91,6 +93,50 @@ impl BrowserDomHost {
         }
         None
     }
+
+    fn css_property_name(name: &str) -> String {
+        let mut out = String::new();
+        for ch in name.chars() {
+            if ch.is_ascii_uppercase() {
+                out.push('-');
+                out.push(ch.to_ascii_lowercase());
+            } else {
+                out.push(ch);
+            }
+        }
+        out
+    }
+
+    fn style_declarations(&self, node: amazing_dom::NodeIdx) -> Vec<(String, String)> {
+        let raw = self
+            .dom
+            .attrs_of(node)
+            .and_then(|attrs| attrs.iter().find(|(key, _)| key == "style"))
+            .map(|(_, value)| value.as_str())
+            .unwrap_or("");
+        raw.split(';')
+            .filter_map(|declaration| {
+                let (name, value) = declaration.split_once(':')?;
+                let name = name.trim().to_ascii_lowercase();
+                if name.is_empty() { return None }
+                Some((name, value.trim().to_string()))
+            })
+            .collect()
+    }
+
+    fn write_style_declarations(
+        &mut self,
+        node: amazing_dom::NodeIdx,
+        declarations: &[(String, String)],
+    ) -> Result<(), String> {
+        let serialized = declarations
+            .iter()
+            .filter(|(_, value)| !value.is_empty())
+            .map(|(name, value)| format!("{name}: {value};"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        self.set_attribute(node.0, "style", &serialized)
+    }
 }
 
 impl amazing_js::DomHost for BrowserDomHost {
@@ -118,12 +164,14 @@ impl amazing_js::DomHost for BrowserDomHost {
     }
 
     fn get_attribute(&self, node: u32, name: &str) -> Option<Option<String>> {
+        if node as usize >= self.dom.node_count() { return None }
         let attrs = self.dom.attrs_of(amazing_dom::NodeIdx(node))?;
         Some(attrs.iter().find(|(key, _)| key == name).map(|(_, value)| value.clone()))
     }
 
     fn set_attribute(&mut self, node: u32, name: &str, value: &str) -> Result<(), String> {
         let idx = amazing_dom::NodeIdx(node);
+        if node as usize >= self.dom.node_count() { return Err("unknown DOM node".into()) }
         let mut attrs = self.dom.attrs_of(idx).ok_or_else(|| "attribute requires an element".to_string())?.to_vec();
         if let Some((_, current)) = attrs.iter_mut().find(|(key, _)| key == name) {
             *current = value.to_string();
@@ -143,7 +191,15 @@ impl amazing_js::DomHost for BrowserDomHost {
     fn append_child(&mut self, parent: u32, child: u32) -> Result<(), String> {
         let parent = amazing_dom::NodeIdx(parent);
         let child = amazing_dom::NodeIdx(child);
+        if parent.0 as usize >= self.dom.node_count() || child.0 as usize >= self.dom.node_count() {
+            return Err("unknown DOM node".into());
+        }
         if self.dom.name(parent).is_none() { return Err("append target is not an element".into()) }
+        let mut ancestor = Some(parent);
+        while let Some(current) = ancestor {
+            if current == child { return Err("cannot append an ancestor into its descendant".into()) }
+            ancestor = self.dom.get(current).parent;
+        }
         if self.dom.get(child).parent.is_some() { self.dom.detach(child); }
         self.dom.attach_last(parent, child);
         Ok(())
@@ -151,9 +207,47 @@ impl amazing_js::DomHost for BrowserDomHost {
 
     fn append_text(&mut self, parent: u32, text: &str) -> Result<(), String> {
         let parent = amazing_dom::NodeIdx(parent);
+        if parent.0 as usize >= self.dom.node_count() { return Err("unknown DOM node".into()) }
         if self.dom.name(parent).is_none() { return Err("append target is not an element".into()) }
         self.dom.create_text(parent, text);
         Ok(())
+    }
+
+    fn get_style(&self, node: u32, property: &str) -> Option<String> {
+        if node as usize >= self.dom.node_count() || self.dom.name(amazing_dom::NodeIdx(node)).is_none() {
+            return None;
+        }
+        let property = BrowserDomHost::css_property_name(property).to_ascii_lowercase();
+        if property == "csstext" {
+            return self
+                .dom
+                .attrs_of(amazing_dom::NodeIdx(node))
+                .and_then(|attrs| attrs.iter().find(|(key, _)| key == "style"))
+                .map(|(_, value)| value.clone())
+                .or_else(|| Some(String::new()));
+        }
+        self.style_declarations(amazing_dom::NodeIdx(node))
+            .into_iter()
+            .find(|(name, _)| name == &property)
+            .map(|(_, value)| value)
+    }
+
+    fn set_style(&mut self, node: u32, property: &str, value: &str) -> Result<(), String> {
+        let idx = amazing_dom::NodeIdx(node);
+        if node as usize >= self.dom.node_count() || self.dom.name(idx).is_none() {
+            return Err("style requires an element".into());
+        }
+        if property.eq_ignore_ascii_case("cssText") {
+            return self.set_attribute(node, "style", value);
+        }
+        let property = BrowserDomHost::css_property_name(property).to_ascii_lowercase();
+        let mut declarations = self.style_declarations(idx);
+        if let Some((_, current)) = declarations.iter_mut().find(|(name, _)| name == &property) {
+            *current = value.trim().to_string();
+        } else {
+            declarations.push((property, value.trim().to_string()));
+        }
+        self.write_style_declarations(idx, &declarations)
     }
 }
 
