@@ -1142,6 +1142,18 @@ impl Interpreter {
     ) -> Result<(), Throw> {
         match &target.kind {
             ExprKind::Paren(inner) => self.assign_pattern_expr(inner, value, env),
+            ExprKind::Assign {
+                op: ast::AssignOp::Assign,
+                target,
+                value: default,
+            } => {
+                if value.is_undefined() {
+                    let fallback = self.eval_expr(default, env)?;
+                    self.assign_pattern_expr(target, &fallback, env)
+                } else {
+                    self.assign_pattern_expr(target, value, env)
+                }
+            }
             ExprKind::Array(elements) => {
                 let items = self.iterate(value)?;
                 let mut index = 0usize;
@@ -3546,6 +3558,11 @@ mod tests {
             .run_script("let key='x'; let {[key]: value}={x:9}; value;")
             .unwrap();
         assert_eq!(num(value), 9.0);
+        let mut n = Interpreter::new();
+        let value = n
+            .run_script("let a=0,b=0; [a=3,b]=[undefined,4]; ({a,b}={a:5,b:6}); a+b;")
+            .unwrap();
+        assert_eq!(num(value), 11.0);
     }
 
     #[test]

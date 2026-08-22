@@ -291,7 +291,8 @@ Assignment uses a
 single evaluated reference for compound/logical updates; property descriptors,
 accessors, extensibility, wrapper objects, named anonymous functions,
 completion values, labeled control flow, and per-iteration `for (let …)`
-environments are covered by the runtime milestone.
+environments, assignment-pattern defaults, and computed binding keys are
+covered by the runtime milestone.
 
 Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
 script, prints captured console lines, then its completion value. The

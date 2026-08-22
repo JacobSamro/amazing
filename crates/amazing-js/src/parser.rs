@@ -1179,6 +1179,11 @@ fn ensure_assignable(e: &Expr) -> Result<(), SyntaxError> {
     match &e.kind {
         ExprKind::Ident(_) | ExprKind::Member { .. } => Ok(()),
         ExprKind::Paren(inner) => ensure_assignable(inner),
+        ExprKind::Assign {
+            op: AssignOp::Assign,
+            target,
+            ..
+        } => ensure_assignable(target),
         ExprKind::Array(elements) => {
             for element in elements.iter().flatten() {
                 if let ExprKind::Spread(inner) = &element.kind {
