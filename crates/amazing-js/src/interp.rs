@@ -235,6 +235,7 @@ impl Interpreter {
         );
         location.set_own("assign", Self::native("assign", native_location_assign, &self.function_proto));
         location.set_own("replace", Self::native("replace", native_location_assign, &self.function_proto));
+        location.set_own("reload", Self::native("reload", native_location_reload, &self.function_proto));
         let location = JsValue::Object(Obj(Rc::new(RefCell::new(location))));
         self.global_obj.borrow_mut().set_own("[[LocationObject]]", location.clone());
         let location_getter = Self::native("get location", native_window_location_get, &self.function_proto);
@@ -3354,6 +3355,15 @@ fn native_location_assign(
     native_location_href_set(i, JsValue::Undefined, args)
 }
 
+fn native_location_reload(
+    i: &mut Interpreter,
+    _: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    i.pending_navigation = Some(i.location_url.clone());
+    Ok(JsValue::Undefined)
+}
+
 fn native_window_location_get(
     _: &mut Interpreter,
     this: JsValue,
@@ -6258,5 +6268,7 @@ mod tests {
         assert_eq!(i.take_navigation().as_deref(), Some("other.html"));
         i.run_script("history.back();").unwrap();
         assert_eq!(i.take_history_delta(), Some(-1));
+        i.run_script("location.reload();").unwrap();
+        assert_eq!(i.take_navigation().as_deref(), Some("other.html"));
     }
 }
