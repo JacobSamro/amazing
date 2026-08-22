@@ -308,9 +308,9 @@ features, and unavailable harness hooks. This is a focused slice, not whole-suit
 coverage.
 
 Known gaps: there is no browser event loop or full Promise combinator/timing
-surface yet, and generators, symbols, modules, destructuring assignment,
-computed pattern keys, regex literals, class accessors, and full class/super
-semantics are deferred. The runtime is
+surface yet, and generators, symbols, modules, computed pattern keys, full
+iterator/error destructuring semantics, regex literals, class accessors, and
+full class/super semantics are deferred. The runtime is
 a milestone, not Phase 6 exit-criteria completion.
 
 ## Later phases (unchanged from goal prompt)

@@ -1159,17 +1159,41 @@ fn validate_for_decl(decl: &VarDecl, at: SourceLocation) -> Result<VarDecl, Synt
     Ok(decl.clone())
 }
 
-/// Assignment-target validity (destructuring deferred → only identifiers,
-/// member expressions, and parenthesized forms are accepted).
+/// Assignment-target validity. Array/object patterns reuse literal AST nodes;
+/// their elements must recursively be assignable references.
 fn ensure_assignable(e: &Expr) -> Result<(), SyntaxError> {
     match &e.kind {
         ExprKind::Ident(_) | ExprKind::Member { .. } => Ok(()),
         ExprKind::Paren(inner) => ensure_assignable(inner),
-        ExprKind::Array(_) | ExprKind::Object(_) => Err(SyntaxError::new(
-            "destructuring assignment is deferred",
-            e.span.start.line,
-            e.span.start.column,
-        )),
+        ExprKind::Array(elements) => {
+            for element in elements.iter().flatten() {
+                if let ExprKind::Spread(inner) = &element.kind {
+                    ensure_assignable(inner)?;
+                } else {
+                    ensure_assignable(element)?;
+                }
+            }
+            Ok(())
+        }
+        ExprKind::Object(elements) => {
+            for element in elements {
+                match element {
+                    ObjElem::Spread(inner) => ensure_assignable(inner)?,
+                    ObjElem::Prop(property) => match &property.value {
+                        PropValue::Shorthand(_) => {}
+                        PropValue::Init(value) => ensure_assignable(value)?,
+                        PropValue::Method(_) => {
+                            return Err(SyntaxError::new(
+                                "methods are not assignment targets",
+                                e.span.start.line,
+                                e.span.start.column,
+                            ));
+                        }
+                    },
+                }
+            }
+            Ok(())
+        }
         _ => Err(SyntaxError::new(
             "invalid assignment target",
             e.span.start.line,
@@ -3192,9 +3216,15 @@ mod construct_tests {
             stmt_kind("function f([a]) {}"),
             StmtKind::Function(_)
         ));
-        assert!(err("[a] = [1];").message.contains("deferred"));
-        assert!(err("({a} = obj);").message.contains("deferred"));
-        assert!(err("for ([a] of x) ;").message.contains("deferred"));
+        assert!(matches!(expr_kind("[a] = [1];"), ExprKind::Assign { .. }));
+        assert!(matches!(
+            expr_kind("({a} = obj);"),
+            ExprKind::Paren(inner) if matches!(inner.kind, ExprKind::Assign { .. })
+        ));
+        assert!(matches!(
+            stmt_kind("for ([a] of x) ;"),
+            StmtKind::ForOf { .. }
+        ));
     }
 
     #[test]

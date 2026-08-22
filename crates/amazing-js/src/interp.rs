@@ -615,6 +615,9 @@ impl Interpreter {
     }
     fn bind_for(&mut self, left: &ForLeft, value: JsValue, env: &EnvHandle) -> Result<(), Throw> {
         match left {
+            ForLeft::Target(t) if is_destructuring_expr(t) => {
+                self.assign_pattern_expr(t, &value, env)
+            }
             ForLeft::Target(t) => self.assign_target(t, value, env),
             ForLeft::Decl(d) => self.bind_pattern(
                 &d.decls
@@ -992,6 +995,11 @@ impl Interpreter {
         r: &ast::Expr,
         e: &EnvHandle,
     ) -> Result<JsValue, Throw> {
+        if op == ast::AssignOp::Assign && is_destructuring_expr(t) {
+            let value = self.eval_expr(r, e)?;
+            self.assign_pattern_expr(t, &value, e)?;
+            return Ok(value);
+        }
         let (reference, old) = self.resolve_reference(t, e)?;
         if op == ast::AssignOp::Assign {
             let mut v = self.eval_expr(r, e)?;
@@ -1114,6 +1122,71 @@ impl Interpreter {
     fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
         let (reference, _) = self.resolve_reference(t, e)?;
         self.put_reference(reference, v, e)
+    }
+
+    fn assign_pattern_expr(
+        &mut self,
+        target: &ast::Expr,
+        value: &JsValue,
+        env: &EnvHandle,
+    ) -> Result<(), Throw> {
+        match &target.kind {
+            ExprKind::Paren(inner) => self.assign_pattern_expr(inner, value, env),
+            ExprKind::Array(elements) => {
+                let items = self.iterate(value)?;
+                let mut index = 0usize;
+                for element in elements.iter().flatten() {
+                    if let ExprKind::Spread(inner) = &element.kind {
+                        let rest = array_values(self, items[index..].to_vec())?;
+                        self.assign_pattern_expr(inner, &rest, env)?;
+                        index = items.len();
+                    } else {
+                        let item = items.get(index).cloned().unwrap_or(JsValue::Undefined);
+                        self.assign_pattern_expr(element, &item, env)?;
+                        index += 1;
+                    }
+                }
+                Ok(())
+            }
+            ExprKind::Object(elements) => {
+                if value.is_null() || value.is_undefined() {
+                    return Err(Throw::type_error("cannot destructure nullish value"));
+                }
+                let mut used = Vec::new();
+                for element in elements {
+                    match element {
+                        ast::ObjElem::Spread(inner) => {
+                            let rest = self.object_rest(value, &used)?;
+                            self.assign_pattern_expr(inner, &rest, env)?;
+                        }
+                        ast::ObjElem::Prop(property) => {
+                            let key = self.prop_key(&property.key, env)?;
+                            used.push(key.clone());
+                            let item = self.get_prop(value, &key)?;
+                            match &property.value {
+                                ast::PropValue::Shorthand(identifier) => {
+                                    let reference = ast::Expr::new(
+                                        ExprKind::Ident(identifier.clone()),
+                                        identifier.span,
+                                    );
+                                    self.assign_pattern_expr(&reference, &item, env)?;
+                                }
+                                ast::PropValue::Init(expression) => {
+                                    self.assign_pattern_expr(expression, &item, env)?;
+                                }
+                                ast::PropValue::Method(_) => {
+                                    return Err(Throw::reference_error(
+                                        "method is not an assignment target",
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(())
+            }
+            _ => self.assign_target(target, value.clone(), env),
+        }
     }
     fn call_expr(
         &mut self,
@@ -1940,6 +2013,14 @@ fn binding_names(binding: &Binding) -> Vec<String> {
             .flat_map(|(_, property)| binding_names(property))
             .collect(),
         Binding::Rest(inner) | Binding::Default(inner, _) => binding_names(inner),
+    }
+}
+
+fn is_destructuring_expr(expression: &ast::Expr) -> bool {
+    match &expression.kind {
+        ExprKind::Paren(inner) => is_destructuring_expr(inner),
+        ExprKind::Array(_) | ExprKind::Object(_) => true,
+        _ => false,
     }
 }
 
@@ -3445,6 +3526,11 @@ mod tests {
             .run_script("let total=0; for (const [a,b] of [[2,3]]) { total=a+b; } total;")
             .unwrap();
         assert_eq!(num(value), 5.0);
+        let mut k = Interpreter::new();
+        let value = k
+            .run_script("let a=0,b=0; [a,b]=[3,4]; ({a,b}={a:5,b:6}); a+b;")
+            .unwrap();
+        assert_eq!(num(value), 11.0);
     }
 
     #[test]
