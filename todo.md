@@ -361,9 +361,10 @@ driver; unsupported TLS remains the documented Phase 5 exception.
 The shell compiles and the complete workspace suite passes on win-001. The
 interactive window itself requires a Windows desktop session (not available
 to the headless SSH service), so visual GUI proof is still pending. Current
-limitations are blocking navigation during fetch/paint, no keyboard Enter
-shortcut, no native scrollbar thumb, and no event-loop integration for page
-scripts.
+Inline page scripts now execute against the live DOM before the first layout
+and repaint; limitations are blocking navigation during fetch/paint, no
+native scrollbar thumb, no persistent JS event loop for later user events,
+and no external-script loading.
 
 ## Later phases (unchanged from goal prompt)
 

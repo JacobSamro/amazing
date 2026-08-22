@@ -16,9 +16,13 @@ mod windows {
     use std::ffi::c_void;
     use std::ptr::{null, null_mut};
     use std::process::ExitCode;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     use amazing_dom::{Dom, NodeIdx, NodeKind};
     use amazing_paint::Surface;
+
+    use crate::BrowserDomHost;
 
     type Handle = *mut c_void;
     type Hwnd = Handle;
@@ -461,17 +465,50 @@ mod windows {
         }
     }
 
+    fn collect_script_text(dom: &Dom, node: NodeIdx, scripts: &mut Vec<String>) {
+        if dom.name(node) == Some("script") {
+            let mut source = String::new();
+            for child in dom.children(node) {
+                if let NodeKind::Text { data } = &dom.get(child).kind {
+                    source.push_str(data);
+                }
+            }
+            if !source.trim().is_empty() {
+                scripts.push(source);
+            }
+            return;
+        }
+        for child in dom.children(node) {
+            collect_script_text(dom, child, scripts);
+        }
+    }
+
     fn render_page(input: &str, width: u32) -> Result<Surface, String> {
         let response = amazing_net::fetch(input, &amazing_net::FetchOptions::default())
             .map_err(|error| error.to_string())?;
         let html = response
             .text()
             .ok_or_else(|| "response was not decodable as text".to_owned())?;
-        let dom = amazing_html::parse(&html);
+        let host = Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse(&html),
+        }));
+        let scripts = {
+            let host_ref = host.borrow();
+            let mut scripts = Vec::new();
+            collect_script_text(&host_ref.dom, NodeIdx(0), &mut scripts);
+            scripts
+        };
+        let mut js = amazing_js::Interpreter::new();
+        js.set_dom_host(host.clone());
+        for script in scripts {
+            js.run_script(&script)
+                .map_err(|error| format!("page script failed: {}", error.describe()))?;
+        }
+        let host_ref = host.borrow();
         let mut css = String::new();
-        collect_style_text(&dom, NodeIdx(0), &mut css);
+        collect_style_text(&host_ref.dom, NodeIdx(0), &mut css);
         let fonts = amazing_layout::font::FontSource::fallback();
-        let root = amazing_layout::layout_document(&html, &css, width.max(1) as f32, &fonts);
+        let root = amazing_layout::layout_dom_document(&host_ref.dom, &css, width.max(1) as f32, &fonts);
         let height = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
             .ceil()
             .clamp(1.0, 8192.0) as u32;

@@ -49,8 +49,8 @@ const PIPELINE: &[(&str, &str)] = &[
     ),
 ];
 
-struct BrowserDomHost {
-    dom: amazing_dom::Dom,
+pub(crate) struct BrowserDomHost {
+    pub(crate) dom: amazing_dom::Dom,
 }
 
 impl BrowserDomHost {
@@ -385,6 +385,47 @@ fn collect_style_text(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &
     }
 }
 
+fn collect_script_text(
+    dom: &amazing_dom::Dom,
+    node: amazing_dom::NodeIdx,
+    scripts: &mut Vec<String>,
+) {
+    if dom.name(node) == Some("script") {
+        let mut source = String::new();
+        for child in dom.children(node) {
+            if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
+                source.push_str(data);
+            }
+        }
+        if !source.trim().is_empty() {
+            scripts.push(source);
+        }
+        return;
+    }
+    for child in dom.children(node) {
+        collect_script_text(dom, child, scripts);
+    }
+}
+
+fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>) -> Result<(), String> {
+    let scripts = {
+        let host_ref = host.borrow();
+        let mut scripts = Vec::new();
+        collect_script_text(&host_ref.dom, amazing_dom::NodeIdx(0), &mut scripts);
+        scripts
+    };
+    if scripts.is_empty() {
+        return Ok(());
+    }
+    let mut js = amazing_js::Interpreter::new();
+    js.set_dom_host(host.clone());
+    for script in scripts {
+        js.run_script(&script)
+            .map_err(|error| format!("inline script failed: {}", error.describe()))?;
+    }
+    Ok(())
+}
+
 fn print_styled(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
@@ -474,10 +515,17 @@ fn cmd_render(args: &[String]) -> ExitCode {
         Ok(s) => s,
         Err(code) => return code,
     };
-    let dom = amazing_html::parse(&html);
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse(&html),
+    }));
+    if let Err(error) = execute_inline_scripts(&host) {
+        eprintln!("amazing render: {error}");
+        return ExitCode::FAILURE;
+    }
 
     let mut css = String::new();
-    collect_style_text(&dom, amazing_dom::NodeIdx(0), &mut css);
+    let dom = host.borrow();
+    collect_style_text(&dom.dom, amazing_dom::NodeIdx(0), &mut css);
     for extra in args.get(3..).unwrap_or(&[]) {
         match read_source(Some(extra), "render") {
             Ok(s) => {
@@ -489,7 +537,7 @@ fn cmd_render(args: &[String]) -> ExitCode {
     }
 
     let fonts = amazing_layout::font::FontSource::fallback();
-    let root = amazing_layout::layout_document(&html, &css, width, &fonts);
+    let root = amazing_layout::layout_dom_document(&dom.dom, &css, width, &fonts);
     // Page height = root margin-box bottom edge (what layout_root returns),
     // clamped so a runaway document cannot exhaust memory.
     let page_h = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))

@@ -187,6 +187,20 @@ pub struct WordFrag {
 /// Convenience entry point: HTML + CSS in, laid-out root box out.
 pub fn layout_document(html: &str, author_css: &str, viewport_width: f32, fonts: &font::FontSource) -> LayoutBox {
     let dom = amazing_html::parse(html);
+    layout_dom_document(&dom, author_css, viewport_width, fonts)
+}
+
+/// Lays out an already-mutated DOM without reparsing its original source.
+///
+/// The GUI/DOM bridge uses this seam after inline JavaScript has changed text,
+/// attributes, or inline style declarations. Keeping the operation here
+/// avoids serializing a live arena back into HTML merely to repaint it.
+pub fn layout_dom_document(
+    dom: &amazing_dom::Dom,
+    author_css: &str,
+    viewport_width: f32,
+    fonts: &font::FontSource,
+) -> LayoutBox {
     let sheet = amazing_css::parse_stylesheet(author_css);
     let styled = amazing_css::compute(&dom, &[sheet]);
     let mut root = box_tree::build_layout_tree(&dom, &styled, fonts);
