@@ -34,6 +34,8 @@ struct PromiseJob {
 struct TimerJob {
     id: u32,
     due: Instant,
+    delay: Duration,
+    repeat: bool,
     callback: JsValue,
     args: Vec<JsValue>,
 }
@@ -248,11 +250,33 @@ impl Interpreter {
         delay_ms: u64,
         args: Vec<JsValue>,
     ) -> u32 {
+        self.schedule_timer_kind(callback, delay_ms, args, false)
+    }
+
+    pub fn schedule_interval(
+        &mut self,
+        callback: JsValue,
+        delay_ms: u64,
+        args: Vec<JsValue>,
+    ) -> u32 {
+        self.schedule_timer_kind(callback, delay_ms, args, true)
+    }
+
+    fn schedule_timer_kind(
+        &mut self,
+        callback: JsValue,
+        delay_ms: u64,
+        args: Vec<JsValue>,
+        repeat: bool,
+    ) -> u32 {
         let id = self.next_timer_id;
         self.next_timer_id = self.next_timer_id.wrapping_add(1).max(1);
+        let delay = Duration::from_millis(delay_ms);
         self.timers.push(TimerJob {
             id,
-            due: Instant::now() + Duration::from_millis(delay_ms),
+            due: Instant::now() + delay,
+            delay,
+            repeat,
             callback,
             args,
         });
@@ -268,10 +292,15 @@ impl Interpreter {
     pub fn pump_timers(&mut self) -> Result<bool, Throw> {
         let now = Instant::now();
         let mut due = Vec::new();
-        self.timers.retain(|timer| {
+        self.timers.retain_mut(|timer| {
             if timer.due <= now {
                 due.push((timer.callback.clone(), timer.args.clone()));
-                false
+                if timer.repeat {
+                    timer.due = now + timer.delay;
+                    true
+                } else {
+                    false
+                }
             } else {
                 true
             }
@@ -2558,6 +2587,14 @@ impl Interpreter {
         self.define_global(
             "clearTimeout",
             Self::native("clearTimeout", native_clear_timeout, &self.function_proto),
+        );
+        self.define_global(
+            "setInterval",
+            Self::native("setInterval", native_set_interval, &self.function_proto),
+        );
+        self.define_global(
+            "clearInterval",
+            Self::native("clearInterval", native_clear_timeout, &self.function_proto),
         );
         self.define_global(
             "Error",
@@ -5301,6 +5338,23 @@ fn native_clear_timeout(
     Ok(JsValue::Undefined)
 }
 
+fn native_set_interval(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let callback = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if callable_function(&callback).is_none() {
+        return Err(Throw::type_error("setInterval callback is not callable"));
+    }
+    let delay = i
+        .to_number(args.get(1).unwrap_or(&JsValue::num(0.0)))?
+        .max(0.0)
+        .min(u64::MAX as f64) as u64;
+    let id = i.schedule_interval(callback, delay, args.into_iter().skip(2).collect());
+    Ok(JsValue::num(id as f64))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5644,6 +5698,12 @@ mod tests {
         assert!(i.pump_timers().unwrap());
         assert_eq!(&*i.output.borrow(), &["later".to_string()]);
         assert!(!i.pump_timers().unwrap());
+        let mut interval = Interpreter::new();
+        interval.run_script("setInterval(()=>console.log('tick'),0);").unwrap();
+        assert!(interval.pump_timers().unwrap());
+        assert!(interval.pump_timers().unwrap());
+        interval.run_script("clearInterval(1);").unwrap();
+        assert!(!interval.pump_timers().unwrap());
     }
 
     #[test]
