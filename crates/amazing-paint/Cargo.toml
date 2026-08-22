@@ -1,10 +1,13 @@
 [package]
 name = "amazing-paint"
-description = "Pure-Rust software rasterizer (scanline fill, anti-aliasing)"
-edition.workspace = true
+description = "Phase 4 software rasterizer: RGBA8 surface, CSS color parsing, painter's-algorithm box painting"
+# Pinned per project phase constraints; the workspace default is inherited by
+# the sibling crates, this crate deliberately stays on 2021.
+edition = "2021"
 version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
 amazing-layout = { path = "../amazing-layout" }
+amazing-css = { path = "../amazing-css" }
