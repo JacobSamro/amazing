@@ -16,13 +16,17 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (140 crate tests); focused Test262 slice measured at 196/196 (100%) |
-| 7–9 | pending |
+| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (142 crate tests); focused Test262 slice measured at 196/196 (100%) |
+| 7 — DOM/JS | 🔄 live DOM, events, styles, scripts, fetch, and repaint tracer landed |
+| 8 — GUI | 🔄 Windows native shell landed; desktop visual proof pending |
+| 9 — Media | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
 Sync loop: edit locally → `scp -r` changed paths → build/test via ssh → commit on server.
 **No rsync on Windows. No git push from macOS (cmd.exe breaks it) — commit on the server.**
+CI artifact: `.github/workflows/ci.yml` runs the workspace build and test gate on
+push and pull request using the Windows toolchain.
 
 ## Phase 1 in-flight — finish these, in this order
 

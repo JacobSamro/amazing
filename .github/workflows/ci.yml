@@ -1,0 +1,20 @@
+name: amazing-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  workspace:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+      - name: Build all targets
+        run: cargo build --workspace --all-targets
+      - name: Run workspace tests
+        run: cargo test --workspace
