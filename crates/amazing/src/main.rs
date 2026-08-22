@@ -383,6 +383,10 @@ impl amazing_js::DomHost for BrowserDomHost {
         }).0)
     }
 
+    fn create_text_node(&mut self, text: &str) -> Result<u32, String> {
+        Ok(self.dom.alloc_unattached(amazing_dom::NodeKind::Text { data: text.to_owned() }).0)
+    }
+
     fn append_child(&mut self, parent: u32, child: u32) -> Result<(), String> {
         let parent = amazing_dom::NodeIdx(parent);
         let child = amazing_dom::NodeIdx(child);

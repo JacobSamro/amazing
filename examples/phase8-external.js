@@ -13,6 +13,10 @@ if (document.querySelectorAll('p').length === 1 && document.getElementById('titl
 if (document.querySelectorAll('p, main').length === 2) title.setAttribute('data-selector-list', 'yes');
 if (title.innerHTML === 'before') { title.innerHTML = 'before'; title.setAttribute('data-inner', 'yes'); }
 if (title.innerText === 'before') title.setAttribute('data-inner-text', 'yes');
+const textNode = document.createTextNode('text-node');
+title.appendChild(textNode);
+if (title.textContent.includes('text-node')) title.setAttribute('data-text-node', 'yes');
+textNode.remove();
 title.onclick = (event) => { title.textContent = event.type + '!'; title.style.color = 'red'; };
 title.addEventListener('click', () => title.setAttribute('data-clicked', 'yes'));
 setTimeout(() => title.setAttribute('data-timer', 'yes'), 0);

@@ -85,6 +85,7 @@ pub trait DomHost {
     fn get_attribute(&self, node: u32, name: &str) -> Option<Option<String>>;
     fn set_attribute(&mut self, node: u32, name: &str, value: &str) -> Result<(), String>;
     fn create_element(&mut self, name: &str) -> Result<u32, String>;
+    fn create_text_node(&mut self, text: &str) -> Result<u32, String>;
     fn append_child(&mut self, parent: u32, child: u32) -> Result<(), String>;
     fn append_text(&mut self, parent: u32, text: &str) -> Result<(), String>;
     fn remove_node(&mut self, node: u32) -> Result<(), String>;
@@ -1995,6 +1996,10 @@ impl Interpreter {
             Self::native("createElement", native_dom_create_element, &self.function_proto),
         );
         document.set_own(
+            "createTextNode",
+            Self::native("createTextNode", native_dom_create_text_node, &self.function_proto),
+        );
+        document.set_own(
             "addEventListener",
             Self::native("addEventListener", native_dom_add_event_listener, &self.function_proto),
         );
@@ -3214,6 +3219,19 @@ fn native_dom_create_element(
     let id = dom_host(i)?
         .borrow_mut()
         .create_element(&name)
+        .map_err(Throw::type_error)?;
+    Ok(i.make_dom_element(id))
+}
+
+fn native_dom_create_text_node(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let text = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let id = dom_host(i)?
+        .borrow_mut()
+        .create_text_node(&text)
         .map_err(Throw::type_error)?;
     Ok(i.make_dom_element(id))
 }

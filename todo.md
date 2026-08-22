@@ -329,6 +329,7 @@ types while exposing live node wrappers. The driver implements a bounded,
 mutation-capable surface: `document.querySelector`/`querySelectorAll`,
 `getElementById` (tag/id/class selectors), `document.body`,
 `document.createElement`, element `textContent`, `id`/`className`,
+`document.createTextNode`,
 `getAttribute`, `setAttribute`, `append`/`appendChild`/`remove`,
 `innerHTML`/`innerText`, `document.title`, the `window`/`globalThis` aliases, and
 `element.dataset`, `element.classList`, and `element.style` inline properties,

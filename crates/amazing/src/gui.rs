@@ -1230,6 +1230,7 @@ mod windows {
             assert_eq!(host.get_attribute(node, "data-viewport"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-inner"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-inner-text"), Some(Some("yes".into())));
+            assert_eq!(host.get_attribute(node, "data-text-node"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-fetch"), Some(Some("fetched\n".into())));
             assert_eq!(host.get_attribute(node, "data-header"), Some(Some("text/plain; charset=utf-8".into())));
             assert_eq!(host.get_attribute(node, "data-json"), Some(Some("json-ok".into())));
