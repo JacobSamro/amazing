@@ -291,6 +291,21 @@ impl Interpreter {
         self.pending_navigation.take()
     }
 
+    pub fn install_inline_handler(
+        &mut self,
+        node: u32,
+        event_type: &str,
+        body: &str,
+    ) -> Result<(), Throw> {
+        let source = format!("(function(event){{{body}}})");
+        let callback = self.run_script(&source)?;
+        if callable_function(&callback).is_none() {
+            return Err(Throw::type_error("inline event handler is not callable"));
+        }
+        self.set_dom_handler(node, event_type, Some(callback));
+        Ok(())
+    }
+
     pub fn last_event_default_prevented(&self) -> bool {
         self.last_event_default_prevented
     }

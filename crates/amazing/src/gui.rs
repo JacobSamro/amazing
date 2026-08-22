@@ -717,6 +717,17 @@ mod windows {
         }
     }
 
+    fn collect_inline_handlers(dom: &Dom, node: NodeIdx, handlers: &mut Vec<(u32, String)>) {
+        if let Some(attrs) = dom.attrs_of(node) {
+            if let Some((_, body)) = attrs.iter().find(|(name, _)| name == "onclick") {
+                handlers.push((node.0, body.clone()));
+            }
+        }
+        for child in dom.children(node) {
+            collect_inline_handlers(dom, child, handlers);
+        }
+    }
+
     fn resolve_script_url(page: &str, source: &str) -> String {
         if source.contains("://") || source.starts_with("file:") {
             return source.to_owned();
@@ -755,6 +766,16 @@ mod windows {
         js.set_dom_host(host.clone());
         js.set_location_url(input);
         js.set_viewport_size(width, 700);
+        let handlers = {
+            let host_ref = host.borrow();
+            let mut handlers = Vec::new();
+            collect_inline_handlers(&host_ref.dom, NodeIdx(0), &mut handlers);
+            handlers
+        };
+        for (node, body) in handlers {
+            js.install_inline_handler(node, "click", &body)
+                .map_err(|error| format!("inline onclick failed: {}", error.describe()))?;
+        }
         for script in scripts {
             let source = match script.src {
                 Some(src) => {
@@ -1212,6 +1233,7 @@ mod windows {
             assert_eq!(host.get_attribute(node, "data-json"), Some(Some("json-ok".into())));
             assert_eq!(host.get_attribute(node, "data-clicked"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-bubbled"), Some(Some("yes".into())));
+            assert_eq!(host.get_attribute(node, "data-inline"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-timer"), Some(Some("yes".into())));
             assert_eq!(host.get_style(node, "color").as_deref(), Some("red"));
             assert!(state.tab().surface.as_ref().unwrap().height > 0);
