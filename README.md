@@ -53,6 +53,10 @@ amazing
 # parse an HTML file (or stdin) and dump the DOM tree
 amazing parse page.html
 cat page.html | amazing parse
+
+# execute a classic JavaScript file (or read the script from stdin)
+amazing run script.js
+cat script.js | amazing run
 ```
 
 ```sh
