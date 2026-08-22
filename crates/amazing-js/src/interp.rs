@@ -1566,6 +1566,7 @@ impl Interpreter {
                 if let Some(function) = &mut class_function.func {
                     function.home = Some(p.clone());
                 }
+                drop(class_function);
                 for m in &c.members {
                     if let ast::ClassMember::Method(x) = m {
                         if x.kind != ast::MethodKind::Constructor {
@@ -1575,7 +1576,33 @@ impl Interpreter {
                                 method_object.borrow_mut().func.as_mut().unwrap().home =
                                     Some(p.clone());
                             }
-                            self.set_prop(&JsValue::Object(p.clone()), &k, method)?;
+                            if matches!(x.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
+                                let function = match method {
+                                    JsValue::Object(method_object) => {
+                                        method_object.borrow().func.clone().unwrap()
+                                    }
+                                    _ => unreachable!(),
+                                };
+                                let mut property =
+                                    p.borrow().own_prop(&k).cloned().unwrap_or(Property {
+                                        value: JsValue::Undefined,
+                                        writable: false,
+                                        enumerable: false,
+                                        configurable: true,
+                                        getter: None,
+                                        setter: None,
+                                    });
+                                if x.kind == ast::MethodKind::Get {
+                                    property.getter = Some(Box::new(function));
+                                } else {
+                                    property.setter = Some(Box::new(function));
+                                }
+                                p.borrow_mut().define(&k, property).map_err(|_| {
+                                    Throw::type_error("could not define class accessor")
+                                })?;
+                            } else {
+                                self.set_prop(&JsValue::Object(p.clone()), &k, method)?;
+                            }
                         }
                     }
                 }
@@ -4063,6 +4090,15 @@ mod tests {
             .run_script("class A { constructor(value){ this.value=value; } } class B extends A { constructor(value){ super(value+1); } } new B(4).value;")
             .unwrap();
         assert_eq!(num(value), 5.0);
+    }
+
+    #[test]
+    fn class_getters_and_setters_use_property_descriptors() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script("class C { constructor(){this._x=1;} get x(){return this._x;} set x(v){this._x=v;} } let c=new C(); c.x=7; c.x;")
+            .unwrap();
+        assert_eq!(num(value), 7.0);
     }
 
     #[test]
