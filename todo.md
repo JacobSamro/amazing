@@ -16,7 +16,7 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (132 crate tests); focused Test262 slice measured at 196/196 (100%) |
+| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (133 crate tests); focused Test262 slice measured at 196/196 (100%) |
 | 7–9 | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
@@ -283,7 +283,9 @@ SameValueZero keys, preserve insertion order, expose `size`, and return
 array-backed key/value/entry iterables for this milestone. Promise supports
 the constructor executor, `resolve`/`reject`, `then`/`catch`/`finally`,
 pending reaction delivery, async-function return wrapping, and a FIFO
-microtask queue drained after each top-level script. Assignment uses a
+microtask queue drained after each top-level script. Promise combinators
+`all`/`race`/`allSettled`/`any` preserve input order and settlement kind.
+Assignment uses a
 single evaluated reference for compound/logical updates; property descriptors,
 accessors, extensibility, wrapper objects, named anonymous functions,
 completion values, labeled control flow, and per-iteration `for (let …)`
@@ -291,8 +293,8 @@ environments are covered by the runtime milestone.
 
 Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
 script, prints captured console lines, then its completion value. The
-interpreter has 15 focused runtime tests; `cargo test --workspace` is green
-on win-001 (132 tests in `amazing-js`).
+interpreter has 16 focused runtime tests; `cargo test --workspace` is green
+on win-001 (133 tests in `amazing-js`).
 
 Conformance evidence: the official Test262 repository was shallow-sparsely
 checked out on win-001 with 641 tests across the selected classic-language

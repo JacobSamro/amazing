@@ -1699,6 +1699,30 @@ impl Interpreter {
                 "reject",
                 Self::native("reject", native_promise_reject, &self.function_proto),
             );
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
+                "all",
+                Self::native("all", native_promise_all, &self.function_proto),
+            );
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
+                "race",
+                Self::native("race", native_promise_race, &self.function_proto),
+            );
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
+                "allSettled",
+                Self::native(
+                    "allSettled",
+                    native_promise_all_settled,
+                    &self.function_proto,
+                ),
+            );
+            let _ = self.set_prop(
+                &JsValue::Object(o.clone()),
+                "any",
+                Self::native("any", native_promise_any, &self.function_proto),
+            );
         }
         self.define_global("Promise", promise_ctor);
         let _ = self.set_prop(
@@ -2278,6 +2302,371 @@ fn native_promise_finally(
         PromiseFate::Rejected(value) => new_promise(i, PromiseFate::Rejected(value)),
         PromiseFate::Pending => unreachable!(),
     })
+}
+
+fn native_data(i: &Interpreter) -> Result<Obj, Throw> {
+    i.native_stack
+        .last()
+        .and_then(|function| function.borrow().func.as_ref()?.home.clone())
+        .ok_or_else(|| Throw::type_error("missing native Promise callback state"))
+}
+
+fn combinator_callback(
+    i: &Interpreter,
+    name: &str,
+    callback: crate::value::NativeFn,
+    state: &Obj,
+    index: usize,
+) -> JsValue {
+    let data = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
+    data.borrow_mut()
+        .set_own("state", JsValue::Object(state.clone()));
+    data.borrow_mut()
+        .set_own("index", JsValue::num(index as f64));
+    let value = Interpreter::native(name, callback, &i.function_proto);
+    if let JsValue::Object(function) = &value {
+        function.borrow_mut().func.as_mut().unwrap().home = Some(data);
+    }
+    value
+}
+
+fn combinator_state(i: &Interpreter) -> Result<(Obj, Obj, usize), Throw> {
+    let data = native_data(i)?;
+    let state = match data.borrow().get_own("state") {
+        Some(JsValue::Object(state)) => state,
+        _ => return Err(Throw::type_error("invalid Promise combinator state")),
+    };
+    let index = match data.borrow().get_own("index") {
+        Some(JsValue::Num(index)) if index >= 0.0 => index as usize,
+        _ => return Err(Throw::type_error("invalid Promise combinator index")),
+    };
+    let target = match state.borrow().get_own("target") {
+        Some(JsValue::Object(target)) => target,
+        _ => return Err(Throw::type_error("invalid Promise combinator target")),
+    };
+    Ok((state, target, index))
+}
+
+fn state_values(state: &Obj, name: &str) -> Result<JsValue, Throw> {
+    state
+        .borrow()
+        .get_own(name)
+        .ok_or_else(|| Throw::type_error("invalid Promise combinator values"))
+}
+
+fn state_remaining(state: &Obj) -> Result<usize, Throw> {
+    match state.borrow().get_own("remaining") {
+        Some(JsValue::Num(value)) if value >= 0.0 => Ok(value as usize),
+        _ => Err(Throw::type_error("invalid Promise combinator count")),
+    }
+}
+
+fn decrement_remaining(state: &Obj) -> Result<usize, Throw> {
+    let remaining = state_remaining(state)?;
+    let next = remaining.saturating_sub(1);
+    state
+        .borrow_mut()
+        .set_own("remaining", JsValue::num(next as f64));
+    Ok(next)
+}
+
+fn native_all_fulfill(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let (state, target, index) = combinator_state(i)?;
+    let values = state_values(&state, "values")?;
+    i.set_prop(
+        &values,
+        &index.to_string(),
+        args.first().cloned().unwrap_or(JsValue::Undefined),
+    )?;
+    if decrement_remaining(&state)? == 0 {
+        settle_promise(&target, PromiseFate::Fulfilled(values), i);
+    }
+    Ok(JsValue::Undefined)
+}
+
+fn native_all_reject(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let (_, target, _) = combinator_state(i)?;
+    settle_promise(
+        &target,
+        PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)),
+        i,
+    );
+    Ok(JsValue::Undefined)
+}
+
+fn native_race_fulfill(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let (_, target, _) = combinator_state(i)?;
+    settle_promise(
+        &target,
+        PromiseFate::Fulfilled(args.first().cloned().unwrap_or(JsValue::Undefined)),
+        i,
+    );
+    Ok(JsValue::Undefined)
+}
+
+fn native_race_reject(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let (_, target, _) = combinator_state(i)?;
+    settle_promise(
+        &target,
+        PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)),
+        i,
+    );
+    Ok(JsValue::Undefined)
+}
+
+fn settled_record(i: &Interpreter, status: &str, key: &str, value: JsValue) -> JsValue {
+    let record = i.object_value();
+    if let JsValue::Object(object) = &record {
+        object.borrow_mut().set_own("status", JsValue::str(status));
+        object.borrow_mut().set_own(key, value);
+    }
+    record
+}
+
+fn native_all_settled_fulfill(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let (state, target, index) = combinator_state(i)?;
+    let values = state_values(&state, "values")?;
+    i.set_prop(
+        &values,
+        &index.to_string(),
+        settled_record(
+            i,
+            "fulfilled",
+            "value",
+            args.first().cloned().unwrap_or(JsValue::Undefined),
+        ),
+    )?;
+    if decrement_remaining(&state)? == 0 {
+        settle_promise(&target, PromiseFate::Fulfilled(values), i);
+    }
+    Ok(JsValue::Undefined)
+}
+
+fn native_all_settled_reject(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let (state, target, index) = combinator_state(i)?;
+    let values = state_values(&state, "values")?;
+    i.set_prop(
+        &values,
+        &index.to_string(),
+        settled_record(
+            i,
+            "rejected",
+            "reason",
+            args.first().cloned().unwrap_or(JsValue::Undefined),
+        ),
+    )?;
+    if decrement_remaining(&state)? == 0 {
+        settle_promise(&target, PromiseFate::Fulfilled(values), i);
+    }
+    Ok(JsValue::Undefined)
+}
+
+fn native_any_fulfill(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let (_, target, _) = combinator_state(i)?;
+    settle_promise(
+        &target,
+        PromiseFate::Fulfilled(args.first().cloned().unwrap_or(JsValue::Undefined)),
+        i,
+    );
+    Ok(JsValue::Undefined)
+}
+
+fn native_any_reject(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let (state, target, index) = combinator_state(i)?;
+    let errors = state_values(&state, "errors")?;
+    i.set_prop(
+        &errors,
+        &index.to_string(),
+        args.first().cloned().unwrap_or(JsValue::Undefined),
+    )?;
+    if decrement_remaining(&state)? == 0 {
+        settle_promise(&target, PromiseFate::Rejected(errors), i);
+    }
+    Ok(JsValue::Undefined)
+}
+
+fn promise_input(i: &Interpreter, value: JsValue) -> JsValue {
+    if matches!(value, JsValue::Object(ref object) if matches!(object.borrow().exotic, Exotic::Promise(_)))
+    {
+        value
+    } else {
+        new_promise(i, PromiseFate::Fulfilled(value))
+    }
+}
+
+fn make_combinator_state(i: &mut Interpreter, count: usize, values: JsValue) -> (Obj, Obj) {
+    let target = promise_object(&new_promise(i, PromiseFate::Pending)).unwrap();
+    let state = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
+    state
+        .borrow_mut()
+        .set_own("target", JsValue::Object(target.clone()));
+    state
+        .borrow_mut()
+        .set_own("remaining", JsValue::num(count as f64));
+    state.borrow_mut().set_own("values", values);
+    (state, target)
+}
+
+fn attach_combinator(
+    i: &mut Interpreter,
+    state: &Obj,
+    input: JsValue,
+    index: usize,
+    fulfill: crate::value::NativeFn,
+    reject: crate::value::NativeFn,
+) -> Result<(), Throw> {
+    let promise = promise_input(i, input);
+    let on_fulfill = combinator_callback(i, "combinatorFulfill", fulfill, state, index);
+    let on_reject = combinator_callback(i, "combinatorReject", reject, state, index);
+    native_promise_then(i, promise, vec![on_fulfill, on_reject])?;
+    Ok(())
+}
+
+fn native_promise_all(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = args
+        .first()
+        .ok_or_else(|| Throw::type_error("Promise.all requires an iterable"))?;
+    let inputs = i.iterate(source)?;
+    let values = array_values(i, vec![JsValue::Undefined; inputs.len()])?;
+    let (state, target) = make_combinator_state(i, inputs.len(), values);
+    if inputs.is_empty() {
+        let values = state_values(&state, "values")?;
+        settle_promise(&target, PromiseFate::Fulfilled(values), i);
+    } else {
+        for (index, input) in inputs.into_iter().enumerate() {
+            attach_combinator(
+                i,
+                &state,
+                input,
+                index,
+                native_all_fulfill,
+                native_all_reject,
+            )?;
+        }
+    }
+    Ok(JsValue::Object(target))
+}
+
+fn native_promise_race(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = args
+        .first()
+        .ok_or_else(|| Throw::type_error("Promise.race requires an iterable"))?;
+    let inputs = i.iterate(source)?;
+    let values = array_values(i, Vec::new())?;
+    let (state, target) = make_combinator_state(i, inputs.len(), values);
+    for (index, input) in inputs.into_iter().enumerate() {
+        attach_combinator(
+            i,
+            &state,
+            input,
+            index,
+            native_race_fulfill,
+            native_race_reject,
+        )?;
+    }
+    Ok(JsValue::Object(target))
+}
+
+fn native_promise_all_settled(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = args
+        .first()
+        .ok_or_else(|| Throw::type_error("Promise.allSettled requires an iterable"))?;
+    let inputs = i.iterate(source)?;
+    let values = array_values(i, vec![JsValue::Undefined; inputs.len()])?;
+    let (state, target) = make_combinator_state(i, inputs.len(), values);
+    if inputs.is_empty() {
+        let values = state_values(&state, "values")?;
+        settle_promise(&target, PromiseFate::Fulfilled(values), i);
+    } else {
+        for (index, input) in inputs.into_iter().enumerate() {
+            attach_combinator(
+                i,
+                &state,
+                input,
+                index,
+                native_all_settled_fulfill,
+                native_all_settled_reject,
+            )?;
+        }
+    }
+    Ok(JsValue::Object(target))
+}
+
+fn native_promise_any(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = args
+        .first()
+        .ok_or_else(|| Throw::type_error("Promise.any requires an iterable"))?;
+    let inputs = i.iterate(source)?;
+    let errors = array_values(i, vec![JsValue::Undefined; inputs.len()])?;
+    let (state, target) = make_combinator_state(i, inputs.len(), errors.clone());
+    state.borrow_mut().set_own("errors", errors);
+    if inputs.is_empty() {
+        settle_promise(
+            &target,
+            PromiseFate::Rejected(state_values(&state, "errors")?),
+            i,
+        );
+    } else {
+        for (index, input) in inputs.into_iter().enumerate() {
+            attach_combinator(
+                i,
+                &state,
+                input,
+                index,
+                native_any_fulfill,
+                native_any_reject,
+            )?;
+        }
+    }
+    Ok(JsValue::Object(target))
 }
 
 fn map_key(value: &JsValue) -> MapKey {
@@ -2928,6 +3317,23 @@ mod tests {
             .run_script("eval('1; for (var x=true; x; x=false) { 3; }');")
             .unwrap();
         assert_eq!(num(value), 3.0);
+    }
+
+    #[test]
+    fn promise_combinators_preserve_order_and_settlement_kind() {
+        let mut i = Interpreter::new();
+        i.run_script(
+            "Promise.all([Promise.resolve(1), 2]).then(v=>console.log(v.join(','))); Promise.allSettled([Promise.resolve(3), Promise.reject(4)]).then(v=>console.log(v[0].status, v[1].status)); Promise.any([Promise.reject(1), Promise.resolve(5)]).then(v=>console.log(v));",
+        )
+        .unwrap();
+        assert_eq!(
+            &*i.output.borrow(),
+            &[
+                "1,2".to_string(),
+                "fulfilled rejected".to_string(),
+                "5".to_string()
+            ]
+        );
     }
 
     #[test]
