@@ -30,6 +30,11 @@ struct PromiseJob {
     fate: PromiseFate,
 }
 
+struct CallFrame {
+    this: JsValue,
+    home: Option<Obj>,
+}
+
 enum Reference {
     Binding(String),
     Property(JsValue, String),
@@ -50,6 +55,7 @@ pub struct Interpreter {
     native_stack: Vec<Obj>,
     jobs: VecDeque<PromiseJob>,
     completion: JsValue,
+    frames: Vec<CallFrame>,
 }
 
 impl Interpreter {
@@ -106,6 +112,7 @@ impl Interpreter {
             native_stack: Vec::new(),
             jobs: VecDeque::new(),
             completion: JsValue::Undefined,
+            frames: Vec::new(),
         };
         i.global_obj
             .borrow_mut()
@@ -673,7 +680,19 @@ impl Interpreter {
                 .resolve(&i.name)
                 .ok_or_else(|| Throw::reference_error(format!("{} is not defined", i.name))),
             ExprKind::This => Ok(env.resolve_this()),
-            ExprKind::Super => Err(Throw::syntax_error("unexpected super")),
+            ExprKind::Super => {
+                let home = self
+                    .frames
+                    .last()
+                    .and_then(|frame| frame.home.clone())
+                    .ok_or_else(|| Throw::syntax_error("super used outside a method"))?;
+                let prototype = home
+                    .borrow()
+                    .proto
+                    .clone()
+                    .ok_or_else(|| Throw::type_error("super prototype is null"))?;
+                Ok(JsValue::Object(prototype))
+            }
             ExprKind::Template(t) => {
                 let mut s = String::new();
                 for (i, q) in t.quasis.iter().enumerate() {
@@ -1221,7 +1240,15 @@ impl Interpreter {
                 return Ok(JsValue::Undefined);
             }
             let k = self.member_key(prop, e)?;
-            (self.get_prop(&o, &k)?, o)
+            let receiver = if matches!(&obj.kind, ExprKind::Super) {
+                self.frames
+                    .last()
+                    .map(|frame| frame.this.clone())
+                    .unwrap_or(JsValue::Undefined)
+            } else {
+                o.clone()
+            };
+            (self.get_prop(&o, &k)?, receiver)
         } else {
             (self.eval_expr(c, e)?, JsValue::Undefined)
         };
@@ -1283,6 +1310,10 @@ impl Interpreter {
             return Err(Throw::range_error("maximum call stack size exceeded"));
         }
         self.depth += 1;
+        self.frames.push(CallFrame {
+            this: this.clone(),
+            home: fun.home.clone(),
+        });
         let previous_completion = self.completion.clone();
         self.completion = JsValue::Undefined;
         let r = (|| -> Result<JsValue, Throw> {
@@ -1320,6 +1351,7 @@ impl Interpreter {
             }
         })();
         self.completion = previous_completion;
+        self.frames.pop();
         self.depth -= 1;
         if fun.is_async {
             match r {
@@ -1483,16 +1515,38 @@ impl Interpreter {
             )
         };
         if let JsValue::Object(o) = &f {
-            if let Some(JsValue::Object(p)) = o.borrow().get_own("prototype") {
+            let prototype = o.borrow().get_own("prototype");
+            if let Some(JsValue::Object(p)) = prototype {
+                if let Some(super_class) = &c.super_class {
+                    let super_value = self.eval_expr(super_class, e)?;
+                    let super_prototype = match super_value {
+                        JsValue::Object(super_constructor) => match super_constructor
+                            .borrow()
+                            .get_own("prototype")
+                        {
+                            Some(JsValue::Object(prototype)) => prototype,
+                            _ => {
+                                return Err(Throw::type_error("super constructor has no prototype"))
+                            }
+                        },
+                        _ => return Err(Throw::type_error("super class is not a constructor")),
+                    };
+                    p.borrow_mut().proto = Some(super_prototype);
+                }
+                let mut class_function = o.borrow_mut();
+                if let Some(function) = &mut class_function.func {
+                    function.home = Some(p.clone());
+                }
                 for m in &c.members {
                     if let ast::ClassMember::Method(x) = m {
                         if x.kind != ast::MethodKind::Constructor {
                             let k = self.prop_key(&x.key, e)?;
-                            self.set_prop(
-                                &JsValue::Object(p.clone()),
-                                &k,
-                                self.method_value(x, e),
-                            )?;
+                            let method = self.method_value(x, e);
+                            if let JsValue::Object(method_object) = &method {
+                                method_object.borrow_mut().func.as_mut().unwrap().home =
+                                    Some(p.clone());
+                            }
+                            self.set_prop(&JsValue::Object(p.clone()), &k, method)?;
                         }
                     }
                 }
@@ -3962,6 +4016,15 @@ mod tests {
             .run_script("JSON.stringify({a:1,b:[2]}) === '{\"a\":1,\"b\":[2]}' && JSON.parse('{\"x\":4}').x === 4 && parseInt('0x10') === 16 && parseFloat('1.5px') === 1.5;")
             .unwrap();
         assert!(matches!(value, JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn class_inheritance_dispatches_super_methods_with_the_real_receiver() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script("class A { value(){ return 4; } } class B extends A { value(){ return super.value()+1; } } new B().value();")
+            .unwrap();
+        assert_eq!(num(value), 5.0);
     }
 
     #[test]
