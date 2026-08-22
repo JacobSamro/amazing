@@ -1201,6 +1201,7 @@ mod windows {
             assert_eq!(host.get_attribute(node, "data-load"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-window"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-dom-api"), Some(Some("yes".into())));
+            assert_eq!(host.get_attribute(node, "data-selector-list"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-dataset"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-classlist"), Some(Some("ready active".into())));
             assert_eq!(host.get_attribute(node, "data-viewport"), Some(Some("yes".into())));

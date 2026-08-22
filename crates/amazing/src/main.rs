@@ -132,38 +132,72 @@ impl BrowserDomHost {
     }
 
     fn find(&self, node: amazing_dom::NodeIdx, selector: &str) -> Option<u32> {
-        let selector = amazing_css::selectors::parse_selector(selector.trim())?;
-        self.find_parsed(node, &selector)
+        let selectors = Self::parse_selector_list(selector)?;
+        self.find_any(node, &selectors)
     }
 
-    fn find_parsed(
+    fn parse_selector_list(selector: &str) -> Option<Vec<amazing_css::selectors::Selector>> {
+        let mut parts = Vec::new();
+        let mut start = 0usize;
+        let mut parens = 0usize;
+        let mut brackets = 0usize;
+        let mut quote = None;
+        let mut escaped = false;
+        for (index, ch) in selector.char_indices() {
+            if escaped { escaped = false; continue; }
+            if ch == '\\' && quote.is_some() { escaped = true; continue; }
+            if let Some(active) = quote {
+                if ch == active { quote = None; }
+                continue;
+            }
+            match ch {
+                '\'' | '"' => quote = Some(ch),
+                '(' => parens += 1,
+                ')' if parens > 0 => parens -= 1,
+                '[' => brackets += 1,
+                ']' if brackets > 0 => brackets -= 1,
+                ',' if parens == 0 && brackets == 0 => {
+                    parts.push(selector[start..index].trim());
+                    start = index + ch.len_utf8();
+                }
+                _ => {}
+            }
+        }
+        parts.push(selector[start..].trim());
+        if parts.iter().any(|part| part.is_empty()) { return None; }
+        parts.into_iter().map(amazing_css::selectors::parse_selector).collect()
+    }
+
+    fn find_any(
         &self,
         node: amazing_dom::NodeIdx,
-        selector: &amazing_css::selectors::Selector,
+        selectors: &[amazing_css::selectors::Selector],
     ) -> Option<u32> {
-        if amazing_css::selectors::matches(&self.dom, node, selector) {
+        if selectors.iter().any(|selector| amazing_css::selectors::matches(&self.dom, node, selector)) {
             return Some(node.0);
         }
         for child in self.dom.children(node) {
-            if let Some(found) = self.find_parsed(child, selector) { return Some(found) }
+            if let Some(found) = self.find_any(child, selectors) { return Some(found); }
         }
         None
     }
 
     fn find_all(&self, node: amazing_dom::NodeIdx, selector: &str, out: &mut Vec<u32>) {
-        let Ok(selector) = amazing_css::selectors::parse_selector(selector.trim()).ok_or(()) else { return };
-        self.find_all_parsed(node, &selector, out);
+        let Some(selectors) = Self::parse_selector_list(selector) else { return };
+        self.find_all_parsed(node, &selectors, out);
     }
 
     fn find_all_parsed(
         &self,
         node: amazing_dom::NodeIdx,
-        selector: &amazing_css::selectors::Selector,
+        selectors: &[amazing_css::selectors::Selector],
         out: &mut Vec<u32>,
     ) {
-        if amazing_css::selectors::matches(&self.dom, node, selector) { out.push(node.0); }
+        if selectors.iter().any(|selector| amazing_css::selectors::matches(&self.dom, node, selector)) {
+            out.push(node.0);
+        }
         for child in self.dom.children(node) {
-            self.find_all_parsed(child, selector, out);
+            self.find_all_parsed(child, selectors, out);
         }
     }
 

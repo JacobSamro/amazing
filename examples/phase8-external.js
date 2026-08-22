@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => title.setAttribute('data-rea
 window.addEventListener('load', () => title.setAttribute('data-load', 'yes'));
 document.querySelector('main').addEventListener('click', (event) => title.setAttribute('data-bubbled', event.currentTarget.getAttribute('id') === 'root' ? 'yes' : 'no'));
 if (document.querySelectorAll('p').length === 1 && document.getElementById('title') !== null) title.setAttribute('data-dom-api', 'yes');
+if (document.querySelectorAll('p, main').length === 2) title.setAttribute('data-selector-list', 'yes');
 if (title.innerHTML === 'before') { title.innerHTML = 'before'; title.setAttribute('data-inner', 'yes'); }
 title.onclick = (event) => { title.textContent = event.type + '!'; title.style.color = 'red'; };
 title.addEventListener('click', () => title.setAttribute('data-clicked', 'yes'));
