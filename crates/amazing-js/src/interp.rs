@@ -1675,6 +1675,24 @@ impl Interpreter {
                         native_string_includes,
                         &self.function_proto,
                     ))
+                } else if k == "replace" {
+                    Ok(Self::native(
+                        "replace",
+                        native_string_replace,
+                        &self.function_proto,
+                    ))
+                } else if k == "startsWith" {
+                    Ok(Self::native(
+                        "startsWith",
+                        native_string_starts_with,
+                        &self.function_proto,
+                    ))
+                } else if k == "endsWith" {
+                    Ok(Self::native(
+                        "endsWith",
+                        native_string_ends_with,
+                        &self.function_proto,
+                    ))
                 } else if k == "length" {
                     Ok(JsValue::num(s.chars().count() as f64))
                 } else if let Ok(n) = k.parse::<usize>() {
@@ -2276,6 +2294,10 @@ impl Interpreter {
             ("filter", native_array_filter as crate::value::NativeFn),
             ("forEach", native_array_for_each as crate::value::NativeFn),
             ("reduce", native_array_reduce as crate::value::NativeFn),
+            ("slice", native_array_slice as crate::value::NativeFn),
+            ("concat", native_array_concat as crate::value::NativeFn),
+            ("includes", native_array_includes as crate::value::NativeFn),
+            ("indexOf", native_array_index_of as crate::value::NativeFn),
         ] {
             let _ = self.set_prop(
                 &JsValue::Object(self.array_proto.clone()),
@@ -4089,6 +4111,55 @@ fn native_string_includes(
     Ok(JsValue::Bool(source.contains(&needle)))
 }
 
+fn native_string_replace(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = string_this(i, this)?;
+    let search = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let replacement = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    if let Some(position) = source.find(&search) {
+        let replacement = if callable_function(&replacement).is_some() {
+            let result = i.call_value(
+                &replacement,
+                JsValue::Undefined,
+                vec![JsValue::str(search.clone())],
+            )?;
+            i.to_string(&result)?
+        } else {
+            i.to_string(&replacement)?
+        };
+        let mut output = String::new();
+        output.push_str(&source[..position]);
+        output.push_str(&replacement);
+        output.push_str(&source[position + search.len()..]);
+        Ok(JsValue::str(output))
+    } else {
+        Ok(JsValue::str(source))
+    }
+}
+
+fn native_string_starts_with(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = string_this(i, this)?;
+    let search = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::Bool(source.starts_with(&search)))
+}
+
+fn native_string_ends_with(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = string_this(i, this)?;
+    let search = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::Bool(source.ends_with(&search)))
+}
+
 fn array_callback(
     i: &mut Interpreter,
     this: JsValue,
@@ -4194,6 +4265,78 @@ fn native_array_reduce(
     }
     Ok(accumulator)
 }
+
+fn native_array_slice(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let length = i.array_length(&this) as i64;
+    let start = i
+        .to_number(args.first().unwrap_or(&JsValue::num(0.0)))?
+        .trunc() as i64;
+    let end = i
+        .to_number(args.get(1).unwrap_or(&JsValue::num(length as f64)))?
+        .trunc() as i64;
+    let start = if start < 0 {
+        (length + start).max(0)
+    } else {
+        start.min(length)
+    } as usize;
+    let end = if end < 0 {
+        (length + end).max(0)
+    } else {
+        end.min(length)
+    } as usize;
+    let mut values = Vec::new();
+    for index in start..end.max(start) {
+        values.push(i.get_prop(&this, &index.to_string())?);
+    }
+    array_values(i, values)
+}
+
+fn native_array_concat(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let mut values = i.iterate(&this)?;
+    for argument in args {
+        if matches!(argument, JsValue::Object(ref object) if matches!(object.borrow().exotic, Exotic::Array))
+            || matches!(argument, JsValue::Str(_))
+        {
+            values.extend(i.iterate(&argument)?);
+        } else {
+            values.push(argument);
+        }
+    }
+    array_values(i, values)
+}
+
+fn native_array_includes(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let search = args.first().cloned().unwrap_or(JsValue::Undefined);
+    Ok(JsValue::Bool(
+        i.iterate(&this)?.into_iter().any(|value| value == search),
+    ))
+}
+
+fn native_array_index_of(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let search = args.first().cloned().unwrap_or(JsValue::Undefined);
+    for (index, value) in i.iterate(&this)?.into_iter().enumerate() {
+        if value == search {
+            return Ok(JsValue::num(index as f64));
+        }
+    }
+    Ok(JsValue::num(-1.0))
+}
 fn native_boolean(_: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let value = JsValue::Bool(a.first().map(|x| x.to_boolean()).unwrap_or(false));
     if let JsValue::Object(object) = &this {
@@ -4273,6 +4416,10 @@ mod tests {
         assert!(matches!(value, JsValue::Bool(true)));
         let value = i.run_script("Object.values({a:1,b:2}).join(',');").unwrap();
         assert_eq!(i.to_string(&value).unwrap(), "1,2");
+        let value = i
+            .run_script("[1,2,3,4].slice(1,3).concat([5]).includes(5) && [1,2,3].indexOf(2)===1 && 'abcdef'.replace('cd','X')==='abXef' && 'abc'.startsWith('a') && 'abc'.endsWith('c');")
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
         let mut j = Interpreter::new();
         let value = j
             .run_script("JSON.stringify({a:1,b:[2]}) === '{\"a\":1,\"b\":[2]}' && JSON.parse('{\"x\":4}').x === 4 && parseInt('0x10') === 16 && parseFloat('1.5px') === 1.5;")
