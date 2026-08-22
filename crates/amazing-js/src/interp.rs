@@ -101,6 +101,8 @@ pub struct Interpreter {
     dom_listeners: Vec<DomListener>,
     timers: Vec<TimerJob>,
     next_timer_id: u32,
+    location_url: String,
+    pending_navigation: Option<String>,
 }
 
 impl Interpreter {
@@ -162,6 +164,8 @@ impl Interpreter {
             dom_listeners: Vec::new(),
             timers: Vec::new(),
             next_timer_id: 1,
+            location_url: String::new(),
+            pending_navigation: None,
         };
         i.global_obj
             .borrow_mut()
@@ -169,7 +173,39 @@ impl Interpreter {
         let global_this = JsValue::Object(i.global_obj.clone());
         let _ = i.global_env.declare_var("globalThis", global_this);
         i.install_builtins();
+        i.install_location();
         i
+    }
+
+    fn install_location(&mut self) {
+        let mut location = JsObject::ordinary();
+        location.proto = Some(self.object_proto.clone());
+        let href_getter = Self::native("get href", native_location_href_get, &self.function_proto);
+        let href_setter = Self::native("set href", native_location_href_set, &self.function_proto);
+        let href_getter = match href_getter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native href getter"),
+            _ => unreachable!(),
+        };
+        let href_setter = match href_setter {
+            JsValue::Object(o) => o.borrow().func.clone().expect("native href setter"),
+            _ => unreachable!(),
+        };
+        let _ = location.define(
+            "href",
+            Property {
+                value: JsValue::Undefined,
+                writable: false,
+                enumerable: true,
+                configurable: true,
+                getter: Some(Box::new(href_getter)),
+                setter: Some(Box::new(href_setter)),
+            },
+        );
+        location.set_own("assign", Self::native("assign", native_location_assign, &self.function_proto));
+        location.set_own("replace", Self::native("replace", native_location_assign, &self.function_proto));
+        let location = JsValue::Object(Obj(Rc::new(RefCell::new(location))));
+        self.global_obj.borrow_mut().set_own("location", location.clone());
+        let _ = self.global_env.declare_var("location", location);
     }
 
     /// Attach a live host and install the browser-facing `document` global.
@@ -178,11 +214,20 @@ impl Interpreter {
         let window = JsValue::Object(self.global_obj.clone());
         self.global_obj.borrow_mut().set_own("window", window.clone());
         let _ = self.global_env.declare_var("window", window);
+        self.install_location();
         let document = self.make_dom_document();
         self.global_obj
             .borrow_mut()
             .set_own("document", document.clone());
         let _ = self.global_env.declare_lexical("document", document, false);
+    }
+
+    pub fn set_location_url(&mut self, url: impl Into<String>) {
+        self.location_url = url.into();
+    }
+
+    pub fn take_navigation(&mut self) -> Option<String> {
+        self.pending_navigation.take()
     }
 
     /// Runs promise reactions queued by a host callback. Browser integrations
@@ -3023,6 +3068,33 @@ fn native_dom_title_set(
     Ok(JsValue::Undefined)
 }
 
+fn native_location_href_get(
+    i: &mut Interpreter,
+    _: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(JsValue::str(i.location_url.clone()))
+}
+
+fn native_location_href_set(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let url = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    i.location_url = url.clone();
+    i.pending_navigation = Some(url);
+    Ok(JsValue::Undefined)
+}
+
+fn native_location_assign(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    native_location_href_set(i, JsValue::Undefined, args)
+}
+
 fn native_dom_get_attribute(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let id = dom_id(&this)?;
     let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
@@ -5558,5 +5630,16 @@ mod tests {
         assert!(i.pump_timers().unwrap());
         assert_eq!(&*i.output.borrow(), &["later".to_string()]);
         assert!(!i.pump_timers().unwrap());
+    }
+
+    #[test]
+    fn location_requests_navigation_and_updates_href() {
+        let mut i = Interpreter::new();
+        i.set_location_url("page.html");
+        let value = i
+            .run_script("location.assign('next.html'); location.href;")
+            .unwrap();
+        assert_eq!(i.to_string(&value).unwrap(), "next.html");
+        assert_eq!(i.take_navigation().as_deref(), Some("next.html"));
     }
 }

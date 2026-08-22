@@ -360,6 +360,17 @@ mod windows {
                         tab.history.push(input.clone());
                         tab.history_pos = tab.history.len().saturating_sub(1);
                     }
+                    let script_navigation = self
+                        .tab_mut()
+                        .runtime
+                        .as_mut()
+                        .and_then(|runtime| runtime.js.take_navigation());
+                    if let Some(url) = script_navigation {
+                        if url != input {
+                            self.navigate(url, true);
+                            return;
+                        }
+                    }
                     set_window_text(self.address, &input);
                     set_window_text(self.hwnd, &format!("Ferric — {input}"));
                     self.update_tab_button();
@@ -468,6 +479,15 @@ mod windows {
                     return;
                 }
             }
+            let navigation = self
+                .tab_mut()
+                .runtime
+                .as_mut()
+                .and_then(|runtime| runtime.js.take_navigation());
+            if let Some(url) = navigation {
+                self.navigate(url, true);
+                return;
+            }
             self.repaint_runtime();
             // SAFETY: hwnd is the live top-level window owned by the message
             // loop; invalidating it schedules a repaint only.
@@ -486,6 +506,15 @@ mod windows {
             } else {
                 false
             };
+            let navigation = self
+                .tab_mut()
+                .runtime
+                .as_mut()
+                .and_then(|runtime| runtime.js.take_navigation());
+            if let Some(url) = navigation {
+                self.navigate(url, true);
+                return;
+            }
             if fired {
                 self.repaint_runtime();
                 // SAFETY: hwnd is the live top-level window owned by the
@@ -641,6 +670,7 @@ mod windows {
         };
         let mut js = amazing_js::Interpreter::new();
         js.set_dom_host(host.clone());
+        js.set_location_url(input);
         for script in scripts {
             let source = match script.src {
                 Some(src) => {

@@ -578,6 +578,7 @@ fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &str) -> Res
     }
     let mut js = amazing_js::Interpreter::new();
     js.set_dom_host(host.clone());
+    js.set_location_url(page);
     for script in scripts {
         let source = match script.src {
             Some(src) => {
