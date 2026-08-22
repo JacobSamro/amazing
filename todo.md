@@ -28,14 +28,17 @@ Sync loop: edit locally → `scp -r` changed paths → build/test via ssh → co
 CI artifact: `.github/workflows/ci.yml` runs the workspace build and test gate on
 push and pull request using the Windows toolchain.
 
-## Phase 1 in-flight — finish these, in this order
+## Historical Phase 1 handoff checklist (superseded)
 
-### 1. REWRITE `crates/amazing-html/src/tokenizer.rs` (broken, do not patch)
+The detailed checklist below is retained as design history only. Phase 1 was
+completed and verified; do not treat the old "in-flight" instructions as
+current work items. The authoritative current status is the completed report
+immediately below and the phase table above.
 
-The committed draft is **invalid Rust**: struct fields declared inside an
-impl block (`was_end_tag_flag`, `finish_attr_placeholder`), a half-wired
-`PendingAttr`, and a mangled `emit_tag`. Delete and rewrite from the design
-below. It was never compiled.
+### 1. Historical tokenizer rewrite design
+
+Historical note: an early draft had invalid Rust and was replaced by the
+compiled tokenizer described in the completed report below.
 
 Design that was intended (keep it):
 - `Tokenizer { input: Vec<char>, pos, state, queue: VecDeque<Token>, text_buf,
@@ -74,7 +77,8 @@ Design that was intended (keep it):
 
 ### 3. Write `crates/amazing-html/src/tree.rs` (~600–800 lines)
 
-Not started. This is the biggest piece of Phase 1. Spec: §13.2.6
+Historical planning note. This was the biggest piece of Phase 1 and is now
+implemented. Spec: §13.2.6
 "Tree construction". Required insertion modes:
 
 ```
@@ -133,10 +137,11 @@ Use the new Dom low-level API added in Phase 1: `alloc_unattached`,
   `</br>`→br; adjacent text merges into ONE node; doctype captured.
 - Gate: `cargo test --workspace` green on win-001, then commit.
 
-### 6. Report (per goal prompt format) and STOP for confirmation
+### 6. Historical phase-gate reporting requirement
 
 What's implemented vs deferred, demo command (`amazing parse page.html`),
-correctness gaps, then ask before Phase 2. Do not auto-proceed.
+correctness gaps, then ask before Phase 2. This gate was completed; later
+phase work is recorded in the sections that follow.
 
 ## Phase 1 — DONE (win-001, all tests green)
 
