@@ -181,6 +181,15 @@ impl Interpreter {
                     self.hoist(std::slice::from_ref(body), env)?;
                 }
                 StmtKind::Labeled { body, .. } => self.hoist(std::slice::from_ref(body), env)?,
+                StmtKind::Try(statement) => {
+                    self.hoist(&statement.block.body, env)?;
+                    if let Some(catch) = &statement.catch {
+                        self.hoist(&catch.body.body, env)?;
+                    }
+                    if let Some(finally) = &statement.finally {
+                        self.hoist(&finally.body, env)?;
+                    }
+                }
                 _ => {}
             }
         }
@@ -241,7 +250,6 @@ impl Interpreter {
             StmtKind::Block(b) => {
                 self.completion = JsValue::Undefined;
                 let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-                self.hoist(&b.body, &e)?;
                 self.exec_stmts(&b.body, &e)
             }
             StmtKind::If { cond, then, els } => {
@@ -269,36 +277,14 @@ impl Interpreter {
                 body,
             } => {
                 self.completion = JsValue::Undefined;
-                let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-                if let Some(i) = init {
-                    match i {
-                        ForInit::Decl(d) => {
-                            let fake = ast::Stmt::new(StmtKind::Var((**d).clone()), s.span.clone());
-                            self.exec_stmt(&fake, &e)?;
-                        }
-                        ForInit::Expr(x) => {
-                            self.eval_expr(x, &e)?;
-                        }
-                    }
-                }
-                loop {
-                    if let Some(t) = test {
-                        if !self.eval_expr(t, &e)?.to_boolean() {
-                            break;
-                        }
-                    }
-                    match self.exec_stmt(body, &e)? {
-                        Flow::Break(None) => break,
-                        Flow::Break(x) => return Ok(Flow::Break(x)),
-                        Flow::Continue(None) | Flow::Normal => {}
-                        Flow::Continue(x) => return Ok(Flow::Continue(x)),
-                        Flow::Return(v) => return Ok(Flow::Return(v)),
-                    }
-                    if let Some(u) = update {
-                        self.eval_expr(u, &e)?;
-                    }
-                }
-                Ok(Flow::Normal)
+                self.loop_for(
+                    init.as_ref(),
+                    test.as_ref(),
+                    update.as_ref(),
+                    body,
+                    env,
+                    None,
+                )
             }
             StmtKind::ForIn { left, right, body } => {
                 self.completion = JsValue::Undefined;
@@ -365,6 +351,19 @@ impl Interpreter {
                 StmtKind::DoWhile { body, test } => {
                     self.loop_do_while(body, test, env, Some(&label.name))
                 }
+                StmtKind::For {
+                    init,
+                    test,
+                    update,
+                    body,
+                } => self.loop_for(
+                    init.as_ref(),
+                    test.as_ref(),
+                    update.as_ref(),
+                    body,
+                    env,
+                    Some(&label.name),
+                ),
                 _ => match self.exec_stmt(body, env)? {
                     Flow::Break(Some(x)) if x == label.name => Ok(Flow::Normal),
                     x => Ok(x),
@@ -442,6 +441,95 @@ impl Interpreter {
         }
         Ok(Flow::Normal)
     }
+
+    fn loop_for(
+        &mut self,
+        init: Option<&ForInit>,
+        test: Option<&ast::Expr>,
+        update: Option<&ast::Expr>,
+        body: &ast::Stmt,
+        env: &EnvHandle,
+        label: Option<&str>,
+    ) -> Result<Flow, Throw> {
+        let loop_env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+        if let Some(init) = init {
+            match init {
+                ForInit::Decl(decl) => {
+                    let fake = ast::Stmt::new(StmtKind::Var((**decl).clone()), body.span.clone());
+                    self.exec_stmt(&fake, &loop_env)?;
+                }
+                ForInit::Expr(expression) => {
+                    self.eval_expr(expression, &loop_env)?;
+                }
+            }
+        }
+        let per_iteration_names: Vec<String> = match init {
+            Some(ForInit::Decl(decl)) if decl.kind != ast::VarKind::Var => decl
+                .decls
+                .iter()
+                .map(|declarator| match &declarator.binding {
+                    Binding::Ident(identifier) => identifier.name.clone(),
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let state_env = if per_iteration_names.is_empty() {
+            loop_env.clone()
+        } else {
+            let state = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+            for name in &per_iteration_names {
+                let value = loop_env.resolve(name).unwrap_or(JsValue::Undefined);
+                state.declare_lexical(name, value, true)?;
+            }
+            state
+        };
+        loop {
+            let iteration_env = if per_iteration_names.is_empty() {
+                loop_env.clone()
+            } else {
+                let iteration = EnvHandle::new(EnvKind::Block, Some(state_env.clone()));
+                for name in &per_iteration_names {
+                    let value = state_env.resolve(name).unwrap_or(JsValue::Undefined);
+                    iteration.declare_lexical(name, value, true)?;
+                }
+                iteration
+            };
+            if let Some(test) = test {
+                if !self.eval_expr(test, &iteration_env)?.to_boolean() {
+                    break;
+                }
+            }
+            match self.exec_stmt(body, &iteration_env)? {
+                Flow::Break(None) => break,
+                Flow::Break(Some(name)) if label == Some(name.as_str()) => break,
+                Flow::Continue(None) => {}
+                Flow::Continue(Some(name)) if label == Some(name.as_str()) => {}
+                Flow::Normal => {}
+                Flow::Continue(name) => return Ok(Flow::Continue(name)),
+                Flow::Break(name) => return Ok(Flow::Break(name)),
+                Flow::Return(value) => return Ok(Flow::Return(value)),
+            }
+            if per_iteration_names.is_empty() {
+                if let Some(update) = update {
+                    self.eval_expr(update, &loop_env)?;
+                }
+            } else {
+                let update_env = EnvHandle::new(EnvKind::Block, Some(state_env.clone()));
+                for name in &per_iteration_names {
+                    let value = iteration_env.resolve(name).unwrap_or(JsValue::Undefined);
+                    update_env.declare_lexical(name, value, true)?;
+                }
+                if let Some(update) = update {
+                    self.eval_expr(update, &update_env)?;
+                }
+                for name in &per_iteration_names {
+                    let value = update_env.resolve(name).unwrap_or(JsValue::Undefined);
+                    state_env.assign(name, value)?;
+                }
+            }
+        }
+        Ok(Flow::Normal)
+    }
     fn bind_for(&mut self, left: &ForLeft, value: JsValue, env: &EnvHandle) -> Result<(), Throw> {
         match left {
             ForLeft::Target(t) => self.assign_target(t, value, env),
@@ -463,7 +551,7 @@ impl Interpreter {
     }
     fn exec_try(&mut self, t: &ast::TryStmt, env: &EnvHandle) -> Result<Flow, Throw> {
         let e = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-        self.hoist(&t.block.body, &e)?;
+        self.hoist(&t.block.body, env)?;
         let mut out = match self.exec_stmts(&t.block.body, &e) {
             Ok(x) => Ok(x),
             Err(th) => {
@@ -472,7 +560,7 @@ impl Interpreter {
                     if let Some(p) = &c.param {
                         ce.declare_lexical(&p.name, th.0, true)?;
                     }
-                    self.hoist(&c.body.body, &ce)?;
+                    self.hoist(&c.body.body, env)?;
                     self.exec_stmts(&c.body.body, &ce)
                 } else {
                     Err(th)
@@ -481,7 +569,7 @@ impl Interpreter {
         };
         if let Some(f) = &t.finally {
             let fe = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-            self.hoist(&f.body, &fe)?;
+            self.hoist(&f.body, env)?;
             match self.exec_stmts(&f.body, &fe) {
                 Ok(Flow::Normal) => {}
                 Ok(x) => out = Ok(x),
@@ -657,11 +745,24 @@ impl Interpreter {
     fn unary(&mut self, op: ast::UnOp, x: &ast::Expr, env: &EnvHandle) -> Result<JsValue, Throw> {
         match op {
             ast::UnOp::Typeof => {
-                if let ExprKind::Ident(i) = &x.kind {
-                    if let Some(v) = env.resolve(&i.name) {
-                        return Ok(JsValue::str(self.typeof_value(&v)));
+                match &x.kind {
+                    ExprKind::Ident(i) => {
+                        return Ok(JsValue::str(
+                            env.resolve(&i.name)
+                                .map(|v| self.typeof_value(&v))
+                                .unwrap_or("undefined"),
+                        ));
                     }
-                    return Ok(JsValue::str("undefined"));
+                    ExprKind::Paren(inner) if matches!(inner.kind, ExprKind::Ident(_)) => {
+                        if let ExprKind::Ident(i) = &inner.kind {
+                            return Ok(JsValue::str(
+                                env.resolve(&i.name)
+                                    .map(|v| self.typeof_value(&v))
+                                    .unwrap_or("undefined"),
+                            ));
+                        }
+                    }
+                    _ => {}
                 }
                 let v = self.eval_expr(x, env)?;
                 Ok(JsValue::str(self.typeof_value(&v)))
@@ -1269,7 +1370,13 @@ impl Interpreter {
                 }
             }
             JsValue::Str(s) => {
-                if k == "length" {
+                if k == "split" {
+                    Ok(Self::native(
+                        "split",
+                        native_string_split,
+                        &self.function_proto,
+                    ))
+                } else if k == "length" {
                     Ok(JsValue::num(s.chars().count() as f64))
                 } else if let Ok(n) = k.parse::<usize>() {
                     Ok(s.chars()
@@ -2611,6 +2718,29 @@ fn native_string(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
         Ok(value)
     }
 }
+fn native_string_split(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let source = match this {
+        JsValue::Str(value) => value.to_string(),
+        value => i.to_string(&value)?,
+    };
+    let separator = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let parts: Vec<String> = if separator.is_undefined() {
+        vec![source]
+    } else {
+        let separator = i.to_string(&separator)?;
+        if separator.is_empty() {
+            source.chars().map(|c| c.to_string()).collect()
+        } else {
+            source.split(&separator).map(str::to_string).collect()
+        }
+    };
+    let values = parts.into_iter().map(JsValue::str).collect();
+    array_values(i, values)
+}
 fn native_boolean(_: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let value = JsValue::Bool(a.first().map(|x| x.to_boolean()).unwrap_or(false));
     if let JsValue::Object(object) = &this {
@@ -2783,6 +2913,21 @@ mod tests {
             )
             .unwrap();
         assert_eq!(num(value), 1.0);
+    }
+
+    #[test]
+    fn descriptors_and_completion_values_are_observable() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script(
+                "let o={}; Object.defineProperty(o,'x',{get:function(){return 0;},set:undefined,enumerable:true,configurable:true}); o.x &&= 1; o.x;",
+            )
+            .unwrap();
+        assert_eq!(num(value), 0.0);
+        let value = i
+            .run_script("eval('1; for (var x=true; x; x=false) { 3; }');")
+            .unwrap();
+        assert_eq!(num(value), 3.0);
     }
 
     #[test]

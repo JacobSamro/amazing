@@ -23,7 +23,10 @@ function assert(condition, message) {
   if (!condition) { throw message || "Test262 assert failed"; }
 }
 assert.sameValue = function (actual, expected, message) {
-  if (!(actual === expected)) { throw message || "Test262 sameValue failed"; }
+  if (!(actual === expected)) {
+    throw (message || "Test262 sameValue failed") +
+      " actual=" + actual + " expected=" + expected;
+  }
 };
 assert.notSameValue = function (actual, unexpected) {
   if (actual === unexpected) { throw "Test262 notSameValue failed"; }
@@ -45,7 +48,7 @@ assert.throws = function (constructor, callback) {
   try { callback(); } catch (error) { threw = true; }
   if (!threw) { throw "Test262 throws failed"; }
 };
-var Test262Error = function () {};
+function Test262Error(message) { this.name = "Test262Error"; this.message = message; }
 function $ERROR(message) { throw message; }
 """
 
