@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
 use crate::env::{EnvHandle, EnvKind};
@@ -28,6 +29,13 @@ enum Flow {
 struct PromiseJob {
     reaction: PendingReaction,
     fate: PromiseFate,
+}
+
+struct TimerJob {
+    id: u32,
+    due: Instant,
+    callback: JsValue,
+    args: Vec<JsValue>,
 }
 
 struct CallFrame {
@@ -84,6 +92,8 @@ pub struct Interpreter {
     frames: Vec<CallFrame>,
     dom_host: Option<Rc<RefCell<dyn DomHost>>>,
     dom_listeners: Vec<DomListener>,
+    timers: Vec<TimerJob>,
+    next_timer_id: u32,
 }
 
 impl Interpreter {
@@ -143,6 +153,8 @@ impl Interpreter {
             frames: Vec::new(),
             dom_host: None,
             dom_listeners: Vec::new(),
+            timers: Vec::new(),
+            next_timer_id: 1,
         };
         i.global_obj
             .borrow_mut()
@@ -159,6 +171,53 @@ impl Interpreter {
             .borrow_mut()
             .set_own("document", document.clone());
         let _ = self.global_env.declare_lexical("document", document, false);
+    }
+
+    /// Runs promise reactions queued by a host callback. Browser integrations
+    /// call this after dispatching an input event or timer task.
+    pub fn drain_microtasks(&mut self) -> Result<(), Throw> {
+        self.drain_jobs()
+    }
+
+    pub fn schedule_timer(
+        &mut self,
+        callback: JsValue,
+        delay_ms: u64,
+        args: Vec<JsValue>,
+    ) -> u32 {
+        let id = self.next_timer_id;
+        self.next_timer_id = self.next_timer_id.wrapping_add(1).max(1);
+        self.timers.push(TimerJob {
+            id,
+            due: Instant::now() + Duration::from_millis(delay_ms),
+            callback,
+            args,
+        });
+        id
+    }
+
+    pub fn cancel_timer(&mut self, id: u32) {
+        self.timers.retain(|timer| timer.id != id);
+    }
+
+    /// Executes all timers whose deadline has passed, then drains resulting
+    /// Promise reactions. Returns whether at least one timer ran.
+    pub fn pump_timers(&mut self) -> Result<bool, Throw> {
+        let now = Instant::now();
+        let mut due = Vec::new();
+        self.timers.retain(|timer| {
+            if timer.due <= now {
+                due.push((timer.callback.clone(), timer.args.clone()));
+                false
+            } else {
+                true
+            }
+        });
+        for (callback, args) in due.iter() {
+            self.call_value(callback, JsValue::Undefined, args.clone())?;
+            self.drain_jobs()?;
+        }
+        Ok(!due.is_empty())
     }
 
     /// Dispatch a browser-style event to listeners registered on a live DOM
@@ -181,6 +240,7 @@ impl Interpreter {
         for callback in callbacks {
             self.call_value(&callback, target.clone(), vec![event.clone()])?;
         }
+        self.drain_jobs()?;
         Ok(())
     }
 
@@ -2291,6 +2351,14 @@ impl Interpreter {
         self.define_global(
             "eval",
             Self::native("eval", native_eval, &self.function_proto),
+        );
+        self.define_global(
+            "setTimeout",
+            Self::native("setTimeout", native_set_timeout, &self.function_proto),
+        );
+        self.define_global(
+            "clearTimeout",
+            Self::native("clearTimeout", native_clear_timeout, &self.function_proto),
         );
         self.define_global(
             "Error",
@@ -4854,6 +4922,35 @@ fn native_log(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValu
     Ok(JsValue::Undefined)
 }
 
+fn native_set_timeout(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let callback = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if callable_function(&callback).is_none() {
+        return Err(Throw::type_error("setTimeout callback is not callable"));
+    }
+    let delay = i
+        .to_number(args.get(1).unwrap_or(&JsValue::num(0.0)))?
+        .max(0.0)
+        .min(u64::MAX as f64) as u64;
+    let id = i.schedule_timer(callback, delay, args.into_iter().skip(2).collect());
+    Ok(JsValue::num(id as f64))
+}
+
+fn native_clear_timeout(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let id = i
+        .to_number(args.first().unwrap_or(&JsValue::Undefined))?
+        .max(0.0) as u32;
+    i.cancel_timer(id);
+    Ok(JsValue::Undefined)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5187,5 +5284,15 @@ mod tests {
         let mut i = Interpreter::new();
         i.run_script("console.log('hello', 3);").unwrap();
         assert_eq!(&*i.output.borrow(), &["hello 3".to_string()]);
+    }
+
+    #[test]
+    fn timers_run_only_when_the_host_pumps_them() {
+        let mut i = Interpreter::new();
+        i.run_script("setTimeout(()=>console.log('later'),0);").unwrap();
+        assert!(i.output.borrow().is_empty());
+        assert!(i.pump_timers().unwrap());
+        assert_eq!(&*i.output.borrow(), &["later".to_string()]);
+        assert!(!i.pump_timers().unwrap());
     }
 }

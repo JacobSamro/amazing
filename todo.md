@@ -364,10 +364,11 @@ to the headless SSH service), so visual GUI proof is still pending. Current
 Inline page scripts now execute against the live DOM before the first layout
 and repaint. Each tab retains its JS runtime; layout-box hit testing dispatches
 mouse clicks and repaints DOM/style mutations. Limitations are blocking
-navigation during fetch/paint, no native scrollbar thumb, no timer/network
-event-loop jobs after load, and no module/async script scheduling. Classic
+navigation during fetch/paint, no native scrollbar thumb, no interval/network
+event sources, and no module/async script scheduling. Classic
 external `script[src]` resources now resolve relative to the page URL/path and
-load through the existing fetcher.
+load through the existing fetcher; `setTimeout` and Promise microtasks use the
+cooperative GUI timer pump.
 
 ## Later phases (unchanged from goal prompt)
 

@@ -55,10 +55,12 @@ mod windows {
     const WM_MOUSEWHEEL: Uint = 0x020a;
     const WM_KEYDOWN: Uint = 0x0100;
     const WM_LBUTTONUP: Uint = 0x0202;
+    const WM_TIMER: Uint = 0x0113;
     const BN_CLICKED: u16 = 0;
     const GWLP_USERDATA: i32 = -21;
     const GWLP_WNDPROC: i32 = -4;
     const VK_RETURN: usize = 0x0d;
+    const GUI_TIMER_ID: usize = 1;
     const DIB_RGB_COLORS: u32 = 0;
     const ID_ADDRESS: usize = 101;
     const ID_GO: usize = 102;
@@ -162,6 +164,8 @@ mod windows {
         fn InvalidateRect(hwnd: Hwnd, rect: *const Rect, erase: i32) -> i32;
         fn MoveWindow(hwnd: Hwnd, x: i32, y: i32, width: i32, height: i32, repaint: i32) -> i32;
         fn PostQuitMessage(code: i32);
+        fn SetTimer(hwnd: Hwnd, id: usize, elapse: u32, callback: Handle) -> usize;
+        fn KillTimer(hwnd: Hwnd, id: usize) -> i32;
         fn CallWindowProcW(previous: isize, hwnd: Hwnd, message: Uint, w_param: Wparam, l_param: Lparam) -> Lresult;
         fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
         fn SetWindowTextW(hwnd: Hwnd, text: *const u16) -> i32;
@@ -468,6 +472,26 @@ mod windows {
             // SAFETY: hwnd is the live top-level window owned by the message
             // loop; invalidating it schedules a repaint only.
             unsafe { InvalidateRect(self.hwnd, null(), 0) };
+        }
+
+        fn pump_timers(&mut self) {
+            let fired = if let Some(runtime) = self.tab_mut().runtime.as_mut() {
+                match runtime.js.pump_timers() {
+                    Ok(fired) => fired,
+                    Err(error) => {
+                        eprintln!("amazing gui: timer callback failed: {}", error.describe());
+                        false
+                    }
+                }
+            } else {
+                false
+            };
+            if fired {
+                self.repaint_runtime();
+                // SAFETY: hwnd is the live top-level window owned by the
+                // message loop; invalidating it schedules a repaint only.
+                unsafe { InvalidateRect(self.hwnd, null(), 0) };
+            }
         }
 
         fn go_back(&mut self) {
@@ -792,11 +816,18 @@ mod windows {
                 unsafe { &mut *state_ptr }.click(x, y);
                 0
             }
+            WM_TIMER if !state_ptr.is_null() => {
+                unsafe { &mut *state_ptr }.pump_timers();
+                0
+            }
             WM_PAINT if !state_ptr.is_null() => {
                 paint(hwnd, unsafe { &*state_ptr });
                 0
             }
             WM_DESTROY => {
+                // SAFETY: the timer belongs to this top-level window and is
+                // stopped before the message loop exits.
+                unsafe { KillTimer(hwnd, GUI_TIMER_ID) };
                 // SAFETY: posting WM_QUIT is the documented way to terminate
                 // this thread's GetMessage loop after the top-level window.
                 unsafe { PostQuitMessage(0) };
@@ -959,6 +990,7 @@ mod windows {
                 GWLP_WNDPROC,
                 edit_proc as *const () as usize as isize,
             );
+            SetTimer(hwnd, GUI_TIMER_ID, 16, null_mut());
         }
         unsafe { &mut *state_ptr }.navigate(initial.unwrap_or("examples/sample.html").to_owned(), true);
         // SAFETY: hwnd is a valid top-level window and the message-loop calls
@@ -1028,10 +1060,20 @@ mod windows {
                 .dispatch_dom_event(node, "click")
                 .expect("click dispatch");
             state.repaint_runtime();
+            state
+                .tab_mut()
+                .runtime
+                .as_mut()
+                .unwrap()
+                .js
+                .pump_timers()
+                .expect("timer pump");
+            state.repaint_runtime();
             let host = state.tab().runtime.as_ref().unwrap().host.clone();
             let host = host.borrow();
             assert_eq!(host.get_text_content(node).as_deref(), Some("click!"));
             assert_eq!(host.get_attribute(node, "data-clicked"), Some(Some("yes".into())));
+            assert_eq!(host.get_attribute(node, "data-timer"), Some(Some("yes".into())));
             assert_eq!(host.get_style(node, "color").as_deref(), Some("red"));
             assert!(state.tab().surface.as_ref().unwrap().height > 0);
         }
