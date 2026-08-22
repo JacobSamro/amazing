@@ -10,7 +10,8 @@
 |-------|--------|
 | 0 — skeleton | ✅ done, all exit criteria met on win-001 |
 | 1 — HTML parser | ✅ done on win-001 (51 workspace tests green) — see report gaps |
-| 2–9 | not started |
+| 2 — CSS | ✅ done on win-001 (88 workspace tests green) — see Phase 2 section |
+| 3–9 | not started |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -142,11 +143,30 @@ table; template/frameset/select modes; foreign content; foster parenting
 ignores reconstructed formatting elements; PUBLIC/SYSTEM ids not captured;
 quirks flag approximated. WPT tracking starts Phase 3 per plan.
 
+## Phase 2 — DONE (win-001, all tests green)
+
+Shipped: `amazing-css` (std-only, zero deps) with `syntax.rs` (css-syntax-3 §4
+tokenizer + serializer: comments, strings+escapes, numbers/dimensions/%,
+functions paired with explicit parens, hash/at-keywords), `parser.rs` (§5:
+qualified rules, comma-split preludes, `!important`, spec-style error
+recovery, at-rules consumed-and-dropped, inline `style=""` via
+`parse_declarations`), `selectors.rs` (css-selectors-4 subset: all four
+combinators right-to-left matching, attr ops incl. `i` flag, structural
+pseudos with full an+b micro-syntax incl. sign-folding token recovery,
+`:root/:empty/:link`, never-match interactive set, `:not/:is/:where` over
+compound args, §6.4 specificity), `cascade.rs` (css-cascade-4 §6 full key:
+importance → origin → inline → specificity → order; inheritance set; 40
+initial values; ~60-rule UA sheet; delta-view for the demo).
+Driver: `amazing style page.html [more.css…]` demo subcommand +
+`crates/amazing/tests/phase2_style.rs` e2e gate.
+
+Known gaps (deferred, in module docs): no shorthand→longhand expansion;
+at-rule bodies not interpreted (`@media` etc. dropped); custom properties,
+`var()`, pseudo-elements, namespaces, `:lang()`, `nth- of S` unsupported;
+presentational attributes ignored; interactive pseudos never match.
+
 ## Later phases (unchanged from goal prompt)
 
-- **2 CSS** Syntax-3 tokenizer/parser, selectors+specificity, cascade over
-  the arena DOM. Needs `Element.attrs` (already in place) plus class/id
-  parsing from attrs.
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
   WPT css/CSS2 tracking starts here.
 - **3.5 Flexbox/Grid** · **4 Paint** software rasterizer + PPM writer ·
