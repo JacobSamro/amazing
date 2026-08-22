@@ -21,8 +21,8 @@ const PIPELINE: &[(&str, &str)] = &[
         "amazing-layout",
         "Phase 3: block/inline FC layout — `layout` subcommand",
     ),
-    ("amazing-paint", "Phase 4: software rasterizer — not started"),
-    ("amazing-net", "Phase 5: HTTP/1.1 — not started"),
+    ("amazing-paint", "Phase 4: software rasterizer — `render` subcommand"),
+    ("amazing-net", "Phase 5: HTTP/1.1 fetcher (library; TLS deferred)"),
     ("amazing-js", "Phase 6: ECMA-262 interpreter — not started"),
 ];
 
@@ -41,9 +41,11 @@ fn main() -> ExitCode {
         Some("parse") => cmd_parse(args.get(2).map(String::as_str)),
         Some("style") => cmd_style(&args[2..]),
         Some("layout") => cmd_layout(&args[2..]),
+        Some("render") => cmd_render(&args[2..]),
+        Some("fetch") => cmd_fetch(&args[2..]),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]]");
             ExitCode::FAILURE
         },
     }
@@ -217,4 +219,98 @@ fn cmd_layout(args: &[String]) -> ExitCode {
     let root = amazing_layout::layout_document(&html, &css, width, &fonts);
     print!("{}", amazing_layout::dump_layout(&dom, &root));
     ExitCode::SUCCESS
+}
+
+/// Phase 4 demo: `amazing render <page.html> <out.bmp> [viewport_width]`
+/// (plus optional extra CSS files after the width). Lays out the page,
+/// rasterizes it into the software framebuffer, and writes a 24-bit BMP
+/// alongside a PPM twin (`<out>.ppm`).
+fn cmd_render(args: &[String]) -> ExitCode {
+    let html_path = match args.first() {
+        Some(p) => p,
+        None => {
+            eprintln!("usage: amazing render <page.html> <out.bmp> [viewport_width] [extra.css…]");
+            return ExitCode::FAILURE;
+        },
+    };
+    let out_path = args.get(1).map(String::as_str).unwrap_or("render.bmp");
+    let width: f32 = args.get(2).and_then(|w| w.parse().ok()).unwrap_or(800.0);
+
+    let html = match read_source(Some(html_path), "render") {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let dom = amazing_html::parse(&html);
+
+    let mut css = String::new();
+    collect_style_text(&dom, amazing_dom::NodeIdx(0), &mut css);
+    for extra in args.get(3..).unwrap_or(&[]) {
+        match read_source(Some(extra), "render") {
+            Ok(s) => {
+                css.push('\n');
+                css.push_str(&s);
+            },
+            Err(code) => return code,
+        }
+    }
+
+    let fonts = amazing_layout::font::FontSource::fallback();
+    let root = amazing_layout::layout_document(&html, &css, width, &fonts);
+    // Page height = root margin-box bottom edge (what layout_root returns),
+    // clamped so a runaway document cannot exhaust memory.
+    let page_h = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
+        .ceil()
+        .clamp(1.0, 8192.0) as u32;
+    let surface =
+        amazing_paint::paint_document(&root, width.max(1.0) as u32, page_h, &fonts);
+
+    if let Err(e) = surface.save_bmp(out_path) {
+        eprintln!("amazing render: cannot write {out_path}: {e}");
+        return ExitCode::FAILURE;
+    }
+    let ppm_path = match out_path.rsplit_once('.') {
+        Some((stem, _)) => format!("{stem}.ppm"),
+        None => format!("{out_path}.ppm"),
+    };
+    if let Err(e) = surface.save_ppm(&ppm_path) {
+        eprintln!("amazing render: cannot write {ppm_path}: {e}");
+        return ExitCode::FAILURE;
+    }
+    println!(
+        "rendered {}x{} px → {out_path} (+{ppm_path})",
+        surface.width, surface.height
+    );
+    ExitCode::SUCCESS
+}
+
+/// Phase 5 demo: `amazing fetch <url|file|path> [-i]`. Performs an HTTP/1.1
+/// GET (or reads a file:// / bare path), prints status + headers + body.
+/// `-i` includes the response headers.
+fn cmd_fetch(args: &[String]) -> ExitCode {
+    let target = match args.first() {
+        Some(p) if !p.starts_with('-') => p,
+        _ => {
+            eprintln!("usage: amazing fetch <url|file> [-i]");
+            return ExitCode::FAILURE;
+        },
+    };
+    let show_headers = args.iter().any(|a| a == "-i");
+
+    match amazing_net::fetch(target, &amazing_net::FetchOptions::default()) {
+        Ok(resp) => {
+            println!("{} {} ({})", resp.status, resp.reason, resp.url);
+            if show_headers {
+                for (name, value) in resp.headers.iter() {
+                    println!("{name}: {value}");
+                }
+                println!();
+            }
+            print!("{}", resp.text().unwrap_or_default());
+            ExitCode::SUCCESS
+        },
+        Err(e) => {
+            eprintln!("amazing fetch: {e}");
+            ExitCode::FAILURE
+        },
+    }
 }
