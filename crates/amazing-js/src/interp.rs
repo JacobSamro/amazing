@@ -239,6 +239,21 @@ impl Interpreter {
         self.location_url = url.into();
     }
 
+    pub fn set_viewport_size(&mut self, width: u32, height: u32) {
+        for (name, value) in [
+            ("innerWidth", JsValue::num(width as f64)),
+            ("innerHeight", JsValue::num(height as f64)),
+            ("devicePixelRatio", JsValue::num(1.0)),
+        ] {
+            self.global_obj.borrow_mut().set_own(name, value.clone());
+            if self.global_env.has(name) {
+                let _ = self.global_env.assign(name, value);
+            } else {
+                let _ = self.global_env.declare_var(name, value);
+            }
+        }
+    }
+
     pub fn take_navigation(&mut self) -> Option<String> {
         self.pending_navigation.take()
     }

@@ -719,6 +719,7 @@ mod windows {
         let mut js = amazing_js::Interpreter::new();
         js.set_dom_host(host.clone());
         js.set_location_url(input);
+        js.set_viewport_size(width, 700);
         for script in scripts {
             let source = match script.src {
                 Some(src) => {
@@ -1156,6 +1157,7 @@ mod windows {
             assert_eq!(host.get_attribute(node, "data-dom-api"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-dataset"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-classlist"), Some(Some("ready active".into())));
+            assert_eq!(host.get_attribute(node, "data-viewport"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-inner"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-fetch"), Some(Some("fetched\n".into())));
             assert_eq!(host.get_attribute(node, "data-header"), Some(Some("text/plain; charset=utf-8".into())));
