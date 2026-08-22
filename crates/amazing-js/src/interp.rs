@@ -2131,12 +2131,37 @@ impl Interpreter {
                 "isExtensible",
                 Self::native("isExtensible", native_is_extensible, &self.function_proto),
             );
+            for (name, function) in [
+                ("create", native_object_create as crate::value::NativeFn),
+                (
+                    "getPrototypeOf",
+                    native_object_get_prototype_of as crate::value::NativeFn,
+                ),
+                (
+                    "setPrototypeOf",
+                    native_object_set_prototype_of as crate::value::NativeFn,
+                ),
+                ("hasOwn", native_object_has_own as crate::value::NativeFn),
+            ] {
+                let _ = self.set_prop(
+                    &JsValue::Object(o.clone()),
+                    name,
+                    Self::native(name, function, &self.function_proto),
+                );
+            }
         }
         self.define_global("Object", object_ctor);
         self.define_global(
             "Array",
             Self::native("Array", native_array, &self.function_proto),
         );
+        if let Some(array) = self.global_env.resolve("Array") {
+            let _ = self.set_prop(
+                &array,
+                "isArray",
+                Self::native("isArray", native_array_is_array, &self.function_proto),
+            );
+        }
         self.define_global("Map", Self::native("Map", native_map, &self.function_proto));
         self.define_global("Set", Self::native("Set", native_set, &self.function_proto));
         let symbol_ctor = Self::native("Symbol", native_symbol, &self.function_proto);
@@ -2399,6 +2424,101 @@ fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsV
 
 fn native_symbol(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     Ok(JsValue::str("@@symbol"))
+}
+
+fn native_object_create(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let prototype = args.first().cloned().unwrap_or(JsValue::Null);
+    let object = match prototype {
+        JsValue::Null => JsObject::ordinary(),
+        JsValue::Object(prototype) => {
+            let mut object = JsObject::ordinary();
+            object.proto = Some(prototype);
+            object
+        }
+        _ => {
+            return Err(Throw::type_error(
+                "Object prototype must be an object or null",
+            ))
+        }
+    };
+    let result = JsValue::object(object);
+    if let Some(properties) = args.get(1) {
+        if !properties.is_null() && !properties.is_undefined() {
+            let _ = native_object_assign(
+                i,
+                JsValue::Undefined,
+                vec![result.clone(), properties.clone()],
+            )?;
+        }
+    }
+    Ok(result)
+}
+
+fn native_object_get_prototype_of(
+    _: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    match args.first() {
+        Some(JsValue::Object(object)) => Ok(object
+            .borrow()
+            .proto
+            .clone()
+            .map(JsValue::Object)
+            .unwrap_or(JsValue::Null)),
+        _ => Err(Throw::type_error("getPrototypeOf target is not an object")),
+    }
+}
+
+fn native_object_set_prototype_of(
+    _: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let object = match args.first() {
+        Some(JsValue::Object(object)) => object.clone(),
+        _ => return Err(Throw::type_error("setPrototypeOf target is not an object")),
+    };
+    let prototype = match args.get(1).cloned().unwrap_or(JsValue::Null) {
+        JsValue::Null => None,
+        JsValue::Object(prototype) => Some(prototype),
+        _ => return Err(Throw::type_error("prototype must be an object or null")),
+    };
+    object.borrow_mut().proto = prototype;
+    Ok(JsValue::Object(object))
+}
+
+fn native_object_has_own(
+    _: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let object = match args.first() {
+        Some(JsValue::Object(object)) => object,
+        _ => return Err(Throw::type_error("hasOwn target is not an object")),
+    };
+    let key = match args.get(1) {
+        Some(JsValue::Str(key)) => key.to_string(),
+        Some(JsValue::Num(key)) => crate::value::number_to_string(*key),
+        Some(JsValue::Bool(key)) => key.to_string(),
+        Some(JsValue::Null) => "null".into(),
+        _ => "undefined".into(),
+    };
+    Ok(JsValue::Bool(object.borrow().own_prop(&key).is_some()))
+}
+
+fn native_array_is_array(
+    _: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    Ok(JsValue::Bool(
+        matches!(args.first(), Some(JsValue::Object(object)) if matches!(object.borrow().exotic, Exotic::Array)),
+    ))
 }
 
 fn native_function_call(
@@ -4167,6 +4287,15 @@ mod tests {
             .run_script("function f(a,b){return this.x+a+b;} let o={x:1}; f.call(o,2,3)+f.apply(o,[2,3])+f.bind(o,2)(3);")
             .unwrap();
         assert_eq!(num(value), 18.0);
+    }
+
+    #[test]
+    fn object_prototype_helpers_and_array_is_array_work() {
+        let mut i = Interpreter::new();
+        let value = i
+            .run_script("let p={x:4}; let o=Object.create(p); o.y=2; Object.getPrototypeOf(o)===p && Object.hasOwn(o,'y') && !Object.hasOwn(o,'x') && Array.isArray([]) && !Array.isArray({});")
+            .unwrap();
+        assert!(matches!(value, JsValue::Bool(true)));
     }
 
     #[test]
