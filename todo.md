@@ -286,8 +286,9 @@ interpreter has 5 focused runtime tests; `cargo test --workspace` is green
 on win-001 (122 tests in `amazing-js`).
 
 Known gaps: Test262 has not been vendored or run yet (pass rate therefore
-unmeasured); async functions/Promises are synchronous identity stubs,
-Map/Set are value-model storage only, and generators, symbols, modules,
+unmeasured); async functions/Promises and Map/Set built-ins are not wired
+into the runtime yet (the value model has storage scaffolding), and generators,
+symbols, modules,
 destructuring, regex literals, accessors, and full class/super semantics are
 deferred. The runtime is a milestone, not Phase 6 exit-criteria completion.
 
