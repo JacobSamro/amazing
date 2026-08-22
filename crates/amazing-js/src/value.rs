@@ -125,6 +125,19 @@ impl JsValue {
         matches!(self, JsValue::Object(_))
     }
 
+    /// The string payload when this IS a string.
+    pub fn as_str(&self) -> Option<&Rc<str>> {
+        match self {
+            JsValue::Str(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Whether this is a string (used by the additive operator's branch).
+    pub fn is_str(&self) -> bool {
+        self.as_str().is_some()
+    }
+
     /// §7.1.2 ToBoolean: everything except `undefined`, `null`, `false`,
     /// `0`/`NaN`, and `""` is true.
     pub fn to_boolean(&self) -> bool {
@@ -386,12 +399,17 @@ pub struct JsFunction {
 }
 
 /// Function body: block for declarations/functions/methods, expression for
-/// concise arrows.
+/// concise arrows, native for built-ins.
 #[derive(Debug, Clone)]
 pub enum FunctionBody {
     Block(ast::Block),
     Expr(ast::Expr),
+    /// Rust-implemented built-in (`Math.abs`, `Array.prototype.push`, ...).
+    Native(NativeFn),
 }
+
+/// Signature of built-in implementations: receiver (`this`), arguments.
+pub type NativeFn = fn(&mut crate::interp::Interpreter, JsValue, Vec<JsValue>) -> Result<JsValue, Throw>;
 
 /// Exotic object flavors. Everything not listed is Ordinary.
 #[derive(Debug, Clone, Default)]

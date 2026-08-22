@@ -16,7 +16,7 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | 🔄 front half landed: lexer/tokens/ast/parser/errors, parse_script green (50 tests); interpreter back half next |
+| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (122 crate tests); Test262 measurement still pending |
 | 7–9 | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
@@ -267,6 +267,29 @@ integration tests (exact request bytes, chunk extensions+trailers, redirect
 chains). TLS deliberately unsupported (`https` fails fast; documented).
 Driver: `amazing fetch <url|file> [-i]`. Deferred: keep-alive, non-GET,
 gzip/br, cookies/caching/auth, HTTP/2.
+
+## Phase 6 (JS) — runtime milestone landed (win-001 green)
+
+Shipped: `amazing-js/src/interp.rs` — panic-free tree-walking execution over
+the existing ECMA-262 AST. The runtime has lexical closures, `var`/`let`/
+`const`, function and arrow calls, `new`, ordinary objects and prototypes,
+arrays with length/index bookkeeping, member assignment, arithmetic/logical/
+relational/equality operators, unary/update/delete/typeof, conditionals,
+loops, switch, try/catch/finally, throw, `for-in`/`for-of`, templates,
+optional chaining, and captured `console.log`. Built-ins include `Object`,
+`Array`, `Math.abs/max/min`, `Number`, `String`, `Boolean`, `Object.keys`,
+and array `push`/`pop`/`join`.
+
+Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
+script, prints captured console lines, then its completion value. The
+interpreter has 5 focused runtime tests; `cargo test --workspace` is green
+on win-001 (122 tests in `amazing-js`).
+
+Known gaps: Test262 has not been vendored or run yet (pass rate therefore
+unmeasured); async functions/Promises are synchronous identity stubs,
+Map/Set are value-model storage only, and generators, symbols, modules,
+destructuring, regex literals, accessors, and full class/super semantics are
+deferred. The runtime is a milestone, not Phase 6 exit-criteria completion.
 
 ## Later phases (unchanged from goal prompt)
 

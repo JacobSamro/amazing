@@ -23,7 +23,7 @@ const PIPELINE: &[(&str, &str)] = &[
     ),
     ("amazing-paint", "Phase 4: software rasterizer — `render` subcommand"),
     ("amazing-net", "Phase 5: HTTP/1.1 fetcher (library; TLS deferred)"),
-    ("amazing-js", "Phase 6: ECMA-262 interpreter — not started"),
+    ("amazing-js", "Phase 6: ECMA-262 parser + tree-walking interpreter — `run` subcommand"),
 ];
 
 fn main() -> ExitCode {
@@ -43,9 +43,10 @@ fn main() -> ExitCode {
         Some("layout") => cmd_layout(&args[2..]),
         Some("render") => cmd_render(&args[2..]),
         Some("fetch") => cmd_fetch(&args[2..]),
+        Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|run [script.js]]");
             ExitCode::FAILURE
         },
     }
@@ -312,5 +313,28 @@ fn cmd_fetch(args: &[String]) -> ExitCode {
             eprintln!("amazing fetch: {e}");
             ExitCode::FAILURE
         },
+    }
+}
+
+/// Phase 6 demo: execute one classic JavaScript script and print captured
+/// `console.log` lines followed by the script completion value.
+fn cmd_run(path: Option<&str>) -> ExitCode {
+    let source = match read_source(path, "run") {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let mut js = amazing_js::Interpreter::new();
+    match js.run_script(&source) {
+        Ok(value) => {
+            for line in js.output.borrow().iter() {
+                println!("{line}");
+            }
+            println!("=> {:?}", value);
+            ExitCode::SUCCESS
+        }
+        Err(thrown) => {
+            eprintln!("amazing run: {:?}", thrown.0);
+            ExitCode::FAILURE
+        }
     }
 }
