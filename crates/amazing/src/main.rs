@@ -54,7 +54,7 @@ const PIPELINE: &[(&str, &str)] = &[
     ),
     (
         "amazing-webrtc",
-        "Phase 9: STUN + RTP foundations — `webrtc-loopback` subcommand",
+        "Phase 9: ICE + RTP/RTCP + SDP — `webrtc-loopback` / `sdp-roundtrip`",
     ),
     (
         "amazing-gpu",
@@ -617,13 +617,14 @@ fn main() -> ExitCode {
         Some("webrtc-loopback") => cmd_webrtc_loopback(),
         Some("gpu-info") => cmd_gpu_info(),
         Some("gpu-present-smoke") => cmd_gpu_present_smoke(),
+        Some("sdp-roundtrip") => cmd_sdp_roundtrip(&args[2..]),
         Some("fetch") => cmd_fetch(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd_domrun(&args[2..]),
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
             ExitCode::FAILURE
         }
     }
@@ -1372,6 +1373,60 @@ fn cmd_gpu_present_smoke() -> ExitCode {
         },
         Err(error) => {
             eprintln!("amazing gpu-present-smoke: {error}");
+            ExitCode::FAILURE
+        },
+    }
+}
+
+/// Phase 9.8 artifact: parse, canonicalize, and reparse a bounded SDP offer.
+fn cmd_sdp_roundtrip(args: &[String]) -> ExitCode {
+    let path = match args.first() {
+        Some(path) => path,
+        None => {
+            eprintln!("usage: amazing sdp-roundtrip <offer.sdp>");
+            return ExitCode::FAILURE;
+        },
+    };
+    let source = match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("amazing sdp-roundtrip: cannot read {path}: {error}");
+            return ExitCode::FAILURE;
+        },
+    };
+    let parsed = match amazing_webrtc::parse_sdp(&source) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            eprintln!("amazing sdp-roundtrip: {error}");
+            return ExitCode::FAILURE;
+        },
+    };
+    let canonical = match amazing_webrtc::encode_sdp(&parsed) {
+        Ok(canonical) => canonical,
+        Err(error) => {
+            eprintln!("amazing sdp-roundtrip: {error}");
+            return ExitCode::FAILURE;
+        },
+    };
+    match amazing_webrtc::parse_sdp(&canonical) {
+        Ok(reparsed) if reparsed == parsed => {
+            println!(
+                "SDP {} payloads={} candidates={} rtpmaps={} ICE={} setup={}; roundtrip ok",
+                parsed.media,
+                parsed.payload_types.len(),
+                parsed.candidates.len(),
+                parsed.rtp_maps.len(),
+                parsed.ice_ufrag,
+                parsed.setup
+            );
+            ExitCode::SUCCESS
+        },
+        Ok(_) => {
+            eprintln!("amazing sdp-roundtrip: canonical SDP changed semantics");
+            ExitCode::FAILURE
+        },
+        Err(error) => {
+            eprintln!("amazing sdp-roundtrip: canonical SDP failed: {error}");
             ExitCode::FAILURE
         },
     }

@@ -665,6 +665,49 @@ credentials, candidates, DTLS fingerprint/setup, and RTP payload mapping,
 followed by a vetted DTLS-SRTP infrastructure decision. The user's explicit
 “do all phases now” instruction pre-authorizes continuing.
 
+## Phase 9.8 (WebRTC signaling) — minimal ICE/DTLS/RTP SDP
+
+Shipped: `SdpDescription` and `RtpMap` provide a strict single-media SDP
+model. The parser accepts session defaults with media-level overrides for
+RFC 8839 ICE ufrag/password, UDP/IPv4 host candidates, RFC 8122 SHA-256
+certificate fingerprints/setup roles, `UDP/TLS/RTP/SAVPF` payload IDs, and
+`rtpmap` clock/channel mappings. It retains and validates the required ordered
+`v=`, `o=`, `s=`, `t=` session skeleton and media `c=` address rather than
+inventing them on output. Incoming ufrags accept RFC's 4–256 range while the
+serializer enforces the RFC 8839 outbound maximum of 32; password, candidate
+foundation/component, uppercase 32-byte SHA-256, seven-bit RTP payload, and
+mapping-membership bounds are also enforced. Unsupported transports,
+candidate forms, fingerprint algorithms, and multiple media sections fail
+explicitly.
+
+The serializer emits deterministic RFC 8866 ordering and reparses its own
+output, refusing a model that cannot be represented without semantic loss.
+Runnable artifact: `target\release\amazing.exe sdp-roundtrip
+examples\phase9-offer.sdp`. The committed offer carries one audio payload,
+one host candidate, ICE credentials, DTLS fingerprint/setup, and Opus mapping;
+the binary integration gate reports `roundtrip ok` (1/1).
+
+Known gaps: multi-media/BUNDLE/MID, media-level override retention in the
+serialized model, answers/rejected media, IPv6/reflexive/relay candidates,
+Trickle ICE/end-of-candidates, RTCP mux/rsize, extmap/fmtp/rtcp-fb, simulcast/
+RID, codec negotiation, ICE restarts, certificate generation/verification,
+and actual DTLS-SRTP remain pending. This parser is a bounded signaling seam,
+not a general SDP implementation.
+
+Conformance: SDP semantic round-trip and unsupported-profile gates pass 2/2;
+the binary signaling gate passes 1/1. Existing baselines remain 17/17 CSS2,
+22/22 flex/grid, and 196/196 supported Test262; no WebRTC WPT subset is
+imported yet.
+
+Final win-001 gate: all 433 hardware-independent workspace tests/doctests
+passed; the release binary is 1,820,160 bytes and the committed SDP offer is
+371 bytes. The release signaling artifact reported `roundtrip ok`.
+
+Recommended next sub-phase: document and implement the vetted DTLS-SRTP
+infrastructure boundary rather than hand-rolling security-critical TLS, then
+bind negotiated keys to RTP/RTCP. The user's explicit “do all phases now”
+instruction pre-authorizes continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -672,8 +715,8 @@ followed by a vetted DTLS-SRTP infrastructure decision. The user's explicit
 - **3.5 Flexbox/Grid** · **4 Paint** software rasterizer + PPM writer ·
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
-  (images/audio, authenticated ICE/RTP/RTCP, and D3D11 presentation milestones
-  landed; SDP/DTLS-SRTP next).
+  (images/audio, authenticated ICE/RTP/RTCP, SDP, and D3D11 presentation
+  milestones landed; vetted DTLS-SRTP boundary next).
 
 ## Server cheat sheet
 

@@ -88,6 +88,7 @@ amazing play-audio examples/phase9-audio.wav
 
 # Phase 9 WebRTC transport artifact
 amazing webrtc-loopback
+amazing sdp-roundtrip examples/phase9-offer.sdp
 
 # Phase 9 hardware capability artifact (Windows)
 amazing gpu-info

@@ -20,6 +20,7 @@ amazing-media ──intrinsic size via PageMedia──▶ amazing-layout
 amazing-media ──RGBA8 via PageMedia───────────▶ amazing-paint
 amazing-media ──validated PCM WAV─────────────▶ GUI shell (WinMM adapter)
 UDP sockets (amazing driver) ◀──STUN/RTP/RTCP bytes──▶ amazing-webrtc codecs
+SDP text (amazing driver) ───────────────────────────▶ amazing-webrtc signaling
 GUI platform seam ──D3D11 device/swap-chain present──▶ Windows graphics driver
 ```
 
