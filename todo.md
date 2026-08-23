@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 18-subphase foundation milestone landed; compressed codecs/video/TURN/browser interop remain |
+| 9 — Media | 🔄 19-subphase foundation milestone landed; compressed codecs/video/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1158,9 +1158,9 @@ clock rates with a 60–200 ms bound and reports `playout=adaptive` before its
 L16/PCMU sample evidence.
 
 Known gaps: the controller has no percentile history, underrun feedback,
-clock-skew estimator, time-stretching, packet-loss concealment, or audio-device
+clock-skew estimator, time-stretching, advanced concealment, or audio-device
 clock. Delay decreases are deliberately conservative but not synchronized to
-audio frame boundaries. Live secure media still carries one packet each way.
+audio frame boundaries.
 
 Conformance: the adaptive raise/reschedule public gate passes 1/1 alongside
 the existing 7/7 jitter/codec/negotiation gates and secure process gate. No
@@ -1170,6 +1170,37 @@ Final win-001 gate: all 489 hardware-independent workspace tests/doctests
 passed with `--locked`; strict WebRTC/application Clippy, stripped ThinLTO
 release, and adaptive secure playout artifact passed. The release binary is
 4,647,936 bytes.
+
+## Phase 9.19 (loss concealment) — secure gap → decoded silence → RTCP loss
+
+Shipped: jitter gaps now include an estimated RTP timestamp and duration derived
+from the last output and the next buffered packet. Gap output advances the
+playout timestamp so consecutive missing packets remain ordered. Both codec
+adapters implement concealment at their negotiated rate/channel count; the
+current L16 and PCMU policy is duration-correct silence with checked allocation.
+
+The secure child sends PCMU sequence 84 and 86 with 160-sample spacing, omitting
+85. The parent decrypts both SRTP packets, emits sequence 84, produces a gap at
+timestamp 2080 for 160 samples, inserts negotiated PCMU silence, then resumes
+sequence 86. The same two received packets feed reception statistics, and the
+child validates extended sequence 86 with RTCP cumulative loss 1.
+
+Runnable artifact: `target\release\amazing.exe secure-media-processes`, which
+reports `playout=adaptive loss=1 conceal=160 ... PCMU child->parent=320` and
+`two-process interop ok`.
+
+Known gaps: silence concealment is intentionally basic; there is no waveform
+repetition, comfort-noise generation, Opus PLC/FEC, NACK recovery, burst-loss
+policy, or audio-device clock. The live gate injects one missing packet, not a
+stochastic loss/reorder profile.
+
+Conformance: timestamp/duration gap and codec concealment assertions pass in
+the public jitter gate; live secure loss/concealment/RTCP correlation passes
+1/1. No WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 489 hardware-independent workspace tests/doctests
+passed with `--locked`; strict WebRTC/application Clippy, stripped ThinLTO
+release, and secure loss artifact passed. The release binary is 4,657,152 bytes.
 
 ## Later phases (unchanged from goal prompt)
 
@@ -1225,7 +1256,7 @@ release, and adaptive secure playout artifact passed. The release binary is
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** eighteen committed subphases provide decoded images/audio,
+- **Phase 9:** nineteen committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1239,7 +1270,7 @@ parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
 remeasured after the audit fixes before each commit. Current gate: **489**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **4,647,936 bytes**.
+stripped ThinLTO release is **4,657,152 bytes**.
 
 ## Server cheat sheet
 

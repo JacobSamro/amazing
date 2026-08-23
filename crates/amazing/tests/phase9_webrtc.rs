@@ -122,7 +122,9 @@ fn secure_media_two_processes_exchange_protected_media() {
     assert!(stdout.contains("RTP parent->child=ok"), "{stdout}");
     assert!(stdout.contains("RTP child->parent=ok"), "{stdout}");
     assert!(
-        stdout.contains("playout=adaptive L16 parent->child=2 PCMU child->parent=2"),
+        stdout.contains(
+            "playout=adaptive loss=1 conceal=160 L16 parent->child=2 PCMU child->parent=320"
+        ),
         "{stdout}"
     );
     assert!(

@@ -38,6 +38,8 @@ pub enum JitterOutput {
     Gap {
         sequence_number: u16,
         extended_sequence: u64,
+        estimated_timestamp: Option<u32>,
+        duration_timestamp_units: Option<u32>,
     },
 }
 
@@ -69,6 +71,7 @@ pub struct RtpJitterBuffer {
     highest_sequence: Option<u64>,
     base_timestamp: u32,
     base_arrival_ms: u64,
+    last_output_timestamp: Option<u32>,
     target_delay_ms: u64,
     adaptive: Option<AdaptivePlayout>,
     stats: JitterStats,
@@ -118,6 +121,7 @@ impl RtpJitterBuffer {
             highest_sequence: None,
             base_timestamp: 0,
             base_arrival_ms: 0,
+            last_output_timestamp: None,
             target_delay_ms,
             adaptive: adaptive.map(|config| AdaptivePlayout {
                 config,
@@ -198,6 +202,7 @@ impl RtpJitterBuffer {
                 .remove(&expected)
                 .expect("queued jitter packet disappeared")
                 .packet;
+            self.last_output_timestamp = Some(packet.timestamp);
             self.next_sequence = Some(expected.saturating_add(1));
             self.stats.emitted = self.stats.emitted.saturating_add(1);
             return Some(JitterOutput::Packet(packet));
@@ -209,9 +214,29 @@ impl RtpJitterBuffer {
         }
         self.next_sequence = Some(expected.saturating_add(1));
         self.stats.gaps = self.stats.gaps.saturating_add(1);
+        let (estimated_timestamp, duration_timestamp_units) = self
+            .last_output_timestamp
+            .map(|previous| {
+                let outputs_until_next = (*next_queued.0 - expected + 1).max(1) as u32;
+                let duration = next_queued
+                    .1
+                    .packet
+                    .timestamp
+                    .wrapping_sub(previous)
+                    .checked_div(outputs_until_next)
+                    .filter(|duration| *duration > 0);
+                let estimated = duration.map(|duration| previous.wrapping_add(duration));
+                (estimated, duration)
+            })
+            .unwrap_or((None, None));
+        if let Some(timestamp) = estimated_timestamp {
+            self.last_output_timestamp = Some(timestamp);
+        }
         Some(JitterOutput::Gap {
             sequence_number: expected as u16,
             extended_sequence: expected,
+            estimated_timestamp,
+            duration_timestamp_units,
         })
     }
 
@@ -292,6 +317,11 @@ pub struct DecodedAudioFrame {
 pub trait RtpAudioDecoder {
     fn payload_type(&self) -> u8;
     fn decode(&mut self, packet: &RtpPacket) -> Result<DecodedAudioFrame, WebRtcError>;
+    fn conceal(
+        &mut self,
+        timestamp: u32,
+        samples_per_channel: usize,
+    ) -> Result<DecodedAudioFrame, WebRtcError>;
 }
 
 pub struct L16Decoder {
@@ -336,6 +366,19 @@ impl RtpAudioDecoder for L16Decoder {
             samples,
         })
     }
+
+    fn conceal(
+        &mut self,
+        timestamp: u32,
+        samples_per_channel: usize,
+    ) -> Result<DecodedAudioFrame, WebRtcError> {
+        concealed_audio(
+            timestamp,
+            self.sample_rate,
+            self.channels,
+            samples_per_channel,
+        )
+    }
 }
 
 pub struct PcmuDecoder {
@@ -367,6 +410,34 @@ impl RtpAudioDecoder for PcmuDecoder {
             samples: packet.payload.iter().copied().map(decode_mulaw).collect(),
         })
     }
+
+    fn conceal(
+        &mut self,
+        timestamp: u32,
+        samples_per_channel: usize,
+    ) -> Result<DecodedAudioFrame, WebRtcError> {
+        concealed_audio(timestamp, self.sample_rate, 1, samples_per_channel)
+    }
+}
+
+fn concealed_audio(
+    timestamp: u32,
+    sample_rate: u32,
+    channels: u16,
+    samples_per_channel: usize,
+) -> Result<DecodedAudioFrame, WebRtcError> {
+    let sample_count =
+        samples_per_channel
+            .checked_mul(channels as usize)
+            .ok_or(WebRtcError::InvalidPacket(
+                "concealed audio length overflow",
+            ))?;
+    Ok(DecodedAudioFrame {
+        timestamp,
+        sample_rate,
+        channels,
+        samples: vec![0; sample_count],
+    })
 }
 
 fn validate_decoder_config(
@@ -657,6 +728,8 @@ mod tests {
             Some(JitterOutput::Gap {
                 sequence_number: 11,
                 extended_sequence: 11,
+                estimated_timestamp: Some(160),
+                duration_timestamp_units: Some(160),
             })
         );
         assert!(matches!(
@@ -715,6 +788,9 @@ mod tests {
         };
         let decoded = pcmu.decode(&pcmu_packet).unwrap();
         assert_eq!(decoded.samples, [0, 0, 32_124, -32_124]);
+        let concealed = pcmu.conceal(616, 160).unwrap();
+        assert_eq!(concealed.timestamp, 616);
+        assert_eq!(concealed.samples, vec![0; 160]);
     }
 
     #[test]

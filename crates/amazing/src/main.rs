@@ -906,7 +906,7 @@ fn cmd_secure_media_processes() -> ExitCode {
     match run_secure_media_processes() {
         Ok(()) => {
             println!(
-                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP L16+PCMU; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive L16 parent->child=2 PCMU child->parent=2; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP L16+PCMU; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 L16 parent->child=2 PCMU child->parent=320; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
             );
             ExitCode::SUCCESS
         }
@@ -1026,7 +1026,14 @@ fn run_secure_media_processes() -> Result<(), String> {
     }
     let child_rtp = endpoint.receive_rtp().map_err(|error| error.to_string())?;
     let child_rtp = amazing_webrtc::parse_rtp(&child_rtp).map_err(|error| error.to_string())?;
-    if child_rtp.payload_type != 0 || child_rtp.sequence_number != 84 {
+    let child_rtp_later = endpoint.receive_rtp().map_err(|error| error.to_string())?;
+    let child_rtp_later =
+        amazing_webrtc::parse_rtp(&child_rtp_later).map_err(|error| error.to_string())?;
+    if child_rtp.payload_type != 0
+        || child_rtp.sequence_number != 84
+        || child_rtp_later.sequence_number != 86
+        || child_rtp_later.ssrc != child_rtp.ssrc
+    {
         return Err("child process returned unexpected RTP".into());
     }
     let child_config = negotiated_codecs
@@ -1043,7 +1050,12 @@ fn run_secure_media_processes() -> Result<(), String> {
     child_jitter
         .push(child_rtp.clone(), 0)
         .map_err(|error| error.to_string())?;
-    let Some(amazing_webrtc::JitterOutput::Packet(played_child_rtp)) = child_jitter.pop_ready(60)
+    child_jitter
+        .push(child_rtp_later.clone(), 5)
+        .map_err(|error| error.to_string())?;
+    let first_playout = child_jitter.target_delay_ms();
+    let Some(amazing_webrtc::JitterOutput::Packet(played_child_rtp)) =
+        child_jitter.pop_ready(first_playout)
     else {
         return Err("child RTP did not reach jitter playout".into());
     };
@@ -1053,20 +1065,48 @@ fn run_secure_media_processes() -> Result<(), String> {
     let child_audio = child_decoder
         .decode(&played_child_rtp)
         .map_err(|error| error.to_string())?;
-    if child_audio.samples != [0, 32_124] {
+    if child_audio.samples != vec![0; 160] {
         return Err("child PCMU playout samples were incorrect".into());
+    }
+    let Some(amazing_webrtc::JitterOutput::Gap {
+        estimated_timestamp: Some(missing_timestamp),
+        duration_timestamp_units: Some(missing_samples),
+        ..
+    }) = child_jitter.pop_ready(first_playout + 40)
+    else {
+        return Err("child RTP loss did not reach jitter concealment".into());
+    };
+    let concealed = child_decoder
+        .conceal(missing_timestamp, missing_samples as usize)
+        .map_err(|error| error.to_string())?;
+    if concealed.samples != vec![0; 160] {
+        return Err("child PCMU concealment samples were incorrect".into());
+    }
+    let Some(amazing_webrtc::JitterOutput::Packet(played_child_later)) =
+        child_jitter.pop_ready(first_playout + 40)
+    else {
+        return Err("child RTP after loss did not reach jitter playout".into());
+    };
+    let later_audio = child_decoder
+        .decode(&played_child_later)
+        .map_err(|error| error.to_string())?;
+    if later_audio.samples != vec![32_124; 160] || child_jitter.stats().gaps != 1 {
+        return Err("child PCMU post-loss samples were incorrect".into());
     }
     let mut reception_stats = amazing_webrtc::RtpReceptionStats::new(child_rtp.ssrc);
     reception_stats
         .observe(&child_rtp, child_rtp.timestamp)
         .map_err(|error| error.to_string())?;
+    reception_stats
+        .observe(&child_rtp_later, child_rtp_later.timestamp)
+        .map_err(|error| error.to_string())?;
     let child_rtcp = endpoint.receive_rtcp().map_err(|error| error.to_string())?;
     let child_rtcp = amazing_webrtc::parse_rtcp_compound_sender_report(&child_rtcp)
         .map_err(|error| error.to_string())?;
     if child_rtcp.sender.ssrc != child_rtp.ssrc
-        || child_rtcp.sender.rtp_timestamp != child_rtp.timestamp
-        || child_rtcp.sender.packet_count != 1
-        || child_rtcp.sender.octet_count != child_rtp.payload.len() as u32
+        || child_rtcp.sender.rtp_timestamp != child_rtp_later.timestamp
+        || child_rtcp.sender.packet_count != 2
+        || child_rtcp.sender.octet_count != 320
         || child_rtcp.cname != "child@ferric"
     {
         return Err("child process returned inconsistent SRTCP".into());
@@ -1184,18 +1224,29 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
         sequence_number: 84,
         timestamp: 1_920,
         ssrc: 0x4348_494c,
-        payload: vec![0xff, 0x80],
+        payload: vec![0xff; 160],
     };
     let response_wire = amazing_webrtc::encode_rtp(&response).map_err(|error| error.to_string())?;
     endpoint
         .send_rtp(&response_wire)
         .map_err(|error| error.to_string())?;
+    let response_later = amazing_webrtc::RtpPacket {
+        sequence_number: 86,
+        timestamp: 2_240,
+        payload: vec![0x80; 160],
+        ..response.clone()
+    };
+    let response_later_wire =
+        amazing_webrtc::encode_rtp(&response_later).map_err(|error| error.to_string())?;
+    endpoint
+        .send_rtp(&response_later_wire)
+        .map_err(|error| error.to_string())?;
     let report = amazing_webrtc::RtcpSenderReport {
         ssrc: response.ssrc,
         ntp_timestamp: 0xe123_4567_89ab_cdef,
-        rtp_timestamp: response.timestamp,
-        packet_count: 1,
-        octet_count: response.payload.len() as u32,
+        rtp_timestamp: response_later.timestamp,
+        packet_count: 2,
+        octet_count: (response.payload.len() + response_later.payload.len()) as u32,
     };
     let compound_sender = amazing_webrtc::RtcpCompoundSenderReport {
         sender: report,
@@ -1232,7 +1283,9 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
             }
         };
     if receiver_report.reception.source_ssrc != response.ssrc
-        || receiver_report.reception.extended_highest_sequence != response.sequence_number as u32
+        || receiver_report.reception.extended_highest_sequence
+            != response_later.sequence_number as u32
+        || receiver_report.reception.cumulative_lost != 1
         || receiver_report.reception.last_sender_report != (report.ntp_timestamp >> 16) as u32
         || receiver_report.cname != "parent@ferric"
     {
