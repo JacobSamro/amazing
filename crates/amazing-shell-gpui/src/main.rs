@@ -3,8 +3,9 @@
 mod engine_viewport;
 
 use gpui::{
-    App, Bounds, Context, IntoElement, ParentElement, Render, SharedString, Styled, Window,
-    WindowBounds, WindowControlArea, WindowOptions, div, img, prelude::*, px, rgb, size,
+    App, Bounds, Context, CursorStyle, FocusHandle, IntoElement, KeyDownEvent, ParentElement,
+    Render, SharedString, Styled, Window, WindowBounds, WindowControlArea, WindowOptions, div, img,
+    prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
 
@@ -35,6 +36,10 @@ struct Tab {
 struct BrowserShell {
     tabs: Vec<Tab>,
     viewport: EngineViewport,
+    address_focus: Option<FocusHandle>,
+    address: String,
+    committed_address: String,
+    address_selected: bool,
     active: usize,
     engine_collapsed: bool,
     specs_collapsed: bool,
@@ -42,7 +47,7 @@ struct BrowserShell {
 }
 
 impl BrowserShell {
-    fn new() -> Self {
+    fn new(address_focus: Option<FocusHandle>) -> Self {
         Self {
             tabs: vec![
                 Tab {
@@ -95,6 +100,10 @@ impl BrowserShell {
                 },
             ],
             viewport: EngineViewport::demo(),
+            address_focus,
+            address: "amazing://status".to_string(),
+            committed_address: "amazing://status".to_string(),
+            address_selected: false,
             active: 0,
             engine_collapsed: false,
             specs_collapsed: true,
@@ -105,7 +114,63 @@ impl BrowserShell {
     fn select_tab(&mut self, index: usize) {
         if index < self.tabs.len() {
             self.active = index;
+            self.address = self.tabs[index].url.to_string();
+            self.committed_address = self.address.clone();
+            self.address_selected = false;
         }
+    }
+
+    fn on_address_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.stop_propagation();
+        match event.keystroke.key.as_str() {
+            "enter" => {
+                self.commit_navigation();
+                window.blur();
+            }
+            "escape" => {
+                self.address = self.committed_address.clone();
+                self.address_selected = false;
+                window.blur();
+            }
+            "backspace" => {
+                if self.address_selected {
+                    self.address.clear();
+                    self.address_selected = false;
+                } else {
+                    self.address.pop();
+                }
+            }
+            _ => {
+                if let Some(text) = event.keystroke.key_char.as_ref()
+                    && !event.keystroke.modifiers.control
+                    && !event.keystroke.modifiers.platform
+                {
+                    if self.address_selected {
+                        self.address.clear();
+                        self.address_selected = false;
+                    }
+                    self.address.push_str(text);
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    fn commit_navigation(&mut self) {
+        let Some(address) = normalize_address(&self.address) else {
+            self.address = self.committed_address.clone();
+            return;
+        };
+        self.viewport = EngineViewport::for_address(&address);
+        self.active = 0;
+        self.address = address.clone();
+        self.committed_address = address;
+        self.address_selected = false;
     }
 
     fn toggle_engine_group(&mut self) {
@@ -235,7 +300,6 @@ impl BrowserShell {
     }
 
     fn navigation_toolbar(&self, cx: &mut Context<Self>, visible: bool) -> gpui::AnyElement {
-        let active_url = self.tabs[self.active].url;
         div()
             .flex()
             .items_center()
@@ -250,6 +314,7 @@ impl BrowserShell {
             ])
             .child(
                 div()
+                    .id("address-bar")
                     .flex()
                     .flex_1()
                     .min_w_0()
@@ -262,6 +327,18 @@ impl BrowserShell {
                     .bg(rgb(SURFACE_2))
                     .text_size(px(13.0))
                     .text_color(rgb(TEXT))
+                    .cursor(CursorStyle::IBeam)
+                    .when_some(self.address_focus.as_ref(), |address, focus| {
+                        address.track_focus(focus)
+                    })
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        if let Some(focus) = this.address_focus.as_ref() {
+                            focus.focus(window, cx);
+                        }
+                        this.address_selected = true;
+                        cx.notify();
+                    }))
+                    .on_key_down(cx.listener(Self::on_address_key_down))
                     .child("▣")
                     .child(
                         div()
@@ -270,7 +347,10 @@ impl BrowserShell {
                             .overflow_hidden()
                             .text_ellipsis()
                             .whitespace_nowrap()
-                            .child(active_url),
+                            .when(self.address_selected, |text| {
+                                text.bg(rgb(0xc9ddf5)).rounded_sm().px_1()
+                            })
+                            .child(self.address.clone()),
                     )
                     .child("☆")
                     .child("⌘"),
@@ -469,6 +549,11 @@ impl BrowserShell {
 
     fn page(&self) -> impl IntoElement {
         let tab = &self.tabs[self.active];
+        let page_url = if self.active == 0 {
+            self.committed_address.clone()
+        } else {
+            tab.url.to_string()
+        };
         div()
             .relative()
             .flex_1()
@@ -567,7 +652,7 @@ impl BrowserShell {
                     .bg(rgb(SURFACE))
                     .text_size(px(11.0))
                     .text_color(rgb(DIM))
-                    .child(tab.url),
+                    .child(page_url),
             )
             .child(
                 div()
@@ -846,8 +931,8 @@ fn main() {
                 ..Default::default()
             },
             move |_, cx| {
-                cx.new(move |_| {
-                    let mut shell = BrowserShell::new();
+                cx.new(move |cx| {
+                    let mut shell = BrowserShell::new(Some(cx.focus_handle().tab_stop(true)));
                     shell.sidebar = start_with_sidebar;
                     if start_with_sidebar {
                         shell.specs_collapsed = false;
@@ -867,7 +952,7 @@ mod tests {
 
     #[test]
     fn reference_shell_state_starts_on_status_with_specs_collapsed() {
-        let shell = BrowserShell::new();
+        let shell = BrowserShell::new(None);
         assert_eq!(shell.tabs.len(), 6);
         assert_eq!(shell.active, 0);
         assert!(!shell.engine_collapsed);
@@ -878,7 +963,7 @@ mod tests {
 
     #[test]
     fn reference_groups_keep_engine_and_spec_tabs_distinct() {
-        let shell = BrowserShell::new();
+        let shell = BrowserShell::new(None);
         assert_eq!(
             &shell.tabs[0..3]
                 .iter()
@@ -897,7 +982,7 @@ mod tests {
 
     #[test]
     fn shell_model_transitions_cover_tabs_groups_and_sidebar() {
-        let mut shell = BrowserShell::new();
+        let mut shell = BrowserShell::new(None);
         shell.select_tab(4);
         shell.toggle_engine_group();
         shell.toggle_specs_group();
@@ -908,5 +993,32 @@ mod tests {
         assert!(shell.sidebar);
         shell.select_tab(99);
         assert_eq!(shell.active, 4, "out-of-range selection is ignored");
+    }
+
+    #[test]
+    fn address_normalization_and_navigation_update_the_engine_surface() {
+        assert_eq!(
+            normalize_address("example.test/docs"),
+            Some("https://example.test/docs".to_string())
+        );
+        assert_eq!(normalize_address("   "), None);
+
+        let mut shell = BrowserShell::new(None);
+        shell.address = "example.test/docs".to_string();
+        shell.commit_navigation();
+        assert_eq!(shell.active, 0);
+        assert_eq!(shell.address, "https://example.test/docs");
+        assert_eq!(shell.committed_address, shell.address);
+    }
+}
+
+fn normalize_address(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else if value.contains("://") {
+        Some(value.to_string())
+    } else {
+        Some(format!("https://{value}"))
     }
 }

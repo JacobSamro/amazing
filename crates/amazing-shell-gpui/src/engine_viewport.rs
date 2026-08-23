@@ -41,6 +41,16 @@ article p { display: block; margin: 12px 0px 0px 0px; color: #5b6371; font-size:
 .proof { display: block; margin: 0px; padding-top: 18px; border-top: 1px solid #d8dce3; color: #737b88; font-size: 11px; }
 "#;
 
+const NAVIGATION_CSS: &str = r#"
+html, body { display: block; margin: 0px; padding: 0px; background: #f7f3ed; color: #1b1e23; }
+main { display: block; padding: 70px 76px; border-top: 8px solid #3a6ea8; }
+.eyebrow { display: block; margin: 0px 0px 24px 0px; color: #3a6ea8; font-size: 13px; }
+h1 { display: block; margin: 0px 0px 20px 0px; color: #1b1e23; font-size: 44px; }
+.intro { display: block; width: 720px; margin: 0px 0px 32px 0px; color: #4e5664; font-size: 18px; }
+.address { display: block; padding: 20px; background: #ffffff; border: 1px solid #d8dce3; color: #1b1e23; font-size: 15px; }
+.note { display: block; width: 720px; margin: 26px 0px 0px 0px; color: #737b88; font-size: 13px; }
+"#;
+
 pub struct EngineViewport {
     pub image: Arc<RenderImage>,
     pub width: u32,
@@ -49,7 +59,28 @@ pub struct EngineViewport {
 
 impl EngineViewport {
     pub fn demo() -> Self {
-        let surface = render_demo_surface();
+        Self::from_document(DEMO_HTML, DEMO_CSS)
+    }
+
+    pub fn for_address(address: &str) -> Self {
+        if address == "amazing://status" {
+            return Self::demo();
+        }
+        let safe_address = escape_html(address);
+        let html = format!(
+            r#"<!doctype html><html><body><main>
+            <p class="eyebrow">AMAZING NAVIGATION</p>
+            <h1>Navigation request accepted.</h1>
+            <p class="intro">The address bar updated the browser model and asked the Amazing pipeline for a new page surface.</p>
+            <p class="address">{safe_address}</p>
+            <p class="note">Network fetch and response-driven document loading are the next handoff. This page is still parsed, laid out, and painted by Amazing.</p>
+            </main></body></html>"#
+        );
+        Self::from_document(&html, NAVIGATION_CSS)
+    }
+
+    fn from_document(html: &str, css: &str) -> Self {
+        let surface = render_surface(html, css);
         let width = surface.width;
         let height = surface.height;
         let image = Arc::new(surface_to_render_image(surface));
@@ -61,11 +92,24 @@ impl EngineViewport {
     }
 }
 
+#[cfg(test)]
 fn render_demo_surface() -> Surface {
+    render_surface(DEMO_HTML, DEMO_CSS)
+}
+
+fn render_surface(html: &str, css: &str) -> Surface {
     let fonts = load_ui_font();
-    let root = amazing_layout::layout_document(DEMO_HTML, DEMO_CSS, VIEWPORT_WIDTH as f32, &fonts);
+    let root = amazing_layout::layout_document(html, css, VIEWPORT_WIDTH as f32, &fonts);
     let glyphs = OutlineGlyphProvider::new(&fonts);
     paint_document_with(&root, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, &fonts, &glyphs)
+}
+
+fn escape_html(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn load_ui_font() -> FontSource {
@@ -110,5 +154,15 @@ mod tests {
         assert_eq!(viewport.image.frame_count(), 1);
         let size = viewport.image.size(0);
         assert_eq!((u32::from(size.width), u32::from(size.height)), (960, 570));
+    }
+
+    #[test]
+    fn navigation_document_escapes_address_markup() {
+        assert_eq!(
+            escape_html("https://example.test/?a=<b>&q=\"x\""),
+            "https://example.test/?a=&lt;b&gt;&amp;q=&quot;x&quot;"
+        );
+        let viewport = EngineViewport::for_address("https://example.test/");
+        assert_eq!((viewport.width, viewport.height), (960, 570));
     }
 }
