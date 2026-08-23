@@ -5,9 +5,11 @@
 //! plus its demo subcommand (`parse` in Phase 1, `style` in Phase 2).
 
 use std::cell::RefCell;
-use std::io::Read;
-use std::process::ExitCode;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::process::{Child, Command, ExitCode, ExitStatus};
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use amazing_js::DomHost;
 
@@ -54,7 +56,7 @@ const PIPELINE: &[(&str, &str)] = &[
     ),
     (
         "amazing-webrtc",
-        "Phase 9: ICE + RTP/RTCP + SDP + DTLS-SRTP on nominated UDP",
+        "Phase 9: ICE + SDP + DTLS-SRTP nominated UDP + two-process gate",
     ),
     (
         "amazing-gpu",
@@ -616,6 +618,8 @@ fn main() -> ExitCode {
         Some("play-audio") => cmd_play_audio(&args[2..]),
         Some("webrtc-loopback") => cmd_webrtc_loopback(),
         Some("secure-media-loopback") => cmd_secure_media_loopback(),
+        Some("secure-media-processes") => cmd_secure_media_processes(),
+        Some("__secure-media-peer") => cmd_secure_media_peer(args.get(2).map(String::as_str)),
         Some("gpu-info") => cmd_gpu_info(),
         Some("gpu-present-smoke") => cmd_gpu_present_smoke(),
         Some("sdp-roundtrip") => cmd_sdp_roundtrip(&args[2..]),
@@ -625,7 +629,7 @@ fn main() -> ExitCode {
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|secure-media-loopback|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
             ExitCode::FAILURE
         }
     }
@@ -665,6 +669,370 @@ fn cmd_secure_media_loopback() -> ExitCode {
             ExitCode::FAILURE
         },
     }
+}
+
+struct ChildGuard {
+    child: Option<Child>,
+}
+
+impl ChildGuard {
+    fn new(child: Child) -> Self {
+        Self { child: Some(child) }
+    }
+
+    fn child_mut(&mut self) -> &mut Child {
+        self.child.as_mut().expect("child guard is active")
+    }
+
+    fn finish(mut self, timeout: Duration) -> Result<ExitStatus, String> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            match self.child_mut().try_wait() {
+                Ok(Some(status)) => {
+                    self.child.take();
+                    return Ok(status);
+                },
+                Ok(None) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                },
+                Ok(None) => {
+                    let child = self.child_mut();
+                    let _ = child.kill();
+                    let reap = child.wait();
+                    return Err(match reap {
+                        Ok(_) => {
+                            self.child.take();
+                            "secure peer completion timed out; child killed and reaped".into()
+                        },
+                        Err(error) => format!(
+                            "secure peer completion timed out; reap after kill failed and guard will retry: {error}"
+                        ),
+                    });
+                },
+                Err(wait_error) => {
+                    let child = self.child_mut();
+                    let _ = child.kill();
+                    let reap = child.wait();
+                    return Err(match reap {
+                        Ok(_) => {
+                            self.child.take();
+                            format!("poll secure peer: {wait_error}; child killed and reaped")
+                        },
+                        Err(reap_error) => format!(
+                            "poll secure peer: {wait_error}; reap after kill failed and guard will retry: {reap_error}"
+                        ),
+                    });
+                },
+            }
+        }
+    }
+}
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+fn cmd_secure_media_processes() -> ExitCode {
+    match run_secure_media_processes() {
+        Ok(()) => {
+            println!(
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; RTP parent->child=ok; RTP child->parent=ok; SRTCP child->parent=ok; two-process interop ok"
+            );
+            ExitCode::SUCCESS
+        },
+        Err(error) => {
+            eprintln!("amazing secure-media-processes: {error}");
+            ExitCode::FAILURE
+        },
+    }
+}
+
+fn cmd_secure_media_peer(control_address: Option<&str>) -> ExitCode {
+    match run_secure_media_peer(control_address) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("amazing secure-media-peer: {error}");
+            ExitCode::FAILURE
+        },
+    }
+}
+
+fn run_secure_media_processes() -> Result<(), String> {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .map_err(|error| format!("bind signaling listener: {error}"))?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|error| format!("configure signaling listener: {error}"))?;
+    let signaling_address = listener.local_addr().map_err(|error| error.to_string())?;
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    let child = Command::new(executable)
+        .arg("__secure-media-peer")
+        .arg(signaling_address.to_string())
+        .spawn()
+        .map_err(|error| format!("spawn secure peer: {error}"))?;
+    let mut child = ChildGuard::new(child);
+    let mut control = accept_control_connection(&listener, &mut child, Duration::from_secs(5))?;
+    configure_control_stream(&control)?;
+    let mut control_reader = BufReader::new(control.try_clone().map_err(|error| error.to_string())?);
+    let offer = read_signaled_description(&mut control_reader, "OFFER")?;
+
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0")
+        .map_err(|error| format!("bind parent UDP: {error}"))?;
+    let parent_address = std_socket_v4(&socket)?;
+    let child_address = description_candidate(&offer)?;
+    socket
+        .connect(child_address)
+        .map_err(|error| format!("connect parent UDP: {error}"))?;
+    let identity = amazing_webrtc_crypto::SecureIdentity::generate("ferric-parent")
+        .map_err(|error| error.to_string())?;
+    let answer = amazing_webrtc_crypto::build_local_description(
+        parent_address,
+        identity.fingerprint(),
+        "active",
+        "parenthost",
+        "parent",
+        "FerricParentPassword123456",
+        400,
+    )
+    .map_err(|error| error.to_string())?;
+    write_signaled_description(&mut control, "ANSWER", &answer)?;
+
+    let mut endpoint = amazing_webrtc_crypto::SecureUdpEndpoint::establish(
+        amazing_webrtc_crypto::SecureEndpointConfig {
+            socket,
+            identity,
+            local_description: answer,
+            remote_description: offer,
+            local_is_offerer: false,
+            ice_role: amazing_webrtc_crypto::IceRole::Controlling,
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    let outbound = amazing_webrtc::RtpPacket {
+        marker: true,
+        payload_type: 111,
+        sequence_number: 41,
+        timestamp: 960,
+        ssrc: 0x5041_5245,
+        payload: b"parent-to-child".to_vec(),
+    };
+    let outbound_wire = amazing_webrtc::encode_rtp(&outbound).map_err(|error| error.to_string())?;
+    endpoint
+        .send_rtp(&outbound_wire)
+        .map_err(|error| error.to_string())?;
+    let child_rtp = endpoint.receive_rtp().map_err(|error| error.to_string())?;
+    let child_rtp = amazing_webrtc::parse_rtp(&child_rtp).map_err(|error| error.to_string())?;
+    if child_rtp.payload != b"child-to-parent" || child_rtp.sequence_number != 84 {
+        return Err("child process returned unexpected RTP".into());
+    }
+    let child_rtcp = endpoint.receive_rtcp().map_err(|error| error.to_string())?;
+    let child_rtcp = amazing_webrtc::parse_rtcp_sender_report(&child_rtcp)
+        .map_err(|error| error.to_string())?;
+    if child_rtcp.ssrc != child_rtp.ssrc
+        || child_rtcp.rtp_timestamp != child_rtp.timestamp
+        || child_rtcp.packet_count != 1
+        || child_rtcp.octet_count != child_rtp.payload.len() as u32
+    {
+        return Err("child process returned inconsistent SRTCP".into());
+    }
+    endpoint.close().map_err(|error| error.to_string())?;
+
+    let mut peer_result = String::new();
+    control_reader
+        .read_line(&mut peer_result)
+        .map_err(|error| error.to_string())?;
+    if peer_result.trim() != "PEER_OK" {
+        return Err(format!("secure peer did not report success: {peer_result:?}"));
+    }
+    drop(control_reader);
+    drop(control);
+    let status = child.finish(Duration::from_secs(5))?;
+    if !status.success() {
+        return Err(format!("secure peer exited {status}"));
+    }
+    Ok(())
+}
+
+fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
+    let control_address = control_address
+        .ok_or_else(|| "secure peer requires a control address".to_string())?;
+    let control_address = control_address
+        .parse()
+        .map_err(|error| format!("parse signaling control address: {error}"))?;
+    let mut control = TcpStream::connect_timeout(&control_address, Duration::from_secs(5))
+        .map_err(|error| format!("connect signaling control: {error}"))?;
+    configure_control_stream(&control)?;
+    let mut control_reader = BufReader::new(control.try_clone().map_err(|error| error.to_string())?);
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0")
+        .map_err(|error| format!("bind child UDP: {error}"))?;
+    let child_address = std_socket_v4(&socket)?;
+    let identity = amazing_webrtc_crypto::SecureIdentity::generate("ferric-child")
+        .map_err(|error| error.to_string())?;
+    let offer = amazing_webrtc_crypto::build_local_description(
+        child_address,
+        identity.fingerprint(),
+        "actpass",
+        "childhost",
+        "child",
+        "FerricChildPassword123456",
+        300,
+    )
+    .map_err(|error| error.to_string())?;
+    write_signaled_description(&mut control, "OFFER", &offer)?;
+    let answer = read_signaled_description(&mut control_reader, "ANSWER")?;
+    socket
+        .connect(description_candidate(&answer)?)
+        .map_err(|error| format!("connect child UDP: {error}"))?;
+    let mut endpoint = amazing_webrtc_crypto::SecureUdpEndpoint::establish(
+        amazing_webrtc_crypto::SecureEndpointConfig {
+            socket,
+            identity,
+            local_description: offer,
+            remote_description: answer,
+            local_is_offerer: true,
+            ice_role: amazing_webrtc_crypto::IceRole::Controlled,
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    let parent_rtp = endpoint.receive_rtp().map_err(|error| error.to_string())?;
+    let parent_rtp = amazing_webrtc::parse_rtp(&parent_rtp).map_err(|error| error.to_string())?;
+    if parent_rtp.payload != b"parent-to-child" || parent_rtp.sequence_number != 41 {
+        return Err("parent process sent unexpected RTP".into());
+    }
+    let response = amazing_webrtc::RtpPacket {
+        marker: true,
+        payload_type: 111,
+        sequence_number: 84,
+        timestamp: 1_920,
+        ssrc: 0x4348_494c,
+        payload: b"child-to-parent".to_vec(),
+    };
+    let response_wire = amazing_webrtc::encode_rtp(&response).map_err(|error| error.to_string())?;
+    endpoint
+        .send_rtp(&response_wire)
+        .map_err(|error| error.to_string())?;
+    let report = amazing_webrtc::RtcpSenderReport {
+        ssrc: response.ssrc,
+        ntp_timestamp: 0xe123_4567_89ab_cdef,
+        rtp_timestamp: response.timestamp,
+        packet_count: 1,
+        octet_count: response.payload.len() as u32,
+    };
+    endpoint
+        .send_rtcp(&amazing_webrtc::encode_rtcp_sender_report(report))
+        .map_err(|error| error.to_string())?;
+    endpoint.close().map_err(|error| error.to_string())?;
+    writeln!(control, "PEER_OK").map_err(|error| error.to_string())?;
+    control.flush().map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn accept_control_connection(
+    listener: &TcpListener,
+    child: &mut ChildGuard,
+    timeout: Duration,
+) -> Result<TcpStream, String> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => return Ok(stream),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {},
+            Err(error) => return Err(format!("accept signaling control: {error}")),
+        }
+        if let Some(status) = child
+            .child_mut()
+            .try_wait()
+            .map_err(|error| format!("poll secure peer before signaling: {error}"))?
+        {
+            return Err(format!(
+                "secure peer exited before signaling connection: {status}"
+            ));
+        }
+        if Instant::now() >= deadline {
+            return Err("secure peer signaling connection timed out".into());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn configure_control_stream(stream: &TcpStream) -> Result<(), String> {
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .map_err(|error| format!("configure signaling read timeout: {error}"))?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(5)))
+        .map_err(|error| format!("configure signaling write timeout: {error}"))
+}
+
+fn write_signaled_description(
+    writer: &mut impl Write,
+    label: &str,
+    description: &amazing_webrtc::SdpDescription,
+) -> Result<(), String> {
+    let sdp = amazing_webrtc::encode_sdp(description).map_err(|error| error.to_string())?;
+    writeln!(writer, "{label} {}", hex_encode(sdp.as_bytes())).map_err(|error| error.to_string())?;
+    writer.flush().map_err(|error| error.to_string())
+}
+
+fn read_signaled_description(
+    reader: &mut impl BufRead,
+    label: &str,
+) -> Result<amazing_webrtc::SdpDescription, String> {
+    let mut line = String::new();
+    if reader.read_line(&mut line).map_err(|error| error.to_string())? == 0 {
+        return Err(format!("missing {label} signaling line"));
+    }
+    let encoded = line
+        .trim_end()
+        .strip_prefix(&format!("{label} "))
+        .ok_or_else(|| format!("invalid {label} signaling line"))?;
+    let bytes = hex_decode(encoded)?;
+    let sdp = String::from_utf8(bytes).map_err(|error| error.to_string())?;
+    amazing_webrtc::parse_sdp(&sdp).map_err(|error| error.to_string())
+}
+
+fn description_candidate(
+    description: &amazing_webrtc::SdpDescription,
+) -> Result<std::net::SocketAddrV4, String> {
+    description
+        .candidates
+        .first()
+        .map(|candidate| candidate.address)
+        .ok_or_else(|| "signaled SDP has no ICE candidate".to_string())
+}
+
+fn std_socket_v4(socket: &std::net::UdpSocket) -> Result<std::net::SocketAddrV4, String> {
+    match socket.local_addr().map_err(|error| error.to_string())? {
+        std::net::SocketAddr::V4(address) => Ok(address),
+        std::net::SocketAddr::V6(_) => Err("secure process artifact requires IPv4".into()),
+    }
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        write!(output, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    output
+}
+
+fn hex_decode(text: &str) -> Result<Vec<u8>, String> {
+    if text.len() % 2 != 0 || !text.is_ascii() {
+        return Err("signaling hex has invalid length or encoding".into());
+    }
+    text.as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let pair = std::str::from_utf8(pair).expect("ASCII checked");
+            u8::from_str_radix(pair, 16).map_err(|_| "signaling hex is invalid".to_string())
+        })
+        .collect()
 }
 
 /// Reads a file (or stdin when `path` is None) as lossy UTF-8.

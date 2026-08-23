@@ -813,6 +813,59 @@ run the secure association across two processes for an interop-shaped gate,
 then add ICE consent freshness and RTCP compound receiver reporting. The
 user's explicit “do all phases now” instruction pre-authorizes continuing.
 
+## Phase 9.11 (secure endpoint) — caller seam + two-process gate
+
+Shipped: `SecureIdentity` is now a usable public opaque identity and
+`SecureEndpointConfig`/`SecureUdpEndpoint::establish` form the caller-facing
+secure transport interface. The caller supplies a connected std UDP socket,
+parsed local/remote SDP, offerer status, and controlling/controlled ICE role.
+The adapter validates that identity fingerprint and both candidates match
+those inputs, then owns its current-thread runtime, authenticated ICE role,
+live DTLS association, RFC 7983 demux, and directional SRTP/SRTCP state.
+Provider certificate, key, async, and cipher-context types stay private.
+
+Runnable artifact: `target\release\amazing.exe secure-media-processes`. The
+parent spawns a second Ferric process through a hidden peer mode. A
+timeout-bounded loopback TCP control channel carries canonical hex-framed SDP:
+the child generates an `actpass` offer and the parent returns an `active`
+answer. SDP intentionally contains ICE credentials, but certificate private
+keys, DTLS/exporter secrets, and SRTP keys never enter signaling. Each process
+owns a distinct certificate, runtime, endpoint, and UDP socket. The parent
+controls ICE and acts as DTLS client; the child responds as controlled DTLS
+server using the same parsed credentials, candidates, roles, and fingerprints
+as the public endpoint interface.
+
+After the cross-process handshake, the parent sends one protected RTP packet
+to the child. The child validates it, returns its own protected RTP packet and
+a matching SRTCP Sender Report, then both endpoints close DTLS cleanly. The
+parent validates the response SSRC/counters and child exit status. Observable
+output reports `processes=2`, `signaling=tcp-loopback`, `ICE credentials=SDP`, both
+RTP directions, SRTCP, and `two-process interop ok`. A child-process guard
+kills and reaps the exact child on every parent error path; nonblocking accept,
+control-stream timeouts, a ten-second DTLS handshake timeout, per-datagram
+timeouts, and bounded `try_wait` completion prevent indefinite waits.
+
+Known gaps: this is process-to-process on one Windows host, not external
+browser interoperability; loopback TCP signaling is an artifact protocol, not
+a web signaling service. ICE still has one IPv4 host pair and no retransmission,
+consent freshness, keepalive, role conflict, peer-reflexive insertion, TURN,
+or IPv6. There is no DTLS rekey overlap/key lifetime enforcement, compound
+RTCP/Receiver Report/SDES, remote codec media, multi-SSRC routing,
+congestion/jitter, SCTP/data channels, or WebRTC WPT import.
+
+Conformance: the public-endpoint two-process integration gate passes 1/1.
+Existing baselines remain 17/17 CSS2, 22/22 flex/grid, and 196/196 supported
+Test262; no WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 435 hardware-independent workspace tests/doctests
+passed with `--locked`; the exact CI build and stripped ThinLTO release command
+passed, the two-process artifact passed, and the binary is 4,505,088 bytes.
+
+Recommended next sub-phase: add periodic ICE consent freshness with timeout
+failure, then RTCP Receiver Reports plus mandatory SDES/CNAME compound packet
+handling. The user's explicit “do all phases now” instruction pre-authorizes
+continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -821,7 +874,7 @@ user's explicit “do all phases now” instruction pre-authorizes continuing.
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
   (images/audio, authenticated ICE/RTP/RTCP, SDP, and D3D11 presentation
-  milestones landed; two-process secure interop and consent freshness next).
+  milestones landed; consent freshness and compound RTCP next).
 
 ## Server cheat sheet
 

@@ -80,3 +80,24 @@ fn secure_media_loopback_uses_vetted_dtls_srtp() {
     );
     assert!(stdout.contains("secure loopback ok"), "{stdout}");
 }
+
+#[test]
+fn secure_media_two_processes_exchange_protected_media() {
+    let result = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .arg("secure-media-processes")
+        .output()
+        .expect("run two-process secure-media artifact");
+    assert!(
+        result.status.success(),
+        "two-process secure media failed: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let stdout = String::from_utf8(result.stdout).expect("UTF-8 command output");
+    assert!(stdout.contains("processes=2"), "{stdout}");
+    assert!(stdout.contains("signaling=tcp-loopback"), "{stdout}");
+    assert!(stdout.contains("ICE credentials=SDP"), "{stdout}");
+    assert!(stdout.contains("RTP parent->child=ok"), "{stdout}");
+    assert!(stdout.contains("RTP child->parent=ok"), "{stdout}");
+    assert!(stdout.contains("SRTCP child->parent=ok"), "{stdout}");
+    assert!(stdout.contains("two-process interop ok"), "{stdout}");
+}

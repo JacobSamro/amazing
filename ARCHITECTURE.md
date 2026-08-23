@@ -110,6 +110,16 @@ not from provider defaults.
 These are internal seams for the loopback milestone; a caller-constructible
 single-endpoint handshake interface remains a Phase 9 follow-on.
 
+Phase 9.11 promotes that seam through `SecureEndpointConfig` and
+`SecureUdpEndpoint`. Callers provide only a connected `std::net::UdpSocket`,
+an opaque `SecureIdentity`, parsed local/remote SDP, offerer status, and ICE
+role. The endpoint owns its current-thread runtime, live DTLS association,
+demultiplexer, and directional SRTP contexts. The provider remains invisible
+to the caller. The two-process artifact uses this exact interface on each side.
+A timeout-bounded loopback TCP control channel carries canonical SDP, including
+the ICE credentials required by STUN; it never carries certificate private
+keys, DTLS/exporter secrets, or SRTP keys.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

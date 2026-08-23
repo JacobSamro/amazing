@@ -88,13 +88,13 @@ impl std::error::Error for SecureMediaError {}
 ///
 /// Provider certificate/key types remain private; callers can signal only the
 /// SHA-256 fingerprint before consuming the identity in a handshake adapter.
-struct SecureIdentity {
+pub struct SecureIdentity {
     certificate: Certificate,
     fingerprint: String,
 }
 
 impl SecureIdentity {
-    fn generate(subject: &str) -> Result<Self, SecureMediaError> {
+    pub fn generate(subject: &str) -> Result<Self, SecureMediaError> {
         let certificate = Certificate::generate_self_signed(vec![subject.into()])
             .map_err(|error| SecureMediaError::new(format!("{subject} certificate: {error}")))?;
         let fingerprint = certificate_fingerprint(&certificate)?;
@@ -104,7 +104,7 @@ impl SecureIdentity {
         })
     }
 
-    fn fingerprint(&self) -> &str {
+    pub fn fingerprint(&self) -> &str {
         &self.fingerprint
     }
 }
@@ -113,6 +113,136 @@ impl SecureIdentity {
 struct SecureMediaSession {
     outgoing: Context,
     incoming: Context,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IceRole {
+    Controlling,
+    Controlled,
+}
+
+/// Inputs for establishing one endpoint on an already-connected UDP socket.
+pub struct SecureEndpointConfig {
+    pub socket: std::net::UdpSocket,
+    pub identity: SecureIdentity,
+    pub local_description: amazing_webrtc::SdpDescription,
+    pub remote_description: amazing_webrtc::SdpDescription,
+    pub local_is_offerer: bool,
+    pub ice_role: IceRole,
+}
+
+/// A caller-constructible single-endpoint DTLS-SRTP association.
+pub struct SecureUdpEndpoint {
+    runtime: tokio::runtime::Runtime,
+    socket: Arc<UdpSocket>,
+    dtls: Option<DTLSConn>,
+    demux_task: JoinHandle<()>,
+    media_rx: mpsc::Receiver<Vec<u8>>,
+    session: SecureMediaSession,
+}
+
+impl SecureUdpEndpoint {
+    pub fn establish(config: SecureEndpointConfig) -> Result<Self, SecureMediaError> {
+        let SecureEndpointConfig {
+            socket: std_socket,
+            identity,
+            local_description,
+            remote_description,
+            local_is_offerer,
+            ice_role,
+        } = config;
+        std_socket.set_nonblocking(true).map_err(|error| {
+            SecureMediaError::new(format!("configure UDP nonblocking: {error}"))
+        })?;
+        let runtime = Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .map_err(|error| {
+                SecureMediaError::new(format!("cannot create endpoint runtime: {error}"))
+            })?;
+        let socket = {
+            let _runtime_context = runtime.enter();
+            UdpSocket::from_std(std_socket)
+                .map_err(|error| SecureMediaError::new(format!("adopt UDP socket: {error}")))?
+        };
+        let socket = Arc::new(socket);
+        let parts = runtime.block_on(establish_endpoint_async(
+            Arc::clone(&socket),
+            identity,
+            local_description,
+            remote_description,
+            local_is_offerer,
+            ice_role,
+        ))?;
+        Ok(Self {
+            runtime,
+            socket,
+            dtls: Some(parts.dtls),
+            demux_task: parts.demux_task,
+            media_rx: parts.media_rx,
+            session: parts.session,
+        })
+    }
+
+    pub fn send_rtp(&mut self, plaintext: &[u8]) -> Result<usize, SecureMediaError> {
+        let packet = self.session.protect_rtp(plaintext)?;
+        let length = packet.len();
+        self.runtime
+            .block_on(send_datagram(&self.socket, &packet))?;
+        Ok(length)
+    }
+
+    pub fn receive_rtp(&mut self) -> Result<Vec<u8>, SecureMediaError> {
+        let packet = self
+            .runtime
+            .block_on(receive_media_datagram(&mut self.media_rx))?;
+        self.session.unprotect_rtp(&packet)
+    }
+
+    pub fn send_rtcp(&mut self, plaintext: &[u8]) -> Result<usize, SecureMediaError> {
+        let packet = self.session.protect_rtcp(plaintext)?;
+        let length = packet.len();
+        self.runtime
+            .block_on(send_datagram(&self.socket, &packet))?;
+        Ok(length)
+    }
+
+    pub fn receive_rtcp(&mut self) -> Result<Vec<u8>, SecureMediaError> {
+        let packet = self
+            .runtime
+            .block_on(receive_media_datagram(&mut self.media_rx))?;
+        self.session.unprotect_rtcp(&packet)
+    }
+
+    pub fn close(mut self) -> Result<(), SecureMediaError> {
+        self.shutdown()
+    }
+
+    fn shutdown(&mut self) -> Result<(), SecureMediaError> {
+        if let Some(dtls) = self.dtls.take() {
+            self.runtime
+                .block_on(dtls.close())
+                .map_err(|error| SecureMediaError::new(format!("close DTLS endpoint: {error}")))?;
+        }
+        self.demux_task.abort();
+        Ok(())
+    }
+}
+
+impl Drop for SecureUdpEndpoint {
+    fn drop(&mut self) {
+        if self.dtls.is_some() {
+            let _ = self.shutdown();
+        }
+    }
+}
+
+struct EstablishedEndpoint {
+    dtls: DTLSConn,
+    demux_task: JoinHandle<()>,
+    media_rx: mpsc::Receiver<Vec<u8>>,
+    session: SecureMediaSession,
 }
 
 impl SecureMediaSession {
@@ -267,7 +397,7 @@ async fn run_secure_loopback_async() -> Result<SecureLoopbackReport, SecureMedia
         .map_err(|error| SecureMediaError::new(format!("connect server UDP: {error}")))?;
     let client_v4 = socket_v4(client_address)?;
     let server_v4 = socket_v4(server_address)?;
-    let client_signal = signaled_description(
+    let client_signal = build_local_description(
         client_v4,
         client_identity.fingerprint(),
         "actpass",
@@ -276,7 +406,7 @@ async fn run_secure_loopback_async() -> Result<SecureLoopbackReport, SecureMedia
         "FerricClientPassword123456",
         100,
     )?;
-    let server_signal = signaled_description(
+    let server_signal = build_local_description(
         server_v4,
         server_identity.fingerprint(),
         "passive",
@@ -518,7 +648,144 @@ async fn run_secure_loopback_async() -> Result<SecureLoopbackReport, SecureMedia
     })
 }
 
-fn signaled_description(
+async fn establish_endpoint_async(
+    socket: Arc<UdpSocket>,
+    identity: SecureIdentity,
+    local_description: amazing_webrtc::SdpDescription,
+    remote_description: amazing_webrtc::SdpDescription,
+    local_is_offerer: bool,
+    ice_role: IceRole,
+) -> Result<EstablishedEndpoint, SecureMediaError> {
+    if local_description.fingerprint != identity.fingerprint {
+        return Err(SecureMediaError::new(
+            "local SDP fingerprint does not match the supplied identity",
+        ));
+    }
+    validate_description_socket(&socket, &local_description, &remote_description)?;
+    match ice_role {
+        IceRole::Controlling => {
+            run_ice_controlling(&socket, &local_description, &remote_description).await?;
+        }
+        IceRole::Controlled => {
+            run_ice_controlled(&socket, &local_description, &remote_description).await?;
+        }
+    }
+    let local_address = socket
+        .local_addr()
+        .map_err(|error| SecureMediaError::new(format!("endpoint local address: {error}")))?;
+    let remote_address = socket
+        .peer_addr()
+        .map_err(|error| SecureMediaError::new(format!("endpoint peer address: {error}")))?;
+    let (dtls_transport, media_rx, demux_task) =
+        start_demux(Arc::clone(&socket), local_address, remote_address);
+    let is_dtls_client = local_dtls_is_client(
+        &local_description.setup,
+        &remote_description.setup,
+        local_is_offerer,
+    )?;
+    let mut provider_config = Config {
+        certificates: vec![identity.certificate],
+        cipher_suites: vec![DTLS_CIPHER],
+        signature_schemes: vec![SignatureScheme::EcdsaWithP256AndSha256],
+        srtp_protection_profiles: vec![DTLS_SRTP_PROFILE],
+        extended_master_secret: ExtendedMasterSecretType::Require,
+        ..Default::default()
+    };
+    if is_dtls_client {
+        // WebRTC pins the self-signed peer through the parsed SDP fingerprint.
+        provider_config.insecure_skip_verify = true;
+    } else {
+        provider_config.client_auth = ClientAuthType::RequireAnyClientCert;
+    }
+    let dtls = timeout(
+        Duration::from_secs(10),
+        DTLSConn::new(dtls_transport, provider_config, is_dtls_client, None),
+    )
+    .await
+    .map_err(|_| SecureMediaError::new("DTLS endpoint handshake timed out"))?
+    .map_err(|error| SecureMediaError::new(format!("establish DTLS endpoint: {error}")))?;
+    if dtls.selected_srtpprotection_profile() != DTLS_SRTP_PROFILE {
+        return Err(SecureMediaError::new(
+            "DTLS endpoint did not negotiate AEAD_AES_128_GCM",
+        ));
+    }
+    let state = dtls.connection_state().await;
+    verify_peer_fingerprint(&state.peer_certificates, &remote_description.fingerprint)?;
+    let keying_material = Zeroizing::new(
+        state
+            .export_keying_material(DTLS_SRTP_EXPORTER_LABEL, &[], EXPORTED_KEYING_MATERIAL_LEN)
+            .await
+            .map_err(|error| SecureMediaError::new(format!("endpoint SRTP exporter: {error}")))?,
+    );
+    let session = secure_session(&keying_material, is_dtls_client)?;
+    Ok(EstablishedEndpoint {
+        dtls,
+        demux_task,
+        media_rx,
+        session,
+    })
+}
+
+fn local_dtls_is_client(
+    local_setup: &str,
+    remote_setup: &str,
+    local_is_offerer: bool,
+) -> Result<bool, SecureMediaError> {
+    if local_is_offerer {
+        match (local_setup, remote_setup) {
+            ("actpass", "passive") => Ok(true),
+            ("actpass", "active") => Ok(false),
+            _ => Err(SecureMediaError::new(
+                "local offer and remote answer have incompatible setup roles",
+            )),
+        }
+    } else {
+        match (remote_setup, local_setup) {
+            ("actpass", "active") => Ok(true),
+            ("actpass", "passive") => Ok(false),
+            _ => Err(SecureMediaError::new(
+                "remote offer and local answer have incompatible setup roles",
+            )),
+        }
+    }
+}
+
+fn validate_description_socket(
+    socket: &UdpSocket,
+    local: &amazing_webrtc::SdpDescription,
+    remote: &amazing_webrtc::SdpDescription,
+) -> Result<(), SecureMediaError> {
+    let local_address = socket_v4(
+        socket
+            .local_addr()
+            .map_err(|error| SecureMediaError::new(format!("endpoint local address: {error}")))?,
+    )?;
+    let remote_address = socket_v4(
+        socket
+            .peer_addr()
+            .map_err(|error| SecureMediaError::new(format!("endpoint peer address: {error}")))?,
+    )?;
+    let local_candidate = local
+        .candidates
+        .first()
+        .ok_or_else(|| SecureMediaError::new("local SDP has no ICE candidate"))?;
+    let remote_candidate = remote
+        .candidates
+        .first()
+        .ok_or_else(|| SecureMediaError::new("remote SDP has no ICE candidate"))?;
+    if local_candidate.address != local_address
+        || remote_candidate.address != remote_address
+        || local.connection_address != *local_address.ip()
+        || remote.connection_address != *remote_address.ip()
+    {
+        return Err(SecureMediaError::new(
+            "SDP candidates do not match the connected endpoint socket",
+        ));
+    }
+    Ok(())
+}
+
+pub fn build_local_description(
     address: SocketAddrV4,
     fingerprint: &str,
     setup: &str,
@@ -604,33 +871,36 @@ async fn nominate_udp_pair(
     client_signal: &amazing_webrtc::SdpDescription,
     server_signal: &amazing_webrtc::SdpDescription,
 ) -> Result<amazing_webrtc::ChecklistState, SecureMediaError> {
-    let local = client_signal
-        .candidates
-        .first()
-        .ok_or_else(|| SecureMediaError::new("parsed client SDP has no ICE candidate"))?;
-    let remote = server_signal
-        .candidates
-        .first()
-        .ok_or_else(|| SecureMediaError::new("parsed server SDP has no ICE candidate"))?;
-    let client_address = socket_v4(
-        client
-            .local_addr()
-            .map_err(|error| SecureMediaError::new(format!("client ICE address: {error}")))?,
-    )?;
-    let server_address = socket_v4(
-        server
-            .local_addr()
-            .map_err(|error| SecureMediaError::new(format!("server ICE address: {error}")))?,
-    )?;
-    if local.address != client_address
-        || remote.address != server_address
-        || client_signal.connection_address != *client_address.ip()
-        || server_signal.connection_address != *server_address.ip()
+    let (controlling, controlled) = tokio::join!(
+        run_ice_controlling(client, client_signal, server_signal),
+        run_ice_controlled(server, server_signal, client_signal),
+    );
+    let controlling = controlling?;
+    let controlled = controlled?;
+    if controlling != amazing_webrtc::ChecklistState::Completed
+        || controlled != amazing_webrtc::ChecklistState::Completed
     {
         return Err(SecureMediaError::new(
-            "parsed SDP candidates do not match the connected UDP pair",
+            "both secure UDP ICE checklists did not complete",
         ));
     }
+    Ok(controlling)
+}
+
+async fn run_ice_controlling(
+    socket: &UdpSocket,
+    local_signal: &amazing_webrtc::SdpDescription,
+    remote_signal: &amazing_webrtc::SdpDescription,
+) -> Result<amazing_webrtc::ChecklistState, SecureMediaError> {
+    validate_description_socket(socket, local_signal, remote_signal)?;
+    let local = local_signal
+        .candidates
+        .first()
+        .ok_or_else(|| SecureMediaError::new("controlling SDP has no local candidate"))?;
+    let remote = remote_signal
+        .candidates
+        .first()
+        .ok_or_else(|| SecureMediaError::new("controlling SDP has no remote candidate"))?;
     let mut checklist = amazing_webrtc::IceChecklist::new(
         std::slice::from_ref(local),
         std::slice::from_ref(remote),
@@ -638,10 +908,10 @@ async fn nominate_udp_pair(
     );
     let pair = checklist
         .next_check()
-        .ok_or_else(|| SecureMediaError::new("secure ICE checklist had no candidate pair"))?;
+        .ok_or_else(|| SecureMediaError::new("controlling ICE checklist had no pair"))?;
     let transaction = amazing_webrtc::TransactionId(*b"secure-ice!!");
-    let username = format!("{}:{}", server_signal.ice_ufrag, client_signal.ice_ufrag);
-    let key = server_signal.ice_pwd.as_bytes();
+    let username = format!("{}:{}", remote_signal.ice_ufrag, local_signal.ice_ufrag);
+    let key = remote_signal.ice_pwd.as_bytes();
     let request = amazing_webrtc::encode_ice_binding_request(
         transaction,
         &username,
@@ -651,35 +921,13 @@ async fn nominate_udp_pair(
         key,
     )
     .map_err(|error| SecureMediaError::new(error.to_string()))?;
-    send_datagram(client, &request).await?;
-    let request_wire = receive_datagram(server).await?;
-    let parsed_request = amazing_webrtc::parse_stun(&request_wire)
-        .map_err(|error| SecureMediaError::new(error.to_string()))?;
-    if parsed_request.class != amazing_webrtc::StunClass::Request
-        || parsed_request.transaction_id != transaction
-        || parsed_request.username.as_deref() != Some(username.as_str())
-        || parsed_request.priority != Some(local.priority)
-        || parsed_request.ice_controlling != Some(0x1020_3040_5060_7080)
-        || parsed_request.ice_controlled.is_some()
-        || !parsed_request.use_candidate
-        || !amazing_webrtc::verify_message_integrity(&request_wire, key)
-            .map_err(|error| SecureMediaError::new(error.to_string()))?
-        || !amazing_webrtc::verify_fingerprint(&request_wire)
-            .map_err(|error| SecureMediaError::new(error.to_string()))?
-    {
-        return Err(SecureMediaError::new(
-            "secure UDP ICE request failed authentication or nomination",
-        ));
-    }
-    let response = amazing_webrtc::encode_ice_binding_success(transaction, client_address, key)
-        .map_err(|error| SecureMediaError::new(error.to_string()))?;
-    send_datagram(server, &response).await?;
-    let response_wire = receive_datagram(client).await?;
+    send_datagram(socket, &request).await?;
+    let response_wire = receive_datagram(socket).await?;
     let parsed_response = amazing_webrtc::parse_stun(&response_wire)
         .map_err(|error| SecureMediaError::new(error.to_string()))?;
     if parsed_response.class != amazing_webrtc::StunClass::SuccessResponse
         || parsed_response.transaction_id != transaction
-        || parsed_response.xor_mapped_address != Some(client_address)
+        || parsed_response.xor_mapped_address != Some(local.address)
         || !amazing_webrtc::verify_message_integrity(&response_wire, key)
             .map_err(|error| SecureMediaError::new(error.to_string()))?
         || !amazing_webrtc::verify_fingerprint(&response_wire)
@@ -690,12 +938,73 @@ async fn nominate_udp_pair(
         ));
     }
     checklist
-        .mark_succeeded(pair, parsed_request.use_candidate)
+        .mark_succeeded(pair, true)
         .map_err(|error| SecureMediaError::new(error.to_string()))?;
     let state = checklist.state();
     if state != amazing_webrtc::ChecklistState::Completed {
         return Err(SecureMediaError::new(
             "secure UDP pair was not nominated to Completed",
+        ));
+    }
+    Ok(state)
+}
+
+async fn run_ice_controlled(
+    socket: &UdpSocket,
+    local_signal: &amazing_webrtc::SdpDescription,
+    remote_signal: &amazing_webrtc::SdpDescription,
+) -> Result<amazing_webrtc::ChecklistState, SecureMediaError> {
+    validate_description_socket(socket, local_signal, remote_signal)?;
+    let local = local_signal
+        .candidates
+        .first()
+        .ok_or_else(|| SecureMediaError::new("controlled SDP has no local candidate"))?;
+    let remote = remote_signal
+        .candidates
+        .first()
+        .ok_or_else(|| SecureMediaError::new("controlled SDP has no remote candidate"))?;
+    let mut checklist = amazing_webrtc::IceChecklist::new(
+        std::slice::from_ref(local),
+        std::slice::from_ref(remote),
+        false,
+    );
+    let pair = checklist
+        .next_check()
+        .ok_or_else(|| SecureMediaError::new("controlled ICE checklist had no pair"))?;
+    let request_wire = receive_datagram(socket).await?;
+    let parsed_request = amazing_webrtc::parse_stun(&request_wire)
+        .map_err(|error| SecureMediaError::new(error.to_string()))?;
+    let username = format!("{}:{}", local_signal.ice_ufrag, remote_signal.ice_ufrag);
+    let key = local_signal.ice_pwd.as_bytes();
+    if parsed_request.class != amazing_webrtc::StunClass::Request
+        || parsed_request.username.as_deref() != Some(username.as_str())
+        || parsed_request.priority != Some(remote.priority)
+        || parsed_request.ice_controlling.is_none()
+        || parsed_request.ice_controlled.is_some()
+        || !parsed_request.use_candidate
+        || !amazing_webrtc::verify_message_integrity(&request_wire, key)
+            .map_err(|error| SecureMediaError::new(error.to_string()))?
+        || !amazing_webrtc::verify_fingerprint(&request_wire)
+            .map_err(|error| SecureMediaError::new(error.to_string()))?
+    {
+        return Err(SecureMediaError::new(
+            "controlled ICE request failed SDP authentication",
+        ));
+    }
+    let response = amazing_webrtc::encode_ice_binding_success(
+        parsed_request.transaction_id,
+        remote.address,
+        key,
+    )
+    .map_err(|error| SecureMediaError::new(error.to_string()))?;
+    send_datagram(socket, &response).await?;
+    checklist
+        .mark_succeeded(pair, parsed_request.use_candidate)
+        .map_err(|error| SecureMediaError::new(error.to_string()))?;
+    let state = checklist.state();
+    if state != amazing_webrtc::ChecklistState::Completed {
+        return Err(SecureMediaError::new(
+            "controlled ICE checklist did not complete",
         ));
     }
     Ok(state)
