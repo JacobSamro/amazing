@@ -192,6 +192,12 @@ The alternative pure-Rust `mousiki` 0.2.1 backend was evaluated and rejected
 because a valid 20 ms mono frame panicked in CELT band processing. Bundled
 libopus requires CMake and the existing Visual Studio C++ tools on Windows.
 
+Phase 9.21 puts video RTP assembly back in the std-only core rather than the
+codec adapter. `VideoFrameAssembler` consumes jitter output, bounds packets and
+bytes, concatenates one timestamp through the RTP marker, and discards a
+damaged frame until its marker. Encoded frames can later cross a VP8/H.264
+decoder seam without teaching transport about codec payload syntax.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

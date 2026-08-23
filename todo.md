@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 20-subphase foundation milestone landed; video/TURN/browser interop remain |
+| 9 — Media | 🔄 21-subphase foundation milestone landed; video codecs/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1234,6 +1234,36 @@ passed with `--locked`; strict codec/WebRTC/application Clippy, stripped
 ThinLTO release, standalone Opus artifact, and secure Opus artifact passed. The
 release binary is 5,214,208 bytes.
 
+## Phase 9.21 (video transport) — bounded RTP frame assembly
+
+Shipped: new std-only `video` module consumes ordered `JitterOutput`, validates
+one SSRC/payload type, and aggregates packet payloads sharing one RTP timestamp
+until the marker bit. Packet count and byte caps prevent unbounded frames.
+Missing packets, timestamp changes before a marker, and overflow drop the
+damaged frame; discard continues through its marker so tail fragments cannot
+be misreported as a complete frame.
+
+The public probe inserts sequence 10, 12, 11 into the jitter buffer, emits
+10, 11, 12, and assembles `frame-middle-end`. It separately injects a gap and
+verifies damage is dropped. A bounded-overflow gate verifies recovery at the
+next complete marked frame.
+
+Runnable artifact: `target\release\amazing.exe video-frame-probe`, which reports
+`video RTP packets=3 frame=16 bytes reordered=yes damaged=dropped; video frame
+probe ok`.
+
+Known gaps: this module assembles opaque encoded frames; it does not parse VP8/
+VP9/AV1/H.264 payload descriptors, identify keyframes, request PLI/NACK, decode
+pixels, synchronize audio/video, or present video. One assembler handles one
+SSRC and payload type.
+
+Conformance: reorder/marker/damage and bound/recovery public gates pass 2/2;
+the command artifact passes 1/1. No WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 494 hardware-independent workspace tests/doctests
+passed with `--locked`; strict WebRTC/application Clippy, stripped ThinLTO
+release, and video-frame artifact passed. The release binary is 5,218,816 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1289,7 +1319,7 @@ release binary is 5,214,208 bytes.
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** twenty committed subphases provide decoded images/audio,
+- **Phase 9:** twenty-one committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1301,9 +1331,9 @@ and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **491**
+remeasured after the audit fixes before each commit. Current gate: **494**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **5,214,208 bytes**.
+stripped ThinLTO release is **5,218,816 bytes**.
 
 ## Server cheat sheet
 

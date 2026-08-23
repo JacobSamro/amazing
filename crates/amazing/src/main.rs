@@ -728,6 +728,7 @@ fn main() -> ExitCode {
         Some("webrtc-loopback") => cmd_webrtc_loopback(),
         Some("rtp-jitter-probe") => cmd_rtp_jitter_probe(),
         Some("opus-probe") => cmd_opus_probe(),
+        Some("video-frame-probe") => cmd_video_frame_probe(),
         Some("secure-media-loopback") => cmd_secure_media_loopback(),
         Some("secure-media-processes") => cmd_secure_media_processes(),
         Some("__secure-media-peer") => cmd_secure_media_peer(args.get(2).map(String::as_str)),
@@ -742,7 +743,7 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|opus-probe|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|opus-probe|video-frame-probe|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
             );
             ExitCode::FAILURE
         }
@@ -784,6 +785,29 @@ fn cmd_opus_probe() -> ExitCode {
         }
         Err(error) => {
             eprintln!("amazing opus-probe: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn cmd_video_frame_probe() -> ExitCode {
+    match amazing_webrtc::run_video_frame_probe() {
+        Ok(report) => {
+            println!(
+                "video RTP packets={} frame={} bytes reordered={} damaged={}; video frame probe ok",
+                report.packets,
+                report.frame_bytes,
+                if report.reordered { "yes" } else { "no" },
+                if report.damaged_dropped {
+                    "dropped"
+                } else {
+                    "accepted"
+                },
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing video-frame-probe: {error}");
             ExitCode::FAILURE
         }
     }

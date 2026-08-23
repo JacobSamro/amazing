@@ -51,6 +51,22 @@ fn opus_probe_encodes_decodes_and_conceals() {
 }
 
 #[test]
+fn video_frame_probe_reorders_and_drops_damage() {
+    let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .arg("video-frame-probe")
+        .output()
+        .expect("run video frame probe");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("packets=3 frame=16 bytes reordered=yes"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("damaged=dropped"), "{stdout}");
+    assert!(stdout.contains("video frame probe ok"), "{stdout}");
+}
+
+#[test]
 fn sdp_roundtrip_command_reports_ice_dtls_media_summary() {
     let offer =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/phase9-offer.sdp");
