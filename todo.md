@@ -926,6 +926,58 @@ event loop, then add ICE retransmission/role conflict and computed RTCP
 reception statistics before moving to jitter buffering/codecs. The user's
 explicit “do all phases now” instruction pre-authorizes continuing.
 
+## Phase 9.13 (transport robustness) — ICE timing + computed RR stats
+
+Shipped: std-only `StunRetransmission` implements RFC 8489's default UDP
+transaction schedule with a minimum 500 ms RTO and seven one-transaction-ID
+sends at 0, 0.5, 1.5, 3.5, 7.5, 15.5, and 31.5 seconds. It waits the final
+`16 * RTO`, fails at 39.5 seconds, supports triggered-check cancellation, and
+cannot be resurrected by a response after failure. Success, failure, and
+cancellation are terminal.
+
+Pure RFC 8445 role-conflict logic now covers controlling/controlling and
+controlled/controlled tiebreaker comparisons, 487 rejection, role switching,
+opposite-role acceptance, and the mandatory client role switch after a 487.
+The release artifact runs the full retransmission schedule plus a role switch
+probe and reports `ICE retransmit=7 role-conflict=resolved`.
+
+`RtpReceptionStats` observes real RTP packets for one SSRC and computes the
+extended highest sequence across wrap, cumulative/interval loss and the
+8-bit loss fraction, plus RFC 3550's integer 1/16 interarrival-jitter filter.
+It samples those values with caller-provided LSR/DLSR into `ReceptionReport`.
+Public gates cover nonzero loss/jitter plus sequence wrap, a late prior-cycle
+packet, duplicates, interval accounting, and DLSR propagation.
+The two-process artifact feeds the received child RTP through this module
+before building the parent's compound RR+CNAME, and reports
+`RTCP stats=computed`.
+
+Runnable artifact: `target\release\amazing.exe secure-media-processes`.
+
+Known gaps: retransmission and role-conflict behavior are deterministic public
+state probes, not yet forced by dropped live packets or an encoded 487 error;
+triggered-check queues, pair-priority recomputation, peer-reflexive insertion,
+and random replacement tiebreakers remain pending. Reception tracking is one
+SSRC with a bounded wrap/out-of-order model; full RFC probation, dropout/
+misorder thresholds, duplicate accounting policy, real arrival-clock
+conversion, periodic report scheduling, and multi-source aggregation remain
+pending. TURN/IPv6, browser interop, jitter buffering/codecs, congestion,
+SCTP/data channels, and WebRTC WPT are still out of this slice.
+
+Conformance: RFC retransmission, role-conflict, and reception-statistics public
+gates pass 4/4; the enhanced two-process integration gate passes 1/1.
+Existing baselines remain 17/17 CSS2, 22/22 flex/grid, and 196/196 supported
+Test262; no WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 442 hardware-independent workspace tests/doctests
+passed with `--locked`; all three strict first-party Clippy gates, exact CI
+build, stripped ThinLTO release, and enhanced two-process artifact passed. The
+release binary is 4,561,408 bytes.
+
+Recommended next sub-phase: wire retransmission and 487 role switching into a
+loss-injected live ICE gate, then add peer-reflexive candidates before starting
+an RTP jitter buffer and codec boundary. The user's explicit “do all phases
+now” instruction pre-authorizes continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -934,7 +986,7 @@ explicit “do all phases now” instruction pre-authorizes continuing.
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
   (images/audio, authenticated ICE/RTP/RTCP, SDP, and D3D11 presentation
-  milestones landed; ICE robustness and reception statistics next).
+  milestones landed; live loss/487 ICE and jitter buffering next).
 
 ## Server cheat sheet
 

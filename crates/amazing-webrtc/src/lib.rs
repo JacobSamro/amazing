@@ -94,6 +94,114 @@ pub struct RtcpCompoundSenderReport {
     pub cname: String,
 }
 
+/// RFC 3550 reception state for one RTP source.
+pub struct RtpReceptionStats {
+    source_ssrc: u32,
+    base_sequence: Option<u16>,
+    max_sequence: u16,
+    sequence_cycles: u32,
+    received: u32,
+    expected_prior: u32,
+    received_prior: u32,
+    previous_transit: Option<i32>,
+    jitter_q4: u32,
+}
+
+impl RtpReceptionStats {
+    pub fn new(source_ssrc: u32) -> Self {
+        Self {
+            source_ssrc,
+            base_sequence: None,
+            max_sequence: 0,
+            sequence_cycles: 0,
+            received: 0,
+            expected_prior: 0,
+            received_prior: 0,
+            previous_transit: None,
+            jitter_q4: 0,
+        }
+    }
+
+    /// `arrival_timestamp_units` uses the RTP payload clock rate.
+    pub fn observe(
+        &mut self,
+        packet: &RtpPacket,
+        arrival_timestamp_units: u32,
+    ) -> Result<(), WebRtcError> {
+        if packet.ssrc != self.source_ssrc {
+            return Err(WebRtcError::InvalidPacket(
+                "RTP packet SSRC does not match reception state",
+            ));
+        }
+        match self.base_sequence {
+            None => {
+                self.base_sequence = Some(packet.sequence_number);
+                self.max_sequence = packet.sequence_number;
+            },
+            Some(_) => {
+                if packet.sequence_number < self.max_sequence
+                    && self.max_sequence - packet.sequence_number > 0x8000
+                {
+                    self.sequence_cycles = self.sequence_cycles.saturating_add(1 << 16);
+                    self.max_sequence = packet.sequence_number;
+                } else if packet.sequence_number > self.max_sequence
+                    && packet.sequence_number - self.max_sequence < 0x8000
+                {
+                    self.max_sequence = packet.sequence_number;
+                }
+            },
+        }
+        self.received = self.received.saturating_add(1);
+        let transit = arrival_timestamp_units.wrapping_sub(packet.timestamp) as i32;
+        if let Some(previous) = self.previous_transit {
+            let difference = transit.wrapping_sub(previous).unsigned_abs();
+            self.jitter_q4 = self
+                .jitter_q4
+                .saturating_add(difference)
+                .saturating_sub((self.jitter_q4.saturating_add(8)) >> 4);
+        }
+        self.previous_transit = Some(transit);
+        Ok(())
+    }
+
+    pub fn report(
+        &mut self,
+        last_sender_report: u32,
+        delay_since_last_sender_report: u32,
+    ) -> Result<ReceptionReport, WebRtcError> {
+        let base_sequence = self
+            .base_sequence
+            .ok_or(WebRtcError::InvalidPacket("no RTP packets observed"))?;
+        let extended_highest_sequence = self
+            .sequence_cycles
+            .saturating_add(self.max_sequence as u32);
+        let expected = extended_highest_sequence
+            .saturating_sub(base_sequence as u32)
+            .saturating_add(1);
+        let cumulative_lost_i64 = expected as i64 - self.received as i64;
+        let cumulative_lost = cumulative_lost_i64.clamp(-8_388_608, 8_388_607) as i32;
+        let expected_interval = expected.saturating_sub(self.expected_prior);
+        let received_interval = self.received.saturating_sub(self.received_prior);
+        let lost_interval = expected_interval as i64 - received_interval as i64;
+        let fraction_lost = if expected_interval == 0 || lost_interval <= 0 {
+            0
+        } else {
+            ((lost_interval as u64 * 256) / expected_interval as u64).min(255) as u8
+        };
+        self.expected_prior = expected;
+        self.received_prior = self.received;
+        Ok(ReceptionReport {
+            source_ssrc: self.source_ssrc,
+            fraction_lost,
+            cumulative_lost,
+            extended_highest_sequence,
+            interarrival_jitter: self.jitter_q4 >> 4,
+            last_sender_report,
+            delay_since_last_sender_report,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RtpMap {
     pub payload_type: u8,
@@ -282,6 +390,159 @@ impl ConsentFreshness {
             ));
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StunRetransmitPoll {
+    WaitUntil(u64),
+    SendNow { attempt: u8 },
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+/// RFC 8489 UDP transaction retransmission state on a monotonic clock.
+pub struct StunRetransmission {
+    rto_ms: u64,
+    sends: u8,
+    next_send_ms: u64,
+    final_deadline_ms: u64,
+    terminal: Option<StunRetransmitPoll>,
+}
+
+impl StunRetransmission {
+    pub const DEFAULT_REQUEST_COUNT: u8 = 7;
+    pub const FINAL_WAIT_MULTIPLIER: u64 = 16;
+
+    pub fn new(now_ms: u64, rto_ms: u64) -> Result<Self, WebRtcError> {
+        if rto_ms < 500 {
+            return Err(WebRtcError::InvalidPacket("STUN RTO is below 500 ms"));
+        }
+        Ok(Self {
+            rto_ms,
+            sends: 0,
+            next_send_ms: now_ms,
+            final_deadline_ms: u64::MAX,
+            terminal: None,
+        })
+    }
+
+    pub fn poll(&self, now_ms: u64) -> StunRetransmitPoll {
+        if let Some(terminal) = self.terminal {
+            return terminal;
+        }
+        if self.sends < Self::DEFAULT_REQUEST_COUNT {
+            if now_ms >= self.next_send_ms {
+                StunRetransmitPoll::SendNow {
+                    attempt: self.sends + 1,
+                }
+            } else {
+                StunRetransmitPoll::WaitUntil(self.next_send_ms)
+            }
+        } else if now_ms >= self.final_deadline_ms {
+            StunRetransmitPoll::Failed
+        } else {
+            StunRetransmitPoll::WaitUntil(self.final_deadline_ms)
+        }
+    }
+
+    pub fn record_sent(&mut self, now_ms: u64) -> Result<(), WebRtcError> {
+        if self.poll(now_ms)
+            != (StunRetransmitPoll::SendNow {
+                attempt: self.sends + 1,
+            })
+        {
+            return Err(WebRtcError::InvalidPacket(
+                "STUN retransmission was recorded outside its deadline",
+            ));
+        }
+        self.sends += 1;
+        if self.sends < Self::DEFAULT_REQUEST_COUNT {
+            let exponent = self.sends - 1;
+            let delay = self.rto_ms.saturating_mul(1u64 << exponent);
+            self.next_send_ms = now_ms.saturating_add(delay);
+        } else {
+            self.final_deadline_ms = now_ms
+                .saturating_add(self.rto_ms.saturating_mul(Self::FINAL_WAIT_MULTIPLIER));
+        }
+        Ok(())
+    }
+
+    pub fn succeed(&mut self, now_ms: u64) -> bool {
+        if self.sends == 0
+            || matches!(
+            self.poll(now_ms),
+            StunRetransmitPoll::Failed | StunRetransmitPoll::Cancelled
+        )
+        {
+            return false;
+        }
+        self.terminal = Some(StunRetransmitPoll::Succeeded);
+        true
+    }
+
+    pub fn cancel(&mut self, now_ms: u64) -> bool {
+        if matches!(
+            self.poll(now_ms),
+            StunRetransmitPoll::Succeeded
+                | StunRetransmitPoll::Failed
+                | StunRetransmitPoll::Cancelled
+        ) {
+            return false;
+        }
+        self.terminal = Some(StunRetransmitPoll::Cancelled);
+        true
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IceAgentRole {
+    Controlling,
+    Controlled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IceRoleAttribute {
+    Controlling(u64),
+    Controlled(u64),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IceRoleConflict {
+    Accept,
+    Reject487,
+    SwitchTo(IceAgentRole),
+}
+
+pub fn resolve_ice_role_conflict(
+    local_role: IceAgentRole,
+    local_tiebreaker: u64,
+    remote: IceRoleAttribute,
+) -> IceRoleConflict {
+    match (local_role, remote) {
+        (IceAgentRole::Controlling, IceRoleAttribute::Controlling(remote_tiebreaker)) => {
+            if local_tiebreaker >= remote_tiebreaker {
+                IceRoleConflict::Reject487
+            } else {
+                IceRoleConflict::SwitchTo(IceAgentRole::Controlled)
+            }
+        },
+        (IceAgentRole::Controlled, IceRoleAttribute::Controlled(remote_tiebreaker)) => {
+            if local_tiebreaker >= remote_tiebreaker {
+                IceRoleConflict::SwitchTo(IceAgentRole::Controlling)
+            } else {
+                IceRoleConflict::Reject487
+            }
+        },
+        _ => IceRoleConflict::Accept,
+    }
+}
+
+pub fn role_after_487(sent: IceRoleAttribute) -> IceAgentRole {
+    match sent {
+        IceRoleAttribute::Controlling(_) => IceAgentRole::Controlled,
+        IceRoleAttribute::Controlled(_) => IceAgentRole::Controlling,
     }
 }
 
@@ -1746,5 +2007,149 @@ mod tests {
         assert!(!consent
             .record_authenticated_response(37_001, transaction)
             .expect("late response cannot restore expired consent"));
+    }
+
+    #[test]
+    fn stun_retransmission_matches_default_rfc8489_schedule() {
+        let mut transaction = StunRetransmission::new(0, 500).expect("valid RTO");
+        assert!(!transaction.succeed(0));
+        let send_times = [0, 500, 1_500, 3_500, 7_500, 15_500, 31_500];
+        for (index, send_time) in send_times.into_iter().enumerate() {
+            assert_eq!(
+                transaction.poll(send_time),
+                StunRetransmitPoll::SendNow {
+                    attempt: index as u8 + 1
+                }
+            );
+            transaction.record_sent(send_time).expect("scheduled send");
+        }
+        assert_eq!(
+            transaction.poll(39_499),
+            StunRetransmitPoll::WaitUntil(39_500)
+        );
+        assert_eq!(transaction.poll(39_500), StunRetransmitPoll::Failed);
+        assert!(!transaction.succeed(39_500));
+        assert!(!transaction.cancel(39_500));
+
+        let mut succeeded = StunRetransmission::new(0, 500).unwrap();
+        succeeded.record_sent(0).unwrap();
+        assert!(succeeded.succeed(100));
+        assert!(!succeeded.cancel(100));
+        assert_eq!(succeeded.poll(100), StunRetransmitPoll::Succeeded);
+
+        let mut cancelled = StunRetransmission::new(0, 500).unwrap();
+        cancelled.record_sent(0).unwrap();
+        assert!(cancelled.cancel(100));
+        assert!(!cancelled.succeed(100));
+        assert_eq!(cancelled.poll(100), StunRetransmitPoll::Cancelled);
+    }
+
+    #[test]
+    fn ice_role_conflict_follows_tiebreaker_rules() {
+        assert_eq!(
+            resolve_ice_role_conflict(
+                IceAgentRole::Controlling,
+                10,
+                IceRoleAttribute::Controlling(9)
+            ),
+            IceRoleConflict::Reject487
+        );
+        assert_eq!(
+            resolve_ice_role_conflict(
+                IceAgentRole::Controlling,
+                10,
+                IceRoleAttribute::Controlling(11)
+            ),
+            IceRoleConflict::SwitchTo(IceAgentRole::Controlled)
+        );
+        assert_eq!(
+            resolve_ice_role_conflict(
+                IceAgentRole::Controlled,
+                10,
+                IceRoleAttribute::Controlled(9)
+            ),
+            IceRoleConflict::SwitchTo(IceAgentRole::Controlling)
+        );
+        assert_eq!(
+            resolve_ice_role_conflict(
+                IceAgentRole::Controlled,
+                10,
+                IceRoleAttribute::Controlled(11)
+            ),
+            IceRoleConflict::Reject487
+        );
+        assert_eq!(
+            resolve_ice_role_conflict(
+                IceAgentRole::Controlled,
+                10,
+                IceRoleAttribute::Controlling(11)
+            ),
+            IceRoleConflict::Accept
+        );
+        assert_eq!(
+            role_after_487(IceRoleAttribute::Controlling(10)),
+            IceAgentRole::Controlled
+        );
+    }
+
+    #[test]
+    fn reception_statistics_compute_loss_sequence_and_jitter() {
+        let packet = |sequence_number, timestamp| RtpPacket {
+            marker: false,
+            payload_type: 111,
+            sequence_number,
+            timestamp,
+            ssrc: 0x4348_494c,
+            payload: vec![0],
+        };
+        let mut stats = RtpReceptionStats::new(0x4348_494c);
+        stats.observe(&packet(100, 0), 0).unwrap();
+        stats.observe(&packet(101, 960), 1_000).unwrap();
+        stats.observe(&packet(103, 2_880), 3_000).unwrap();
+
+        let first = stats.report(0x1234_5678, 0x0001_8000).unwrap();
+        assert_eq!(first.fraction_lost, 64);
+        assert_eq!(first.cumulative_lost, 1);
+        assert_eq!(first.extended_highest_sequence, 103);
+        assert_eq!(first.interarrival_jitter, 7);
+        assert_eq!(first.last_sender_report, 0x1234_5678);
+
+        stats.observe(&packet(104, 3_840), 4_000).unwrap();
+        let second = stats.report(0, 0).unwrap();
+        assert_eq!(second.fraction_lost, 0);
+        assert_eq!(second.cumulative_lost, 1);
+        assert_eq!(second.extended_highest_sequence, 104);
+        assert_eq!(second.interarrival_jitter, 9);
+    }
+
+    #[test]
+    fn reception_statistics_handle_wrap_late_duplicates_and_dlsr() {
+        let packet = |sequence_number| RtpPacket {
+            marker: false,
+            payload_type: 111,
+            sequence_number,
+            timestamp: sequence_number as u32 * 960,
+            ssrc: 0x1122_3344,
+            payload: vec![0],
+        };
+        let mut stats = RtpReceptionStats::new(0x1122_3344);
+        for sequence in [65_534, 65_535, 0, 1] {
+            let packet = packet(sequence);
+            stats.observe(&packet, packet.timestamp).unwrap();
+        }
+        let first = stats.report(0x0102_0304, 0x0002_8000).unwrap();
+        assert_eq!(first.extended_highest_sequence, 65_537);
+        assert_eq!(first.cumulative_lost, 0);
+        assert_eq!(first.delay_since_last_sender_report, 0x0002_8000);
+
+        for sequence in [65_535, 1] {
+            let packet = packet(sequence);
+            stats.observe(&packet, packet.timestamp).unwrap();
+        }
+        let second = stats.report(0, 9).unwrap();
+        assert_eq!(second.extended_highest_sequence, 65_537);
+        assert_eq!(second.cumulative_lost, -2);
+        assert_eq!(second.fraction_lost, 0);
+        assert_eq!(second.delay_since_last_sender_report, 9);
     }
 }

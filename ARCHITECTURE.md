@@ -129,6 +129,13 @@ the live demux. The RTCP codec now emits/parses RFC 3550 compound Sender or
 Receiver Reports followed by mandatory SDES/CNAME, which SRTCP protects
 unchanged.
 
+Phase 9.13 adds deterministic RFC transport/statistics state to the std-only
+core: `StunRetransmission` owns exponential UDP deadlines and terminal
+success/failure/cancellation; role-conflict resolution is a pure tiebreaker
+decision; `RtpReceptionStats` converts observed sequence/timestamp/arrival
+state into RR loss, extended sequence, jitter, LSR, and DLSR fields. The
+driver's probes use these interfaces, not duplicate arithmetic.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

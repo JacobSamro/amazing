@@ -741,7 +741,7 @@ fn cmd_secure_media_processes() -> ExitCode {
     match run_secure_media_processes() {
         Ok(()) => {
             println!(
-                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; two-process interop ok"
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; ICE retransmit=7 role-conflict=resolved; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
             );
             ExitCode::SUCCESS
         },
@@ -762,7 +762,31 @@ fn cmd_secure_media_peer(control_address: Option<&str>) -> ExitCode {
     }
 }
 
+fn verify_ice_robustness_probe() -> Result<(), String> {
+    let mut transaction =
+        amazing_webrtc::StunRetransmission::new(0, 500).map_err(|error| error.to_string())?;
+    for send_time in [0, 500, 1_500, 3_500, 7_500, 15_500, 31_500] {
+        transaction
+            .record_sent(send_time)
+            .map_err(|error| error.to_string())?;
+    }
+    if transaction.poll(39_500) != amazing_webrtc::StunRetransmitPoll::Failed
+        || amazing_webrtc::resolve_ice_role_conflict(
+            amazing_webrtc::IceAgentRole::Controlling,
+            10,
+            amazing_webrtc::IceRoleAttribute::Controlling(11),
+        )
+            != amazing_webrtc::IceRoleConflict::SwitchTo(
+                amazing_webrtc::IceAgentRole::Controlled,
+            )
+    {
+        return Err("ICE retransmission or role-conflict probe failed".into());
+    }
+    Ok(())
+}
+
 fn run_secure_media_processes() -> Result<(), String> {
+    verify_ice_robustness_probe()?;
     let listener = TcpListener::bind("127.0.0.1:0")
         .map_err(|error| format!("bind signaling listener: {error}"))?;
     listener
@@ -843,6 +867,10 @@ fn run_secure_media_processes() -> Result<(), String> {
     if child_rtp.payload != b"child-to-parent" || child_rtp.sequence_number != 84 {
         return Err("child process returned unexpected RTP".into());
     }
+    let mut reception_stats = amazing_webrtc::RtpReceptionStats::new(child_rtp.ssrc);
+    reception_stats
+        .observe(&child_rtp, child_rtp.timestamp)
+        .map_err(|error| error.to_string())?;
     let child_rtcp = endpoint.receive_rtcp().map_err(|error| error.to_string())?;
     let child_rtcp = amazing_webrtc::parse_rtcp_compound_sender_report(&child_rtcp)
         .map_err(|error| error.to_string())?;
@@ -855,17 +883,12 @@ fn run_secure_media_processes() -> Result<(), String> {
         return Err("child process returned inconsistent SRTCP".into());
     }
     read_control_marker(&mut control_reader, "READY_RR")?;
+    let reception = reception_stats
+        .report((child_rtcp.sender.ntp_timestamp >> 16) as u32, 0)
+        .map_err(|error| error.to_string())?;
     let receiver_report = amazing_webrtc::RtcpCompoundReceiverReport {
         receiver_ssrc: 0x5252_4356,
-        reception: amazing_webrtc::ReceptionReport {
-            source_ssrc: child_rtp.ssrc,
-            fraction_lost: 0,
-            cumulative_lost: 0,
-            extended_highest_sequence: child_rtp.sequence_number as u32,
-            interarrival_jitter: 0,
-            last_sender_report: (child_rtcp.sender.ntp_timestamp >> 16) as u32,
-            delay_since_last_sender_report: 0,
-        },
+        reception,
         cname: "parent@ferric".into(),
     };
     let receiver_report = amazing_webrtc::encode_rtcp_compound_receiver_report(&receiver_report)

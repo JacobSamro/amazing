@@ -96,6 +96,10 @@ fn secure_media_two_processes_exchange_protected_media() {
     assert!(stdout.contains("processes=2"), "{stdout}");
     assert!(stdout.contains("signaling=tcp-loopback"), "{stdout}");
     assert!(stdout.contains("ICE credentials=SDP"), "{stdout}");
+    assert!(
+        stdout.contains("ICE retransmit=7 role-conflict=resolved"),
+        "{stdout}"
+    );
     assert!(stdout.contains("consent=Fresh expiry=detected"), "{stdout}");
     assert!(stdout.contains("RTP parent->child=ok"), "{stdout}");
     assert!(stdout.contains("RTP child->parent=ok"), "{stdout}");
@@ -107,5 +111,6 @@ fn secure_media_two_processes_exchange_protected_media() {
         stdout.contains("RTCP RR+CNAME parent->child=ok"),
         "{stdout}"
     );
+    assert!(stdout.contains("RTCP stats=computed"), "{stdout}");
     assert!(stdout.contains("two-process interop ok"), "{stdout}");
 }
