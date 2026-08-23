@@ -173,11 +173,12 @@ fn secure_media_two_processes_exchange_protected_media() {
     assert!(stdout.contains("processes=2"), "{stdout}");
     assert!(stdout.contains("signaling=tcp-loopback"), "{stdout}");
     assert!(stdout.contains("ICE credentials=SDP"), "{stdout}");
-    assert!(stdout.contains("codecs=SDP Opus+L16+PCMU"), "{stdout}");
+    assert!(stdout.contains("codecs=SDP Opus+L16+PCMU+H264"), "{stdout}");
     assert!(
         stdout.contains("ICE live-loss=2 sends=3 487=resolved prflx=learned"),
         "{stdout}"
     );
+    assert!(stdout.contains("video=H264 secure 32x32"), "{stdout}");
     assert!(stdout.contains("consent=Fresh expiry=detected"), "{stdout}");
     assert!(stdout.contains("RTP parent->child=ok"), "{stdout}");
     assert!(stdout.contains("RTP child->parent=ok"), "{stdout}");

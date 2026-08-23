@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 25-subphase foundation milestone landed; secure video/TURN/browser interop remain |
+| 9 — Media | 🔄 26-subphase foundation milestone landed; video presentation/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1392,6 +1392,34 @@ passed with `--locked`; strict WebRTC/crypto/application Clippy, stripped
 ThinLTO release, and bundled SDP artifact passed. The release binary is
 8,473,088 bytes.
 
+## Phase 9.26 (secure video) — bundled H.264 SRTP → I420
+
+Shipped: the secure two-process artifact now negotiates H.264/PT121 on bundled
+video mid 1 and sends a real encoded 32×32 access unit over the existing
+DTLS-SRTP association. The controlled peer authenticates/decrypts RTP,
+demultiplexes the payload to video, uses the negotiated 90 kHz clock for jitter,
+assembles the marked encoded frame, and decodes it through the isolated
+OpenH264 adapter to three-plane 32×32 output before acknowledging success.
+
+The audio direction, live PCMU loss/concealment, Opus playout, consent, compound
+SRTCP/RTCP, and reception statistics continue on the same association. The
+artifact reports `codecs=SDP Opus+L16+PCMU+H264` and `video=H264 secure 32x32`.
+
+Runnable artifact: `target\release\amazing.exe secure-media-processes`.
+
+Known gaps: the small access unit fits one RTP packet; RFC 6184 single-NAL,
+STAP-A, and FU-A packetization/depacketization are not implemented. Video has no
+RTCP sender/receiver report, PLI/NACK, loss recovery, multiple-frame timing,
+A/V sync, scaling, colorspace conversion, or GPUI presentation.
+
+Conformance: enhanced secure bundled video gate passes 1/1 alongside all audio,
+ICE, consent, DTLS-SRTP, and RTCP assertions. No WebRTC WPT subset is imported.
+
+Final win-001 gate: all 499 hardware-independent workspace tests/doctests
+passed with `--locked`; strict codec/WebRTC/application Clippy, stripped
+ThinLTO release, and secure H.264 artifact passed. The release binary is
+8,480,768 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1447,7 +1475,7 @@ ThinLTO release, and bundled SDP artifact passed. The release binary is
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** twenty-five committed subphases provide decoded images/audio,
+- **Phase 9:** twenty-six committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1461,7 +1489,7 @@ parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
 remeasured after the audit fixes before each commit. Current gate: **499**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **8,473,088 bytes**.
+stripped ThinLTO release is **8,480,768 bytes**.
 
 ## Server cheat sheet
 
