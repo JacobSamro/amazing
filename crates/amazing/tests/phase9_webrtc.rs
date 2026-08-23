@@ -17,5 +17,6 @@ fn webrtc_loopback_command_completes_stun_and_rtp_exchange() {
     assert!(stdout.contains("payload=15 bytes"), "{stdout}");
     assert!(stdout.contains("ICE state=Completed"), "{stdout}");
     assert!(stdout.contains("integrity=ok"), "{stdout}");
+    assert!(stdout.contains("RTCP packets=1 octets=15"), "{stdout}");
     assert!(stdout.contains("loopback ok"), "{stdout}");
 }

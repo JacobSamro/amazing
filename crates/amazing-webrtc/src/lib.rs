@@ -1,6 +1,6 @@
 //! Phase 9.3 WebRTC transport foundations.
 //!
-//! STUN and RTP wire details stay behind small parse/encode interfaces. The
+//! STUN, RTP, and RTCP wire details stay behind small parse/encode interfaces. The
 //! crate is safe, synchronous, and `std`-only. Authenticated ICE-style checks
 //! follow RFC 8489/8445 wire rules and RFC 5769 vectors; TURN, DTLS/SRTP,
 //! congestion control, and media codecs are later sub-phases.
@@ -58,6 +58,15 @@ pub struct RtpPacket {
     pub timestamp: u32,
     pub ssrc: u32,
     pub payload: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RtcpSenderReport {
+    pub ssrc: u32,
+    pub ntp_timestamp: u64,
+    pub rtp_timestamp: u32,
+    pub packet_count: u32,
+    pub octet_count: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -532,6 +541,57 @@ pub fn parse_rtp(packet: &[u8]) -> Result<RtpPacket, WebRtcError> {
     })
 }
 
+pub fn encode_rtcp_sender_report(report: RtcpSenderReport) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(28);
+    packet.push(0x80);
+    packet.push(200);
+    packet.extend_from_slice(&6u16.to_be_bytes());
+    packet.extend_from_slice(&report.ssrc.to_be_bytes());
+    packet.extend_from_slice(&((report.ntp_timestamp >> 32) as u32).to_be_bytes());
+    packet.extend_from_slice(&(report.ntp_timestamp as u32).to_be_bytes());
+    packet.extend_from_slice(&report.rtp_timestamp.to_be_bytes());
+    packet.extend_from_slice(&report.packet_count.to_be_bytes());
+    packet.extend_from_slice(&report.octet_count.to_be_bytes());
+    packet
+}
+
+pub fn parse_rtcp_sender_report(packet: &[u8]) -> Result<RtcpSenderReport, WebRtcError> {
+    if packet.len() < 4 {
+        return Err(WebRtcError::InvalidPacket("truncated RTCP header"));
+    }
+    if packet[0] >> 6 != 2 || packet[0] & 0x20 != 0 {
+        return Err(WebRtcError::InvalidPacket("RTCP version or padding is invalid"));
+    }
+    if packet[0] & 0x1f != 0 {
+        return Err(WebRtcError::Unsupported("RTCP Sender Report reception blocks"));
+    }
+    if packet[1] != 200 {
+        return Err(WebRtcError::Unsupported("RTCP packet is not a Sender Report"));
+    }
+    let words_minus_one = u16::from_be_bytes([packet[2], packet[3]]) as usize;
+    let declared_len = words_minus_one
+        .checked_add(1)
+        .and_then(|words| words.checked_mul(4))
+        .ok_or(WebRtcError::InvalidPacket("RTCP length overflow"))?;
+    if declared_len != packet.len() || packet.len() != 28 {
+        return Err(WebRtcError::InvalidPacket("RTCP Sender Report length mismatch"));
+    }
+    let word = |offset| {
+        u32::from_be_bytes(
+            packet[offset..offset + 4]
+                .try_into()
+                .expect("RTCP length checked"),
+        )
+    };
+    Ok(RtcpSenderReport {
+        ssrc: word(4),
+        ntp_timestamp: ((word(8) as u64) << 32) | word(12) as u64,
+        rtp_timestamp: word(16),
+        packet_count: word(20),
+        octet_count: word(24),
+    })
+}
+
 /// Verifies the STUN MESSAGE-INTEGRITY attribute with a short-term key.
 pub fn verify_message_integrity(packet: &[u8], key: &[u8]) -> Result<bool, WebRtcError> {
     let attributes = stun_attribute_ranges(packet)?;
@@ -855,6 +915,25 @@ mod tests {
 
         assert!(verify_message_integrity(&forged, key).is_err());
         assert!(parse_stun(&forged).is_err());
+    }
+
+    #[test]
+    fn rtcp_sender_report_round_trips_rfc3550_sender_info() {
+        let report = RtcpSenderReport {
+            ssrc: 0xaabb_ccdd,
+            ntp_timestamp: 0xe123_4567_89ab_cdef,
+            rtp_timestamp: 96_000,
+            packet_count: 321,
+            octet_count: 45_678,
+        };
+        let wire = encode_rtcp_sender_report(report);
+        let parsed = parse_rtcp_sender_report(&wire).expect("valid RTCP SR");
+
+        assert_eq!(wire.len(), 28);
+        assert_eq!(wire[0], 0x80);
+        assert_eq!(wire[1], 200);
+        assert_eq!(&wire[2..4], &6u16.to_be_bytes());
+        assert_eq!(parsed, report);
     }
 
     #[test]

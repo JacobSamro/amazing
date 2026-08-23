@@ -19,7 +19,7 @@ amazing-net ──bytes──▶ amazing-html ──tree ops──▶ amazing-do
 amazing-media ──intrinsic size via PageMedia──▶ amazing-layout
 amazing-media ──RGBA8 via PageMedia───────────▶ amazing-paint
 amazing-media ──validated PCM WAV─────────────▶ GUI shell (WinMM adapter)
-UDP sockets (amazing driver) ◀──STUN/RTP bytes──▶ amazing-webrtc codecs
+UDP sockets (amazing driver) ◀──STUN/RTP/RTCP bytes──▶ amazing-webrtc codecs
 GUI platform seam ──D3D11 device/swap-chain present──▶ Windows graphics driver
 ```
 

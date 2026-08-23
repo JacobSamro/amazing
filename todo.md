@@ -634,6 +634,37 @@ Recommended next sub-phase: Phase 9.7 RTCP packet/report handling and minimal
 SDP/ICE credential signaling, followed by DTLS-SRTP. The user's explicit “do
 all phases now” instruction pre-authorizes continuing.
 
+## Phase 9.7 (WebRTC) — RTCP sender timing/report foundation
+
+Shipped: `RtcpSenderReport` encodes and parses RFC 3550 RTCP v2 Sender Reports
+with zero reception blocks: SSRC, 64-bit NTP timestamp, RTP timestamp, packet
+count, and octet count. Parsing enforces version 2, no first-packet padding,
+packet type 200, RC=0, 32-bit word-minus-one length 6, and the exact 28-byte
+sender-info shape; unsupported report blocks are rejected explicitly.
+
+The release `webrtc-loopback` artifact now sends an RTCP report after the
+authenticated ICE check and RTP echo. Both endpoints decode and compare the
+report, proving the RTP timestamp/SSRC and one-packet/15-octet counters survive
+the UDP wire. The integration output includes `RTCP packets=1 octets=15`.
+
+Known gaps: Receiver Reports, reception report blocks, SDES/CNAME compound
+packets, BYE/APP, reduced-size RTCP, feedback/NACK/PLI/TWCC, scheduling and
+bandwidth fractions, RTT/jitter calculations, and wall-clock NTP generation
+remain pending. This is the sender-info wire foundation, not full RTCP.
+
+Conformance: RFC 3550 Sender Report unit gate 1/1 and the extended UDP
+integration gate 1/1. Existing baselines remain 17/17 CSS2, 22/22 flex/grid,
+and 196/196 supported Test262; no WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 430 hardware-independent workspace tests/doctests
+passed and the release binary is 1,782,784 bytes. The release loopback output
+included `RTCP packets=1 octets=15` after authenticated ICE and RTP.
+
+Recommended next sub-phase: minimal SDP offer/answer parsing for ICE
+credentials, candidates, DTLS fingerprint/setup, and RTP payload mapping,
+followed by a vetted DTLS-SRTP infrastructure decision. The user's explicit
+“do all phases now” instruction pre-authorizes continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -641,8 +672,8 @@ all phases now” instruction pre-authorizes continuing.
 - **3.5 Flexbox/Grid** · **4 Paint** software rasterizer + PPM writer ·
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
-  (images/audio, authenticated ICE/RTP, and D3D11 presentation milestones
-  landed; RTCP/SDP/DTLS-SRTP next).
+  (images/audio, authenticated ICE/RTP/RTCP, and D3D11 presentation milestones
+  landed; SDP/DTLS-SRTP next).
 
 ## Server cheat sheet
 

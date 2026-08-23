@@ -1137,6 +1137,7 @@ fn cmd_webrtc_loopback() -> ExitCode {
         std::net::SocketAddrV4,
         amazing_webrtc::RtpPacket,
         amazing_webrtc::ChecklistState,
+        amazing_webrtc::RtcpSenderReport,
     ), String> {
         use std::net::{SocketAddr, UdpSocket};
         use std::time::Duration;
@@ -1289,16 +1290,52 @@ fn cmd_webrtc_loopback() -> ExitCode {
         if received != outbound {
             return Err("loopback server decoded different RTP contents".into());
         }
-        Ok((client_address, echoed, checklist.state()))
+
+        let sender_report = amazing_webrtc::RtcpSenderReport {
+            ssrc: outbound.ssrc,
+            ntp_timestamp: 0xe123_4567_89ab_cdef,
+            rtp_timestamp: outbound.timestamp,
+            packet_count: 1,
+            octet_count: outbound.payload.len() as u32,
+        };
+        let rtcp = amazing_webrtc::encode_rtcp_sender_report(sender_report);
+        client
+            .send_to(&rtcp, server_address)
+            .map_err(|error| error.to_string())?;
+        let (length, rtcp_peer) = server
+            .recv_from(&mut server_buffer)
+            .map_err(|error| error.to_string())?;
+        if rtcp_peer != peer {
+            return Err("RTCP arrived from a different endpoint".into());
+        }
+        let server_report = amazing_webrtc::parse_rtcp_sender_report(&server_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        server
+            .send_to(&server_buffer[..length], peer)
+            .map_err(|error| error.to_string())?;
+        let (length, source) = client
+            .recv_from(&mut client_buffer)
+            .map_err(|error| error.to_string())?;
+        if source != server_address {
+            return Err("RTCP echo came from the wrong endpoint".into());
+        }
+        let echoed_report = amazing_webrtc::parse_rtcp_sender_report(&client_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        if server_report != sender_report || echoed_report != sender_report {
+            return Err("RTCP Sender Report changed during loopback".into());
+        }
+        Ok((client_address, echoed, checklist.state(), echoed_report))
     }
 
     match run() {
-        Ok((mapped, packet, ice_state)) => {
+        Ok((mapped, packet, ice_state, report)) => {
             println!(
-                "STUN mapped {mapped}; ICE state={ice_state:?} integrity=ok; RTP seq={} timestamp={} payload={} bytes; loopback ok",
+                "STUN mapped {mapped}; ICE state={ice_state:?} integrity=ok; RTP seq={} timestamp={} payload={} bytes; RTCP packets={} octets={}; loopback ok",
                 packet.sequence_number,
                 packet.timestamp,
-                packet.payload.len()
+                packet.payload.len(),
+                report.packet_count,
+                report.octet_count
             );
             ExitCode::SUCCESS
         },
