@@ -1741,6 +1741,44 @@ is 20/20. Strict changed-package Clippy and locked stripped ThinLTO builds pass
 on win-001. Release sizes are 8,521,728 bytes (`amazing.exe`) and 14,236,160
 bytes (`amazing-shell.exe`).
 
+## Phase 9.37 (incremental secure decode) — paced SRTP packet to live RGBA
+
+Shipped: the parent now encodes the six fixture access units into owned RTP
+packets, sends authenticated audio/video RTCP Sender Reports before video, and
+paces SRTP packet transmission at 0, 500, 1000, 1500, 2000, and 2500 ms when a
+frame sink is active. The ordinary `secure-media-processes` artifact retains its
+fast unpaced path; only the UI stream requests real-time network pacing.
+
+The child constructs `AvSyncTimeline` before video reception. Every paced packet
+then independently crosses SRTP authentication, the 30 ms jitter deadline,
+bounded frame assembly, persistent H.264 decode, `VideoPlayoutQueue`, RTCP A/V
+validation, and AMV2 output before the next packet is received. `SecureVideoOutput`
+concentrates dimension/alpha/order/sync/checksum validation and optional sink
+writes behind one internal presentation interface.
+
+The release reports `pace=RTCP decode=incremental`. The measured win-001 AMV2
+inter-arrival deltas after this reorder were `[499, 500, 499, 500, 499] ms`;
+each record can only be written after that packet has decoded. Native captures
+show the intermediate end-user state:
+
+- frame 1 / A/V 0 ms / RTP 90000:
+  `afdc6857c127ead5ef3ce8bb02d41c58c4876f0681caf73a9107d4e4432ab31b`;
+- frame 2 / A/V 500 ms / RTP 135000:
+  `bfc83bcef59b8729296cef3ce18155caab96762ae20a2e69134586c111dd894f`.
+
+Both badges visibly identify `LIVE SRTP → JITTER → H.264 → RGBA`.
+
+Known gaps: the local fixture still encodes all access units ahead of send and
+uses one RTP packet per access unit. The progressive path has no induced video
+loss/reorder, NACK/PLI/FIR feedback, keyframe recovery, bounded cross-process
+backpressure, audio device cursor, network peer, or browser interoperability.
+
+Conformance: the enhanced secure-stream gate, every retained secure-media gate,
+and full root workspace pass 504/504. Standalone GPUI remains 20/20. Strict
+changed-package Clippy and locked stripped ThinLTO builds pass on win-001.
+Release sizes are 8,523,264 bytes (`amazing.exe`) and 14,236,160 bytes
+(`amazing-shell.exe`).
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.

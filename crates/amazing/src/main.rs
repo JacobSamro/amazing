@@ -1013,7 +1013,9 @@ fn cmd_secure_video_stream(frame_sink: Option<&str>) -> ExitCode {
     };
     match run_secure_media_processes(Some(frame_sink)) {
         Ok(()) => {
-            println!("secure RGBA stream frames=6 size=32x32 timestamps=90k; stream ok");
+            println!(
+                "secure RGBA stream frames=6 size=32x32 timestamps=90k pace=RTCP decode=incremental; stream ok"
+            );
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -1292,6 +1294,7 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
     let mut h264_encoder =
         amazing_webrtc_codecs::H264EncoderAdapter::new().map_err(|error| error.to_string())?;
     let mut video_octets = 0u32;
+    let mut video_packets = Vec::with_capacity(6);
     for phase in 0..6u16 {
         let mut rgb = Vec::with_capacity(32 * 32 * 3);
         for y in 0..32 {
@@ -1307,17 +1310,14 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
             .encode_rgb(&rgb, (32, 32))
             .map_err(|error| error.to_string())?;
         video_octets = video_octets.saturating_add(h264.len() as u32);
-        let video_rtp = amazing_webrtc::RtpPacket {
+        video_packets.push(amazing_webrtc::RtpPacket {
             marker: true,
             payload_type: 121,
             sequence_number: 200 + phase,
             timestamp: 90_000 + phase as u32 * 45_000,
             ssrc: 0x5649_4445,
             payload: h264,
-        };
-        endpoint
-            .send_rtp(&amazing_webrtc::encode_rtp(&video_rtp).map_err(|error| error.to_string())?)
-            .map_err(|error| error.to_string())?;
+        });
     }
     const AV_SYNC_NTP: u64 = 0xe223_4567_0000_0000;
     let audio_sender = amazing_webrtc::RtcpCompoundSenderReport {
@@ -1346,6 +1346,19 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
                 &amazing_webrtc::encode_rtcp_compound_sender_report(report)
                     .map_err(|error| error.to_string())?,
             )
+            .map_err(|error| error.to_string())?;
+    }
+    let progressive_video = frame_sink.is_some();
+    let video_send_started = Instant::now();
+    for (phase, video_rtp) in video_packets.iter().enumerate() {
+        if progressive_video
+            && let Some(remaining) =
+                Duration::from_millis(phase as u64 * 500).checked_sub(video_send_started.elapsed())
+        {
+            std::thread::sleep(remaining);
+        }
+        endpoint
+            .send_rtp(&amazing_webrtc::encode_rtp(video_rtp).map_err(|error| error.to_string())?)
             .map_err(|error| error.to_string())?;
     }
 
@@ -1538,30 +1551,6 @@ fn run_secure_media_peer(
         .find(|mapping| mapping.payload_type == 121)
         .map(|mapping| mapping.clock_rate)
         .ok_or_else(|| "H.264 rtpmap is missing".to_string())?;
-    let mut video_jitter =
-        amazing_webrtc::RtpJitterBuffer::new(amazing_webrtc::JitterBufferConfig {
-            ssrc: 0x5649_4445,
-            payload_type: 121,
-            clock_rate: video_clock,
-            playout_delay_ms: 30,
-            capacity: 16,
-        })
-        .map_err(|error| error.to_string())?;
-    for phase in 0..6u16 {
-        let video_wire = endpoint.receive_rtp().map_err(|error| error.to_string())?;
-        let video_rtp =
-            amazing_webrtc::parse_rtp(&video_wire).map_err(|error| error.to_string())?;
-        if video_rtp.payload_type != 121
-            || video_rtp.ssrc != 0x5649_4445
-            || video_rtp.sequence_number != 200 + phase
-            || video_rtp.timestamp != 90_000 + phase as u32 * 45_000
-        {
-            return Err("secure H.264 RTP sequence or timestamp was incorrect".into());
-        }
-        video_jitter
-            .push(video_rtp, phase as u64 * 5)
-            .map_err(|error| error.to_string())?;
-    }
     let mut parent_reports = Vec::new();
     for _ in 0..2 {
         let wire = endpoint.receive_rtcp().map_err(|error| error.to_string())?;
@@ -1593,6 +1582,16 @@ fn run_secure_media_peer(
         20,
     )
     .map_err(|error| error.to_string())?;
+    let progressive_video = frame_sink.is_some();
+    let mut video_jitter =
+        amazing_webrtc::RtpJitterBuffer::new(amazing_webrtc::JitterBufferConfig {
+            ssrc: 0x5649_4445,
+            payload_type: 121,
+            clock_rate: video_clock,
+            playout_delay_ms: 30,
+            capacity: 16,
+        })
+        .map_err(|error| error.to_string())?;
     let mut assembler =
         amazing_webrtc::VideoFrameAssembler::new(amazing_webrtc::VideoFrameConfig {
             ssrc: 0x5649_4445,
@@ -1609,6 +1608,48 @@ fn run_secure_media_peer(
         capacity: 8,
     })
     .map_err(|error| error.to_string())?;
+    let mut video_output = SecureVideoOutput::new(&av_sync, parent_rtp.timestamp, &mut frame_sink);
+    for phase in 0..6u16 {
+        let video_wire = endpoint.receive_rtp().map_err(|error| error.to_string())?;
+        let video_rtp =
+            amazing_webrtc::parse_rtp(&video_wire).map_err(|error| error.to_string())?;
+        if video_rtp.payload_type != 121
+            || video_rtp.ssrc != 0x5649_4445
+            || video_rtp.sequence_number != 200 + phase
+            || video_rtp.timestamp != 90_000 + phase as u32 * 45_000
+        {
+            return Err("secure H.264 RTP sequence or timestamp was incorrect".into());
+        }
+        let arrival_ms = if progressive_video {
+            phase as u64 * 500
+        } else {
+            phase as u64 * 5
+        };
+        video_jitter
+            .push(video_rtp, arrival_ms)
+            .map_err(|error| error.to_string())?;
+        if progressive_video {
+            std::thread::sleep(Duration::from_millis(30));
+            while let Some(output) = video_jitter.pop_ready(arrival_ms.saturating_add(30)) {
+                if let amazing_webrtc::VideoAssembly::Frame(frame) =
+                    assembler.push(output).map_err(|error| error.to_string())?
+                {
+                    let timestamp = frame.timestamp;
+                    let decoded = decoder
+                        .decode(&frame.payload)
+                        .map_err(|error| error.to_string())?;
+                    if playout.push(timestamp, decoded, arrival_ms)
+                        != amazing_webrtc::VideoQueuePush::Queued
+                    {
+                        return Err("secure decoded video frame was not queued".into());
+                    }
+                }
+            }
+            while let Some(frame) = playout.pop_due(arrival_ms.saturating_add(30)) {
+                video_output.present(frame)?;
+            }
+        }
+    }
     while let Some(output) = video_jitter.pop_ready(3_000) {
         if let amazing_webrtc::VideoAssembly::Frame(frame) =
             assembler.push(output).map_err(|error| error.to_string())?
@@ -1622,72 +1663,104 @@ fn run_secure_media_peer(
             }
         }
     }
-    let mut decoded_frames = 0usize;
-    let mut first_checksum = None;
-    let mut pixels_changed = false;
-    let mut previous_timestamp = None;
-    let av_origin_ns = av_sync.audio.presentation_nanoseconds(parent_rtp.timestamp);
-    let frame_stream_started = frame_sink.as_ref().map(|_| Instant::now());
     while let Some(frame) = playout.pop_due(3_000) {
-        let audio_timestamp = parent_rtp
-            .timestamp
-            .wrapping_add(decoded_frames as u32 * 24_000);
-        if previous_timestamp.is_some_and(|previous| frame.timestamp <= previous)
-            || (frame.frame.width, frame.frame.height) != (32, 32)
-            || frame.frame.planes != 3
-            || frame.frame.rgba.len() != 32 * 32 * 4
-        {
-            return Err("secure H.264 playout frame was invalid".into());
-        }
-        if av_sync.decide(audio_timestamp, frame.timestamp)
-            != amazing_webrtc::AvSyncDecision::Present
-        {
-            return Err("secure H.264 frame was not aligned to audio master".into());
-        }
-        previous_timestamp = Some(frame.timestamp);
-        match first_checksum {
-            Some(first) if first != frame.frame.checksum => pixels_changed = true,
-            None => first_checksum = Some(frame.frame.checksum),
-            _ => {}
-        }
-        if let Some(frame_sink) = frame_sink.as_mut() {
-            let presentation_ns = av_sync
-                .video
-                .presentation_nanoseconds(frame.timestamp)
-                .saturating_sub(av_origin_ns);
-            if presentation_ns < 0 || presentation_ns / 1_000_000 > u32::MAX as i128 {
-                return Err("secure frame presentation time is out of range".into());
-            }
-            let presentation_ms = (presentation_ns / 1_000_000) as u32;
-            if let Some(remaining) = Duration::from_millis(presentation_ms as u64).checked_sub(
-                frame_stream_started
-                    .expect("frame stream clock exists with sink")
-                    .elapsed(),
-            ) {
-                std::thread::sleep(remaining);
-            }
-            write_secure_rgba_frame(
-                frame_sink,
-                decoded_frames as u32,
-                frame.timestamp,
-                presentation_ms,
-                &frame.frame,
-            )?;
-        }
-        decoded_frames += 1;
+        video_output.present(frame)?;
     }
-    if decoded_frames != 6 || !pixels_changed || playout.stats().emitted != 6 {
-        return Err("secure H.264 clocked playout was incomplete".into());
-    }
-    if let Some(frame_sink) = frame_sink.as_mut() {
-        frame_sink.flush().map_err(|error| error.to_string())?;
-    }
+    video_output.finish(playout.stats().emitted)?;
     endpoint
         .close()
         .map_err(|error| format!("close child secure endpoint: {error}"))?;
     writeln!(control, "PEER_OK").map_err(|error| error.to_string())?;
     control.flush().map_err(|error| error.to_string())?;
     Ok(())
+}
+
+struct SecureVideoOutput<'a> {
+    av_sync: &'a amazing_webrtc::AvSyncTimeline,
+    audio_base_timestamp: u32,
+    av_origin_ns: i128,
+    frame_sink: &'a mut Option<TcpStream>,
+    frames: usize,
+    first_checksum: Option<u64>,
+    pixels_changed: bool,
+    previous_timestamp: Option<u32>,
+}
+
+impl<'a> SecureVideoOutput<'a> {
+    fn new(
+        av_sync: &'a amazing_webrtc::AvSyncTimeline,
+        audio_base_timestamp: u32,
+        frame_sink: &'a mut Option<TcpStream>,
+    ) -> Self {
+        Self {
+            av_sync,
+            audio_base_timestamp,
+            av_origin_ns: av_sync.audio.presentation_nanoseconds(audio_base_timestamp),
+            frame_sink,
+            frames: 0,
+            first_checksum: None,
+            pixels_changed: false,
+            previous_timestamp: None,
+        }
+    }
+
+    fn present(
+        &mut self,
+        frame: amazing_webrtc::TimedVideoFrame<amazing_webrtc_codecs::DecodedVideoFrame>,
+    ) -> Result<(), String> {
+        let audio_timestamp = self
+            .audio_base_timestamp
+            .wrapping_add(self.frames as u32 * 24_000);
+        if self
+            .previous_timestamp
+            .is_some_and(|previous| frame.timestamp <= previous)
+            || (frame.frame.width, frame.frame.height) != (32, 32)
+            || frame.frame.planes != 3
+            || frame.frame.rgba.len() != 32 * 32 * 4
+        {
+            return Err("secure H.264 playout frame was invalid".into());
+        }
+        if self.av_sync.decide(audio_timestamp, frame.timestamp)
+            != amazing_webrtc::AvSyncDecision::Present
+        {
+            return Err("secure H.264 frame was not aligned to audio master".into());
+        }
+        self.previous_timestamp = Some(frame.timestamp);
+        match self.first_checksum {
+            Some(first) if first != frame.frame.checksum => self.pixels_changed = true,
+            None => self.first_checksum = Some(frame.frame.checksum),
+            _ => {}
+        }
+        if let Some(frame_sink) = self.frame_sink.as_mut() {
+            let presentation_ns = self
+                .av_sync
+                .video
+                .presentation_nanoseconds(frame.timestamp)
+                .saturating_sub(self.av_origin_ns);
+            if presentation_ns < 0 || presentation_ns / 1_000_000 > u32::MAX as i128 {
+                return Err("secure frame presentation time is out of range".into());
+            }
+            write_secure_rgba_frame(
+                frame_sink,
+                self.frames as u32,
+                frame.timestamp,
+                (presentation_ns / 1_000_000) as u32,
+                &frame.frame,
+            )?;
+        }
+        self.frames += 1;
+        Ok(())
+    }
+
+    fn finish(&mut self, emitted: u64) -> Result<(), String> {
+        if self.frames != 6 || !self.pixels_changed || emitted != 6 {
+            return Err("secure H.264 clocked playout was incomplete".into());
+        }
+        if let Some(frame_sink) = self.frame_sink.as_mut() {
+            frame_sink.flush().map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
 }
 
 fn write_secure_rgba_frame(

@@ -249,7 +249,7 @@ impl BrowserShell {
         self.video_frame_index = update.frame_index;
         if self.secure_video_complete {
             self.secure_video_status = format!(
-                "SECURE SRTP COMPLETE  ·  {} decoded frames  ·  RTCP A/V clock  ·  late {}",
+                "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  RTCP A/V clock  ·  late {}",
                 self.video_frames.len(),
                 update.dropped_total
             );
@@ -288,7 +288,7 @@ impl BrowserShell {
                         self.pending_video_presentation_ms
                             .push(frame.presentation_ms as u64);
                         self.secure_video_status = format!(
-                            "LIVE SRTP → H.264 → RGBA  ·  frame {}  ·  A/V {} ms  ·  RTP {}",
+                            "LIVE SRTP → JITTER → H.264 → RGBA  ·  frame {}  ·  A/V {} ms  ·  RTP {}",
                             frame.index + 1,
                             frame.presentation_ms,
                             frame.timestamp
@@ -303,7 +303,7 @@ impl BrowserShell {
                         self.video_clock.seal_stream();
                         self.secure_video_complete = true;
                         self.secure_video_status = format!(
-                            "SECURE SRTP COMPLETE  ·  {} decoded frames  ·  RTCP A/V clock  ·  late 0",
+                            "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  RTCP A/V clock  ·  late 0",
                             self.video_frames.len()
                         );
                     }

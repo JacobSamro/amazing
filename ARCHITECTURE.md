@@ -287,6 +287,14 @@ first record, appends later times without looping, polls a missing next deadline
 at 50 ms, and seals the completed six-frame timeline at EOF. Transport pacing
 and UI presentation now share the same audio-master-relative time values.
 
+Phase 9.37 moves pacing upstream to authenticated media. The parent encodes its
+fixture access units, sends audio/video RTCP Sender Reports first, then transmits
+each SRTP video packet on its 500 ms presentation boundary. The child constructs
+the A/V timeline before video arrives and processes each packet through the 30 ms
+jitter deadline, frame assembly, persistent H.264 decode, decoded playout, and
+AMV2 write before receiving its successor. The non-UI secure-media command keeps
+its fast unpaced path through the same implementation.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

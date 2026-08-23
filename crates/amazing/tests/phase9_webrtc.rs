@@ -249,7 +249,9 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(String::from_utf8_lossy(&output.stdout).contains("secure RGBA stream frames=6"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("secure RGBA stream frames=6"), "{stdout}");
+    assert!(stdout.contains("pace=RTCP decode=incremental"), "{stdout}");
     let (bytes, arrivals) = receiver.join().expect("frame receiver thread");
     let arrival_deltas_ms = arrivals
         .windows(2)
