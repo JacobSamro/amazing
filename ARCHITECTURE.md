@@ -150,6 +150,14 @@ decision; `RtpReceptionStats` converts observed sequence/timestamp/arrival
 state into RR loss, extended sequence, jitter, LSR, and DLSR fields. The
 driver's probes use these interfaces, not duplicate arithmetic.
 
+Phase 9.15 places the playout seam in `amazing-webrtc::jitter`. A bounded
+`RtpJitterBuffer` hides 16-bit sequence extension, wrap-aware reordering,
+fixed RTP-clock deadlines, duplicate/late/overflow accounting, and explicit
+gap emission behind `push`/`pop_ready`/`stats`. `RtpAudioDecoder` is a real
+codec seam with two std-only adapters: network-order L16 PCM and G.711 PCMU.
+The platform and secure-transport crates do not learn codec implementation
+details.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

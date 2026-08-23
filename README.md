@@ -46,7 +46,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-net` | HTTP/1.1 client | ✅ Phase 5 |
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | ✅ Phase 6 milestone |
 | `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
-| `amazing-webrtc` | ICE + RTP/compound RTCP + transport statistics | Phase 9.3–9.14 |
+| `amazing-webrtc` | ICE + RTP/RTCP + jitter buffer + L16/PCMU | Phase 9.3–9.15 |
 | `amazing-webrtc-crypto` | vetted DTLS-SRTP + secure UDP endpoint | Phase 9.9–9.13 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | ✅ Phase 7/8 |
 
@@ -97,6 +97,7 @@ amazing play-audio examples/phase9-audio.wav
 
 # Phase 9 WebRTC transport artifact
 amazing webrtc-loopback
+amazing rtp-jitter-probe
 amazing sdp-roundtrip examples/phase9-offer.sdp
 amazing secure-media-loopback
 amazing secure-media-processes
