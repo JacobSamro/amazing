@@ -252,7 +252,7 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("secure RGBA stream frames=6"), "{stdout}");
     assert!(
-        stdout.contains("pace=RTCP decode=incremental recovery=PLI+IDR"),
+        stdout.contains("pace=RTCP decode=incremental loss=RTP1 recovery=PLI+IDR"),
         "{stdout}"
     );
     let (bytes, arrivals) = receiver.join().expect("frame receiver thread");
@@ -273,8 +273,8 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
     );
     let mut cursor = 0usize;
     let mut checksums = Vec::new();
-    let timestamps = [90_000, 135_000, 225_000, 270_000, 315_000, 360_000];
-    let presentations = [0, 500, 1_500, 2_000, 2_500, 3_000];
+    let timestamps = [90_000, 135_000, 270_000, 315_000, 360_000, 405_000];
+    let presentations = [0, 500, 2_000, 2_500, 3_000, 3_500];
     for index in 0..6u32 {
         assert_eq!(&bytes[cursor..cursor + 4], b"AMV2");
         cursor += 4;

@@ -995,7 +995,7 @@ fn cmd_secure_media_processes() -> ExitCode {
     match run_secure_media_processes(None) {
         Ok(()) => {
             println!(
-                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP Opus+L16+PCMU+H264; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 Opus parent->child=960 PCMU child->parent=320; video=H264 secure frames=6 32x32 clock=90k changed=yes recovery=PLI+IDR; avsync=RTCP-SR 6/6 aligned; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP Opus+L16+PCMU+H264; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 Opus parent->child=960 PCMU child->parent=320; video=H264 secure frames=6 32x32 clock=90k changed=yes loss=RTP1 recovery=PLI+IDR; avsync=RTCP-SR 6/6 aligned; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
             );
             ExitCode::SUCCESS
         }
@@ -1014,7 +1014,7 @@ fn cmd_secure_video_stream(frame_sink: Option<&str>) -> ExitCode {
     match run_secure_media_processes(Some(frame_sink)) {
         Ok(()) => {
             println!(
-                "secure RGBA stream frames=6 size=32x32 timestamps=90k pace=RTCP decode=incremental recovery=PLI+IDR; stream ok"
+                "secure RGBA stream frames=6 size=32x32 timestamps=90k pace=RTCP decode=incremental loss=RTP1 recovery=PLI+IDR; stream ok"
             );
             ExitCode::SUCCESS
         }
@@ -1324,7 +1324,7 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
         amazing_webrtc_codecs::H264EncoderAdapter::new().map_err(|error| error.to_string())?;
     let progressive_video = frame_sink.is_some();
     let video_send_started = Instant::now();
-    for phase in 0..7u16 {
+    for phase in 0..8u16 {
         let mut rgb = Vec::with_capacity(32 * 32 * 3);
         for y in 0..32 {
             for x in 0..32 {
@@ -1338,18 +1338,16 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
         let encoded = h264_encoder
             .encode_rgb(&rgb, (32, 32))
             .map_err(|error| error.to_string())?;
-        let payload = if phase == 2 {
-            vec![0, 0, 0, 1, 0x09, 0xf0]
-        } else {
-            encoded
-        };
+        if phase == 2 {
+            continue;
+        }
         let video_rtp = amazing_webrtc::RtpPacket {
             marker: true,
             payload_type: 121,
             sequence_number: 200 + phase,
             timestamp: 90_000 + phase as u32 * 45_000,
             ssrc: 0x5649_4445,
-            payload,
+            payload: encoded,
         };
         if progressive_video
             && let Some(remaining) =
@@ -1360,7 +1358,7 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
         endpoint
             .send_rtp(&amazing_webrtc::encode_rtp(&video_rtp).map_err(|error| error.to_string())?)
             .map_err(|error| error.to_string())?;
-        if phase == 2 {
+        if phase == 3 {
             let feedback = endpoint.receive_rtcp().map_err(|error| error.to_string())?;
             let feedback = amazing_webrtc::parse_rtcp_picture_loss_indication(&feedback)
                 .map_err(|error| error.to_string())?;
@@ -1619,18 +1617,21 @@ fn run_secure_media_peer(
     .map_err(|error| error.to_string())?;
     let mut video_output = SecureVideoOutput::new(&av_sync, parent_rtp.timestamp, &mut frame_sink);
     let mut pli_sent = false;
-    for phase in 0..7u16 {
+    let expected_sequences = [200, 201, 203, 204, 205, 206, 207];
+    let expected_timestamps = [90_000, 135_000, 225_000, 270_000, 315_000, 360_000, 405_000];
+    for received in 0..7usize {
         let video_wire = endpoint.receive_rtp().map_err(|error| error.to_string())?;
         let video_rtp =
             amazing_webrtc::parse_rtp(&video_wire).map_err(|error| error.to_string())?;
         if video_rtp.payload_type != 121
             || video_rtp.ssrc != 0x5649_4445
-            || video_rtp.sequence_number != 200 + phase
-            || video_rtp.timestamp != 90_000 + phase as u32 * 45_000
+            || video_rtp.sequence_number != expected_sequences[received]
+            || video_rtp.timestamp != expected_timestamps[received]
         {
             return Err("secure H.264 RTP sequence or timestamp was incorrect".into());
         }
-        let arrival_ms = phase as u64 * 500;
+        let arrival_ms =
+            video_rtp.timestamp.wrapping_sub(90_000) as u64 * 1_000 / video_clock as u64;
         video_jitter
             .push(video_rtp, arrival_ms)
             .map_err(|error| error.to_string())?;
@@ -1638,33 +1639,31 @@ fn run_secure_media_peer(
             std::thread::sleep(Duration::from_millis(30));
         }
         while let Some(output) = video_jitter.pop_ready(arrival_ms.saturating_add(30)) {
-            if let amazing_webrtc::VideoAssembly::Frame(frame) =
-                assembler.push(output).map_err(|error| error.to_string())?
-            {
-                let timestamp = frame.timestamp;
-                let decoded = decoder.decode(&frame.payload);
-                if phase == 2 {
-                    if decoded.is_ok() {
-                        return Err("damaged H.264 delta unexpectedly decoded".into());
+            match assembler.push(output).map_err(|error| error.to_string())? {
+                amazing_webrtc::VideoAssembly::Frame(frame) => {
+                    let timestamp = frame.timestamp;
+                    let decoded = decoder
+                        .decode(&frame.payload)
+                        .map_err(|error| error.to_string())?;
+                    let playout_arrival_ms = if progressive_video { arrival_ms } else { 0 };
+                    if playout.push(timestamp, decoded, playout_arrival_ms)
+                        != amazing_webrtc::VideoQueuePush::Queued
+                    {
+                        return Err("secure decoded video frame was not queued".into());
                     }
+                }
+                amazing_webrtc::VideoAssembly::Dropped if !pli_sent => {
                     endpoint
                         .send_rtcp(&amazing_webrtc::encode_rtcp_picture_loss_indication(
                             amazing_webrtc::RtcpPictureLossIndication {
                                 sender_ssrc: 0x5256_4352,
-                                media_ssrc: frame.ssrc,
+                                media_ssrc: 0x5649_4445,
                             },
                         ))
                         .map_err(|error| error.to_string())?;
                     pli_sent = true;
-                    continue;
                 }
-                let decoded = decoded.map_err(|error| error.to_string())?;
-                let playout_arrival_ms = if progressive_video { arrival_ms } else { 0 };
-                if playout.push(timestamp, decoded, playout_arrival_ms)
-                    != amazing_webrtc::VideoQueuePush::Queued
-                {
-                    return Err("secure decoded video frame was not queued".into());
-                }
+                _ => {}
             }
         }
         if progressive_video {
@@ -1691,6 +1690,9 @@ fn run_secure_media_peer(
     }
     if !pli_sent {
         return Err("secure H.264 recovery did not send RTCP PLI".into());
+    }
+    if video_jitter.stats().gaps != 1 {
+        return Err("secure H.264 recovery did not observe exactly one RTP loss".into());
     }
     video_output.finish(playout.stats().emitted)?;
     endpoint

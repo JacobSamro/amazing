@@ -251,8 +251,9 @@ impl BrowserShell {
         self.video_frame_index = update.frame_index;
         if self.secure_video_complete {
             self.secure_video_status = format!(
-                "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  PLI/IDR {}  ·  late {}  ·  queue {}",
+                "SECURE SRTP COMPLETE  ·  {} frames  ·  RTP loss {}  ·  IDR {}  ·  late {}  ·  queue {}",
                 self.video_frames.len(),
+                self.secure_video_recoveries,
                 self.secure_video_recoveries,
                 update.dropped_total,
                 FRAME_EVENT_CAPACITY
@@ -316,8 +317,9 @@ impl BrowserShell {
                         self.video_clock.seal_stream();
                         self.secure_video_complete = true;
                         self.secure_video_status = format!(
-                            "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  PLI/IDR {}  ·  late 0  ·  queue {}",
+                            "SECURE SRTP COMPLETE  ·  {} frames  ·  RTP loss {}  ·  IDR {}  ·  late 0  ·  queue {}",
                             self.video_frames.len(),
+                            self.secure_video_recoveries,
                             self.secure_video_recoveries,
                             FRAME_EVENT_CAPACITY
                         );

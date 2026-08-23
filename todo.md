@@ -1844,6 +1844,38 @@ passes 22/22. Strict changed-package Clippy and locked stripped ThinLTO builds
 pass on win-001. Release sizes are 8,525,312 bytes (`amazing.exe`) and 14,236,672
 bytes (`amazing-shell.exe`).
 
+## Phase 9.40 (actual RTP loss) — jitter gap to PLI/IDR recovery
+
+Shipped: the secure encoder advances through phases 0–7 but deliberately omits
+the phase-2 SRTP datagram (sequence 202, timestamp 180000). It then sends the
+dependent phase-3 delta. The child receives explicit sequences 200, 201, and
+203–207; its fixed-delay jitter buffer emits exactly one gap for 202. The frame
+assembler enters discard-through-marker state for the dependent delta and sends
+one PLI over the authenticated SRTCP association.
+
+The parent waits after phase 3, validates the PLI sender/media SSRC pair, forces
+phase 4 to IDR, and resumes ordinary delta encoding. Six decoded outputs reach
+GPUI at RTP timestamps 90000, 135000, 270000, 315000, 360000, and 405000, mapped
+to audio-master presentations 0, 500, 2000, 2500, 3000, and 3500 ms. Both fast
+and real-time secure modes require exactly one jitter loss and one PLI.
+
+Measured AMV2 inter-arrival deltas are `[499, 1499, 500, 499, 500] ms`: the
+missing frame and discarded dependent delta form one 1.5-second gap, then IDR
+restores 500 ms cadence. The end-user badge reports `RTP loss 1 · IDR 1 · late 0
+· queue 3`. Native evidence:
+`813de38903661c15fd52f5917fa23ec80ba1ccd94294a37edcb8ce7b6d068988`.
+
+Known gaps: this is one deterministic single-packet loss. There is no burst-loss
+matrix, packet reordering in the secure video path, Generic NACK/retransmission,
+FIR, PLI rate limiting, repeated-loss escalation, long-term reference recovery,
+or remote browser peer. Access units still fit one RTP packet each.
+
+Conformance: both secure process modes, exact paced-stream assertions, and all
+retained media gates pass. Root workspace remains 506/506; standalone GPUI is
+22/22. Strict changed-package Clippy and locked stripped ThinLTO builds pass on
+win-001. Release sizes are 8,525,312 bytes (`amazing.exe`) and 14,237,184 bytes
+(`amazing-shell.exe`).
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.

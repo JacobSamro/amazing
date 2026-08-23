@@ -308,6 +308,13 @@ validates its sender/media SSRCs and calls the isolated encoder's safe
 `force_intra_frame` interface. The next access unit is an IDR, restoring the same
 decoder and incremental presentation path after one explicit timeline gap.
 
+Phase 9.40 moves the fault to transport ordering. The encoder advances through
+one delta whose SRTP datagram is deliberately omitted; receipt of the following
+sequence makes `RtpJitterBuffer` emit exactly one gap. Frame assembly discards
+that dependent delta and triggers the authenticated PLI. A forced IDR on the next
+sequence restores decode, so the native status can distinguish one RTP loss and
+one recovery without treating damaged codec bytes as network loss.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
