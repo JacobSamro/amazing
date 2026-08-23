@@ -160,6 +160,7 @@ mod windows {
         fn DispatchMessageW(message: *const Msg) -> Lresult;
         fn GetMessageW(message: *mut Msg, hwnd: Hwnd, min: Uint, max: Uint) -> i32;
         fn GetModuleHandleW(name: *const u16) -> Hinstance;
+        fn GetConsoleWindow() -> Hwnd;
         fn GetParent(hwnd: Hwnd) -> Hwnd;
         fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
         fn InvalidateRect(hwnd: Hwnd, rect: *const Rect, erase: i32) -> i32;
@@ -1070,6 +1071,13 @@ mod windows {
     }
 
     pub fn run(initial: Option<&str>) -> ExitCode {
+        // SAFETY: GetConsoleWindow returns this process's optional console;
+        // hiding it leaves the native GUI visible without changing console
+        // behavior for the other command-line subcommands.
+        unsafe {
+            let console = GetConsoleWindow();
+            if !console.is_null() { ShowWindow(console, 0); }
+        }
         let class_name = wide("FerricWindow");
         let title = wide("Ferric — from-scratch browser engine");
         // SAFETY: null asks Windows for this process's module handle.
