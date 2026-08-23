@@ -344,6 +344,13 @@ sendrecv/sendonly/recvonly/inactive direction and invert offer direction for an
 answer. Opus and H.264 selection now resolves the common rtpmap dynamically, so
 secure media no longer assumes payload types 111 and 121.
 
+Phase 9.45 models order-independent codec format parameters and RTCP feedback at
+the media-section seam. Chromium answer synthesis keeps offered Opus/PCMU IDs,
+selects constrained-baseline H.264 packetization-mode 1 at its offered ID, copies
+that exact RFC 6184 configuration point, and advertises only implemented PLI
+feedback. Local ICE identity/candidates and inverted media directions produce a
+canonical answer that parses back identically.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

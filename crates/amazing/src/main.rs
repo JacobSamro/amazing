@@ -742,6 +742,7 @@ fn main() -> ExitCode {
         Some("gpu-info") => cmd_gpu_info(),
         Some("gpu-present-smoke") => cmd_gpu_present_smoke(),
         Some("sdp-roundtrip") => cmd_sdp_roundtrip(&args[2..]),
+        Some("sdp-browser-answer") => cmd_sdp_browser_answer(&args[2..]),
         Some("fetch") => cmd_fetch(&args[2..]),
         Some("fetch-parse") => cmd_fetch_parse(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
@@ -750,7 +751,7 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
             );
             ExitCode::FAILURE
         }
@@ -2853,6 +2854,76 @@ fn cmd_gpu_present_smoke() -> ExitCode {
 }
 
 /// Phase 9.8 artifact: parse, canonicalize, and reparse a bounded SDP offer.
+fn cmd_sdp_browser_answer(args: &[String]) -> ExitCode {
+    let path = match args.first() {
+        Some(path) => path,
+        None => {
+            eprintln!("usage: amazing sdp-browser-answer <offer.sdp>");
+            return ExitCode::FAILURE;
+        }
+    };
+    let source = match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("amazing sdp-browser-answer: cannot read {path}: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let offer = match amazing_webrtc::parse_sdp(&source) {
+        Ok(offer) => offer,
+        Err(error) => {
+            eprintln!("amazing sdp-browser-answer: parse offer: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let socket = match std::net::UdpSocket::bind("127.0.0.1:0") {
+        Ok(socket) => socket,
+        Err(error) => {
+            eprintln!("amazing sdp-browser-answer: bind UDP: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let address = match std_socket_v4(&socket) {
+        Ok(address) => address,
+        Err(error) => {
+            eprintln!("amazing sdp-browser-answer: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let identity = match amazing_webrtc_crypto::SecureIdentity::generate("amazing-browser-answer") {
+        Ok(identity) => identity,
+        Err(error) => {
+            eprintln!("amazing sdp-browser-answer: identity: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let answer = match amazing_webrtc_crypto::build_local_answer(
+        &offer,
+        address,
+        identity.fingerprint(),
+        "browseranswer",
+        "amaz",
+        "AmazingBrowserPassword1234",
+        900,
+    ) {
+        Ok(answer) => answer,
+        Err(error) => {
+            eprintln!("amazing sdp-browser-answer: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match amazing_webrtc::encode_sdp(&answer) {
+        Ok(answer) => {
+            print!("{answer}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing sdp-browser-answer: encode answer: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn cmd_sdp_roundtrip(args: &[String]) -> ExitCode {
     let path = match args.first() {
         Some(path) => path,

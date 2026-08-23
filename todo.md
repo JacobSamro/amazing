@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 44-subphase foundation landed; live browser signaling/DTLS interop remains |
+| 9 — Media | 🔄 45-subphase foundation landed; RTP packetization/live browser interop remains |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -2030,6 +2030,44 @@ one root artifact gate bring the workspace to 513/513; standalone GPUI remains
 pass on win-001. Release sizes are 8,578,560 bytes (`amazing.exe`) and 14,268,928
 bytes (`amazing-shell.exe`).
 
+## Phase 9.45 (Chromium answer synthesis) — fmtp symmetry and supported feedback
+
+Shipped: media sections now own order-independent `RtpFormatParameters` and
+`RtcpFeedback` collections keyed by payload type. The parser accepts fmtp up to
+1024 non-control bytes and feedback values up to 128 bytes, validates payload
+membership and duplicates, and handles Chromium's feedback-before-rtpmap order.
+Canonical SDP emits both collections and parses back to the same model.
+
+The H.264 parameter interface provides case-insensitive lookup without exposing
+string parsing to callers. Browser answer synthesis accepts only 90 kHz H.264
+with packetization-mode 1 and a six-hex-digit constrained-baseline (`42xxxx`)
+profile. It copies the offer's exact profile/packetization configuration and
+payload ID as required by RFC 6184. Audio retains compatible offered Opus and
+PCMU mappings plus Opus fmtp. Feedback is reduced to implemented `nack pli`;
+unsupported transport-cc and `ccm fir` are not advertised.
+
+`build_local_answer` retains BUNDLE mids, inverts Chromium recvonly to sendonly,
+uses a new local certificate/ICE credential set and host candidate, and returns
+a canonical parsed answer. Runnable artifact:
+
+`target\release\amazing.exe sdp-browser-answer
+examples\phase9-chromium-offer.sdp`.
+
+The measured answer selected audio PTs 111/0 and video PT 102, emitted
+`a=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f`,
+and emitted only `a=rtcp-fb:102 nack pli` for video.
+
+Known gaps: the model does not yet interpret every codec-specific fmtp field or
+generate sprop-parameter-sets. H.264 bytes are not yet RFC 6184 packetized, and
+there is still no HTTP signaling page, live browser ICE/DTLS handshake, SRTP sent
+to Chromium, or visible browser media proof.
+
+Conformance: the enhanced Chromium parameter gate and browser-answer artifact
+gate bring the root workspace to 514/514; standalone GPUI remains 24/24. Strict
+changed-package Clippy and the locked stripped ThinLTO root build pass on
+win-001. Release sizes are 8,599,040 bytes (`amazing.exe`) and 14,268,928 bytes
+(`amazing-shell.exe`).
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -2085,12 +2123,12 @@ bytes (`amazing-shell.exe`).
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** thirty-three committed subphases provide decoded images/audio,
-  authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
-  two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
-  computed reception statistics. Each subphase records its bounded scope;
-  TURN, codecs/video, full browser interop, and WebRTC WPT remain future
-  production work rather than hidden completion claims.
+- **Phase 9:** forty-five committed subphases now include decoded media,
+  authenticated ICE/consent/TURN, compound RTCP, browser-shaped SDP answers,
+  vetted two-process DTLS-SRTP, D3D11/GPUI presentation, Windows audio-master
+  playback, RTP loss recovery, and bounded handoff state. Each subphase records
+  its bounded scope; live browser DTLS-SRTP/media proof and WebRTC WPT remain
+  future production work rather than hidden completion claims.
 
 Completion is not yet claimed. The current audit has real external measurements
 and runnable artifacts for every numbered phase. Phase 1's original four-file

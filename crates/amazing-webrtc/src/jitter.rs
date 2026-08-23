@@ -869,6 +869,8 @@ mod tests {
                 payload_types: maps.iter().map(|mapping| mapping.payload_type).collect(),
                 candidates: Vec::new(),
                 rtp_maps: maps,
+                format_parameters: Vec::new(),
+                rtcp_feedback: Vec::new(),
                 direction: crate::SdpDirection::SendRecv,
             }],
         }

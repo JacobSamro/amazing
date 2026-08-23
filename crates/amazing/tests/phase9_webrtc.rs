@@ -169,6 +169,44 @@ fn chromium_sdp_roundtrip_keeps_relay_candidates_and_dynamic_payloads() {
 }
 
 #[test]
+fn chromium_offer_produces_direction_and_parameter_compatible_answer() {
+    let offer = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/phase9-chromium-offer.sdp");
+    let result = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .args([
+            "sdp-browser-answer",
+            offer.to_str().expect("UTF-8 offer path"),
+        ])
+        .output()
+        .expect("run Chromium answer artifact");
+    assert!(
+        result.status.success(),
+        "Chromium answer failed: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let source = String::from_utf8(result.stdout).expect("UTF-8 browser answer");
+    let answer = amazing_webrtc::parse_sdp(&source).expect("parse browser answer");
+    let audio = answer.media("audio").unwrap();
+    let video = answer.media("video").unwrap();
+    assert_eq!(audio.direction, amazing_webrtc::SdpDirection::SendOnly);
+    assert_eq!(video.direction, amazing_webrtc::SdpDirection::SendOnly);
+    assert_eq!(audio.payload_types, [111, 0]);
+    assert_eq!(video.payload_types, [102]);
+    assert_eq!(
+        video
+            .format_parameters(102)
+            .unwrap()
+            .parameter("packetization-mode"),
+        Some("1")
+    );
+    assert_eq!(video.rtcp_feedback.len(), 1);
+    assert_eq!(video.rtcp_feedback[0].value, "nack pli");
+    assert!(source.contains("a=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1"));
+    assert!(!source.contains("a=rtpmap:96 VP8"));
+    assert!(!source.contains("ccm fir"));
+}
+
+#[test]
 fn secure_media_loopback_uses_vetted_dtls_srtp() {
     let result = Command::new(env!("CARGO_BIN_EXE_amazing"))
         .arg("secure-media-loopback")

@@ -1071,6 +1071,8 @@ pub fn build_local_description(
                         channels: 1,
                     },
                 ],
+                format_parameters: Vec::new(),
+                rtcp_feedback: Vec::new(),
                 direction: amazing_webrtc::SdpDirection::SendRecv,
             },
             amazing_webrtc::SdpMediaSection {
@@ -1103,6 +1105,8 @@ pub fn build_local_description(
                         channels: 1,
                     },
                 ],
+                format_parameters: Vec::new(),
+                rtcp_feedback: Vec::new(),
                 direction: amazing_webrtc::SdpDirection::SendRecv,
             },
         ],
@@ -1111,6 +1115,103 @@ pub fn build_local_description(
         .map_err(|error| SecureMediaError::new(format!("encode secure SDP: {error}")))?;
     amazing_webrtc::parse_sdp(&wire)
         .map_err(|error| SecureMediaError::new(format!("parse secure SDP: {error}")))
+}
+
+pub fn build_local_answer(
+    offer: &amazing_webrtc::SdpDescription,
+    address: SocketAddrV4,
+    fingerprint: &str,
+    foundation: &str,
+    ice_ufrag: &str,
+    ice_pwd: &str,
+    origin_id: u64,
+) -> Result<amazing_webrtc::SdpDescription, SecureMediaError> {
+    let mut answer = build_local_description(
+        address,
+        fingerprint,
+        "active",
+        foundation,
+        ice_ufrag,
+        ice_pwd,
+        origin_id,
+    )?;
+    answer.bundle = offer.bundle.clone();
+    for section in &mut answer.media_sections {
+        let offered = offer.media(&section.media).ok_or_else(|| {
+            SecureMediaError::new(format!("browser offer has no {} media", section.media))
+        })?;
+        section.mid = offered.mid.clone();
+        section.direction = offered.direction.answer_for_offer();
+        section.rtcp_mux = offered.rtcp_mux;
+        let selected = if section.media == "audio" {
+            offered
+                .rtp_maps
+                .iter()
+                .filter(|mapping| {
+                    (mapping.encoding.eq_ignore_ascii_case("opus")
+                        && mapping.clock_rate == 48_000
+                        && matches!(mapping.channels, 1 | 2))
+                        || (mapping.encoding.eq_ignore_ascii_case("PCMU")
+                            && mapping.clock_rate == 8_000
+                            && mapping.channels == 1)
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        } else {
+            offered
+                .rtp_maps
+                .iter()
+                .find(|mapping| {
+                    if !mapping.encoding.eq_ignore_ascii_case("H264")
+                        || mapping.clock_rate != 90_000
+                    {
+                        return false;
+                    }
+                    let Some(parameters) = offered.format_parameters(mapping.payload_type) else {
+                        return false;
+                    };
+                    parameters.parameter("packetization-mode") == Some("1")
+                        && parameters
+                            .parameter("profile-level-id")
+                            .is_some_and(|profile| profile.len() == 6 && profile.starts_with("42"))
+                })
+                .cloned()
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+        if selected.is_empty() {
+            return Err(SecureMediaError::new(format!(
+                "browser offer has no supported {} codec",
+                section.media
+            )));
+        }
+        section.payload_types = selected
+            .iter()
+            .map(|mapping| mapping.payload_type)
+            .collect();
+        section.rtp_maps = selected;
+        section.format_parameters = offered
+            .format_parameters
+            .iter()
+            .filter(|parameters| section.payload_types.contains(&parameters.payload_type))
+            .cloned()
+            .collect();
+        section.rtcp_feedback = offered
+            .rtcp_feedback
+            .iter()
+            .filter(|feedback| {
+                feedback
+                    .payload_type
+                    .is_none_or(|payload| section.payload_types.contains(&payload))
+                    && feedback.value.eq_ignore_ascii_case("nack pli")
+            })
+            .cloned()
+            .collect();
+    }
+    let wire = amazing_webrtc::encode_sdp(&answer)
+        .map_err(|error| SecureMediaError::new(format!("encode browser answer: {error}")))?;
+    amazing_webrtc::parse_sdp(&wire)
+        .map_err(|error| SecureMediaError::new(format!("parse browser answer: {error}")))
 }
 
 fn dtls_roles_from_setup(

@@ -238,6 +238,27 @@ pub struct RtpMap {
     pub channels: u16,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RtpFormatParameters {
+    pub payload_type: u8,
+    pub parameters: String,
+}
+
+impl RtpFormatParameters {
+    pub fn parameter(&self, name: &str) -> Option<&str> {
+        self.parameters.split(';').find_map(|parameter| {
+            let (key, value) = parameter.trim().split_once('=')?;
+            key.eq_ignore_ascii_case(name).then_some(value.trim())
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RtcpFeedback {
+    pub payload_type: Option<u8>,
+    pub value: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SdpDirection {
     SendRecv,
@@ -277,7 +298,17 @@ pub struct SdpMediaSection {
     pub payload_types: Vec<u8>,
     pub candidates: Vec<IceCandidate>,
     pub rtp_maps: Vec<RtpMap>,
+    pub format_parameters: Vec<RtpFormatParameters>,
+    pub rtcp_feedback: Vec<RtcpFeedback>,
     pub direction: SdpDirection,
+}
+
+impl SdpMediaSection {
+    pub fn format_parameters(&self, payload_type: u8) -> Option<&RtpFormatParameters> {
+        self.format_parameters
+            .iter()
+            .find(|parameters| parameters.payload_type == payload_type)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1854,6 +1885,8 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 payload_types,
                 candidates: Vec::new(),
                 rtp_maps: Vec::new(),
+                format_parameters: Vec::new(),
+                rtcp_feedback: Vec::new(),
                 direction: SdpDirection::SendRecv,
             });
             media_connections.push(false);
@@ -2051,6 +2084,73 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
             });
             continue;
         }
+        if let Some(value) = line.strip_prefix("a=fmtp:") {
+            let section = media_sections
+                .last_mut()
+                .ok_or(WebRtcError::InvalidPacket("session-level SDP fmtp"))?;
+            let (payload, parameters) = value
+                .split_once(' ')
+                .ok_or(WebRtcError::InvalidPacket("malformed SDP fmtp"))?;
+            let payload_type = payload
+                .parse::<u8>()
+                .map_err(|_| WebRtcError::InvalidPacket("invalid fmtp payload type"))?;
+            let parameters = parameters.trim();
+            if !section.payload_types.contains(&payload_type)
+                || parameters.is_empty()
+                || parameters.len() > 1_024
+                || parameters.chars().any(char::is_control)
+                || section
+                    .format_parameters
+                    .iter()
+                    .any(|entry| entry.payload_type == payload_type)
+            {
+                return Err(WebRtcError::InvalidPacket("invalid or duplicate SDP fmtp"));
+            }
+            section.format_parameters.push(RtpFormatParameters {
+                payload_type,
+                parameters: parameters.to_owned(),
+            });
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("a=rtcp-fb:") {
+            let section = media_sections
+                .last_mut()
+                .ok_or(WebRtcError::InvalidPacket("session-level SDP rtcp-fb"))?;
+            let (payload, feedback) = value
+                .split_once(' ')
+                .ok_or(WebRtcError::InvalidPacket("malformed SDP rtcp-fb"))?;
+            let payload_type = if payload == "*" {
+                None
+            } else {
+                let payload_type = payload
+                    .parse::<u8>()
+                    .map_err(|_| WebRtcError::InvalidPacket("invalid rtcp-fb payload type"))?;
+                if !section.payload_types.contains(&payload_type) {
+                    return Err(WebRtcError::InvalidPacket(
+                        "rtcp-fb does not match media payloads",
+                    ));
+                }
+                Some(payload_type)
+            };
+            let feedback = feedback.trim();
+            if feedback.is_empty()
+                || feedback.len() > 128
+                || feedback.chars().any(char::is_control)
+                || section
+                    .rtcp_feedback
+                    .iter()
+                    .any(|entry| entry.payload_type == payload_type && entry.value == feedback)
+            {
+                return Err(WebRtcError::InvalidPacket(
+                    "invalid or duplicate SDP rtcp-fb",
+                ));
+            }
+            section.rtcp_feedback.push(RtcpFeedback {
+                payload_type,
+                value: feedback.to_owned(),
+            });
+            continue;
+        }
         if let Some(value) = line.strip_prefix("a=rtpmap:") {
             let section = media_sections
                 .last_mut()
@@ -2208,6 +2308,21 @@ pub fn encode_sdp(description: &SdpDescription) -> Result<String, WebRtcError> {
                 } else {
                     format!("/{}", mapping.channels)
                 }
+            ));
+        }
+        for parameters in &section.format_parameters {
+            output.push_str(&format!(
+                "a=fmtp:{} {}\r\n",
+                parameters.payload_type, parameters.parameters
+            ));
+        }
+        for feedback in &section.rtcp_feedback {
+            output.push_str(&format!(
+                "a=rtcp-fb:{} {}\r\n",
+                feedback
+                    .payload_type
+                    .map_or_else(|| "*".to_string(), |payload| payload.to_string()),
+                feedback.value
             ));
         }
     }
@@ -2704,7 +2819,9 @@ mod tests {
             "a=mid:0\r\n",
             "a=recvonly\r\n",
             "a=rtcp-mux\r\n",
+            "a=rtcp-fb:111 transport-cc\r\n",
             "a=rtpmap:111 opus/48000/2\r\n",
+            "a=fmtp:111 minptime=10;useinbandfec=1\r\n",
             "a=rtpmap:0 PCMU/8000\r\n",
             "m=video 9 UDP/TLS/RTP/SAVPF 96 102\r\n",
             "c=IN IP4 0.0.0.0\r\n",
@@ -2717,8 +2834,11 @@ mod tests {
             "a=mid:1\r\n",
             "a=recvonly\r\n",
             "a=rtcp-mux\r\n",
+            "a=rtcp-fb:102 ccm fir\r\n",
+            "a=rtcp-fb:102 nack pli\r\n",
             "a=rtpmap:96 VP8/90000\r\n",
             "a=rtpmap:102 H264/90000\r\n",
+            "a=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f\r\n",
             "a=end-of-candidates\r\n",
         );
         let parsed = parse_sdp(offer).unwrap();
@@ -2747,6 +2867,24 @@ mod tests {
                 .rtp_maps
                 .iter()
                 .any(|mapping| mapping.payload_type == 102 && mapping.encoding == "H264")
+        );
+        let h264_parameters = parsed
+            .media("video")
+            .unwrap()
+            .format_parameters(102)
+            .unwrap();
+        assert_eq!(h264_parameters.parameter("packetization-mode"), Some("1"));
+        assert_eq!(
+            h264_parameters.parameter("profile-level-id"),
+            Some("42001f")
+        );
+        assert!(
+            parsed
+                .media("video")
+                .unwrap()
+                .rtcp_feedback
+                .iter()
+                .any(|feedback| feedback.payload_type == Some(102) && feedback.value == "nack pli")
         );
         assert_eq!(
             SdpDirection::RecvOnly.answer_for_offer(),
