@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 17-subphase foundation milestone landed; compressed codecs/video/TURN/browser interop remain |
+| 9 — Media | 🔄 18-subphase foundation milestone landed; compressed codecs/video/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1132,7 +1132,7 @@ reports `codecs=SDP L16+PCMU` before the secure playout evidence.
 Known gaps: negotiation supports one audio media section and exact common
 rtpmap entries; it does not implement codec preference scoring, asymmetric
 payload mappings, fmtp, rtcp-fb, direction attributes, bundle, or multiple
-transceivers. Adaptive playout, Opus, video, and browser interoperability remain.
+transceivers. Opus, video, and browser interoperability remain.
 
 Conformance: two public negotiation gates cover construction and rejection;
 the secure two-process negotiation/playout gate passes 1/1. No WebRTC WPT
@@ -1143,6 +1143,34 @@ passed with `--locked`; all three strict Clippy targets, stripped ThinLTO
 release, and SDP-driven secure artifact passed. The release binary is
 4,646,912 bytes.
 
+## Phase 9.18 (adaptive playout) — bounded transit-variation control
+
+Shipped: `RtpJitterBuffer::new_adaptive` adds an optional controller without
+changing fixed-delay callers. It observes arrival transit in negotiated RTP
+clock units, maintains an integer 1/16 EWMA of variation, multiplies that
+estimate into a bounded delay target, raises the target immediately under
+jitter, and decays by one millisecond per stable observation. Queued packets
+derive playout from media offset plus the current target, so a delay increase
+reschedules already buffered media instead of releasing it early.
+
+The secure two-process path now constructs adaptive buffers from SDP-derived
+clock rates with a 60–200 ms bound and reports `playout=adaptive` before its
+L16/PCMU sample evidence.
+
+Known gaps: the controller has no percentile history, underrun feedback,
+clock-skew estimator, time-stretching, packet-loss concealment, or audio-device
+clock. Delay decreases are deliberately conservative but not synchronized to
+audio frame boundaries. Live secure media still carries one packet each way.
+
+Conformance: the adaptive raise/reschedule public gate passes 1/1 alongside
+the existing 7/7 jitter/codec/negotiation gates and secure process gate. No
+WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 489 hardware-independent workspace tests/doctests
+passed with `--locked`; strict WebRTC/application Clippy, stripped ThinLTO
+release, and adaptive secure playout artifact passed. The release binary is
+4,647,936 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1152,7 +1180,7 @@ release, and SDP-driven secure artifact passed. The release binary is
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
   (images/audio, authenticated ICE/RTP/RTCP, bounded jitter playout, L16/PCMU,
   SDP, secure two-process playout, and D3D11 presentation milestones landed;
-  adaptive playout, compressed codecs, and video next).
+  compressed codecs, live loss/concealment, and video next).
 
 ## Numbered-phase completion audit (2026-08-23, win-001 authoritative)
 
@@ -1197,7 +1225,7 @@ release, and SDP-driven secure artifact passed. The release binary is
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** seventeen committed subphases provide decoded images/audio,
+- **Phase 9:** eighteen committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1209,9 +1237,9 @@ and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **488**
+remeasured after the audit fixes before each commit. Current gate: **489**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **4,646,912 bytes**.
+stripped ThinLTO release is **4,647,936 bytes**.
 
 ## Server cheat sheet
 
