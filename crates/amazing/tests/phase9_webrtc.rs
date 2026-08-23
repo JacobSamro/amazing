@@ -55,6 +55,15 @@ fn secure_media_loopback_uses_vetted_dtls_srtp() {
         String::from_utf8_lossy(&result.stderr)
     );
     let stdout = String::from_utf8(result.stdout).expect("UTF-8 command output");
+    assert!(
+        stdout.contains("ICE state=Completed credentials=SDP"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("UDP transport=127.0.0.1:"), "{stdout}");
+    assert!(
+        stdout.contains("SDP identity=ok roles=active/passive"),
+        "{stdout}"
+    );
     assert!(stdout.contains("DTLS1.2"), "{stdout}");
     assert!(stdout.contains("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"), "{stdout}");
     assert!(stdout.contains("SRTP profile=AEAD_AES_128_GCM"), "{stdout}");

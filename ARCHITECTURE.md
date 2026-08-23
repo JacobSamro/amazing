@@ -19,9 +19,9 @@ amazing-net ──bytes──▶ amazing-html ──tree ops──▶ amazing-do
 amazing-media ──intrinsic size via PageMedia──▶ amazing-layout
 amazing-media ──RGBA8 via PageMedia───────────▶ amazing-paint
 amazing-media ──validated PCM WAV─────────────▶ GUI shell (WinMM adapter)
-UDP sockets (amazing driver) ◀──STUN/RTP/RTCP bytes──▶ amazing-webrtc codecs
+UDP sockets ◀──authenticated ICE──▶ amazing-webrtc codecs
 SDP text (amazing driver) ───────────────────────────▶ amazing-webrtc signaling
-amazing-webrtc codecs ──RTP/RTCP──▶ amazing-webrtc-crypto ──DTLS-SRTP──▶ peer
+UDP demux ──DTLS──▶ amazing-webrtc-crypto ◀──SRTP/SRTCP── amazing-webrtc codecs
 GUI platform seam ──D3D11 device/swap-chain present──▶ Windows graphics driver
 ```
 
@@ -96,6 +96,19 @@ single-threaded cooperative v1 decision. Its first milestone negotiates DTLS
 fingerprints, exports `EXTRACTOR-dtls_srtp` keying material, and delegates
 SRTP/SRTCP protection and replay defense. Revisit this exception only as a
 project-level security decision.
+
+Phase 9.10 keeps that DTLS association live while media flows. A single
+RFC 7983-style reader routes DTLS and SRTP/SRTCP into separate channels on the
+same authenticated ICE-nominated UDP five-tuple. Routing is nonblocking:
+queue saturation drops that UDP datagram instead of allowing one protocol
+class to starve the other. `SecureIdentity` hides
+provider certificates/keys behind a SHA-256 fingerprint, while
+`SecureMediaSession` hides directional provider contexts behind four
+protect/unprotect methods. ICE candidates/credentials, setup roles, and peer
+fingerprints come from SDP that has passed the std-only parser/serializer,
+not from provider defaults.
+These are internal seams for the loopback milestone; a caller-constructible
+single-endpoint handshake interface remains a Phase 9 follow-on.
 
 ## Conformance tracking
 

@@ -758,6 +758,60 @@ SRTP/SRTCP over its nominated UDP pair, using the parsed SDP fingerprint as
 the peer identity. The user's explicit “do all phases now” instruction
 pre-authorizes continuing.
 
+## Phase 9.10 (secure transport) — ICE-nominated UDP + SDP identity
+
+Shipped: internal `SecureIdentity` and `SecureMediaSession` seams isolate
+certificate/key and secure-packet behavior. The former exposes only the
+signaled SHA-256 fingerprint inside the adapter; the latter keeps provider
+contexts behind RTP/RTCP protect/unprotect operations with directional keys
+and 64-packet replay windows. These seams are intentionally not public until a
+single-endpoint handshake constructor exists. WebRTC.rs async/provider types
+do not leak into engine cores or the driver.
+
+The upgraded `secure-media-loopback` binds and connects one real IPv4 UDP
+socket per endpoint and serializes/reparses SDP containing the actual
+ephemeral certificate fingerprints, ICE credentials, host candidates, and
+`actpass`/`passive` setup roles. The controlling checklist is formed from the
+parsed candidates; STUN USERNAME, PRIORITY, MESSAGE-INTEGRITY key, and mapped
+endpoint checks come from those parsed descriptions. The parsed answer makes
+the offerer `active` (DTLS client) and answerer `passive` (DTLS server); those
+roles and parsed peer fingerprints drive the mutual DTLS 1.2 handshake.
+
+An internal RFC 7983-style datagram demultiplexer owns the sole socket reader
+for each endpoint. It routes DTLS records and SRTP/SRTCP datagrams to separate
+bounded channels with nonblocking UDP-loss behavior, so a full queue for one
+protocol cannot starve the other. The DTLS association stays live while
+Amazing's real RTP and RTCP packets cross the same ICE-nominated UDP
+five-tuple in both directions. The wire gate still rejects altered and
+replayed SRTP and SRTCP, and the server's Sender Report follows its own RTP
+SSRC/counters.
+
+Runnable artifact: `target\release\amazing.exe secure-media-loopback`. New
+observable evidence includes `ICE state=Completed credentials=SDP`, both
+loopback UDP ports, and `SDP identity=ok roles=active/passive` before the
+existing DTLS/SRTP, fingerprint, AEAD, replay, RTP, and SRTCP evidence.
+
+Known gaps: the two peers still run in one process and construction of a
+single remote-facing `SecureMediaSession` remains internal to the proof.
+There is no two-process/browser interop gate, ICE consent freshness,
+keepalives/retransmission/role conflict, pre-handshake unified STUN/TURN demux,
+TURN/IPv6, certificate persistence/rotation, DTLS rekey overlap, packet/key
+lifetime enforcement, multi-SSRC association table, codec media pipeline,
+congestion/jitter, SCTP/data channels, or WebRTC WPT import.
+
+Conformance: the secure nominated-UDP integration gate passes 1/1. Existing
+baselines remain 17/17 CSS2, 22/22 flex/grid, and 196/196 supported Test262;
+no WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 434 hardware-independent workspace tests/doctests
+passed with `--locked`; the exact CI build and release command passed, and the
+release binary is 4,311,552 bytes.
+
+Recommended next sub-phase: extract a single-endpoint handshake constructor,
+run the secure association across two processes for an interop-shaped gate,
+then add ICE consent freshness and RTCP compound receiver reporting. The
+user's explicit “do all phases now” instruction pre-authorizes continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -766,7 +820,7 @@ pre-authorizes continuing.
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
   (images/audio, authenticated ICE/RTP/RTCP, SDP, and D3D11 presentation
-  milestones landed; secure transport is next wired to nominated UDP).
+  milestones landed; two-process secure interop and consent freshness next).
 
 ## Server cheat sheet
 

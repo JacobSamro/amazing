@@ -121,6 +121,7 @@ name = "amazing-webrtc-crypto"
 version = "0.0.1"
 dependencies = [
  "amazing-webrtc",
+ "async-trait",
  "sha2",
  "tokio",
  "webrtc-dtls",

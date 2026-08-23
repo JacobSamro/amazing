@@ -54,7 +54,7 @@ const PIPELINE: &[(&str, &str)] = &[
     ),
     (
         "amazing-webrtc",
-        "Phase 9: ICE + RTP/RTCP + SDP + vetted DTLS-SRTP adapter",
+        "Phase 9: ICE + RTP/RTCP + SDP + DTLS-SRTP on nominated UDP",
     ),
     (
         "amazing-gpu",
@@ -636,7 +636,14 @@ fn cmd_secure_media_loopback() -> ExitCode {
     match amazing_webrtc_crypto::run_secure_loopback() {
         Ok(report) => {
             println!(
-                "{} {}; SRTP profile={} keying={} bytes; fingerprints={}; SRTP payload={} bytes protected={} bytes; SRTCP packets={} protected={} bytes; SRTP tamper={} replay={}; SRTCP tamper={} replay={}; secure loopback ok",
+                "ICE state={} credentials={}; UDP transport={} -> {}; SDP identity={} roles={}/{}; {} {}; SRTP profile={} keying={} bytes; fingerprints={}; SRTP payload={} bytes protected={} bytes; SRTCP packets={} protected={} bytes; SRTP tamper={} replay={}; SRTCP tamper={} replay={}; secure loopback ok",
+                report.ice_state,
+                if report.ice_credentials_bound { "SDP" } else { "local" },
+                report.udp_client_address,
+                report.udp_server_address,
+                if report.sdp_identity_verified { "ok" } else { "failed" },
+                report.client_setup,
+                report.server_setup,
                 report.dtls_version,
                 report.cipher_suite,
                 report.srtp_profile,

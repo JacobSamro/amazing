@@ -47,7 +47,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | Phase 6 |
 | `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
 | `amazing-webrtc` | authenticated ICE + RTP/RTCP transport | Phase 9.3/9.6/9.7 |
-| `amazing-webrtc-crypto` | isolated vetted DTLS-SRTP adapter | Phase 9.9 |
+| `amazing-webrtc-crypto` | vetted DTLS-SRTP + nominated-UDP adapter | Phase 9.9/9.10 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | Phase 7/8 |
 
 The Windows GUI shell includes tabs, address/history navigation, live DOM
