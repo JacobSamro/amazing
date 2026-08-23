@@ -1101,33 +1101,33 @@ impl Tokenizer {
             State::CommentStartDash => {
                 // dash not yet added
                 let data = std::mem::take(&mut self.comment_buf);
-                self.queue.push_back(Token::Comment(data));
+                self.emit(Token::Comment(data));
             },
             State::CommentEndDash => {
                 let mut data = std::mem::take(&mut self.comment_buf);
                 data.push('-');
-                self.queue.push_back(Token::Comment(data));
+                self.emit(Token::Comment(data));
             },
             State::CommentEnd => {
                 let mut data = std::mem::take(&mut self.comment_buf);
                 data.push_str("--");
-                self.queue.push_back(Token::Comment(data));
+                self.emit(Token::Comment(data));
             },
             State::CommentEndBang => {
                 let mut data = std::mem::take(&mut self.comment_buf);
                 data.push_str("--!");
-                self.queue.push_back(Token::Comment(data));
+                self.emit(Token::Comment(data));
             },
             State::CommentStart | State::Comment | State::BogusComment => {
                 let data = std::mem::take(&mut self.comment_buf);
-                self.queue.push_back(Token::Comment(data));
+                self.emit(Token::Comment(data));
             },
             State::BeforeDoctypeName
             | State::DoctypeName
             | State::AfterDoctypeName
             | State::BogusDoctype => {
                 let name = self.doctype_name.take();
-                self.queue.push_back(Token::Doctype {
+                self.emit(Token::Doctype {
                     name,
                     force_quirks: true,
                 });
@@ -1317,6 +1317,10 @@ mod tests {
         assert_eq!(tokenize("<!-->"), vec![Token::Comment(String::new())]);
         assert_eq!(tokenize("<!--x--!y-->"), vec![Token::Comment("x--!y".into())]);
         assert_eq!(tokenize("<?php echo 1 ?>"), vec![Token::Comment("?php echo 1 ?".into())]);
+        assert_eq!(
+            tokenize("FOO<!-- BAR"),
+            vec![Token::Characters("FOO".into()), Token::Comment(" BAR".into())]
+        );
     }
 
     #[test]

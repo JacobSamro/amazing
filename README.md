@@ -39,16 +39,16 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 |-------|------|--------|
 | `amazing-common` | shared byte-stream/text utils | ✅ |
 | `amazing-dom` | arena-allocated DOM (`u32` indices, no `Rc<RefCell>`) | ✅ core |
-| `amazing-html` | WHATWG tokenizer + tree construction | 🚧 Phase 1 |
-| `amazing-css` | Syntax-3 parser, selectors, cascade | Phase 2 |
-| `amazing-layout` | block/inline FC → flexbox/grid | Phase 3+ |
-| `amazing-paint` | software rasterizer | Phase 4 |
-| `amazing-net` | HTTP/1.1 client | Phase 5 |
-| `amazing-js` | ECMA-262 lexer/parser/interpreter | Phase 6 |
+| `amazing-html` | WHATWG tokenizer + tree construction | 🔄 Phase 1 milestone; conformance gaps tracked |
+| `amazing-css` | Syntax-3 parser, selectors, cascade | ✅ Phase 2 |
+| `amazing-layout` | block/inline FC → flexbox/grid | ✅ Phase 3/3.5 |
+| `amazing-paint` | software rasterizer | ✅ Phase 4 |
+| `amazing-net` | HTTP/1.1 client | ✅ Phase 5 |
+| `amazing-js` | ECMA-262 lexer/parser/interpreter | ✅ Phase 6 milestone |
 | `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
 | `amazing-webrtc` | ICE + RTP/compound RTCP + transport statistics | Phase 9.3–9.13 |
 | `amazing-webrtc-crypto` | vetted DTLS-SRTP + secure UDP endpoint | Phase 9.9–9.13 |
-| `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | Phase 7/8 |
+| `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | ✅ Phase 7/8 |
 
 The Windows GUI shell includes tabs, address/history navigation, live DOM
 events and mutation, classic scripts/external resources, and software-paint
@@ -60,6 +60,12 @@ request via `.github/workflows/ci.yml`.
 ![Ferric Phase 8 running on win-001](docs/screenshots/phase8-win001.png)
 
 ![Ferric Phase 9 decoded-image render](docs/screenshots/phase9-media.png)
+
+Phase 4 visual gate (Amazing at left, Edge reference at right; 800×804):
+
+![Ferric Phase 4 visual comparison](docs/screenshots/phase4-side-by-side.png)
+
+Reproduction details and measured RMSE: [Phase 4 visual audit](docs/phase4-visual-audit.md).
 
 ## Usage
 
@@ -101,6 +107,11 @@ amazing gpu-present-smoke
 
 ```sh
 cargo test --workspace --locked
+
+# External conformance corpora checked out beside the repo on win-001
+python scripts/test262.py C:\Users\server\src\test262 --binary target\debug\amazing.exe
+python scripts/html5lib.py C:\Users\server\src\wpt --binary target\release\amazing.exe
+python scripts/wpt.py C:\Users\server\src\wpt --binary target\release\amazing.exe
 ```
 
 ## Architecture notes

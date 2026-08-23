@@ -1453,6 +1453,18 @@ impl TreeBuilder {
                 self.insert_and_push("tr", attrs);
                 self.mode = Mode::InRow;
             },
+            "td" | "th" => {
+                // Parse error: synthesize the missing row, then reprocess
+                // the cell token using the in-row rules.
+                self.clear_back_to_section();
+                self.insert_and_push("tr", Vec::new());
+                self.mode = Mode::InRow;
+                self.in_row(Token::StartTag {
+                    name: name.to_owned(),
+                    attrs,
+                    self_closing: false,
+                });
+            },
             "caption" | "colgroup" | "col" | "tbody" | "tfoot" | "thead" => {
                 if self.close_section() {
                     self.reset_insertion_mode();
@@ -1780,6 +1792,14 @@ mod tests {
         assert_eq!(
             build_shape("<table><tr><td>y"),
             "(doc html[head[]body[table[tbody[tr[td[\"y\"]]]]]])"
+        );
+    }
+
+    #[test]
+    fn bare_table_cell_synthesizes_row_without_recursing() {
+        assert_eq!(
+            build_shape("<table><th>"),
+            "(doc html[head[]body[table[tbody[tr[th[]]]]]])"
         );
     }
 

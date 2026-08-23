@@ -9,17 +9,17 @@
 | Phase | Status |
 |-------|--------|
 | 0 — skeleton | ✅ done, all exit criteria met on win-001 |
-| 1 — HTML parser | ✅ done on win-001 (51 workspace tests green) — see report gaps |
+| 1 — HTML parser | 🔄 exit fixtures pass; actual html5lib/WPT tree subset 93/100; full foreign/template/adoption gaps remain |
 | 2 — CSS | ✅ done on win-001 (88 workspace tests green) — see Phase 2 section |
 | 3 — Layout | ✅ done on win-001 (workspace green; curated css/CSS2 subset 17/17) |
 | 3.5 — Flexbox | ✅ done on win-001 (13 flex tests; row/column/wrap/grow/shrink/justify/align/gaps/auto-margins/order) |
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | ✅ tree-walking milestone exit criteria met (142 crate tests); focused Test262 slice 196/196 supported (100%) |
+| 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 images/audio + ICE/RTP/RTCP/SDP + vetted DTLS-SRTP + D3D11 milestones landed |
+| 9 — Media | 🔄 13-subphase foundation milestone landed; codecs/video/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -158,6 +158,16 @@ table; template/frameset/select modes; foreign content; foster parenting
 ignores reconstructed formatting elements; PUBLIC/SYSTEM ids not captured;
 quirks flag approximated. WPT tracking starts Phase 3 per plan.
 
+Actual upstream conformance (completion audit): at WPT revision
+`53bc812da2ed81179ebd1ba76b2d197cc4747d12`, `scripts/html5lib.py` runs the
+migrated html5lib tree files `blocks.dat`, `comments01.dat`, `tables01.dat`,
+and `adoption01.dat` through the public release `parse` artifact. It discovered
+101 cases: 93 passed, 7 failed, 1 fragment/script-mode case skipped; measured
+eligible pass rate **93/100 (93.00%)**. The audit fixed EOF comment token order
+and a bare `<table><th>` implicit-row recursion/stack-overflow bug. Remaining
+failures are foreign-content and deep adoption-agency cases already named in
+the gaps above.
+
 ## Phase 2 — DONE (win-001, all tests green)
 
 Shipped: `amazing-css` (std-only, zero deps) with `syntax.rs` (css-syntax-3 §4
@@ -212,6 +222,13 @@ OUTLINES not parsed (advance/metrics only — paint draws placeholder ink).
 WPT css/CSS2 pass-rate tracking = this curated subset until full WPT
 harness lands.
 
+Actual WPT tracking now also runs through `scripts/wpt.py` at revision
+`53bc812da2ed81179ebd1ba76b2d197cc4747d12`: ten named reftests spanning four
+CSS2, four flexbox, and two grid files are rendered with Amazing and compared
+byte-for-byte to their declared `rel=match` references. Result: **3/10
+(30.00%)**, 7 named mismatches, 0 skipped. The older 17/17 and 22/22 numbers
+remain useful curated diagnostics but are no longer presented as actual WPT.
+
 ## Phase 3.5 (flexbox) — DONE (win-001, all tests green)
 
 Shipped: `amazing-layout/src/flex.rs` — `display:flex`/`inline-flex`,
@@ -261,9 +278,17 @@ TTF `loca`/`glyf` outlines (simple + composite glyphs, F2Dot14 transforms,
 implied quadratic midpoints, depth-capped recursion, hostile-input safe) and
 `amazing-paint/text.rs` rasterizes them (curve flattening, 4x4 supersampled
 nonzero-winding scanline fill, bearing/advance blit); fallback rect-ink kept
-for fonts without outlines. Deviations: glyph ink is placeholder bars until TTF
-outlines land; borders
-always solid; no radius/shadows/images.
+for fonts without outlines. Deviations: pages without an available TTF use
+placeholder bars; borders are always solid; no radius/shadows/images.
+
+Completion-audit visual gate: the win-001 release rendered
+`examples/layout.html` at 800×804 to BMP+PPM. Edge rendered the same fixture
+and viewport independently on win-001; committed Amazing, Edge,
+absolute-diff, and side-by-side PNGs live under `docs/screenshots/phase4-*`.
+Normalized pixel RMSE is 0.460741. The geometry comparison visibly preserves
+the centered card and overall block flow, while the high pixel delta records
+the known fallback bar glyphs, subset layout, and UTF-8-vs-browser-default
+encoding difference rather than pretending at pixel parity.
 
 ## Phase 5 (net) — DONE (crate integrated, win-001 green)
 
@@ -276,6 +301,11 @@ integration tests (exact request bytes, chunk extensions+trailers, redirect
 chains). TLS deliberately unsupported (`https` fails fast; documented).
 Driver: `amazing fetch <url|file> [-i]`. Deferred: keep-alive, non-GET,
 gzip/br, cookies/caching/auth, HTTP/2.
+
+Completion-audit integration artifact: `amazing fetch-parse <http-url>` feeds
+successful response text directly into `amazing_html::parse` and dumps the
+DOM. Its bounded loopback integration gate passes, and the win-001 release
+fetched `http://example.com/` into a 652-byte DOM dump.
 
 ## Phase 6 (JS) — runtime milestone landed (win-001 green)
 
@@ -312,7 +342,7 @@ covered by the runtime milestone.
 Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
 script, prints captured console lines, then its completion value. The
 interpreter's focused runtime coverage is included in the `amazing-js` suite;
-`cargo test --workspace` is green on win-001 (142 tests in `amazing-js`).
+`cargo test --workspace` is green on win-001 (143 tests in `amazing-js`).
 
 Conformance evidence: the official Test262 repository was shallow-sparsely
 checked out on win-001 with 641 tests across the selected classic-language
@@ -328,8 +358,8 @@ sources, and generators, symbols, modules, real Symbol identity, regex
 literals, and full class semantics are deferred. Basic
 `super` property and constructor calls now work.
 The `Symbol.iterator` key bridge, lazy `next()` consumption, and abrupt-body
-closing are implemented. The runtime is
-a milestone, not Phase 6 exit-criteria completion.
+closing are implemented. The runtime meets the Phase 6 tree-walking/Test262
+milestone exit criteria; it is not a claim of full ECMA-262 completion.
 
 ## Phase 7 (DOM/JS bridge) — interactive tracer slice landed (win-001 green)
 
@@ -987,6 +1017,64 @@ now” instruction pre-authorizes continuing.
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
   (images/audio, authenticated ICE/RTP/RTCP, SDP, and D3D11 presentation
   milestones landed; live loss/487 ICE and jitter buffering next).
+
+## Numbered-phase completion audit (2026-08-23, win-001 authoritative)
+
+- **Phase 0:** `target\release\amazing.exe version` reports every workspace
+  module; `.github/workflows/ci.yml` and `scripts/ci.sh` run locked all-target
+  build/test gates on pushes/PRs. Workspace structure and architecture decisions
+  are committed.
+- **Phase 1:** release `parse examples\sample.html` produced a 1,528-byte
+  indented DOM dump. The 51-test HTML suite covers malformed recovery,
+  insertion modes, implicit table structure, foster parenting, and adoption
+  agency. Actual migrated html5lib/WPT tree measurement is 93/100 with seven
+  foreign/deep-adoption failures and one skipped fragment case; full algorithm
+  completion is therefore not claimed.
+- **Phase 2:** release `style examples\sample.html` produced a 2,307-byte
+  computed-style tree through the HTML→CSS cascade pipeline; selector,
+  specificity, inheritance, shorthand, and recovery tests remain green.
+- **Phase 3/3.5:** release `layout examples\layout.html 800` produced a
+  4,496-byte absolute layout tree. Measured curated WPT gates are 17/17 CSS2
+  and 22/22 flexbox/grid. An actual named WPT reftest subset is 3/10; both
+  scopes are now labeled separately.
+- **Phase 4:** release render wrote 800×804 BMP+PPM artifacts (1,929,654 and
+  1,929,615 bytes). An independent win-001 Edge reference, absolute diff, and
+  side-by-side visual gate are committed; normalized RMSE is 0.460741 with
+  fallback-glyph/subset differences explicitly recorded.
+- **Phase 5:** release `fetch http://example.com/ -i` completed a real external
+  HTTP/1.1 request with `200 OK` and an 856-byte captured response. The 61-test
+  network suite covers loopback framing/redirect/error behavior. HTTPS remains
+  `fetch-parse` fed that live body into Phase 1 and dumped 652 bytes of DOM.
+  HTTPS remains the documented vetted-TLS follow-on, not a hand-rolled exception.
+- **Phase 6:** the repaired release artifact executes Array/Promise plus
+  `Object.keys(...).join`, `Set`, and `Map` (`a,b`, `2`, `2`). The root cause
+  was `Object.keys` bypassing the shared array builder and therefore missing
+  `Array.prototype`; a focused regression now passes. All 143 JS tests pass.
+  Fresh Test262 measurement: 641 discovered, 196 passed, 0 failed, 445
+  explicitly skipped; supported pass rate 196/196 (100%).
+- **Phase 7:** release `domrun examples\phase7.html examples\phase7.js`
+  logged `click!! ready red` and dumped the mutated DOM with click state,
+  style, dataset, and appended span visible.
+- **Phase 8:** the double-clickable release shell, input/history/tabs, event
+  loop, external resources, repaint/reflow, and Win32 FFI gates are green. The
+  committed `phase8-win001.png` shows the real Windows application. A separate
+  final `[D3D11]` title screenshot remains optional proof pending the user's
+  acceptance of Windows App's certificate warning; hardware presentation
+  itself passed the interactive smoke gate.
+- **Phase 9:** thirteen committed subphases provide decoded images/audio,
+  authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
+  two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
+  computed reception statistics. Each subphase records its bounded scope;
+  TURN, codecs/video, full browser interop, and WebRTC WPT remain future
+  production work rather than hidden completion claims.
+
+Completion is not yet claimed. The current audit has real external measurements
+and runnable artifacts for every numbered phase, but Phase 1 remains partial at
+93/100 in the declared actual tree subset and Phase 9 remains a foundation with
+explicit media/interop gaps. Final workspace count/size are remeasured after
+the audit fixes before each commit. Current post-audit gate: **445**
+hardware-independent workspace tests/doctests pass with `--locked`; the
+stripped ThinLTO release is **4,560,384 bytes**.
 
 ## Server cheat sheet
 

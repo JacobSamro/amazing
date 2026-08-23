@@ -624,12 +624,13 @@ fn main() -> ExitCode {
         Some("gpu-present-smoke") => cmd_gpu_present_smoke(),
         Some("sdp-roundtrip") => cmd_sdp_roundtrip(&args[2..]),
         Some("fetch") => cmd_fetch(&args[2..]),
+        Some("fetch-parse") => cmd_fetch_parse(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd_domrun(&args[2..]),
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
             ExitCode::FAILURE
         }
     }
@@ -1580,6 +1581,33 @@ fn cmd_fetch(args: &[String]) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Phase 5 integration artifact: fetch an HTTP response and feed its decoded
+/// body directly into the Phase 1 parser before dumping the resulting DOM.
+fn cmd_fetch_parse(args: &[String]) -> ExitCode {
+    let target = match args.first() {
+        Some(target) if target.starts_with("http://") => target,
+        _ => {
+            eprintln!("usage: amazing fetch-parse <http-url>");
+            return ExitCode::FAILURE;
+        },
+    };
+    let response = match amazing_net::fetch(target, &amazing_net::FetchOptions::default()) {
+        Ok(response) if response.is_success() => response,
+        Ok(response) => {
+            eprintln!("amazing fetch-parse: HTTP status {}", response.status);
+            return ExitCode::FAILURE;
+        },
+        Err(error) => {
+            eprintln!("amazing fetch-parse: {error}");
+            return ExitCode::FAILURE;
+        },
+    };
+    let source = response.text().unwrap_or_default();
+    let dom = amazing_html::parse(&source);
+    print!("{}", dom.dump(amazing_dom::NodeIdx(0)));
+    ExitCode::SUCCESS
 }
 
 /// Phase 9.2 audio artifact: decode PCM WAV and report stream properties.

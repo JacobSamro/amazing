@@ -140,8 +140,8 @@ driver's probes use these interfaces, not duplicate arithmetic.
 
 | Phase | Suite | Gate |
 |-------|-------|------|
-| 1 | html5ever/html5lib tokenizer + tree tests | report % |
-| 2–3.5 | WPT css/* subdirs per phase | report % |
+| 1 | html5lib tree tests migrated to WPT parsing resources | report discovered/pass/fail/skip + % |
+| 2–3.5 | actual named WPT css/* reftests plus curated diagnostics | report both scopes separately |
 | 4 | screenshot diffs vs reference renderer | visual review |
 | 6+ | Test262 | report % |
 
