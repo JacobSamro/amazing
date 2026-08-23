@@ -103,7 +103,13 @@ def main() -> int:
     parser.add_argument(
         "--files",
         nargs="+",
-        default=["blocks.dat", "comments01.dat", "tables01.dat", "adoption01.dat"],
+        default=[
+            "blocks.dat",
+            "comments01.dat",
+            "tables01.dat",
+            "adoption01.dat",
+            "tests1.dat",
+        ],
         help="Named .dat files under html/syntax/parsing/resources",
     )
     parser.add_argument("--show-failures", type=int, default=5)

@@ -18,7 +18,6 @@
 //!   performed (caller decodes bytes before handing them to [`parse`]).
 //! - CDATA sections (`<![CDATA[…]]>`) tokenize as bogus comments.
 //! - `<frameset>` documents are parsed as ordinary body content.
-//! - `select`/`optgroup`/`option` handling is minimal.
 //! - Doctype PUBLIC/SYSTEM identifiers are consumed but not captured; only
 //!   their presence feeds quirks-mode approximation.
 //! - MathML/SVG namespaces and integration points are implemented; some

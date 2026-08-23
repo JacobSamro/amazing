@@ -12,9 +12,6 @@
 //! - `template` is ignored everywhere; no "in template" insertion modes.
 //! - Frameset parsing is skipped entirely; frameset documents degrade to
 //!   ordinary body content.
-//! - `select`/`optgroup`/`option` have no dedicated insertion modes; a
-//!   `select` start tag simply stays in "in body", and the mode-reset table
-//!   folds `select` back to "in body".
 //! - `noscript` content is parsed as raw text regardless of scripting flag.
 //! - Foreign content implements namespace-aware SVG/MathML tree construction
 //!   and integration points, but not every foreign-attribute adjustment.
@@ -102,8 +99,9 @@ fn strip_leading_lf(mut s: String) -> String {
     s
 }
 
-/// Insertion modes (§13.2.4.1). `InSelect*`, `InTemplate*` and frameset
-/// modes are folded away (see module deviation list).
+/// Insertion modes (§13.2.4.1). `InTemplate*` and frameset modes are folded
+/// away (see module deviation list). Current WHATWG select recovery is part
+/// of the in-body rules.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Mode {
     Initial,
@@ -708,12 +706,12 @@ impl TreeBuilder {
     }
 
     /// Reset the insertion mode by walking the open-element stack top-down
-    /// (§13.2.4.1). `select` folds to "in body" per the deviations.
+    /// (§13.2.4.1).
     fn reset_insertion_mode(&mut self) {
         for &node in self.open.iter().rev() {
             let n = self.dom.name(node).unwrap_or("");
             let next = match n {
-                "select" => Some(Mode::InBody),
+                "select" => Some(Mode::InBody), // current spec: in-body recovery
                 "td" | "th" => Some(Mode::InCell),
                 "tr" => Some(Mode::InRow),
                 "tbody" | "tfoot" | "thead" => Some(Mode::InTableBody),
@@ -1444,15 +1442,32 @@ impl TreeBuilder {
                 self.frameset_ok = false;
                 self.mode = Mode::InTable;
             },
-            "area" | "br" | "embed" | "img" | "input" | "keygen" | "wbr" => {
+            "area" | "br" | "embed" | "img" | "keygen" | "wbr" => {
                 self.reconstruct();
                 self.insert_void(name, attrs);
                 if name == "br" {
                     self.frameset_ok = false;
                 }
             },
+            "input" => {
+                if self.has_in_scope("select") {
+                    self.pop_until("select");
+                    self.reset_insertion_mode();
+                }
+                let hidden = attrs.iter().any(|(attr, value)| {
+                    attr == "type" && value.eq_ignore_ascii_case("hidden")
+                });
+                self.reconstruct();
+                self.insert_void("input", attrs);
+                if !hidden {
+                    self.frameset_ok = false;
+                }
+            },
             "hr" => {
                 self.close_p_element();
+                if self.has_in_scope("select") {
+                    self.generate_implied_end_tags(None);
+                }
                 self.insert_void("hr", attrs);
                 self.frameset_ok = false;
             },
@@ -1480,21 +1495,38 @@ impl TreeBuilder {
             "iframe" => self.start_generic_text_element("iframe", attrs),
             "noscript" => self.start_generic_text_element("noscript", attrs),
             "select" => {
-                self.reconstruct();
-                self.insert_and_push("select", attrs);
-                self.frameset_ok = false;
-                // deviation: no InSelect mode; stay in body.
-            },
-            "optgroup" | "option" => {
-                while let Some(cur) = self.current() {
-                    let n = self.dom.name(cur).unwrap_or("");
-                    if n == "option" || (name == "optgroup" && n == "optgroup") {
-                        self.open.pop();
-                    } else {
-                        break;
-                    }
+                if self.has_in_scope("select") {
+                    self.pop_until("select");
+                    self.reset_insertion_mode();
+                } else {
+                    self.reconstruct();
+                    self.insert_and_push("select", attrs);
+                    self.frameset_ok = false;
                 }
-                self.insert_and_push(name, attrs);
+            },
+            "option" => {
+                if self.has_in_scope("select") {
+                    self.generate_implied_end_tags(Some("optgroup"));
+                } else if self
+                    .current()
+                    .is_some_and(|cur| self.dom.name(cur) == Some("option"))
+                {
+                    self.open.pop();
+                }
+                self.reconstruct();
+                self.insert_and_push("option", attrs);
+            },
+            "optgroup" => {
+                if self.has_in_scope("select") {
+                    self.generate_implied_end_tags(None);
+                } else if self
+                    .current()
+                    .is_some_and(|cur| self.dom.name(cur) == Some("option"))
+                {
+                    self.open.pop();
+                }
+                self.reconstruct();
+                self.insert_and_push("optgroup", attrs);
             },
             "rb" | "rtc" => {
                 self.generate_implied_end_tags(None);
@@ -1558,9 +1590,37 @@ impl TreeBuilder {
                 }
             },
             "dd" | "dt" | "li" | "optgroup" | "option" | "rb" | "rp" | "rt" => {
-                if self.stack_has(name) {
+                if name == "option" {
+                    if self
+                        .current()
+                        .is_some_and(|cur| self.dom.name(cur) == Some("option"))
+                    {
+                        self.open.pop();
+                    }
+                } else if name == "optgroup" {
+                    if self.current().is_some_and(|cur| {
+                        self.dom.name(cur) == Some("option")
+                            && self.open.len() >= 2
+                            && self.dom.name(self.open[self.open.len() - 2])
+                                == Some("optgroup")
+                    }) {
+                        self.open.pop();
+                    }
+                    if self
+                        .current()
+                        .is_some_and(|cur| self.dom.name(cur) == Some("optgroup"))
+                    {
+                        self.open.pop();
+                    }
+                } else if self.stack_has(name) {
                     self.generate_implied_end_tags(Some(name));
                     self.pop_until(name);
+                }
+            },
+            "select" => {
+                if self.has_in_scope("select") {
+                    self.pop_until("select");
+                    self.reset_insertion_mode();
                 }
             },
             "form" => {
@@ -2186,6 +2246,34 @@ mod tests {
         assert!(builder.is_special(mtext));
         builder.open = vec![anchor, desc];
         assert!(!builder.has_in_scope("a"));
+    }
+
+    #[test]
+    fn select_options_and_groups_close_predecessors() {
+        assert_eq!(
+            build_shape("<select><optgroup><option>1<option>2<optgroup><option>3</select>"),
+            "(doc html[head[]body[select[optgroup[option[\"1\"]option[\"2\"]]optgroup[option[\"3\"]]]]])"
+        );
+    }
+
+    #[test]
+    fn nested_select_uses_current_in_body_recovery() {
+        assert_eq!(
+            build_shape("<select><b><option><select><option></b></select>X"),
+            "(doc html[head[]body[select[b[option[]]]b[option[]]\"X\"]])"
+        );
+    }
+
+    #[test]
+    fn select_scope_adjusts_hr_and_input() {
+        assert_eq!(
+            build_shape("<select><option>x<hr>y</select>"),
+            "(doc html[head[]body[select[option[\"x\"]hr[]\"y\"]]])"
+        );
+        assert_eq!(
+            build_shape("<select><option>x<input>y"),
+            "(doc html[head[]body[select[option[\"x\"]]input[]\"y\"]])"
+        );
     }
 
     #[test]
