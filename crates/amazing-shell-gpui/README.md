@@ -22,6 +22,8 @@ first real engine viewport:
   scrolling while browser chrome stays fixed;
 - a native media tab that encodes H.264, decodes I420, converts to RGBA, and
   presents the resulting 320×180 frame through GPUI;
+- six statefully encoded/decoded frames advanced by a detached 500 ms GPUI
+  timer without changing the active tab or browser chrome;
 - real TrueType glyph rasterization using the Windows UI font;
 - responsive 1080×760 startup bounds for the win-001 RDP desktop.
 
@@ -36,6 +38,9 @@ first real engine viewport:
 ![Amazing GPUI history Back navigation on win-001](../../docs/screenshots/gpui-history-back-win001.png)
 
 ![Amazing GPUI decoded video presentation on win-001](../../docs/screenshots/gpui-video-presentation-win001.png)
+
+Animated proof: [frame A](../../docs/screenshots/gpui-video-frame-a-win001.png)
+and [frame B](../../docs/screenshots/gpui-video-frame-b-win001.png).
 
 Build and launch on win-001:
 

@@ -101,38 +101,49 @@ impl EngineViewport {
         Self::from_document(&html, NAVIGATION_CSS)
     }
 
+    #[cfg(test)]
     pub fn video_demo() -> Result<Self, String> {
+        Self::video_demo_frames().map(|mut frames| frames.remove(0))
+    }
+
+    pub fn video_demo_frames() -> Result<Vec<Self>, String> {
         const WIDTH: usize = 320;
         const HEIGHT: usize = 180;
-        let mut rgb = Vec::with_capacity(WIDTH * HEIGHT * 3);
-        for row in 0..HEIGHT {
-            for column in 0..WIDTH {
-                let panel = (column / 40 + row / 30) % 2;
-                rgb.extend_from_slice(&[
-                    (35 + column * 180 / WIDTH) as u8,
-                    (45 + row * 150 / HEIGHT) as u8,
-                    if panel == 0 { 185 } else { 75 },
-                ]);
-            }
-        }
         let mut encoder =
             amazing_webrtc_codecs::H264EncoderAdapter::new().map_err(|error| error.to_string())?;
-        let encoded = encoder
-            .encode_rgb(&rgb, (WIDTH, HEIGHT))
-            .map_err(|error| error.to_string())?;
-        let decoded = amazing_webrtc_codecs::H264DecoderAdapter::new()
-            .and_then(|mut decoder| decoder.decode(&encoded))
-            .map_err(|error| error.to_string())?;
-        let image = Arc::new(rgba_to_render_image(
-            decoded.width,
-            decoded.height,
-            decoded.rgba,
-        ));
-        Ok(Self {
-            image,
-            width: decoded.width,
-            height: decoded.height,
-        })
+        let mut decoder =
+            amazing_webrtc_codecs::H264DecoderAdapter::new().map_err(|error| error.to_string())?;
+        let mut frames = Vec::new();
+        for phase in 0..6 {
+            let mut rgb = Vec::with_capacity(WIDTH * HEIGHT * 3);
+            for row in 0..HEIGHT {
+                for column in 0..WIDTH {
+                    let panel = (column / 40 + row / 30 + phase) % 2;
+                    rgb.extend_from_slice(&[
+                        (35 + (column + phase * 11) % WIDTH * 180 / WIDTH) as u8,
+                        (45 + (row + phase * 7) % HEIGHT * 150 / HEIGHT) as u8,
+                        if panel == 0 { 185 } else { 75 },
+                    ]);
+                }
+            }
+            let encoded = encoder
+                .encode_rgb(&rgb, (WIDTH, HEIGHT))
+                .map_err(|error| error.to_string())?;
+            let decoded = decoder
+                .decode(&encoded)
+                .map_err(|error| error.to_string())?;
+            let image = Arc::new(rgba_to_render_image(
+                decoded.width,
+                decoded.height,
+                decoded.rgba,
+            ));
+            frames.push(Self {
+                image,
+                width: decoded.width,
+                height: decoded.height,
+            });
+        }
+        Ok(frames)
     }
 
     fn from_document(html: &str, css: &str) -> Self {
@@ -276,6 +287,7 @@ mod tests {
         let viewport = EngineViewport::video_demo().expect("video demo");
         assert_eq!((viewport.width, viewport.height), (320, 180));
         assert_eq!(viewport.image.frame_count(), 1);
+        assert_eq!(EngineViewport::video_demo_frames().unwrap().len(), 6);
     }
 
     #[test]

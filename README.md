@@ -64,6 +64,9 @@ request via `.github/workflows/ci.yml`.
 
 ![Amazing GPUI decoded H.264 video surface](docs/screenshots/gpui-video-presentation-win001.png)
 
+Clocked decoded-video proof: [frame A](docs/screenshots/gpui-video-frame-a-win001.png)
+and [frame B](docs/screenshots/gpui-video-frame-b-win001.png).
+
 Phase 4 visual gate (Amazing at left, Edge reference at right; 800×804):
 
 ![Ferric Phase 4 visual comparison](docs/screenshots/phase4-side-by-side.png)

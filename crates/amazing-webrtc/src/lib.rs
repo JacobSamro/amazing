@@ -18,7 +18,8 @@ pub use jitter::{
     RtpAudioDecoder, RtpJitterBuffer, negotiate_audio_codecs, run_jitter_codec_probe,
 };
 pub use video::{
-    EncodedVideoFrame, VideoAssembly, VideoFrameAssembler, VideoFrameConfig, VideoFrameProbeReport,
+    EncodedVideoFrame, TimedVideoFrame, VideoAssembly, VideoFrameAssembler, VideoFrameConfig,
+    VideoFrameProbeReport, VideoPlayoutConfig, VideoPlayoutQueue, VideoQueuePush, VideoQueueStats,
     run_video_frame_probe,
 };
 
@@ -1123,7 +1124,7 @@ fn append_stun_attribute(
     packet.extend_from_slice(&attribute_type.to_be_bytes());
     packet.extend_from_slice(&length.to_be_bytes());
     packet.extend_from_slice(value);
-    while packet.len() % 4 != 0 {
+    while !packet.len().is_multiple_of(4) {
         packet.push(0);
     }
     Ok(())
@@ -1170,7 +1171,7 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
         ));
     }
     let body_len = u16::from_be_bytes([packet[2], packet[3]]) as usize;
-    if body_len % 4 != 0 || packet.len() != 20 + body_len {
+    if !body_len.is_multiple_of(4) || packet.len() != 20 + body_len {
         return Err(WebRtcError::InvalidPacket("STUN body length mismatch"));
     }
     if u32::from_be_bytes([packet[4], packet[5], packet[6], packet[7]]) != STUN_MAGIC_COOKIE {
@@ -1582,7 +1583,7 @@ fn append_sdes_cname(wire: &mut Vec<u8>, ssrc: u32, cname: &str) -> Result<(), W
     wire.push(cname.len() as u8);
     wire.extend_from_slice(cname);
     wire.push(0);
-    while (wire.len() - sdes_start) % 4 != 0 {
+    while !(wire.len() - sdes_start).is_multiple_of(4) {
         wire.push(0);
     }
     let words_minus_one = (wire.len() - sdes_start) / 4 - 1;
@@ -2092,7 +2093,7 @@ fn stun_attribute_ranges(packet: &[u8]) -> Result<Vec<(u16, usize, usize, usize)
         return Err(WebRtcError::InvalidPacket("truncated STUN header"));
     }
     let body_len = u16::from_be_bytes([packet[2], packet[3]]) as usize;
-    if body_len % 4 != 0 || packet.len() != 20 + body_len {
+    if !body_len.is_multiple_of(4) || packet.len() != 20 + body_len {
         return Err(WebRtcError::InvalidPacket("STUN body length mismatch"));
     }
     if u32::from_be_bytes([packet[4], packet[5], packet[6], packet[7]]) != STUN_MAGIC_COOKIE {
