@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 32-subphase foundation milestone landed; UI media clock/TURN/browser interop remain |
+| 9 — Media | 🔄 33-subphase foundation milestone landed; UI audio-master sync/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1601,6 +1601,35 @@ Conformance: two public media-clock/sync gates and enhanced secure A/V gate
 pass. Workspace tests pass 504/504; strict WebRTC/application Clippy and
 stripped ThinLTO artifact pass. Release binary is 8,521,216 bytes.
 
+## Phase 9.33 (UI media clock) — secure RTP timestamp-driven GPUI timing
+
+Shipped: GPUI retains each AMVF frame's original 90 kHz RTP timestamp alongside
+its render image. `next_video_delay_ms` converts the current-to-next wrapping
+delta to milliseconds, clamps unsafe values to 16–5000 ms, and uses the final
+observed interval when the six-frame demo loops. Synthetic preview frames carry
+the same 45000-tick schedule.
+
+The detached GPUI task now carries its previous computed delay across awaits,
+polls secure events, advances the frame, notifies rendering, and derives the
+next delay from the newly current frame. Unit gates cover 100/200 ms irregular
+intervals and 500 ms loop wrap; tab/address/history state remains unchanged.
+
+`--secure-video` now reports `SECURE SRTP COMPLETE · 6 decoded frames · 90 kHz
+clock`. Two captures from one window differ while retaining that badge:
+
+- A `9f3e953025b18b60d8afbff96f502b6d1de3c1d65b733dc7834e40064cd81acd`;
+- B `624fb8e5bbe2892579c88292a46326b99f298d0b9aafd2b918e2573ad3e4355d`.
+
+Known gaps: AMVF does not carry the audio Sender Report anchor, so GPUI honors
+video cadence but does not independently apply audio-master hold/drop decisions.
+There is no drift correction, visibility pause, backpressure, or dropped-frame
+telemetry in the shell.
+
+Conformance: standalone shell tests pass 14/14; RTP timing unit gate, direct
+secure stream, warning-free locked ThinLTO build, and two-frame native proof
+pass. Shell release is 14,232,576 bytes; root remains 504 tests and 8,521,216
+bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1656,7 +1685,7 @@ stripped ThinLTO artifact pass. Release binary is 8,521,216 bytes.
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** thirty-two committed subphases provide decoded images/audio,
+- **Phase 9:** thirty-three committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;

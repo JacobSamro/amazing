@@ -41,6 +41,7 @@ struct BrowserShell {
     tabs: Vec<Tab>,
     viewport: EngineViewport,
     video_frames: Vec<EngineViewport>,
+    video_timestamps: Vec<u32>,
     video_frame_index: usize,
     secure_video_receiver: Option<std::sync::mpsc::Receiver<SecureVideoEvent>>,
     secure_video_requested: bool,
@@ -113,6 +114,7 @@ impl BrowserShell {
             ],
             viewport: EngineViewport::demo(),
             video_frames: EngineViewport::video_demo_frames().expect("decode GPUI video demo"),
+            video_timestamps: (0..6).map(|index| index * 45_000).collect(),
             video_frame_index: 0,
             secure_video_receiver: None,
             secure_video_requested: false,
@@ -240,6 +242,22 @@ impl BrowserShell {
         }
     }
 
+    fn next_video_delay_ms(&self) -> u64 {
+        if self.video_timestamps.len() != self.video_frames.len() || self.video_timestamps.len() < 2
+        {
+            return 500;
+        }
+        let current = self.video_frame_index;
+        let next = (current + 1) % self.video_timestamps.len();
+        let delta = if next > current {
+            self.video_timestamps[next].wrapping_sub(self.video_timestamps[current])
+        } else {
+            let last = self.video_timestamps.len() - 1;
+            self.video_timestamps[last].wrapping_sub(self.video_timestamps[last - 1])
+        };
+        ((delta as u64).saturating_mul(1_000) / 90_000).clamp(16, 5_000)
+    }
+
     fn poll_secure_video(&mut self) {
         let mut events = Vec::new();
         if let Some(receiver) = self.secure_video_receiver.as_ref() {
@@ -255,10 +273,12 @@ impl BrowserShell {
                     {
                         if !self.secure_video_active {
                             self.video_frames.clear();
+                            self.video_timestamps.clear();
                             self.video_frame_index = 0;
                             self.secure_video_active = true;
                         }
                         self.video_frames.push(viewport);
+                        self.video_timestamps.push(frame.timestamp);
                         self.secure_video_status = format!(
                             "SECURE SRTP → H.264 → RGBA  ·  frame {}  ·  RTP {}",
                             frame.index + 1,
@@ -268,7 +288,7 @@ impl BrowserShell {
                 }
                 SecureVideoEvent::Complete => {
                     self.secure_video_status = format!(
-                        "SECURE SRTP COMPLETE  ·  {} decoded frames",
+                        "SECURE SRTP COMPLETE  ·  {} decoded frames  ·  90 kHz clock",
                         self.video_frames.len()
                     );
                 }
@@ -1118,19 +1138,19 @@ fn main() {
                 cx.new(move |cx| {
                     let mut shell = BrowserShell::new(Some(cx.focus_handle().tab_stop(true)));
                     cx.spawn(async move |this, cx| {
+                        let mut delay_ms = 500;
                         loop {
                             cx.background_executor()
-                                .timer(Duration::from_millis(500))
+                                .timer(Duration::from_millis(delay_ms))
                                 .await;
-                            if this
-                                .update(cx, |shell: &mut BrowserShell, cx| {
-                                    shell.poll_secure_video();
-                                    shell.advance_video();
-                                    cx.notify();
-                                })
-                                .is_err()
-                            {
-                                break;
+                            match this.update(cx, |shell: &mut BrowserShell, cx| {
+                                shell.poll_secure_video();
+                                shell.advance_video();
+                                cx.notify();
+                                shell.next_video_delay_ms()
+                            }) {
+                                Ok(next_delay) => delay_ms = next_delay,
+                                Err(_) => break,
                             }
                         }
                     })
@@ -1231,6 +1251,19 @@ mod tests {
         }
         assert_eq!(shell.video_frame_index, 0);
         assert_eq!(shell.active, 1);
+        assert_eq!(shell.next_video_delay_ms(), 500);
+    }
+
+    #[test]
+    fn video_timer_uses_bounded_ninety_kilohertz_timestamp_deltas() {
+        let mut shell = BrowserShell::new(None);
+        shell.video_frames.truncate(3);
+        shell.video_timestamps = vec![0, 9_000, 27_000];
+        assert_eq!(shell.next_video_delay_ms(), 100);
+        shell.advance_video();
+        assert_eq!(shell.next_video_delay_ms(), 200);
+        shell.advance_video();
+        assert_eq!(shell.next_video_delay_ms(), 200);
     }
 
     #[test]

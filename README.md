@@ -70,6 +70,9 @@ and [frame B](docs/screenshots/gpui-video-frame-b-win001.png).
 Direct secure-session GPUI proof: [frame A](docs/screenshots/gpui-secure-video-win001.png)
 and [frame B](docs/screenshots/gpui-secure-video-b-win001.png).
 
+Secure 90 kHz RTP-clock proof: [frame A](docs/screenshots/gpui-rtp-clock-a-win001.png)
+and [frame B](docs/screenshots/gpui-rtp-clock-b-win001.png).
+
 Phase 4 visual gate (Amazing at left, Edge reference at right; 800×804):
 
 ![Ferric Phase 4 visual comparison](docs/screenshots/phase4-side-by-side.png)

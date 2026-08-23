@@ -22,8 +22,8 @@ first real engine viewport:
   scrolling while browser chrome stays fixed;
 - a native media tab that encodes H.264, decodes I420, converts to RGBA, and
   presents the resulting 320×180 frame through GPUI;
-- six statefully encoded/decoded frames advanced by a detached 500 ms GPUI
-  timer without changing the active tab or browser chrome;
+- six statefully encoded/decoded frames advanced by a detached GPUI timer whose
+  16–5000 ms delays derive from 90 kHz RTP timestamp deltas;
 - `--secure-video` launches the root DTLS-SRTP driver, validates framed RGBA on
   a background localhost reader, and replaces the synthetic loop with the six
   actual secure-session frames;
@@ -47,6 +47,9 @@ and [frame B](../../docs/screenshots/gpui-video-frame-b-win001.png).
 
 Direct secure proof: [frame A](../../docs/screenshots/gpui-secure-video-win001.png)
 and [frame B](../../docs/screenshots/gpui-secure-video-b-win001.png).
+
+RTP-clock proof: [frame A](../../docs/screenshots/gpui-rtp-clock-a-win001.png)
+and [frame B](../../docs/screenshots/gpui-rtp-clock-b-win001.png).
 
 Build and launch on win-001:
 
