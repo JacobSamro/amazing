@@ -260,6 +260,11 @@ maps wrapping RTP timestamps onto signed nanosecond NTP time; `AvSyncTimeline`
 classifies video as hold/present/drop against audio master time. The secure
 sender provides separate audio/video anchors on the bundled association.
 
+Phase 9.33 carries original video RTP timestamps through AMVF into GPUI. The UI
+computes each next delay from the 90 kHz delta, clamps 16–5000 ms, and uses the
+last observed interval for loop wrap. The asynchronous timer is media-clock
+driven rather than hard-coded, while audio-master correction remains upstream.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
