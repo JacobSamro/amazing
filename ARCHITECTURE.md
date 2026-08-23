@@ -217,6 +217,11 @@ audio or video section owns its connection, port, candidates, payload list,
 and rtpmap entries. Existing ICE selects the primary section until explicit
 BUNDLE/mid demultiplexing lands; no caller silently treats video as audio.
 
+Phase 9.25 makes that shared transport explicit: session BUNDLE lists unique
+per-section mids, every bundled section requires rtcp-mux, and negotiated
+payload types resolve to exactly one media section. Duplicate mids, missing
+members, and cross-media payload collisions fail before RTP dispatch.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

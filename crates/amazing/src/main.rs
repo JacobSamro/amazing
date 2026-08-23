@@ -2388,8 +2388,14 @@ fn cmd_sdp_roundtrip(args: &[String]) -> ExitCode {
                 .map(|section| section.rtp_maps.len())
                 .sum::<usize>();
             println!(
-                "SDP {} payloads={} candidates={} rtpmaps={} ICE={} setup={}; roundtrip ok",
-                media, payloads, candidates, rtp_maps, parsed.ice_ufrag, parsed.setup
+                "SDP {} bundle={} payloads={} candidates={} rtpmaps={} ICE={} setup={}; roundtrip ok",
+                media,
+                parsed.bundle.len(),
+                payloads,
+                candidates,
+                rtp_maps,
+                parsed.ice_ufrag,
+                parsed.setup
             );
             ExitCode::SUCCESS
         }

@@ -106,7 +106,10 @@ fn sdp_roundtrip_command_reports_ice_dtls_media_summary() {
         String::from_utf8_lossy(&result.stderr)
     );
     let stdout = String::from_utf8(result.stdout).expect("UTF-8 command output");
-    assert!(stdout.contains("SDP audio+video payloads=3"), "{stdout}");
+    assert!(
+        stdout.contains("SDP audio+video bundle=2 payloads=3"),
+        "{stdout}"
+    );
     assert!(stdout.contains("candidates=2"), "{stdout}");
     assert!(stdout.contains("rtpmaps=3"), "{stdout}");
     assert!(stdout.contains("ICE=ferric"), "{stdout}");
