@@ -22,5 +22,17 @@ license = "MIT"
 rust-version = "1.85"
 
 [profile.release]
+opt-level = 3
 lto = "thin"
 codegen-units = 1
+strip = true
+
+# Dev builds skip full debug info: the target directory lives on a slow
+# external volume (see ~/.local/bin/cargo), and line tables keep backtraces
+# usable at roughly half the artifact size and link time.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.test]
+debug = "line-tables-only"
+lto = "off"

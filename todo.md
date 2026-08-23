@@ -805,7 +805,8 @@ no WebRTC WPT subset is imported yet.
 
 Final win-001 gate: all 434 hardware-independent workspace tests/doctests
 passed with `--locked`; the exact CI build and release command passed, and the
-release binary is 4,311,552 bytes.
+release binary is 4,311,040 bytes with the repository's stripped ThinLTO
+release profile.
 
 Recommended next sub-phase: extract a single-endpoint handshake constructor,
 run the secure association across two processes for an interop-shaped gate,
