@@ -18,7 +18,7 @@
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
 | 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (142 crate tests); focused Test262 slice measured at 196/196 (100%) |
 | 7 — DOM/JS | 🔄 live DOM, events, styles, scripts, fetch, and repaint tracer landed |
-| 8 — GUI | 🔄 Windows native shell landed; desktop visual proof pending |
+| 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
 | 9 — Media | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
@@ -376,10 +376,20 @@ paint pipeline and blits the RGBA surface through a top-down GDI bitmap.
 Local files and plain `http://` URLs use the same fetch path as the headless
 driver; unsupported TLS remains the documented Phase 5 exception.
 
-The shell compiles and the complete workspace suite passes on win-001. The
-interactive window itself requires a Windows desktop session (not available
-to the headless SSH service), so visual GUI proof is still pending. Current
-Inline page scripts now execute against the live DOM before the first layout
+The shell compiles and the complete workspace suite passes on win-001. Live
+Windows App/RDP desktop runs loaded both `examples/phase8.html` and the
+no-argument default `examples/sample.html` in the release executable. The
+clean, bounded no-argument-launch capture is preserved at
+`docs/screenshots/phase8-win001.png`. It visibly proves the Ferric top-level
+window, tab/address controls, Go/Back/Forward/new-tab controls, the default
+local URL, and the colored software-painted page. The
+GUI click smoke test also asserts the live DOM mutation, white foreground,
+red repainted background pixel, event bubbling, timers, and fetch results.
+On Windows, launching `amazing.exe` with no arguments now opens the GUI, so
+the release artifact is directly double-clickable; `amazing version` retains
+the pipeline-status output.
+
+Inline page scripts execute against the live DOM before the first layout
 and repaint. Each tab retains its JS runtime; layout-box hit testing dispatches
 mouse clicks and repaints DOM/style mutations. Limitations are blocking
 navigation during fetch/paint, no native scrollbar thumb, no network event
@@ -406,8 +416,11 @@ External `<link rel="stylesheet" href="…">` resources are fetched and merged
 into the author cascade before layout.
 
 Release artifact evidence: `cargo build --release` on win-001 produced
-`target/release/amazing.exe` (1,667,072 bytes); its `version` command reports
+`target/release/amazing.exe` (1,701,376 bytes); its `version` command reports
 the GUI subcommand and its release `render` command produced a 640×54 raster.
+Phase 8 runnable demo: double-click `target\release\amazing.exe`, or run
+`target\release\amazing.exe gui examples\phase8.html` to open the captured
+fixture directly.
 
 ## Later phases (unchanged from goal prompt)
 

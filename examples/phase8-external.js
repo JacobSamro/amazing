@@ -21,7 +21,11 @@ const textNode = document.createTextNode('text-node');
 title.appendChild(textNode);
 if (title.textContent.includes('text-node')) title.setAttribute('data-text-node', 'yes');
 textNode.remove();
-title.onclick = (event) => { title.textContent = event.type + '!'; title.style.color = 'red'; };
+title.onclick = (event) => {
+  title.textContent = event.type + ' handled by Ferric!';
+  title.style.color = 'white';
+  title.style.backgroundColor = 'red';
+};
 title.addEventListener('click', () => title.setAttribute('data-clicked', 'yes'));
 setTimeout(() => title.setAttribute('data-timer', 'yes'), 0);
 fetch('phase8-data.txt').then((response) => { if (response.headers.has('content-type')) title.setAttribute('data-header', response.headers.get('content-type')); return response.text(); }).then((text) => title.setAttribute('data-fetch', text));

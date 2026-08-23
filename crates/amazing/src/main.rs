@@ -480,6 +480,10 @@ impl amazing_js::DomHost for BrowserDomHost {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
+    #[cfg(windows)]
+    if args.len() == 1 {
+        return gui::run(None);
+    }
     match args.get(1).map(String::as_str) {
         Some("version") | None => {
             println!("amazing v{}", env!("CARGO_PKG_VERSION"));

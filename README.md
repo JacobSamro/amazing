@@ -50,11 +50,13 @@ events and mutation, classic scripts/external resources, and software-paint
 reflow. CI runs the workspace build and test gate on every push and pull
 request via `.github/workflows/ci.yml`.
 
+![Ferric Phase 8 running on win-001](docs/screenshots/phase8-win001.png)
+
 ## Usage
 
 ```sh
 # pipeline status
-amazing
+amazing version
 
 # parse an HTML file (or stdin) and dump the DOM tree
 amazing parse page.html
@@ -67,7 +69,7 @@ cat script.js | amazing run
 # execute a script against a live parsed DOM and dump the mutation result
 amazing domrun page.html script.js
 
-# open the native Windows shell (optional initial local file or http URL)
+# open the native Windows shell (on Windows, double-clicking amazing.exe does this)
 amazing gui [url]
 ```
 

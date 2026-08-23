@@ -1267,6 +1267,19 @@ mod windows {
     mod tests {
         use super::*;
 
+        fn find_layout_box(layout: &LayoutBox, node: NodeIdx) -> Option<&LayoutBox> {
+            if layout.node == Some(node) {
+                return Some(layout);
+            }
+            let children: &[LayoutBox] = match &layout.flow {
+                Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children,
+                Flow::Inlines(_) | Flow::Empty => &[],
+            };
+            children
+                .iter()
+                .find_map(|child| find_layout_box(child, node))
+        }
+
         #[test]
         fn page_click_runtime_mutates_dom_and_repaints() {
             let rendered = render_page("../../examples/phase8.html", 640).expect("fixture renders");
@@ -1306,7 +1319,10 @@ mod windows {
             state.repaint_runtime();
             let host = state.tab().runtime.as_ref().unwrap().host.clone();
             let host = host.borrow();
-            assert_eq!(host.get_text_content(node).as_deref(), Some("click!"));
+            assert_eq!(
+                host.get_text_content(node).as_deref(),
+                Some("click handled by Ferric!")
+            );
             assert_eq!(host.get_attribute(node, "data-ready"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-load"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-body-load"), Some(Some("yes".into())));
@@ -1330,8 +1346,18 @@ mod windows {
             assert_eq!(host.get_attribute(node, "data-bubbled"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-inline"), Some(Some("yes".into())));
             assert_eq!(host.get_attribute(node, "data-timer"), Some(Some("yes".into())));
-            assert_eq!(host.get_style(node, "color").as_deref(), Some("red"));
-            assert!(state.tab().surface.as_ref().unwrap().height > 0);
+            assert_eq!(host.get_style(node, "color").as_deref(), Some("white"));
+            assert_eq!(
+                host.get_style(node, "backgroundColor").as_deref(),
+                Some("red")
+            );
+            let runtime = state.tab().runtime.as_ref().unwrap();
+            let title_box = find_layout_box(&runtime.layout, NodeIdx(node)).unwrap();
+            let x = (title_box.border_box.x + title_box.border_box.w * 0.75) as u32;
+            let y = (title_box.border_box.y + title_box.border_box.h * 0.5) as u32;
+            let surface = state.tab().surface.as_ref().unwrap();
+            let offset = ((y * surface.width + x) * 4) as usize;
+            assert_eq!(&surface.pixels[offset..offset + 4], &[255, 0, 0, 255]);
         }
     }
 
