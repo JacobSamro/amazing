@@ -60,6 +60,8 @@ v1 features:
 `amazing_dom::Dom` = flat `Vec<Node>`, references are `NodeIdx(u32)`.
 No `Rc<RefCell<..>>` anywhere in the engine core. Consequences we accept:
 
+- Element nodes carry an explicit HTML, SVG, or MathML namespace; local names
+  remain separate so selector/layout consumers do not parse serialized names.
 - Node removal = freelist insertion; indices stay stable until reused.
 - Borrow rules are manual (the tree builder holds `&mut Dom`; delegates use
   indices). This is deliberate — it keeps mutation auditable.

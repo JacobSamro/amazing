@@ -23,7 +23,7 @@
 //! - `:lang()`, `:dir()`, `:nth-*` with `of S` syntax not implemented
 
 use crate::syntax::{tokenize, serialize, Token};
-use amazing_dom::{Dom, NodeIdx};
+use amazing_dom::{Dom, Namespace, NodeIdx};
 use std::fmt;
 
 // ---------------------------------------------------------------------------
@@ -286,7 +286,7 @@ impl<'t> SelParser<'t> {
 
     fn simple(&mut self) -> Option<Simple> {
         match self.bump()? {
-            Token::Ident(name) => Some(Simple::Type(name.to_ascii_lowercase())),
+            Token::Ident(name) => Some(Simple::Type(name)),
             Token::Delim('*') => Some(Simple::Universal),
             Token::Hash(id) => Some(Simple::Id(id)),
             Token::Delim('.') => match self.bump()? {
@@ -635,7 +635,13 @@ pub fn matches_compound(dom: &Dom, el: NodeIdx, comp: &Compound) -> bool {
 
 pub fn matches_simple(dom: &Dom, el: NodeIdx, s: &Simple) -> bool {
     match s {
-        Simple::Type(name) => dom.name(el).is_some_and(|n| n.eq_ignore_ascii_case(name)),
+        Simple::Type(name) => dom.name(el).is_some_and(|local| {
+            if dom.namespace(el) == Some(Namespace::Html) {
+                local.eq_ignore_ascii_case(name)
+            } else {
+                local == name
+            }
+        }),
         Simple::Universal => true,
         Simple::Id(id) => attr_is(dom, el, "id", id),
         Simple::Class(class) => class_list_contains(dom, el, class),
@@ -698,10 +704,20 @@ fn nth_index(dom: &Dom, el: NodeIdx, from_last: bool) -> Option<u32> {
 /// Position among same-type element siblings.
 fn type_position(dom: &Dom, el: NodeIdx, from_last: bool) -> Option<u32> {
     let my_name = dom.name(el)?.to_owned();
+    let my_namespace = dom.namespace(el)?;
     let parent = dom.get(el).parent?;
     let same_type: Vec<NodeIdx> = dom
         .children(parent)
-        .filter(|c| dom.name(*c).is_some_and(|n| n.eq_ignore_ascii_case(&my_name)))
+        .filter(|c| {
+            dom.namespace(*c) == Some(my_namespace)
+                && dom.name(*c).is_some_and(|name| {
+                    if my_namespace == Namespace::Html {
+                        name.eq_ignore_ascii_case(&my_name)
+                    } else {
+                        name == my_name
+                    }
+                })
+        })
         .collect();
     let pos = same_type.iter().position(|&c| c == el)? as u32 + 1;
     Some(if from_last { same_type.len() as u32 + 1 - pos } else { pos })
@@ -885,6 +901,26 @@ mod tests {
         assert!(m(&d, &p, "p:last-of-type"));
         assert!(!m(&d, &[0, 0, 1, 0], "li:last-of-type"));
         assert!(m(&d, &[0, 0, 1, 2], "li:last-of-type"));
+    }
+
+    #[test]
+    fn foreign_type_matching_uses_namespace_and_case_sensitive_local_names() {
+        let mut dom = Dom::new();
+        let body = dom.create_element(NodeIdx(0), "body");
+        let _html_rect = dom.create_element(body, "rect");
+        let svg_rect = dom.append_child(body, amazing_dom::NodeKind::Element {
+            name: "rect".into(),
+            attrs: Vec::new(),
+            namespace: Namespace::Svg,
+        });
+        let gradient = dom.append_child(body, amazing_dom::NodeKind::Element {
+            name: "linearGradient".into(),
+            attrs: Vec::new(),
+            namespace: Namespace::Svg,
+        });
+        assert!(matches(&dom, svg_rect, &parse_selector("rect:first-of-type").unwrap()));
+        assert!(matches(&dom, gradient, &parse_selector("linearGradient").unwrap()));
+        assert!(!matches(&dom, gradient, &parse_selector("lineargradient").unwrap()));
     }
 
     #[test]

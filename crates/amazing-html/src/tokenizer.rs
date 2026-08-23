@@ -1207,10 +1207,11 @@ impl Tokenizer {
         let mut best: Option<(&str, &str)> = None;
         for (name, replacement) in NAMED {
             let bare = &name[1..]; // drop '&'
-            if window.len() >= bare.len() && window.starts_with(bare) {
-                if best.map_or(true, |(b, _)| bare.len() > b.len()) {
-                    best = Some((bare, replacement));
-                }
+            if window.len() >= bare.len()
+                && window.starts_with(bare)
+                && best.is_none_or(|(b, _)| bare.len() > b.len())
+            {
+                best = Some((bare, replacement));
             }
         }
         if let Some((bare, replacement)) = best {
@@ -1223,10 +1224,11 @@ impl Tokenizer {
         let mut best_legacy: Option<(&str, &str)> = None;
         for (name, replacement) in LEGACY_NO_SEMI {
             let bare = &name[1..];
-            if window.len() >= bare.len() && window.starts_with(bare) {
-                if best_legacy.map_or(true, |(b, _)| bare.len() > b.len()) {
-                    best_legacy = Some((bare, replacement));
-                }
+            if window.len() >= bare.len()
+                && window.starts_with(bare)
+                && best_legacy.is_none_or(|(b, _)| bare.len() > b.len())
+            {
+                best_legacy = Some((bare, replacement));
             }
         }
         if let Some((bare, replacement)) = best_legacy {

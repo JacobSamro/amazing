@@ -15,6 +15,16 @@
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct NodeIdx(pub u32);
 
+/// Namespace carried by an element node. HTML is the default for DOM-created
+/// elements; the tree builder selects SVG or MathML while parsing foreign
+/// content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Namespace {
+    Html,
+    Svg,
+    MathMl,
+}
+
 /// Node kinds. Grows in later phases (attributes live on `Element` since
 /// the CSS selector engine needs them).
 #[derive(Debug, Clone, PartialEq)]
@@ -23,6 +33,7 @@ pub enum NodeKind {
     Element {
         name: String,
         attrs: Vec<(String, String)>,
+        namespace: Namespace,
     },
     Text {
         data: String,
@@ -103,6 +114,7 @@ impl Dom {
         self.append_child(parent, NodeKind::Element {
             name: name.to_owned(),
             attrs: Vec::new(),
+            namespace: Namespace::Html,
         })
     }
 
@@ -224,6 +236,14 @@ impl Dom {
         }
     }
 
+    /// Element namespace, or `None` for non-element nodes.
+    pub fn namespace(&self, idx: NodeIdx) -> Option<Namespace> {
+        match self.get(idx).kind {
+            NodeKind::Element { namespace, .. } => Some(namespace),
+            _ => None,
+        }
+    }
+
     pub fn set_attrs(&mut self, idx: NodeIdx, attrs: Vec<(String, String)>) {
         if let NodeKind::Element { attrs: slot, .. } =
             &mut self.nodes[idx.0 as usize].kind
@@ -249,8 +269,13 @@ impl Dom {
         }
         match &self.get(idx).kind {
             NodeKind::Document => out.push_str("#document\n"),
-            NodeKind::Element { name, .. } => {
+            NodeKind::Element { name, namespace, .. } => {
                 out.push('<');
+                match namespace {
+                    Namespace::Html => {},
+                    Namespace::Svg => out.push_str("svg "),
+                    Namespace::MathMl => out.push_str("math "),
+                }
                 out.push_str(name);
                 if let NodeKind::Element { attrs, .. } = &self.get(idx).kind {
                     for (key, value) in attrs {
@@ -339,6 +364,7 @@ mod tests {
         let b = dom.alloc_unattached(NodeKind::Element {
             name: "b".into(),
             attrs: vec![],
+            namespace: Namespace::Html,
         });
         dom.attach_before(doc, Some(c), b);
         let names: Vec<_> = dom.children(doc).map(|k| dom.name(k).unwrap().to_owned()).collect();

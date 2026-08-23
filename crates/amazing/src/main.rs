@@ -175,7 +175,7 @@ impl BrowserDomHost {
             amazing_dom::NodeKind::Document => {
                 for child in self.dom.children(node) { self.serialize_node(child, out); }
             }
-            amazing_dom::NodeKind::Element { name, attrs } => {
+            amazing_dom::NodeKind::Element { name, attrs, .. } => {
                 out.push('<');
                 out.push_str(name);
                 for (key, value) in attrs {
@@ -205,7 +205,11 @@ impl BrowserDomHost {
         node: amazing_dom::NodeIdx,
         name: &str,
     ) -> Option<amazing_dom::NodeIdx> {
-        if dom.name(node) == Some(name) { return Some(node); }
+        if dom.namespace(node) == Some(amazing_dom::Namespace::Html)
+            && dom.name(node) == Some(name)
+        {
+            return Some(node);
+        }
         for child in dom.children(node) {
             if let Some(found) = Self::find_named_in(dom, child, name) { return Some(found); }
         }
@@ -220,9 +224,11 @@ impl BrowserDomHost {
     ) {
         let kind = source.get(source_node).kind.clone();
         let created = match kind {
-            amazing_dom::NodeKind::Element { name, attrs } => {
-                let node = self.dom.create_element(parent, &name);
-                self.dom.set_attrs(node, attrs);
+            amazing_dom::NodeKind::Element { name, attrs, namespace } => {
+                let node = self.dom.append_child(
+                    parent,
+                    amazing_dom::NodeKind::Element { name, attrs, namespace },
+                );
                 node
             }
             amazing_dom::NodeKind::Text { data } => self.dom.create_text(parent, &data),
@@ -511,7 +517,9 @@ impl amazing_js::DomHost for BrowserDomHost {
 
     fn create_element(&mut self, name: &str) -> Result<u32, String> {
         Ok(self.dom.alloc_unattached(amazing_dom::NodeKind::Element {
-            name: name.to_ascii_lowercase(), attrs: Vec::new(),
+            name: name.to_ascii_lowercase(),
+            attrs: Vec::new(),
+            namespace: amazing_dom::Namespace::Html,
         }).0)
     }
 
@@ -2058,5 +2066,30 @@ fn format_js_error(value: &amazing_js::value::JsValue) -> String {
         }
         amazing_js::value::JsValue::Str(s) => s.to_string(),
         other => format!("{other:?}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn document_title_ignores_svg_title_elements() {
+        let mut host = BrowserDomHost {
+            dom: amazing_html::parse("<svg><title>foreign</title></svg>"),
+        };
+        assert_eq!(
+            <BrowserDomHost as amazing_js::DomHost>::get_document_title(&host),
+            ""
+        );
+        <BrowserDomHost as amazing_js::DomHost>::set_document_title(
+            &mut host,
+            "html title",
+        )
+        .expect("set title");
+        assert_eq!(
+            <BrowserDomHost as amazing_js::DomHost>::get_document_title(&host),
+            "html title"
+        );
     }
 }

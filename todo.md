@@ -9,7 +9,7 @@
 | Phase | Status |
 |-------|--------|
 | 0 — skeleton | ✅ done, all exit criteria met on win-001 |
-| 1 — HTML parser | 🔄 exit fixtures pass; actual html5lib/WPT tree subset 93/100; full foreign/template/adoption gaps remain |
+| 1 — HTML parser | 🔄 actual html5lib/WPT tree subset 100/100 eligible; fragment/template/select/frameset and foreign-attribute gaps remain |
 | 2 — CSS | ✅ done on win-001 (88 workspace tests green) — see Phase 2 section |
 | 3 — Layout | ✅ done on win-001 (workspace green; curated css/CSS2 subset 17/17) |
 | 3.5 — Flexbox | ✅ done on win-001 (13 flex tests; row/column/wrap/grow/shrink/justify/align/gaps/auto-margins/order) |
@@ -154,19 +154,21 @@ foster parenting, implicit tbody, scope sets), `amazing_html::parse` +
 README.md.
 
 Known gaps (deferred, listed in module docs): full 2 231-entry named-entity
-table; template/frameset/select modes; foreign content; foster parenting
-ignores reconstructed formatting elements; PUBLIC/SYSTEM ids not captured;
-quirks flag approximated. WPT tracking starts Phase 3 per plan.
+table; template/frameset/select modes; complete foreign-attribute adjustment;
+PUBLIC/SYSTEM ids not captured; quirks flag approximated. WPT tracking starts
+Phase 3 per plan.
 
 Actual upstream conformance (completion audit): at WPT revision
 `53bc812da2ed81179ebd1ba76b2d197cc4747d12`, `scripts/html5lib.py` runs the
 migrated html5lib tree files `blocks.dat`, `comments01.dat`, `tables01.dat`,
 and `adoption01.dat` through the public release `parse` artifact. It discovered
-101 cases: 93 passed, 7 failed, 1 fragment/script-mode case skipped; measured
-eligible pass rate **93/100 (93.00%)**. The audit fixed EOF comment token order
-and a bare `<table><th>` implicit-row recursion/stack-overflow bug. Remaining
-failures are foreign-content and deep adoption-agency cases already named in
-the gaps above.
+101 cases: 100 passed, 0 failed, 1 fragment/script-mode case skipped; measured
+eligible pass rate **100/100 (100.00%)**. This runner compares the DOM tree
+minus doctype, because the public dump stores doctype separately. The audit fixed EOF comment token
+order, a bare `<table><th>` implicit-row recursion/stack-overflow bug,
+namespace-aware SVG/MathML integration, table-adjusted adoption placement,
+the adoption outer-loop stack direction, and cell-marker cleanup. This is a
+declared complete-document tree subset, not full parser conformance.
 
 ## Phase 2 — DONE (win-001, all tests green)
 
@@ -1025,11 +1027,11 @@ now” instruction pre-authorizes continuing.
   build/test gates on pushes/PRs. Workspace structure and architecture decisions
   are committed.
 - **Phase 1:** release `parse examples\sample.html` produced a 1,528-byte
-  indented DOM dump. The 51-test HTML suite covers malformed recovery,
+  indented DOM dump. The 42-test `amazing-html` unit suite covers malformed recovery,
   insertion modes, implicit table structure, foster parenting, and adoption
-  agency. Actual migrated html5lib/WPT tree measurement is 93/100 with seven
-  foreign/deep-adoption failures and one skipped fragment case; full algorithm
-  completion is therefore not claimed.
+  agency. Actual migrated html5lib/WPT DOM-minus-doctype tree measurement is 100/100 eligible
+  with one skipped fragment/script-mode case. Template/select/frameset and
+  remaining foreign-attribute gaps mean full parser completion is not claimed.
 - **Phase 2:** release `style examples\sample.html` produced a 2,307-byte
   computed-style tree through the HTML→CSS cascade pipeline; selector,
   specificity, inheritance, shorthand, and recovery tests remain green.
@@ -1069,12 +1071,12 @@ now” instruction pre-authorizes continuing.
   production work rather than hidden completion claims.
 
 Completion is not yet claimed. The current audit has real external measurements
-and runnable artifacts for every numbered phase, but Phase 1 remains partial at
-93/100 in the declared actual tree subset and Phase 9 remains a foundation with
-explicit media/interop gaps. Final workspace count/size are remeasured after
-the audit fixes before each commit. Current post-audit gate: **445**
+and runnable artifacts for every numbered phase. Phase 1's declared upstream
+tree subset is now clean, but broader parser modes remain partial; Phase 9 is a
+foundation with explicit media/interop gaps. Final workspace count/size are
+remeasured after the audit fixes before each commit. Current gate: **457**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **4,560,384 bytes**.
+stripped ThinLTO release is **4,570,624 bytes**.
 
 ## Server cheat sheet
 

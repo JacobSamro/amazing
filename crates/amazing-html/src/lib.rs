@@ -21,7 +21,8 @@
 //! - `select`/`optgroup`/`option` handling is minimal.
 //! - Doctype PUBLIC/SYSTEM identifiers are consumed but not captured; only
 //!   their presence feeds quirks-mode approximation.
-//! - MathML/SVG foreign content is treated as ordinary unknown elements.
+//! - MathML/SVG namespaces and integration points are implemented; some
+//!   foreign attribute-name and namespace adjustments remain incomplete.
 //!
 //! # Example
 //!

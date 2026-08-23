@@ -16,13 +16,10 @@
 //!   `select` start tag simply stays in "in body", and the mode-reset table
 //!   folds `select` back to "in body".
 //! - `noscript` content is parsed as raw text regardless of scripting flag.
-//! - Foreign content (`svg`/`math`) becomes ordinary unknown HTML elements;
-//!   no MathML/SVG integration points.
+//! - Foreign content implements namespace-aware SVG/MathML tree construction
+//!   and integration points, but not every foreign-attribute adjustment.
 //! - `plaintext` loses its tokenizer-level effect (no PLAINTEXT state); it
 //!   is inserted as an ordinary unknown element.
-//! - The adoption agency algorithm runs at most one full reparenting pass
-//!   per invocation, matching shipping engines, though the spec's outer
-//!   loop nominally allows eight.
 //! - Scope terminator sets omit `template`.
 //! - Quirks-mode differences are not modelled; the no-quirks rules always
 //!   apply (e.g. `<table>` always closes an open `<p>`).
@@ -35,7 +32,7 @@
 //! bookkeeping: insert character tokens into the current node, pop on the
 //! appropriate end tag.
 
-use amazing_dom::{Dom, NodeIdx, NodeKind};
+use amazing_dom::{Dom, Namespace, NodeIdx, NodeKind};
 
 use crate::tokenizer::{Token, Tokenizer};
 
@@ -82,6 +79,15 @@ const SPECIAL_ELEMENTS: &[&str] = &[
     "search", "section", "select", "source", "style", "summary", "table",
     "tbody", "td", "template", "textarea", "tfoot", "th", "thead", "title",
     "tr", "track", "ul", "wbr", "xmp",
+];
+
+/// HTML start tags that break out of foreign content (§13.2.6.5).
+const FOREIGN_BREAKOUT_START_TAGS: &[&str] = &[
+    "b", "big", "blockquote", "body", "br", "center", "code", "dd",
+    "div", "dl", "dt", "em", "embed", "h1", "h2", "h3", "h4", "h5",
+    "h6", "head", "hr", "i", "img", "li", "listing", "menu", "meta",
+    "nobr", "ol", "p", "pre", "ruby", "s", "small", "span", "strong",
+    "strike", "sub", "sup", "table", "tt", "u", "ul", "var",
 ];
 
 fn is_ws_char(c: char) -> bool {
@@ -199,6 +205,23 @@ impl TreeBuilder {
     // ---- token routing ----
 
     fn process_token(&mut self, tok: Token) {
+        if self.should_process_in_foreign_content(&tok) {
+            self.in_foreign_content(tok);
+            return;
+        }
+        self.process_token_in_html(tok);
+    }
+
+    fn process_token_in_html(&mut self, tok: Token) {
+        let self_closing_foreign_root = match &tok {
+            Token::StartTag { name, self_closing: true, .. } if name == "svg" => {
+                Some((Namespace::Svg, "svg"))
+            },
+            Token::StartTag { name, self_closing: true, .. } if name == "math" => {
+                Some((Namespace::MathMl, "math"))
+            },
+            _ => None,
+        };
         match self.mode {
             Mode::Initial => self.initial(tok),
             Mode::BeforeHtml => self.before_html(tok),
@@ -216,6 +239,14 @@ impl TreeBuilder {
             Mode::AfterBody => self.after_body(tok),
             Mode::AfterAfterBody => self.after_after_body(tok),
         }
+        if let Some((namespace, name)) = self_closing_foreign_root {
+            if self.current().is_some_and(|current| {
+                self.dom.namespace(current) == Some(namespace)
+                    && self.dom.name(current) == Some(name)
+            }) {
+                self.open.pop();
+            }
+        }
     }
 
     // ---- small queries ----
@@ -225,23 +256,210 @@ impl TreeBuilder {
     }
 
     fn stack_has(&self, name: &str) -> bool {
-        self.open.iter().any(|&i| self.dom.name(i) == Some(name))
+        self.open.iter().any(|&i| {
+            self.dom.namespace(i) == Some(Namespace::Html)
+                && self.dom.name(i) == Some(name)
+        })
     }
 
     fn stack_contains(&self, idx: NodeIdx) -> bool {
-        self.open.iter().any(|&i| i == idx)
+        self.open.contains(&idx)
     }
 
     fn is_special(&self, idx: NodeIdx) -> bool {
-        matches!(self.dom.name(idx), Some(n) if SPECIAL_ELEMENTS.contains(&n))
+        match (self.dom.namespace(idx), self.dom.name(idx)) {
+            (Some(Namespace::Html), Some(name)) => SPECIAL_ELEMENTS.contains(&name),
+            (Some(Namespace::MathMl), Some(name)) => matches!(
+                name,
+                "mi" | "mo" | "mn" | "ms" | "mtext" | "annotation-xml"
+            ),
+            (Some(Namespace::Svg), Some(name)) => {
+                matches!(name, "foreignObject" | "desc" | "title")
+            },
+            _ => false,
+        }
     }
 
     fn elem_name_attrs(&self, idx: NodeIdx) -> (String, Vec<(String, String)>) {
         match self.dom.get(idx).kind {
-            NodeKind::Element { ref name, ref attrs } => {
+            NodeKind::Element { ref name, ref attrs, .. } => {
                 (name.clone(), attrs.clone())
             },
             _ => (String::new(), Vec::new()),
+        }
+    }
+
+    fn is_mathml_text_integration_point(&self, idx: NodeIdx) -> bool {
+        self.dom.namespace(idx) == Some(Namespace::MathMl)
+            && matches!(self.dom.name(idx), Some("mi" | "mo" | "mn" | "ms" | "mtext"))
+    }
+
+    fn is_html_integration_point(&self, idx: NodeIdx) -> bool {
+        match (self.dom.namespace(idx), self.dom.name(idx)) {
+            (Some(Namespace::Svg), Some("foreignObject" | "desc" | "title")) => true,
+            (Some(Namespace::MathMl), Some("annotation-xml")) => self
+                .dom
+                .attrs_of(idx)
+                .is_some_and(|attrs| {
+                    attrs.iter().any(|(name, value)| {
+                        name == "encoding"
+                            && (value.eq_ignore_ascii_case("text/html")
+                                || value.eq_ignore_ascii_case("application/xhtml+xml"))
+                    })
+                }),
+            _ => false,
+        }
+    }
+
+    fn should_process_in_foreign_content(&self, tok: &Token) -> bool {
+        let Some(current) = self.current() else { return false };
+        if self.dom.namespace(current) == Some(Namespace::Html) {
+            return false;
+        }
+        match tok {
+            Token::Eof => false,
+            Token::Characters(_) if self.is_mathml_text_integration_point(current) => false,
+            Token::StartTag { name, .. }
+                if self.is_mathml_text_integration_point(current)
+                    && !matches!(name.as_str(), "mglyph" | "malignmark") =>
+            {
+                false
+            },
+            Token::StartTag { name, .. }
+                if self.dom.namespace(current) == Some(Namespace::MathMl)
+                    && self.dom.name(current) == Some("annotation-xml")
+                    && name == "svg" =>
+            {
+                false
+            },
+            Token::Characters(_) | Token::StartTag { .. }
+                if self.is_html_integration_point(current) =>
+            {
+                false
+            },
+            _ => true,
+        }
+    }
+
+    fn adjusted_svg_tag_name(name: &str) -> &str {
+        match name {
+            "altglyph" => "altGlyph",
+            "altglyphdef" => "altGlyphDef",
+            "altglyphitem" => "altGlyphItem",
+            "animatecolor" => "animateColor",
+            "animatemotion" => "animateMotion",
+            "animatetransform" => "animateTransform",
+            "clippath" => "clipPath",
+            "feblend" => "feBlend",
+            "fecolormatrix" => "feColorMatrix",
+            "fecomponenttransfer" => "feComponentTransfer",
+            "fecomposite" => "feComposite",
+            "feconvolvematrix" => "feConvolveMatrix",
+            "fediffuselighting" => "feDiffuseLighting",
+            "fedisplacementmap" => "feDisplacementMap",
+            "fedistantlight" => "feDistantLight",
+            "fedropshadow" => "feDropShadow",
+            "feflood" => "feFlood",
+            "fefunca" => "feFuncA",
+            "fefuncb" => "feFuncB",
+            "fefuncg" => "feFuncG",
+            "fefuncr" => "feFuncR",
+            "fegaussianblur" => "feGaussianBlur",
+            "feimage" => "feImage",
+            "femerge" => "feMerge",
+            "femergenode" => "feMergeNode",
+            "femorphology" => "feMorphology",
+            "feoffset" => "feOffset",
+            "fepointlight" => "fePointLight",
+            "fespecularlighting" => "feSpecularLighting",
+            "fespotlight" => "feSpotLight",
+            "fetile" => "feTile",
+            "feturbulence" => "feTurbulence",
+            "foreignobject" => "foreignObject",
+            "glyphref" => "glyphRef",
+            "lineargradient" => "linearGradient",
+            "radialgradient" => "radialGradient",
+            "textpath" => "textPath",
+            _ => name,
+        }
+    }
+
+    fn insert_foreign_element(
+        &mut self,
+        name: &str,
+        attrs: Vec<(String, String)>,
+        namespace: Namespace,
+    ) -> NodeIdx {
+        let local_name = if namespace == Namespace::Svg {
+            Self::adjusted_svg_tag_name(name)
+        } else {
+            name
+        };
+        let (parent, before) = self.insertion_place();
+        let idx = self.dom.alloc_unattached(NodeKind::Element {
+            name: local_name.to_owned(),
+            attrs,
+            namespace,
+        });
+        self.dom.attach_before(parent, before, idx);
+        self.open.push(idx);
+        idx
+    }
+
+    fn in_foreign_content(&mut self, tok: Token) {
+        match tok {
+            Token::Characters(data) => self.insert_text(&data.replace('\0', "\u{FFFD}")),
+            Token::Comment(data) => self.insert_comment_here(&data),
+            Token::Doctype { .. } => {},
+            Token::StartTag { name, attrs, self_closing } => {
+                let font_breakout = name == "font"
+                    && attrs.iter().any(|(attr, _)| {
+                        matches!(attr.as_str(), "color" | "face" | "size")
+                    });
+                if FOREIGN_BREAKOUT_START_TAGS.contains(&name.as_str()) || font_breakout {
+                    while let Some(current) = self.current() {
+                        if self.dom.namespace(current) == Some(Namespace::Html)
+                            || self.is_mathml_text_integration_point(current)
+                            || self.is_html_integration_point(current)
+                        {
+                            break;
+                        }
+                        self.open.pop();
+                    }
+                    self.process_token_in_html(Token::StartTag {
+                        name,
+                        attrs,
+                        self_closing,
+                    });
+                    return;
+                }
+                let namespace = self
+                    .current()
+                    .and_then(|idx| self.dom.namespace(idx))
+                    .unwrap_or(Namespace::Html);
+                self.insert_foreign_element(&name, attrs, namespace);
+                if self_closing {
+                    self.open.pop();
+                }
+            },
+            Token::EndTag { name } => {
+                for position in (0..self.open.len()).rev() {
+                    let node = self.open[position];
+                    if self
+                        .dom
+                        .name(node)
+                        .is_some_and(|local| local.eq_ignore_ascii_case(&name))
+                    {
+                        self.open.truncate(position);
+                        return;
+                    }
+                    if self.dom.namespace(node) == Some(Namespace::Html) {
+                        self.process_token_in_html(Token::EndTag { name });
+                        return;
+                    }
+                }
+            },
+            Token::Eof => self.process_token_in_html(Token::Eof),
         }
     }
 
@@ -250,10 +468,24 @@ impl TreeBuilder {
     fn has_in_specific_scope(&self, name: &str, extra: &[&str]) -> bool {
         for &node in self.open.iter().rev() {
             let n = self.dom.name(node).unwrap_or("");
-            if n == name {
+            let namespace = self.dom.namespace(node);
+            if namespace == Some(Namespace::Html) && n == name {
                 return true;
             }
-            if SCOPE_TERMINATORS.contains(&n) || extra.contains(&n) {
+            let is_terminator = match namespace {
+                Some(Namespace::Html) => {
+                    SCOPE_TERMINATORS.contains(&n) || extra.contains(&n)
+                },
+                Some(Namespace::MathMl) => matches!(
+                    n,
+                    "mi" | "mo" | "mn" | "ms" | "mtext" | "annotation-xml"
+                ),
+                Some(Namespace::Svg) => {
+                    matches!(n, "foreignObject" | "desc" | "title")
+                },
+                None => false,
+            };
+            if is_terminator {
                 return false;
             }
         }
@@ -268,6 +500,22 @@ impl TreeBuilder {
         self.has_in_specific_scope(name, BUTTON_SCOPE_EXTRA)
     }
 
+    fn has_in_table_scope(&self, name: &str) -> bool {
+        for &node in self.open.iter().rev() {
+            if self.dom.namespace(node) != Some(Namespace::Html) {
+                continue;
+            }
+            let local = self.dom.name(node).unwrap_or("");
+            if local == name {
+                return true;
+            }
+            if matches!(local, "html" | "table" | "template") {
+                return false;
+            }
+        }
+        false
+    }
+
     #[allow(dead_code)]
     fn has_in_list_item_scope(&self, name: &str) -> bool {
         self.has_in_specific_scope(name, LIST_ITEM_SCOPE_EXTRA)
@@ -278,26 +526,39 @@ impl TreeBuilder {
     /// Appropriate insertion location `(parent, before-sibling)`. Honours
     /// the foster flag when the current node is table family: the node lands
     /// immediately before the last `table` on the open-element stack.
-    fn insertion_place(&self) -> (NodeIdx, Option<NodeIdx>) {
-        let Some(&target) = self.open.last() else {
-            return (NodeIdx(0), None);
-        };
+    fn adjusted_insertion_place_for(
+        &self,
+        target: NodeIdx,
+    ) -> (NodeIdx, Option<NodeIdx>) {
         if self.foster {
             let family = {
                 let n = self.dom.name(target).unwrap_or("");
                 matches!(n, "table" | "tbody" | "tfoot" | "thead" | "tr")
             };
             if family {
-                for &t in self.open.iter().rev() {
-                    if self.dom.name(t) == Some("table") {
-                        if let Some(parent) = self.dom.get(t).parent {
-                            return (parent, Some(t));
-                        }
+                if let Some(table_pos) = self
+                    .open
+                    .iter()
+                    .rposition(|&node| self.dom.name(node) == Some("table"))
+                {
+                    let table = self.open[table_pos];
+                    if let Some(parent) = self.dom.get(table).parent {
+                        return (parent, Some(table));
+                    }
+                    if table_pos > 0 {
+                        return (self.open[table_pos - 1], None);
                     }
                 }
             }
         }
         (target, None)
+    }
+
+    fn insertion_place(&self) -> (NodeIdx, Option<NodeIdx>) {
+        let Some(&target) = self.open.last() else {
+            return (NodeIdx(0), None);
+        };
+        self.adjusted_insertion_place_for(target)
     }
 
     fn alloc_element(
@@ -306,7 +567,11 @@ impl TreeBuilder {
         attrs: Vec<(String, String)>,
     ) -> NodeIdx {
         self.dom
-            .alloc_unattached(NodeKind::Element { name: name.to_owned(), attrs })
+            .alloc_unattached(NodeKind::Element {
+                name: name.to_owned(),
+                attrs,
+                namespace: Namespace::Html,
+            })
     }
 
     /// Creates an element at the appropriate insertion place WITHOUT
@@ -409,8 +674,7 @@ impl TreeBuilder {
     // ---- stack surgery ----
 
     fn generate_implied_end_tags(&mut self, except: Option<&str>) {
-        loop {
-            let Some(&cur) = self.open.last() else { break };
+        while let Some(&cur) = self.open.last() {
             let pops = {
                 let n = self.dom.name(cur).unwrap_or("");
                 IMPLIED_END_TAGS.contains(&n) && Some(n) != except
@@ -425,7 +689,9 @@ impl TreeBuilder {
 
     fn pop_until(&mut self, name: &str) {
         while let Some(idx) = self.open.pop() {
-            if self.dom.name(idx) == Some(name) {
+            if self.dom.namespace(idx) == Some(Namespace::Html)
+                && self.dom.name(idx) == Some(name)
+            {
                 break;
             }
         }
@@ -433,7 +699,9 @@ impl TreeBuilder {
 
     fn pop_until_any(&mut self, names: &[&str]) {
         while let Some(idx) = self.open.pop() {
-            if matches!(self.dom.name(idx), Some(n) if names.contains(&n)) {
+            if self.dom.namespace(idx) == Some(Namespace::Html)
+                && matches!(self.dom.name(idx), Some(n) if names.contains(&n))
+            {
                 break;
             }
         }
@@ -583,8 +851,7 @@ impl TreeBuilder {
 
     // ---- adoption agency (§13.2.6.5) ----
 
-    /// Runs at most one full reparenting pass (module deviation: shipping
-    /// engines stop after one despite the spec's eight-iteration loop).
+    /// Runs the spec-bounded outer loop (at most eight reparenting passes).
     fn adoption_agency(&mut self, subject: &str) {
         // Current node is the subject yet absent from the fmt list: pop it.
         if let Some(cur) = self.current() {
@@ -643,22 +910,23 @@ impl TreeBuilder {
 
             loop {
                 inner += 1;
-                if inner > 64 || last_node_pos <= fe_stack_pos {
-                    break; // defensive bound; spec caps at ~8 passes
+                if last_node_pos <= fe_stack_pos {
+                    break;
                 }
                 let cand_pos = last_node_pos - 1;
                 let cand = self.open[cand_pos];
                 if cand == fe_idx {
                     break;
                 }
-                let in_fmt = self.fmt_pos_by_idx(cand);
-                if inner > 3 && in_fmt.is_some() {
-                    let p = in_fmt.expect("checked above");
-                    self.fmt.remove(p);
-                    if bookmark > p {
-                        bookmark -= 1;
+                let mut in_fmt = self.fmt_pos_by_idx(cand);
+                if inner > 3 {
+                    if let Some(p) = in_fmt {
+                        self.fmt.remove(p);
+                        if bookmark > p {
+                            bookmark -= 1;
+                        }
+                        in_fmt = None;
                     }
-                    continue;
                 }
                 if in_fmt.is_none() {
                     self.open.remove(cand_pos);
@@ -670,6 +938,7 @@ impl TreeBuilder {
                 let clone = self.dom.alloc_unattached(NodeKind::Element {
                     name: cname.clone(),
                     attrs: cattrs.clone(),
+                    namespace: Namespace::Html,
                 });
                 let p = in_fmt.expect("checked above");
                 self.fmt[p] =
@@ -684,15 +953,19 @@ impl TreeBuilder {
                 last_node_pos = cand_pos;
             }
 
-            // Move lastNode under the common ancestor.
+            // Move lastNode to the adjusted insertion location for the
+            // common ancestor. This is foster-parented when the agency was
+            // entered through the table fallback rules.
             self.dom.detach(last_node);
-            self.dom.attach_last(common, last_node);
+            let (parent, before) = self.adjusted_insertion_place_for(common);
+            self.dom.attach_before(parent, before, last_node);
 
             // Clone the formatting element; adopt furthest block's children.
             let (fname, fattrs) = self.elem_name_attrs(fe_idx);
             let fe_clone = self.dom.alloc_unattached(NodeKind::Element {
                 name: fname.clone(),
                 attrs: fattrs.clone(),
+                namespace: Namespace::Html,
             });
             while let Some(child) = self.dom.last_child(fb_idx) {
                 self.dom.detach(child);
@@ -703,6 +976,9 @@ impl TreeBuilder {
             // Patch the fmt list at the bookmark.
             if let Some(p) = self.fmt_pos_by_idx(fe_idx) {
                 self.fmt.remove(p);
+                if bookmark > p {
+                    bookmark -= 1;
+                }
             }
             let bm = bookmark.min(self.fmt.len());
             self.fmt.insert(
@@ -717,9 +993,8 @@ impl TreeBuilder {
                 .iter()
                 .position(|&i| i == fb_idx)
                 .unwrap_or(self.open.len());
-            self.open.insert(fb_now, fe_clone);
+            self.open.insert(fb_now.saturating_add(1), fe_clone);
 
-            return;
         }
     }
 
@@ -838,6 +1113,10 @@ impl TreeBuilder {
     /// bare generate-implied pops exactly down through the cell.
     fn close_cell(&mut self) {
         self.generate_implied_end_tags(None);
+        if self.stack_has("td") || self.stack_has("th") {
+            self.pop_until_any(&["td", "th"]);
+        }
+        self.clear_fmt_to_marker();
         self.mode = Mode::InRow;
     }
 
@@ -943,7 +1222,7 @@ impl TreeBuilder {
             },
             Token::Comment(data) => self.insert_comment_here(&data),
             Token::Doctype { .. } => {},
-            Token::StartTag { ref name, attrs, self_closing: _ } => {
+            Token::StartTag { ref name, attrs, self_closing } => {
                 match name.as_str() {
                     "base" | "basefont" | "bgsound" | "link" | "meta" => {
                         self.insert_void(name, attrs);
@@ -958,7 +1237,7 @@ impl TreeBuilder {
                         self.after_head(Token::StartTag {
                             name: name.clone(),
                             attrs,
-                            self_closing: false,
+                            self_closing,
                         });
                     },
                 }
@@ -990,7 +1269,7 @@ impl TreeBuilder {
             },
             Token::Comment(data) => self.insert_comment_here(&data),
             Token::Doctype { .. } => {},
-            Token::StartTag { ref name, attrs, self_closing: _ } => {
+            Token::StartTag { ref name, attrs, self_closing } => {
                 match name.as_str() {
                     "body" => {
                         self.insert_and_push(name, attrs);
@@ -1003,7 +1282,7 @@ impl TreeBuilder {
                         self.in_body(Token::StartTag {
                             name: name.clone(),
                             attrs,
-                            self_closing: false,
+                            self_closing,
                         });
                     },
                 }
@@ -1207,8 +1486,7 @@ impl TreeBuilder {
                 // deviation: no InSelect mode; stay in body.
             },
             "optgroup" | "option" => {
-                loop {
-                    let Some(cur) = self.current() else { break };
+                while let Some(cur) = self.current() {
                     let n = self.dom.name(cur).unwrap_or("");
                     if n == "option" || (name == "optgroup" && n == "optgroup") {
                         self.open.pop();
@@ -1227,9 +1505,13 @@ impl TreeBuilder {
                 self.insert_and_push(name, attrs);
             },
             "math" | "svg" => {
-                // deviation: foreign content as ordinary unknown elements.
                 self.reconstruct();
-                self.insert_and_push(name, attrs);
+                let namespace = if name == "svg" {
+                    Namespace::Svg
+                } else {
+                    Namespace::MathMl
+                };
+                self.insert_foreign_element(name, attrs, namespace);
             },
             _ => {
                 self.reconstruct();
@@ -1375,7 +1657,7 @@ impl TreeBuilder {
                 self.in_table_body_start_tag(name, attrs);
             },
             "table" => {
-                if self.has_in_scope("table") {
+                if self.has_in_table_scope("table") {
                     self.pop_until("table");
                     self.reset_insertion_mode();
                     self.process_token(Token::StartTag {
@@ -1415,7 +1697,7 @@ impl TreeBuilder {
     fn in_table_end_tag(&mut self, name: &str) {
         match name {
             "table" => {
-                if self.has_in_scope("table") {
+                if self.has_in_table_scope("table") {
                     self.pop_until("table");
                     self.reset_insertion_mode();
                 }
@@ -1530,9 +1812,7 @@ impl TreeBuilder {
                 },
                 "td" | "th" => {
                     if self.stack_has(&name) {
-                        self.generate_implied_end_tags(Some(name.as_str()));
-                        self.pop_until(&name);
-                        self.mode = Mode::InRow;
+                        self.close_cell();
                     }
                 },
                 "tbody" | "tfoot" | "thead" => {
@@ -1576,9 +1856,7 @@ impl TreeBuilder {
             Token::EndTag { name } => match name.as_str() {
                 "td" | "th" => {
                     if self.stack_has(&name) {
-                        self.generate_implied_end_tags(Some(name.as_str()));
-                        self.pop_until(&name);
-                        self.mode = Mode::InRow;
+                        self.close_cell();
                     }
                 },
                 "body" | "caption" | "col" | "colgroup" | "html" => {},
@@ -1606,7 +1884,7 @@ impl TreeBuilder {
                     }
                 },
                 "table" => {
-                    if self.has_in_scope("table") {
+                    if self.has_in_table_scope("table") {
                         self.generate_implied_end_tags(None);
                         self.pop_until("caption");
                         self.clear_fmt_to_marker();
@@ -1825,6 +2103,116 @@ mod tests {
         // <b>1<i>2</b>3</i> -> body > b>["1", i>"2"], i>"3"
         let dom = build("<b>1<i>2</b>3</i>");
         assert_eq!(shape(&dom), "(doc html[head[]body[b[\"1\"i[\"2\"]]i[\"3\"]]])");
+    }
+
+    #[test]
+    fn adoption_agency_repeats_across_nested_blocks() {
+        assert_eq!(
+            build_shape("<a>1<div>2<div>3</a>4</div>5</div>"),
+            "(doc html[head[]body[a[\"1\"]div[a[\"2\"]div[a[\"3\"]\"4\"]\"5\"]]])"
+        );
+    }
+
+    #[test]
+    fn adoption_agency_uses_adjusted_table_insertion_location() {
+        assert_eq!(
+            build_shape("<table><a>1<p>2</a>3</p>"),
+            "(doc html[head[]body[a[\"1\"]p[a[\"2\"]\"3\"]table[]]])"
+        );
+    }
+
+    #[test]
+    fn formatting_reconstructs_after_a_table_cell() {
+        assert_eq!(
+            build_shape("<table><a>1<td>2</td>3</table>"),
+            "(doc html[head[]body[a[\"1\"]a[\"3\"]table[tbody[tr[td[\"2\"]]]]]])"
+        );
+    }
+
+    #[test]
+    fn explicit_cell_close_pops_non_implied_descendants() {
+        assert_eq!(
+            build_shape("<table><tr><td><div>x</td>z</tr></table>"),
+            "(doc html[head[]body[\"z\"table[tbody[tr[td[div[\"x\"]]]]]]])"
+        );
+    }
+
+    #[test]
+    fn self_closing_foreign_root_does_not_capture_following_html() {
+        let dom = build("<svg/><circle>");
+        let html = dom.get(NodeIdx(0)).first_child.expect("html");
+        let body = dom.get(html).last_child.expect("body");
+        let children: Vec<NodeIdx> = dom.children(body).collect();
+        assert_eq!(children.len(), 2);
+        assert_eq!(dom.namespace(children[0]), Some(Namespace::Svg));
+        assert_eq!(dom.name(children[0]), Some("svg"));
+        assert_eq!(dom.namespace(children[1]), Some(Namespace::Html));
+        assert_eq!(dom.name(children[1]), Some("circle"));
+    }
+
+    #[test]
+    fn table_fallback_preserves_foreign_root_self_closing() {
+        let dom = build("<table><svg/><circle>");
+        let html = dom.get(NodeIdx(0)).first_child.expect("html");
+        let body = dom.get(html).last_child.expect("body");
+        let children: Vec<NodeIdx> = dom.children(body).collect();
+        assert_eq!(children.len(), 3);
+        assert_eq!(dom.namespace(children[0]), Some(Namespace::Svg));
+        assert_eq!(dom.name(children[0]), Some("svg"));
+        assert_eq!(dom.namespace(children[1]), Some(Namespace::Html));
+        assert_eq!(dom.name(children[1]), Some("circle"));
+        assert_eq!(dom.name(children[2]), Some("table"));
+    }
+
+    #[test]
+    fn foreign_integration_points_are_special_scope_boundaries() {
+        let mut builder = TreeBuilder::new();
+        let anchor = builder.dom.alloc_unattached(NodeKind::Element {
+            name: "a".into(),
+            attrs: Vec::new(),
+            namespace: Namespace::Html,
+        });
+        let desc = builder.dom.alloc_unattached(NodeKind::Element {
+            name: "desc".into(),
+            attrs: Vec::new(),
+            namespace: Namespace::Svg,
+        });
+        let mtext = builder.dom.alloc_unattached(NodeKind::Element {
+            name: "mtext".into(),
+            attrs: Vec::new(),
+            namespace: Namespace::MathMl,
+        });
+        assert!(builder.is_special(desc));
+        assert!(builder.is_special(mtext));
+        builder.open = vec![anchor, desc];
+        assert!(!builder.has_in_scope("a"));
+    }
+
+    #[test]
+    fn svg_desc_is_an_html_integration_point() {
+        let dom = build("<table><tr><td><svg><desc><td>");
+        assert_eq!(
+            dom.dump(NodeIdx(0)),
+            "#document\n  <html>\n    <head>\n    <body>\n      <table>\n        <tbody>\n          <tr>\n            <td>\n              <svg svg>\n                <svg desc>\n            <td>\n"
+        );
+    }
+
+    #[test]
+    fn svg_adjusts_foreign_object_and_reenters_html() {
+        let dom = build("<div><table><svg><foreignObject><select><table><s>");
+        assert_eq!(
+            dom.dump(NodeIdx(0)),
+            "#document\n  <html>\n    <head>\n    <body>\n      <div>\n        <svg svg>\n          <svg foreignObject>\n            <select>\n        <table>\n        <s>\n        <table>\n"
+        );
+    }
+
+    #[test]
+    fn svg_children_stay_in_svg_namespace() {
+        let dom = build("<a><svg><tr><input></a>");
+        assert_eq!(
+            dom.dump(NodeIdx(0)),
+            "#document\n  <html>\n    <head>\n    <body>\n      <a>\n        <svg svg>\n          <svg tr>\n            <svg input>\n"
+        );
     }
 
     #[test]
