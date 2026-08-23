@@ -1133,7 +1133,11 @@ fn cmd_play_audio(args: &[String]) -> ExitCode {
 
 /// Phase 9.3 artifact: STUN discovery followed by one RTP echo over UDP.
 fn cmd_webrtc_loopback() -> ExitCode {
-    fn run() -> Result<(std::net::SocketAddrV4, amazing_webrtc::RtpPacket), String> {
+    fn run() -> Result<(
+        std::net::SocketAddrV4,
+        amazing_webrtc::RtpPacket,
+        amazing_webrtc::ChecklistState,
+    ), String> {
         use std::net::{SocketAddr, UdpSocket};
         use std::time::Duration;
 
@@ -1142,7 +1146,11 @@ fn cmd_webrtc_loopback() -> ExitCode {
             .set_read_timeout(Some(Duration::from_secs(2)))
             .map_err(|error| error.to_string())?;
         let server_address = server.local_addr().map_err(|error| error.to_string())?;
+        let SocketAddr::V4(server_v4) = server_address else {
+            return Err("loopback artifact requires IPv4".into());
+        };
         let transaction = amazing_webrtc::TransactionId(*b"ferric-stun!");
+        let ice_key = b"ferric-loopback-password";
         let client = UdpSocket::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
         client
             .set_read_timeout(Some(Duration::from_secs(2)))
@@ -1151,7 +1159,32 @@ fn cmd_webrtc_loopback() -> ExitCode {
         else {
             return Err("loopback artifact requires IPv4".into());
         };
-        let request = amazing_webrtc::encode_binding_request(transaction);
+        let local_candidate = amazing_webrtc::IceCandidate {
+            foundation: "local-host".into(),
+            component: 1,
+            priority: 100,
+            address: client_address,
+        };
+        let remote_candidate = amazing_webrtc::IceCandidate {
+            foundation: "remote-host".into(),
+            component: 1,
+            priority: 80,
+            address: server_v4,
+        };
+        let mut checklist =
+            amazing_webrtc::IceChecklist::new(&[local_candidate], &[remote_candidate], true);
+        let check_index = checklist
+            .next_check()
+            .ok_or_else(|| "ICE checklist had no candidate pair".to_string())?;
+        let request = amazing_webrtc::encode_ice_binding_request(
+            transaction,
+            "remote:local",
+            100,
+            0x1020_3040_5060_7080,
+            true,
+            ice_key,
+        )
+        .map_err(|error| error.to_string())?;
         client
             .send_to(&request, server_address)
             .map_err(|error| error.to_string())?;
@@ -1161,15 +1194,31 @@ fn cmd_webrtc_loopback() -> ExitCode {
             .map_err(|error| error.to_string())?;
         let request = amazing_webrtc::parse_stun(&server_buffer[..length])
             .map_err(|error| error.to_string())?;
+        if !amazing_webrtc::verify_message_integrity(&server_buffer[..length], ice_key)
+            .map_err(|error| error.to_string())?
+            || !amazing_webrtc::verify_fingerprint(&server_buffer[..length])
+                .map_err(|error| error.to_string())?
+        {
+            return Err("ICE request authentication failed".into());
+        }
         if request.class != amazing_webrtc::StunClass::Request
             || request.transaction_id != transaction
         {
             return Err("unexpected STUN Binding request".into());
         }
+        if request.username.as_deref() != Some("remote:local")
+            || request.priority != Some(100)
+            || request.ice_controlling != Some(0x1020_3040_5060_7080)
+            || request.ice_controlled.is_some()
+            || !request.use_candidate
+        {
+            return Err("ICE request attributes failed semantic validation".into());
+        }
         let SocketAddr::V4(peer_v4) = peer else {
             return Err("loopback artifact requires IPv4".into());
         };
-        let response = amazing_webrtc::encode_binding_success(transaction, peer_v4);
+        let response = amazing_webrtc::encode_ice_binding_success(transaction, peer_v4, ice_key)
+            .map_err(|error| error.to_string())?;
         server
             .send_to(&response, peer)
             .map_err(|error| error.to_string())?;
@@ -1183,10 +1232,23 @@ fn cmd_webrtc_loopback() -> ExitCode {
         }
         let response = amazing_webrtc::parse_stun(&client_buffer[..length])
             .map_err(|error| error.to_string())?;
+        if !amazing_webrtc::verify_message_integrity(&client_buffer[..length], ice_key)
+            .map_err(|error| error.to_string())?
+            || !amazing_webrtc::verify_fingerprint(&client_buffer[..length])
+                .map_err(|error| error.to_string())?
+        {
+            return Err("ICE response authentication failed".into());
+        }
         if response.transaction_id != transaction
             || response.xor_mapped_address != Some(client_address)
         {
             return Err("STUN mapped address or transaction mismatch".into());
+        }
+        checklist
+            .mark_succeeded(check_index, request.use_candidate)
+            .map_err(|error| error.to_string())?;
+        if checklist.state() != amazing_webrtc::ChecklistState::Completed {
+            return Err("ICE checklist did not complete after nomination".into());
         }
 
         let outbound = amazing_webrtc::RtpPacket {
@@ -1227,13 +1289,13 @@ fn cmd_webrtc_loopback() -> ExitCode {
         if received != outbound {
             return Err("loopback server decoded different RTP contents".into());
         }
-        Ok((client_address, echoed))
+        Ok((client_address, echoed, checklist.state()))
     }
 
     match run() {
-        Ok((mapped, packet)) => {
+        Ok((mapped, packet, ice_state)) => {
             println!(
-                "STUN mapped {mapped}; RTP seq={} timestamp={} payload={} bytes; loopback ok",
+                "STUN mapped {mapped}; ICE state={ice_state:?} integrity=ok; RTP seq={} timestamp={} payload={} bytes; loopback ok",
                 packet.sequence_number,
                 packet.timestamp,
                 packet.payload.len()

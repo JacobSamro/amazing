@@ -15,5 +15,7 @@ fn webrtc_loopback_command_completes_stun_and_rtp_exchange() {
     assert!(stdout.contains("STUN mapped 127.0.0.1:"), "{stdout}");
     assert!(stdout.contains("RTP seq=7"), "{stdout}");
     assert!(stdout.contains("payload=15 bytes"), "{stdout}");
+    assert!(stdout.contains("ICE state=Completed"), "{stdout}");
+    assert!(stdout.contains("integrity=ok"), "{stdout}");
     assert!(stdout.contains("loopback ok"), "{stdout}");
 }

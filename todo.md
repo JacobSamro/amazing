@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (142 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 9.1 images + 9.2 audio + 9.3 STUN/RTP + 9.4/9.5 D3D11 presentation landed |
+| 9 — Media | 🔄 images/audio + authenticated ICE/RTP + D3D11 presentation milestones landed |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -596,6 +596,44 @@ Recommended next sub-phase: Phase 9.6 deepen WebRTC with ICE checklist/state,
 authenticated STUN, RTCP, and DTLS-SRTP foundations. The user's explicit “do
 all phases now” instruction pre-authorizes continuing.
 
+## Phase 9.6 (WebRTC) — authenticated ICE connectivity checks
+
+Shipped: the safe `amazing-webrtc` core now implements SHA-1, HMAC-SHA1, and
+IEEE CRC32 internally for STUN MESSAGE-INTEGRITY and FINGERPRINT. Verification
+passes RFC 5769's published sample-request bytes exactly and uses a
+no-early-exit best-effort digest comparison (ordinary Rust optimization does
+not provide a formal constant-time guarantee). Authenticated Binding requests encode
+USERNAME, PRIORITY, ICE-CONTROLLING, optional USE-CANDIDATE, integrity, and
+fingerprint; authenticated success responses retain XOR-MAPPED-ADDRESS.
+Tampering is rejected by both integrity and fingerprint gates.
+
+`IceChecklist` forms same-component candidate pairs, applies RFC 8445's pair
+priority formula, sorts highest-first, and exposes Frozen/Waiting/In-Progress/
+Succeeded/Failed transitions plus nomination-driven Running/Completed/Failed
+checklist state. The upgraded `webrtc-loopback` command performs authenticated
+request and response checks, validates the mapped endpoint, nominates the pair
+to `Completed`, then permits the existing RTP echo. The binary integration
+output now includes `ICE state=Completed integrity=ok` and remains 1/1.
+
+Known gaps: this is one-component IPv4 host-candidate ICE. Foundation-based
+unfreezing across multiple checklists, triggered-check queues, retransmission
+timers, role conflict, peer/server-reflexive candidate insertion, TURN, IPv6,
+credential signaling/restarts, RTCP, SDP, DTLS-SRTP, SCTP, jitter/congestion,
+and codecs remain pending. The in-crate SHA-1/HMAC is protocol compatibility
+work, not a general-purpose cryptographic library.
+
+Conformance: RFC 5769 vector gate 1/1 and authenticated UDP integration gate
+1/1. Existing baselines remain 17/17 CSS2, 22/22 flex/grid, and 196/196
+supported Test262; no dedicated WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 429 hardware-independent workspace tests/doctests
+passed and the release binary is 1,778,688 bytes. The release loopback again
+reported `ICE state=Completed integrity=ok` before RTP delivery.
+
+Recommended next sub-phase: Phase 9.7 RTCP packet/report handling and minimal
+SDP/ICE credential signaling, followed by DTLS-SRTP. The user's explicit “do
+all phases now” instruction pre-authorizes continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -603,8 +641,8 @@ all phases now” instruction pre-authorizes continuing.
 - **3.5 Flexbox/Grid** · **4 Paint** software rasterizer + PPM writer ·
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
-  (9.1 images, 9.2 audio, 9.3 STUN/RTP, and 9.4/9.5 D3D11 presentation
-  landed; deeper WebRTC next).
+  (images/audio, authenticated ICE/RTP, and D3D11 presentation milestones
+  landed; RTCP/SDP/DTLS-SRTP next).
 
 ## Server cheat sheet
 
