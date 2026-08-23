@@ -40,6 +40,9 @@ Windows build server, and run every build/test there.
 ### Build server environment (already provisioned)
 
 - cargo/rustc 1.97.1, git 2.55, VS 2022 Build Tools
+- VS 2022 CMake at `Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`;
+  its absolute path is stored in the user-level `CMAKE` variable for bundled
+  libopus builds.
 - Amazing itself is std-only; no extra deps required to build.
 - Env vars set at user level (left over from other projects): `LIBCLANG_PATH`,
   `PYTHON3`.

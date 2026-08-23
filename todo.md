@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 19-subphase foundation milestone landed; compressed codecs/video/TURN/browser interop remain |
+| 9 — Media | 🔄 20-subphase foundation milestone landed; video/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1202,6 +1202,38 @@ Final win-001 gate: all 489 hardware-independent workspace tests/doctests
 passed with `--locked`; strict WebRTC/application Clippy, stripped ThinLTO
 release, and secure loss artifact passed. The release binary is 4,657,152 bytes.
 
+## Phase 9.20 (compressed audio) — isolated Opus encode/decode/PLC
+
+Shipped: new `amazing-webrtc-codecs` keeps third-party codec code outside the
+std-only protocol core and implements its existing decoder seam. It pins
+`opus2` 0.4.0 with bundled, statically linked upstream libopus. First-party
+adapter code forbids unsafe. The evaluated pure-Rust `mousiki` backend was
+rejected after panicking on a valid 20 ms mono CELT frame; that failure is not
+hidden behind a fallback.
+
+`OpusEncoderAdapter` validates one/two-channel legal frame durations and emits
+RTP payloads. `OpusDecoderAdapter` decodes negotiated packets and delegates an
+empty packet to libopus PLC for loss. Both construct from the exact SDP mapping.
+Secure SDP now offers Opus/PT111 first, followed by L16 and PCMU; parent-to-child
+media is a real 960-sample Opus packet while the reverse loss gate stays PCMU.
+
+Runnable artifacts: `target\release\amazing.exe opus-probe` reports
+`Opus encoded=127 bytes decoded=960 samples PLC=960 samples; opus probe ok`;
+`secure-media-processes` reports `codecs=SDP Opus+L16+PCMU` and
+`Opus parent->child=960`.
+
+Known gaps: the secure Opus leg does not inject loss/FEC; encoder bitrate,
+complexity, DTX, in-band FEC, packet-loss percentage, stereo, and fmtp are not
+configured. There is no resampling or audio device, and video remains pending.
+
+Conformance: isolated Opus encode/decode/PLC passes 1/1; CLI Opus and enhanced
+secure process gates pass 2/2. No WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 491 hardware-independent workspace tests/doctests
+passed with `--locked`; strict codec/WebRTC/application Clippy, stripped
+ThinLTO release, standalone Opus artifact, and secure Opus artifact passed. The
+release binary is 5,214,208 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1211,7 +1243,8 @@ release, and secure loss artifact passed. The release binary is 4,657,152 bytes.
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
   (images/audio, authenticated ICE/RTP/RTCP, bounded jitter playout, L16/PCMU,
   SDP, secure two-process playout, and D3D11 presentation milestones landed;
-  compressed codecs, live loss/concealment, and video next).
+  Opus, live loss/concealment, and adaptive playout landed; video, TURN, and
+  browser interoperability next).
 
 ## Numbered-phase completion audit (2026-08-23, win-001 authoritative)
 
@@ -1256,7 +1289,7 @@ release, and secure loss artifact passed. The release binary is 4,657,152 bytes.
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** nineteen committed subphases provide decoded images/audio,
+- **Phase 9:** twenty committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1268,9 +1301,9 @@ and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **489**
+remeasured after the audit fixes before each commit. Current gate: **491**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **4,657,152 bytes**.
+stripped ThinLTO release is **5,214,208 bytes**.
 
 ## Server cheat sheet
 
