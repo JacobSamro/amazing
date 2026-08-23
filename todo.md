@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (142 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 9.1 images + 9.2 PCM audio + 9.3 STUN/RTP UDP foundations landed |
+| 9 — Media | 🔄 9.1 images + 9.2 audio + 9.3 STUN/RTP + 9.4 D3D11 hardware gate landed |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -522,6 +522,41 @@ Recommended next sub-phase: Phase 9.4 Windows hardware-accelerated surface
 presentation with a software fallback and pixel-equivalence gate. The user's
 explicit “do all phases now” instruction pre-authorizes continuing.
 
+## Phase 9.4 (hardware acceleration) — D3D11 capability foundation
+
+Shipped: `crates/amazing/src/gpu.rs` isolates a hand-written D3D11/COM FFI
+adapter behind `gpu::probe`. It requests only `D3D_DRIVER_TYPE_HARDWARE`,
+negotiates feature levels 11.1 through 10.0 (with the documented 11.1
+`E_INVALIDARG` retry), requires non-null device/context interfaces, and
+releases each owned COM reference exactly once. Every unsafe operation states
+its pointer/ownership invariants and why `std` cannot express Direct3D/COM.
+
+Runnable artifact: `target\release\amazing.exe gpu-info`. On win-001 the
+integration gate created a real **D3D11 hardware device at feature level
+11.1**. No WARP/software device is accepted, so a passing command is direct
+hardware evidence rather than a fallback disguised as acceleration.
+
+Known gaps: the software RGBA compositor is not yet uploaded to a D3D11
+texture or presented through a DXGI swap chain; resize/device-loss handling,
+frame pacing, dirty rectangles, GPU rasterization, and GDI fallback selection
+are therefore still pending. This sub-phase proves capability, not completed
+hardware presentation.
+
+Conformance: the Windows GPU integration gate is 1/1. Existing baselines
+remain 17/17 CSS2, 22/22 flex/grid, and 196/196 supported Test262; no GPU WPT
+subset is imported yet.
+
+Final win-001 gate: all 423 hardware-independent workspace tests/doctests
+passed, plus the explicitly invoked hardware integration gate passed 1/1.
+The release binary is 1,745,920 bytes; release `gpu-info` again negotiated
+D3D11 hardware feature level 11.1. The GPU test is ignored in the ordinary
+suite so generic Windows CI runners without an exposed adapter stay portable.
+
+Recommended next sub-phase: Phase 9.5 DXGI swap-chain presentation of the
+existing software surface, retaining the current GDI path as a fallback and
+adding pixel/dimension equivalence evidence. The user's explicit “do all
+phases now” instruction pre-authorizes continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -529,7 +564,8 @@ explicit “do all phases now” instruction pre-authorizes continuing.
 - **3.5 Flexbox/Grid** · **4 Paint** software rasterizer + PPM writer ·
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
-  (9.1 images, 9.2 PCM audio, and 9.3 STUN/RTP landed; acceleration next).
+  (9.1 images, 9.2 audio, 9.3 STUN/RTP, and 9.4 D3D11 capability landed;
+  swap-chain presentation next).
 
 ## Server cheat sheet
 

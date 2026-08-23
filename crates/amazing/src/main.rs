@@ -12,6 +12,7 @@ use std::rc::Rc;
 use amazing_js::DomHost;
 
 mod gui;
+mod gpu;
 
 const PIPELINE: &[(&str, &str)] = &[
     ("amazing-common", "byte streams + text utils"),
@@ -54,6 +55,10 @@ const PIPELINE: &[(&str, &str)] = &[
     (
         "amazing-webrtc",
         "Phase 9: STUN + RTP foundations — `webrtc-loopback` subcommand",
+    ),
+    (
+        "amazing-gpu",
+        "Phase 9: D3D11 hardware capability — `gpu-info` subcommand",
     ),
 ];
 
@@ -610,13 +615,14 @@ fn main() -> ExitCode {
         Some("audio-info") => cmd_audio_info(&args[2..]),
         Some("play-audio") => cmd_play_audio(&args[2..]),
         Some("webrtc-loopback") => cmd_webrtc_loopback(),
+        Some("gpu-info") => cmd_gpu_info(),
         Some("fetch") => cmd_fetch(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd_domrun(&args[2..]),
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|gpu-info|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
             ExitCode::FAILURE
         }
     }
@@ -1235,6 +1241,20 @@ fn cmd_webrtc_loopback() -> ExitCode {
         },
         Err(error) => {
             eprintln!("amazing webrtc-loopback: {error}");
+            ExitCode::FAILURE
+        },
+    }
+}
+
+/// Phase 9.4 artifact: require a real Direct3D 11 hardware device.
+fn cmd_gpu_info() -> ExitCode {
+    match gpu::probe() {
+        Ok(info) => {
+            println!("{}, feature level {}", info.backend, info.feature_level);
+            ExitCode::SUCCESS
+        },
+        Err(error) => {
+            eprintln!("amazing gpu-info: {error}");
             ExitCode::FAILURE
         },
     }

@@ -20,6 +20,7 @@ amazing-media ──intrinsic size via PageMedia──▶ amazing-layout
 amazing-media ──RGBA8 via PageMedia───────────▶ amazing-paint
 amazing-media ──validated PCM WAV─────────────▶ GUI shell (WinMM adapter)
 UDP sockets (amazing driver) ◀──STUN/RTP bytes──▶ amazing-webrtc codecs
+GUI platform seam ──D3D11 hardware device probe──▶ Windows graphics driver
 ```
 
 Dependency direction always points "downward" in the pipeline; nothing in a
