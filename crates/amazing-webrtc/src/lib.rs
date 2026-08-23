@@ -228,22 +228,41 @@ pub struct RtpMap {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SdpDescription {
-    pub origin: String,
-    pub session_name: String,
-    pub timing: String,
+pub struct SdpMediaSection {
     pub connection_address: Ipv4Addr,
     pub media: String,
     pub port: u16,
     pub protocol: String,
     pub payload_types: Vec<u8>,
+    pub candidates: Vec<IceCandidate>,
+    pub rtp_maps: Vec<RtpMap>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SdpDescription {
+    pub origin: String,
+    pub session_name: String,
+    pub timing: String,
     pub ice_ufrag: String,
     pub ice_pwd: String,
     pub fingerprint_algorithm: String,
     pub fingerprint: String,
     pub setup: String,
-    pub candidates: Vec<IceCandidate>,
-    pub rtp_maps: Vec<RtpMap>,
+    pub media_sections: Vec<SdpMediaSection>,
+}
+
+impl SdpDescription {
+    pub fn media(&self, kind: &str) -> Option<&SdpMediaSection> {
+        self.media_sections
+            .iter()
+            .find(|section| section.media == kind)
+    }
+
+    pub fn primary_media(&self) -> Result<&SdpMediaSection, WebRtcError> {
+        self.media_sections
+            .first()
+            .ok_or(WebRtcError::InvalidPacket("SDP has no media section"))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1626,18 +1645,13 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
         return Err(WebRtcError::InvalidPacket("unsupported SDP timing"));
     }
 
-    let mut media = None;
-    let mut connection_address = None;
-    let mut port = 0;
-    let mut protocol = String::new();
-    let mut payload_types = Vec::new();
+    let mut media_sections = Vec::<SdpMediaSection>::new();
+    let mut media_connections = Vec::<bool>::new();
     let mut ice_ufrag = None;
     let mut ice_pwd = None;
     let mut fingerprint_algorithm = None;
     let mut fingerprint = None;
     let mut setup = None;
-    let mut candidates = Vec::new();
-    let mut rtp_maps = Vec::new();
 
     for line in &lines[4..] {
         let line = *line;
@@ -1651,9 +1665,6 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
             ));
         }
         if let Some(value) = line.strip_prefix("m=") {
-            if media.is_some() {
-                return Err(WebRtcError::Unsupported("multiple SDP media sections"));
-            }
             let fields: Vec<&str> = value.split_ascii_whitespace().collect();
             if fields.len() < 4 {
                 return Err(WebRtcError::InvalidPacket("malformed SDP media line"));
@@ -1661,8 +1672,7 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
             if fields[0] != "audio" && fields[0] != "video" {
                 return Err(WebRtcError::Unsupported("SDP media kind"));
             }
-            media = Some(fields[0].to_owned());
-            port = fields[1]
+            let port = fields[1]
                 .parse()
                 .ok()
                 .filter(|value| *value > 0)
@@ -1670,8 +1680,7 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
             if fields[2] != "UDP/TLS/RTP/SAVPF" {
                 return Err(WebRtcError::Unsupported("SDP media transport profile"));
             }
-            protocol = fields[2].to_owned();
-            payload_types = fields[3..]
+            let payload_types = fields[3..]
                 .iter()
                 .map(|field| {
                     field
@@ -1681,21 +1690,37 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                         .ok_or(WebRtcError::InvalidPacket("invalid SDP payload type"))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            media_sections.push(SdpMediaSection {
+                connection_address: Ipv4Addr::UNSPECIFIED,
+                media: fields[0].to_owned(),
+                port,
+                protocol: fields[2].to_owned(),
+                payload_types,
+                candidates: Vec::new(),
+                rtp_maps: Vec::new(),
+            });
+            media_connections.push(false);
             continue;
         }
         if let Some(value) = line.strip_prefix("c=") {
-            if media.is_none() || connection_address.is_some() {
+            let index = media_sections
+                .len()
+                .checked_sub(1)
+                .ok_or(WebRtcError::InvalidPacket("session-level SDP connection"))?;
+            let section = media_sections
+                .last_mut()
+                .ok_or(WebRtcError::InvalidPacket("session-level SDP connection"))?;
+            if media_connections[index] {
                 return Err(WebRtcError::InvalidPacket("invalid SDP connection line"));
             }
             let fields: Vec<&str> = value.split_ascii_whitespace().collect();
             if fields.len() != 3 || fields[0] != "IN" || fields[1] != "IP4" {
                 return Err(WebRtcError::Unsupported("SDP connection form"));
             }
-            connection_address = Some(
-                fields[2]
-                    .parse::<Ipv4Addr>()
-                    .map_err(|_| WebRtcError::Unsupported("non-IPv4 SDP connection"))?,
-            );
+            section.connection_address = fields[2]
+                .parse::<Ipv4Addr>()
+                .map_err(|_| WebRtcError::Unsupported("non-IPv4 SDP connection"))?;
+            media_connections[index] = true;
             continue;
         }
         if let Some(value) = line.strip_prefix("a=ice-ufrag:") {
@@ -1738,9 +1763,10 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
             continue;
         }
         if let Some(value) = line.strip_prefix("a=candidate:") {
-            if media.is_none() || connection_address.is_none() {
-                return Err(WebRtcError::InvalidPacket("session-level ICE candidate"));
-            }
+            let section = media_sections
+                .last_mut()
+                .filter(|_| media_connections.last() == Some(&true))
+                .ok_or(WebRtcError::InvalidPacket("session-level ICE candidate"))?;
             let fields: Vec<&str> = value.split_ascii_whitespace().collect();
             if fields.len() != 8
                 || !fields[2].eq_ignore_ascii_case("UDP")
@@ -1770,7 +1796,7 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 .ok()
                 .filter(|value| *value > 0)
                 .ok_or(WebRtcError::InvalidPacket("invalid candidate port"))?;
-            candidates.push(IceCandidate {
+            section.candidates.push(IceCandidate {
                 foundation: ice_text(fields[0], 1, "invalid candidate foundation")?,
                 component,
                 priority,
@@ -1779,9 +1805,10 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
             continue;
         }
         if let Some(value) = line.strip_prefix("a=rtpmap:") {
-            if media.is_none() || connection_address.is_none() {
-                return Err(WebRtcError::InvalidPacket("session-level rtpmap"));
-            }
+            let section = media_sections
+                .last_mut()
+                .filter(|_| media_connections.last() == Some(&true))
+                .ok_or(WebRtcError::InvalidPacket("session-level rtpmap"))?;
             let (payload, encoding) = value
                 .split_once(' ')
                 .ok_or(WebRtcError::InvalidPacket("malformed SDP rtpmap"))?;
@@ -1803,12 +1830,12 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 .transpose()
                 .map_err(|_| WebRtcError::InvalidPacket("invalid rtpmap channels"))?
                 .unwrap_or(1);
-            if channels == 0 || !payload_types.contains(&payload_type) {
+            if channels == 0 || !section.payload_types.contains(&payload_type) {
                 return Err(WebRtcError::InvalidPacket(
                     "rtpmap does not match media payloads",
                 ));
             }
-            rtp_maps.push(RtpMap {
+            section.rtp_maps.push(RtpMap {
                 payload_type,
                 encoding: parts[0].to_owned(),
                 clock_rate,
@@ -1817,25 +1844,32 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
         }
     }
 
+    if media_sections.is_empty() {
+        return Err(WebRtcError::InvalidPacket("SDP media section is missing"));
+    }
+    if media_sections
+        .iter()
+        .zip(&media_connections)
+        .any(|(section, has_connection)| {
+            !has_connection || section.payload_types.is_empty() || section.candidates.is_empty()
+        })
+    {
+        return Err(WebRtcError::InvalidPacket(
+            "SDP media section is incomplete",
+        ));
+    }
+
     Ok(SdpDescription {
         origin: origin.to_owned(),
         session_name: session_name.to_owned(),
         timing: timing.to_owned(),
-        connection_address: connection_address.ok_or(WebRtcError::InvalidPacket(
-            "SDP media connection is missing",
-        ))?,
-        media: media.ok_or(WebRtcError::InvalidPacket("SDP media section is missing"))?,
-        port,
-        protocol,
-        payload_types,
         ice_ufrag: ice_ufrag.ok_or(WebRtcError::InvalidPacket("SDP ice-ufrag is missing"))?,
         ice_pwd: ice_pwd.ok_or(WebRtcError::InvalidPacket("SDP ice-pwd is missing"))?,
         fingerprint_algorithm: fingerprint_algorithm
             .ok_or(WebRtcError::InvalidPacket("SDP fingerprint is missing"))?,
         fingerprint: fingerprint.ok_or(WebRtcError::InvalidPacket("SDP fingerprint is missing"))?,
         setup: setup.ok_or(WebRtcError::InvalidPacket("SDP setup is missing"))?,
-        candidates,
-        rtp_maps,
+        media_sections,
     })
 }
 
@@ -1857,41 +1891,43 @@ pub fn encode_sdp(description: &SdpDescription) -> Result<String, WebRtcError> {
         description.fingerprint_algorithm, description.fingerprint
     ));
     output.push_str(&format!("a=setup:{}\r\n", description.setup));
-    output.push_str(&format!(
-        "m={} {} {} {}\r\n",
-        description.media,
-        description.port,
-        description.protocol,
-        description
-            .payload_types
-            .iter()
-            .map(u8::to_string)
-            .collect::<Vec<_>>()
-            .join(" ")
-    ));
-    output.push_str(&format!("c=IN IP4 {}\r\n", description.connection_address));
-    for candidate in &description.candidates {
+    for section in &description.media_sections {
         output.push_str(&format!(
-            "a=candidate:{} {} UDP {} {} {} typ host\r\n",
-            candidate.foundation,
-            candidate.component,
-            candidate.priority,
-            candidate.address.ip(),
-            candidate.address.port()
+            "m={} {} {} {}\r\n",
+            section.media,
+            section.port,
+            section.protocol,
+            section
+                .payload_types
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(" ")
         ));
-    }
-    for mapping in &description.rtp_maps {
-        output.push_str(&format!(
-            "a=rtpmap:{} {}/{}{}\r\n",
-            mapping.payload_type,
-            mapping.encoding,
-            mapping.clock_rate,
-            if mapping.channels == 1 {
-                String::new()
-            } else {
-                format!("/{}", mapping.channels)
-            }
-        ));
+        output.push_str(&format!("c=IN IP4 {}\r\n", section.connection_address));
+        for candidate in &section.candidates {
+            output.push_str(&format!(
+                "a=candidate:{} {} UDP {} {} {} typ host\r\n",
+                candidate.foundation,
+                candidate.component,
+                candidate.priority,
+                candidate.address.ip(),
+                candidate.address.port()
+            ));
+        }
+        for mapping in &section.rtp_maps {
+            output.push_str(&format!(
+                "a=rtpmap:{} {}/{}{}\r\n",
+                mapping.payload_type,
+                mapping.encoding,
+                mapping.clock_rate,
+                if mapping.channels == 1 {
+                    String::new()
+                } else {
+                    format!("/{}", mapping.channels)
+                }
+            ));
+        }
     }
     let parsed = parse_sdp(&output)?;
     if &parsed != description {
@@ -2315,15 +2351,44 @@ mod tests {
         );
         let parsed = parse_sdp(offer).expect("supported SDP offer");
 
-        assert_eq!(parsed.media, "audio");
+        let audio = parsed.media("audio").expect("audio section");
         assert_eq!(parsed.ice_ufrag, "ferric");
-        assert_eq!(parsed.candidates.len(), 1);
-        assert_eq!(parsed.rtp_maps[0].encoding, "opus");
-        assert_eq!(parsed.rtp_maps[0].clock_rate, 48_000);
+        assert_eq!(audio.candidates.len(), 1);
+        assert_eq!(audio.rtp_maps[0].encoding, "opus");
+        assert_eq!(audio.rtp_maps[0].clock_rate, 48_000);
         assert_eq!(
             parse_sdp(&encode_sdp(&parsed).expect("serializable SDP")).unwrap(),
             parsed
         );
+    }
+
+    #[test]
+    fn audio_and_video_media_sections_round_trip_in_order() {
+        let offer = concat!(
+            "v=0\r\n",
+            "o=- 1 1 IN IP4 127.0.0.1\r\n",
+            "s=Amazing AV\r\n",
+            "t=0 0\r\n",
+            "a=ice-ufrag:ferric\r\n",
+            "a=ice-pwd:FerricPassword1234567890AB\r\n",
+            "a=fingerprint:sha-256 AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA\r\n",
+            "a=setup:actpass\r\n",
+            "m=audio 5000 UDP/TLS/RTP/SAVPF 111\r\n",
+            "c=IN IP4 127.0.0.1\r\n",
+            "a=candidate:a 1 UDP 100 127.0.0.1 5000 typ host\r\n",
+            "a=rtpmap:111 opus/48000/1\r\n",
+            "m=video 5002 UDP/TLS/RTP/SAVPF 120 121\r\n",
+            "c=IN IP4 127.0.0.1\r\n",
+            "a=candidate:v 1 UDP 90 127.0.0.1 5002 typ host\r\n",
+            "a=rtpmap:120 VP8/90000\r\n",
+            "a=rtpmap:121 H264/90000\r\n",
+        );
+        let parsed = parse_sdp(offer).expect("multi-media SDP");
+        assert_eq!(parsed.media_sections.len(), 2);
+        assert_eq!(parsed.media_sections[0].media, "audio");
+        assert_eq!(parsed.media_sections[1].media, "video");
+        assert_eq!(parsed.media("video").unwrap().rtp_maps.len(), 2);
+        assert_eq!(parse_sdp(&encode_sdp(&parsed).unwrap()).unwrap(), parsed);
     }
 
     #[test]

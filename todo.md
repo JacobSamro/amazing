@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 23-subphase foundation milestone landed; secure video/TURN/browser interop remain |
+| 9 — Media | 🔄 24-subphase foundation milestone landed; secure video/BUNDLE/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1326,6 +1326,40 @@ Final win-001 gate: all 498 hardware-independent workspace tests/doctests
 passed with `--locked`; strict codec/application Clippy, stripped ThinLTO
 release, and H.264 artifact passed. The release binary is 8,455,680 bytes.
 
+## Phase 9.24 (multi-media signaling) — ordered audio + video SDP sections
+
+Shipped: `SdpDescription` now owns ordered `SdpMediaSection` values instead of
+one flat media tuple. Each section validates and preserves its media kind,
+connection address, port, secure RTP profile, payload list, ICE candidates, and
+rtpmap mappings. Session origin/name/timing, ICE credentials, DTLS fingerprint,
+and setup role remain session-level. `media(kind)` and `primary_media()` keep
+callers explicit.
+
+The parser accepts multiple audio/video sections and rejects incomplete sections;
+the encoder emits each section canonically and reparses for semantic equality.
+The secure description builder now emits audio Opus/L16/PCMU and video VP8/H264
+sections. Existing ICE/consent intentionally uses the primary audio section,
+preserving all secure transport gates while video transport remains separate.
+
+Runnable artifact: `target\release\amazing.exe sdp-roundtrip
+examples\phase9-offer.sdp`, reporting `SDP audio+video payloads=3 candidates=2
+rtpmaps=3 ICE=ferric setup=actpass; roundtrip ok`.
+
+Known gaps: BUNDLE group, mid, rtcp-mux, direction attributes, shared-candidate
+deduplication, rejected m-lines, section-level ICE credentials/fingerprints,
+fmtp/rtcp-fb, and RTP demultiplexing by negotiated payload/SSRC remain. The
+fixture uses distinct ports; the secure builder temporarily advertises the same
+connected port in both sections and still selects only primary audio for ICE.
+
+Conformance: multi-media parser/serializer public gate passes 1/1; upgraded
+command artifact and existing secure process gates pass. No WebRTC WPT subset
+is imported yet.
+
+Final win-001 gate: all 499 hardware-independent workspace tests/doctests
+passed with `--locked`; strict WebRTC/crypto/application Clippy, stripped
+ThinLTO release, and multi-media SDP artifact passed. The release binary is
+8,463,872 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1381,7 +1415,7 @@ release, and H.264 artifact passed. The release binary is 8,455,680 bytes.
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** twenty-three committed subphases provide decoded images/audio,
+- **Phase 9:** twenty-four committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1393,9 +1427,9 @@ and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **498**
+remeasured after the audit fixes before each commit. Current gate: **499**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **8,455,680 bytes**.
+stripped ThinLTO release is **8,463,872 bytes**.
 
 ## Server cheat sheet
 

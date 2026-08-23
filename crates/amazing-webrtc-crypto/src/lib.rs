@@ -263,6 +263,8 @@ impl SecureUdpEndpoint {
             .map_err(|error| SecureMediaError::new(error.to_string()))?;
         let local = self
             .local_description
+            .primary_media()
+            .map_err(|error| SecureMediaError::new(error.to_string()))?
             .candidates
             .first()
             .ok_or_else(|| SecureMediaError::new("local consent candidate is missing"))?;
@@ -325,6 +327,8 @@ impl SecureUdpEndpoint {
             .map_err(|error| SecureMediaError::new(error.to_string()))?;
         let remote = self
             .remote_description
+            .primary_media()
+            .map_err(|error| SecureMediaError::new(error.to_string()))?
             .candidates
             .first()
             .ok_or_else(|| SecureMediaError::new("remote consent candidate is missing"))?;
@@ -985,18 +989,24 @@ fn validate_description_socket(
             .peer_addr()
             .map_err(|error| SecureMediaError::new(format!("endpoint peer address: {error}")))?,
     )?;
-    let local_candidate = local
+    let local_media = local
+        .primary_media()
+        .map_err(|error| SecureMediaError::new(error.to_string()))?;
+    let remote_media = remote
+        .primary_media()
+        .map_err(|error| SecureMediaError::new(error.to_string()))?;
+    let local_candidate = local_media
         .candidates
         .first()
         .ok_or_else(|| SecureMediaError::new("local SDP has no ICE candidate"))?;
-    let remote_candidate = remote
+    let remote_candidate = remote_media
         .candidates
         .first()
         .ok_or_else(|| SecureMediaError::new("remote SDP has no ICE candidate"))?;
     if local_candidate.address != local_address
         || remote_candidate.address != remote_address
-        || local.connection_address != *local_address.ip()
-        || remote.connection_address != *remote_address.ip()
+        || local_media.connection_address != *local_address.ip()
+        || remote_media.connection_address != *remote_address.ip()
     {
         return Err(SecureMediaError::new(
             "SDP candidates do not match the connected endpoint socket",
@@ -1018,40 +1028,71 @@ pub fn build_local_description(
         origin: format!("- {origin_id} 1 IN IP4 {}", address.ip()),
         session_name: "Ferric secure UDP loopback".into(),
         timing: "0 0".into(),
-        connection_address: *address.ip(),
-        media: "audio".into(),
-        port: address.port(),
-        protocol: "UDP/TLS/RTP/SAVPF".into(),
-        payload_types: vec![111, 96, 0],
         ice_ufrag: ice_ufrag.into(),
         ice_pwd: ice_pwd.into(),
         fingerprint_algorithm: "sha-256".into(),
         fingerprint: fingerprint.into(),
         setup: setup.into(),
-        candidates: vec![amazing_webrtc::IceCandidate {
-            foundation: foundation.into(),
-            component: 1,
-            priority: 2_130_706_431,
-            address,
-        }],
-        rtp_maps: vec![
-            amazing_webrtc::RtpMap {
-                payload_type: 111,
-                encoding: "opus".into(),
-                clock_rate: 48_000,
-                channels: 1,
+        media_sections: vec![
+            amazing_webrtc::SdpMediaSection {
+                connection_address: *address.ip(),
+                media: "audio".into(),
+                port: address.port(),
+                protocol: "UDP/TLS/RTP/SAVPF".into(),
+                payload_types: vec![111, 96, 0],
+                candidates: vec![amazing_webrtc::IceCandidate {
+                    foundation: foundation.into(),
+                    component: 1,
+                    priority: 2_130_706_431,
+                    address,
+                }],
+                rtp_maps: vec![
+                    amazing_webrtc::RtpMap {
+                        payload_type: 111,
+                        encoding: "opus".into(),
+                        clock_rate: 48_000,
+                        channels: 1,
+                    },
+                    amazing_webrtc::RtpMap {
+                        payload_type: 96,
+                        encoding: "L16".into(),
+                        clock_rate: 48_000,
+                        channels: 1,
+                    },
+                    amazing_webrtc::RtpMap {
+                        payload_type: 0,
+                        encoding: "PCMU".into(),
+                        clock_rate: 8_000,
+                        channels: 1,
+                    },
+                ],
             },
-            amazing_webrtc::RtpMap {
-                payload_type: 96,
-                encoding: "L16".into(),
-                clock_rate: 48_000,
-                channels: 1,
-            },
-            amazing_webrtc::RtpMap {
-                payload_type: 0,
-                encoding: "PCMU".into(),
-                clock_rate: 8_000,
-                channels: 1,
+            amazing_webrtc::SdpMediaSection {
+                connection_address: *address.ip(),
+                media: "video".into(),
+                port: address.port(),
+                protocol: "UDP/TLS/RTP/SAVPF".into(),
+                payload_types: vec![120, 121],
+                candidates: vec![amazing_webrtc::IceCandidate {
+                    foundation: format!("{foundation}v"),
+                    component: 1,
+                    priority: 2_130_706_430,
+                    address,
+                }],
+                rtp_maps: vec![
+                    amazing_webrtc::RtpMap {
+                        payload_type: 120,
+                        encoding: "VP8".into(),
+                        clock_rate: 90_000,
+                        channels: 1,
+                    },
+                    amazing_webrtc::RtpMap {
+                        payload_type: 121,
+                        encoding: "H264".into(),
+                        clock_rate: 90_000,
+                        channels: 1,
+                    },
+                ],
             },
         ],
     };
@@ -1128,10 +1169,14 @@ async fn run_ice_controlling(
 ) -> Result<amazing_webrtc::ChecklistState, SecureMediaError> {
     validate_description_socket(socket, local_signal, remote_signal)?;
     let local = local_signal
+        .primary_media()
+        .map_err(|error| SecureMediaError::new(error.to_string()))?
         .candidates
         .first()
         .ok_or_else(|| SecureMediaError::new("controlling SDP has no local candidate"))?;
     let remote = remote_signal
+        .primary_media()
+        .map_err(|error| SecureMediaError::new(error.to_string()))?
         .candidates
         .first()
         .ok_or_else(|| SecureMediaError::new("controlling SDP has no remote candidate"))?;
@@ -1190,10 +1235,14 @@ async fn run_ice_controlled(
 ) -> Result<amazing_webrtc::ChecklistState, SecureMediaError> {
     validate_description_socket(socket, local_signal, remote_signal)?;
     let local = local_signal
+        .primary_media()
+        .map_err(|error| SecureMediaError::new(error.to_string()))?
         .candidates
         .first()
         .ok_or_else(|| SecureMediaError::new("controlled SDP has no local candidate"))?;
     let remote = remote_signal
+        .primary_media()
+        .map_err(|error| SecureMediaError::new(error.to_string()))?
         .candidates
         .first()
         .ok_or_else(|| SecureMediaError::new("controlled SDP has no remote candidate"))?;

@@ -1491,6 +1491,8 @@ fn description_candidate(
     description: &amazing_webrtc::SdpDescription,
 ) -> Result<std::net::SocketAddrV4, String> {
     description
+        .primary_media()
+        .map_err(|error| error.to_string())?
         .candidates
         .first()
         .map(|candidate| candidate.address)
@@ -2364,14 +2366,30 @@ fn cmd_sdp_roundtrip(args: &[String]) -> ExitCode {
     };
     match amazing_webrtc::parse_sdp(&canonical) {
         Ok(reparsed) if reparsed == parsed => {
+            let media = parsed
+                .media_sections
+                .iter()
+                .map(|section| section.media.as_str())
+                .collect::<Vec<_>>()
+                .join("+");
+            let payloads = parsed
+                .media_sections
+                .iter()
+                .map(|section| section.payload_types.len())
+                .sum::<usize>();
+            let candidates = parsed
+                .media_sections
+                .iter()
+                .map(|section| section.candidates.len())
+                .sum::<usize>();
+            let rtp_maps = parsed
+                .media_sections
+                .iter()
+                .map(|section| section.rtp_maps.len())
+                .sum::<usize>();
             println!(
                 "SDP {} payloads={} candidates={} rtpmaps={} ICE={} setup={}; roundtrip ok",
-                parsed.media,
-                parsed.payload_types.len(),
-                parsed.candidates.len(),
-                parsed.rtp_maps.len(),
-                parsed.ice_ufrag,
-                parsed.setup
+                media, payloads, candidates, rtp_maps, parsed.ice_ufrag, parsed.setup
             );
             ExitCode::SUCCESS
         }

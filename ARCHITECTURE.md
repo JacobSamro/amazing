@@ -211,6 +211,12 @@ access units; dependency-internal C/FFI remains outside first-party Rust. This
 provides a complete browser-compatible video codec path while VP8 encoding is
 still tracked separately.
 
+Phase 9.24 replaces the flat SDP media fields with ordered
+`SdpMediaSection` values. Session identity/ICE/DTLS remains shared while each
+audio or video section owns its connection, port, candidates, payload list,
+and rtpmap entries. Existing ICE selects the primary section until explicit
+BUNDLE/mid demultiplexing lands; no caller silently treats video as audio.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
