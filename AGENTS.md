@@ -53,3 +53,6 @@ Windows build server, and run every build/test there.
   report per-phase results and wait for confirmation.
 - Conformance suites: WPT tracked from Phase 3 onward, Test262 from Phase 6;
   always report measured numbers, never estimates.
+
+
+Keep files under 4000 Lines per file. For code health
