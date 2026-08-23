@@ -1,4 +1,7 @@
+use std::io::Read;
+use std::net::TcpListener;
 use std::process::Command;
+use std::time::Duration;
 
 #[test]
 fn webrtc_loopback_command_completes_stun_and_rtp_exchange() {
@@ -201,4 +204,55 @@ fn secure_media_two_processes_exchange_protected_media() {
     );
     assert!(stdout.contains("RTCP stats=computed"), "{stdout}");
     assert!(stdout.contains("two-process interop ok"), "{stdout}");
+}
+
+#[test]
+fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind frame sink");
+    let address = listener.local_addr().unwrap();
+    let receiver = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept secure frame stream");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(15)))
+            .unwrap();
+        let mut bytes = Vec::new();
+        stream.read_to_end(&mut bytes).expect("read secure frames");
+        bytes
+    });
+    let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .args(["secure-video-stream", &address.to_string()])
+        .output()
+        .expect("run secure video stream");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("secure RGBA stream frames=6"));
+    let bytes = receiver.join().expect("frame receiver thread");
+    let mut cursor = 0usize;
+    let mut checksums = Vec::new();
+    for index in 0..6u32 {
+        assert_eq!(&bytes[cursor..cursor + 4], b"AMVF");
+        cursor += 4;
+        let mut read_u32 = || {
+            let value = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+            cursor += 4;
+            value
+        };
+        assert_eq!(read_u32(), index);
+        assert_eq!(read_u32(), 32);
+        assert_eq!(read_u32(), 32);
+        assert_eq!(read_u32(), 90_000 + index * 45_000);
+        let length = read_u32() as usize;
+        assert_eq!(length, 32 * 32 * 4);
+        let rgba = &bytes[cursor..cursor + length];
+        cursor += length;
+        assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
+        checksums.push(rgba.iter().fold(0u64, |checksum, byte| {
+            checksum.rotate_left(5) ^ *byte as u64
+        }));
+    }
+    assert_eq!(cursor, bytes.len());
+    assert!(checksums.windows(2).any(|pair| pair[0] != pair[1]));
 }

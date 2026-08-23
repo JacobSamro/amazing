@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 29-subphase foundation milestone landed; direct UI handoff/TURN/browser interop remain |
+| 9 — Media | 🔄 30-subphase foundation milestone landed; GPUI secure handoff/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1514,6 +1514,33 @@ Final win-001 gate: all 501 hardware-independent workspace tests/doctests pass
 with `--locked`; strict application Clippy, stripped ThinLTO release, and
 continuous secure-video artifact pass. The release binary is 8,511,488 bytes.
 
+## Phase 9.30 (secure frame stream) — decoded RGBA process seam
+
+Shipped: `amazing secure-video-stream <host:port>` runs the complete existing
+two-process ICE/DTLS-SRTP/audio/video session while passing the optional sink
+address only to the controlled child. After secure H.264 decode and clocked
+playout, the child writes six bounded binary records to that localhost stream.
+
+Each `AMVF` record contains a 24-byte little-endian header—magic, zero-based
+index, width, height, original RTP timestamp, RGBA byte length—followed by owned
+opaque RGBA. Frames are capped at 16 MiB and must equal `width × height × 4`.
+The sender uses write timeout and explicit flush; stream EOF is completion.
+
+The integration listener parses all six records independently, verifies indices
+0–5, dimensions 32×32, timestamps 90000–315000, length 4096, opaque alpha, no
+trailing bytes, and changing pixel checksums. The release artifact delivers
+exactly 24,720 bytes and reports `secure RGBA stream frames=6 size=32x32
+timestamps=90k; stream ok`.
+
+Known gaps: the localhost sink has no separate authentication or origin policy;
+it assumes a listener created by the same desktop application. There is no
+reconnect, version negotiation, backpressure beyond blocking writes, frame-drop
+policy, shared memory, or cross-machine transport. GPUI consumption is next.
+
+Conformance: framed-stream integration passes 1/1 alongside every secure media
+assertion. Root workspace tests pass 502/502; strict application Clippy and
+release artifact pass. Release binary is 8,515,584 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1569,7 +1596,7 @@ continuous secure-video artifact pass. The release binary is 8,511,488 bytes.
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** twenty-nine committed subphases provide decoded images/audio,
+- **Phase 9:** thirty committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1581,9 +1608,9 @@ and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **501**
+remeasured after the audit fixes before each commit. Current gate: **502**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **8,511,488 bytes**.
+stripped ThinLTO release is **8,515,584 bytes**.
 
 ## Server cheat sheet
 
