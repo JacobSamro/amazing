@@ -726,6 +726,7 @@ fn main() -> ExitCode {
         Some("audio-info") => cmd_audio_info(&args[2..]),
         Some("play-audio") => cmd_play_audio(&args[2..]),
         Some("webrtc-loopback") => cmd_webrtc_loopback(),
+        Some("rtp-jitter-probe") => cmd_rtp_jitter_probe(),
         Some("secure-media-loopback") => cmd_secure_media_loopback(),
         Some("secure-media-processes") => cmd_secure_media_processes(),
         Some("__secure-media-peer") => cmd_secure_media_peer(args.get(2).map(String::as_str)),
@@ -740,8 +741,32 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
             );
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn cmd_rtp_jitter_probe() -> ExitCode {
+    match amazing_webrtc::run_jitter_codec_probe() {
+        Ok(report) => {
+            println!(
+                "RTP jitter packets={} reordered={} duplicate={} codecs=L16+PCMU samples={}+{}; jitter/codec probe ok",
+                report.emitted_packets,
+                if report.reordered { "yes" } else { "no" },
+                if report.duplicate_rejected {
+                    "rejected"
+                } else {
+                    "accepted"
+                },
+                report.l16_samples,
+                report.pcmu_samples,
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing rtp-jitter-probe: {error}");
             ExitCode::FAILURE
         }
     }

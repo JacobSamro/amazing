@@ -22,6 +22,20 @@ fn webrtc_loopback_command_completes_stun_and_rtp_exchange() {
 }
 
 #[test]
+fn rtp_jitter_probe_reorders_and_decodes_two_codecs() {
+    let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .arg("rtp-jitter-probe")
+        .output()
+        .expect("run jitter/codec probe");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("packets=3 reordered=yes"), "{stdout}");
+    assert!(stdout.contains("duplicate=rejected"), "{stdout}");
+    assert!(stdout.contains("codecs=L16+PCMU samples=3+2"), "{stdout}");
+    assert!(stdout.contains("jitter/codec probe ok"), "{stdout}");
+}
+
+#[test]
 fn sdp_roundtrip_command_reports_ice_dtls_media_summary() {
     let offer =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/phase9-offer.sdp");

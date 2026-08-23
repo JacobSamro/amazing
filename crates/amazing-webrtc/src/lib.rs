@@ -3,9 +3,18 @@
 //! STUN, RTP, and RTCP wire details stay behind small parse/encode interfaces. The
 //! crate is safe, synchronous, and `std`-only. Authenticated ICE-style checks
 //! follow RFC 8489/8445 wire rules and RFC 5769 vectors; TURN, DTLS/SRTP,
-//! congestion control, and media codecs are later sub-phases.
+//! congestion control, and compressed media codecs are later sub-phases. The
+//! `jitter` module provides bounded RTP playout plus L16 and PCMU audio decoder
+//! adapters.
 
 #![forbid(unsafe_code)]
+
+pub mod jitter;
+
+pub use jitter::{
+    DecodedAudioFrame, JitterBufferConfig, JitterCodecReport, JitterOutput, JitterPush,
+    JitterStats, L16Decoder, PcmuDecoder, RtpAudioDecoder, RtpJitterBuffer, run_jitter_codec_probe,
+};
 
 use std::collections::HashSet;
 use std::fmt;
