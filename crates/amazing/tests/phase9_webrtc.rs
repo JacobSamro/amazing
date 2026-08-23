@@ -43,7 +43,7 @@ fn turn_probe_authenticates_allocates_relays_and_deletes() {
     assert!(stdout.contains("mapped=127.0.0.1:"), "{stdout}");
     assert!(stdout.contains("lifetime=600s permission=ok"), "{stdout}");
     assert!(
-        stdout.contains("data=12/12 delete=ok; turn probe ok"),
+        stdout.contains("data=12/12 nominate=ok delete=ok; turn probe ok"),
         "{stdout}"
     );
 }

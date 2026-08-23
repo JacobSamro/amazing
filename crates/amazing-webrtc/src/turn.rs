@@ -4,8 +4,9 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::time::Duration;
 
 use crate::{
-    STUN_MAGIC_COOKIE, TransactionId, WebRtcError, append_stun_attribute, crc32,
-    finish_authenticated_stun, set_stun_body_length, stun_attribute_ranges, stun_header,
+    CandidatePairState, ChecklistState, IceCandidate, IceCandidateKind, IceChecklist,
+    STUN_MAGIC_COOKIE, TransactionId, WebRtcError, append_stun_attribute, candidate_priority,
+    crc32, finish_authenticated_stun, set_stun_body_length, stun_attribute_ranges, stun_header,
     verify_fingerprint, verify_message_integrity,
 };
 
@@ -48,6 +49,8 @@ pub struct TurnProbeReport {
     pub client_to_peer_bytes: usize,
     pub peer_to_client_bytes: usize,
     pub allocation_deleted: bool,
+    pub relay_candidate: IceCandidate,
+    pub relay_nominated: bool,
 }
 
 #[derive(Debug)]
@@ -273,6 +276,38 @@ pub fn run_turn_udp_probe() -> Result<TurnProbeReport, WebRtcError> {
         .join()
         .map_err(|_| WebRtcError::InvalidPacket("TURN server thread panicked"))??;
 
+    let relay_candidate = IceCandidate {
+        foundation: "turnudp".into(),
+        component: 1,
+        priority: candidate_priority(IceCandidateKind::Relay, u16::MAX, 1)?,
+        address: allocated_relay,
+        kind: IceCandidateKind::Relay,
+        related_address: Some(mapped_address),
+    };
+    let remote_candidate = IceCandidate {
+        foundation: "turn-peer".into(),
+        component: 1,
+        priority: candidate_priority(IceCandidateKind::Host, u16::MAX, 1)?,
+        address: peer_address,
+        kind: IceCandidateKind::Host,
+        related_address: None,
+    };
+    let mut checklist = IceChecklist::new(
+        std::slice::from_ref(&relay_candidate),
+        &[remote_candidate],
+        true,
+    );
+    let pair = checklist
+        .next_check()
+        .ok_or(WebRtcError::InvalidPacket("TURN relay ICE pair is missing"))?;
+    if checklist.pairs[pair].state != CandidatePairState::InProgress {
+        return Err(WebRtcError::InvalidPacket(
+            "TURN relay ICE pair did not start",
+        ));
+    }
+    checklist.mark_succeeded(pair, true)?;
+    let relay_nominated = checklist.state() == ChecklistState::Completed;
+
     Ok(TurnProbeReport {
         challenge_code,
         relayed_address: allocated_relay,
@@ -282,6 +317,8 @@ pub fn run_turn_udp_probe() -> Result<TurnProbeReport, WebRtcError> {
         client_to_peer_bytes,
         peer_to_client_bytes: b"relay-return".len(),
         allocation_deleted,
+        relay_candidate,
+        relay_nominated,
     })
 }
 
@@ -703,6 +740,12 @@ mod tests {
         assert_eq!(report.mapped_address.ip(), &Ipv4Addr::LOCALHOST);
         assert_eq!(report.lifetime_seconds, LIFETIME_SECONDS);
         assert!(report.permission_created && report.allocation_deleted);
+        assert_eq!(report.relay_candidate.kind, IceCandidateKind::Relay);
+        assert_eq!(
+            report.relay_candidate.related_address,
+            Some(report.mapped_address)
+        );
+        assert!(report.relay_nominated);
         assert_eq!(report.client_to_peer_bytes, 12);
         assert_eq!(report.peer_to_client_bytes, 12);
     }

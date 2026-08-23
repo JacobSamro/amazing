@@ -310,6 +310,27 @@ pub struct IceCandidate {
     pub component: u16,
     pub priority: u32,
     pub address: SocketAddrV4,
+    pub kind: IceCandidateKind,
+    pub related_address: Option<SocketAddrV4>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IceCandidateKind {
+    Host,
+    ServerReflexive,
+    PeerReflexive,
+    Relay,
+}
+
+impl IceCandidateKind {
+    fn sdp_name(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::ServerReflexive => "srflx",
+            Self::PeerReflexive => "prflx",
+            Self::Relay => "relay",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -781,6 +802,8 @@ impl IceChecklist {
             component: base.remote.component,
             priority,
             address,
+            kind: IceCandidateKind::PeerReflexive,
+            related_address: None,
         };
         let (controlling, controlled) = if self.local_is_controlling {
             (base.local.priority, remote.priority)
@@ -815,6 +838,27 @@ pub fn candidate_pair_priority(controlling: u32, controlled: u32) -> u64 {
         .saturating_mul(controlling.min(controlled) as u64)
         .saturating_add(2u64.saturating_mul(controlling.max(controlled) as u64))
         .saturating_add(u64::from(controlling > controlled))
+}
+
+pub fn candidate_priority(
+    kind: IceCandidateKind,
+    local_preference: u16,
+    component: u16,
+) -> Result<u32, WebRtcError> {
+    if !(1..=256).contains(&component) {
+        return Err(WebRtcError::InvalidPacket(
+            "ICE candidate component is out of range",
+        ));
+    }
+    let type_preference = match kind {
+        IceCandidateKind::Host => 126u32,
+        IceCandidateKind::PeerReflexive => 110,
+        IceCandidateKind::ServerReflexive => 100,
+        IceCandidateKind::Relay => 0,
+    };
+    Ok((type_preference << 24)
+        .saturating_add((local_preference as u32) << 8)
+        .saturating_add(256 - component as u32))
 }
 
 pub fn encode_binding_request(transaction_id: TransactionId) -> Vec<u8> {
@@ -936,12 +980,16 @@ pub fn run_live_ice_robustness_probe(
         component: 1,
         priority: 100,
         address: server_address,
+        kind: IceCandidateKind::Host,
+        related_address: None,
     };
     let signaled_remote = IceCandidate {
         foundation: "probe-signaled".into(),
         component: 1,
         priority: 80,
         address: SocketAddrV4::new(Ipv4Addr::LOCALHOST, 9),
+        kind: IceCandidateKind::Host,
+        related_address: None,
     };
     let mut server_checklist = IceChecklist::new(&[local], &[signaled_remote], true);
     let key = b"live-ice-probe-password";
@@ -1870,13 +1918,19 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 .filter(|_| media_connections.last() == Some(&true))
                 .ok_or(WebRtcError::InvalidPacket("session-level ICE candidate"))?;
             let fields: Vec<&str> = value.split_ascii_whitespace().collect();
-            if fields.len() != 8
+            if !matches!(fields.len(), 8 | 12)
                 || !fields[2].eq_ignore_ascii_case("UDP")
                 || fields[6] != "typ"
-                || fields[7] != "host"
             {
                 return Err(WebRtcError::Unsupported("SDP candidate form"));
             }
+            let kind = match fields[7] {
+                "host" => IceCandidateKind::Host,
+                "srflx" => IceCandidateKind::ServerReflexive,
+                "prflx" => IceCandidateKind::PeerReflexive,
+                "relay" => IceCandidateKind::Relay,
+                _ => return Err(WebRtcError::Unsupported("SDP candidate type")),
+            };
             if fields[0].len() > 32 {
                 return Err(WebRtcError::InvalidPacket(
                     "candidate foundation is too long",
@@ -1898,11 +1952,36 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 .ok()
                 .filter(|value| *value > 0)
                 .ok_or(WebRtcError::InvalidPacket("invalid candidate port"))?;
+            let related_address = if fields.len() == 12 {
+                if fields[8] != "raddr" || fields[10] != "rport" {
+                    return Err(WebRtcError::InvalidPacket(
+                        "invalid related ICE candidate address",
+                    ));
+                }
+                let related_ip = fields[9]
+                    .parse::<Ipv4Addr>()
+                    .map_err(|_| WebRtcError::Unsupported("non-IPv4 related candidate"))?;
+                let related_port = fields[11]
+                    .parse()
+                    .ok()
+                    .filter(|value| *value > 0)
+                    .ok_or(WebRtcError::InvalidPacket("invalid related candidate port"))?;
+                Some(SocketAddrV4::new(related_ip, related_port))
+            } else {
+                None
+            };
+            if kind == IceCandidateKind::Host && related_address.is_some() {
+                return Err(WebRtcError::InvalidPacket(
+                    "host candidate has a related address",
+                ));
+            }
             section.candidates.push(IceCandidate {
                 foundation: ice_text(fields[0], 1, "invalid candidate foundation")?,
                 component,
                 priority,
                 address: SocketAddrV4::new(address, candidate_port),
+                kind,
+                related_address,
             });
             continue;
         }
@@ -2038,13 +2117,18 @@ pub fn encode_sdp(description: &SdpDescription) -> Result<String, WebRtcError> {
         }
         for candidate in &section.candidates {
             output.push_str(&format!(
-                "a=candidate:{} {} UDP {} {} {} typ host\r\n",
+                "a=candidate:{} {} UDP {} {} {} typ {}",
                 candidate.foundation,
                 candidate.component,
                 candidate.priority,
                 candidate.address.ip(),
-                candidate.address.port()
+                candidate.address.port(),
+                candidate.kind.sdp_name(),
             ));
+            if let Some(related) = candidate.related_address {
+                output.push_str(&format!(" raddr {} rport {}", related.ip(), related.port()));
+            }
+            output.push_str("\r\n");
         }
         for mapping in &section.rtp_maps {
             output.push_str(&format!(
@@ -2505,11 +2589,31 @@ mod tests {
         let audio = parsed.media("audio").expect("audio section");
         assert_eq!(parsed.ice_ufrag, "ferric");
         assert_eq!(audio.candidates.len(), 1);
+        assert_eq!(audio.candidates[0].kind, IceCandidateKind::Host);
         assert_eq!(audio.rtp_maps[0].encoding, "opus");
         assert_eq!(audio.rtp_maps[0].clock_rate, 48_000);
         assert_eq!(
             parse_sdp(&encode_sdp(&parsed).expect("serializable SDP")).unwrap(),
             parsed
+        );
+
+        let mut relayed = parsed.clone();
+        let candidate = &mut relayed.media_sections[0].candidates[0];
+        candidate.foundation = "turnudp".into();
+        candidate.kind = IceCandidateKind::Relay;
+        candidate.priority = candidate_priority(IceCandidateKind::Relay, u16::MAX, 1).unwrap();
+        candidate.address = "127.0.0.1:55000".parse().unwrap();
+        candidate.related_address = Some("127.0.0.1:5000".parse().unwrap());
+        let encoded = encode_sdp(&relayed).unwrap();
+        assert!(encoded.contains("typ relay raddr 127.0.0.1 rport 5000\r\n"));
+        assert_eq!(parse_sdp(&encoded).unwrap(), relayed);
+        assert!(
+            candidate_priority(IceCandidateKind::Host, u16::MAX, 1).unwrap()
+                > candidate_priority(IceCandidateKind::ServerReflexive, u16::MAX, 1).unwrap()
+        );
+        assert!(
+            candidate_priority(IceCandidateKind::ServerReflexive, u16::MAX, 1).unwrap()
+                > candidate_priority(IceCandidateKind::Relay, u16::MAX, 1).unwrap()
         );
     }
 
@@ -2595,6 +2699,8 @@ mod tests {
             component: 1,
             priority,
             address: SocketAddrV4::new(Ipv4Addr::LOCALHOST, port),
+            kind: IceCandidateKind::Host,
+            related_address: None,
         };
         let local = [
             candidate("local-high", 100, 5000),
@@ -2627,6 +2733,8 @@ mod tests {
             component: 1,
             priority,
             address: SocketAddrV4::new(Ipv4Addr::LOCALHOST, port),
+            kind: IceCandidateKind::Host,
+            related_address: None,
         };
         let local = [candidate("local", 100, 5000)];
         let remote = [candidate("signaled", 80, 6000)];

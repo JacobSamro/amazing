@@ -1048,6 +1048,8 @@ pub fn build_local_description(
                     component: 1,
                     priority: 2_130_706_431,
                     address,
+                    kind: amazing_webrtc::IceCandidateKind::Host,
+                    related_address: None,
                 }],
                 rtp_maps: vec![
                     amazing_webrtc::RtpMap {
@@ -1083,6 +1085,8 @@ pub fn build_local_description(
                     component: 1,
                     priority: 2_130_706_430,
                     address,
+                    kind: amazing_webrtc::IceCandidateKind::Host,
+                    related_address: None,
                 }],
                 rtp_maps: vec![
                     amazing_webrtc::RtpMap {

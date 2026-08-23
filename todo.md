@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 42-subphase foundation landed; external TURN/browser interop remain |
+| 9 — Media | 🔄 43-subphase foundation landed; external TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1954,6 +1954,42 @@ Conformance: three TURN module gates and one root artifact gate bring the root
 workspace to 510/510; standalone GPUI remains 24/24. Strict changed-package
 Clippy and the locked stripped ThinLTO root build pass on win-001. Release sizes
 are 8,575,488 bytes (`amazing.exe`) and 14,268,928 bytes (`amazing-shell.exe`).
+
+## Phase 9.43 (relay candidate nomination) — TURN allocation enters ICE
+
+Shipped: `IceCandidate` now carries an explicit `IceCandidateKind` (`Host`,
+`ServerReflexive`, `PeerReflexive`, or `Relay`) plus an optional related
+transport address. The public priority helper applies type preferences
+126/110/100/0, 16-bit local preference, and inverse component ID; invalid
+components outside 1–256 fail. Existing host and learned peer-reflexive
+candidates are classified at their construction sites.
+
+SDP candidate parsing/encoding now round-trips `host`, `srflx`, `prflx`, and
+`relay`. Non-host candidates may carry the exact `raddr`/`rport` pair; host
+candidates reject a related address. A relay fixture serializes as
+`typ relay raddr 127.0.0.1 rport 5000`, parses back identically, and retains the
+lowest candidate type priority.
+
+`TurnProbeReport` now returns the constructed relay candidate with its mapped
+address as the related address. Only after the real client→peer and peer→client
+relay payloads validate does the module start its relay/host candidate pair,
+mark it succeeded and nominated, and require `ChecklistState::Completed` for
+component 1. The stripped artifact reported:
+
+`TURN challenge=401 relay=127.0.0.1:63839 mapped=127.0.0.1:63840 lifetime=600s
+permission=ok data=12/12 nominate=ok delete=ok; turn probe ok`.
+
+Known gaps: TURN gathering is not yet driven by a configured external server,
+and the nominated relay pair is not passed into DTLS-SRTP endpoint construction.
+The SDP parser remains IPv4/UDP and does not accept browser extension tokens such
+as generation/network-id/network-cost. SHA-256 credentials, ChannelData, DNS,
+TLS/TCP, and external browser interoperability remain open.
+
+Conformance: enhanced SDP and TURN interface gates, the root artifact, and all
+retained suites pass. Root workspace remains 510/510; standalone GPUI remains
+24/24. Strict changed-package Clippy and the locked stripped ThinLTO root build
+pass on win-001. Release sizes are 8,579,584 bytes (`amazing.exe`) and 14,268,928
+bytes (`amazing-shell.exe`).
 
 ## Later phases (unchanged from goal prompt)
 

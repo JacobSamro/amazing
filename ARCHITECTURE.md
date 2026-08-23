@@ -330,6 +330,13 @@ Allocate, CreatePermission, Send/Data indications, and Refresh deletion. Its
 network adapter binds distinct control, relay, client, and peer UDP sockets and
 proves payloads in both directions through the allocated relay address.
 
+Phase 9.43 integrates that allocation into ICE. `IceCandidateKind` distinguishes
+host, server-reflexive, peer-reflexive, and relay candidates; candidates retain
+their related transport address and use RFC-style type/local/component priority.
+SDP parses and emits `typ relay raddr ... rport ...`. After TURN payloads succeed
+in both directions, the relay/peer pair crosses the ordinary checklist interface
+and is marked succeeded plus nominated, completing component 1.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

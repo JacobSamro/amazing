@@ -761,7 +761,7 @@ fn cmd_turn_probe() -> ExitCode {
     match amazing_webrtc::run_turn_udp_probe() {
         Ok(report) => {
             println!(
-                "TURN challenge={} relay={} mapped={} lifetime={}s permission={} data={}/{} delete={}; turn probe ok",
+                "TURN challenge={} relay={} mapped={} lifetime={}s permission={} data={}/{} nominate={} delete={}; turn probe ok",
                 report.challenge_code,
                 report.relayed_address,
                 report.mapped_address,
@@ -773,6 +773,11 @@ fn cmd_turn_probe() -> ExitCode {
                 },
                 report.client_to_peer_bytes,
                 report.peer_to_client_bytes,
+                if report.relay_nominated {
+                    "ok"
+                } else {
+                    "missing"
+                },
                 if report.allocation_deleted {
                     "ok"
                 } else {
@@ -2624,12 +2629,16 @@ fn cmd_webrtc_loopback() -> ExitCode {
             component: 1,
             priority: 100,
             address: client_address,
+            kind: amazing_webrtc::IceCandidateKind::Host,
+            related_address: None,
         };
         let remote_candidate = amazing_webrtc::IceCandidate {
             foundation: "remote-host".into(),
             component: 1,
             priority: 80,
             address: server_v4,
+            kind: amazing_webrtc::IceCandidateKind::Host,
+            related_address: None,
         };
         let mut checklist =
             amazing_webrtc::IceChecklist::new(&[local_candidate], &[remote_candidate], true);
