@@ -1,0 +1,24 @@
+[package]
+name = "amazing-shell-gpui"
+description = "GPUI desktop shell for the Amazing browser engine"
+edition = "2024"
+version = "0.0.1"
+license = "MIT"
+rust-version = "1.85"
+
+[dependencies]
+amazing-layout = { path = "../amazing-layout" }
+amazing-paint = { path = "../amazing-paint" }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "d9ad6aff67e47de43abb270d22de75dd950f1b48" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "d9ad6aff67e47de43abb270d22de75dd950f1b48" }
+image = { version = "0.25.9", default-features = false }
+
+[[bin]]
+name = "amazing-shell"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
