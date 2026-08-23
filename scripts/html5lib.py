@@ -116,6 +116,7 @@ def main() -> int:
             "svg.dat",
             "math.dat",
             "namespace-sensitivity.dat",
+            "tests11.dat",
         ],
         help="Named .dat files under html/syntax/parsing/resources",
     )

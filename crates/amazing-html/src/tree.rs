@@ -400,10 +400,74 @@ impl TreeBuilder {
         }
     }
 
+    fn adjusted_svg_attribute_name(name: &str) -> &str {
+        match name {
+            "attributename" => "attributeName",
+            "attributetype" => "attributeType",
+            "basefrequency" => "baseFrequency",
+            "baseprofile" => "baseProfile",
+            "calcmode" => "calcMode",
+            "clippathunits" => "clipPathUnits",
+            "diffuseconstant" => "diffuseConstant",
+            "edgemode" => "edgeMode",
+            "filterunits" => "filterUnits",
+            "glyphref" => "glyphRef",
+            "gradienttransform" => "gradientTransform",
+            "gradientunits" => "gradientUnits",
+            "kernelmatrix" => "kernelMatrix",
+            "kernelunitlength" => "kernelUnitLength",
+            "keypoints" => "keyPoints",
+            "keysplines" => "keySplines",
+            "keytimes" => "keyTimes",
+            "lengthadjust" => "lengthAdjust",
+            "limitingconeangle" => "limitingConeAngle",
+            "markerheight" => "markerHeight",
+            "markerunits" => "markerUnits",
+            "markerwidth" => "markerWidth",
+            "maskcontentunits" => "maskContentUnits",
+            "maskunits" => "maskUnits",
+            "numoctaves" => "numOctaves",
+            "pathlength" => "pathLength",
+            "patterncontentunits" => "patternContentUnits",
+            "patterntransform" => "patternTransform",
+            "patternunits" => "patternUnits",
+            "pointsatx" => "pointsAtX",
+            "pointsaty" => "pointsAtY",
+            "pointsatz" => "pointsAtZ",
+            "preservealpha" => "preserveAlpha",
+            "preserveaspectratio" => "preserveAspectRatio",
+            "primitiveunits" => "primitiveUnits",
+            "refx" => "refX",
+            "refy" => "refY",
+            "repeatcount" => "repeatCount",
+            "repeatdur" => "repeatDur",
+            "requiredextensions" => "requiredExtensions",
+            "requiredfeatures" => "requiredFeatures",
+            "specularconstant" => "specularConstant",
+            "specularexponent" => "specularExponent",
+            "spreadmethod" => "spreadMethod",
+            "startoffset" => "startOffset",
+            "stddeviation" => "stdDeviation",
+            "stitchtiles" => "stitchTiles",
+            "surfacescale" => "surfaceScale",
+            "systemlanguage" => "systemLanguage",
+            "tablevalues" => "tableValues",
+            "targetx" => "targetX",
+            "targety" => "targetY",
+            "textlength" => "textLength",
+            "viewbox" => "viewBox",
+            "viewtarget" => "viewTarget",
+            "xchannelselector" => "xChannelSelector",
+            "ychannelselector" => "yChannelSelector",
+            "zoomandpan" => "zoomAndPan",
+            _ => name,
+        }
+    }
+
     fn insert_foreign_element(
         &mut self,
         name: &str,
-        attrs: Vec<(String, String)>,
+        mut attrs: Vec<(String, String)>,
         namespace: Namespace,
     ) -> NodeIdx {
         let local_name = if namespace == Namespace::Svg {
@@ -411,6 +475,18 @@ impl TreeBuilder {
         } else {
             name
         };
+        for (attribute_name, _) in &mut attrs {
+            let adjusted = match namespace {
+                Namespace::Svg => Self::adjusted_svg_attribute_name(attribute_name),
+                Namespace::MathMl if attribute_name == "definitionurl" => {
+                    "definitionURL"
+                },
+                _ => attribute_name,
+            };
+            if adjusted != attribute_name {
+                *attribute_name = adjusted.to_owned();
+            }
+        }
         let (parent, before) = self.insertion_place();
         let idx = self.dom.alloc_unattached(NodeKind::Element {
             name: local_name.to_owned(),
@@ -2558,6 +2634,15 @@ mod tests {
             dom.dump(NodeIdx(0)),
             "#document\n  <html>\n    <head>\n    <body>\n      <a>\n        <svg svg>\n          <svg tr>\n            <svg input>\n"
         );
+    }
+
+    #[test]
+    fn foreign_attributes_receive_canonical_local_names() {
+        let dom = build("<svg viewbox='' preserveaspectratio=''><g xlink:href='x'></g></svg><math><mn definitionurl='u'>");
+        let dump = dom.dump(NodeIdx(0));
+        assert!(dump.contains("<svg svg viewBox=\"\" preserveAspectRatio=\"\">"));
+        assert!(dump.contains("<svg g xlink:href=\"x\">"));
+        assert!(dump.contains("<math mn definitionURL=\"u\">"));
     }
 
     #[test]
