@@ -25,6 +25,30 @@ fn webrtc_loopback_command_completes_stun_and_rtp_exchange() {
 }
 
 #[test]
+fn turn_probe_authenticates_allocates_relays_and_deletes() {
+    let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .arg("turn-probe")
+        .output()
+        .expect("run TURN probe artifact");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("TURN challenge=401 relay=127.0.0.1:"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("mapped=127.0.0.1:"), "{stdout}");
+    assert!(stdout.contains("lifetime=600s permission=ok"), "{stdout}");
+    assert!(
+        stdout.contains("data=12/12 delete=ok; turn probe ok"),
+        "{stdout}"
+    );
+}
+
+#[test]
 fn rtp_jitter_probe_reorders_and_decodes_two_codecs() {
     let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
         .arg("rtp-jitter-probe")

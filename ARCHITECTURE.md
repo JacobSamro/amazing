@@ -323,6 +323,13 @@ remain in that module; the crate root denies unsafe elsewhere. GPUI samples the
 device cursor after event polling and feeds it to `VideoPlaybackClock`, whose
 existing absolute catch-up policy now follows audible progress.
 
+Phase 9.42 adds authenticated TURN UDP allocation and relaying behind one
+`run_turn_udp_probe` interface. The std-only module owns legacy long-term-key
+MD5, 401 REALM/NONCE challenge state, MESSAGE-INTEGRITY/FINGERPRINT validation,
+Allocate, CreatePermission, Send/Data indications, and Refresh deletion. Its
+network adapter binds distinct control, relay, client, and peer UDP sockets and
+proves payloads in both directions through the allocated relay address.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

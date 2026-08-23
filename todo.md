@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 41-subphase foundation landed; TURN/browser interop remain |
+| 9 — Media | 🔄 42-subphase foundation landed; external TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1916,6 +1916,44 @@ gate; two pure audio cursor/validation gates bring standalone GPUI to 24/24.
 Root workspace remains 506/506. Strict changed-package Clippy and locked stripped
 ThinLTO builds pass on win-001. Release sizes are 8,526,848 bytes (`amazing.exe`)
 and 14,268,928 bytes (`amazing-shell.exe`).
+
+## Phase 9.42 (TURN allocation) — authenticated UDP relay lifecycle
+
+Shipped: new std-only `turn` module implements the bounded IPv4/UDP subset of
+RFC 8656 behind one `run_turn_udp_probe` interface. It owns Allocate request,
+401 ERROR-CODE challenge, REALM/NONCE, UDP REQUESTED-TRANSPORT, LIFETIME,
+XOR-RELAYED/XOR-MAPPED/XOR-PEER addresses, CreatePermission, Send/Data
+indications, and lifetime-zero Refresh deletion. Duplicate required attributes,
+bad cookies/fingerprints, changed client 5-tuples, wrong peer permissions, and
+integrity failures are rejected.
+
+Long-term authentication uses the explicitly agreed legacy MESSAGE-INTEGRITY
+mode. Its HMAC key is MD5(`username:realm:password`); the RFC 8489 example
+`user:realm:pass → 8493fbc53ba582fb4c044c456bdc40eb` is a byte-exact gate.
+Every authenticated request and response validates HMAC-SHA1 plus final STUN
+FINGERPRINT. The nonce starts with the RFC 8489 zero-feature cookie
+`obMatJos2AAAA` and is echoed on all subsequent requests.
+
+The real loopback adapter binds separate TURN control, relayed, client, and peer
+UDP sockets. It completes challenge/retry allocation, creates a permission,
+relays `through-turn` client→peer, returns `relay-return` as a Data indication,
+and deletes the allocation. The stripped win-001 artifact reported:
+
+`TURN challenge=401 relay=127.0.0.1:59189 mapped=127.0.0.1:59190 lifetime=600s
+permission=ok data=12/12 delete=ok; turn probe ok`.
+
+Runnable artifact: `target\release\amazing.exe turn-probe`.
+
+Known gaps: the interoperable legacy credential path does not yet negotiate
+PASSWORD-ALGORITHMS or MESSAGE-INTEGRITY-SHA256. The module supports IPv4 UDP
+only: no DNS/SRV discovery, TLS/DTLS/TCP transport, IPv6/dual allocation,
+ChannelBind/ChannelData, stale-nonce retry, alternate server, quotas, or external
+TURN deployment. Relay candidates are not yet inserted into the ICE checklist.
+
+Conformance: three TURN module gates and one root artifact gate bring the root
+workspace to 510/510; standalone GPUI remains 24/24. Strict changed-package
+Clippy and the locked stripped ThinLTO root build pass on win-001. Release sizes
+are 8,575,488 bytes (`amazing.exe`) and 14,268,928 bytes (`amazing-shell.exe`).
 
 ## Later phases (unchanged from goal prompt)
 

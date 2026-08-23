@@ -56,7 +56,7 @@ const PIPELINE: &[(&str, &str)] = &[
     ),
     (
         "amazing-webrtc",
-        "Phase 9: ICE + SDP + DTLS-SRTP nominated UDP + two-process gate",
+        "Phase 9: ICE/TURN + SDP + DTLS-SRTP nominated UDP + two-process gate",
     ),
     (
         "amazing-gpu",
@@ -726,6 +726,7 @@ fn main() -> ExitCode {
         Some("audio-info") => cmd_audio_info(&args[2..]),
         Some("play-audio") => cmd_play_audio(&args[2..]),
         Some("webrtc-loopback") => cmd_webrtc_loopback(),
+        Some("turn-probe") => cmd_turn_probe(),
         Some("rtp-jitter-probe") => cmd_rtp_jitter_probe(),
         Some("opus-probe") => cmd_opus_probe(),
         Some("video-frame-probe") => cmd_video_frame_probe(),
@@ -749,8 +750,39 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
             );
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn cmd_turn_probe() -> ExitCode {
+    match amazing_webrtc::run_turn_udp_probe() {
+        Ok(report) => {
+            println!(
+                "TURN challenge={} relay={} mapped={} lifetime={}s permission={} data={}/{} delete={}; turn probe ok",
+                report.challenge_code,
+                report.relayed_address,
+                report.mapped_address,
+                report.lifetime_seconds,
+                if report.permission_created {
+                    "ok"
+                } else {
+                    "missing"
+                },
+                report.client_to_peer_bytes,
+                report.peer_to_client_bytes,
+                if report.allocation_deleted {
+                    "ok"
+                } else {
+                    "missing"
+                },
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing turn-probe: {error}");
             ExitCode::FAILURE
         }
     }
