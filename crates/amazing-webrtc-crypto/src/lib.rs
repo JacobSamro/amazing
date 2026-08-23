@@ -1028,6 +1028,7 @@ pub fn build_local_description(
         origin: format!("- {origin_id} 1 IN IP4 {}", address.ip()),
         session_name: "Ferric secure UDP loopback".into(),
         timing: "0 0".into(),
+        bundle: vec!["0".into(), "1".into()],
         ice_ufrag: ice_ufrag.into(),
         ice_pwd: ice_pwd.into(),
         fingerprint_algorithm: "sha-256".into(),
@@ -1035,6 +1036,8 @@ pub fn build_local_description(
         setup: setup.into(),
         media_sections: vec![
             amazing_webrtc::SdpMediaSection {
+                mid: "0".into(),
+                rtcp_mux: true,
                 connection_address: *address.ip(),
                 media: "audio".into(),
                 port: address.port(),
@@ -1068,6 +1071,8 @@ pub fn build_local_description(
                 ],
             },
             amazing_webrtc::SdpMediaSection {
+                mid: "1".into(),
+                rtcp_mux: true,
                 connection_address: *address.ip(),
                 media: "video".into(),
                 port: address.port(),

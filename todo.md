@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 24-subphase foundation milestone landed; secure video/BUNDLE/TURN/browser interop remain |
+| 9 — Media | 🔄 25-subphase foundation milestone landed; secure video/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1360,6 +1360,38 @@ passed with `--locked`; strict WebRTC/crypto/application Clippy, stripped
 ThinLTO release, and multi-media SDP artifact passed. The release binary is
 8,463,872 bytes.
 
+## Phase 9.25 (bundled media) — BUNDLE + mid + rtcp-mux demultiplexing
+
+Shipped: SDP session state now carries an ordered BUNDLE mid list. Each media
+section owns a unique alphanumeric mid and explicit rtcp-mux flag. Parsing and
+canonical serialization preserve these attributes. Validation requires every
+bundled section to have rtcp-mux, every media mid to appear exactly once in the
+group, and every group member to resolve to a real section.
+
+`media_by_mid` resolves section identity and `media_for_payload_type` maps an
+incoming RTP payload to exactly one negotiated media section. Missing payloads
+are unsupported; reuse across audio/video is rejected as ambiguous before
+transport dispatch. The secure builder advertises BUNDLE `0 1` with audio mid
+0 and video mid 1 on the shared connected socket.
+
+Runnable artifact: `target\release\amazing.exe sdp-roundtrip
+examples\phase9-offer.sdp`, reporting `SDP audio+video bundle=2 payloads=3
+candidates=2 rtpmaps=3 ... roundtrip ok`.
+
+Known gaps: bundled RTP is not yet routed by SSRC/PT into independent audio and
+video consumers. There is no MID RTP header extension, rejected m-line support,
+direction negotiation, fmtp/rtcp-fb, or separate RTCP scheduling per media.
+
+Conformance: positive BUNDLE roundtrip plus missing-member, duplicate-mid,
+missing-rtcp-mux, and payload-collision assertions pass in the public SDP gate;
+the upgraded command and existing secure process gates pass. No WebRTC WPT
+subset is imported yet.
+
+Final win-001 gate: all 499 hardware-independent workspace tests/doctests
+passed with `--locked`; strict WebRTC/crypto/application Clippy, stripped
+ThinLTO release, and bundled SDP artifact passed. The release binary is
+8,473,088 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1415,7 +1447,7 @@ ThinLTO release, and multi-media SDP artifact passed. The release binary is
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** twenty-four committed subphases provide decoded images/audio,
+- **Phase 9:** twenty-five committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1429,7 +1461,7 @@ parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
 remeasured after the audit fixes before each commit. Current gate: **499**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **8,463,872 bytes**.
+stripped ThinLTO release is **8,473,088 bytes**.
 
 ## Server cheat sheet
 

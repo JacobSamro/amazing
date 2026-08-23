@@ -229,6 +229,8 @@ pub struct RtpMap {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SdpMediaSection {
+    pub mid: String,
+    pub rtcp_mux: bool,
     pub connection_address: Ipv4Addr,
     pub media: String,
     pub port: u16,
@@ -243,6 +245,7 @@ pub struct SdpDescription {
     pub origin: String,
     pub session_name: String,
     pub timing: String,
+    pub bundle: Vec<String>,
     pub ice_ufrag: String,
     pub ice_pwd: String,
     pub fingerprint_algorithm: String,
@@ -262,6 +265,31 @@ impl SdpDescription {
         self.media_sections
             .first()
             .ok_or(WebRtcError::InvalidPacket("SDP has no media section"))
+    }
+
+    pub fn media_by_mid(&self, mid: &str) -> Option<&SdpMediaSection> {
+        self.media_sections
+            .iter()
+            .find(|section| section.mid == mid)
+    }
+
+    pub fn media_for_payload_type(
+        &self,
+        payload_type: u8,
+    ) -> Result<&SdpMediaSection, WebRtcError> {
+        let mut matches = self
+            .media_sections
+            .iter()
+            .filter(|section| section.payload_types.contains(&payload_type));
+        let section = matches.next().ok_or(WebRtcError::Unsupported(
+            "SDP payload type was not negotiated",
+        ))?;
+        if matches.next().is_some() {
+            return Err(WebRtcError::InvalidPacket(
+                "SDP payload type is ambiguous across media sections",
+            ));
+        }
+        Ok(section)
     }
 }
 
@@ -1647,6 +1675,7 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
 
     let mut media_sections = Vec::<SdpMediaSection>::new();
     let mut media_connections = Vec::<bool>::new();
+    let mut bundle = Vec::<String>::new();
     let mut ice_ufrag = None;
     let mut ice_pwd = None;
     let mut fingerprint_algorithm = None;
@@ -1663,6 +1692,16 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
             return Err(WebRtcError::InvalidPacket(
                 "duplicate or out-of-order SDP session field",
             ));
+        }
+        if let Some(value) = line.strip_prefix("a=group:BUNDLE ") {
+            if !media_sections.is_empty() || !bundle.is_empty() {
+                return Err(WebRtcError::InvalidPacket("invalid SDP BUNDLE group"));
+            }
+            bundle = value.split_ascii_whitespace().map(str::to_owned).collect();
+            if bundle.is_empty() {
+                return Err(WebRtcError::InvalidPacket("empty SDP BUNDLE group"));
+            }
+            continue;
         }
         if let Some(value) = line.strip_prefix("m=") {
             let fields: Vec<&str> = value.split_ascii_whitespace().collect();
@@ -1691,6 +1730,8 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             media_sections.push(SdpMediaSection {
+                mid: String::new(),
+                rtcp_mux: false,
                 connection_address: Ipv4Addr::UNSPECIFIED,
                 media: fields[0].to_owned(),
                 port,
@@ -1760,6 +1801,29 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 return Err(WebRtcError::InvalidPacket("invalid SDP setup role"));
             }
             setup = Some(value.to_owned());
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("a=mid:") {
+            let section = media_sections
+                .last_mut()
+                .ok_or(WebRtcError::InvalidPacket("session-level SDP mid"))?;
+            if !section.mid.is_empty()
+                || value.is_empty()
+                || !value.bytes().all(|byte| byte.is_ascii_alphanumeric())
+            {
+                return Err(WebRtcError::InvalidPacket("invalid SDP mid"));
+            }
+            section.mid = value.to_owned();
+            continue;
+        }
+        if line == "a=rtcp-mux" {
+            let section = media_sections
+                .last_mut()
+                .ok_or(WebRtcError::InvalidPacket("session-level rtcp-mux"))?;
+            if section.rtcp_mux {
+                return Err(WebRtcError::InvalidPacket("duplicate SDP rtcp-mux"));
+            }
+            section.rtcp_mux = true;
             continue;
         }
         if let Some(value) = line.strip_prefix("a=candidate:") {
@@ -1858,11 +1922,28 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
             "SDP media section is incomplete",
         ));
     }
+    if !bundle.is_empty() {
+        let mids: HashSet<&str> = media_sections
+            .iter()
+            .map(|section| section.mid.as_str())
+            .collect();
+        if mids.len() != media_sections.len()
+            || mids.contains("")
+            || bundle.len() != media_sections.len()
+            || bundle.iter().any(|mid| !mids.contains(mid.as_str()))
+            || media_sections.iter().any(|section| !section.rtcp_mux)
+        {
+            return Err(WebRtcError::InvalidPacket(
+                "SDP BUNDLE mids or rtcp-mux are inconsistent",
+            ));
+        }
+    }
 
     Ok(SdpDescription {
         origin: origin.to_owned(),
         session_name: session_name.to_owned(),
         timing: timing.to_owned(),
+        bundle,
         ice_ufrag: ice_ufrag.ok_or(WebRtcError::InvalidPacket("SDP ice-ufrag is missing"))?,
         ice_pwd: ice_pwd.ok_or(WebRtcError::InvalidPacket("SDP ice-pwd is missing"))?,
         fingerprint_algorithm: fingerprint_algorithm
@@ -1891,6 +1972,12 @@ pub fn encode_sdp(description: &SdpDescription) -> Result<String, WebRtcError> {
         description.fingerprint_algorithm, description.fingerprint
     ));
     output.push_str(&format!("a=setup:{}\r\n", description.setup));
+    if !description.bundle.is_empty() {
+        output.push_str(&format!(
+            "a=group:BUNDLE {}\r\n",
+            description.bundle.join(" ")
+        ));
+    }
     for section in &description.media_sections {
         output.push_str(&format!(
             "m={} {} {} {}\r\n",
@@ -1905,6 +1992,12 @@ pub fn encode_sdp(description: &SdpDescription) -> Result<String, WebRtcError> {
                 .join(" ")
         ));
         output.push_str(&format!("c=IN IP4 {}\r\n", section.connection_address));
+        if !section.mid.is_empty() {
+            output.push_str(&format!("a=mid:{}\r\n", section.mid));
+        }
+        if section.rtcp_mux {
+            output.push_str("a=rtcp-mux\r\n");
+        }
         for candidate in &section.candidates {
             output.push_str(&format!(
                 "a=candidate:{} {} UDP {} {} {} typ host\r\n",
@@ -2373,12 +2466,17 @@ mod tests {
             "a=ice-pwd:FerricPassword1234567890AB\r\n",
             "a=fingerprint:sha-256 AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA\r\n",
             "a=setup:actpass\r\n",
+            "a=group:BUNDLE 0 1\r\n",
             "m=audio 5000 UDP/TLS/RTP/SAVPF 111\r\n",
             "c=IN IP4 127.0.0.1\r\n",
+            "a=mid:0\r\n",
+            "a=rtcp-mux\r\n",
             "a=candidate:a 1 UDP 100 127.0.0.1 5000 typ host\r\n",
             "a=rtpmap:111 opus/48000/1\r\n",
             "m=video 5002 UDP/TLS/RTP/SAVPF 120 121\r\n",
             "c=IN IP4 127.0.0.1\r\n",
+            "a=mid:1\r\n",
+            "a=rtcp-mux\r\n",
             "a=candidate:v 1 UDP 90 127.0.0.1 5002 typ host\r\n",
             "a=rtpmap:120 VP8/90000\r\n",
             "a=rtpmap:121 H264/90000\r\n",
@@ -2387,8 +2485,21 @@ mod tests {
         assert_eq!(parsed.media_sections.len(), 2);
         assert_eq!(parsed.media_sections[0].media, "audio");
         assert_eq!(parsed.media_sections[1].media, "video");
+        assert_eq!(parsed.bundle, ["0", "1"]);
+        assert_eq!(parsed.media_by_mid("1").unwrap().media, "video");
+        assert_eq!(parsed.media_for_payload_type(120).unwrap().mid, "1");
         assert_eq!(parsed.media("video").unwrap().rtp_maps.len(), 2);
         assert_eq!(parse_sdp(&encode_sdp(&parsed).unwrap()).unwrap(), parsed);
+
+        let mut missing_bundle_member = parsed.clone();
+        missing_bundle_member.bundle.pop();
+        assert!(encode_sdp(&missing_bundle_member).is_err());
+        let mut duplicate_mid = parsed.clone();
+        duplicate_mid.media_sections[1].mid = "0".into();
+        assert!(encode_sdp(&duplicate_mid).is_err());
+        let mut ambiguous_payload = parsed;
+        ambiguous_payload.media_sections[0].payload_types.push(120);
+        assert!(ambiguous_payload.media_for_payload_type(120).is_err());
     }
 
     #[test]
