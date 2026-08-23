@@ -14,6 +14,7 @@ members = [
     "crates/amazing-webrtc-crypto",
     "crates/amazing",
 ]
+exclude = ["crates/amazing-shell-gpui"]
 
 [workspace.package]
 version = "0.0.1"

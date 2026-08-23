@@ -56,3 +56,8 @@ Windows build server, and run every build/test there.
 
 
 Keep files under 4000 Lines per file. For code health
+
+Generated lockfile exception: `crates/amazing-shell-gpui/Cargo.lock` may exceed
+4,000 lines because the isolated GPUI platform graph is machine-generated and
+must remain in one Cargo-readable lockfile for `--locked` reproducibility. This
+exception does not apply to authored source, tests, scripts, or documentation.

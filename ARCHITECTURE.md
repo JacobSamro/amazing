@@ -99,6 +99,18 @@ fingerprints, exports `EXTRACTOR-dtls_srtp` keying material, and delegates
 SRTP/SRTCP protection and replay defense. Revisit this exception only as a
 project-level security decision.
 
+### 6a. GPUI application-shell isolation
+
+The user-directed GPUI shell lives in `amazing-shell-gpui`, outside every
+engine core and is excluded from the engine workspace with its own lockfile.
+It pins GPUI and `gpui_platform` to one reviewed Zed revision so
+their types and Windows DirectX backend cannot drift independently. The shell
+may use GPUI's third-party dependency graph; `amazing-html`, `amazing-css`,
+`amazing-dom`, `amazing-layout`, `amazing-js`, `amazing-net`, `amazing-media`,
+`amazing-paint`, and `amazing-webrtc` retain their std-only boundary. The
+first-party shell crate forbids unsafe code. The hand-written Win32 shell stays
+available as a fallback until the GPUI viewport owns the complete engine loop.
+
 Phase 9.10 keeps that DTLS association live while media flows. A single
 RFC 7983-style reader routes DTLS and SRTP/SRTCP into separate channels on the
 same authenticated ICE-nominated UDP five-tuple. Routing is nonblocking:
