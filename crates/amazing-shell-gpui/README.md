@@ -12,6 +12,7 @@ first real engine viewport:
 - back/forward/reload controls and an address surface;
 - focused address-bar editing with select-on-click, Backspace, Escape, and
   Enter-to-navigate behavior;
+- Back, Forward, and Reload controls backed by branch-aware in-memory history;
 - sidebar-tab mode, bookmarks row, profile and utility controls;
 - a live `amazing-layout` → `amazing-paint` RGBA8 page surface, converted to
   GPUI's native BGRA image without crossing the engine-core boundary;
@@ -29,6 +30,8 @@ first real engine viewport:
 ![Amazing GPUI fetched document on win-001](../../docs/screenshots/gpui-file-navigation-win001.png)
 
 ![Amazing GPUI scrolled engine surface on win-001](../../docs/screenshots/gpui-scroll-navigation-win001.png)
+
+![Amazing GPUI history Back navigation on win-001](../../docs/screenshots/gpui-history-back-win001.png)
 
 Build and launch on win-001:
 

@@ -1,7 +1,8 @@
 param(
     [string]$Address = "file:///C:/Users/server/src/amazing/examples/gpui-navigation.html",
     [string]$OutputPath = "target\gpui-address-navigation.png",
-    [switch]$ScrollViewport
+    [switch]$ScrollViewport,
+    [switch]$GoBackAfterNavigation
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,6 +47,13 @@ $shell = New-Object -ComObject WScript.Shell
 $shell.SendKeys($Address)
 $shell.SendKeys("{ENTER}")
 Start-Sleep -Seconds 3
+
+if ($GoBackAfterNavigation) {
+    [AmazingAddressSmokeNative]::SetCursorPos($rect.Left + 30, $rect.Top + 62) | Out-Null
+    [AmazingAddressSmokeNative]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+    [AmazingAddressSmokeNative]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Seconds 3
+}
 
 if ($ScrollViewport) {
     $viewportX = $rect.Left + (($rect.Right - $rect.Left) / 2)

@@ -40,6 +40,8 @@ struct BrowserShell {
     address: String,
     committed_address: String,
     address_selected: bool,
+    history: Vec<String>,
+    history_index: usize,
     active: usize,
     engine_collapsed: bool,
     specs_collapsed: bool,
@@ -104,6 +106,8 @@ impl BrowserShell {
             address: "amazing://status".to_string(),
             committed_address: "amazing://status".to_string(),
             address_selected: false,
+            history: vec!["amazing://status".to_string()],
+            history_index: 0,
             active: 0,
             engine_collapsed: false,
             specs_collapsed: true,
@@ -166,7 +170,16 @@ impl BrowserShell {
             self.address = self.committed_address.clone();
             return;
         };
-        match EngineViewport::load_address(&address) {
+        self.load_navigation(&address);
+        if self.history[self.history_index] != self.committed_address {
+            self.history.truncate(self.history_index + 1);
+            self.history.push(self.committed_address.clone());
+            self.history_index = self.history.len() - 1;
+        }
+    }
+
+    fn load_navigation(&mut self, address: &str) {
+        match EngineViewport::load_address(address) {
             Ok((viewport, final_address)) => {
                 self.viewport = viewport;
                 self.address = final_address.clone();
@@ -174,12 +187,35 @@ impl BrowserShell {
             }
             Err(error) => {
                 self.viewport = EngineViewport::error(&address, &error);
-                self.address = address.clone();
-                self.committed_address = address;
+                self.address = address.to_string();
+                self.committed_address = address.to_string();
             }
         }
         self.active = 0;
         self.address_selected = false;
+    }
+
+    fn go_back(&mut self) {
+        if self.history_index == 0 {
+            return;
+        }
+        self.history_index -= 1;
+        let address = self.history[self.history_index].clone();
+        self.load_navigation(&address);
+    }
+
+    fn go_forward(&mut self) {
+        if self.history_index + 1 >= self.history.len() {
+            return;
+        }
+        self.history_index += 1;
+        let address = self.history[self.history_index].clone();
+        self.load_navigation(&address);
+    }
+
+    fn reload(&mut self) {
+        let address = self.committed_address.clone();
+        self.load_navigation(&address);
     }
 
     fn toggle_engine_group(&mut self) {
@@ -317,9 +353,30 @@ impl BrowserShell {
             .px_2()
             .bg(rgb(SURFACE))
             .children([
-                Self::icon_button("←").into_any_element(),
-                Self::icon_button("→").into_any_element(),
-                Self::icon_button("↻").into_any_element(),
+                div()
+                    .id("history-back")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.go_back();
+                        cx.notify();
+                    }))
+                    .child(Self::icon_button("←"))
+                    .into_any_element(),
+                div()
+                    .id("history-forward")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.go_forward();
+                        cx.notify();
+                    }))
+                    .child(Self::icon_button("→"))
+                    .into_any_element(),
+                div()
+                    .id("history-reload")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.reload();
+                        cx.notify();
+                    }))
+                    .child(Self::icon_button("↻"))
+                    .into_any_element(),
             ])
             .child(
                 div()
@@ -1019,6 +1076,37 @@ mod tests {
         assert_eq!(shell.active, 0);
         assert_eq!(shell.address, "https://example.test/docs");
         assert_eq!(shell.committed_address, shell.address);
+    }
+
+    #[test]
+    fn history_back_forward_and_branching_follow_browser_rules() {
+        let mut shell = BrowserShell::new(None);
+        shell.address = "first.test".to_string();
+        shell.commit_navigation();
+        shell.address = "second.test".to_string();
+        shell.commit_navigation();
+        assert_eq!(shell.history.len(), 3);
+        assert_eq!(shell.history_index, 2);
+
+        shell.go_back();
+        assert_eq!(shell.committed_address, "https://first.test");
+        shell.go_forward();
+        assert_eq!(shell.committed_address, "https://second.test");
+
+        shell.go_back();
+        shell.address = "branch.test".to_string();
+        shell.commit_navigation();
+        assert_eq!(
+            shell.history,
+            [
+                "amazing://status",
+                "https://first.test",
+                "https://branch.test"
+            ]
+        );
+        assert_eq!(shell.history_index, 2);
+        shell.go_forward();
+        assert_eq!(shell.committed_address, "https://branch.test");
     }
 }
 
