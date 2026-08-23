@@ -43,6 +43,11 @@ Windows build server, and run every build/test there.
 - VS 2022 CMake at `Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`;
   its absolute path is stored in the user-level `CMAKE` variable for bundled
   libopus builds.
+- vcpkg `2026.07.29` at `C:\Users\server\src\vcpkg` (commit
+  `9e593bb18ea69cc5095e012465dcd675a822ed0d`) with
+  `libvpx:x64-windows-static-md` 1.16.0#2. User-level `VPX_LIB_DIR`,
+  `VPX_INCLUDE_DIR`, `VPX_VERSION`, `VPX_STATIC`, `PKG_CONFIG`, and
+  `PKG_CONFIG_PATH` point at that installation.
 - Amazing itself is std-only; no extra deps required to build.
 - Env vars set at user level (left over from other projects): `LIBCLANG_PATH`,
   `PYTHON3`.

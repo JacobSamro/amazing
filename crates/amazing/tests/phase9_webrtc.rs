@@ -67,6 +67,20 @@ fn video_frame_probe_reorders_and_drops_damage() {
 }
 
 #[test]
+fn vp8_decode_probe_reconstructs_key_and_interframes() {
+    let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .arg("vp8-decode-probe")
+        .output()
+        .expect("run VP8 decode probe");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("interframes="), "{stdout}");
+    assert!(!stdout.contains("interframes=0"), "{stdout}");
+    assert!(stdout.contains("pixels_changed=yes"), "{stdout}");
+    assert!(stdout.contains("vp8 decode probe ok"), "{stdout}");
+}
+
+#[test]
 fn sdp_roundtrip_command_reports_ice_dtls_media_summary() {
     let offer =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/phase9-offer.sdp");
