@@ -906,7 +906,7 @@ fn cmd_secure_media_processes() -> ExitCode {
     match run_secure_media_processes() {
         Ok(()) => {
             println!(
-                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP L16+PCMU; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=L16 parent->child=2 PCMU child->parent=2; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP L16+PCMU; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive L16 parent->child=2 PCMU child->parent=2; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
             );
             ExitCode::SUCCESS
         }
@@ -1032,8 +1032,14 @@ fn run_secure_media_processes() -> Result<(), String> {
     let child_config = negotiated_codecs
         .jitter_config(child_rtp.payload_type, child_rtp.ssrc, 60, 8)
         .map_err(|error| error.to_string())?;
-    let mut child_jitter =
-        amazing_webrtc::RtpJitterBuffer::new(child_config).map_err(|error| error.to_string())?;
+    let mut child_jitter = amazing_webrtc::RtpJitterBuffer::new_adaptive(
+        child_config,
+        amazing_webrtc::AdaptivePlayoutConfig {
+            max_delay_ms: 200,
+            jitter_multiplier: 4,
+        },
+    )
+    .map_err(|error| error.to_string())?;
     child_jitter
         .push(child_rtp.clone(), 0)
         .map_err(|error| error.to_string())?;
@@ -1145,8 +1151,14 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
     let parent_config = negotiated_codecs
         .jitter_config(parent_rtp.payload_type, parent_rtp.ssrc, 60, 8)
         .map_err(|error| error.to_string())?;
-    let mut parent_jitter =
-        amazing_webrtc::RtpJitterBuffer::new(parent_config).map_err(|error| error.to_string())?;
+    let mut parent_jitter = amazing_webrtc::RtpJitterBuffer::new_adaptive(
+        parent_config,
+        amazing_webrtc::AdaptivePlayoutConfig {
+            max_delay_ms: 200,
+            jitter_multiplier: 4,
+        },
+    )
+    .map_err(|error| error.to_string())?;
     parent_jitter
         .push(parent_rtp.clone(), 0)
         .map_err(|error| error.to_string())?;

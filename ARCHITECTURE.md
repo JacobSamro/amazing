@@ -170,6 +170,12 @@ clock/channel parameters, and constructs both jitter configuration and a
 decoder adapter for an actually negotiated payload type. Secure endpoints
 advertise the L16/PCMU set they send; unnegotiated RTP cannot enter playout.
 
+Phase 9.18 keeps adaptive delay inside the jitter module. An optional bounded
+controller observes RTP-clock transit variation, applies an RFC-style 1/16
+EWMA, raises delay immediately under jitter, decays one millisecond per stable
+observation, and reschedules queued packets against the current target. Callers
+still drive monotonic time and choose fixed or adaptive construction.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

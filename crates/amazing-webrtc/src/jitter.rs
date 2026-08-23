@@ -19,6 +19,12 @@ pub struct JitterBufferConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AdaptivePlayoutConfig {
+    pub max_delay_ms: u64,
+    pub jitter_multiplier: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JitterPush {
     Buffered,
     Duplicate,
@@ -47,7 +53,13 @@ pub struct JitterStats {
 
 struct TimedPacket {
     packet: RtpPacket,
-    playout_at_ms: u64,
+    media_offset_ms: u64,
+}
+
+struct AdaptivePlayout {
+    config: AdaptivePlayoutConfig,
+    previous_transit_ms: Option<i64>,
+    jitter_q4: u64,
 }
 
 pub struct RtpJitterBuffer {
@@ -57,11 +69,32 @@ pub struct RtpJitterBuffer {
     highest_sequence: Option<u64>,
     base_timestamp: u32,
     base_arrival_ms: u64,
+    target_delay_ms: u64,
+    adaptive: Option<AdaptivePlayout>,
     stats: JitterStats,
 }
 
 impl RtpJitterBuffer {
     pub fn new(config: JitterBufferConfig) -> Result<Self, WebRtcError> {
+        Self::build(config, None)
+    }
+
+    pub fn new_adaptive(
+        config: JitterBufferConfig,
+        adaptive: AdaptivePlayoutConfig,
+    ) -> Result<Self, WebRtcError> {
+        if adaptive.max_delay_ms < config.playout_delay_ms || adaptive.jitter_multiplier == 0 {
+            return Err(WebRtcError::InvalidPacket(
+                "adaptive jitter bounds or multiplier are invalid",
+            ));
+        }
+        Self::build(config, Some(adaptive))
+    }
+
+    fn build(
+        config: JitterBufferConfig,
+        adaptive: Option<AdaptivePlayoutConfig>,
+    ) -> Result<Self, WebRtcError> {
         if config.payload_type > 127 {
             return Err(WebRtcError::InvalidPacket(
                 "jitter payload type exceeds seven bits",
@@ -77,6 +110,7 @@ impl RtpJitterBuffer {
                 "jitter capacity must hold at least two packets",
             ));
         }
+        let target_delay_ms = config.playout_delay_ms;
         Ok(Self {
             config,
             queue: BTreeMap::new(),
@@ -84,6 +118,12 @@ impl RtpJitterBuffer {
             highest_sequence: None,
             base_timestamp: 0,
             base_arrival_ms: 0,
+            target_delay_ms,
+            adaptive: adaptive.map(|config| AdaptivePlayout {
+                config,
+                previous_transit_ms: None,
+                jitter_q4: 0,
+            }),
             stats: JitterStats::default(),
         })
     }
@@ -131,10 +171,7 @@ impl RtpJitterBuffer {
             .saturating_mul(1_000)
             .checked_div(self.config.clock_rate as u64)
             .unwrap_or(0);
-        let playout_at_ms = self
-            .base_arrival_ms
-            .saturating_add(self.config.playout_delay_ms)
-            .saturating_add(media_delay_ms);
+        self.observe_transit(arrival_ms, media_delay_ms);
         self.highest_sequence = Some(
             self.highest_sequence
                 .map_or(extended, |highest| highest.max(extended)),
@@ -143,7 +180,7 @@ impl RtpJitterBuffer {
             extended,
             TimedPacket {
                 packet,
-                playout_at_ms,
+                media_offset_ms: media_delay_ms,
             },
         );
         self.stats.accepted = self.stats.accepted.saturating_add(1);
@@ -153,7 +190,7 @@ impl RtpJitterBuffer {
     pub fn pop_ready(&mut self, now_ms: u64) -> Option<JitterOutput> {
         let expected = self.next_sequence?;
         if let Some(timed) = self.queue.get(&expected) {
-            if timed.playout_at_ms > now_ms {
+            if self.playout_at(timed) > now_ms {
                 return None;
             }
             let packet = self
@@ -167,7 +204,7 @@ impl RtpJitterBuffer {
         }
 
         let next_queued = self.queue.first_key_value()?;
-        if *next_queued.0 <= expected || next_queued.1.playout_at_ms > now_ms {
+        if *next_queued.0 <= expected || self.playout_at(next_queued.1) > now_ms {
             return None;
         }
         self.next_sequence = Some(expected.saturating_add(1));
@@ -188,6 +225,49 @@ impl RtpJitterBuffer {
 
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
+    }
+
+    pub fn target_delay_ms(&self) -> u64 {
+        self.target_delay_ms
+    }
+
+    fn playout_at(&self, timed: &TimedPacket) -> u64 {
+        self.base_arrival_ms
+            .saturating_add(self.target_delay_ms)
+            .saturating_add(timed.media_offset_ms)
+    }
+
+    fn observe_transit(&mut self, arrival_ms: u64, media_offset_ms: u64) {
+        let Some(adaptive) = self.adaptive.as_mut() else {
+            return;
+        };
+        let transit = (arrival_ms as i128 - self.base_arrival_ms as i128)
+            .saturating_sub(media_offset_ms as i128)
+            .clamp(i64::MIN as i128, i64::MAX as i128) as i64;
+        if let Some(previous) = adaptive.previous_transit_ms {
+            let variation = transit.abs_diff(previous);
+            adaptive.jitter_q4 = adaptive
+                .jitter_q4
+                .saturating_add(variation)
+                .saturating_sub((adaptive.jitter_q4.saturating_add(8)) >> 4);
+            let desired = self
+                .config
+                .playout_delay_ms
+                .saturating_add(
+                    (adaptive.jitter_q4 >> 4)
+                        .saturating_mul(adaptive.config.jitter_multiplier as u64),
+                )
+                .min(adaptive.config.max_delay_ms);
+            if desired >= self.target_delay_ms {
+                self.target_delay_ms = desired;
+            } else {
+                self.target_delay_ms = self
+                    .target_delay_ms
+                    .saturating_sub(1)
+                    .max(self.config.playout_delay_ms);
+            }
+        }
+        adaptive.previous_transit_ms = Some(transit);
     }
 }
 
@@ -644,6 +724,35 @@ mod tests {
         assert!(report.reordered);
         assert!(report.duplicate_rejected);
         assert_eq!((report.l16_samples, report.pcmu_samples), (3, 2));
+    }
+
+    #[test]
+    fn adaptive_playout_raises_delay_and_reschedules_queued_packets() {
+        let mut buffer = RtpJitterBuffer::new_adaptive(
+            JitterBufferConfig {
+                ssrc: 7,
+                payload_type: 96,
+                clock_rate: 1_000,
+                playout_delay_ms: 40,
+                capacity: 8,
+            },
+            AdaptivePlayoutConfig {
+                max_delay_ms: 120,
+                jitter_multiplier: 4,
+            },
+        )
+        .unwrap();
+        buffer.push(packet(1, 0), 0).unwrap();
+        buffer.push(packet(2, 20), 80).unwrap();
+        assert!(buffer.target_delay_ms() > 40);
+        assert!(
+            buffer.pop_ready(40).is_none(),
+            "queued packet was not rescheduled"
+        );
+        assert!(matches!(
+            buffer.pop_ready(buffer.target_delay_ms()),
+            Some(JitterOutput::Packet(_))
+        ));
     }
 
     fn description(maps: Vec<crate::RtpMap>) -> SdpDescription {
