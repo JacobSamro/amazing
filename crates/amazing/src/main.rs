@@ -51,6 +51,10 @@ const PIPELINE: &[(&str, &str)] = &[
         "amazing-media",
         "Phase 9: image + PCM WAV media — `render` / `audio-info` / `play-audio`",
     ),
+    (
+        "amazing-webrtc",
+        "Phase 9: STUN + RTP foundations — `webrtc-loopback` subcommand",
+    ),
 ];
 
 pub(crate) struct BrowserDomHost {
@@ -605,13 +609,14 @@ fn main() -> ExitCode {
         Some("render") => cmd_render(&args[2..]),
         Some("audio-info") => cmd_audio_info(&args[2..]),
         Some("play-audio") => cmd_play_audio(&args[2..]),
+        Some("webrtc-loopback") => cmd_webrtc_loopback(),
         Some("fetch") => cmd_fetch(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd_domrun(&args[2..]),
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
             ExitCode::FAILURE
         }
     }
@@ -1117,6 +1122,122 @@ fn cmd_play_audio(args: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     }
     gui::play_wav_file(path)
+}
+
+/// Phase 9.3 artifact: STUN discovery followed by one RTP echo over UDP.
+fn cmd_webrtc_loopback() -> ExitCode {
+    fn run() -> Result<(std::net::SocketAddrV4, amazing_webrtc::RtpPacket), String> {
+        use std::net::{SocketAddr, UdpSocket};
+        use std::time::Duration;
+
+        let server = UdpSocket::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
+        server
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .map_err(|error| error.to_string())?;
+        let server_address = server.local_addr().map_err(|error| error.to_string())?;
+        let transaction = amazing_webrtc::TransactionId(*b"ferric-stun!");
+        let client = UdpSocket::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .map_err(|error| error.to_string())?;
+        let SocketAddr::V4(client_address) = client.local_addr().map_err(|error| error.to_string())?
+        else {
+            return Err("loopback artifact requires IPv4".into());
+        };
+        let request = amazing_webrtc::encode_binding_request(transaction);
+        client
+            .send_to(&request, server_address)
+            .map_err(|error| error.to_string())?;
+        let mut server_buffer = [0u8; 1500];
+        let (length, peer) = server
+            .recv_from(&mut server_buffer)
+            .map_err(|error| error.to_string())?;
+        let request = amazing_webrtc::parse_stun(&server_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        if request.class != amazing_webrtc::StunClass::Request
+            || request.transaction_id != transaction
+        {
+            return Err("unexpected STUN Binding request".into());
+        }
+        let SocketAddr::V4(peer_v4) = peer else {
+            return Err("loopback artifact requires IPv4".into());
+        };
+        let response = amazing_webrtc::encode_binding_success(transaction, peer_v4);
+        server
+            .send_to(&response, peer)
+            .map_err(|error| error.to_string())?;
+
+        let mut client_buffer = [0u8; 1500];
+        let (length, source) = client
+            .recv_from(&mut client_buffer)
+            .map_err(|error| error.to_string())?;
+        if source != server_address {
+            return Err("STUN response came from the wrong endpoint".into());
+        }
+        let response = amazing_webrtc::parse_stun(&client_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        if response.transaction_id != transaction
+            || response.xor_mapped_address != Some(client_address)
+        {
+            return Err("STUN mapped address or transaction mismatch".into());
+        }
+
+        let outbound = amazing_webrtc::RtpPacket {
+            marker: true,
+            payload_type: 111,
+            sequence_number: 7,
+            timestamp: 960,
+            ssrc: 0xf3_22_10_01,
+            payload: b"ferric-loopback".to_vec(),
+        };
+        let wire = amazing_webrtc::encode_rtp(&outbound).map_err(|error| error.to_string())?;
+        client
+            .send_to(&wire, server_address)
+            .map_err(|error| error.to_string())?;
+        let (length, rtp_peer) = server
+            .recv_from(&mut server_buffer)
+            .map_err(|error| error.to_string())?;
+        if rtp_peer != peer {
+            return Err("RTP arrived from a different endpoint".into());
+        }
+        let received = amazing_webrtc::parse_rtp(&server_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        server
+            .send_to(&server_buffer[..length], peer)
+            .map_err(|error| error.to_string())?;
+
+        let (length, source) = client
+            .recv_from(&mut client_buffer)
+            .map_err(|error| error.to_string())?;
+        if source != server_address {
+            return Err("RTP echo came from the wrong endpoint".into());
+        }
+        let echoed = amazing_webrtc::parse_rtp(&client_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        if echoed != outbound {
+            return Err("RTP echo changed packet contents".into());
+        }
+        if received != outbound {
+            return Err("loopback server decoded different RTP contents".into());
+        }
+        Ok((client_address, echoed))
+    }
+
+    match run() {
+        Ok((mapped, packet)) => {
+            println!(
+                "STUN mapped {mapped}; RTP seq={} timestamp={} payload={} bytes; loopback ok",
+                packet.sequence_number,
+                packet.timestamp,
+                packet.payload.len()
+            );
+            ExitCode::SUCCESS
+        },
+        Err(error) => {
+            eprintln!("amazing webrtc-loopback: {error}");
+            ExitCode::FAILURE
+        },
+    }
 }
 
 /// Phase 6 demo: execute one classic JavaScript script and print captured

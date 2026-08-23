@@ -16,6 +16,7 @@ amazing-media = { path = "../amazing-media" }
 amazing-paint = { path = "../amazing-paint" }
 amazing-net = { path = "../amazing-net" }
 amazing-js = { path = "../amazing-js" }
+amazing-webrtc = { path = "../amazing-webrtc" }
 
 [[bin]]
 name = "amazing"

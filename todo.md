@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (142 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 9.1 images + 9.2 PCM WAV decode/inspection/Windows playback landed |
+| 9 — Media | 🔄 9.1 images + 9.2 PCM audio + 9.3 STUN/RTP UDP foundations landed |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -488,6 +488,40 @@ RTP parsing plus a UDP loopback artifact), followed by Windows hardware-
 accelerated presentation. The user's explicit “do all phases now” instruction
 pre-authorizes continuing past this sub-phase gate.
 
+## Phase 9.3 (WebRTC) — STUN/RTP UDP transport foundation
+
+Shipped: the new safe, std-only `amazing-webrtc` crate encodes and parses STUN
+Binding requests/success responses with RFC magic-cookie and 96-bit
+transaction validation, including IPv4 XOR-MAPPED-ADDRESS recovery. It also
+encodes and parses the RTP v2 fixed header (marker, payload type, sequence,
+timestamp, SSRC) and owned payloads.
+
+Runnable artifact: `target\release\amazing.exe webrtc-loopback`. A real pair
+of `std::net::UdpSocket`s performs a STUN exchange, verifies the discovered
+client endpoint and transaction, then sends an RTP packet with sequence 7,
+timestamp 960, and a 15-byte payload. The server decodes and echoes it; the
+client and server both compare the full packet. The binary-process integration
+gate is 1/1 and uses a cooperative single-threaded exchange plus two-second
+socket deadlines to fail rather than hang.
+
+Known gaps: ICE candidate gathering/checklists, TURN, STUN authentication,
+MESSAGE-INTEGRITY/FINGERPRINT, IPv6 mapped addresses, RTP CSRC/extensions/
+padding, RTCP, SDP, DTLS-SRTP, SCTP/data channels, jitter buffering,
+congestion control, and real audio/video codec flow remain separate WebRTC
+sub-phases. This loopback is transport evidence, not a claim of browser-
+compatible WebRTC.
+
+Conformance: no dedicated WebRTC WPT subset is imported yet. Existing
+baselines remain 17/17 CSS2, 22/22 flex/grid, and 196/196 supported Test262.
+
+Final win-001 gate: all 423 workspace tests/doctests passed, the release
+binary is 1,744,896 bytes, and the release loopback artifact completed with
+one successful STUN/RTP exchange (integration gate 1/1).
+
+Recommended next sub-phase: Phase 9.4 Windows hardware-accelerated surface
+presentation with a software fallback and pixel-equivalence gate. The user's
+explicit “do all phases now” instruction pre-authorizes continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -495,7 +529,7 @@ pre-authorizes continuing past this sub-phase gate.
 - **3.5 Flexbox/Grid** · **4 Paint** software rasterizer + PPM writer ·
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
-  (9.1 image pipeline and 9.2 PCM audio landed; WebRTC/acceleration next).
+  (9.1 images, 9.2 PCM audio, and 9.3 STUN/RTP landed; acceleration next).
 
 ## Server cheat sheet
 

@@ -19,7 +19,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 
 - **`std` only** in the engine cores: `amazing-html`, `amazing-css`,
   `amazing-dom`, `amazing-layout`, `amazing-js`, `amazing-net`,
-  `amazing-media`, `amazing-paint`.
+  `amazing-media`, `amazing-paint`, `amazing-webrtc`.
 - No `nom`/`pest` for parsing, no `skia`/`tiny-skia` for painting, no
   `rusttype`/`fontdue` for fonts, no `hyper`/`reqwest` for networking.
   Everything is hand-written against the relevant specs:
@@ -45,6 +45,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-net` | HTTP/1.1 client | Phase 5 |
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | Phase 6 |
 | `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
+| `amazing-webrtc` | STUN Binding, RTP v2, UDP loopback transport | Phase 9.3 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | Phase 7/8 |
 
 The Windows GUI shell includes tabs, address/history navigation, live DOM
@@ -84,6 +85,9 @@ amazing render examples/phase9-media.html phase9-media.bmp 400
 # Phase 9 PCM audio artifacts
 amazing audio-info examples/phase9-audio.wav
 amazing play-audio examples/phase9-audio.wav
+
+# Phase 9 WebRTC transport artifact
+amazing webrtc-loopback
 ```
 
 ```sh
