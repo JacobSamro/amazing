@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use amazing_layout::font::{FontSource, ParsedFont};
+use amazing_net::{FetchOptions, fetch};
 use amazing_paint::{OutlineGlyphProvider, Surface, paint_document_with};
 use gpui::RenderImage;
 use image::{Frame, RgbaImage};
@@ -62,25 +63,51 @@ impl EngineViewport {
         Self::from_document(DEMO_HTML, DEMO_CSS)
     }
 
-    pub fn for_address(address: &str) -> Self {
+    pub fn load_address(address: &str) -> Result<(Self, String), String> {
         if address == "amazing://status" {
-            return Self::demo();
+            return Ok((Self::demo(), address.to_string()));
         }
+        let mut options = FetchOptions::default();
+        options.timeout = std::time::Duration::from_secs(3);
+        let response = fetch(address, &options).map_err(|error| error.to_string())?;
+        let content_type = response
+            .content_type()
+            .unwrap_or("application/octet-stream");
+        if content_type != "text/html" && content_type != "application/xhtml+xml" {
+            return Err(format!("cannot render response type {content_type}"));
+        }
+        let final_address = response.url.clone();
+        let html = response
+            .text()
+            .ok_or_else(|| "response body was not decodable text".to_string())?;
+        let dom = amazing_html::parse(&html);
+        let mut css = String::new();
+        collect_inline_styles(&dom, amazing_dom::NodeIdx(0), &mut css);
+        Ok((Self::from_dom(&dom, &css), final_address))
+    }
+
+    pub fn error(address: &str, error: &str) -> Self {
         let safe_address = escape_html(address);
+        let safe_error = escape_html(error);
         let html = format!(
             r#"<!doctype html><html><body><main>
-            <p class="eyebrow">AMAZING NAVIGATION</p>
-            <h1>Navigation request accepted.</h1>
-            <p class="intro">The address bar updated the browser model and asked the Amazing pipeline for a new page surface.</p>
+            <p class="eyebrow">AMAZING NAVIGATION ERROR</p>
+            <h1>This address could not be loaded.</h1>
+            <p class="intro">Amazing kept the failure inside the viewport and preserved the requested address.</p>
             <p class="address">{safe_address}</p>
-            <p class="note">Network fetch and response-driven document loading are the next handoff. This page is still parsed, laid out, and painted by Amazing.</p>
+            <p class="note">{safe_error}</p>
             </main></body></html>"#
         );
         Self::from_document(&html, NAVIGATION_CSS)
     }
 
     fn from_document(html: &str, css: &str) -> Self {
-        let surface = render_surface(html, css);
+        let dom = amazing_html::parse(html);
+        Self::from_dom(&dom, css)
+    }
+
+    fn from_dom(dom: &amazing_dom::Dom, css: &str) -> Self {
+        let surface = render_dom(dom, css);
         let width = surface.width;
         let height = surface.height;
         let image = Arc::new(surface_to_render_image(surface));
@@ -97,11 +124,32 @@ fn render_demo_surface() -> Surface {
     render_surface(DEMO_HTML, DEMO_CSS)
 }
 
+#[cfg(test)]
 fn render_surface(html: &str, css: &str) -> Surface {
+    let dom = amazing_html::parse(html);
+    render_dom(&dom, css)
+}
+
+fn render_dom(dom: &amazing_dom::Dom, css: &str) -> Surface {
     let fonts = load_ui_font();
-    let root = amazing_layout::layout_document(html, css, VIEWPORT_WIDTH as f32, &fonts);
+    let root = amazing_layout::layout_dom_document(dom, css, VIEWPORT_WIDTH as f32, &fonts);
     let glyphs = OutlineGlyphProvider::new(&fonts);
     paint_document_with(&root, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, &fonts, &glyphs)
+}
+
+fn collect_inline_styles(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut String) {
+    if dom.name(node) == Some("style") {
+        for child in dom.children(node) {
+            if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
+                out.push_str(data);
+                out.push('\n');
+            }
+        }
+        return;
+    }
+    for child in dom.children(node) {
+        collect_inline_styles(dom, child, out);
+    }
 }
 
 fn escape_html(value: &str) -> String {
@@ -162,7 +210,18 @@ mod tests {
             escape_html("https://example.test/?a=<b>&q=\"x\""),
             "https://example.test/?a=&lt;b&gt;&amp;q=&quot;x&quot;"
         );
-        let viewport = EngineViewport::for_address("https://example.test/");
+        let viewport = EngineViewport::error("https://example.test/", "unsupported scheme");
+        assert_eq!((viewport.width, viewport.height), (960, 570));
+    }
+
+    #[test]
+    fn inline_style_collection_feeds_response_rendering() {
+        let dom =
+            amazing_html::parse("<style>body { background: #010203; }</style><p>response</p>");
+        let mut css = String::new();
+        collect_inline_styles(&dom, amazing_dom::NodeIdx(0), &mut css);
+        assert!(css.contains("background: #010203"));
+        let viewport = EngineViewport::from_dom(&dom, &css);
         assert_eq!((viewport.width, viewport.height), (960, 570));
     }
 }

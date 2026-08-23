@@ -1,5 +1,5 @@
 param(
-    [string]$Address = "example.test/docs",
+    [string]$Address = "file:///C:/Users/server/src/amazing/examples/gpui-navigation.html",
     [string]$OutputPath = "target\gpui-address-navigation.png"
 )
 

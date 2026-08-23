@@ -200,6 +200,10 @@ name = "amazing-media"
 version = "0.0.1"
 
 [[package]]
+name = "amazing-net"
+version = "0.0.1"
+
+[[package]]
 name = "amazing-paint"
 version = "0.0.1"
 dependencies = [
@@ -213,7 +217,10 @@ dependencies = [
 name = "amazing-shell-gpui"
 version = "0.0.1"
 dependencies = [
+ "amazing-dom",
+ "amazing-html",
  "amazing-layout",
+ "amazing-net",
  "amazing-paint",
  "gpui",
  "gpui_platform",

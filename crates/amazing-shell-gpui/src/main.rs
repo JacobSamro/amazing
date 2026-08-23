@@ -166,10 +166,19 @@ impl BrowserShell {
             self.address = self.committed_address.clone();
             return;
         };
-        self.viewport = EngineViewport::for_address(&address);
+        match EngineViewport::load_address(&address) {
+            Ok((viewport, final_address)) => {
+                self.viewport = viewport;
+                self.address = final_address.clone();
+                self.committed_address = final_address;
+            }
+            Err(error) => {
+                self.viewport = EngineViewport::error(&address, &error);
+                self.address = address.clone();
+                self.committed_address = address;
+            }
+        }
         self.active = 0;
-        self.address = address.clone();
-        self.committed_address = address;
         self.address_selected = false;
     }
 
