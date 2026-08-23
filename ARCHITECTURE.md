@@ -176,6 +176,12 @@ EWMA, raises delay immediately under jitter, decays one millisecond per stable
 observation, and reschedules queued packets against the current target. Callers
 still drive monotonic time and choose fixed or adaptive construction.
 
+Phase 9.19 makes loss a playout event rather than a missing counter only. The
+jitter module estimates a missing packet's RTP timestamp and duration from the
+surrounding sequence, advances its output clock, and asks the negotiated codec
+adapter for concealment. The secure two-process artifact forces that path and
+correlates its one gap with RTCP cumulative loss.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
