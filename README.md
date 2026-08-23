@@ -27,8 +27,9 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
   - CSS Syntax Module Level 3
   - ECMA-262 (tree-walking interpreter, no JIT)
   - HTTP/1.1 over plain `std::net::TcpStream`
-- `unsafe` only at the platform windowing boundary (Phase 8), isolated and
-  justified per-block.
+- First-party `unsafe` only at platform boundaries (Phase 8+), isolated and
+  justified per-block. The documented vetted TLS exception may contain
+  dependency-internal unsafe; its first-party adapter forbids unsafe.
 - Every phase ships a runnable artifact — a terminal dump, an image file,
   or a real interactive window. Passing unit tests alone doesn't count.
 
@@ -46,6 +47,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | Phase 6 |
 | `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
 | `amazing-webrtc` | authenticated ICE + RTP/RTCP transport | Phase 9.3/9.6/9.7 |
+| `amazing-webrtc-crypto` | isolated vetted DTLS-SRTP adapter | Phase 9.9 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | Phase 7/8 |
 
 The Windows GUI shell includes tabs, address/history navigation, live DOM
@@ -89,6 +91,7 @@ amazing play-audio examples/phase9-audio.wav
 # Phase 9 WebRTC transport artifact
 amazing webrtc-loopback
 amazing sdp-roundtrip examples/phase9-offer.sdp
+amazing secure-media-loopback
 
 # Phase 9 hardware capability artifact (Windows)
 amazing gpu-info
@@ -96,7 +99,7 @@ amazing gpu-present-smoke
 ```
 
 ```sh
-cargo test --workspace
+cargo test --workspace --locked
 ```
 
 ## Architecture notes

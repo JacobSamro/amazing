@@ -34,7 +34,7 @@ Windows build server, and run every build/test there.
    first commit; reuse it)
 4. Build/test on win-001:
    ```
-   ssh -i ~/.ssh/win001-build-key -o BatchMode=yes server@win-001 "cd /d C:\Users\server\src\amazing && cargo test --workspace"
+   ssh -i ~/.ssh/win001-build-key -o BatchMode=yes server@win-001 "cd /d C:\Users\server\src\amazing && cargo test --workspace --locked"
    ```
 
 ### Build server environment (already provisioned)

@@ -11,6 +11,7 @@ members = [
     "crates/amazing-net",
     "crates/amazing-paint",
     "crates/amazing-webrtc",
+    "crates/amazing-webrtc-crypto",
     "crates/amazing",
 ]
 

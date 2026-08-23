@@ -17,6 +17,7 @@ amazing-paint = { path = "../amazing-paint" }
 amazing-net = { path = "../amazing-net" }
 amazing-js = { path = "../amazing-js" }
 amazing-webrtc = { path = "../amazing-webrtc" }
+amazing-webrtc-crypto = { path = "../amazing-webrtc-crypto" }
 
 [[bin]]
 name = "amazing"

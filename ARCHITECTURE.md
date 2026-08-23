@@ -21,6 +21,7 @@ amazing-media ──RGBA8 via PageMedia───────────▶ amaz
 amazing-media ──validated PCM WAV─────────────▶ GUI shell (WinMM adapter)
 UDP sockets (amazing driver) ◀──STUN/RTP/RTCP bytes──▶ amazing-webrtc codecs
 SDP text (amazing driver) ───────────────────────────▶ amazing-webrtc signaling
+amazing-webrtc codecs ──RTP/RTCP──▶ amazing-webrtc-crypto ──DTLS-SRTP──▶ peer
 GUI platform seam ──D3D11 device/swap-chain present──▶ Windows graphics driver
 ```
 
@@ -71,16 +72,30 @@ specs. Error-recovery behavior *is* the interop contract — never invent a
 
 ### 5. unsafe policy
 
-No `unsafe` outside platform-boundary modules (windowing FFI, Phase 8+).
-Every `unsafe` block carries a comment justifying: what invariant upholds
-safety, why std cannot express it. Engine crates compile with `unsafe_code`
-denied (enforced via workspace lint config as crates appear).
+No first-party `unsafe` outside platform-boundary modules (windowing FFI,
+Phase 8+). Every first-party `unsafe` block carries a comment justifying: what
+invariant upholds safety, why std cannot express it. Engine crates compile with
+`unsafe_code` denied (enforced via workspace lint config as crates appear).
+The vetted TLS exception below may contain dependency-internal unsafe code;
+its first-party adapter forbids unsafe and does not expose dependency types to
+the engine cores.
 
 ### 6. TLS exception (decided at Phase 5)
 
-Working assumption: Amazing uses a vetted TLS implementation rather than
-hand-rolled TLS 1.3. Rationale lives in `crates/amazing-net/src/lib.rs`;
-revisit only if the constraint set changes.
+Amazing uses vetted TLS implementations rather than hand-rolled TLS. Rationale
+for HTTPS lives in `crates/amazing-net/src/lib.rs`; HTTPS remains unimplemented.
+
+Phase 9 applies the exception in the isolated `amazing-webrtc-crypto` adapter.
+It pins WebRTC.rs DTLS 0.12.0 and SRTP 0.17.2, plus their RustCrypto/rustls/ring
+stack, while `amazing-webrtc` remains safe and `std`-only. `Cargo.lock` is
+committed because exact security-provider resolution is part of the reviewed
+artifact. The adapter uses a current-thread Tokio runtime, preserving the
+single-threaded cooperative v1 decision. Its first milestone negotiates DTLS
+1.2 with `TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256`, negotiates
+`AEAD_AES_128_GCM` through `use_srtp`, pins both SHA-256 certificate
+fingerprints, exports `EXTRACTOR-dtls_srtp` keying material, and delegates
+SRTP/SRTCP protection and replay defense. Revisit this exception only as a
+project-level security decision.
 
 ## Conformance tracking
 

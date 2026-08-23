@@ -54,7 +54,7 @@ const PIPELINE: &[(&str, &str)] = &[
     ),
     (
         "amazing-webrtc",
-        "Phase 9: ICE + RTP/RTCP + SDP — `webrtc-loopback` / `sdp-roundtrip`",
+        "Phase 9: ICE + RTP/RTCP + SDP + vetted DTLS-SRTP adapter",
     ),
     (
         "amazing-gpu",
@@ -615,6 +615,7 @@ fn main() -> ExitCode {
         Some("audio-info") => cmd_audio_info(&args[2..]),
         Some("play-audio") => cmd_play_audio(&args[2..]),
         Some("webrtc-loopback") => cmd_webrtc_loopback(),
+        Some("secure-media-loopback") => cmd_secure_media_loopback(),
         Some("gpu-info") => cmd_gpu_info(),
         Some("gpu-present-smoke") => cmd_gpu_present_smoke(),
         Some("sdp-roundtrip") => cmd_sdp_roundtrip(&args[2..]),
@@ -624,9 +625,38 @@ fn main() -> ExitCode {
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|secure-media-loopback|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// Phase 9.9 artifact: vetted DTLS 1.2 key agreement and SRTP/SRTCP proof.
+fn cmd_secure_media_loopback() -> ExitCode {
+    match amazing_webrtc_crypto::run_secure_loopback() {
+        Ok(report) => {
+            println!(
+                "{} {}; SRTP profile={} keying={} bytes; fingerprints={}; SRTP payload={} bytes protected={} bytes; SRTCP packets={} protected={} bytes; SRTP tamper={} replay={}; SRTCP tamper={} replay={}; secure loopback ok",
+                report.dtls_version,
+                report.cipher_suite,
+                report.srtp_profile,
+                report.exported_keying_material_bytes,
+                if report.fingerprints_verified { "ok" } else { "failed" },
+                report.rtp_payload_bytes,
+                report.protected_rtp_bytes,
+                report.rtcp_packet_count,
+                report.protected_rtcp_bytes,
+                if report.srtp_tamper_rejected { "rejected" } else { "accepted" },
+                if report.srtp_replay_rejected { "rejected" } else { "accepted" },
+                if report.srtcp_tamper_rejected { "rejected" } else { "accepted" },
+                if report.srtcp_replay_rejected { "rejected" } else { "accepted" },
+            );
+            ExitCode::SUCCESS
+        },
+        Err(error) => {
+            eprintln!("amazing secure-media-loopback: {error}");
+            ExitCode::FAILURE
+        },
     }
 }
 

@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (142 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 images/audio + authenticated ICE/RTP + D3D11 presentation milestones landed |
+| 9 — Media | 🔄 images/audio + ICE/RTP/RTCP/SDP + vetted DTLS-SRTP + D3D11 milestones landed |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -708,6 +708,56 @@ infrastructure boundary rather than hand-rolling security-critical TLS, then
 bind negotiated keys to RTP/RTCP. The user's explicit “do all phases now”
 instruction pre-authorizes continuing.
 
+## Phase 9.9 (secure media) — vetted DTLS-SRTP adapter
+
+Shipped: the new `amazing-webrtc-crypto` crate is the sole third-party
+security-provider exception. It pins WebRTC.rs DTLS 0.12.0 and SRTP 0.17.2,
+uses a current-thread cooperative Tokio runtime, forbids first-party unsafe,
+and keeps every engine core including `amazing-webrtc` safe and `std`-only.
+The application now commits `Cargo.lock`, so the reviewed crypto dependency
+graph and checksums are reproducible.
+
+The adapter generates ephemeral P-256 certificates, performs a mutual DTLS
+1.2 handshake with `TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256`, negotiates
+`AEAD_AES_128_GCM` through RFC 5764 `use_srtp`, and verifies both peer
+certificate SHA-256 fingerprints before exporting any media keys. It exports
+56 bytes with `EXTRACTOR-dtls_srtp`, applies RFC 5764's client/server key and
+salt ordering, zeroizes the temporary exported buffers, then delegates RTP
+and RTCP protection to the vetted SRTP provider with 64-packet replay windows.
+
+Runnable artifact: `target\release\amazing.exe secure-media-loopback`. The
+command protects and recovers Amazing's real 15-byte RTP payload in both
+directions. The server uses its own SSRC and counters before sending its RTCP
+Sender Report, so the opposite-direction SRTCP proof is semantically valid.
+The public integration gate proves that altered and replayed SRTP and SRTCP
+packets are all rejected. Observed debug wire sizes are 43 bytes for SRTP and
+48 bytes for SRTCP.
+
+Known gaps: this milestone uses an in-memory datagram transport, not the
+ICE-nominated UDP sockets from `webrtc-loopback`; generated fingerprints are
+pinned directly rather than exchanged through the Phase 9.8 SDP model; DTLS
+client/server roles are fixed rather than derived from SDP `setup`; there is
+no persistent identity, certificate rotation, rekey/overlap, key-lifetime
+enforcement, multiple SSRC association table, packet demultiplexer, remote
+interop gate, or WebRTC WPT import. TURN, full ICE, media negotiation/codecs,
+congestion/jitter, and SCTP/data channels also remain pending. HTTPS still
+needs a separate vetted TLS adapter.
+
+Conformance: the secure command integration gate passes 1/1. The existing
+baselines remain 17/17 CSS2, 22/22 flex/grid, and 196/196 supported Test262;
+no WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 434 hardware-independent workspace tests/doctests
+passed with `--locked`; the release command passed and the binary is 4,191,232
+bytes. The increase from Phase 9.8 is the isolated vetted crypto provider and
+its exact dependency closure.
+
+Recommended next sub-phase: expose a datagram-session seam from the secure
+adapter and replace the plaintext RTP/RTCP portion of `webrtc-loopback` with
+SRTP/SRTCP over its nominated UDP pair, using the parsed SDP fingerprint as
+the peer identity. The user's explicit “do all phases now” instruction
+pre-authorizes continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -716,7 +766,7 @@ instruction pre-authorizes continuing.
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
   (images/audio, authenticated ICE/RTP/RTCP, SDP, and D3D11 presentation
-  milestones landed; vetted DTLS-SRTP boundary next).
+  milestones landed; secure transport is next wired to nominated UDP).
 
 ## Server cheat sheet
 
@@ -726,7 +776,7 @@ scp -q -r -i ~/.ssh/win001-build-key <local paths> 'server@win-001:C:/Users/serv
 
 # build/test/commit (on server)
 ssh -i ~/.ssh/win001-build-key -o BatchMode=yes server@win-001 ^
-  "cd /d C:\Users\server\src\amazing && cargo test --workspace"
+  "cd /d C:\Users\server\src\amazing && cargo test --workspace --locked"
 git -C C:\Users\server\src\amazing add -A
 git -C C:\Users\server\src\amazing -c user.name=server -c user.email=server@win-001 commit -m "..."
 ```

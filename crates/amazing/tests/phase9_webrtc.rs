@@ -42,3 +42,32 @@ fn sdp_roundtrip_command_reports_ice_dtls_media_summary() {
     assert!(stdout.contains("setup=actpass"), "{stdout}");
     assert!(stdout.contains("roundtrip ok"), "{stdout}");
 }
+
+#[test]
+fn secure_media_loopback_uses_vetted_dtls_srtp() {
+    let result = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .arg("secure-media-loopback")
+        .output()
+        .expect("run secure-media loopback artifact");
+    assert!(
+        result.status.success(),
+        "secure-media loopback failed: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let stdout = String::from_utf8(result.stdout).expect("UTF-8 command output");
+    assert!(stdout.contains("DTLS1.2"), "{stdout}");
+    assert!(stdout.contains("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"), "{stdout}");
+    assert!(stdout.contains("SRTP profile=AEAD_AES_128_GCM"), "{stdout}");
+    assert!(stdout.contains("fingerprints=ok"), "{stdout}");
+    assert!(stdout.contains("SRTP payload=15 bytes"), "{stdout}");
+    assert!(stdout.contains("SRTCP packets=1"), "{stdout}");
+    assert!(
+        stdout.contains("SRTP tamper=rejected replay=rejected"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("SRTCP tamper=rejected replay=rejected"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("secure loopback ok"), "{stdout}");
+}
