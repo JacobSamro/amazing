@@ -21,7 +21,7 @@ exclude = ["crates/amazing-shell-gpui"]
 version = "0.0.1"
 edition = "2024"
 license = "MIT"
-rust-version = "1.85"
+rust-version = "1.89"
 
 [profile.release]
 opt-level = 3

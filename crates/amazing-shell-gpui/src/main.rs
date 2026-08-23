@@ -36,6 +36,7 @@ struct Tab {
 struct BrowserShell {
     tabs: Vec<Tab>,
     viewport: EngineViewport,
+    video_viewport: EngineViewport,
     address_focus: Option<FocusHandle>,
     address: String,
     committed_address: String,
@@ -61,11 +62,11 @@ impl BrowserShell {
                     hue: ACCENT,
                 },
                 Tab {
-                    mono: "W",
-                    title: "WPT · flexbox + grid gate",
-                    url: "localhost:8080/wpt/css/flex",
-                    kicker: "LOCALHOST:8080",
-                    lede: "Flex and grid reference runs for the layout gate suite.",
+                    mono: "V",
+                    title: "Secure video · H.264 decoded frame",
+                    url: "amazing://media/video",
+                    kicker: "AMAZING://MEDIA/VIDEO",
+                    lede: "A real H.264 access unit decoded through the isolated codec adapter and presented as RGBA by GPUI.",
                     hue: 0x3f7d4e,
                 },
                 Tab {
@@ -102,6 +103,7 @@ impl BrowserShell {
                 },
             ],
             viewport: EngineViewport::demo(),
+            video_viewport: EngineViewport::video_demo().expect("decode GPUI video demo"),
             address_focus,
             address: "amazing://status".to_string(),
             committed_address: "amazing://status".to_string(),
@@ -667,7 +669,47 @@ impl BrowserShell {
                         ),
                 )
             })
-            .when(self.active != 0, |page| {
+            .when(self.active == 1, |page| {
+                page.child(
+                    div()
+                        .relative()
+                        .flex()
+                        .flex_1()
+                        .size_full()
+                        .items_center()
+                        .justify_center()
+                        .bg(rgb(0x111820))
+                        .p_6()
+                        .child(
+                            div()
+                                .size_full()
+                                .overflow_hidden()
+                                .rounded_lg()
+                                .border_1()
+                                .border_color(rgb(0x33404d))
+                                .bg(rgb(0x080c10))
+                                .shadow_lg()
+                                .child(img(self.video_viewport.image.clone()).size_full()),
+                        )
+                        .child(
+                            div()
+                                .absolute()
+                                .top_8()
+                                .right_8()
+                                .px_3()
+                                .py_2()
+                                .rounded_md()
+                                .bg(rgb(0x12291b))
+                                .text_color(rgb(0xbde7c6))
+                                .text_size(px(10.5))
+                                .child(format!(
+                                    "H.264 → I420 → RGBA  ·  {} × {}",
+                                    self.video_viewport.width, self.video_viewport.height
+                                )),
+                        ),
+                )
+            })
+            .when(self.active > 1, |page| {
                 page.child(
                     div()
                         .w(px(760.0))
@@ -989,6 +1031,7 @@ impl Render for BrowserShell {
 
 fn main() {
     let start_with_sidebar = std::env::args().any(|argument| argument == "--sidebar");
+    let start_with_video = std::env::args().any(|argument| argument == "--video");
     application().run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1080.0), px(760.0)), cx);
         cx.open_window(
@@ -1001,6 +1044,9 @@ fn main() {
                 cx.new(move |cx| {
                     let mut shell = BrowserShell::new(Some(cx.focus_handle().tab_stop(true)));
                     shell.sidebar = start_with_sidebar;
+                    if start_with_video {
+                        shell.select_tab(1);
+                    }
                     if start_with_sidebar {
                         shell.specs_collapsed = false;
                     }
@@ -1036,7 +1082,7 @@ mod tests {
                 .iter()
                 .map(|tab| tab.mono)
                 .collect::<Vec<_>>(),
-            &["A", "W", "H"]
+            &["A", "V", "H"]
         );
         assert_eq!(
             &shell.tabs[3..6]

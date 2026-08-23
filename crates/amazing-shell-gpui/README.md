@@ -20,6 +20,8 @@ first real engine viewport:
   inline `<style>` collection and explicit in-viewport fetch errors;
 - content-height painting up to the engine safety cap and native GPUI wheel
   scrolling while browser chrome stays fixed;
+- a native media tab that encodes H.264, decodes I420, converts to RGBA, and
+  presents the resulting 320×180 frame through GPUI;
 - real TrueType glyph rasterization using the Windows UI font;
 - responsive 1080×760 startup bounds for the win-001 RDP desktop.
 
@@ -33,6 +35,8 @@ first real engine viewport:
 
 ![Amazing GPUI history Back navigation on win-001](../../docs/screenshots/gpui-history-back-win001.png)
 
+![Amazing GPUI decoded video presentation on win-001](../../docs/screenshots/gpui-video-presentation-win001.png)
+
 Build and launch on win-001:
 
 ```powershell
@@ -40,6 +44,8 @@ cargo build --manifest-path crates\amazing-shell-gpui\Cargo.toml --target-dir ta
 target\release\amazing-shell.exe
 # Start directly in the grouped sidebar layout
 target\release\amazing-shell.exe --sidebar
+# Start directly on the decoded-video media tab
+target\release\amazing-shell.exe --video
 ```
 
 The shell now proves the full local presentation path from address input through

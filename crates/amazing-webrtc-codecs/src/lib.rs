@@ -134,7 +134,7 @@ impl OpusEncoderAdapter {
         ssrc: u32,
         samples: &[i16],
     ) -> Result<RtpPacket, CodecError> {
-        if samples.is_empty() || samples.len() % self.channels as usize != 0 {
+        if samples.is_empty() || !samples.len().is_multiple_of(self.channels as usize) {
             return Err(CodecError(
                 "Opus PCM does not contain whole channel frames".into(),
             ));
@@ -202,6 +202,7 @@ pub struct DecodedVideoFrame {
     pub height: u32,
     pub planes: usize,
     pub checksum: u64,
+    pub rgba: Vec<u8>,
 }
 
 pub struct Vp8DecoderAdapter {
@@ -250,11 +251,28 @@ impl Vp8DecoderAdapter {
                 checksum = checksum.rotate_left(5) ^ *byte as u64;
             }
         }
+        let rgba = i420_to_rgba(
+            descriptor.width().get() as usize,
+            descriptor.height().get() as usize,
+            I420Plane {
+                data: planes.plane_data(0).unwrap_or_default(),
+                stride: planes.plane_stride(0).unwrap_or_default(),
+            },
+            I420Plane {
+                data: planes.plane_data(1).unwrap_or_default(),
+                stride: planes.plane_stride(1).unwrap_or_default(),
+            },
+            I420Plane {
+                data: planes.plane_data(2).unwrap_or_default(),
+                stride: planes.plane_stride(2).unwrap_or_default(),
+            },
+        )?;
         Ok(DecodedVideoFrame {
             width: descriptor.width().get(),
             height: descriptor.height().get(),
             planes: planes.len(),
             checksum,
+            rgba,
         })
     }
 }
@@ -382,11 +400,14 @@ impl H264DecoderAdapter {
             .map_err(|error| CodecError(format!("decode H.264 frame: {error}")))?
             .ok_or_else(|| CodecError("H.264 bitstream produced no picture".into()))?;
         let dimensions = decoded.dimensions();
+        let mut rgba = vec![0; dimensions.0.saturating_mul(dimensions.1).saturating_mul(4)];
+        decoded.write_rgba8(&mut rgba);
         Ok(DecodedVideoFrame {
             width: dimensions.0 as u32,
             height: dimensions.1 as u32,
             planes: 3,
             checksum: yuv_checksum(&decoded),
+            rgba,
         })
     }
 }
@@ -443,6 +464,50 @@ fn yuv_checksum(source: &impl openh264::formats::YUVSource) -> u64 {
         })
 }
 
+#[derive(Clone, Copy)]
+struct I420Plane<'a> {
+    data: &'a [u8],
+    stride: usize,
+}
+
+fn i420_to_rgba(
+    width: usize,
+    height: usize,
+    y_plane: I420Plane<'_>,
+    u_plane: I420Plane<'_>,
+    v_plane: I420Plane<'_>,
+) -> Result<Vec<u8>, CodecError> {
+    if width == 0
+        || height == 0
+        || y_plane.stride < width
+        || u_plane.stride < width.div_ceil(2)
+        || v_plane.stride < width.div_ceil(2)
+        || y_plane.data.len() < y_plane.stride.saturating_mul(height)
+        || u_plane.data.len() < u_plane.stride.saturating_mul(height.div_ceil(2))
+        || v_plane.data.len() < v_plane.stride.saturating_mul(height.div_ceil(2))
+    {
+        return Err(CodecError("decoded I420 planes are truncated".into()));
+    }
+    let mut rgba = vec![0; width.saturating_mul(height).saturating_mul(4)];
+    for row in 0..height {
+        for column in 0..width {
+            let y = y_plane.data[row * y_plane.stride + column] as i32;
+            let u = u_plane.data[row / 2 * u_plane.stride + column / 2] as i32;
+            let v = v_plane.data[row / 2 * v_plane.stride + column / 2] as i32;
+            let c = (y - 16).max(0);
+            let d = u - 128;
+            let e = v - 128;
+            let channel = |value: i32| ((value + 128) >> 8).clamp(0, 255) as u8;
+            let offset = (row * width + column) * 4;
+            rgba[offset] = channel(298 * c + 409 * e);
+            rgba[offset + 1] = channel(298 * c - 100 * d - 208 * e);
+            rgba[offset + 2] = channel(298 * c + 516 * d);
+            rgba[offset + 3] = 255;
+        }
+    }
+    Ok(rgba)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -471,5 +536,15 @@ mod tests {
         assert!(report.first_bytes > 0 && report.second_bytes > 0);
         assert_eq!((report.width, report.height), (32, 32));
         assert!(report.pixels_changed);
+    }
+
+    #[test]
+    fn decoded_video_surfaces_are_opaque_rgba() {
+        let mut encoder = H264EncoderAdapter::new().unwrap();
+        let rgb = vec![80; 16 * 16 * 3];
+        let encoded = encoder.encode_rgb(&rgb, (16, 16)).unwrap();
+        let decoded = H264DecoderAdapter::new().unwrap().decode(&encoded).unwrap();
+        assert_eq!(decoded.rgba.len(), 16 * 16 * 4);
+        assert!(decoded.rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
     }
 }

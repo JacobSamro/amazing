@@ -101,6 +101,40 @@ impl EngineViewport {
         Self::from_document(&html, NAVIGATION_CSS)
     }
 
+    pub fn video_demo() -> Result<Self, String> {
+        const WIDTH: usize = 320;
+        const HEIGHT: usize = 180;
+        let mut rgb = Vec::with_capacity(WIDTH * HEIGHT * 3);
+        for row in 0..HEIGHT {
+            for column in 0..WIDTH {
+                let panel = (column / 40 + row / 30) % 2;
+                rgb.extend_from_slice(&[
+                    (35 + column * 180 / WIDTH) as u8,
+                    (45 + row * 150 / HEIGHT) as u8,
+                    if panel == 0 { 185 } else { 75 },
+                ]);
+            }
+        }
+        let mut encoder =
+            amazing_webrtc_codecs::H264EncoderAdapter::new().map_err(|error| error.to_string())?;
+        let encoded = encoder
+            .encode_rgb(&rgb, (WIDTH, HEIGHT))
+            .map_err(|error| error.to_string())?;
+        let decoded = amazing_webrtc_codecs::H264DecoderAdapter::new()
+            .and_then(|mut decoder| decoder.decode(&encoded))
+            .map_err(|error| error.to_string())?;
+        let image = Arc::new(rgba_to_render_image(
+            decoded.width,
+            decoded.height,
+            decoded.rgba,
+        ));
+        Ok(Self {
+            image,
+            width: decoded.width,
+            height: decoded.height,
+        })
+    }
+
     fn from_document(html: &str, css: &str) -> Self {
         let dom = amazing_html::parse(html);
         Self::from_dom(&dom, css)
@@ -189,11 +223,14 @@ fn load_ui_font() -> FontSource {
 }
 
 fn surface_to_render_image(surface: Surface) -> RenderImage {
-    let mut bgra = surface.pixels;
+    rgba_to_render_image(surface.width, surface.height, surface.pixels)
+}
+
+fn rgba_to_render_image(width: u32, height: u32, mut bgra: Vec<u8>) -> RenderImage {
     for pixel in bgra.chunks_exact_mut(4) {
         pixel.swap(0, 2);
     }
-    let image = RgbaImage::from_raw(surface.width, surface.height, bgra)
+    let image = RgbaImage::from_raw(width, height, bgra)
         .expect("Amazing surface dimensions match its pixel buffer");
     RenderImage::new([Frame::new(image)])
 }
@@ -232,6 +269,13 @@ mod tests {
         );
         let viewport = EngineViewport::error("https://example.test/", "unsupported scheme");
         assert_eq!((viewport.width, viewport.height), (960, 570));
+    }
+
+    #[test]
+    fn decoded_video_demo_produces_a_gpui_surface() {
+        let viewport = EngineViewport::video_demo().expect("video demo");
+        assert_eq!((viewport.width, viewport.height), (320, 180));
+        assert_eq!(viewport.image.frame_count(), 1);
     }
 
     #[test]
