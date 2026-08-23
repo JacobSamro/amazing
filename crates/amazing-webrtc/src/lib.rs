@@ -10,11 +10,16 @@
 #![forbid(unsafe_code)]
 
 pub mod jitter;
+pub mod video;
 
 pub use jitter::{
     AdaptivePlayoutConfig, DecodedAudioFrame, JitterBufferConfig, JitterCodecReport, JitterOutput,
     JitterPush, JitterStats, L16Decoder, NegotiatedAudioCodec, NegotiatedAudioCodecs, PcmuDecoder,
     RtpAudioDecoder, RtpJitterBuffer, negotiate_audio_codecs, run_jitter_codec_probe,
+};
+pub use video::{
+    EncodedVideoFrame, VideoAssembly, VideoFrameAssembler, VideoFrameConfig, VideoFrameProbeReport,
+    run_video_frame_probe,
 };
 
 use std::collections::HashSet;
