@@ -249,6 +249,12 @@ secure child writes bounded `AMVF` records containing index, dimensions, RTP
 timestamp, byte length, and owned RGBA. The consumer receives no DTLS, SRTP,
 codec, or arena types; EOF terminates the six-frame stream.
 
+Phase 9.31 consumes that seam in GPUI. A named background thread owns the
+listener/driver lifecycle and sends validated raw RGBA events through an MPSC
+channel. The GPUI timer creates render images on the UI context, replaces the
+synthetic frame set on first secure media, and continues cycling without
+blocking browser input.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

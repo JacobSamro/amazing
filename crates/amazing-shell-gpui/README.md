@@ -24,6 +24,9 @@ first real engine viewport:
   presents the resulting 320×180 frame through GPUI;
 - six statefully encoded/decoded frames advanced by a detached 500 ms GPUI
   timer without changing the active tab or browser chrome;
+- `--secure-video` launches the root DTLS-SRTP driver, validates framed RGBA on
+  a background localhost reader, and replaces the synthetic loop with the six
+  actual secure-session frames;
 - real TrueType glyph rasterization using the Windows UI font;
 - responsive 1080×760 startup bounds for the win-001 RDP desktop.
 
@@ -42,6 +45,9 @@ first real engine viewport:
 Animated proof: [frame A](../../docs/screenshots/gpui-video-frame-a-win001.png)
 and [frame B](../../docs/screenshots/gpui-video-frame-b-win001.png).
 
+Direct secure proof: [frame A](../../docs/screenshots/gpui-secure-video-win001.png)
+and [frame B](../../docs/screenshots/gpui-secure-video-b-win001.png).
+
 Build and launch on win-001:
 
 ```powershell
@@ -51,6 +57,8 @@ target\release\amazing-shell.exe
 target\release\amazing-shell.exe --sidebar
 # Start directly on the decoded-video media tab
 target\release\amazing-shell.exe --video
+# Launch the real secure two-process session and display its decoded frames
+target\release\amazing-shell.exe --secure-video
 ```
 
 The shell now proves the full local presentation path from address input through
