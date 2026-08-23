@@ -349,7 +349,7 @@ impl RtpAudioDecoder for L16Decoder {
     fn decode(&mut self, packet: &RtpPacket) -> Result<DecodedAudioFrame, WebRtcError> {
         validate_packet_payload(packet, self.payload_type)?;
         let frame_bytes = self.channels as usize * 2;
-        if packet.payload.len() % frame_bytes != 0 {
+        if !packet.payload.len().is_multiple_of(frame_bytes) {
             return Err(WebRtcError::InvalidPacket(
                 "L16 payload ends inside an audio sample frame",
             ));

@@ -233,6 +233,12 @@ creates its native BGRA render image. Codec/FFI types do not cross the shell
 seam. The root and standalone manifests declare Rust 1.89, matching the highest
 transitive media dependency MSRV instead of the stale 1.85 claim.
 
+Phase 9.28 adds a codec-agnostic `VideoPlayoutQueue` in the std-only core. It
+extends wrapping 32-bit RTP timestamps, orders bounded decoded frames, computes
+due times from the negotiated clock, and counts duplicate/late/overflow state.
+GPUI owns only the timer and current render-image index; it never learns RTP or
+codec state.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

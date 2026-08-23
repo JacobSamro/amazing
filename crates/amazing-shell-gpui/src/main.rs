@@ -2,6 +2,8 @@
 
 mod engine_viewport;
 
+use std::time::Duration;
+
 use gpui::{
     App, Bounds, Context, CursorStyle, FocusHandle, IntoElement, KeyDownEvent, ParentElement,
     Render, SharedString, Styled, Window, WindowBounds, WindowControlArea, WindowOptions, div, img,
@@ -36,7 +38,8 @@ struct Tab {
 struct BrowserShell {
     tabs: Vec<Tab>,
     viewport: EngineViewport,
-    video_viewport: EngineViewport,
+    video_frames: Vec<EngineViewport>,
+    video_frame_index: usize,
     address_focus: Option<FocusHandle>,
     address: String,
     committed_address: String,
@@ -103,7 +106,8 @@ impl BrowserShell {
                 },
             ],
             viewport: EngineViewport::demo(),
-            video_viewport: EngineViewport::video_demo().expect("decode GPUI video demo"),
+            video_frames: EngineViewport::video_demo_frames().expect("decode GPUI video demo"),
+            video_frame_index: 0,
             address_focus,
             address: "amazing://status".to_string(),
             committed_address: "amazing://status".to_string(),
@@ -218,6 +222,12 @@ impl BrowserShell {
     fn reload(&mut self) {
         let address = self.committed_address.clone();
         self.load_navigation(&address);
+    }
+
+    fn advance_video(&mut self) {
+        if !self.video_frames.is_empty() {
+            self.video_frame_index = (self.video_frame_index + 1) % self.video_frames.len();
+        }
     }
 
     fn toggle_engine_group(&mut self) {
@@ -617,6 +627,7 @@ impl BrowserShell {
 
     fn page(&self) -> impl IntoElement {
         let tab = &self.tabs[self.active];
+        let video_viewport = &self.video_frames[self.video_frame_index];
         let page_url = if self.active == 0 {
             self.committed_address.clone()
         } else {
@@ -689,7 +700,7 @@ impl BrowserShell {
                                 .border_color(rgb(0x33404d))
                                 .bg(rgb(0x080c10))
                                 .shadow_lg()
-                                .child(img(self.video_viewport.image.clone()).size_full()),
+                                .child(img(video_viewport.image.clone()).size_full()),
                         )
                         .child(
                             div()
@@ -704,7 +715,7 @@ impl BrowserShell {
                                 .text_size(px(10.5))
                                 .child(format!(
                                     "H.264 → I420 → RGBA  ·  {} × {}",
-                                    self.video_viewport.width, self.video_viewport.height
+                                    video_viewport.width, video_viewport.height
                                 )),
                         ),
                 )
@@ -1043,6 +1054,23 @@ fn main() {
             move |_, cx| {
                 cx.new(move |cx| {
                     let mut shell = BrowserShell::new(Some(cx.focus_handle().tab_stop(true)));
+                    cx.spawn(async move |this, cx| {
+                        loop {
+                            cx.background_executor()
+                                .timer(Duration::from_millis(500))
+                                .await;
+                            if this
+                                .update(cx, |shell: &mut BrowserShell, cx| {
+                                    shell.advance_video();
+                                    cx.notify();
+                                })
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                    })
+                    .detach();
                     shell.sidebar = start_with_sidebar;
                     if start_with_video {
                         shell.select_tab(1);
@@ -1122,6 +1150,18 @@ mod tests {
         assert_eq!(shell.active, 0);
         assert_eq!(shell.address, "https://example.test/docs");
         assert_eq!(shell.committed_address, shell.address);
+    }
+
+    #[test]
+    fn decoded_video_frames_cycle_without_changing_tab_state() {
+        let mut shell = BrowserShell::new(None);
+        shell.select_tab(1);
+        assert_eq!(shell.video_frames.len(), 6);
+        for _ in 0..6 {
+            shell.advance_video();
+        }
+        assert_eq!(shell.video_frame_index, 0);
+        assert_eq!(shell.active, 1);
     }
 
     #[test]

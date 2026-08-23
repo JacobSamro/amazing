@@ -1,6 +1,143 @@
 //! Bounded RTP video-frame assembly after jitter ordering.
 
+use std::collections::BTreeMap;
+
 use crate::{JitterOutput, RtpPacket, WebRtcError};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VideoPlayoutConfig {
+    pub clock_rate: u32,
+    pub delay_ms: u64,
+    pub capacity: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoQueuePush {
+    Queued,
+    Duplicate,
+    Late,
+    Overflow,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct VideoQueueStats {
+    pub queued: u64,
+    pub emitted: u64,
+    pub duplicates: u64,
+    pub late: u64,
+    pub overflow: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimedVideoFrame<T> {
+    pub timestamp: u32,
+    pub extended_timestamp: u64,
+    pub frame: T,
+}
+
+pub struct VideoPlayoutQueue<T> {
+    config: VideoPlayoutConfig,
+    queue: BTreeMap<u64, (u32, T)>,
+    base_timestamp: Option<u64>,
+    highest_timestamp: Option<u64>,
+    last_emitted: Option<u64>,
+    base_arrival_ms: u64,
+    stats: VideoQueueStats,
+}
+
+impl<T> VideoPlayoutQueue<T> {
+    pub fn new(config: VideoPlayoutConfig) -> Result<Self, WebRtcError> {
+        if config.clock_rate == 0 || config.capacity == 0 {
+            return Err(WebRtcError::InvalidPacket(
+                "video playout queue configuration is invalid",
+            ));
+        }
+        Ok(Self {
+            config,
+            queue: BTreeMap::new(),
+            base_timestamp: None,
+            highest_timestamp: None,
+            last_emitted: None,
+            base_arrival_ms: 0,
+            stats: VideoQueueStats::default(),
+        })
+    }
+
+    pub fn push(&mut self, timestamp: u32, frame: T, arrival_ms: u64) -> VideoQueuePush {
+        let extended = match self.highest_timestamp {
+            Some(reference) => extend_timestamp(timestamp, reference),
+            None => {
+                let first = timestamp as u64;
+                self.base_timestamp = Some(first);
+                self.base_arrival_ms = arrival_ms;
+                first
+            }
+        };
+        if self.last_emitted.is_some_and(|last| extended <= last) {
+            self.stats.late = self.stats.late.saturating_add(1);
+            return VideoQueuePush::Late;
+        }
+        if self.queue.contains_key(&extended) {
+            self.stats.duplicates = self.stats.duplicates.saturating_add(1);
+            return VideoQueuePush::Duplicate;
+        }
+        if self.queue.len() >= self.config.capacity {
+            self.stats.overflow = self.stats.overflow.saturating_add(1);
+            return VideoQueuePush::Overflow;
+        }
+        self.highest_timestamp = Some(
+            self.highest_timestamp
+                .map_or(extended, |highest| highest.max(extended)),
+        );
+        self.queue.insert(extended, (timestamp, frame));
+        self.stats.queued = self.stats.queued.saturating_add(1);
+        VideoQueuePush::Queued
+    }
+
+    pub fn pop_due(&mut self, now_ms: u64) -> Option<TimedVideoFrame<T>> {
+        let (&extended, _) = self.queue.first_key_value()?;
+        let base = self.base_timestamp?;
+        let media_ms =
+            extended.saturating_sub(base).saturating_mul(1_000) / self.config.clock_rate as u64;
+        let due = self
+            .base_arrival_ms
+            .saturating_add(self.config.delay_ms)
+            .saturating_add(media_ms);
+        if now_ms < due {
+            return None;
+        }
+        let (timestamp, frame) = self.queue.remove(&extended)?;
+        self.last_emitted = Some(extended);
+        self.stats.emitted = self.stats.emitted.saturating_add(1);
+        Some(TimedVideoFrame {
+            timestamp,
+            extended_timestamp: extended,
+            frame,
+        })
+    }
+
+    pub fn stats(&self) -> VideoQueueStats {
+        self.stats
+    }
+
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+}
+
+fn extend_timestamp(timestamp: u32, reference: u64) -> u64 {
+    let mut candidate = (reference & !0xffff_ffff) | timestamp as u64;
+    if candidate.saturating_add(0x8000_0000) < reference {
+        candidate = candidate.saturating_add(0x1_0000_0000);
+    } else if candidate > reference.saturating_add(0x8000_0000) && candidate >= 0x1_0000_0000 {
+        candidate -= 0x1_0000_0000;
+    }
+    candidate
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VideoFrameConfig {
@@ -238,5 +375,27 @@ mod tests {
             VideoAssembly::Frame(_)
         ));
         assert_eq!(assembler.counts(), (1, 1));
+    }
+
+    #[test]
+    fn playout_queue_orders_wraps_and_rejects_stale_frames() {
+        let mut queue = VideoPlayoutQueue::new(VideoPlayoutConfig {
+            clock_rate: 1_000,
+            delay_ms: 40,
+            capacity: 3,
+        })
+        .unwrap();
+        assert_eq!(queue.push(u32::MAX - 9, "first", 0), VideoQueuePush::Queued);
+        assert_eq!(queue.push(10, "third", 2), VideoQueuePush::Queued);
+        assert_eq!(queue.push(0, "second", 3), VideoQueuePush::Queued);
+        assert_eq!(queue.push(10, "duplicate", 4), VideoQueuePush::Duplicate);
+        assert!(queue.pop_due(39).is_none());
+        assert_eq!(queue.pop_due(40).unwrap().frame, "first");
+        assert_eq!(queue.pop_due(50).unwrap().frame, "second");
+        assert_eq!(queue.pop_due(60).unwrap().frame, "third");
+        assert_eq!(queue.push(0, "late", 70), VideoQueuePush::Late);
+        assert_eq!(queue.stats().emitted, 3);
+        assert_eq!(queue.stats().duplicates, 1);
+        assert_eq!(queue.stats().late, 1);
     }
 }
