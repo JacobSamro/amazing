@@ -1071,6 +1071,7 @@ pub fn build_local_description(
                         channels: 1,
                     },
                 ],
+                direction: amazing_webrtc::SdpDirection::SendRecv,
             },
             amazing_webrtc::SdpMediaSection {
                 mid: "1".into(),
@@ -1102,6 +1103,7 @@ pub fn build_local_description(
                         channels: 1,
                     },
                 ],
+                direction: amazing_webrtc::SdpDirection::SendRecv,
             },
         ],
     };

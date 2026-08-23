@@ -516,6 +516,13 @@ impl NegotiatedAudioCodecs {
             ))
     }
 
+    pub fn codec_by_encoding(&self, encoding: &str) -> Result<&NegotiatedAudioCodec, WebRtcError> {
+        self.codecs
+            .iter()
+            .find(|codec| codec.encoding.eq_ignore_ascii_case(encoding))
+            .ok_or(WebRtcError::Unsupported("RTP encoding was not negotiated"))
+    }
+
     pub fn jitter_config(
         &self,
         payload_type: u8,
@@ -862,6 +869,7 @@ mod tests {
                 payload_types: maps.iter().map(|mapping| mapping.payload_type).collect(),
                 candidates: Vec::new(),
                 rtp_maps: maps,
+                direction: crate::SdpDirection::SendRecv,
             }],
         }
     }

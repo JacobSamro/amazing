@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 43-subphase foundation landed; external TURN/browser interop remain |
+| 9 — Media | 🔄 44-subphase foundation landed; live browser signaling/DTLS interop remains |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1989,6 +1989,45 @@ Conformance: enhanced SDP and TURN interface gates, the root artifact, and all
 retained suites pass. Root workspace remains 510/510; standalone GPUI remains
 24/24. Strict changed-package Clippy and the locked stripped ThinLTO root build
 pass on win-001. Release sizes are 8,579,584 bytes (`amazing.exe`) and 14,268,928
+bytes (`amazing-shell.exe`).
+
+## Phase 9.44 (Chromium SDP ingest) — observed offer shape and dynamic PTs
+
+Shipped: a real current Chromium offer was generated with Playwright from two
+recvonly audio/video transceivers. The captured shape included BUNDLE mids,
+media-level ICE/fingerprint/setup, mDNS host candidates, candidate
+`generation`/`network-id`/`network-cost` extensions, recvonly, rtcp-mux, Opus PT
+111, and H.264 PT 102 among a larger codec set. A curated faithful subset is
+preserved as `examples/phase9-chromium-offer.sdp` and is a runnable artifact.
+
+Candidate parsing now accepts up to eight bounded extension pairs. Numeric
+generation/network fields are validated; unknown nonempty extension pairs are
+semantically ignored. Unresolved `.local` host candidates are skipped instead
+of aborting the description, while literal relay candidates and `raddr`/`rport`
+(including browser `0.0.0.0:0`) remain modeled. The fixture keeps exactly two
+relay candidates after dropping two mDNS hosts.
+
+`SdpDirection` adds sendrecv/sendonly/recvonly/inactive to every media section;
+the parser retains Chromium recvonly and `answer_for_offer` maps it to sendonly.
+Canonical SDP emits direction and relay related addresses. The secure process's
+Opus lookup now uses encoding rather than PT 111. H.264 offer/answer negotiation
+selects the first identical common mapping by encoding and clock, using browser
+PT 102 in its gate while the existing Amazing session continues with PT 121.
+
+The stripped win-001 artifact reported:
+
+`SDP audio+video bundle=2 payloads=4 candidates=2 rtpmaps=4 ICE=PBBd
+setup=actpass; roundtrip ok`.
+
+Known gaps: mDNS names are skipped, not resolved. Codec `fmtp` and RTCP feedback
+parameters are still ignored, so packetization-mode/profile compatibility is not
+yet answerable. There is no HTTP signaling page, browser-generated answer, live
+Chromium ICE check, or cross-implementation DTLS-SRTP packet exchange yet.
+
+Conformance: one observed-Chromium core gate, one dynamic-codec root gate, and
+one root artifact gate bring the workspace to 513/513; standalone GPUI remains
+24/24. Strict changed-package Clippy and the locked stripped ThinLTO root build
+pass on win-001. Release sizes are 8,578,560 bytes (`amazing.exe`) and 14,268,928
 bytes (`amazing-shell.exe`).
 
 ## Later phases (unchanged from goal prompt)

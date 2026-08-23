@@ -145,6 +145,30 @@ fn sdp_roundtrip_command_reports_ice_dtls_media_summary() {
 }
 
 #[test]
+fn chromium_sdp_roundtrip_keeps_relay_candidates_and_dynamic_payloads() {
+    let offer = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/phase9-chromium-offer.sdp");
+    let result = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .args(["sdp-roundtrip", offer.to_str().expect("UTF-8 offer path")])
+        .output()
+        .expect("run Chromium SDP artifact");
+    assert!(
+        result.status.success(),
+        "Chromium SDP artifact failed: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    assert!(
+        stdout.contains("SDP audio+video bundle=2 payloads=4 candidates=2 rtpmaps=4"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("ICE=PBBd setup=actpass; roundtrip ok"),
+        "{stdout}"
+    );
+}
+
+#[test]
 fn secure_media_loopback_uses_vetted_dtls_srtp() {
     let result = Command::new(env!("CARGO_BIN_EXE_amazing"))
         .arg("secure-media-loopback")

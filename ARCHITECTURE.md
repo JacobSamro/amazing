@@ -337,6 +337,13 @@ SDP parses and emits `typ relay raddr ... rport ...`. After TURN payloads succee
 in both directions, the relay/peer pair crosses the ordinary checklist interface
 and is marked succeeded plus nominated, completing component 1.
 
+Phase 9.44 ingests the observed Chromium offer subset. Candidate parsing accepts
+bounded extension pairs, skips unresolved mDNS host candidates, and retains
+literal relay candidates with related addresses. Media sections carry explicit
+sendrecv/sendonly/recvonly/inactive direction and invert offer direction for an
+answer. Opus and H.264 selection now resolves the common rtpmap dynamically, so
+secure media no longer assumes payload types 111 and 121.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

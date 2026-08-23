@@ -1106,35 +1106,46 @@ fn negotiated_audio_decoder(
     }
 }
 
+struct NegotiatedVideoMedia<'a> {
+    section: &'a amazing_webrtc::SdpMediaSection,
+    payload_type: u8,
+    clock_rate: u32,
+}
+
 fn negotiated_video_media<'a>(
     offer: &'a amazing_webrtc::SdpDescription,
     answer: &amazing_webrtc::SdpDescription,
-    payload_type: u8,
-) -> Result<&'a amazing_webrtc::SdpMediaSection, String> {
+    encoding: &str,
+) -> Result<NegotiatedVideoMedia<'a>, String> {
     let offered = offer
-        .media_for_payload_type(payload_type)
-        .map_err(|error| error.to_string())?;
+        .media("video")
+        .ok_or_else(|| "offer has no video media".to_string())?;
     let accepted = answer
-        .media_for_payload_type(payload_type)
-        .map_err(|error| error.to_string())?;
+        .media("video")
+        .ok_or_else(|| "answer has no video media".to_string())?;
     let offered_map = offered
         .rtp_maps
         .iter()
-        .find(|mapping| mapping.payload_type == payload_type)
-        .ok_or_else(|| "offered video rtpmap is missing".to_string())?;
-    let accepted_map = accepted
-        .rtp_maps
-        .iter()
-        .find(|mapping| mapping.payload_type == payload_type)
-        .ok_or_else(|| "answered video rtpmap is missing".to_string())?;
+        .find(|mapping| {
+            mapping.encoding.eq_ignore_ascii_case(encoding)
+                && accepted
+                    .rtp_maps
+                    .iter()
+                    .any(|accepted| accepted == *mapping)
+        })
+        .ok_or_else(|| format!("offer and answer have no common {encoding} video codec"))?;
     if offered.media != "video"
         || accepted.media != "video"
         || offered.mid != accepted.mid
-        || offered_map != accepted_map
+        || offered_map.clock_rate != 90_000
     {
         return Err("video offer/answer mapping changed".into());
     }
-    Ok(offered)
+    Ok(NegotiatedVideoMedia {
+        section: offered,
+        payload_type: offered_map.payload_type,
+        clock_rate: offered_map.clock_rate,
+    })
 }
 
 fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
@@ -1185,7 +1196,7 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
     write_signaled_description(&mut control, "ANSWER", &answer)?;
     let negotiated_codecs = amazing_webrtc::negotiate_audio_codecs(&offer, &answer)
         .map_err(|error| error.to_string())?;
-    negotiated_video_media(&offer, &answer, 121)?;
+    let video_payload_type = negotiated_video_media(&offer, &answer, "H264")?.payload_type;
 
     let mut endpoint = amazing_webrtc_crypto::SecureUdpEndpoint::establish(
         amazing_webrtc_crypto::SecureEndpointConfig {
@@ -1199,7 +1210,7 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
     )
     .map_err(|error| error.to_string())?;
     let opus_codec = negotiated_codecs
-        .codec(111)
+        .codec_by_encoding("opus")
         .map_err(|error| error.to_string())?;
     let mut opus_encoder = amazing_webrtc_codecs::OpusEncoderAdapter::from_negotiated(opus_codec)
         .map_err(|error| error.to_string())?;
@@ -1380,7 +1391,7 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
         }
         let video_rtp = amazing_webrtc::RtpPacket {
             marker: true,
-            payload_type: 121,
+            payload_type: video_payload_type,
             sequence_number: 200 + phase,
             timestamp: 90_000 + phase as u32 * 45_000,
             ssrc: 0x5649_4445,
@@ -1465,7 +1476,12 @@ fn run_secure_media_peer(
     let answer = read_signaled_description(&mut control_reader, "ANSWER")?;
     let negotiated_codecs = amazing_webrtc::negotiate_audio_codecs(&offer, &answer)
         .map_err(|error| error.to_string())?;
-    let negotiated_video = negotiated_video_media(&offer, &answer, 121)?.clone();
+    let negotiated_video = negotiated_video_media(&offer, &answer, "H264")?;
+    if negotiated_video.section.mid != "1" || negotiated_video.section.media != "video" {
+        return Err("H.264 payload did not demultiplex to bundled video".into());
+    }
+    let video_payload_type = negotiated_video.payload_type;
+    let video_clock = negotiated_video.clock_rate;
     socket
         .connect(description_candidate(&answer)?)
         .map_err(|error| format!("connect child UDP: {error}"))?;
@@ -1589,15 +1605,6 @@ fn run_secure_media_peer(
     {
         return Err("parent process returned inconsistent compound RTCP".into());
     }
-    if negotiated_video.mid != "1" || negotiated_video.media != "video" {
-        return Err("H.264 payload did not demultiplex to bundled video".into());
-    }
-    let video_clock = negotiated_video
-        .rtp_maps
-        .iter()
-        .find(|mapping| mapping.payload_type == 121)
-        .map(|mapping| mapping.clock_rate)
-        .ok_or_else(|| "H.264 rtpmap is missing".to_string())?;
     let mut parent_reports = Vec::new();
     for _ in 0..2 {
         let wire = endpoint.receive_rtcp().map_err(|error| error.to_string())?;
@@ -1633,7 +1640,7 @@ fn run_secure_media_peer(
     let mut video_jitter =
         amazing_webrtc::RtpJitterBuffer::new(amazing_webrtc::JitterBufferConfig {
             ssrc: 0x5649_4445,
-            payload_type: 121,
+            payload_type: video_payload_type,
             clock_rate: video_clock,
             playout_delay_ms: 30,
             capacity: 16,
@@ -1642,7 +1649,7 @@ fn run_secure_media_peer(
     let mut assembler =
         amazing_webrtc::VideoFrameAssembler::new(amazing_webrtc::VideoFrameConfig {
             ssrc: 0x5649_4445,
-            payload_type: 121,
+            payload_type: video_payload_type,
             max_packets: 8,
             max_bytes: 1_000_000,
         })
@@ -1663,7 +1670,7 @@ fn run_secure_media_peer(
         let video_wire = endpoint.receive_rtp().map_err(|error| error.to_string())?;
         let video_rtp =
             amazing_webrtc::parse_rtp(&video_wire).map_err(|error| error.to_string())?;
-        if video_rtp.payload_type != 121
+        if video_rtp.payload_type != video_payload_type
             || video_rtp.ssrc != 0x5649_4445
             || video_rtp.sequence_number != expected_sequences[received]
             || video_rtp.timestamp != expected_timestamps[received]
@@ -3032,6 +3039,21 @@ mod tests {
         assert_eq!(
             <BrowserDomHost as amazing_js::DomHost>::get_document_title(&host),
             "html title"
+        );
+    }
+
+    #[test]
+    fn chromium_offer_selects_dynamic_opus_and_h264_payloads() {
+        let offer =
+            amazing_webrtc::parse_sdp(include_str!("../../../examples/phase9-chromium-offer.sdp"))
+                .unwrap();
+        let audio = amazing_webrtc::negotiate_audio_codecs(&offer, &offer).unwrap();
+        assert_eq!(audio.codec_by_encoding("opus").unwrap().payload_type, 111);
+        let video = negotiated_video_media(&offer, &offer, "H264").unwrap();
+        assert_eq!((video.payload_type, video.clock_rate), (102, 90_000));
+        assert_eq!(
+            video.section.direction,
+            amazing_webrtc::SdpDirection::RecvOnly
         );
     }
 }

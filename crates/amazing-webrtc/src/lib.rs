@@ -238,6 +238,34 @@ pub struct RtpMap {
     pub channels: u16,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SdpDirection {
+    SendRecv,
+    SendOnly,
+    RecvOnly,
+    Inactive,
+}
+
+impl SdpDirection {
+    pub fn answer_for_offer(self) -> Self {
+        match self {
+            Self::SendRecv => Self::SendRecv,
+            Self::SendOnly => Self::RecvOnly,
+            Self::RecvOnly => Self::SendOnly,
+            Self::Inactive => Self::Inactive,
+        }
+    }
+
+    fn sdp_name(self) -> &'static str {
+        match self {
+            Self::SendRecv => "sendrecv",
+            Self::SendOnly => "sendonly",
+            Self::RecvOnly => "recvonly",
+            Self::Inactive => "inactive",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SdpMediaSection {
     pub mid: String,
@@ -249,6 +277,7 @@ pub struct SdpMediaSection {
     pub payload_types: Vec<u8>,
     pub candidates: Vec<IceCandidate>,
     pub rtp_maps: Vec<RtpMap>,
+    pub direction: SdpDirection,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1825,6 +1854,7 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 payload_types,
                 candidates: Vec::new(),
                 rtp_maps: Vec::new(),
+                direction: SdpDirection::SendRecv,
             });
             media_connections.push(false);
             continue;
@@ -1912,13 +1942,28 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
             section.rtcp_mux = true;
             continue;
         }
+        if let Some(direction) = line.strip_prefix("a=").and_then(|value| match value {
+            "sendrecv" => Some(SdpDirection::SendRecv),
+            "sendonly" => Some(SdpDirection::SendOnly),
+            "recvonly" => Some(SdpDirection::RecvOnly),
+            "inactive" => Some(SdpDirection::Inactive),
+            _ => None,
+        }) {
+            let section = media_sections
+                .last_mut()
+                .ok_or(WebRtcError::InvalidPacket("session-level SDP direction"))?;
+            section.direction = direction;
+            continue;
+        }
         if let Some(value) = line.strip_prefix("a=candidate:") {
             let section = media_sections
                 .last_mut()
                 .filter(|_| media_connections.last() == Some(&true))
                 .ok_or(WebRtcError::InvalidPacket("session-level ICE candidate"))?;
             let fields: Vec<&str> = value.split_ascii_whitespace().collect();
-            if !matches!(fields.len(), 8 | 12)
+            if fields.len() < 8
+                || fields.len() > 24
+                || !(fields.len() - 8).is_multiple_of(2)
                 || !fields[2].eq_ignore_ascii_case("UDP")
                 || fields[6] != "typ"
             {
@@ -1944,31 +1989,52 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
             let priority = fields[3]
                 .parse()
                 .map_err(|_| WebRtcError::InvalidPacket("invalid candidate priority"))?;
-            let address = fields[4]
-                .parse::<Ipv4Addr>()
-                .map_err(|_| WebRtcError::Unsupported("non-IPv4 SDP candidate"))?;
+            let address = match fields[4].parse::<Ipv4Addr>() {
+                Ok(address) => address,
+                Err(_) if kind == IceCandidateKind::Host && fields[4].ends_with(".local") => {
+                    continue;
+                }
+                Err(_) => return Err(WebRtcError::Unsupported("non-IPv4 SDP candidate")),
+            };
             let candidate_port = fields[5]
                 .parse()
                 .ok()
                 .filter(|value| *value > 0)
                 .ok_or(WebRtcError::InvalidPacket("invalid candidate port"))?;
-            let related_address = if fields.len() == 12 {
-                if fields[8] != "raddr" || fields[10] != "rport" {
+            let mut related_ip = None;
+            let mut related_port = None;
+            for extension in fields[8..].chunks_exact(2) {
+                match extension[0] {
+                    "raddr" => {
+                        related_ip =
+                            Some(extension[1].parse::<Ipv4Addr>().map_err(|_| {
+                                WebRtcError::Unsupported("non-IPv4 related candidate")
+                            })?);
+                    }
+                    "rport" => {
+                        related_port = Some(extension[1].parse().map_err(|_| {
+                            WebRtcError::InvalidPacket("invalid related candidate port")
+                        })?);
+                    }
+                    "generation" | "network-id" | "network-cost" => {
+                        extension[1].parse::<u32>().map_err(|_| {
+                            WebRtcError::InvalidPacket("invalid numeric candidate extension")
+                        })?;
+                    }
+                    _ if extension[0].is_empty() || extension[1].is_empty() => {
+                        return Err(WebRtcError::InvalidPacket("empty ICE candidate extension"));
+                    }
+                    _ => {}
+                }
+            }
+            let related_address = match (related_ip, related_port) {
+                (Some(ip), Some(port)) => Some(SocketAddrV4::new(ip, port)),
+                (None, None) => None,
+                _ => {
                     return Err(WebRtcError::InvalidPacket(
-                        "invalid related ICE candidate address",
+                        "incomplete related ICE candidate address",
                     ));
                 }
-                let related_ip = fields[9]
-                    .parse::<Ipv4Addr>()
-                    .map_err(|_| WebRtcError::Unsupported("non-IPv4 related candidate"))?;
-                let related_port = fields[11]
-                    .parse()
-                    .ok()
-                    .filter(|value| *value > 0)
-                    .ok_or(WebRtcError::InvalidPacket("invalid related candidate port"))?;
-                Some(SocketAddrV4::new(related_ip, related_port))
-            } else {
-                None
             };
             if kind == IceCandidateKind::Host && related_address.is_some() {
                 return Err(WebRtcError::InvalidPacket(
@@ -2115,6 +2181,7 @@ pub fn encode_sdp(description: &SdpDescription) -> Result<String, WebRtcError> {
         if section.rtcp_mux {
             output.push_str("a=rtcp-mux\r\n");
         }
+        output.push_str(&format!("a={}\r\n", section.direction.sdp_name()));
         for candidate in &section.candidates {
             output.push_str(&format!(
                 "a=candidate:{} {} UDP {} {} {} typ {}",
@@ -2614,6 +2681,76 @@ mod tests {
         assert!(
             candidate_priority(IceCandidateKind::ServerReflexive, u16::MAX, 1).unwrap()
                 > candidate_priority(IceCandidateKind::Relay, u16::MAX, 1).unwrap()
+        );
+    }
+
+    #[test]
+    fn chromium_offer_keeps_relay_candidates_direction_and_dynamic_codecs() {
+        let offer = concat!(
+            "v=0\r\n",
+            "o=- 5175661652751387823 2 IN IP4 127.0.0.1\r\n",
+            "s=-\r\n",
+            "t=0 0\r\n",
+            "a=group:BUNDLE 0 1\r\n",
+            "a=extmap-allow-mixed\r\n",
+            "m=audio 9 UDP/TLS/RTP/SAVPF 111 0\r\n",
+            "c=IN IP4 0.0.0.0\r\n",
+            "a=candidate:823789495 1 udp 2113937151 browser-host.local 55055 typ host generation 0 network-cost 999\r\n",
+            "a=candidate:turnudp 1 udp 16777215 127.0.0.1 55000 typ relay raddr 0.0.0.0 rport 0 generation 0 network-id 1 network-cost 10\r\n",
+            "a=ice-ufrag:PBBd\r\n",
+            "a=ice-pwd:Dos+9TOjY0WIrWBz2n5ZAIpq\r\n",
+            "a=fingerprint:sha-256 AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA\r\n",
+            "a=setup:actpass\r\n",
+            "a=mid:0\r\n",
+            "a=recvonly\r\n",
+            "a=rtcp-mux\r\n",
+            "a=rtpmap:111 opus/48000/2\r\n",
+            "a=rtpmap:0 PCMU/8000\r\n",
+            "m=video 9 UDP/TLS/RTP/SAVPF 96 102\r\n",
+            "c=IN IP4 0.0.0.0\r\n",
+            "a=candidate:823789495 1 udp 2113937151 browser-host.local 55056 typ host generation 0 network-cost 999\r\n",
+            "a=candidate:turnudpv 1 udp 16777214 127.0.0.1 55001 typ relay raddr 0.0.0.0 rport 0 generation 0 network-id 1 network-cost 10\r\n",
+            "a=ice-ufrag:PBBd\r\n",
+            "a=ice-pwd:Dos+9TOjY0WIrWBz2n5ZAIpq\r\n",
+            "a=fingerprint:sha-256 AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA\r\n",
+            "a=setup:actpass\r\n",
+            "a=mid:1\r\n",
+            "a=recvonly\r\n",
+            "a=rtcp-mux\r\n",
+            "a=rtpmap:96 VP8/90000\r\n",
+            "a=rtpmap:102 H264/90000\r\n",
+            "a=end-of-candidates\r\n",
+        );
+        let parsed = parse_sdp(offer).unwrap();
+        assert_eq!(parsed.media_sections.len(), 2);
+        for section in &parsed.media_sections {
+            assert_eq!(section.direction, SdpDirection::RecvOnly);
+            assert_eq!(section.candidates.len(), 1, "mDNS host is unresolved");
+            assert_eq!(section.candidates[0].kind, IceCandidateKind::Relay);
+            assert_eq!(
+                section.candidates[0].related_address,
+                Some("0.0.0.0:0".parse().unwrap())
+            );
+        }
+        assert!(
+            parsed
+                .media("audio")
+                .unwrap()
+                .rtp_maps
+                .iter()
+                .any(|mapping| mapping.payload_type == 111 && mapping.encoding == "opus")
+        );
+        assert!(
+            parsed
+                .media("video")
+                .unwrap()
+                .rtp_maps
+                .iter()
+                .any(|mapping| mapping.payload_type == 102 && mapping.encoding == "H264")
+        );
+        assert_eq!(
+            SdpDirection::RecvOnly.answer_for_offer(),
+            SdpDirection::SendOnly
         );
     }
 
