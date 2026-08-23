@@ -12,6 +12,7 @@ amazing-dom = { path = "../amazing-dom" }
 amazing-html = { path = "../amazing-html" }
 amazing-css = { path = "../amazing-css" }
 amazing-layout = { path = "../amazing-layout" }
+amazing-media = { path = "../amazing-media" }
 amazing-paint = { path = "../amazing-paint" }
 amazing-net = { path = "../amazing-net" }
 amazing-js = { path = "../amazing-js" }

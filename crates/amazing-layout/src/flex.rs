@@ -755,6 +755,10 @@ pub(crate) fn translate(b: &mut LayoutBox, dx: f32, dy: f32) {
         for w in &mut line.words {
             w.x += dx;
         }
+        for image in &mut line.replaced {
+            image.x += dx;
+            image.y += dy;
+        }
     }
     match &mut b.flow {
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
@@ -795,15 +799,30 @@ pub(crate) fn max_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
 /// Unwrapped width of an inline run: every word plus the collapsible
 /// spaces between them (reuses the line breaker's tokenizer).
 fn inline_run_width(items: &[crate::InlineNode], fonts: &FontSource) -> f32 {
-    let (tokens, _) = inline::tokenize(items);
-    let mut w = 0.0f32;
-    for t in &tokens {
-        if t.space_before && w > 0.0 {
-            w += fonts.measure(" ", t.font_size);
+    let tokens = inline::tokenize(items);
+    let mut line_width = 0.0f32;
+    let mut max_width = 0.0f32;
+    for token in tokens {
+        match token {
+            inline::Token::Break => {
+                max_width = max_width.max(line_width);
+                line_width = 0.0;
+            },
+            inline::Token::Word { text, font_size, space_before, .. } => {
+                if space_before && line_width > 0.0 {
+                    line_width += fonts.measure(" ", font_size);
+                }
+                line_width += fonts.measure(&text, font_size);
+            },
+            inline::Token::Replaced { size, space_before, .. } => {
+                if space_before && line_width > 0.0 {
+                    line_width += fonts.measure(" ", 16.0);
+                }
+                line_width += size.width;
+            },
         }
-        w += fonts.measure(&t.text, t.font_size);
     }
-    w
+    max_width.max(line_width)
 }
 
 #[cfg(test)]
@@ -1000,4 +1019,3 @@ mod tests {
         assert!(k[0].border_box.x < k[1].border_box.x);
     }
 }
-

@@ -8,13 +8,16 @@ event, not a refactor.
 
 ```
 amazing-net ──bytes──▶ amazing-html ──tree ops──▶ amazing-dom
-                                                   │
-                                     styles        │ tree mutations
-                                        ▼          ▼
-                                    amazing-css   amazing-js  ◀── DOM/JS bridge (Phase 7)
-                                        │
-                                        ▼ computed style tree
-                                   amazing-layout ──layout tree──▶ amazing-paint ──pixels──▶ GUI shell
+      │                                            │
+      │                              styles        │ tree mutations
+      │                                 ▼          ▼
+      │                             amazing-css   amazing-js  ◀── DOM/JS bridge (Phase 7)
+      │                                 │
+      │                                 ▼ computed style tree
+      │                            amazing-layout ──layout tree──▶ amazing-paint ──pixels──▶ GUI shell
+      └──image bytes──▶ amazing-media
+amazing-media ──intrinsic size via PageMedia──▶ amazing-layout
+amazing-media ──RGBA8 via PageMedia───────────▶ amazing-paint
 ```
 
 Dependency direction always points "downward" in the pipeline; nothing in a

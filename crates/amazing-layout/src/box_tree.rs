@@ -13,17 +13,27 @@ use amazing_dom::{Dom, NodeIdx, NodeKind};
 
 use crate::font::FontSource;
 use crate::values;
-use crate::{Display, Flow, InlineNode, LayoutBox};
+use crate::{Display, Flow, InlineNode, LayoutBox, NoReplacedElements, ReplacedElementProvider};
 
 /// Builds the root box for a document: the `<body>` element (or `<html>`
 /// when body is missing; an empty box otherwise).
 pub fn build_layout_tree(dom: &Dom, styled: &StyledDom, fonts: &FontSource) -> LayoutBox {
+    build_layout_tree_with_replaced(dom, styled, fonts, &NoReplacedElements)
+}
+
+/// Builds the root box while resolving replaced-element intrinsic sizes.
+pub fn build_layout_tree_with_replaced(
+    dom: &Dom,
+    styled: &StyledDom,
+    fonts: &FontSource,
+    replaced: &dyn ReplacedElementProvider,
+) -> LayoutBox {
     let root_style = ComputedStyle::default();
     let start = dom_html(dom)
         .and_then(|html| find_element(dom, html, "body"))
         .or_else(|| dom_html(dom));
     match start {
-        Some(idx) => build_element(dom, styled, idx, values::ROOT_FONT_SIZE, fonts),
+        Some(idx) => build_element(dom, styled, idx, values::ROOT_FONT_SIZE, fonts, replaced),
         None => LayoutBox::new(None, Display::Block, root_style, values::ROOT_FONT_SIZE, 19.2),
     }
 }
@@ -45,6 +55,7 @@ fn build_element(
     idx: NodeIdx,
     parent_font_px: f32,
     fonts: &FontSource,
+    replaced: &dyn ReplacedElementProvider,
 ) -> LayoutBox {
     let style = styled.get(idx).cloned().unwrap_or_default();
     let font_size =
@@ -57,7 +68,8 @@ fn build_element(
     );
     let display = parse_display(&style);
     let mut box_ = LayoutBox::new(Some(idx), display, style, font_size, line_height);
-    box_.flow = classify_children(dom, styled, idx, font_size, fonts);
+    box_.replaced_size = replaced.intrinsic_size(idx);
+    box_.flow = classify_children(dom, styled, idx, font_size, fonts, replaced);
     box_
 }
 
@@ -116,6 +128,7 @@ fn classify_children(
     idx: NodeIdx,
     font_size: f32,
     fonts: &FontSource,
+    replaced: &dyn ReplacedElementProvider,
 ) -> Flow {
     // Flex/grid containers take every non-`none` element child as an ITEM
     // (css-flexbox-1 §3 / css-grid-1 §3 blockification); contiguous text
@@ -140,7 +153,7 @@ fn classify_children(
                         continue;
                     }
                     flush_anonymous_into(&mut items, &mut run, font_size, fonts);
-                    items.push(build_element(dom, styled, child, font_size, fonts));
+                    items.push(build_element(dom, styled, child, font_size, fonts, replaced));
                 },
             }
         }
@@ -182,11 +195,16 @@ fn classify_children(
                     {
                         // Flush pending inline content into an anonymous block.
                         flush_anonymous_into(&mut blocks, &mut inlines, font_size, fonts);
-                        blocks.push(build_element(dom, styled, child, font_size, fonts));
+                        blocks.push(build_element(dom, styled, child, font_size, fonts, replaced));
+                    },
+                    Some("img") => {
+                        if let Some(size) = replaced.intrinsic_size(child) {
+                            inlines.push(InlineNode::Replaced { node: child, size });
+                        }
                     },
                     _ => flatten_inline(
                         dom, styled, child, child_style, font_size,
-                        &mut inlines, &mut blocks, fonts,
+                        &mut inlines, &mut blocks, fonts, replaced,
                     ),
                 }
             },
@@ -244,6 +262,7 @@ fn flatten_inline(
     inlines: &mut Vec<InlineNode>,
     blocks_out: &mut Vec<LayoutBox>,
     fonts: &FontSource,
+    replaced: &dyn ReplacedElementProvider,
 ) {
     let font_size =
         values::resolve_font_size(style.get("font-size").unwrap_or("medium"), parent_font_px);
@@ -270,11 +289,23 @@ fn flatten_inline(
                     ) => {
                         // Hoist: end the current inline run here.
                         flush_anonymous_into(blocks_out, inlines, parent_font_px, fonts);
-                        blocks_out.push(build_element(dom, styled, child, parent_font_px, fonts));
+                        blocks_out.push(build_element(
+                            dom,
+                            styled,
+                            child,
+                            parent_font_px,
+                            fonts,
+                            replaced,
+                        ));
+                    },
+                    Some("img") => {
+                        if let Some(size) = replaced.intrinsic_size(child) {
+                            inlines.push(InlineNode::Replaced { node: child, size });
+                        }
                     },
                     _ => flatten_inline(
                         dom, styled, child, cs, font_size,
-                        inlines, blocks_out, fonts,
+                        inlines, blocks_out, fonts, replaced,
                     ),
                 }
             },
@@ -359,6 +390,7 @@ mod tests {
             match self {
                 InlineNode::Text { text, font_size, .. } => (text.as_str(), *font_size),
                 InlineNode::Break => ("<br>", 0.0),
+                InlineNode::Replaced { .. } => ("<replaced>", 0.0),
             }
         }
     }

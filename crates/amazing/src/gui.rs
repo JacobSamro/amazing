@@ -24,7 +24,7 @@ mod windows {
     use amazing_layout::{Flow, LayoutBox};
     use amazing_paint::Surface;
 
-    use crate::BrowserDomHost;
+    use crate::{load_page_media, BrowserDomHost, PageMedia};
 
     type Handle = *mut c_void;
     type Hwnd = Handle;
@@ -226,6 +226,7 @@ mod windows {
         host: Rc<RefCell<BrowserDomHost>>,
         js: amazing_js::Interpreter,
         layout: LayoutBox,
+        media: PageMedia,
     }
 
     struct RenderedPage {
@@ -483,24 +484,32 @@ mod windows {
                 return;
             }
             let fonts = amazing_layout::font::FontSource::fallback();
-            let layout = amazing_layout::layout_dom_document(
+            let media = load_page_media(&host_ref.dom, &page);
+            for warning in &media.warnings {
+                eprintln!("amazing gui: {warning}");
+            }
+            let layout = amazing_layout::layout_dom_document_with_replaced(
                 &host_ref.dom,
                 &css,
                 width.max(1) as f32,
                 &fonts,
+                &media,
             );
             let height = (layout.border_box.y
                 + layout.border_box.h
                 + layout.margin.bottom.unwrap_or(0.0))
                 .ceil()
                 .clamp(1.0, 8192.0) as u32;
-            let surface = amazing_paint::paint_document(
+            let surface = amazing_paint::paint_document_with_resources(
                 &layout,
                 width.max(1),
                 height,
                 &fonts,
+                &amazing_paint::RectInkProvider,
+                &media,
             );
             runtime.layout = layout;
+            runtime.media = media;
             tab.surface = Some(surface);
             tab.scroll_y = 0;
             self.clamp_scroll();
@@ -892,15 +901,32 @@ mod windows {
         }
         let host_ref = host.borrow();
         let fonts = amazing_layout::font::FontSource::fallback();
-        let root = amazing_layout::layout_dom_document(&host_ref.dom, &css, width.max(1) as f32, &fonts);
+        let media = load_page_media(&host_ref.dom, input);
+        for warning in &media.warnings {
+            eprintln!("amazing gui: {warning}");
+        }
+        let root = amazing_layout::layout_dom_document_with_replaced(
+            &host_ref.dom,
+            &css,
+            width.max(1) as f32,
+            &fonts,
+            &media,
+        );
         let height = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
             .ceil()
             .clamp(1.0, 8192.0) as u32;
-        let surface = amazing_paint::paint_document(&root, width.max(1), height, &fonts);
+        let surface = amazing_paint::paint_document_with_resources(
+            &root,
+            width.max(1),
+            height,
+            &fonts,
+            &amazing_paint::RectInkProvider,
+            &media,
+        );
         drop(host_ref);
         Ok(RenderedPage {
             surface,
-            runtime: PageRuntime { host, js, layout: root },
+            runtime: PageRuntime { host, js, layout: root, media },
         })
     }
 

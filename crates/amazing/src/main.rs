@@ -53,6 +53,107 @@ pub(crate) struct BrowserDomHost {
     pub(crate) dom: amazing_dom::Dom,
 }
 
+struct PageImage {
+    node: amazing_dom::NodeIdx,
+    image: amazing_media::Image,
+    used_size: amazing_layout::IntrinsicSize,
+}
+
+#[derive(Default)]
+pub(crate) struct PageMedia {
+    images: Vec<PageImage>,
+    pub(crate) warnings: Vec<String>,
+}
+
+impl amazing_layout::ReplacedElementProvider for PageMedia {
+    fn intrinsic_size(&self, node: amazing_dom::NodeIdx) -> Option<amazing_layout::IntrinsicSize> {
+        self.images
+            .iter()
+            .find(|entry| entry.node == node)
+            .map(|entry| entry.used_size)
+    }
+}
+
+impl amazing_paint::ImageProvider for PageMedia {
+    fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
+        self.images
+            .iter()
+            .find(|entry| entry.node == node)
+            .map(|entry| &entry.image)
+    }
+}
+
+pub(crate) fn load_page_media(dom: &amazing_dom::Dom, page: &str) -> PageMedia {
+    fn dimension(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, name: &str) -> Option<f32> {
+        dom.attrs_of(node)?
+            .iter()
+            .find(|(attribute, _)| attribute == name)?
+            .1
+            .trim()
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value > 0)
+            .map(|value| value as f32)
+    }
+
+    fn walk(
+        dom: &amazing_dom::Dom,
+        node: amazing_dom::NodeIdx,
+        page: &str,
+        media: &mut PageMedia,
+    ) {
+        if dom.name(node) == Some("img") {
+            let source = dom
+                .attrs_of(node)
+                .and_then(|attrs| attrs.iter().find(|(name, _)| name == "src"))
+                .map(|(_, value)| value.as_str())
+                .filter(|value| !value.trim().is_empty());
+            if let Some(source) = source {
+                let resolved = resolve_script_url(page, source);
+                match amazing_net::fetch(&resolved, &amazing_net::FetchOptions::default())
+                    .map_err(|error| error.to_string())
+                    .and_then(|response| {
+                        amazing_media::decode_image(&response.body).map_err(|error| error.to_string())
+                    })
+                {
+                    Ok(image) => {
+                        let intrinsic_width = image.width as f32;
+                        let intrinsic_height = image.height as f32;
+                        let width_attr = dimension(dom, node, "width");
+                        let height_attr = dimension(dom, node, "height");
+                        let used_size = match (width_attr, height_attr) {
+                            (Some(width), Some(height)) => amazing_layout::IntrinsicSize { width, height },
+                            (Some(width), None) => amazing_layout::IntrinsicSize {
+                                width,
+                                height: intrinsic_height * width / intrinsic_width,
+                            },
+                            (None, Some(height)) => amazing_layout::IntrinsicSize {
+                                width: intrinsic_width * height / intrinsic_height,
+                                height,
+                            },
+                            (None, None) => amazing_layout::IntrinsicSize {
+                                width: intrinsic_width,
+                                height: intrinsic_height,
+                            },
+                        };
+                        media.images.push(PageImage { node, image, used_size });
+                    },
+                    Err(error) => media
+                        .warnings
+                        .push(format!("image {source:?} ({resolved}): {error}")),
+                }
+            }
+        }
+        for child in dom.children(node) {
+            walk(dom, child, page, media);
+        }
+    }
+
+    let mut media = PageMedia::default();
+    walk(dom, amazing_dom::NodeIdx(0), page, &mut media);
+    media
+}
+
 impl BrowserDomHost {
     fn serialize_node(&self, node: amazing_dom::NodeIdx, out: &mut String) {
         match &self.dom.get(node).kind {
@@ -874,13 +975,30 @@ fn cmd_render(args: &[String]) -> ExitCode {
     }
 
     let fonts = amazing_layout::font::FontSource::fallback();
-    let root = amazing_layout::layout_dom_document(&dom.dom, &css, width, &fonts);
+    let media = load_page_media(&dom.dom, html_path);
+    for warning in &media.warnings {
+        eprintln!("amazing render: {warning}");
+    }
+    let root = amazing_layout::layout_dom_document_with_replaced(
+        &dom.dom,
+        &css,
+        width,
+        &fonts,
+        &media,
+    );
     // Page height = root margin-box bottom edge (what layout_root returns),
     // clamped so a runaway document cannot exhaust memory.
     let page_h = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
         .ceil()
         .clamp(1.0, 8192.0) as u32;
-    let surface = amazing_paint::paint_document(&root, width.max(1.0) as u32, page_h, &fonts);
+    let surface = amazing_paint::paint_document_with_resources(
+        &root,
+        width.max(1.0) as u32,
+        page_h,
+        &fonts,
+        &amazing_paint::RectInkProvider,
+        &media,
+    );
 
     if let Err(e) = surface.save_bmp(out_path) {
         eprintln!("amazing render: cannot write {out_path}: {e}");

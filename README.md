@@ -18,7 +18,8 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 ## Hard constraints
 
 - **`std` only** in the engine cores: `amazing-html`, `amazing-css`,
-  `amazing-dom`, `amazing-layout`, `amazing-js`, `amazing-net`, `amazing-paint`.
+  `amazing-dom`, `amazing-layout`, `amazing-js`, `amazing-net`,
+  `amazing-media`, `amazing-paint`.
 - No `nom`/`pest` for parsing, no `skia`/`tiny-skia` for painting, no
   `rusttype`/`fontdue` for fonts, no `hyper`/`reqwest` for networking.
   Everything is hand-written against the relevant specs:
@@ -43,14 +44,19 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-paint` | software rasterizer | Phase 4 |
 | `amazing-net` | HTTP/1.1 client | Phase 5 |
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | Phase 6 |
+| `amazing-media` | BMP/P6 PPM detection and RGBA8 decoding | Phase 9.1 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | Phase 7/8 |
 
 The Windows GUI shell includes tabs, address/history navigation, live DOM
 events and mutation, classic scripts/external resources, and software-paint
-reflow. CI runs the workspace build and test gate on every push and pull
+reflow. Relative `<img>` resources are fetched, decoded by `amazing-media`,
+given intrinsic inline layout geometry, and painted with nearest-neighbor
+scaling. CI runs the workspace build and test gate on every push and pull
 request via `.github/workflows/ci.yml`.
 
 ![Ferric Phase 8 running on win-001](docs/screenshots/phase8-win001.png)
+
+![Ferric Phase 9 decoded-image render](docs/screenshots/phase9-media.png)
 
 ## Usage
 
@@ -71,6 +77,9 @@ amazing domrun page.html script.js
 
 # open the native Windows shell (on Windows, double-clicking amazing.exe does this)
 amazing gui [url]
+
+# Phase 9 image-media artifact
+amazing render examples/phase9-media.html phase9-media.bmp 400
 ```
 
 ```sh

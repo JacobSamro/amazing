@@ -16,10 +16,10 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (142 crate tests); focused Test262 slice measured at 196/196 (100%) |
-| 7 — DOM/JS | 🔄 live DOM, events, styles, scripts, fetch, and repaint tracer landed |
+| 6 — JS | ✅ tree-walking milestone exit criteria met (142 crate tests); focused Test262 slice 196/196 supported (100%) |
+| 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | pending |
+| 9 — Media | 🔄 9.1 image slice landed: std-only BMP/P6 PPM decode + live `<img>` layout/paint |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -422,13 +422,51 @@ Phase 8 runnable demo: double-click `target\release\amazing.exe`, or run
 `target\release\amazing.exe gui examples\phase8.html` to open the captured
 fixture directly.
 
+## Phase 9.1 (media) — decoded image vertical slice
+
+Shipped: the std-only `amazing-media` crate detects and validates binary PPM
+(P6, max values 1–255) and uncompressed 24-bit BMP, normalizing both into a
+top-left RGBA8 `Image`. The driver resolves relative `<img src>` resources
+through `amazing-net`; `PageMedia` is the concrete adapter at both the layout
+intrinsic-size seam and the paint pixel seam. Inline images participate in
+word order, wrapping, baseline placement, and line-height growth. Block/flex/
+grid image boxes use intrinsic dimensions, and HTML `width`/`height`
+attributes scale while preserving aspect ratio when only one is supplied.
+Paint performs clipped nearest-neighbor scaling and source-over RGBA.
+
+Runnable artifact on win-001:
+`target\debug\amazing.exe render examples\phase9-media.html phase9_media.bmp 400`.
+It produced a measured 400×355 BMP/PPM pair; the visually inspected render is
+preserved at `docs/screenshots/phase9-media.png`. The integration test invokes
+the real `render` command in a temporary directory and proves a relative PPM's
+red/green pixels survive fetch → decode → inline layout → paint → BMP encode →
+decode.
+
+Known Phase 9 gaps: PNG/JPEG/GIF/WebP, animation, `<picture>`/`srcset`, audio,
+video containers/codecs, playback clocks, WebRTC, and hardware acceleration
+remain separate follow-on slices rather than hidden exceptions.
+
+Conformance baseline for this slice: curated WPT CSS2 remains 17/17 and
+flexbox/grid remains 22/22; the focused Test262 slice remains 196/196
+supported tests (445 unsupported/skipped). No dedicated media WPT subset is
+imported yet; the Phase 9 render integration gate is 1/1.
+
+Final win-001 gate: all 416 workspace tests/doctests passed and
+`cargo build --release` produced `target/release/amazing.exe` at 1,719,296
+bytes. The release demo emitted a 426,054-byte BMP and 426,015-byte PPM.
+
+Recommended next sub-phase: Phase 9.2 PCM WAV audio decode and Windows
+playback. The user's explicit “do all phases now” instruction pre-authorizes
+continuing past this sub-phase gate.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
   WPT css/CSS2 tracking starts here.
 - **3.5 Flexbox/Grid** · **4 Paint** software rasterizer + PPM writer ·
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
-  **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**.
+  **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
+  (9.1 image decode/layout/paint landed; audio/video/WebRTC/acceleration next).
 
 ## Server cheat sheet
 

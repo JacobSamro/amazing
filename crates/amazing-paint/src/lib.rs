@@ -19,6 +19,8 @@
 //!   padding-box background, then its four border strips (all non-none
 //!   styles painted solid), then its line-box text fragments, then its
 //!   children; flex children like block children
+//! - decoded replaced images from an [`paint::ImageProvider`], scaled with
+//!   clipped nearest-neighbor sampling and source-over RGBA compositing
 //! - [`text`]: per-character advances from the same `FontSource::measure`
 //!   numbers layout used, integer alpha compositing, and two
 //!   [`text::GlyphProvider`] implementations: [`text::RectInkProvider`]
@@ -31,8 +33,8 @@
 //!
 //! - Outline text has no hinting and flattens curves at a fixed 4
 //!   subdivisions per segment; coverage is 16-level box supersampling.
-//! - all border styles render solid; no radius/shadows/images/markers/
-//!   opacity/stacking contexts; word-level colors inside one line use the
+//! - all border styles render solid; no radius/shadows/markers/opacity/
+//!   stacking contexts; word-level colors inside one line use the
 //!   containing block's color (`WordFrag` carries no style)
 //! - the canvas starts opaque white; transparent backgrounds skip filling
 
@@ -42,7 +44,9 @@ pub mod surface;
 pub mod text;
 
 pub use color::parse_css_color;
-pub use paint::{paint_document, paint_document_with};
+pub use paint::{
+    paint_document, paint_document_with, paint_document_with_resources, ImageProvider, NoImages,
+};
 pub use surface::Surface;
 pub use text::{
     draw_fragment, GlyphBitmap, GlyphProvider, OutlineGlyphProvider, RectInkProvider,
