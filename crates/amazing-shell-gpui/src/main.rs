@@ -1,10 +1,15 @@
 #![forbid(unsafe_code)]
 
+mod engine_viewport;
+
 use gpui::{
-    App, Bounds, Context, IntoElement, ParentElement, Render, SharedString, Styled, Window,
-    WindowBounds, WindowControlArea, WindowOptions, div, prelude::*, px, rgb, size,
+    App, Bounds, Context, CursorStyle, FocusHandle, IntoElement, KeyDownEvent, ParentElement,
+    Render, SharedString, Styled, Window, WindowBounds, WindowControlArea, WindowOptions, div, img,
+    prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
+
+use engine_viewport::EngineViewport;
 
 const STRIP: u32 = 0xd5dae2;
 const STRIP_HOVER: u32 = 0xc6ccd6;
@@ -30,6 +35,14 @@ struct Tab {
 
 struct BrowserShell {
     tabs: Vec<Tab>,
+    viewport: EngineViewport,
+    video_viewport: EngineViewport,
+    address_focus: Option<FocusHandle>,
+    address: String,
+    committed_address: String,
+    address_selected: bool,
+    history: Vec<String>,
+    history_index: usize,
     active: usize,
     engine_collapsed: bool,
     specs_collapsed: bool,
@@ -37,7 +50,7 @@ struct BrowserShell {
 }
 
 impl BrowserShell {
-    fn new() -> Self {
+    fn new(address_focus: Option<FocusHandle>) -> Self {
         Self {
             tabs: vec![
                 Tab {
@@ -49,11 +62,11 @@ impl BrowserShell {
                     hue: ACCENT,
                 },
                 Tab {
-                    mono: "W",
-                    title: "WPT · flexbox + grid gate",
-                    url: "localhost:8080/wpt/css/flex",
-                    kicker: "LOCALHOST:8080",
-                    lede: "Flex and grid reference runs for the layout gate suite.",
+                    mono: "V",
+                    title: "Secure video · H.264 decoded frame",
+                    url: "amazing://media/video",
+                    kicker: "AMAZING://MEDIA/VIDEO",
+                    lede: "A real H.264 access unit decoded through the isolated codec adapter and presented as RGBA by GPUI.",
                     hue: 0x3f7d4e,
                 },
                 Tab {
@@ -89,6 +102,14 @@ impl BrowserShell {
                     hue: 0x7a5aa8,
                 },
             ],
+            viewport: EngineViewport::demo(),
+            video_viewport: EngineViewport::video_demo().expect("decode GPUI video demo"),
+            address_focus,
+            address: "amazing://status".to_string(),
+            committed_address: "amazing://status".to_string(),
+            address_selected: false,
+            history: vec!["amazing://status".to_string()],
+            history_index: 0,
             active: 0,
             engine_collapsed: false,
             specs_collapsed: true,
@@ -99,7 +120,104 @@ impl BrowserShell {
     fn select_tab(&mut self, index: usize) {
         if index < self.tabs.len() {
             self.active = index;
+            self.address = self.tabs[index].url.to_string();
+            self.committed_address = self.address.clone();
+            self.address_selected = false;
         }
+    }
+
+    fn on_address_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.stop_propagation();
+        match event.keystroke.key.as_str() {
+            "enter" => {
+                self.commit_navigation();
+                window.blur();
+            }
+            "escape" => {
+                self.address = self.committed_address.clone();
+                self.address_selected = false;
+                window.blur();
+            }
+            "backspace" => {
+                if self.address_selected {
+                    self.address.clear();
+                    self.address_selected = false;
+                } else {
+                    self.address.pop();
+                }
+            }
+            _ => {
+                if let Some(text) = event.keystroke.key_char.as_ref()
+                    && !event.keystroke.modifiers.control
+                    && !event.keystroke.modifiers.platform
+                {
+                    if self.address_selected {
+                        self.address.clear();
+                        self.address_selected = false;
+                    }
+                    self.address.push_str(text);
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    fn commit_navigation(&mut self) {
+        let Some(address) = normalize_address(&self.address) else {
+            self.address = self.committed_address.clone();
+            return;
+        };
+        self.load_navigation(&address);
+        if self.history[self.history_index] != self.committed_address {
+            self.history.truncate(self.history_index + 1);
+            self.history.push(self.committed_address.clone());
+            self.history_index = self.history.len() - 1;
+        }
+    }
+
+    fn load_navigation(&mut self, address: &str) {
+        match EngineViewport::load_address(address) {
+            Ok((viewport, final_address)) => {
+                self.viewport = viewport;
+                self.address = final_address.clone();
+                self.committed_address = final_address;
+            }
+            Err(error) => {
+                self.viewport = EngineViewport::error(&address, &error);
+                self.address = address.to_string();
+                self.committed_address = address.to_string();
+            }
+        }
+        self.active = 0;
+        self.address_selected = false;
+    }
+
+    fn go_back(&mut self) {
+        if self.history_index == 0 {
+            return;
+        }
+        self.history_index -= 1;
+        let address = self.history[self.history_index].clone();
+        self.load_navigation(&address);
+    }
+
+    fn go_forward(&mut self) {
+        if self.history_index + 1 >= self.history.len() {
+            return;
+        }
+        self.history_index += 1;
+        let address = self.history[self.history_index].clone();
+        self.load_navigation(&address);
+    }
+
+    fn reload(&mut self) {
+        let address = self.committed_address.clone();
+        self.load_navigation(&address);
     }
 
     fn toggle_engine_group(&mut self) {
@@ -229,7 +347,6 @@ impl BrowserShell {
     }
 
     fn navigation_toolbar(&self, cx: &mut Context<Self>, visible: bool) -> gpui::AnyElement {
-        let active_url = self.tabs[self.active].url;
         div()
             .flex()
             .items_center()
@@ -238,12 +355,34 @@ impl BrowserShell {
             .px_2()
             .bg(rgb(SURFACE))
             .children([
-                Self::icon_button("←").into_any_element(),
-                Self::icon_button("→").into_any_element(),
-                Self::icon_button("↻").into_any_element(),
+                div()
+                    .id("history-back")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.go_back();
+                        cx.notify();
+                    }))
+                    .child(Self::icon_button("←"))
+                    .into_any_element(),
+                div()
+                    .id("history-forward")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.go_forward();
+                        cx.notify();
+                    }))
+                    .child(Self::icon_button("→"))
+                    .into_any_element(),
+                div()
+                    .id("history-reload")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.reload();
+                        cx.notify();
+                    }))
+                    .child(Self::icon_button("↻"))
+                    .into_any_element(),
             ])
             .child(
                 div()
+                    .id("address-bar")
                     .flex()
                     .flex_1()
                     .min_w_0()
@@ -256,6 +395,18 @@ impl BrowserShell {
                     .bg(rgb(SURFACE_2))
                     .text_size(px(13.0))
                     .text_color(rgb(TEXT))
+                    .cursor(CursorStyle::IBeam)
+                    .when_some(self.address_focus.as_ref(), |address, focus| {
+                        address.track_focus(focus)
+                    })
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        if let Some(focus) = this.address_focus.as_ref() {
+                            focus.focus(window, cx);
+                        }
+                        this.address_selected = true;
+                        cx.notify();
+                    }))
+                    .on_key_down(cx.listener(Self::on_address_key_down))
                     .child("▣")
                     .child(
                         div()
@@ -264,7 +415,10 @@ impl BrowserShell {
                             .overflow_hidden()
                             .text_ellipsis()
                             .whitespace_nowrap()
-                            .child(active_url),
+                            .when(self.address_selected, |text| {
+                                text.bg(rgb(0xc9ddf5)).rounded_sm().px_1()
+                            })
+                            .child(self.address.clone()),
                     )
                     .child("☆")
                     .child("⌘"),
@@ -463,71 +617,135 @@ impl BrowserShell {
 
     fn page(&self) -> impl IntoElement {
         let tab = &self.tabs[self.active];
+        let page_url = if self.active == 0 {
+            self.committed_address.clone()
+        } else {
+            tab.url.to_string()
+        };
         div()
             .relative()
             .flex_1()
             .h_full()
             .overflow_hidden()
             .bg(rgb(SURFACE))
-            .child(
-                div()
-                    .w(px(760.0))
-                    .px(px(64.0))
-                    .py(px(56.0))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .text_size(px(12.0))
-                            .text_color(rgb(DIM))
-                            .child(div().w(px(18.0)).h(px(1.0)).bg(rgb(ACCENT)))
-                            .child(tab.kicker),
-                    )
-                    .child(
-                        div()
-                            .mt_4()
-                            .font_family("Georgia")
-                            .font_weight(gpui::FontWeight::NORMAL)
-                            .text_size(px(46.0))
-                            .line_height(gpui::relative(1.1))
-                            .text_color(rgb(TEXT))
-                            .child(tab.title),
-                    )
-                    .child(
-                        div()
-                            .mt_4()
-                            .w(px(620.0))
-                            .text_size(px(16.0))
-                            .line_height(gpui::relative(1.6))
-                            .text_color(rgb(DIM))
-                            .child(tab.lede),
-                    )
-                    .when(self.active == 0, |page| {
-                        page.child(
+            .when(self.active == 0, |page| {
+                page.child(
+                    div()
+                        .relative()
+                        .flex()
+                        .flex_1()
+                        .size_full()
+                        .items_center()
+                        .justify_center()
+                        .bg(rgb(0xe9edf2))
+                        .p_3()
+                        .child(
                             div()
-                                .flex()
-                                .mt_8()
-                                .rounded_lg()
+                                .id("engine-viewport-scroll")
+                                .size_full()
+                                .overflow_y_scroll()
+                                .rounded_md()
                                 .border_1()
-                                .border_color(rgb(RULE))
-                                .overflow_hidden()
-                                .children([
-                                    Self::stat("476", "workspace tests green"),
-                                    Self::stat("243/243", "html5lib subset"),
-                                    Self::stat("4.60 MB", "stripped ThinLTO release"),
-                                ]),
+                                .border_color(rgb(BORDER))
+                                .bg(rgb(SURFACE))
+                                .shadow_md()
+                                .child(img(self.viewport.image.clone()).w_full()),
                         )
                         .child(
                             div()
-                                .mt_6()
-                                .text_size(px(13.0))
+                                .absolute()
+                                .top_4()
+                                .right_4()
+                                .px_2()
+                                .py_1()
+                                .rounded_md()
+                                .bg(rgb(TEXT))
+                                .text_color(rgb(SURFACE))
+                                .text_size(px(10.5))
+                                .child(format!(
+                                    "AMAZING ENGINE  ·  {} × {}",
+                                    self.viewport.width, self.viewport.height
+                                )),
+                        ),
+                )
+            })
+            .when(self.active == 1, |page| {
+                page.child(
+                    div()
+                        .relative()
+                        .flex()
+                        .flex_1()
+                        .size_full()
+                        .items_center()
+                        .justify_center()
+                        .bg(rgb(0x111820))
+                        .p_6()
+                        .child(
+                            div()
+                                .size_full()
+                                .overflow_hidden()
+                                .rounded_lg()
+                                .border_1()
+                                .border_color(rgb(0x33404d))
+                                .bg(rgb(0x080c10))
+                                .shadow_lg()
+                                .child(img(self.video_viewport.image.clone()).size_full()),
+                        )
+                        .child(
+                            div()
+                                .absolute()
+                                .top_8()
+                                .right_8()
+                                .px_3()
+                                .py_2()
+                                .rounded_md()
+                                .bg(rgb(0x12291b))
+                                .text_color(rgb(0xbde7c6))
+                                .text_size(px(10.5))
+                                .child(format!(
+                                    "H.264 → I420 → RGBA  ·  {} × {}",
+                                    self.video_viewport.width, self.video_viewport.height
+                                )),
+                        ),
+                )
+            })
+            .when(self.active > 1, |page| {
+                page.child(
+                    div()
+                        .w(px(760.0))
+                        .px(px(64.0))
+                        .py(px(56.0))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .text_size(px(12.0))
+                                .text_color(rgb(DIM))
+                                .child(div().w(px(18.0)).h(px(1.0)).bg(rgb(ACCENT)))
+                                .child(tab.kicker),
+                        )
+                        .child(
+                            div()
+                                .mt_4()
+                                .font_family("Georgia")
+                                .font_weight(gpui::FontWeight::NORMAL)
+                                .text_size(px(46.0))
+                                .line_height(gpui::relative(1.1))
+                                .text_color(rgb(TEXT))
+                                .child(tab.title),
+                        )
+                        .child(
+                            div()
+                                .mt_4()
+                                .w(px(620.0))
+                                .text_size(px(16.0))
                                 .line_height(gpui::relative(1.6))
                                 .text_color(rgb(DIM))
-                                .child("Next viewport handoff: present amazing-paint surfaces produced by amazing-layout inside this GPUI shell."),
-                        )
-                    }),
-            )
+                                .child(tab.lede),
+                        ),
+                )
+            })
             .child(
                 div()
                     .absolute()
@@ -543,7 +761,7 @@ impl BrowserShell {
                     .bg(rgb(SURFACE))
                     .text_size(px(11.0))
                     .text_color(rgb(DIM))
-                    .child(tab.url),
+                    .child(page_url),
             )
             .child(
                 div()
@@ -556,26 +774,6 @@ impl BrowserShell {
                     .text_color(rgb(DIM))
                     .child("win-001  ·  GPUI 0.2.2  ·  ThinLTO"),
             )
-    }
-
-    fn stat(value: &'static str, label: &'static str) -> impl IntoElement {
-        div()
-            .flex_1()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .p_4()
-            .bg(rgb(SURFACE))
-            .border_r_1()
-            .border_color(rgb(RULE))
-            .child(
-                div()
-                    .text_size(px(26.0))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(rgb(TEXT))
-                    .child(value),
-            )
-            .child(div().text_size(px(12.0)).text_color(rgb(DIM)).child(label))
     }
 }
 
@@ -833,6 +1031,7 @@ impl Render for BrowserShell {
 
 fn main() {
     let start_with_sidebar = std::env::args().any(|argument| argument == "--sidebar");
+    let start_with_video = std::env::args().any(|argument| argument == "--video");
     application().run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1080.0), px(760.0)), cx);
         cx.open_window(
@@ -842,9 +1041,12 @@ fn main() {
                 ..Default::default()
             },
             move |_, cx| {
-                cx.new(move |_| {
-                    let mut shell = BrowserShell::new();
+                cx.new(move |cx| {
+                    let mut shell = BrowserShell::new(Some(cx.focus_handle().tab_stop(true)));
                     shell.sidebar = start_with_sidebar;
+                    if start_with_video {
+                        shell.select_tab(1);
+                    }
                     if start_with_sidebar {
                         shell.specs_collapsed = false;
                     }
@@ -863,7 +1065,7 @@ mod tests {
 
     #[test]
     fn reference_shell_state_starts_on_status_with_specs_collapsed() {
-        let shell = BrowserShell::new();
+        let shell = BrowserShell::new(None);
         assert_eq!(shell.tabs.len(), 6);
         assert_eq!(shell.active, 0);
         assert!(!shell.engine_collapsed);
@@ -874,13 +1076,13 @@ mod tests {
 
     #[test]
     fn reference_groups_keep_engine_and_spec_tabs_distinct() {
-        let shell = BrowserShell::new();
+        let shell = BrowserShell::new(None);
         assert_eq!(
             &shell.tabs[0..3]
                 .iter()
                 .map(|tab| tab.mono)
                 .collect::<Vec<_>>(),
-            &["A", "W", "H"]
+            &["A", "V", "H"]
         );
         assert_eq!(
             &shell.tabs[3..6]
@@ -893,7 +1095,7 @@ mod tests {
 
     #[test]
     fn shell_model_transitions_cover_tabs_groups_and_sidebar() {
-        let mut shell = BrowserShell::new();
+        let mut shell = BrowserShell::new(None);
         shell.select_tab(4);
         shell.toggle_engine_group();
         shell.toggle_specs_group();
@@ -904,5 +1106,63 @@ mod tests {
         assert!(shell.sidebar);
         shell.select_tab(99);
         assert_eq!(shell.active, 4, "out-of-range selection is ignored");
+    }
+
+    #[test]
+    fn address_normalization_and_navigation_update_the_engine_surface() {
+        assert_eq!(
+            normalize_address("example.test/docs"),
+            Some("https://example.test/docs".to_string())
+        );
+        assert_eq!(normalize_address("   "), None);
+
+        let mut shell = BrowserShell::new(None);
+        shell.address = "example.test/docs".to_string();
+        shell.commit_navigation();
+        assert_eq!(shell.active, 0);
+        assert_eq!(shell.address, "https://example.test/docs");
+        assert_eq!(shell.committed_address, shell.address);
+    }
+
+    #[test]
+    fn history_back_forward_and_branching_follow_browser_rules() {
+        let mut shell = BrowserShell::new(None);
+        shell.address = "first.test".to_string();
+        shell.commit_navigation();
+        shell.address = "second.test".to_string();
+        shell.commit_navigation();
+        assert_eq!(shell.history.len(), 3);
+        assert_eq!(shell.history_index, 2);
+
+        shell.go_back();
+        assert_eq!(shell.committed_address, "https://first.test");
+        shell.go_forward();
+        assert_eq!(shell.committed_address, "https://second.test");
+
+        shell.go_back();
+        shell.address = "branch.test".to_string();
+        shell.commit_navigation();
+        assert_eq!(
+            shell.history,
+            [
+                "amazing://status",
+                "https://first.test",
+                "https://branch.test"
+            ]
+        );
+        assert_eq!(shell.history_index, 2);
+        shell.go_forward();
+        assert_eq!(shell.committed_address, "https://branch.test");
+    }
+}
+
+fn normalize_address(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else if value.contains("://") {
+        Some(value.to_string())
+    } else {
+        Some(format!("https://{value}"))
     }
 }

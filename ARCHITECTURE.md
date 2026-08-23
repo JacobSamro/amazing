@@ -227,6 +227,12 @@ Payload type resolves video mid 1, then the packet crosses jitter ordering,
 bounded frame assembly, and the isolated H.264 decoder. The transport adapter
 still handles authenticated bytes only; decoded I420 remains caller-owned.
 
+Phase 9.27 converts decoded I420 into an owned opaque RGBA surface inside the
+isolated codec adapter. The GPUI shell consumes only that safe pixel value and
+creates its native BGRA render image. Codec/FFI types do not cross the shell
+seam. The root and standalone manifests declare Rust 1.89, matching the highest
+transitive media dependency MSRV instead of the stale 1.85 claim.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

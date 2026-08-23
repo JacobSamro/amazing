@@ -163,11 +163,85 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "amazing-common"
+version = "0.0.1"
+
+[[package]]
+name = "amazing-css"
+version = "0.0.1"
+dependencies = [
+ "amazing-common",
+ "amazing-dom",
+]
+
+[[package]]
+name = "amazing-dom"
+version = "0.0.1"
+
+[[package]]
+name = "amazing-html"
+version = "0.0.1"
+dependencies = [
+ "amazing-common",
+ "amazing-dom",
+]
+
+[[package]]
+name = "amazing-layout"
+version = "0.0.1"
+dependencies = [
+ "amazing-css",
+ "amazing-dom",
+ "amazing-html",
+]
+
+[[package]]
+name = "amazing-media"
+version = "0.0.1"
+
+[[package]]
+name = "amazing-net"
+version = "0.0.1"
+
+[[package]]
+name = "amazing-paint"
+version = "0.0.1"
+dependencies = [
+ "amazing-css",
+ "amazing-dom",
+ "amazing-layout",
+ "amazing-media",
+]
+
+[[package]]
 name = "amazing-shell-gpui"
 version = "0.0.1"
 dependencies = [
+ "amazing-dom",
+ "amazing-html",
+ "amazing-layout",
+ "amazing-net",
+ "amazing-paint",
+ "amazing-webrtc-codecs",
  "gpui",
  "gpui_platform",
+ "image",
+]
+
+[[package]]
+name = "amazing-webrtc"
+version = "0.0.1"
+
+[[package]]
+name = "amazing-webrtc-codecs"
+version = "0.0.1"
+dependencies = [
+ "amazing-webrtc",
+ "media-codec",
+ "media-codec-vpx",
+ "media-core",
+ "openh264",
+ "opus2",
 ]
 
 [[package]]
@@ -559,6 +633,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bindgen"
+version = "0.72.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
+dependencies = [
+ "bitflags 2.13.1",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 2.1.3",
+ "shlex 1.3.0",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -843,6 +937,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmake"
+version = "0.1.58"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "cocoa"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -929,6 +1032,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
+name = "colorutils-rs"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e2fc25857fa523662de5cae84225b0e7bfb24a2a3f9ed8802fecf03df7252b1"
+dependencies = [
+ "erydanos",
+ "half",
+ "num-traits",
+ "rayon",
+]
+
+[[package]]
 name = "compression-codecs"
 version = "0.4.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -972,6 +1087,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
 dependencies = [
  "unicode-segmentation",
+]
+
+[[package]]
+name = "core-audio-types"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2b5354d2dd3c98fe23ddceaf4a2a4d38756b72c950d8b71298c57af5bc1e293"
+dependencies = [
+ "cfg-if",
+ "core-foundation-sys",
+ "libc",
 ]
 
 [[package]]
@@ -1075,6 +1201,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-media"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32472110b234059f80a051526122cfd274661acf0ff932a2f18c70a570a10402"
+dependencies = [
+ "block",
+ "cfg-if",
+ "core-audio-types",
+ "core-foundation 0.10.1",
+ "core-graphics2",
+ "core-video",
+ "libc",
+]
+
+[[package]]
 name = "core-text"
 version = "21.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1098,6 +1239,17 @@ dependencies = [
  "io-surface",
  "libc",
  "metal",
+]
+
+[[package]]
+name = "core_affinity"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a034b3a7b624016c6e13f5df875747cc25f884156aad2abd12b6c46797971342"
+dependencies = [
+ "libc",
+ "num_cpus",
+ "winapi",
 ]
 
 [[package]]
@@ -1203,6 +1355,16 @@ dependencies = [
 
 [[package]]
 name = "ctor"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "424e0138278faeb2b401f174ad17e715c829512d74f3d1e81eb43365c2e0590e"
+dependencies = [
+ "ctor-proc-macro",
+ "dtor",
+]
+
+[[package]]
+name = "ctor"
 version = "1.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "914a755b7c2d4af2bdcff7ce1739e2db9a1b81a9b07123d8015786ae03c0980d"
@@ -1210,6 +1372,12 @@ dependencies = [
  "link-section",
  "linktime-proc-macro",
 ]
+
+[[package]]
+name = "ctor-proc-macro"
+version = "0.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52560adf09603e58c9a7ee1fe1dcb95a16927b17c127f0ac02d6e768a0e25bc1"
 
 [[package]]
 name = "data-url"
@@ -1339,6 +1507,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "dtor"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "404d02eeb088a82cfd873006cb713fe411306c7d182c344905e101fb1167d301"
+dependencies = [
+ "dtor-proc-macro",
+]
+
+[[package]]
+name = "dtor-proc-macro"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f678cf4a922c215c63e0de95eb1ff08a958a81d47e485cf9da1e27bf6305cfa5"
+
+[[package]]
 name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1465,6 +1648,15 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "erydanos"
+version = "0.2.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cbdc4987ed8e9ece64845393c2d53596b3a4ccbfb3948d799d58f6450e89fb1"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -1958,12 +2150,12 @@ dependencies = [
  "anyhow",
  "async-channel",
  "async-task",
- "bindgen",
+ "bindgen 0.71.1",
  "bitflags 2.13.1",
  "chrono",
  "collections",
  "core-video",
- "ctor",
+ "ctor 1.0.13",
  "derive_more",
  "embed-resource",
  "etagere",
@@ -2087,7 +2279,7 @@ dependencies = [
  "core-foundation-sys",
  "core-graphics 0.24.0",
  "core-text",
- "ctor",
+ "ctor 1.0.13",
  "dispatch2",
  "foreign-types",
  "futures",
@@ -2796,6 +2988,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
+name = "libopus_sys"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b81c32f233fb2507347a93f97b9919493be9db7ec2249ce2c3ed0c89ad8edf60"
+dependencies = [
+ "cmake",
+ "log",
+ "pkg-config",
+]
+
+[[package]]
 name = "libredox"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2984,12 +3187,145 @@ version = "0.1.0"
 source = "git+https://github.com/zed-industries/zed?rev=d9ad6aff67e47de43abb270d22de75dd950f1b48#d9ad6aff67e47de43abb270d22de75dd950f1b48"
 dependencies = [
  "anyhow",
- "bindgen",
+ "bindgen 0.71.1",
  "core-foundation 0.10.1",
  "core-video",
  "foreign-types",
  "metal",
  "objc",
+]
+
+[[package]]
+name = "media-codec"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3558c7f864020775137706cbc5ca3a224e7cf60b14cc7a2fd4651ad416de2b8d"
+dependencies = [
+ "ctor 0.6.3",
+ "media-codec-h264",
+ "media-codec-h265",
+ "media-codec-types",
+ "media-codec-video-toolbox",
+ "media-core",
+]
+
+[[package]]
+name = "media-codec-bitstream"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5d41ed5e97526ef5a7b3329266e918d1d71e0cbcc80f23f8ed027b0caecd292"
+dependencies = [
+ "bitstream-io",
+]
+
+[[package]]
+name = "media-codec-h264"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c0bf9bb546905dbc2b129ac2ef94401093df917029315f915dc350c6f143f9d"
+dependencies = [
+ "media-codec-bitstream",
+ "media-codec-nal",
+ "media-codec-types",
+ "media-core",
+ "smallvec",
+]
+
+[[package]]
+name = "media-codec-h265"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f663cd5db517092bd3938a135acf995cd4636737be9569667f5724a68d2dc879"
+dependencies = [
+ "media-codec-bitstream",
+ "media-codec-nal",
+ "media-codec-types",
+ "media-core",
+ "smallvec",
+]
+
+[[package]]
+name = "media-codec-nal"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2428f6dc8043ca2923f49d2933d6cc342887080ffcb46af5e2c804a5164d6897"
+dependencies = [
+ "media-core",
+]
+
+[[package]]
+name = "media-codec-types"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a97cfdc6407b336b36bf32bc48e65aa6e600b292ce5a849880244e4382ea22d"
+dependencies = [
+ "bitflags 2.13.1",
+ "media-core",
+]
+
+[[package]]
+name = "media-codec-video-toolbox"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab4c3e8dc285e0797d3a4aff84d9bccf42beb0706c49517024967293cb7ea037"
+dependencies = [
+ "core-foundation 0.10.1",
+ "core-media",
+ "core-video",
+ "media-codec-types",
+ "media-core",
+ "os-ver",
+ "video-toolbox",
+]
+
+[[package]]
+name = "media-codec-vpx"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a96c46c7cddbdea17726069de93b98b68279c631f1d88421a73ab410b5b894a8"
+dependencies = [
+ "ctor 0.6.3",
+ "media-codec",
+ "media-codec-vpx-sys",
+ "media-core",
+ "smallvec",
+]
+
+[[package]]
+name = "media-codec-vpx-sys"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2648e4206eb3b8ef5dd3bc6ab9a81c83acec98069601c676d83ba5d66dfff5db"
+dependencies = [
+ "bindgen 0.72.1",
+ "pkg-config",
+]
+
+[[package]]
+name = "media-core"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "230b800ac6d4f5923682ce5f9fa72d1effa609c42e9288c7c3d00cb7ef677042"
+dependencies = [
+ "aligned-vec",
+ "bitflags 2.13.1",
+ "bytemuck",
+ "cfg-if",
+ "core-audio-types",
+ "core-foundation 0.10.1",
+ "core-media",
+ "core-video",
+ "crossbeam-queue",
+ "num-rational",
+ "num-traits",
+ "num_enum",
+ "os-ver",
+ "pic-scale",
+ "smallvec",
+ "strum",
+ "thiserror 1.0.69",
+ "x-variant",
+ "yuv",
 ]
 
 [[package]]
@@ -3084,6 +3420,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nasm-rs"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "706bf8a5e8c8ddb99128c3291d31bd21f4bcde17f0f4c20ec678d85c74faa149"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "ndk-sys"
 version = "0.6.0+11769913"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3144,6 +3489,15 @@ dependencies = [
  "serde",
  "tauri-winrt-notification",
  "zbus",
+]
+
+[[package]]
+name = "novtb"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75c0ea7569466bbce2394c0e5654b1e283c28ef7c70799e6f07b32029cca6d74"
+dependencies = [
+ "core_affinity",
 ]
 
 [[package]]
@@ -3280,6 +3634,28 @@ checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
 dependencies = [
  "hermit-abi",
  "libc",
+]
+
+[[package]]
+name = "num_enum"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d0bca838442ec211fa11de3a8b0e0e8f3a4522575b5c4c06ed722e005036f26"
+dependencies = [
+ "num_enum_derive",
+ "rustversion",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
+dependencies = [
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -3564,10 +3940,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "openh264"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcc9071a0b5f9c501ddd01066c2600d922cc799dc450a52975222bcda7755a08"
+dependencies = [
+ "openh264-sys2",
+ "wide",
+]
+
+[[package]]
+name = "openh264-sys2"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ada29a4cadc13d4d326737af87c13e224210d7d99fe47594e9f3f9b0102fd70"
+dependencies = [
+ "cc",
+ "nasm-rs",
+ "walkdir",
+]
+
+[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
+
+[[package]]
+name = "opus2"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49521e33fbf825d2abc8d696506c278cb8469d0c6cc05d3785bef5c5f7ee957b"
+dependencies = [
+ "libopus_sys",
+]
 
 [[package]]
 name = "ordered-float"
@@ -3586,6 +3992,19 @@ checksum = "9aa2b01e1d916879f73a53d01d1d6cee68adbb31d6d9177a8cfce093cced1d50"
 dependencies = [
  "futures-core",
  "pin-project-lite",
+]
+
+[[package]]
+name = "os-ver"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "858fedc08ae6afc391f686ebbc16c48a37735f76df5aa50a3533a822df090fe3"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "objc2 0.5.2",
+ "objc2-foundation 0.2.2",
+ "windows-version",
 ]
 
 [[package]]
@@ -3715,6 +4134,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e57fef6bc5981e38c2ce2d63bfa546861309f875b8a75f092d1d54ae2d64f266"
 dependencies = [
  "siphasher",
+]
+
+[[package]]
+name = "pic-scale"
+version = "0.6.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff95ed1aee2a9952d6e292e3408024d212c4a2443174413f60480f2991a99727"
+dependencies = [
+ "colorutils-rs",
+ "novtb",
+ "num-traits",
+ "pxfm",
+ "rayon",
 ]
 
 [[package]]
@@ -4432,6 +4864,15 @@ name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
+name = "safe_arch"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42c6efa15875e6ecb39ca61fb0b0c1a40b84fac5a5ffe71eef7d1000c8eb3f5f"
+dependencies = [
+ "bytemuck",
+]
 
 [[package]]
 name = "same-file"
@@ -5645,6 +6086,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "video-toolbox"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58c41669c96e71b0d444889eed81486663170023fc931699dffd088f7765fbaa"
+dependencies = [
+ "bitflags 2.13.1",
+ "block",
+ "core-foundation 0.10.1",
+ "core-graphics2",
+ "core-media",
+ "core-video",
+ "libc",
+]
+
+[[package]]
 name = "vswhom"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5987,6 +6443,16 @@ dependencies = [
  "home",
  "rustix 0.38.44",
  "winsafe",
+]
+
+[[package]]
+name = "wide"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de2aaf408e58689c2096682331b1f42bb2d9f2ed6b11560407d023cd0a6c634e"
+dependencies = [
+ "bytemuck",
+ "safe_arch",
 ]
 
 [[package]]
@@ -6443,6 +6909,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
+name = "x-variant"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e535e69559fbc90c49f7750f51315f4f7fd0c51255f5dc3f62b611ac4cf095a5"
+dependencies = [
+ "num",
+ "serde",
+]
+
+[[package]]
 name = "x11"
 version = "2.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6520,6 +6996,15 @@ dependencies = [
  "quote",
  "syn 2.0.119",
  "synstructure",
+]
+
+[[package]]
+name = "yuv"
+version = "0.8.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "220655e1c245693beb13b377d3174b9efcb1645018d1d4ec53903fc211b135ae"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

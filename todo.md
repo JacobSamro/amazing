@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 26-subphase foundation milestone landed; video presentation/TURN/browser interop remain |
+| 9 — Media | 🔄 27-subphase foundation milestone landed; live video/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1420,6 +1420,39 @@ passed with `--locked`; strict codec/WebRTC/application Clippy, stripped
 ThinLTO release, and secure H.264 artifact passed. The release binary is
 8,480,768 bytes.
 
+## Phase 9.27 (video presentation) — decoded I420 → RGBA → GPUI
+
+Shipped: both isolated video decoders now return owned RGBA pixels in addition
+to geometry/checksum evidence. VP8 I420 planes are bounds/stride validated and
+converted with integer BT.601 limited-range math; H.264 uses the safe wrapper's
+RGBA conversion. Tests require exact `width × height × 4` storage and opaque
+alpha.
+
+The standalone GPUI shell depends on the isolated codec adapter, generates a
+320×180 patterned RGB frame, encodes and decodes H.264, converts I420 to RGBA,
+swizzles to GPUI's BGRA render image, and presents it in the former WPT tab now
+labeled `Secure video · H.264 decoded frame`. `--video` launches directly into
+that tab. Engine status remains the default tab.
+
+Runnable artifact: `target\release\amazing-shell.exe --video`. The committed
+native win-001 capture is `docs/screenshots/gpui-video-presentation-win001.png`
+(SHA-256 `7fc2d4c9a2c9bf089052650c59a65a49183fed273cab34803617dfd95b36087b`).
+
+Known gaps: this is a deterministic decoded frame, not a continuous remote
+video clock. The secure-process H.264 frame and GPUI preview use the same codec
+path but are separate runtime processes. Animation, frame queues, A/V sync,
+scaling policy, colorspace metadata, and direct secure-session-to-GPUI handoff
+remain.
+
+Conformance: opaque RGBA adapter and GPUI video-surface gates pass; standalone
+shell tests pass 11/11. Native Windows capture, locked ThinLTO shell build, and
+all root gates pass.
+
+Final win-001 gate: all 500 hardware-independent root workspace tests/doctests
+passed with `--locked`; strict codec Clippy and stripped ThinLTO root release
+passed. Root release is 8,496,640 bytes; standalone GPUI release is 14,133,760
+bytes. Both manifests declare the dependency graph's actual Rust 1.89 MSRV.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1475,7 +1508,7 @@ ThinLTO release, and secure H.264 artifact passed. The release binary is
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** twenty-six committed subphases provide decoded images/audio,
+- **Phase 9:** twenty-seven committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1487,9 +1520,9 @@ and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **499**
+remeasured after the audit fixes before each commit. Current gate: **500**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **8,480,768 bytes**.
+stripped ThinLTO release is **8,496,640 bytes**.
 
 ## Server cheat sheet
 
