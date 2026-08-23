@@ -11,6 +11,12 @@ pub fn run(_: Option<&str>) -> std::process::ExitCode {
     std::process::ExitCode::FAILURE
 }
 
+#[cfg(not(windows))]
+pub fn play_wav_file(_: &str) -> std::process::ExitCode {
+    eprintln!("amazing play-audio: this build has no native audio adapter");
+    std::process::ExitCode::FAILURE
+}
+
 #[cfg(windows)]
 mod windows {
     use std::ffi::c_void;
@@ -63,6 +69,8 @@ mod windows {
     const VK_RETURN: usize = 0x0d;
     const GUI_TIMER_ID: usize = 1;
     const DIB_RGB_COLORS: u32 = 0;
+    const SND_NODEFAULT: u32 = 0x0002;
+    const SND_FILENAME: u32 = 0x0002_0000;
     const ID_ADDRESS: usize = 101;
     const ID_GO: usize = 102;
     const ID_BACK: usize = 103;
@@ -196,6 +204,14 @@ mod windows {
             info: *const BitmapInfo,
             usage: u32,
         ) -> i32;
+    }
+
+    // Rust's standard library exposes no native audio-output interface, so
+    // synchronous Windows playback must cross the WinMM ABI at this isolated
+    // platform boundary.
+    #[link(name = "winmm")]
+    unsafe extern "system" {
+        fn PlaySoundW(sound: *const u16, module: Hinstance, flags: u32) -> i32;
     }
 
     struct Tab {
@@ -1289,6 +1305,24 @@ mod windows {
         ExitCode::SUCCESS
     }
 
+    pub fn play_wav_file(path: &str) -> ExitCode {
+        let path = wide(path);
+        // SAFETY: `path` is a live, null-terminated UTF-16 filename for the
+        // duration of this synchronous WinMM call; a null module is required
+        // with SND_FILENAME and no callback or retained pointer is involved.
+        // Rust's standard library cannot express native audio playback, which
+        // is why this operation uses the platform FFI seam.
+        let played = unsafe {
+            PlaySoundW(path.as_ptr(), null_mut(), SND_FILENAME | SND_NODEFAULT)
+        };
+        if played == 0 {
+            eprintln!("amazing play-audio: WinMM could not play the WAV file");
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -1390,4 +1424,4 @@ mod windows {
 }
 
 #[cfg(windows)]
-pub use windows::run;
+pub use windows::{play_wav_file, run};

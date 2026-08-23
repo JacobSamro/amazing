@@ -47,6 +47,10 @@ const PIPELINE: &[(&str, &str)] = &[
         "amazing-gui",
         "Phase 8: native Windows shell — `gui` subcommand",
     ),
+    (
+        "amazing-media",
+        "Phase 9: image + PCM WAV media — `render` / `audio-info` / `play-audio`",
+    ),
 ];
 
 pub(crate) struct BrowserDomHost {
@@ -599,13 +603,15 @@ fn main() -> ExitCode {
         Some("style") => cmd_style(&args[2..]),
         Some("layout") => cmd_layout(&args[2..]),
         Some("render") => cmd_render(&args[2..]),
+        Some("audio-info") => cmd_audio_info(&args[2..]),
+        Some("play-audio") => cmd_play_audio(&args[2..]),
         Some("fetch") => cmd_fetch(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd_domrun(&args[2..]),
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
             ExitCode::FAILURE
         }
     }
@@ -1049,6 +1055,68 @@ fn cmd_fetch(args: &[String]) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Phase 9.2 audio artifact: decode PCM WAV and report stream properties.
+fn cmd_audio_info(args: &[String]) -> ExitCode {
+    let path = match args.first() {
+        Some(path) => path,
+        None => {
+            eprintln!("usage: amazing audio-info <file.wav>");
+            return ExitCode::FAILURE;
+        },
+    };
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("amazing audio-info: cannot read {path}: {error}");
+            return ExitCode::FAILURE;
+        },
+    };
+    let audio = match amazing_media::decode_wav(&bytes) {
+        Ok(audio) => audio,
+        Err(error) => {
+            eprintln!("amazing audio-info: {error}");
+            return ExitCode::FAILURE;
+        },
+    };
+    let frames = audio.samples.len() / audio.channels as usize;
+    let duration = frames as f64 / audio.sample_rate as f64;
+    let peak = audio
+        .samples
+        .iter()
+        .map(|sample| sample.unsigned_abs())
+        .max()
+        .unwrap_or(0);
+    let channel_word = if audio.channels == 1 { "channel" } else { "channels" };
+    println!(
+        "PCM WAV: {} Hz, {} {channel_word}, {frames} frames, {duration:.6} s, peak {peak}",
+        audio.sample_rate, audio.channels
+    );
+    ExitCode::SUCCESS
+}
+
+/// Validates a PCM WAV through the core decoder, then plays it via WinMM.
+fn cmd_play_audio(args: &[String]) -> ExitCode {
+    let path = match args.first() {
+        Some(path) => path,
+        None => {
+            eprintln!("usage: amazing play-audio <file.wav>");
+            return ExitCode::FAILURE;
+        },
+    };
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("amazing play-audio: cannot read {path}: {error}");
+            return ExitCode::FAILURE;
+        },
+    };
+    if let Err(error) = amazing_media::decode_wav(&bytes) {
+        eprintln!("amazing play-audio: {error}");
+        return ExitCode::FAILURE;
+    }
+    gui::play_wav_file(path)
 }
 
 /// Phase 6 demo: execute one classic JavaScript script and print captured

@@ -18,6 +18,7 @@ amazing-net ──bytes──▶ amazing-html ──tree ops──▶ amazing-do
       └──image bytes──▶ amazing-media
 amazing-media ──intrinsic size via PageMedia──▶ amazing-layout
 amazing-media ──RGBA8 via PageMedia───────────▶ amazing-paint
+amazing-media ──validated PCM WAV─────────────▶ GUI shell (WinMM adapter)
 ```
 
 Dependency direction always points "downward" in the pipeline; nothing in a

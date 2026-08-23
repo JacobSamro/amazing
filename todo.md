@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (142 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 9.1 image slice landed: std-only BMP/P6 PPM decode + live `<img>` layout/paint |
+| 9 — Media | 🔄 9.1 images + 9.2 PCM WAV decode/inspection/Windows playback landed |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -442,9 +442,10 @@ the real `render` command in a temporary directory and proves a relative PPM's
 red/green pixels survive fetch → decode → inline layout → paint → BMP encode →
 decode.
 
-Known Phase 9 gaps: PNG/JPEG/GIF/WebP, animation, `<picture>`/`srcset`, audio,
-video containers/codecs, playback clocks, WebRTC, and hardware acceleration
-remain separate follow-on slices rather than hidden exceptions.
+Known Phase 9.1 image gaps: PNG/JPEG/GIF/WebP, animation, and
+`<picture>`/`srcset` remain separate follow-on slices rather than hidden
+exceptions. Audio begins in Phase 9.2; video, WebRTC, and acceleration remain
+later Phase 9 sub-projects.
 
 Conformance baseline for this slice: curated WPT CSS2 remains 17/17 and
 flexbox/grid remains 22/22; the focused Test262 slice remains 196/196
@@ -455,9 +456,37 @@ Final win-001 gate: all 416 workspace tests/doctests passed and
 `cargo build --release` produced `target/release/amazing.exe` at 1,719,296
 bytes. The release demo emitted a 426,054-byte BMP and 426,015-byte PPM.
 
-Recommended next sub-phase: Phase 9.2 PCM WAV audio decode and Windows
-playback. The user's explicit “do all phases now” instruction pre-authorizes
-continuing past this sub-phase gate.
+## Phase 9.2 (media) — PCM WAV audio foundation
+
+Shipped: `amazing-media::decode_wav` parses bounded RIFF/WAVE chunks in any
+order, honors odd-byte chunk padding, validates PCM format consistency, and
+normalizes unsigned 8-bit or signed 16-bit mono/multichannel streams into
+interleaved signed `i16` samples. `amazing audio-info <file.wav>` reports the
+decoded sample rate, channels, frame count, duration, and peak. The committed
+`examples/phase9-audio.wav` fixture is 0.25 seconds of mono PCM16 at 8 kHz;
+the command measured 2,000 frames and peak 4,095.
+
+The Windows-only `play-audio` adapter validates through the core decoder and
+then calls synchronous WinMM `PlaySoundW` at the existing platform/unsafe
+seam. An interactive-session scheduled-task run on win-001 completed with
+`LastTaskResult = 0`; the temporary task was unregistered immediately.
+Automated coverage includes PCM16 decode, PCM8 normalization, and a real
+binary-process `audio-info` integration test.
+
+Final win-001 gate: all 419 workspace tests/doctests passed; the release
+binary is 1,725,440 bytes and the committed WAV fixture is 4,078 bytes.
+The existing WPT/Test262 baselines remain 17/17 CSS2, 22/22 flex/grid, and
+196/196 supported Test262 tests; no dedicated audio WPT subset is imported.
+
+Known gaps: float/24/32-bit PCM, compressed WAV codecs, resampling/mixing,
+streaming, an HTML `<audio>` element/event model, and playback timing remain
+follow-on media work. The Phase 9.1 image, WebRTC, and hardware-acceleration
+gaps remain unchanged.
+
+Recommended next sub-phase: Phase 9.3 WebRTC transport foundations (STUN and
+RTP parsing plus a UDP loopback artifact), followed by Windows hardware-
+accelerated presentation. The user's explicit “do all phases now” instruction
+pre-authorizes continuing past this sub-phase gate.
 
 ## Later phases (unchanged from goal prompt)
 
@@ -466,7 +495,7 @@ continuing past this sub-phase gate.
 - **3.5 Flexbox/Grid** · **4 Paint** software rasterizer + PPM writer ·
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
-  (9.1 image decode/layout/paint landed; audio/video/WebRTC/acceleration next).
+  (9.1 image pipeline and 9.2 PCM audio landed; WebRTC/acceleration next).
 
 ## Server cheat sheet
 

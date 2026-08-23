@@ -44,7 +44,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-paint` | software rasterizer | Phase 4 |
 | `amazing-net` | HTTP/1.1 client | Phase 5 |
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | Phase 6 |
-| `amazing-media` | BMP/P6 PPM detection and RGBA8 decoding | Phase 9.1 |
+| `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | Phase 7/8 |
 
 The Windows GUI shell includes tabs, address/history navigation, live DOM
@@ -80,6 +80,10 @@ amazing gui [url]
 
 # Phase 9 image-media artifact
 amazing render examples/phase9-media.html phase9-media.bmp 400
+
+# Phase 9 PCM audio artifacts
+amazing audio-info examples/phase9-audio.wav
+amazing play-audio examples/phase9-audio.wav
 ```
 
 ```sh

@@ -1,8 +1,10 @@
-//! Phase 9 media decoding behind one format-independent interface.
+//! Phase 9 media decoding behind small format-independent interfaces.
 //!
-//! The first slice accepts uncompressed BMP and binary PPM images and
-//! normalizes them into top-left-origin RGBA8 pixels. Container parsing,
-//! row orientation, padding, and channel order stay private to this module.
+//! Image decoding accepts uncompressed BMP and binary PPM and normalizes them
+//! into top-left-origin RGBA8 pixels. Audio decoding accepts RIFF/WAVE integer
+//! PCM and normalizes unsigned 8-bit or signed 16-bit samples into interleaved
+//! signed 16-bit PCM. Container parsing, padding, row orientation, and channel
+//! representation stay private to this module.
 
 #![forbid(unsafe_code)]
 
@@ -14,6 +16,14 @@ pub struct Image {
     pub width: u32,
     pub height: u32,
     pub pixels: Vec<u8>,
+}
+
+/// Decoded interleaved signed PCM samples.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Audio {
+    pub sample_rate: u32,
+    pub channels: u16,
+    pub samples: Vec<i16>,
 }
 
 /// Failures observable at the media-decoding seam.
@@ -45,6 +55,98 @@ pub fn decode_image(bytes: &[u8]) -> Result<Image, MediaError> {
         return decode_bmp(bytes);
     }
     Err(MediaError::UnsupportedFormat)
+}
+
+/// Decodes a RIFF/WAVE PCM stream into interleaved signed 16-bit samples.
+pub fn decode_wav(bytes: &[u8]) -> Result<Audio, MediaError> {
+    if bytes.get(0..4) != Some(b"RIFF") || bytes.get(8..12) != Some(b"WAVE") {
+        return Err(MediaError::UnsupportedFormat);
+    }
+    let riff_end = 8usize
+        .checked_add(read_u32(bytes, 4)? as usize)
+        .ok_or(MediaError::DimensionOverflow)?;
+    if riff_end < 12 || riff_end > bytes.len() {
+        return Err(MediaError::InvalidData("truncated RIFF container"));
+    }
+
+    let mut cursor = 12usize;
+    let mut format = None;
+    let mut data = None;
+    while cursor < riff_end {
+        let header_end = cursor.checked_add(8).ok_or(MediaError::DimensionOverflow)?;
+        if header_end > riff_end {
+            return Err(MediaError::InvalidData("truncated WAV chunk header"));
+        }
+        let chunk_id = &bytes[cursor..cursor + 4];
+        let chunk_size = read_u32(bytes, cursor + 4)? as usize;
+        let chunk_start = header_end;
+        let chunk_end = chunk_start
+            .checked_add(chunk_size)
+            .ok_or(MediaError::DimensionOverflow)?;
+        if chunk_end > riff_end {
+            return Err(MediaError::InvalidData("truncated WAV chunk"));
+        }
+        match chunk_id {
+            b"fmt " if format.is_none() => {
+                if chunk_size < 16 {
+                    return Err(MediaError::InvalidData("WAV fmt chunk is too short"));
+                }
+                format = Some((
+                    read_u16(bytes, chunk_start)?,
+                    read_u16(bytes, chunk_start + 2)?,
+                    read_u32(bytes, chunk_start + 4)?,
+                    read_u32(bytes, chunk_start + 8)?,
+                    read_u16(bytes, chunk_start + 12)?,
+                    read_u16(bytes, chunk_start + 14)?,
+                ));
+            },
+            b"data" if data.is_none() => data = Some(&bytes[chunk_start..chunk_end]),
+            _ => {},
+        }
+        cursor = chunk_end
+            .checked_add(chunk_size & 1)
+            .ok_or(MediaError::DimensionOverflow)?;
+        if cursor > riff_end {
+            return Err(MediaError::InvalidData("missing WAV chunk padding"));
+        }
+    }
+
+    let (audio_format, channels, sample_rate, byte_rate, block_align, bits_per_sample) =
+        format.ok_or(MediaError::InvalidData("missing WAV fmt chunk"))?;
+    let data = data.ok_or(MediaError::InvalidData("missing WAV data chunk"))?;
+    if audio_format != 1 {
+        return Err(MediaError::InvalidData("only integer PCM WAV is supported"));
+    }
+    if channels == 0 || sample_rate == 0 {
+        return Err(MediaError::InvalidData("WAV channels and sample rate must be positive"));
+    }
+    let bytes_per_sample = match bits_per_sample {
+        8 => 1,
+        16 => 2,
+        _ => return Err(MediaError::InvalidData("only 8-bit and 16-bit PCM WAV are supported")),
+    };
+    let expected_align = channels
+        .checked_mul(bytes_per_sample)
+        .ok_or(MediaError::DimensionOverflow)?;
+    let expected_rate = sample_rate
+        .checked_mul(expected_align as u32)
+        .ok_or(MediaError::DimensionOverflow)?;
+    if block_align != expected_align || byte_rate != expected_rate {
+        return Err(MediaError::InvalidData("inconsistent WAV PCM format fields"));
+    }
+    if data.len() % block_align as usize != 0 {
+        return Err(MediaError::InvalidData("partial WAV PCM frame"));
+    }
+
+    let mut samples = Vec::with_capacity(data.len() / bytes_per_sample as usize);
+    if bits_per_sample == 8 {
+        samples.extend(data.iter().map(|sample| ((*sample as i32 - 128) * 256) as i16));
+    } else {
+        for sample in data.chunks_exact(2) {
+            samples.push(i16::from_le_bytes([sample[0], sample[1]]));
+        }
+    }
+    Ok(Audio { sample_rate, channels, samples })
 }
 
 fn decode_bmp(bytes: &[u8]) -> Result<Image, MediaError> {
@@ -109,7 +211,7 @@ fn decode_bmp(bytes: &[u8]) -> Result<Image, MediaError> {
 fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, MediaError> {
     let raw: [u8; 2] = bytes
         .get(offset..offset + 2)
-        .ok_or(MediaError::InvalidData("truncated BMP field"))?
+        .ok_or(MediaError::InvalidData("truncated little-endian field"))?
         .try_into()
         .expect("slice length checked");
     Ok(u16::from_le_bytes(raw))
@@ -118,7 +220,7 @@ fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, MediaError> {
 fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, MediaError> {
     let raw: [u8; 4] = bytes
         .get(offset..offset + 4)
-        .ok_or(MediaError::InvalidData("truncated BMP field"))?
+        .ok_or(MediaError::InvalidData("truncated little-endian field"))?
         .try_into()
         .expect("slice length checked");
     Ok(u32::from_le_bytes(raw))
@@ -243,6 +345,30 @@ mod tests {
         out
     }
 
+    fn wav_pcm(format: u16, channels: u16, sample_rate: u32, bits: u16, data: &[u8]) -> Vec<u8> {
+        let block_align = channels * (bits / 8);
+        let byte_rate = sample_rate * block_align as u32;
+        let riff_size = 4 + (8 + 16) + (8 + data.len() + data.len() % 2);
+        let mut out = Vec::with_capacity(8 + riff_size);
+        out.extend_from_slice(b"RIFF");
+        out.extend_from_slice(&(riff_size as u32).to_le_bytes());
+        out.extend_from_slice(b"WAVEfmt ");
+        out.extend_from_slice(&16u32.to_le_bytes());
+        out.extend_from_slice(&format.to_le_bytes());
+        out.extend_from_slice(&channels.to_le_bytes());
+        out.extend_from_slice(&sample_rate.to_le_bytes());
+        out.extend_from_slice(&byte_rate.to_le_bytes());
+        out.extend_from_slice(&block_align.to_le_bytes());
+        out.extend_from_slice(&bits.to_le_bytes());
+        out.extend_from_slice(b"data");
+        out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        out.extend_from_slice(data);
+        if data.len() % 2 != 0 {
+            out.push(0);
+        }
+        out
+    }
+
     #[test]
     fn decodes_binary_ppm_through_the_public_interface() {
         let bytes = b"P6\n2 1\n255\n\xff\x00\x00\x00\x80\xff";
@@ -283,5 +409,30 @@ mod tests {
                 0, 0, 255, 255, 255, 255, 255, 255,
             ]
         );
+    }
+
+    #[test]
+    fn decodes_pcm16_wav_through_the_public_interface() {
+        let bytes = wav_pcm(
+            1,
+            1,
+            8_000,
+            16,
+            &[0x00, 0x80, 0x00, 0x00, 0xff, 0x7f],
+        );
+        let audio = decode_wav(&bytes).expect("valid PCM WAV");
+
+        assert_eq!(audio.sample_rate, 8_000);
+        assert_eq!(audio.channels, 1);
+        assert_eq!(audio.samples, vec![i16::MIN, 0, i16::MAX]);
+    }
+
+    #[test]
+    fn normalizes_unsigned_pcm8_wav_to_signed_samples() {
+        let audio = decode_wav(&wav_pcm(1, 1, 11_025, 8, &[0, 128, 255]))
+            .expect("valid 8-bit PCM WAV");
+
+        assert_eq!(audio.sample_rate, 11_025);
+        assert_eq!(audio.samples, vec![i16::MIN, 0, 32_512]);
     }
 }
