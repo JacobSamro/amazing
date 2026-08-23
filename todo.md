@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 30-subphase foundation milestone landed; GPUI secure handoff/TURN/browser interop remain |
+| 9 — Media | 🔄 31-subphase foundation milestone landed; A/V sync/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1541,6 +1541,38 @@ Conformance: framed-stream integration passes 1/1 alongside every secure media
 assertion. Root workspace tests pass 502/502; strict application Clippy and
 release artifact pass. Release binary is 8,515,584 bytes.
 
+## Phase 9.31 (direct secure UI) — DTLS-SRTP child → RGBA stream → GPUI
+
+Shipped: `amazing-shell.exe --secure-video` binds an ephemeral loopback listener
+before launching sibling `amazing.exe secure-video-stream`. A named background
+thread owns process/accept/read lifecycle, handles Windows WSAEWOULDBLOCK 10035,
+restores blocking mode on the accepted socket, applies a 15-second read timeout,
+and validates AMVF magic, monotonic indices, dimensions, 16 MiB cap, exact RGBA
+length, and opaque alpha before emitting UI events.
+
+The existing 500 ms GPUI task drains those events. The first secure frame clears
+the synthetic set; all six become native render images on the UI context. The
+badge reports `SECURE SRTP COMPLETE · 6 decoded frames`, proving that display
+origin, and browser chrome/history remain interactive.
+
+Runnable artifact: `target\release\amazing-shell.exe --secure-video`. Native
+proof hashes from one running window differ as secure frames cycle:
+
+- frame A `4eb20d7b45c5b6ece367ab4587c9b8df076419fe0d7aa83ebeec287abd3dda8d`;
+- frame B `3c1630d8ac3aaa7bde8594f789bb8ce46149e88b6bdd7b56f8567ed00341f39c`.
+
+Known gaps: loopback IPC trusts same-user local processes and has no handshake
+version beyond AMVF magic. Frames arrive as a completed burst and then loop;
+GPUI does not yet preserve original RTP wall-clock spacing, synchronize audio,
+apply backpressure/drop policy, restart a failed session, or pause when hidden.
+
+Conformance: bounded frame-reader unit gate passes; standalone shell tests pass
+13/13; root secure stream integration remains green. Both native captures,
+locked ThinLTO shell build, strict root gates, and 502/502 workspace tests pass.
+
+Final win-001 sizes: root release 8,515,584 bytes; standalone GPUI release
+14,231,552 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1596,7 +1628,7 @@ release artifact pass. Release binary is 8,515,584 bytes.
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** thirty committed subphases provide decoded images/audio,
+- **Phase 9:** thirty-one committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;

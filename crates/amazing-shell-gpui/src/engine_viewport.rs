@@ -146,6 +146,21 @@ impl EngineViewport {
         Ok(frames)
     }
 
+    pub fn from_rgba(width: u32, height: u32, rgba: Vec<u8>) -> Result<Self, String> {
+        let expected = (width as usize)
+            .checked_mul(height as usize)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .ok_or_else(|| "RGBA surface dimensions overflow".to_string())?;
+        if rgba.len() != expected || !rgba.chunks_exact(4).all(|pixel| pixel[3] == 255) {
+            return Err("RGBA surface is malformed or translucent".into());
+        }
+        Ok(Self {
+            image: Arc::new(rgba_to_render_image(width, height, rgba)),
+            width,
+            height,
+        })
+    }
+
     fn from_document(html: &str, css: &str) -> Self {
         let dom = amazing_html::parse(html);
         Self::from_dom(&dom, css)

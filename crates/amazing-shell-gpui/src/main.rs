@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod engine_viewport;
+mod secure_video;
 
 use std::time::Duration;
 
@@ -12,6 +13,7 @@ use gpui::{
 use gpui_platform::application;
 
 use engine_viewport::EngineViewport;
+use secure_video::{SecureVideoEvent, spawn_secure_video_source};
 
 const STRIP: u32 = 0xd5dae2;
 const STRIP_HOVER: u32 = 0xc6ccd6;
@@ -40,6 +42,10 @@ struct BrowserShell {
     viewport: EngineViewport,
     video_frames: Vec<EngineViewport>,
     video_frame_index: usize,
+    secure_video_receiver: Option<std::sync::mpsc::Receiver<SecureVideoEvent>>,
+    secure_video_requested: bool,
+    secure_video_active: bool,
+    secure_video_status: String,
     address_focus: Option<FocusHandle>,
     address: String,
     committed_address: String,
@@ -108,6 +114,10 @@ impl BrowserShell {
             viewport: EngineViewport::demo(),
             video_frames: EngineViewport::video_demo_frames().expect("decode GPUI video demo"),
             video_frame_index: 0,
+            secure_video_receiver: None,
+            secure_video_requested: false,
+            secure_video_active: false,
+            secure_video_status: "H.264 → I420 → RGBA".into(),
             address_focus,
             address: "amazing://status".to_string(),
             committed_address: "amazing://status".to_string(),
@@ -227,6 +237,45 @@ impl BrowserShell {
     fn advance_video(&mut self) {
         if !self.video_frames.is_empty() {
             self.video_frame_index = (self.video_frame_index + 1) % self.video_frames.len();
+        }
+    }
+
+    fn poll_secure_video(&mut self) {
+        let mut events = Vec::new();
+        if let Some(receiver) = self.secure_video_receiver.as_ref() {
+            while let Ok(event) = receiver.try_recv() {
+                events.push(event);
+            }
+        }
+        for event in events {
+            match event {
+                SecureVideoEvent::Frame(frame) => {
+                    if let Ok(viewport) =
+                        EngineViewport::from_rgba(frame.width, frame.height, frame.rgba)
+                    {
+                        if !self.secure_video_active {
+                            self.video_frames.clear();
+                            self.video_frame_index = 0;
+                            self.secure_video_active = true;
+                        }
+                        self.video_frames.push(viewport);
+                        self.secure_video_status = format!(
+                            "SECURE SRTP → H.264 → RGBA  ·  frame {}  ·  RTP {}",
+                            frame.index + 1,
+                            frame.timestamp
+                        );
+                    }
+                }
+                SecureVideoEvent::Complete => {
+                    self.secure_video_status = format!(
+                        "SECURE SRTP COMPLETE  ·  {} decoded frames",
+                        self.video_frames.len()
+                    );
+                }
+                SecureVideoEvent::Error(error) => {
+                    self.secure_video_status = format!("SECURE VIDEO ERROR  ·  {error}");
+                }
+            }
         }
     }
 
@@ -628,6 +677,14 @@ impl BrowserShell {
     fn page(&self) -> impl IntoElement {
         let tab = &self.tabs[self.active];
         let video_viewport = &self.video_frames[self.video_frame_index];
+        let video_badge = if self.secure_video_requested {
+            self.secure_video_status.clone()
+        } else {
+            format!(
+                "H.264 → I420 → RGBA  ·  {} × {}",
+                video_viewport.width, video_viewport.height
+            )
+        };
         let page_url = if self.active == 0 {
             self.committed_address.clone()
         } else {
@@ -713,10 +770,7 @@ impl BrowserShell {
                                 .bg(rgb(0x12291b))
                                 .text_color(rgb(0xbde7c6))
                                 .text_size(px(10.5))
-                                .child(format!(
-                                    "H.264 → I420 → RGBA  ·  {} × {}",
-                                    video_viewport.width, video_viewport.height
-                                )),
+                                .child(video_badge),
                         ),
                 )
             })
@@ -1043,6 +1097,15 @@ impl Render for BrowserShell {
 fn main() {
     let start_with_sidebar = std::env::args().any(|argument| argument == "--sidebar");
     let start_with_video = std::env::args().any(|argument| argument == "--video");
+    let start_with_secure_video = std::env::args().any(|argument| argument == "--secure-video");
+    let (secure_receiver, secure_status) = if start_with_secure_video {
+        match spawn_secure_video_source() {
+            Ok(receiver) => (Some(receiver), "CONNECTING SECURE VIDEO…".to_string()),
+            Err(error) => (None, format!("SECURE VIDEO ERROR  ·  {error}")),
+        }
+    } else {
+        (None, String::new())
+    };
     application().run(move |cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1080.0), px(760.0)), cx);
         cx.open_window(
@@ -1061,6 +1124,7 @@ fn main() {
                                 .await;
                             if this
                                 .update(cx, |shell: &mut BrowserShell, cx| {
+                                    shell.poll_secure_video();
                                     shell.advance_video();
                                     cx.notify();
                                 })
@@ -1072,7 +1136,12 @@ fn main() {
                     })
                     .detach();
                     shell.sidebar = start_with_sidebar;
-                    if start_with_video {
+                    shell.secure_video_receiver = secure_receiver;
+                    if start_with_secure_video {
+                        shell.secure_video_requested = true;
+                        shell.secure_video_status = secure_status;
+                    }
+                    if start_with_video || start_with_secure_video {
                         shell.select_tab(1);
                     }
                     if start_with_sidebar {
