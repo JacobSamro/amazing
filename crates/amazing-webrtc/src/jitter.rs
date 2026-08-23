@@ -556,11 +556,12 @@ pub fn negotiate_audio_codecs(
     offer: &SdpDescription,
     answer: &SdpDescription,
 ) -> Result<NegotiatedAudioCodecs, WebRtcError> {
-    if offer.media != "audio" || answer.media != "audio" {
-        return Err(WebRtcError::Unsupported(
-            "audio codec negotiation requires audio media",
-        ));
-    }
+    let offer = offer
+        .media("audio")
+        .ok_or(WebRtcError::Unsupported("offer has no audio media"))?;
+    let answer = answer
+        .media("audio")
+        .ok_or(WebRtcError::Unsupported("answer has no audio media"))?;
     let mut codecs = Vec::new();
     for offered in &offer.rtp_maps {
         let Some(accepted) = answer
@@ -845,18 +846,20 @@ mod tests {
             origin: "- 1 1 IN IP4 127.0.0.1".into(),
             session_name: "codec test".into(),
             timing: "0 0".into(),
-            connection_address: "127.0.0.1".parse().unwrap(),
-            media: "audio".into(),
-            port: 5000,
-            protocol: "UDP/TLS/RTP/SAVPF".into(),
-            payload_types: maps.iter().map(|mapping| mapping.payload_type).collect(),
             ice_ufrag: "test".into(),
             ice_pwd: "TestPassword123456789012".into(),
             fingerprint_algorithm: "sha-256".into(),
             fingerprint: "AA".into(),
             setup: "actpass".into(),
-            candidates: Vec::new(),
-            rtp_maps: maps,
+            media_sections: vec![crate::SdpMediaSection {
+                connection_address: "127.0.0.1".parse().unwrap(),
+                media: "audio".into(),
+                port: 5000,
+                protocol: "UDP/TLS/RTP/SAVPF".into(),
+                payload_types: maps.iter().map(|mapping| mapping.payload_type).collect(),
+                candidates: Vec::new(),
+                rtp_maps: maps,
+            }],
         }
     }
 
