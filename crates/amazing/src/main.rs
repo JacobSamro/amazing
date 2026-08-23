@@ -991,7 +991,7 @@ fn cmd_secure_media_processes() -> ExitCode {
     match run_secure_media_processes() {
         Ok(()) => {
             println!(
-                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP Opus+L16+PCMU+H264; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 Opus parent->child=960 PCMU child->parent=320; video=H264 secure 32x32; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP Opus+L16+PCMU+H264; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 Opus parent->child=960 PCMU child->parent=320; video=H264 secure frames=6 32x32 clock=90k changed=yes; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
             );
             ExitCode::SUCCESS
         }
@@ -1265,26 +1265,32 @@ fn run_secure_media_processes() -> Result<(), String> {
 
     let mut h264_encoder =
         amazing_webrtc_codecs::H264EncoderAdapter::new().map_err(|error| error.to_string())?;
-    let mut rgb = Vec::with_capacity(32 * 32 * 3);
-    for y in 0..32 {
-        for x in 0..32 {
-            rgb.extend_from_slice(&[(x * 7) as u8, (y * 9) as u8, ((x + y) * 4) as u8]);
+    for phase in 0..6u16 {
+        let mut rgb = Vec::with_capacity(32 * 32 * 3);
+        for y in 0..32 {
+            for x in 0..32 {
+                rgb.extend_from_slice(&[
+                    (x * 7 + phase as usize * 13) as u8,
+                    (y * 9 + phase as usize * 17) as u8,
+                    ((x + y) * 4 + phase as usize * 23) as u8,
+                ]);
+            }
         }
+        let h264 = h264_encoder
+            .encode_rgb(&rgb, (32, 32))
+            .map_err(|error| error.to_string())?;
+        let video_rtp = amazing_webrtc::RtpPacket {
+            marker: true,
+            payload_type: 121,
+            sequence_number: 200 + phase,
+            timestamp: 90_000 + phase as u32 * 45_000,
+            ssrc: 0x5649_4445,
+            payload: h264,
+        };
+        endpoint
+            .send_rtp(&amazing_webrtc::encode_rtp(&video_rtp).map_err(|error| error.to_string())?)
+            .map_err(|error| error.to_string())?;
     }
-    let h264 = h264_encoder
-        .encode_rgb(&rgb, (32, 32))
-        .map_err(|error| error.to_string())?;
-    let video_rtp = amazing_webrtc::RtpPacket {
-        marker: true,
-        payload_type: 121,
-        sequence_number: 200,
-        timestamp: 90_000,
-        ssrc: 0x5649_4445,
-        payload: h264,
-    };
-    endpoint
-        .send_rtp(&amazing_webrtc::encode_rtp(&video_rtp).map_err(|error| error.to_string())?)
-        .map_err(|error| error.to_string())?;
 
     read_control_marker(&mut control_reader, "PEER_OK")?;
     endpoint
@@ -1450,32 +1456,39 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
     {
         return Err("parent process returned inconsistent compound RTCP".into());
     }
-    let video_wire = endpoint.receive_rtp().map_err(|error| error.to_string())?;
-    let video_rtp = amazing_webrtc::parse_rtp(&video_wire).map_err(|error| error.to_string())?;
     if negotiated_video.mid != "1" || negotiated_video.media != "video" {
         return Err("H.264 payload did not demultiplex to bundled video".into());
     }
     let video_clock = negotiated_video
         .rtp_maps
         .iter()
-        .find(|mapping| mapping.payload_type == video_rtp.payload_type)
+        .find(|mapping| mapping.payload_type == 121)
         .map(|mapping| mapping.clock_rate)
         .ok_or_else(|| "H.264 rtpmap is missing".to_string())?;
     let mut video_jitter =
         amazing_webrtc::RtpJitterBuffer::new(amazing_webrtc::JitterBufferConfig {
-            ssrc: video_rtp.ssrc,
-            payload_type: video_rtp.payload_type,
+            ssrc: 0x5649_4445,
+            payload_type: 121,
             clock_rate: video_clock,
             playout_delay_ms: 30,
-            capacity: 8,
+            capacity: 16,
         })
         .map_err(|error| error.to_string())?;
-    video_jitter
-        .push(video_rtp, 0)
-        .map_err(|error| error.to_string())?;
-    let output = video_jitter
-        .pop_ready(30)
-        .ok_or_else(|| "secure H.264 packet did not reach playout".to_string())?;
+    for phase in 0..6u16 {
+        let video_wire = endpoint.receive_rtp().map_err(|error| error.to_string())?;
+        let video_rtp =
+            amazing_webrtc::parse_rtp(&video_wire).map_err(|error| error.to_string())?;
+        if video_rtp.payload_type != 121
+            || video_rtp.ssrc != 0x5649_4445
+            || video_rtp.sequence_number != 200 + phase
+            || video_rtp.timestamp != 90_000 + phase as u32 * 45_000
+        {
+            return Err("secure H.264 RTP sequence or timestamp was incorrect".into());
+        }
+        video_jitter
+            .push(video_rtp, phase as u64 * 5)
+            .map_err(|error| error.to_string())?;
+    }
     let mut assembler =
         amazing_webrtc::VideoFrameAssembler::new(amazing_webrtc::VideoFrameConfig {
             ssrc: 0x5649_4445,
@@ -1484,16 +1497,49 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
             max_bytes: 1_000_000,
         })
         .map_err(|error| error.to_string())?;
-    let amazing_webrtc::VideoAssembly::Frame(frame) =
-        assembler.push(output).map_err(|error| error.to_string())?
-    else {
-        return Err("secure H.264 frame did not assemble".into());
-    };
-    let decoded = amazing_webrtc_codecs::H264DecoderAdapter::new()
-        .and_then(|mut decoder| decoder.decode(&frame.payload))
-        .map_err(|error| error.to_string())?;
-    if (decoded.width, decoded.height) != (32, 32) || decoded.planes != 3 {
-        return Err("secure H.264 frame decoded incorrect geometry".into());
+    let mut decoder =
+        amazing_webrtc_codecs::H264DecoderAdapter::new().map_err(|error| error.to_string())?;
+    let mut playout = amazing_webrtc::VideoPlayoutQueue::new(amazing_webrtc::VideoPlayoutConfig {
+        clock_rate: video_clock,
+        delay_ms: 30,
+        capacity: 8,
+    })
+    .map_err(|error| error.to_string())?;
+    while let Some(output) = video_jitter.pop_ready(3_000) {
+        if let amazing_webrtc::VideoAssembly::Frame(frame) =
+            assembler.push(output).map_err(|error| error.to_string())?
+        {
+            let timestamp = frame.timestamp;
+            let decoded = decoder
+                .decode(&frame.payload)
+                .map_err(|error| error.to_string())?;
+            if playout.push(timestamp, decoded, 0) != amazing_webrtc::VideoQueuePush::Queued {
+                return Err("secure decoded video frame was not queued".into());
+            }
+        }
+    }
+    let mut decoded_frames = 0usize;
+    let mut first_checksum = None;
+    let mut pixels_changed = false;
+    let mut previous_timestamp = None;
+    while let Some(frame) = playout.pop_due(3_000) {
+        if previous_timestamp.is_some_and(|previous| frame.timestamp <= previous)
+            || (frame.frame.width, frame.frame.height) != (32, 32)
+            || frame.frame.planes != 3
+            || frame.frame.rgba.len() != 32 * 32 * 4
+        {
+            return Err("secure H.264 playout frame was invalid".into());
+        }
+        previous_timestamp = Some(frame.timestamp);
+        match first_checksum {
+            Some(first) if first != frame.frame.checksum => pixels_changed = true,
+            None => first_checksum = Some(frame.frame.checksum),
+            _ => {}
+        }
+        decoded_frames += 1;
+    }
+    if decoded_frames != 6 || !pixels_changed || playout.stats().emitted != 6 {
+        return Err("secure H.264 clocked playout was incomplete".into());
     }
     endpoint
         .close()
@@ -1617,7 +1663,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 fn hex_decode(text: &str) -> Result<Vec<u8>, String> {
-    if text.len() % 2 != 0 || !text.is_ascii() {
+    if !text.len().is_multiple_of(2) || !text.is_ascii() {
         return Err("signaling hex has invalid length or encoding".into());
     }
     text.as_bytes()
@@ -1765,22 +1811,20 @@ fn collect_author_css(
         if rel
             .split_ascii_whitespace()
             .any(|token| token == "stylesheet")
-        {
-            if let Some(href) = attrs
+            && let Some(href) = attrs
                 .iter()
                 .find(|(name, _)| name == "href")
                 .map(|(_, value)| value)
-            {
-                let url = resolve_script_url(page, href);
-                let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
-                    .map_err(|error| format!("stylesheet {href}: {error}"))?;
-                out.push_str(
-                    &response
-                        .text()
-                        .ok_or_else(|| format!("stylesheet {href} was not text"))?,
-                );
-                out.push('\n');
-            }
+        {
+            let url = resolve_script_url(page, href);
+            let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
+                .map_err(|error| format!("stylesheet {href}: {error}"))?;
+            out.push_str(
+                &response
+                    .text()
+                    .ok_or_else(|| format!("stylesheet {href} was not text"))?,
+            );
+            out.push('\n');
         }
     }
     for child in dom.children(node) {
@@ -1892,12 +1936,11 @@ fn resolve_script_url(page: &str, source: &str) -> String {
     if source.contains("://") || source.starts_with("file:") {
         return source.to_owned();
     }
-    if page.starts_with("http://") || page.starts_with("https://") || page.starts_with("file:") {
-        if let Ok(base) = amazing_net::Url::parse(page) {
-            if let Ok(resolved) = amazing_net::resolve(source, &base) {
-                return resolved.to_string();
-            }
-        }
+    if (page.starts_with("http://") || page.starts_with("https://") || page.starts_with("file:"))
+        && let Ok(base) = amazing_net::Url::parse(page)
+        && let Ok(resolved) = amazing_net::resolve(source, &base)
+    {
+        return resolved.to_string();
     }
     std::path::Path::new(page)
         .parent()

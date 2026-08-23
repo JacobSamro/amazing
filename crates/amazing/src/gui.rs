@@ -19,10 +19,10 @@ pub fn play_wav_file(_: &str) -> std::process::ExitCode {
 
 #[cfg(windows)]
 mod windows {
-    use std::ffi::c_void;
-    use std::ptr::{null, null_mut};
-    use std::process::ExitCode;
     use std::cell::RefCell;
+    use std::ffi::c_void;
+    use std::process::ExitCode;
+    use std::ptr::{null, null_mut};
     use std::rc::Rc;
 
     use amazing_dom::{Dom, NodeIdx, NodeKind};
@@ -30,7 +30,7 @@ mod windows {
     use amazing_layout::{Flow, LayoutBox};
     use amazing_paint::Surface;
 
-    use crate::{load_page_media, BrowserDomHost, PageMedia};
+    use crate::{BrowserDomHost, PageMedia, load_page_media};
 
     type Handle = *mut c_void;
     type Hwnd = Handle;
@@ -176,7 +176,13 @@ mod windows {
         fn PostQuitMessage(code: i32);
         fn SetTimer(hwnd: Hwnd, id: usize, elapse: u32, callback: Handle) -> usize;
         fn KillTimer(hwnd: Hwnd, id: usize) -> i32;
-        fn CallWindowProcW(previous: isize, hwnd: Hwnd, message: Uint, w_param: Wparam, l_param: Lparam) -> Lresult;
+        fn CallWindowProcW(
+            previous: isize,
+            hwnd: Hwnd,
+            message: Uint,
+            w_param: Wparam,
+            l_param: Lparam,
+        ) -> Lresult;
         fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
         fn SetWindowTextW(hwnd: Hwnd, text: *const u16) -> i32;
         fn ShowWindow(hwnd: Hwnd, command: i32) -> i32;
@@ -293,7 +299,11 @@ mod windows {
         }
 
         fn window_title(&self, label: &str) -> String {
-            let backend = if self.presenter.is_some() { "D3D11" } else { "GDI" };
+            let backend = if self.presenter.is_some() {
+                "D3D11"
+            } else {
+                "GDI"
+            };
             format!("Ferric [{backend}] — {label}")
         }
 
@@ -395,11 +405,11 @@ mod windows {
                         .runtime
                         .as_mut()
                         .and_then(|runtime| runtime.js.take_navigation());
-                    if let Some(url) = script_navigation {
-                        if url != input {
-                            self.navigate(url, true);
-                            return;
-                        }
+                    if let Some(url) = script_navigation
+                        && url != input
+                    {
+                        self.navigate(url, true);
+                        return;
                     }
                     set_window_text(self.address, &input);
                     set_window_text(self.hwnd, &self.window_title(&input));
@@ -428,12 +438,13 @@ mod windows {
             if base == input {
                 return input.to_owned();
             }
-            if base.starts_with("http://") || base.starts_with("https://") || base.starts_with("file:") {
-                if let Ok(base_url) = amazing_net::Url::parse(base) {
-                    if let Ok(resolved) = amazing_net::resolve(input, &base_url) {
-                        return resolved.to_string();
-                    }
-                }
+            if (base.starts_with("http://")
+                || base.starts_with("https://")
+                || base.starts_with("file:"))
+                && let Ok(base_url) = amazing_net::Url::parse(base)
+                && let Ok(resolved) = amazing_net::resolve(input, &base_url)
+            {
+                return resolved.to_string();
             }
             let path = std::path::Path::new(base);
             if std::path::Path::new(input).is_absolute() {
@@ -496,16 +507,13 @@ mod windows {
             let width = self.width;
             let page = self.tab().current_url().unwrap_or("").to_owned();
             let tab = self.tab_mut();
-            let Some(runtime) = tab.runtime.as_mut() else { return };
+            let Some(runtime) = tab.runtime.as_mut() else {
+                return;
+            };
             let host = runtime.host.clone();
             let host_ref = host.borrow();
             let mut css = String::new();
-            if let Err(error) = collect_author_css(
-                &host_ref.dom,
-                NodeIdx(0),
-                &page,
-                &mut css,
-            ) {
+            if let Err(error) = collect_author_css(&host_ref.dom, NodeIdx(0), &page, &mut css) {
                 eprintln!("amazing gui: stylesheet refresh failed: {error}");
                 return;
             }
@@ -521,11 +529,10 @@ mod windows {
                 &fonts,
                 &media,
             );
-            let height = (layout.border_box.y
-                + layout.border_box.h
-                + layout.margin.bottom.unwrap_or(0.0))
-                .ceil()
-                .clamp(1.0, 8192.0) as u32;
+            let height =
+                (layout.border_box.y + layout.border_box.h + layout.margin.bottom.unwrap_or(0.0))
+                    .ceil()
+                    .clamp(1.0, 8192.0) as u32;
             let surface = amazing_paint::paint_document_with_resources(
                 &layout,
                 width.max(1),
@@ -552,11 +559,11 @@ mod windows {
                 .as_ref()
                 .and_then(|runtime| hit_test(&runtime.layout, x as f32, page_y as f32));
             let Some(node) = node else { return };
-            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
-                if let Err(error) = runtime.js.dispatch_dom_event(node.0, "click") {
-                    eprintln!("amazing gui: click handler failed: {}", error.describe());
-                    return;
-                }
+            if let Some(runtime) = self.tab_mut().runtime.as_mut()
+                && let Err(error) = runtime.js.dispatch_dom_event(node.0, "click")
+            {
+                eprintln!("amazing gui: click handler failed: {}", error.describe());
+                return;
             }
             let navigation = self
                 .tab_mut()
@@ -658,13 +665,22 @@ mod windows {
 
         fn apply_history_delta(&mut self, delta: i32) {
             if delta < 0 {
-                for _ in 0..delta.unsigned_abs() { self.go_back(); }
+                for _ in 0..delta.unsigned_abs() {
+                    self.go_back();
+                }
             } else {
-                for _ in 0..delta as u32 { self.go_forward(); }
+                for _ in 0..delta as u32 {
+                    self.go_forward();
+                }
             }
         }
 
-        fn apply_history_update(&mut self, url: String, replace: bool, state: amazing_js::value::JsValue) {
+        fn apply_history_update(
+            &mut self,
+            url: String,
+            replace: bool,
+            state: amazing_js::value::JsValue,
+        ) {
             let url = self.resolve_navigation(&url);
             {
                 let tab = self.tab_mut();
@@ -786,17 +802,22 @@ mod windows {
                 .find(|(name, _)| name == "rel")
                 .map(|(_, value)| value.to_ascii_lowercase())
                 .unwrap_or_default();
-            if rel.split_ascii_whitespace().any(|token| token == "stylesheet") {
-                if let Some(href) = attrs.iter().find(|(name, _)| name == "href").map(|(_, value)| value) {
-                    let url = resolve_script_url(page, href);
-                    let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
-                        .map_err(|error| format!("stylesheet {href}: {error}"))?;
-                    let css = response
-                        .text()
-                        .ok_or_else(|| format!("stylesheet {href} was not text"))?;
-                    out.push_str(&css);
-                    out.push('\n');
-                }
+            if rel
+                .split_ascii_whitespace()
+                .any(|token| token == "stylesheet")
+                && let Some(href) = attrs
+                    .iter()
+                    .find(|(name, _)| name == "href")
+                    .map(|(_, value)| value)
+            {
+                let url = resolve_script_url(page, href);
+                let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
+                    .map_err(|error| format!("stylesheet {href}: {error}"))?;
+                let css = response
+                    .text()
+                    .ok_or_else(|| format!("stylesheet {href} was not text"))?;
+                out.push_str(&css);
+                out.push('\n');
             }
         }
         for child in dom.children(node) {
@@ -827,7 +848,11 @@ mod windows {
         }
     }
 
-    fn collect_inline_handlers(dom: &Dom, node: NodeIdx, handlers: &mut Vec<(u32, String, String)>) {
+    fn collect_inline_handlers(
+        dom: &Dom,
+        node: NodeIdx,
+        handlers: &mut Vec<(u32, String, String)>,
+    ) {
         if let Some(attrs) = dom.attrs_of(node) {
             for (name, body) in attrs {
                 if let Some(event) = name.strip_prefix("on").filter(|event| !event.is_empty()) {
@@ -844,12 +869,13 @@ mod windows {
         if source.contains("://") || source.starts_with("file:") {
             return source.to_owned();
         }
-        if page.starts_with("http://") || page.starts_with("https://") || page.starts_with("file:") {
-            if let Ok(base) = amazing_net::Url::parse(page) {
-                if let Ok(resolved) = amazing_net::resolve(source, &base) {
-                    return resolved.to_string();
-                }
-            }
+        if (page.starts_with("http://")
+            || page.starts_with("https://")
+            || page.starts_with("file:"))
+            && let Ok(base) = amazing_net::Url::parse(page)
+            && let Ok(resolved) = amazing_net::resolve(source, &base)
+        {
+            return resolved.to_string();
         }
         std::path::Path::new(page)
             .parent()
@@ -892,11 +918,9 @@ mod windows {
             let source = match script.src {
                 Some(src) => {
                     let script_url = resolve_script_url(input, &src);
-                    let response = amazing_net::fetch(
-                        &script_url,
-                        &amazing_net::FetchOptions::default(),
-                    )
-                    .map_err(|error| format!("external script {src}: {error}"))?;
+                    let response =
+                        amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
+                            .map_err(|error| format!("external script {src}: {error}"))?;
                     response
                         .text()
                         .ok_or_else(|| format!("external script {src} was not text"))?
@@ -952,7 +976,12 @@ mod windows {
         drop(host_ref);
         Ok(RenderedPage {
             surface,
-            runtime: PageRuntime { host, js, layout: root, media },
+            runtime: PageRuntime {
+                host,
+                js,
+                layout: root,
+                media,
+            },
         })
     }
 
@@ -972,8 +1001,7 @@ mod windows {
         let columns = surface.width.min(frame_width);
         for row in 0..rows as usize {
             let source_row = (scroll as usize + row) * surface.width as usize * 4;
-            let destination_row =
-                (CONTROL_HEIGHT as usize + row) * frame_width as usize * 4;
+            let destination_row = (CONTROL_HEIGHT as usize + row) * frame_width as usize * 4;
             for column in 0..columns as usize {
                 let source = source_row + column * 4;
                 let destination = destination_row + column * 4;
@@ -1012,12 +1040,7 @@ mod windows {
                     .saturating_sub(scroll as u32)
                     .min(state.viewport_height.max(1) as u32);
                 (
-                    compose_gpu_frame(
-                        surface,
-                        state.tab().scroll_y,
-                        frame_width,
-                        frame_height,
-                    ),
+                    compose_gpu_frame(surface, state.tab().scroll_y, frame_width, frame_height),
                     bgra,
                     surface.width,
                     surface.height,
@@ -1026,14 +1049,11 @@ mod windows {
                 )
             };
             let gpu_presented = gpu_frame.is_some_and(|frame| {
-                state
-                    .presenter
-                    .as_mut()
-                    .is_some_and(|presenter| {
-                        presenter
-                            .present_bgra(&frame, frame_width, frame_height)
-                            .is_ok()
-                    })
+                state.presenter.as_mut().is_some_and(|presenter| {
+                    presenter
+                        .present_bgra(&frame, frame_width, frame_height)
+                        .is_ok()
+                })
             });
             if gpu_presented {
                 // SAFETY: paint was initialized by BeginPaint and belongs to
@@ -1043,11 +1063,7 @@ mod windows {
             }
             if state.presenter.is_some() {
                 state.presenter = None;
-                let label = state
-                    .tab()
-                    .current_url()
-                    .unwrap_or("New tab")
-                    .to_owned();
+                let label = state.tab().current_url().unwrap_or("New tab").to_owned();
                 set_window_text(state.hwnd, &state.window_title(&label));
             }
 
@@ -1212,7 +1228,9 @@ mod windows {
         // behavior for the other command-line subcommands.
         unsafe {
             let console = GetConsoleWindow();
-            if !console.is_null() { ShowWindow(console, 0); }
+            if !console.is_null() {
+                ShowWindow(console, 0);
+            }
         }
         let class_name = wide("FerricWindow");
         let title = wide("Ferric — from-scratch browser engine");
@@ -1345,7 +1363,12 @@ mod windows {
                 null_mut(),
             );
         }
-        if state.address.is_null() || state.go.is_null() || state.back.is_null() || state.forward.is_null() || state.new_tab.is_null() {
+        if state.address.is_null()
+            || state.go.is_null()
+            || state.back.is_null()
+            || state.forward.is_null()
+            || state.new_tab.is_null()
+        {
             eprintln!("amazing gui: could not create navigation controls");
             return ExitCode::FAILURE;
         }
@@ -1368,7 +1391,8 @@ mod windows {
             );
             SetTimer(hwnd, GUI_TIMER_ID, 16, null_mut());
         }
-        unsafe { &mut *state_ptr }.navigate(initial.unwrap_or("examples/sample.html").to_owned(), true);
+        unsafe { &mut *state_ptr }
+            .navigate(initial.unwrap_or("examples/sample.html").to_owned(), true);
         // SAFETY: hwnd is a valid top-level window and the message-loop calls
         // follow the Win32 lifetime contract.
         unsafe {
@@ -1410,9 +1434,7 @@ mod windows {
         // with SND_FILENAME and no callback or retained pointer is involved.
         // Rust's standard library cannot express native audio playback, which
         // is why this operation uses the platform FFI seam.
-        let played = unsafe {
-            PlaySoundW(path.as_ptr(), null_mut(), SND_FILENAME | SND_NODEFAULT)
-        };
+        let played = unsafe { PlaySoundW(path.as_ptr(), null_mut(), SND_FILENAME | SND_NODEFAULT) };
         if played == 0 {
             eprintln!("amazing play-audio: WinMM could not play the WAV file");
             ExitCode::FAILURE
@@ -1429,16 +1451,10 @@ mod windows {
         fn gpu_frame_matches_gdi_scroll_and_channel_order() {
             let mut surface = Surface::new(2, 2);
             surface.pixels = vec![
-                255, 0, 0, 255, 0, 255, 0, 255,
-                0, 0, 255, 255, 10, 20, 30, 255,
+                255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 10, 20, 30, 255,
             ];
-            let frame = compose_gpu_frame(
-                &surface,
-                1,
-                2,
-                CONTROL_HEIGHT as u32 + 1,
-            )
-            .expect("bounded GPU frame");
+            let frame = compose_gpu_frame(&surface, 1, 2, CONTROL_HEIGHT as u32 + 1)
+                .expect("bounded GPU frame");
 
             assert_eq!(&frame[0..4], &[255, 255, 255, 255]);
             let page = CONTROL_HEIGHT as usize * 2 * 4;
@@ -1501,29 +1517,95 @@ mod windows {
                 host.get_text_content(node).as_deref(),
                 Some("click handled by Ferric!")
             );
-            assert_eq!(host.get_attribute(node, "data-ready"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-load"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-body-load"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-window"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-dom-api"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-selector-list"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-collections"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-matches"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-dataset"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-attr-api"), Some(Some("yes".into())));
+            assert_eq!(
+                host.get_attribute(node, "data-ready"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-load"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-body-load"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-window"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-dom-api"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-selector-list"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-collections"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-matches"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-dataset"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-attr-api"),
+                Some(Some("yes".into()))
+            );
             assert_eq!(host.get_attribute(node, "data-temp"), Some(None));
-            assert_eq!(host.get_attribute(node, "data-classlist"), Some(Some("ready active".into())));
-            assert_eq!(host.get_attribute(node, "data-viewport"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-inner"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-inner-text"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-text-node"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-fetch"), Some(Some("fetched\n".into())));
-            assert_eq!(host.get_attribute(node, "data-header"), Some(Some("text/plain; charset=utf-8".into())));
-            assert_eq!(host.get_attribute(node, "data-json"), Some(Some("json-ok".into())));
-            assert_eq!(host.get_attribute(node, "data-clicked"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-bubbled"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-inline"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-timer"), Some(Some("yes".into())));
+            assert_eq!(
+                host.get_attribute(node, "data-classlist"),
+                Some(Some("ready active".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-viewport"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-inner"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-inner-text"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-text-node"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-fetch"),
+                Some(Some("fetched\n".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-header"),
+                Some(Some("text/plain; charset=utf-8".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-json"),
+                Some(Some("json-ok".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-clicked"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-bubbled"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-inline"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-timer"),
+                Some(Some("yes".into()))
+            );
             assert_eq!(host.get_style(node, "color").as_deref(), Some("white"));
             assert_eq!(
                 host.get_style(node, "backgroundColor").as_deref(),
@@ -1538,7 +1620,6 @@ mod windows {
             assert_eq!(&surface.pixels[offset..offset + 4], &[255, 0, 0, 255]);
         }
     }
-
 }
 
 #[cfg(windows)]
