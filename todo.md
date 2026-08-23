@@ -9,7 +9,7 @@
 | Phase | Status |
 |-------|--------|
 | 0 — skeleton | ✅ done, all exit criteria met on win-001 |
-| 1 — HTML parser | 🔄 expanded html5lib/WPT tree subset 243/243; general fragment/template/attribute-namespace gaps remain |
+| 1 — HTML parser | ✅ milestone exit criteria met; expanded html5lib/WPT tree subset 243/243, broader conformance gaps tracked |
 | 2 — CSS | ✅ done on win-001 (88 workspace tests green) — see Phase 2 section |
 | 3 — Layout | ✅ done on win-001 (workspace green; curated css/CSS2 subset 17/17) |
 | 3.5 — Flexbox | ✅ done on win-001 (13 flex tests; row/column/wrap/grow/shrink/justify/align/gaps/auto-margins/order) |
@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 33-subphase foundation milestone landed; UI audio-master sync/TURN/browser interop remain |
+| 9 — Media | 🔄 40-subphase foundation landed; live audio device/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
