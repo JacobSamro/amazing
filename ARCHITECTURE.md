@@ -222,6 +222,11 @@ per-section mids, every bundled section requires rtcp-mux, and negotiated
 payload types resolve to exactly one media section. Duplicate mids, missing
 members, and cross-media payload collisions fail before RTP dispatch.
 
+Phase 9.26 routes bundled video on the existing authenticated SRTP association.
+Payload type resolves video mid 1, then the packet crosses jitter ordering,
+bounded frame assembly, and the isolated H.264 decoder. The transport adapter
+still handles authenticated bytes only; decoded I420 remains caller-owned.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
