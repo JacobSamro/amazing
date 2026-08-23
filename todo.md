@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 22-subphase foundation milestone landed; VP8 encode/TURN/browser interop remain |
+| 9 — Media | 🔄 23-subphase foundation milestone landed; secure video/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1297,6 +1297,35 @@ passed with `--locked`; strict codec/WebRTC/application Clippy, stripped
 ThinLTO release, and embedded official VP8 artifact passed. The release binary
 is 7,724,032 bytes.
 
+## Phase 9.23 (video codec) — bundled H.264 key/delta roundtrip
+
+Shipped: the isolated codec adapter now pins `openh264` 0.9.8 with its bundled
+Cisco OpenH264 source. Its safe high-level Rust interface preserves the
+first-party `forbid(unsafe_code)` rule while providing both encoding and
+stateful decoding on win-001. No preinstalled codec binary is required.
+
+The artifact synthesizes two different 32×32 RGB frames, converts them to
+YUV420, encodes them through one persistent encoder, and decodes the resulting
+access units through one persistent decoder. The first access unit is 265 bytes,
+the following delta unit is 153 bytes, dimensions stay 32×32, and reconstructed
+pixel checksums change.
+
+Runnable artifact: `target\release\amazing.exe h264-roundtrip-probe`, reporting
+`H264 first=265 bytes delta=153 bytes size=32x32 pixels_changed=yes; h264
+roundtrip probe ok`.
+
+Known gaps: H.264 RTP packetization/depacketization, SPS/PPS signaling through
+fmtp, profile-level-id negotiation, secure video transport, loss recovery/PLI,
+A/V synchronization, scaling, and presentation remain. VP8 encoding remains
+unavailable through the compatible safe wrapper.
+
+Conformance: isolated key/delta encode/decode gate passes 1/1; command
+integration passes 1/1. No WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 498 hardware-independent workspace tests/doctests
+passed with `--locked`; strict codec/application Clippy, stripped ThinLTO
+release, and H.264 artifact passed. The release binary is 8,455,680 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1352,7 +1381,7 @@ is 7,724,032 bytes.
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** twenty-two committed subphases provide decoded images/audio,
+- **Phase 9:** twenty-three committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1364,9 +1393,9 @@ and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **496**
+remeasured after the audit fixes before each commit. Current gate: **498**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **7,724,032 bytes**.
+stripped ThinLTO release is **8,455,680 bytes**.
 
 ## Server cheat sheet
 

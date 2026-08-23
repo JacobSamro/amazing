@@ -324,6 +324,85 @@ fn parse_ivf(bytes: &[u8]) -> Result<Vec<(u64, &[u8])>, CodecError> {
     Ok(frames)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct H264ProbeReport {
+    pub first_bytes: usize,
+    pub second_bytes: usize,
+    pub width: usize,
+    pub height: usize,
+    pub pixels_changed: bool,
+}
+
+pub fn run_h264_probe() -> Result<H264ProbeReport, CodecError> {
+    use openh264::formats::{RgbSliceU8, YUVBuffer, YUVSource};
+
+    const WIDTH: usize = 32;
+    const HEIGHT: usize = 32;
+    let rgb_frame = |phase: usize| {
+        let mut rgb = Vec::with_capacity(WIDTH * HEIGHT * 3);
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                rgb.extend_from_slice(&[
+                    ((x * 7 + phase * 31) & 0xff) as u8,
+                    ((y * 9 + phase * 17) & 0xff) as u8,
+                    (((x + y) * 5 + phase * 43) & 0xff) as u8,
+                ]);
+            }
+        }
+        rgb
+    };
+    let first_rgb = rgb_frame(0);
+    let second_rgb = rgb_frame(1);
+    let first_yuv = YUVBuffer::from_rgb_source(RgbSliceU8::new(&first_rgb, (WIDTH, HEIGHT)));
+    let second_yuv = YUVBuffer::from_rgb_source(RgbSliceU8::new(&second_rgb, (WIDTH, HEIGHT)));
+    let mut encoder = openh264::encoder::Encoder::new()
+        .map_err(|error| CodecError(format!("create H.264 encoder: {error}")))?;
+    let first = encoder
+        .encode(&first_yuv)
+        .map_err(|error| CodecError(format!("encode H.264 first frame: {error}")))?
+        .to_vec();
+    let second = encoder
+        .encode(&second_yuv)
+        .map_err(|error| CodecError(format!("encode H.264 second frame: {error}")))?
+        .to_vec();
+    let mut decoder = openh264::decoder::Decoder::new()
+        .map_err(|error| CodecError(format!("create H.264 decoder: {error}")))?;
+    let (first_dimensions, first_checksum) = {
+        let first_decoded = decoder
+            .decode(&first)
+            .map_err(|error| CodecError(format!("decode H.264 first frame: {error}")))?
+            .ok_or_else(|| CodecError("H.264 first frame produced no picture".into()))?;
+        (first_decoded.dimensions(), yuv_checksum(&first_decoded))
+    };
+    let second_decoded = decoder
+        .decode(&second)
+        .map_err(|error| CodecError(format!("decode H.264 second frame: {error}")))?
+        .ok_or_else(|| CodecError("H.264 second frame produced no picture".into()))?;
+    let second_dimensions = second_decoded.dimensions();
+    let second_checksum = yuv_checksum(&second_decoded);
+    if first_dimensions != second_dimensions {
+        return Err(CodecError("H.264 frame dimensions changed".into()));
+    }
+    Ok(H264ProbeReport {
+        first_bytes: first.len(),
+        second_bytes: second.len(),
+        width: first_dimensions.0,
+        height: first_dimensions.1,
+        pixels_changed: first_checksum != second_checksum,
+    })
+}
+
+fn yuv_checksum(source: &impl openh264::formats::YUVSource) -> u64 {
+    source
+        .y()
+        .iter()
+        .chain(source.u())
+        .chain(source.v())
+        .fold(0u64, |checksum, byte| {
+            checksum.rotate_left(5) ^ *byte as u64
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,5 +423,13 @@ mod tests {
         assert!(report.interframes >= 1);
         assert!(report.width > 0 && report.height > 0);
         assert!(report.checksum_changed);
+    }
+
+    #[test]
+    fn h264_key_and_delta_frames_round_trip_to_pixels() {
+        let report = run_h264_probe().expect("H.264 probe");
+        assert!(report.first_bytes > 0 && report.second_bytes > 0);
+        assert_eq!((report.width, report.height), (32, 32));
+        assert!(report.pixels_changed);
     }
 }

@@ -81,6 +81,18 @@ fn vp8_decode_probe_reconstructs_key_and_interframes() {
 }
 
 #[test]
+fn h264_roundtrip_probe_encodes_and_decodes_changed_pixels() {
+    let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .arg("h264-roundtrip-probe")
+        .output()
+        .expect("run H.264 roundtrip probe");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("size=32x32 pixels_changed=yes"), "{stdout}");
+    assert!(stdout.contains("h264 roundtrip probe ok"), "{stdout}");
+}
+
+#[test]
 fn sdp_roundtrip_command_reports_ice_dtls_media_summary() {
     let offer =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/phase9-offer.sdp");

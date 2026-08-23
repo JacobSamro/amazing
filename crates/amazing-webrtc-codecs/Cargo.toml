@@ -11,4 +11,5 @@ amazing-webrtc = { path = "../amazing-webrtc" }
 media-codec-vpx = "=0.8.0"
 media-codec = { version = "=0.9.1", default-features = false, features = ["decoder", "video"] }
 media-core = { version = "=0.9.1", default-features = false, features = ["video"] }
+openh264 = "=0.9.8"
 opus2 = { version = "=0.4.0", default-features = false, features = ["backend-libopus", "bundled", "static"] }

@@ -730,6 +730,7 @@ fn main() -> ExitCode {
         Some("opus-probe") => cmd_opus_probe(),
         Some("video-frame-probe") => cmd_video_frame_probe(),
         Some("vp8-decode-probe") => cmd_vp8_decode_probe(),
+        Some("h264-roundtrip-probe") => cmd_h264_roundtrip_probe(),
         Some("secure-media-loopback") => cmd_secure_media_loopback(),
         Some("secure-media-processes") => cmd_secure_media_processes(),
         Some("__secure-media-peer") => cmd_secure_media_peer(args.get(2).map(String::as_str)),
@@ -744,7 +745,7 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
             );
             ExitCode::FAILURE
         }
@@ -831,6 +832,26 @@ fn cmd_vp8_decode_probe() -> ExitCode {
         }
         Err(error) => {
             eprintln!("amazing vp8-decode-probe: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn cmd_h264_roundtrip_probe() -> ExitCode {
+    match amazing_webrtc_codecs::run_h264_probe() {
+        Ok(report) => {
+            println!(
+                "H264 first={} bytes delta={} bytes size={}x{} pixels_changed={}; h264 roundtrip probe ok",
+                report.first_bytes,
+                report.second_bytes,
+                report.width,
+                report.height,
+                if report.pixels_changed { "yes" } else { "no" },
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing h264-roundtrip-probe: {error}");
             ExitCode::FAILURE
         }
     }

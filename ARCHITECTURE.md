@@ -205,6 +205,12 @@ adapter accepts complete encoded frames and returns measured I420 geometry and
 pixel data. Encoding remains a separate gate because the compatible maintained
 wrapper intentionally ships decoder-only.
 
+Phase 9.23 adds a second isolated video adapter using `openh264` 0.9.8 with its
+bundled Cisco source. The safe high-level wrapper encodes and decodes key/delta
+access units; dependency-internal C/FFI remains outside first-party Rust. This
+provides a complete browser-compatible video codec path while VP8 encoding is
+still tracked separately.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
