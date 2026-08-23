@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 
 mod engine_viewport;
+mod playback_clock;
 mod secure_video;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui::{
     App, Bounds, Context, CursorStyle, FocusHandle, IntoElement, KeyDownEvent, ParentElement,
@@ -13,6 +14,7 @@ use gpui::{
 use gpui_platform::application;
 
 use engine_viewport::EngineViewport;
+use playback_clock::{PlaybackUpdate, VideoPlaybackClock};
 use secure_video::{SecureVideoEvent, spawn_secure_video_source};
 
 const STRIP: u32 = 0xd5dae2;
@@ -41,11 +43,13 @@ struct BrowserShell {
     tabs: Vec<Tab>,
     viewport: EngineViewport,
     video_frames: Vec<EngineViewport>,
-    video_presentation_ms: Vec<u64>,
+    video_clock: VideoPlaybackClock,
     video_frame_index: usize,
+    pending_video_presentation_ms: Vec<u64>,
     secure_video_receiver: Option<std::sync::mpsc::Receiver<SecureVideoEvent>>,
     secure_video_requested: bool,
     secure_video_active: bool,
+    secure_video_complete: bool,
     secure_video_status: String,
     address_focus: Option<FocusHandle>,
     address: String,
@@ -114,11 +118,14 @@ impl BrowserShell {
             ],
             viewport: EngineViewport::demo(),
             video_frames: EngineViewport::video_demo_frames().expect("decode GPUI video demo"),
-            video_presentation_ms: (0..6).map(|index| index * 500).collect(),
+            video_clock: VideoPlaybackClock::new((0..6).map(|index| index * 500).collect(), 0)
+                .expect("valid demo video timeline"),
             video_frame_index: 0,
+            pending_video_presentation_ms: Vec::new(),
             secure_video_receiver: None,
             secure_video_requested: false,
             secure_video_active: false,
+            secure_video_complete: false,
             secure_video_status: "H.264 → I420 → RGBA".into(),
             address_focus,
             address: "amazing://status".to_string(),
@@ -236,30 +243,20 @@ impl BrowserShell {
         self.load_navigation(&address);
     }
 
-    fn advance_video(&mut self) {
-        if !self.video_frames.is_empty() {
-            self.video_frame_index = (self.video_frame_index + 1) % self.video_frames.len();
+    fn update_video_clock(&mut self, now_ms: u64) -> PlaybackUpdate {
+        let update = self.video_clock.update(now_ms);
+        self.video_frame_index = update.frame_index;
+        if self.secure_video_complete {
+            self.secure_video_status = format!(
+                "SECURE SRTP COMPLETE  ·  {} decoded frames  ·  RTCP A/V clock  ·  late {}",
+                self.video_frames.len(),
+                update.dropped_total
+            );
         }
+        update
     }
 
-    fn next_video_delay_ms(&self) -> u64 {
-        if self.video_presentation_ms.len() != self.video_frames.len()
-            || self.video_presentation_ms.len() < 2
-        {
-            return 500;
-        }
-        let current = self.video_frame_index;
-        let next = (current + 1) % self.video_presentation_ms.len();
-        let delta = if next > current {
-            self.video_presentation_ms[next].saturating_sub(self.video_presentation_ms[current])
-        } else {
-            let last = self.video_presentation_ms.len() - 1;
-            self.video_presentation_ms[last].saturating_sub(self.video_presentation_ms[last - 1])
-        };
-        delta.clamp(16, 5_000)
-    }
-
-    fn poll_secure_video(&mut self) {
+    fn poll_secure_video(&mut self, now_ms: u64) {
         let mut events = Vec::new();
         if let Some(receiver) = self.secure_video_receiver.as_ref() {
             while let Ok(event) = receiver.try_recv() {
@@ -274,12 +271,13 @@ impl BrowserShell {
                     {
                         if !self.secure_video_active {
                             self.video_frames.clear();
-                            self.video_presentation_ms.clear();
+                            self.pending_video_presentation_ms.clear();
                             self.video_frame_index = 0;
                             self.secure_video_active = true;
+                            self.secure_video_complete = false;
                         }
                         self.video_frames.push(viewport);
-                        self.video_presentation_ms
+                        self.pending_video_presentation_ms
                             .push(frame.presentation_ms as u64);
                         self.secure_video_status = format!(
                             "SECURE SRTP → H.264 → RGBA  ·  frame {}  ·  A/V {} ms  ·  RTP {}",
@@ -290,10 +288,21 @@ impl BrowserShell {
                     }
                 }
                 SecureVideoEvent::Complete => {
-                    self.secure_video_status = format!(
-                        "SECURE SRTP COMPLETE  ·  {} decoded frames  ·  RTCP A/V clock",
-                        self.video_frames.len()
-                    );
+                    if self.pending_video_presentation_ms.len() != self.video_frames.len() {
+                        self.secure_video_status =
+                            "SECURE VIDEO ERROR  ·  frame timeline length mismatch".into();
+                    } else if let Err(error) = self
+                        .video_clock
+                        .replace_timeline(self.pending_video_presentation_ms.clone(), now_ms)
+                    {
+                        self.secure_video_status = format!("SECURE VIDEO ERROR  ·  {error}");
+                    } else {
+                        self.secure_video_complete = true;
+                        self.secure_video_status = format!(
+                            "SECURE SRTP COMPLETE  ·  {} decoded frames  ·  RTCP A/V clock  ·  late 0",
+                            self.video_frames.len()
+                        );
+                    }
                 }
                 SecureVideoEvent::Error(error) => {
                     self.secure_video_status = format!("SECURE VIDEO ERROR  ·  {error}");
@@ -1141,16 +1150,19 @@ fn main() {
                 cx.new(move |cx| {
                     let mut shell = BrowserShell::new(Some(cx.focus_handle().tab_stop(true)));
                     cx.spawn(async move |this, cx| {
+                        let started = Instant::now();
                         let mut delay_ms = 500;
                         loop {
                             cx.background_executor()
                                 .timer(Duration::from_millis(delay_ms))
                                 .await;
                             match this.update(cx, |shell: &mut BrowserShell, cx| {
-                                shell.poll_secure_video();
-                                shell.advance_video();
+                                let now_ms =
+                                    started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+                                shell.poll_secure_video(now_ms);
+                                let update = shell.update_video_clock(now_ms);
                                 cx.notify();
-                                shell.next_video_delay_ms()
+                                update.next_delay_ms
                             }) {
                                 Ok(next_delay) => delay_ms = next_delay,
                                 Err(_) => break,
@@ -1260,24 +1272,10 @@ mod tests {
         let mut shell = BrowserShell::new(None);
         shell.select_tab(1);
         assert_eq!(shell.video_frames.len(), 6);
-        for _ in 0..6 {
-            shell.advance_video();
-        }
+        shell.update_video_clock(3_000);
         assert_eq!(shell.video_frame_index, 0);
         assert_eq!(shell.active, 1);
-        assert_eq!(shell.next_video_delay_ms(), 500);
-    }
-
-    #[test]
-    fn video_timer_uses_bounded_audio_master_presentation_deltas() {
-        let mut shell = BrowserShell::new(None);
-        shell.video_frames.truncate(3);
-        shell.video_presentation_ms = vec![0, 100, 300];
-        assert_eq!(shell.next_video_delay_ms(), 100);
-        shell.advance_video();
-        assert_eq!(shell.next_video_delay_ms(), 200);
-        shell.advance_video();
-        assert_eq!(shell.next_video_delay_ms(), 200);
+        assert_eq!(shell.update_video_clock(3_000).next_delay_ms, 500);
     }
 
     #[test]

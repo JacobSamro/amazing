@@ -22,8 +22,9 @@ first real engine viewport:
   scrolling while browser chrome stays fixed;
 - a native media tab that encodes H.264, decodes I420, converts to RGBA, and
   presents the resulting 320×180 frame through GPUI;
-- six statefully encoded/decoded frames advanced by a detached GPUI timer whose
-  16–5000 ms delays derive from audio-master-relative presentation times;
+- six statefully encoded/decoded frames driven by an absolute presentation
+  clock; its 16–5000 ms waits target audio-master-relative deadlines and a late
+  wake catches up without accumulating drift;
 - `--secure-video` launches the root DTLS-SRTP driver, validates versioned AMV2
   RGBA records and strictly increasing RTCP-derived presentation times on a
   background localhost reader, and replaces the synthetic loop with the six
@@ -54,6 +55,9 @@ and [frame B](../../docs/screenshots/gpui-rtp-clock-b-win001.png).
 
 RTCP A/V-clock proof: [frame A](../../docs/screenshots/gpui-rtcp-av-clock-a-win001.png)
 and [frame B](../../docs/screenshots/gpui-rtcp-av-clock-b-win001.png).
+
+Absolute-deadline proof: [frame A](../../docs/screenshots/gpui-absolute-clock-a-win001.png)
+and [frame B](../../docs/screenshots/gpui-absolute-clock-b-win001.png).
 
 Build and launch on win-001:
 

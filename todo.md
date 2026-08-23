@@ -1668,6 +1668,39 @@ application packages with `--no-deps`; locked stripped ThinLTO builds pass.
 Final win-001 sizes are 8,521,728 bytes for `amazing.exe` and 14,233,600 bytes
 for `amazing-shell.exe`.
 
+## Phase 9.35 (absolute UI clock) — deadline catch-up without cadence drift
+
+Shipped: a pure in-process `VideoPlaybackClock` module now owns the looping
+presentation timeline, monotonic origin, absolute sequence, cumulative late
+drops, and next bounded deadline. Its interface takes only a validated timeline
+and host `now_ms`; each update returns the due frame index, total drops, and next
+wait. GPUI no longer advances exactly one frame after every relative timer.
+
+For `[0, 100, 300]`, deterministic gates prove deadlines of 100, 200, and 150
+ms across the irregular schedule and inferred 200 ms loop interval. A first wake
+at 350 ms jumps directly from frame 0 to frame 2, counts exactly one skipped
+frame, and schedules the next absolute boundary 150 ms later. A second sample at
+360 ms neither recounts the drop nor shifts that boundary. Replacement resets
+origin, sequence, and telemetry; waits remain clamped to 16–5000 ms.
+
+The live secure timeline is installed atomically after all six validated AMV2
+records arrive. The badge reports `SECURE SRTP COMPLETE · 6 decoded frames ·
+RTCP A/V clock · late 0`. Native captures from one win-001 process show changing
+decoded pixels with no late frames:
+
+- A `aae9683f4638e482fe50d08955c1a4d4c5aa74a8334951bafbad6a4b1e7256aa`;
+- B `8b238b02f5906dd84b41f141515709ef71aec5d25e19065808ad4804b31e8adb`.
+
+Known gaps: late frames are skipped only at the UI image-selection layer; the
+completed six-frame burst still decodes every frame before presentation. There
+is no live queue backpressure, audio device cursor, drift estimator, visibility
+pause, periodic RTCP refresh, or discontinuity/restart policy.
+
+Conformance: five clock-interface gates plus the retained stream and shell gates
+pass; standalone GPUI tests are 19/19. Strict `-D warnings` Clippy and the locked
+stripped ThinLTO build pass on win-001. Root remains 504/504 tests and 8,521,728
+bytes; the shell release is 14,235,648 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.

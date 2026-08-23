@@ -273,6 +273,13 @@ successors. GPUI schedules directly from those bounded presentation deltas, so
 the RTCP A/V timeline—not knowledge of a 90 kHz video clock—now crosses the
 process boundary.
 
+Phase 9.35 moves deadline ownership into a pure `VideoPlaybackClock` module.
+The clock accepts a validated looping presentation timeline plus monotonic host
+time and returns the frame due now, cumulative late drops, and the next bounded
+absolute deadline. A late UI wake jumps directly to the due frame and counts
+intervening frames once; rendering time therefore cannot accumulate as cadence
+drift across later frames.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
