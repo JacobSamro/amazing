@@ -995,7 +995,7 @@ fn cmd_secure_media_processes() -> ExitCode {
     match run_secure_media_processes(None) {
         Ok(()) => {
             println!(
-                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP Opus+L16+PCMU+H264; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 Opus parent->child=960 PCMU child->parent=320; video=H264 secure frames=6 32x32 clock=90k changed=yes; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP Opus+L16+PCMU+H264; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 Opus parent->child=960 PCMU child->parent=320; video=H264 secure frames=6 32x32 clock=90k changed=yes; avsync=RTCP-SR 6/6 aligned; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
             );
             ExitCode::SUCCESS
         }
@@ -1291,6 +1291,7 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
 
     let mut h264_encoder =
         amazing_webrtc_codecs::H264EncoderAdapter::new().map_err(|error| error.to_string())?;
+    let mut video_octets = 0u32;
     for phase in 0..6u16 {
         let mut rgb = Vec::with_capacity(32 * 32 * 3);
         for y in 0..32 {
@@ -1305,6 +1306,7 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
         let h264 = h264_encoder
             .encode_rgb(&rgb, (32, 32))
             .map_err(|error| error.to_string())?;
+        video_octets = video_octets.saturating_add(h264.len() as u32);
         let video_rtp = amazing_webrtc::RtpPacket {
             marker: true,
             payload_type: 121,
@@ -1315,6 +1317,35 @@ fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
         };
         endpoint
             .send_rtp(&amazing_webrtc::encode_rtp(&video_rtp).map_err(|error| error.to_string())?)
+            .map_err(|error| error.to_string())?;
+    }
+    const AV_SYNC_NTP: u64 = 0xe223_4567_0000_0000;
+    let audio_sender = amazing_webrtc::RtcpCompoundSenderReport {
+        sender: amazing_webrtc::RtcpSenderReport {
+            ssrc: outbound.ssrc,
+            ntp_timestamp: AV_SYNC_NTP,
+            rtp_timestamp: outbound.timestamp,
+            packet_count: 1,
+            octet_count: outbound.payload.len() as u32,
+        },
+        cname: "parent-audio@amazing".into(),
+    };
+    let video_sender = amazing_webrtc::RtcpCompoundSenderReport {
+        sender: amazing_webrtc::RtcpSenderReport {
+            ssrc: 0x5649_4445,
+            ntp_timestamp: AV_SYNC_NTP.saturating_add((2u64 << 32) | 0x8000_0000),
+            rtp_timestamp: 315_000,
+            packet_count: 6,
+            octet_count: video_octets,
+        },
+        cname: "parent-video@amazing".into(),
+    };
+    for report in [&audio_sender, &video_sender] {
+        endpoint
+            .send_rtcp(
+                &amazing_webrtc::encode_rtcp_compound_sender_report(report)
+                    .map_err(|error| error.to_string())?,
+            )
             .map_err(|error| error.to_string())?;
     }
 
@@ -1531,6 +1562,37 @@ fn run_secure_media_peer(
             .push(video_rtp, phase as u64 * 5)
             .map_err(|error| error.to_string())?;
     }
+    let mut parent_reports = Vec::new();
+    for _ in 0..2 {
+        let wire = endpoint.receive_rtcp().map_err(|error| error.to_string())?;
+        parent_reports.push(
+            amazing_webrtc::parse_rtcp_compound_sender_report(&wire)
+                .map_err(|error| error.to_string())?,
+        );
+    }
+    let audio_sender = parent_reports
+        .iter()
+        .find(|report| report.sender.ssrc == parent_rtp.ssrc)
+        .ok_or_else(|| "parent audio Sender Report is missing".to_string())?;
+    let video_sender = parent_reports
+        .iter()
+        .find(|report| report.sender.ssrc == 0x5649_4445)
+        .ok_or_else(|| "parent video Sender Report is missing".to_string())?;
+    if audio_sender.cname != "parent-audio@amazing"
+        || video_sender.cname != "parent-video@amazing"
+        || video_sender.sender.packet_count != 6
+        || video_sender.sender.rtp_timestamp != 315_000
+    {
+        return Err("parent A/V Sender Reports are inconsistent".into());
+    }
+    let av_sync = amazing_webrtc::AvSyncTimeline::new(
+        amazing_webrtc::MediaClockAnchor::from_sender_report(audio_sender.sender, 48_000)
+            .map_err(|error| error.to_string())?,
+        amazing_webrtc::MediaClockAnchor::from_sender_report(video_sender.sender, 90_000)
+            .map_err(|error| error.to_string())?,
+        20,
+    )
+    .map_err(|error| error.to_string())?;
     let mut assembler =
         amazing_webrtc::VideoFrameAssembler::new(amazing_webrtc::VideoFrameConfig {
             ssrc: 0x5649_4445,
@@ -1565,12 +1627,20 @@ fn run_secure_media_peer(
     let mut pixels_changed = false;
     let mut previous_timestamp = None;
     while let Some(frame) = playout.pop_due(3_000) {
+        let audio_timestamp = parent_rtp
+            .timestamp
+            .wrapping_add(decoded_frames as u32 * 24_000);
         if previous_timestamp.is_some_and(|previous| frame.timestamp <= previous)
             || (frame.frame.width, frame.frame.height) != (32, 32)
             || frame.frame.planes != 3
             || frame.frame.rgba.len() != 32 * 32 * 4
         {
             return Err("secure H.264 playout frame was invalid".into());
+        }
+        if av_sync.decide(audio_timestamp, frame.timestamp)
+            != amazing_webrtc::AvSyncDecision::Present
+        {
+            return Err("secure H.264 frame was not aligned to audio master".into());
         }
         previous_timestamp = Some(frame.timestamp);
         match first_checksum {
