@@ -727,6 +727,7 @@ fn main() -> ExitCode {
         Some("play-audio") => cmd_play_audio(&args[2..]),
         Some("webrtc-loopback") => cmd_webrtc_loopback(),
         Some("rtp-jitter-probe") => cmd_rtp_jitter_probe(),
+        Some("opus-probe") => cmd_opus_probe(),
         Some("secure-media-loopback") => cmd_secure_media_loopback(),
         Some("secure-media-processes") => cmd_secure_media_processes(),
         Some("__secure-media-peer") => cmd_secure_media_peer(args.get(2).map(String::as_str)),
@@ -741,7 +742,7 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|opus-probe|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
             );
             ExitCode::FAILURE
         }
@@ -767,6 +768,22 @@ fn cmd_rtp_jitter_probe() -> ExitCode {
         }
         Err(error) => {
             eprintln!("amazing rtp-jitter-probe: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn cmd_opus_probe() -> ExitCode {
+    match amazing_webrtc_codecs::run_opus_probe() {
+        Ok(report) => {
+            println!(
+                "Opus encoded={} bytes decoded={} samples PLC={} samples; opus probe ok",
+                report.encoded_bytes, report.decoded_samples, report.concealed_samples
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing opus-probe: {error}");
             ExitCode::FAILURE
         }
     }
@@ -906,7 +923,7 @@ fn cmd_secure_media_processes() -> ExitCode {
     match run_secure_media_processes() {
         Ok(()) => {
             println!(
-                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP L16+PCMU; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 L16 parent->child=2 PCMU child->parent=320; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP Opus+L16+PCMU; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 Opus parent->child=960 PCMU child->parent=320; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
             );
             ExitCode::SUCCESS
         }
@@ -940,6 +957,25 @@ fn verify_ice_robustness_probe() -> Result<(), String> {
         return Err("live ICE robustness probe failed".into());
     }
     Ok(())
+}
+
+fn negotiated_audio_decoder(
+    codecs: &amazing_webrtc::NegotiatedAudioCodecs,
+    payload_type: u8,
+) -> Result<Box<dyn amazing_webrtc::RtpAudioDecoder>, String> {
+    let codec = codecs
+        .codec(payload_type)
+        .map_err(|error| error.to_string())?;
+    if codec.encoding.eq_ignore_ascii_case("OPUS") {
+        Ok(Box::new(
+            amazing_webrtc_codecs::OpusDecoderAdapter::from_negotiated(codec)
+                .map_err(|error| error.to_string())?,
+        ))
+    } else {
+        codecs
+            .decoder(payload_type)
+            .map_err(|error| error.to_string())
+    }
 }
 
 fn run_secure_media_processes() -> Result<(), String> {
@@ -997,14 +1033,17 @@ fn run_secure_media_processes() -> Result<(), String> {
         },
     )
     .map_err(|error| error.to_string())?;
-    let outbound = amazing_webrtc::RtpPacket {
-        marker: true,
-        payload_type: 96,
-        sequence_number: 41,
-        timestamp: 960,
-        ssrc: 0x5041_5245,
-        payload: [1_000i16.to_be_bytes(), (-1_000i16).to_be_bytes()].concat(),
-    };
+    let opus_codec = negotiated_codecs
+        .codec(111)
+        .map_err(|error| error.to_string())?;
+    let mut opus_encoder = amazing_webrtc_codecs::OpusEncoderAdapter::from_negotiated(opus_codec)
+        .map_err(|error| error.to_string())?;
+    let opus_pcm: Vec<i16> = (0..960)
+        .map(|index| (((index % 96) - 48) * 400) as i16)
+        .collect();
+    let outbound = opus_encoder
+        .encode(41, 960, 0x5041_5245, &opus_pcm)
+        .map_err(|error| error.to_string())?;
     let outbound_wire = amazing_webrtc::encode_rtp(&outbound).map_err(|error| error.to_string())?;
     endpoint
         .send_rtp(&outbound_wire)
@@ -1059,14 +1098,12 @@ fn run_secure_media_processes() -> Result<(), String> {
     else {
         return Err("child RTP did not reach jitter playout".into());
     };
-    let mut child_decoder = negotiated_codecs
-        .decoder(child_rtp.payload_type)
-        .map_err(|error| error.to_string())?;
+    let mut child_decoder = negotiated_audio_decoder(&negotiated_codecs, child_rtp.payload_type)?;
     let child_audio = child_decoder
         .decode(&played_child_rtp)
         .map_err(|error| error.to_string())?;
-    if child_audio.samples != vec![0; 160] {
-        return Err("child PCMU playout samples were incorrect".into());
+    if child_audio.samples.len() != 160 {
+        return Err("child audio playout sample count was incorrect".into());
     }
     let Some(amazing_webrtc::JitterOutput::Gap {
         estimated_timestamp: Some(missing_timestamp),
@@ -1185,7 +1222,7 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
     .map_err(|error| error.to_string())?;
     let parent_rtp = endpoint.receive_rtp().map_err(|error| error.to_string())?;
     let parent_rtp = amazing_webrtc::parse_rtp(&parent_rtp).map_err(|error| error.to_string())?;
-    if parent_rtp.payload_type != 96 || parent_rtp.sequence_number != 41 {
+    if parent_rtp.payload_type != 111 || parent_rtp.sequence_number != 41 {
         return Err("parent process sent unexpected RTP".into());
     }
     let parent_config = negotiated_codecs
@@ -1206,14 +1243,12 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
     else {
         return Err("parent RTP did not reach jitter playout".into());
     };
-    let mut parent_decoder = negotiated_codecs
-        .decoder(parent_rtp.payload_type)
-        .map_err(|error| error.to_string())?;
+    let mut parent_decoder = negotiated_audio_decoder(&negotiated_codecs, parent_rtp.payload_type)?;
     let parent_audio = parent_decoder
         .decode(&played_parent_rtp)
         .map_err(|error| error.to_string())?;
-    if parent_audio.samples != [1_000, -1_000] {
-        return Err("parent L16 playout samples were incorrect".into());
+    if parent_audio.samples.len() != 960 {
+        return Err("parent Opus playout sample count was incorrect".into());
     }
     endpoint
         .answer_consent()

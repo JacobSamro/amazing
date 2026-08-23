@@ -1022,7 +1022,7 @@ pub fn build_local_description(
         media: "audio".into(),
         port: address.port(),
         protocol: "UDP/TLS/RTP/SAVPF".into(),
-        payload_types: vec![96, 0],
+        payload_types: vec![111, 96, 0],
         ice_ufrag: ice_ufrag.into(),
         ice_pwd: ice_pwd.into(),
         fingerprint_algorithm: "sha-256".into(),
@@ -1035,6 +1035,12 @@ pub fn build_local_description(
             address,
         }],
         rtp_maps: vec![
+            amazing_webrtc::RtpMap {
+                payload_type: 111,
+                encoding: "opus".into(),
+                clock_rate: 48_000,
+                channels: 1,
+            },
             amazing_webrtc::RtpMap {
                 payload_type: 96,
                 encoding: "L16".into(),

@@ -182,6 +182,16 @@ surrounding sequence, advances its output clock, and asks the negotiated codec
 adapter for concealment. The secure two-process artifact forces that path and
 correlates its one gap with RTCP cumulative loss.
 
+### 6b. Compressed-codec exception (Phase 9.20)
+
+The std-only protocol core does not implement Opus. `amazing-webrtc-codecs` is
+an isolated adapter with `#![forbid(unsafe_code)]` that satisfies the core
+`RtpAudioDecoder` seam. It pins `opus2` 0.4.0 to the bundled static upstream
+libopus backend; dependency-internal C/FFI stays outside every engine core.
+The alternative pure-Rust `mousiki` 0.2.1 backend was evaluated and rejected
+because a valid 20 ms mono frame panicked in CELT band processing. Bundled
+libopus requires CMake and the existing Visual Studio C++ tools on Windows.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

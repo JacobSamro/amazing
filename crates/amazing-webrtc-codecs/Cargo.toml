@@ -1,0 +1,11 @@
+[package]
+name = "amazing-webrtc-codecs"
+description = "Isolated compressed-codec adapters for Amazing WebRTC"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+amazing-webrtc = { path = "../amazing-webrtc" }
+opus2 = { version = "=0.4.0", default-features = false, features = ["backend-libopus", "bundled", "static"] }

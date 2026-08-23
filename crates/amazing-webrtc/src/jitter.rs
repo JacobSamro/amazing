@@ -485,6 +485,7 @@ fn decode_mulaw(encoded: u8) -> i16 {
 enum AudioCodecKind {
     L16,
     Pcmu,
+    Opus,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -544,6 +545,9 @@ impl NegotiatedAudioCodecs {
                 codec.payload_type,
                 codec.clock_rate,
             )?)),
+            AudioCodecKind::Opus => Err(WebRtcError::Unsupported(
+                "Opus decoder requires the isolated codec adapter",
+            )),
         }
     }
 }
@@ -578,6 +582,11 @@ pub fn negotiate_audio_codecs(
             AudioCodecKind::L16
         } else if offered.encoding.eq_ignore_ascii_case("PCMU") && offered.channels == 1 {
             AudioCodecKind::Pcmu
+        } else if offered.encoding.eq_ignore_ascii_case("opus")
+            && offered.clock_rate == 48_000
+            && matches!(offered.channels, 1 | 2)
+        {
+            AudioCodecKind::Opus
         } else {
             continue;
         };
@@ -880,15 +889,18 @@ mod tests {
 
     #[test]
     fn sdp_negotiation_rejects_changed_or_unsupported_codec_sets() {
-        let opus = crate::RtpMap {
+        let unsupported = crate::RtpMap {
             payload_type: 111,
-            encoding: "opus".into(),
+            encoding: "speex".into(),
             clock_rate: 48_000,
             channels: 2,
         };
         assert!(
-            negotiate_audio_codecs(&description(vec![opus.clone()]), &description(vec![opus]))
-                .is_err()
+            negotiate_audio_codecs(
+                &description(vec![unsupported.clone()]),
+                &description(vec![unsupported])
+            )
+            .is_err()
         );
 
         let offer = crate::RtpMap {
