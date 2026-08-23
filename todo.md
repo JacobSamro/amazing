@@ -1810,6 +1810,40 @@ Strict changed-package Clippy and locked stripped ThinLTO builds pass on win-001
 Release sizes are 8,523,264 bytes (`amazing.exe`) and 14,236,672 bytes
 (`amazing-shell.exe`).
 
+## Phase 9.39 (video-loss recovery) — authenticated PLI and forced IDR
+
+Shipped: the std-only WebRTC core now owns the exact 12-byte RFC 4585
+Payload-Specific Feedback/Picture Loss Indication shape. The public value carries
+sender and media SSRCs; encode emits V=2/FMT=1/PT=206/length=2, and parse rejects
+wrong format, packet type, padding/length, and truncation. The isolated H.264
+adapter exposes the safe OpenH264 0.9.8 `force_intra_frame` control without
+leaking codec or FFI state across its interface.
+
+The secure parent sends seven authenticated RTP packets. Packet three advances
+encoder reference state but carries a deliberately damaged access unit. The
+child reaches that packet through its normal jitter/assembly path, requires
+decode failure, and sends PLI over SRTCP. The parent validates both SSRCs, forces
+the next encoded frame to IDR, and resumes deltas afterward. Six decoded frames
+reach GPUI at RTP timestamps 90000, 135000, 225000, 270000, 315000, and 360000;
+their A/V presentations are 0, 500, 1500, 2000, 2500, and 3000 ms.
+
+Measured AMV2 inter-arrival deltas are `[499, 999, 499, 500, 500] ms`: one
+visible damaged-frame gap followed by restored 500 ms cadence. GPUI detects that
+single discontinuity and completes with `PLI/IDR 1 · late 0 · queue 3`. Native
+evidence:
+`4d04b310d47b24a55b7d847c4cc562917633d55d4326951cb8792a5d4ba08db8`.
+
+Known gaps: the fault is an authenticated damaged access unit rather than an
+actual dropped UDP datagram. There is no Generic NACK, FIR, PLI rate limiting,
+retransmission buffer, repeated-loss escalation, decoder reset fallback, or
+remote browser peer. The fixture still uses one RTP packet per access unit.
+
+Conformance: new PLI shape and forced-IDR codec gates pass; both secure
+two-process modes recover; root workspace passes 506/506 and standalone GPUI
+passes 22/22. Strict changed-package Clippy and locked stripped ThinLTO builds
+pass on win-001. Release sizes are 8,525,312 bytes (`amazing.exe`) and 14,236,672
+bytes (`amazing-shell.exe`).
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.

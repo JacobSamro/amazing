@@ -301,6 +301,13 @@ and propagates backpressure to the child writer and its existing timeout rather
 than accumulating decoded RGBA indefinitely. GPUI drains in order on its timer;
 the current two-frame-per-second secure path completes losslessly with the bound.
 
+Phase 9.39 adds bounded video-loss recovery. The std-only RTCP core encodes and
+parses the exact RFC 4585 PSFB/FMT=1 Picture Loss Indication. A damaged secure
+delta produces no decoded picture, so the child sends PLI over SRTCP; the parent
+validates its sender/media SSRCs and calls the isolated encoder's safe
+`force_intra_frame` interface. The next access unit is an IDR, restoring the same
+decoder and incremental presentation path after one explicit timeline gap.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

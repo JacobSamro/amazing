@@ -378,6 +378,10 @@ impl H264EncoderAdapter {
             .map(|stream| stream.to_vec())
             .map_err(|error| CodecError(format!("encode H.264 frame: {error}")))
     }
+
+    pub fn force_keyframe(&mut self) {
+        self.encoder.force_intra_frame();
+    }
 }
 
 pub struct H264DecoderAdapter {
@@ -512,6 +516,19 @@ fn i420_to_rgba(
 mod tests {
     use super::*;
 
+    fn contains_idr_nal(bitstream: &[u8]) -> bool {
+        (0..bitstream.len()).any(|index| {
+            let header = if bitstream.get(index..index + 4) == Some(&[0, 0, 0, 1]) {
+                bitstream.get(index + 4)
+            } else if bitstream.get(index..index + 3) == Some(&[0, 0, 1]) {
+                bitstream.get(index + 3)
+            } else {
+                None
+            };
+            header.is_some_and(|header| header & 0x1f == 5)
+        })
+    }
+
     #[test]
     fn opus_roundtrip_and_plc_cross_the_core_codec_seam() {
         let report = run_opus_probe().expect("Opus probe");
@@ -536,6 +553,24 @@ mod tests {
         assert!(report.first_bytes > 0 && report.second_bytes > 0);
         assert_eq!((report.width, report.height), (32, 32));
         assert!(report.pixels_changed);
+    }
+
+    #[test]
+    fn h264_encoder_forces_idr_after_picture_loss_feedback() {
+        let mut encoder = H264EncoderAdapter::new().unwrap();
+        let first = encoder
+            .encode_rgb(&vec![20; 16 * 16 * 3], (16, 16))
+            .unwrap();
+        let delta = encoder
+            .encode_rgb(&vec![21; 16 * 16 * 3], (16, 16))
+            .unwrap();
+        encoder.force_keyframe();
+        let recovery = encoder
+            .encode_rgb(&vec![22; 16 * 16 * 3], (16, 16))
+            .unwrap();
+        assert!(contains_idr_nal(&first));
+        assert!(!contains_idr_nal(&delta));
+        assert!(contains_idr_nal(&recovery));
     }
 
     #[test]

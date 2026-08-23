@@ -51,6 +51,7 @@ struct BrowserShell {
     secure_video_requested: bool,
     secure_video_active: bool,
     secure_video_complete: bool,
+    secure_video_recoveries: u64,
     secure_video_status: String,
     address_focus: Option<FocusHandle>,
     address: String,
@@ -127,6 +128,7 @@ impl BrowserShell {
             secure_video_requested: false,
             secure_video_active: false,
             secure_video_complete: false,
+            secure_video_recoveries: 0,
             secure_video_status: "H.264 → I420 → RGBA".into(),
             address_focus,
             address: "amazing://status".to_string(),
@@ -249,8 +251,9 @@ impl BrowserShell {
         self.video_frame_index = update.frame_index;
         if self.secure_video_complete {
             self.secure_video_status = format!(
-                "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  RTCP A/V clock  ·  late {}  ·  queue {}",
+                "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  PLI/IDR {}  ·  late {}  ·  queue {}",
                 self.video_frames.len(),
+                self.secure_video_recoveries,
                 update.dropped_total,
                 FRAME_EVENT_CAPACITY
             );
@@ -277,6 +280,7 @@ impl BrowserShell {
                             self.video_frame_index = 0;
                             self.secure_video_active = true;
                             self.secure_video_complete = false;
+                            self.secure_video_recoveries = 0;
                             self.video_clock.begin_stream(now_ms);
                         } else if let Err(error) = self
                             .video_clock
@@ -285,14 +289,22 @@ impl BrowserShell {
                             self.secure_video_status = format!("SECURE VIDEO ERROR  ·  {error}");
                             continue;
                         }
+                        if presentation_gap_exceeds_cadence(
+                            &self.pending_video_presentation_ms,
+                            frame.presentation_ms as u64,
+                        ) {
+                            self.secure_video_recoveries =
+                                self.secure_video_recoveries.saturating_add(1);
+                        }
                         self.video_frames.push(viewport);
                         self.pending_video_presentation_ms
                             .push(frame.presentation_ms as u64);
                         self.secure_video_status = format!(
-                            "LIVE SRTP → JITTER → H.264 → RGBA  ·  frame {}  ·  A/V {} ms  ·  RTP {}",
+                            "LIVE SRTP → JITTER → H.264 → RGBA  ·  frame {}  ·  A/V {} ms  ·  RTP {}  ·  rec {}",
                             frame.index + 1,
                             frame.presentation_ms,
-                            frame.timestamp
+                            frame.timestamp,
+                            self.secure_video_recoveries
                         );
                     }
                 }
@@ -304,8 +316,9 @@ impl BrowserShell {
                         self.video_clock.seal_stream();
                         self.secure_video_complete = true;
                         self.secure_video_status = format!(
-                            "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  RTCP A/V clock  ·  late 0  ·  queue {}",
+                            "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  PLI/IDR {}  ·  late 0  ·  queue {}",
                             self.video_frames.len(),
+                            self.secure_video_recoveries,
                             FRAME_EVENT_CAPACITY
                         );
                     }
@@ -1218,6 +1231,18 @@ fn normalize_address(value: &str) -> Option<String> {
     }
 }
 
+fn presentation_gap_exceeds_cadence(presentation_ms: &[u64], next_ms: u64) -> bool {
+    let Some(previous) = presentation_ms.last().copied() else {
+        return false;
+    };
+    let expected_interval = if presentation_ms.len() >= 2 {
+        previous.saturating_sub(presentation_ms[presentation_ms.len() - 2])
+    } else {
+        500
+    };
+    next_ms.saturating_sub(previous) > expected_interval
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1292,6 +1317,14 @@ mod tests {
         assert_eq!(shell.video_frame_index, 0);
         assert_eq!(shell.active, 1);
         assert_eq!(shell.update_video_clock(3_000).next_delay_ms, 500);
+    }
+
+    #[test]
+    fn presentation_gap_identifies_one_recovery_discontinuity() {
+        assert!(!presentation_gap_exceeds_cadence(&[], 0));
+        assert!(!presentation_gap_exceeds_cadence(&[0], 500));
+        assert!(presentation_gap_exceeds_cadence(&[0, 500], 1_500));
+        assert!(!presentation_gap_exceeds_cadence(&[0, 500, 1_500], 2_000));
     }
 
     #[test]

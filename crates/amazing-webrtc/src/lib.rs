@@ -91,6 +91,12 @@ pub struct RtcpSenderReport {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RtcpPictureLossIndication {
+    pub sender_ssrc: u32,
+    pub media_ssrc: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReceptionReport {
     pub source_ssrc: u32,
     pub fraction_lost: u8,
@@ -1421,6 +1427,33 @@ pub fn encode_rtcp_sender_report(report: RtcpSenderReport) -> Vec<u8> {
     packet
 }
 
+/// Encodes the bounded RFC 4585 Picture Loss Indication shape (PSFB FMT=1).
+pub fn encode_rtcp_picture_loss_indication(report: RtcpPictureLossIndication) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(12);
+    packet.extend_from_slice(&[0x81, 206]);
+    packet.extend_from_slice(&2u16.to_be_bytes());
+    packet.extend_from_slice(&report.sender_ssrc.to_be_bytes());
+    packet.extend_from_slice(&report.media_ssrc.to_be_bytes());
+    packet
+}
+
+pub fn parse_rtcp_picture_loss_indication(
+    packet: &[u8],
+) -> Result<RtcpPictureLossIndication, WebRtcError> {
+    if packet.len() != 12 {
+        return Err(WebRtcError::InvalidPacket("RTCP PLI length mismatch"));
+    }
+    if packet[0] != 0x81 || packet[1] != 206 || packet[2..4] != 2u16.to_be_bytes() {
+        return Err(WebRtcError::InvalidPacket(
+            "RTCP packet is not an unpadded PLI",
+        ));
+    }
+    Ok(RtcpPictureLossIndication {
+        sender_ssrc: u32::from_be_bytes(packet[4..8].try_into().expect("PLI sender bounds")),
+        media_ssrc: u32::from_be_bytes(packet[8..12].try_into().expect("PLI media bounds")),
+    })
+}
+
 pub fn parse_rtcp_sender_report(packet: &[u8]) -> Result<RtcpSenderReport, WebRtcError> {
     if packet.len() < 4 {
         return Err(WebRtcError::InvalidPacket("truncated RTCP header"));
@@ -2427,6 +2460,26 @@ mod tests {
         assert_eq!(wire[1], 200);
         assert_eq!(&wire[2..4], &6u16.to_be_bytes());
         assert_eq!(parsed, report);
+    }
+
+    #[test]
+    fn rtcp_picture_loss_indication_round_trips_rfc4585_shape() {
+        let report = RtcpPictureLossIndication {
+            sender_ssrc: 0x5256_4352,
+            media_ssrc: 0x5649_4445,
+        };
+        let wire = encode_rtcp_picture_loss_indication(report);
+        assert_eq!(
+            wire,
+            [
+                0x81, 206, 0, 2, 0x52, 0x56, 0x43, 0x52, 0x56, 0x49, 0x44, 0x45
+            ]
+        );
+        assert_eq!(parse_rtcp_picture_loss_indication(&wire).unwrap(), report);
+        let mut wrong_format = wire.clone();
+        wrong_format[0] = 0x82;
+        assert!(parse_rtcp_picture_loss_indication(&wrong_format).is_err());
+        assert!(parse_rtcp_picture_loss_indication(&wire[..8]).is_err());
     }
 
     #[test]

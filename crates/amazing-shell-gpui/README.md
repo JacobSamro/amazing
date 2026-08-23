@@ -32,6 +32,8 @@ first real engine viewport:
   timeline at EOF;
 - the reader/UI handoff is a bounded three-event synchronous channel, so a slow
   renderer backpressures TCP instead of growing decoded-frame memory;
+- a presentation discontinuity after damaged H.264 records one authenticated
+  PLI/forced-IDR recovery in the native status surface;
 - real TrueType glyph rasterization using the Windows UI font;
 - responsive 1080×760 startup bounds for the win-001 RDP desktop.
 
@@ -69,6 +71,8 @@ Incremental-decode proof: [frame 1](../../docs/screenshots/gpui-incremental-deco
 and [frame 2](../../docs/screenshots/gpui-incremental-decode-b-win001.png).
 
 Bounded-queue proof: [complete session](../../docs/screenshots/gpui-bounded-queue-win001.png).
+
+PLI/IDR recovery proof: [complete session](../../docs/screenshots/gpui-pli-recovery-win001.png).
 
 Build and launch on win-001:
 

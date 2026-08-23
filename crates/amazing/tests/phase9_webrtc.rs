@@ -251,7 +251,10 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("secure RGBA stream frames=6"), "{stdout}");
-    assert!(stdout.contains("pace=RTCP decode=incremental"), "{stdout}");
+    assert!(
+        stdout.contains("pace=RTCP decode=incremental recovery=PLI+IDR"),
+        "{stdout}"
+    );
     let (bytes, arrivals) = receiver.join().expect("frame receiver thread");
     let arrival_deltas_ms = arrivals
         .windows(2)
@@ -270,6 +273,8 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
     );
     let mut cursor = 0usize;
     let mut checksums = Vec::new();
+    let timestamps = [90_000, 135_000, 225_000, 270_000, 315_000, 360_000];
+    let presentations = [0, 500, 1_500, 2_000, 2_500, 3_000];
     for index in 0..6u32 {
         assert_eq!(&bytes[cursor..cursor + 4], b"AMV2");
         cursor += 4;
@@ -281,8 +286,8 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
         assert_eq!(read_u32(), index);
         assert_eq!(read_u32(), 32);
         assert_eq!(read_u32(), 32);
-        assert_eq!(read_u32(), 90_000 + index * 45_000);
-        assert_eq!(read_u32(), index * 500);
+        assert_eq!(read_u32(), timestamps[index as usize]);
+        assert_eq!(read_u32(), presentations[index as usize]);
         let length = read_u32() as usize;
         assert_eq!(length, 32 * 32 * 4);
         let rgba = &bytes[cursor..cursor + length];
