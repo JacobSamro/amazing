@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 28-subphase foundation milestone landed; direct live video/TURN/browser interop remain |
+| 9 — Media | 🔄 29-subphase foundation milestone landed; direct UI handoff/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1485,6 +1485,35 @@ locked ThinLTO builds pass.
 Final win-001 sizes: root release 8,492,544 bytes; standalone GPUI release
 14,161,920 bytes.
 
+## Phase 9.29 (continuous secure video) — six-frame SRTP clocked playout
+
+Shipped: the parent secure process uses one persistent H.264 encoder to send six
+key/delta access units on bundled video PT121/SSRC `0x56494445`. Sequence numbers
+200–205 and 90 kHz timestamps 90000–315000 advance at 500 ms intervals. Every
+access unit is authenticated and encrypted by the existing SRTP context.
+
+The controlled peer verifies every payload/SSRC/sequence/timestamp, buffers all
+six through RTP jitter, assembles marked frames, decodes them with one persistent
+H.264 decoder, and enqueues owned RGBA frames in `VideoPlayoutQueue`. Simulated
+clock release proves strict timestamp order, six emissions, stable 32×32×4
+geometry, and changing pixel checksums.
+
+Runnable artifact: `target\release\amazing.exe secure-media-processes`, now
+reporting `video=H264 secure frames=6 32x32 clock=90k changed=yes` before
+`two-process interop ok`.
+
+Known gaps: each small access unit still fits one RTP packet, so FU-A/STAP-A and
+loss recovery remain pending. The secure decoded queue lives in the child
+process and is not yet streamed into GPUI. Wall-clock sleeping, drift, A/V sync,
+visibility/backpressure, and video RTCP feedback are not implemented.
+
+Conformance: enhanced secure six-frame timing/geometry/pixel gate passes 1/1;
+all prior ICE, consent, audio loss, Opus, RTCP, and video assertions remain.
+
+Final win-001 gate: all 501 hardware-independent workspace tests/doctests pass
+with `--locked`; strict application Clippy, stripped ThinLTO release, and
+continuous secure-video artifact pass. The release binary is 8,511,488 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1540,7 +1569,7 @@ Final win-001 sizes: root release 8,492,544 bytes; standalone GPUI release
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** twenty-eight committed subphases provide decoded images/audio,
+- **Phase 9:** twenty-nine committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1554,7 +1583,7 @@ parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
 remeasured after the audit fixes before each commit. Current gate: **501**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **8,492,544 bytes**.
+stripped ThinLTO release is **8,511,488 bytes**.
 
 ## Server cheat sheet
 

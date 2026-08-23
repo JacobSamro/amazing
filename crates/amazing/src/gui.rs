@@ -405,11 +405,11 @@ mod windows {
                         .runtime
                         .as_mut()
                         .and_then(|runtime| runtime.js.take_navigation());
-                    if let Some(url) = script_navigation {
-                        if url != input {
-                            self.navigate(url, true);
-                            return;
-                        }
+                    if let Some(url) = script_navigation
+                        && url != input
+                    {
+                        self.navigate(url, true);
+                        return;
                     }
                     set_window_text(self.address, &input);
                     set_window_text(self.hwnd, &self.window_title(&input));
@@ -438,15 +438,13 @@ mod windows {
             if base == input {
                 return input.to_owned();
             }
-            if base.starts_with("http://")
+            if (base.starts_with("http://")
                 || base.starts_with("https://")
-                || base.starts_with("file:")
+                || base.starts_with("file:"))
+                && let Ok(base_url) = amazing_net::Url::parse(base)
+                && let Ok(resolved) = amazing_net::resolve(input, &base_url)
             {
-                if let Ok(base_url) = amazing_net::Url::parse(base) {
-                    if let Ok(resolved) = amazing_net::resolve(input, &base_url) {
-                        return resolved.to_string();
-                    }
-                }
+                return resolved.to_string();
             }
             let path = std::path::Path::new(base);
             if std::path::Path::new(input).is_absolute() {
@@ -561,11 +559,11 @@ mod windows {
                 .as_ref()
                 .and_then(|runtime| hit_test(&runtime.layout, x as f32, page_y as f32));
             let Some(node) = node else { return };
-            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
-                if let Err(error) = runtime.js.dispatch_dom_event(node.0, "click") {
-                    eprintln!("amazing gui: click handler failed: {}", error.describe());
-                    return;
-                }
+            if let Some(runtime) = self.tab_mut().runtime.as_mut()
+                && let Err(error) = runtime.js.dispatch_dom_event(node.0, "click")
+            {
+                eprintln!("amazing gui: click handler failed: {}", error.describe());
+                return;
             }
             let navigation = self
                 .tab_mut()
@@ -807,21 +805,19 @@ mod windows {
             if rel
                 .split_ascii_whitespace()
                 .any(|token| token == "stylesheet")
-            {
-                if let Some(href) = attrs
+                && let Some(href) = attrs
                     .iter()
                     .find(|(name, _)| name == "href")
                     .map(|(_, value)| value)
-                {
-                    let url = resolve_script_url(page, href);
-                    let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
-                        .map_err(|error| format!("stylesheet {href}: {error}"))?;
-                    let css = response
-                        .text()
-                        .ok_or_else(|| format!("stylesheet {href} was not text"))?;
-                    out.push_str(&css);
-                    out.push('\n');
-                }
+            {
+                let url = resolve_script_url(page, href);
+                let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
+                    .map_err(|error| format!("stylesheet {href}: {error}"))?;
+                let css = response
+                    .text()
+                    .ok_or_else(|| format!("stylesheet {href} was not text"))?;
+                out.push_str(&css);
+                out.push('\n');
             }
         }
         for child in dom.children(node) {
@@ -873,13 +869,13 @@ mod windows {
         if source.contains("://") || source.starts_with("file:") {
             return source.to_owned();
         }
-        if page.starts_with("http://") || page.starts_with("https://") || page.starts_with("file:")
+        if (page.starts_with("http://")
+            || page.starts_with("https://")
+            || page.starts_with("file:"))
+            && let Ok(base) = amazing_net::Url::parse(page)
+            && let Ok(resolved) = amazing_net::resolve(source, &base)
         {
-            if let Ok(base) = amazing_net::Url::parse(page) {
-                if let Ok(resolved) = amazing_net::resolve(source, &base) {
-                    return resolved.to_string();
-                }
-            }
+            return resolved.to_string();
         }
         std::path::Path::new(page)
             .parent()

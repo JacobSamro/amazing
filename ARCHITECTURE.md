@@ -239,6 +239,11 @@ due times from the negotiated clock, and counts duplicate/late/overflow state.
 GPUI owns only the timer and current render-image index; it never learns RTP or
 codec state.
 
+Phase 9.29 runs that queue on authenticated media: six H.264 key/delta access
+units share one SRTP context, preserve 90 kHz timestamps through jitter/frame
+assembly, decode with persistent reference state, and leave the queue in due
+order. This proves continuous secure media independently of the UI process.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
