@@ -1701,6 +1701,46 @@ pass; standalone GPUI tests are 19/19. Strict `-D warnings` Clippy and the locke
 stripped ThinLTO build pass on win-001. Root remains 504/504 tests and 8,521,728
 bytes; the shell release is 14,235,648 bytes.
 
+## Phase 9.36 (progressive UI stream) — paced AMV2 delivery and display
+
+Shipped: when the optional RGBA sink is active, the secure child anchors an
+`Instant` at the first decoded output and sleeps only the remaining duration to
+each RTCP-derived `presentation_ms` before writing its AMV2 record. The normal
+secure media artifact remains unpaced; pacing is isolated to the presentation
+adapter and does not enter the std-only WebRTC core.
+
+`VideoPlaybackClock` now has a progressive mode. The first validated zero-time
+frame resets an unsealed timeline; later strictly increasing presentations are
+appended without loop wrap. While no next record is known, GPUI polls at 50 ms.
+EOF seals the same timeline into its inferred-interval replay loop. Appends after
+seal, duplicate/backward times, and non-zero protocol origin remain errors.
+
+The integration receiver reads every 28-byte header and RGBA payload separately
+and timestamps completion of each record. The measured win-001 inter-arrival
+deltas were exactly `[500, 499, 500, 499, 500] ms`; gates require every delta to
+be at least 300 ms and the first-to-last span at least 2200 ms. The wire result
+remains six records, 24,744 bytes, changing opaque pixels, and no trailing data.
+
+Native captures prove the intermediate UI state rather than only replay after
+EOF:
+
+- frame 1 / A/V 0 ms / RTP 90000:
+  `9d17d224f51361ae202de7decb98cb8ad55a1f94f7b1ef8be518026271b7abe8`;
+- frame 2 / A/V 500 ms / RTP 135000:
+  `7f1a88cd77123196eca8a0bb713f195cb43b5b27d98f69a0c054c6269a04b96f`.
+
+Known gaps: all six H.264 access units still arrive and decode before the RGBA
+adapter paces output, so this is progressive delivery/presentation rather than
+incremental network decode. There is no bounded cross-process queue,
+backpressure, producer-side late-drop policy, audio device cursor, visibility
+pause, periodic RTCP refresh, or restart after failure.
+
+Conformance: the paced secure-stream integration, six progressive-clock gates,
+and retained shell gates pass. Root workspace remains 504/504; standalone GPUI
+is 20/20. Strict changed-package Clippy and locked stripped ThinLTO builds pass
+on win-001. Release sizes are 8,521,728 bytes (`amazing.exe`) and 14,236,160
+bytes (`amazing-shell.exe`).
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.

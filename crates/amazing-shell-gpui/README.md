@@ -27,8 +27,8 @@ first real engine viewport:
   wake catches up without accumulating drift;
 - `--secure-video` launches the root DTLS-SRTP driver, validates versioned AMV2
   RGBA records and strictly increasing RTCP-derived presentation times on a
-  background localhost reader, and replaces the synthetic loop with the six
-  actual secure-session frames;
+  background localhost reader, progressively presents each paced secure-session
+  frame, then seals the six-frame replay timeline at EOF;
 - real TrueType glyph rasterization using the Windows UI font;
 - responsive 1080×760 startup bounds for the win-001 RDP desktop.
 
@@ -58,6 +58,9 @@ and [frame B](../../docs/screenshots/gpui-rtcp-av-clock-b-win001.png).
 
 Absolute-deadline proof: [frame A](../../docs/screenshots/gpui-absolute-clock-a-win001.png)
 and [frame B](../../docs/screenshots/gpui-absolute-clock-b-win001.png).
+
+Progressive-delivery proof: [frame 1](../../docs/screenshots/gpui-live-stream-a-win001.png)
+and [frame 2](../../docs/screenshots/gpui-live-stream-b-win001.png).
 
 Build and launch on win-001:
 

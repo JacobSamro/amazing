@@ -1627,6 +1627,7 @@ fn run_secure_media_peer(
     let mut pixels_changed = false;
     let mut previous_timestamp = None;
     let av_origin_ns = av_sync.audio.presentation_nanoseconds(parent_rtp.timestamp);
+    let frame_stream_started = frame_sink.as_ref().map(|_| Instant::now());
     while let Some(frame) = playout.pop_due(3_000) {
         let audio_timestamp = parent_rtp
             .timestamp
@@ -1657,11 +1658,19 @@ fn run_secure_media_peer(
             if presentation_ns < 0 || presentation_ns / 1_000_000 > u32::MAX as i128 {
                 return Err("secure frame presentation time is out of range".into());
             }
+            let presentation_ms = (presentation_ns / 1_000_000) as u32;
+            if let Some(remaining) = Duration::from_millis(presentation_ms as u64).checked_sub(
+                frame_stream_started
+                    .expect("frame stream clock exists with sink")
+                    .elapsed(),
+            ) {
+                std::thread::sleep(remaining);
+            }
             write_secure_rgba_frame(
                 frame_sink,
                 decoded_frames as u32,
                 frame.timestamp,
-                (presentation_ns / 1_000_000) as u32,
+                presentation_ms,
                 &frame.frame,
             )?;
         }

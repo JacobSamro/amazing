@@ -28,6 +28,7 @@ const DIM: u32 = 0x5b6371;
 const ICON: u32 = 0x4a5160;
 const ACCENT: u32 = 0xb1552b;
 const RULE: u32 = 0xe7e9ee;
+const SECURE_VIDEO_POLL_MS: u64 = 50;
 
 #[derive(Clone)]
 struct Tab {
@@ -275,12 +276,19 @@ impl BrowserShell {
                             self.video_frame_index = 0;
                             self.secure_video_active = true;
                             self.secure_video_complete = false;
+                            self.video_clock.begin_stream(now_ms);
+                        } else if let Err(error) = self
+                            .video_clock
+                            .append_presentation(frame.presentation_ms as u64)
+                        {
+                            self.secure_video_status = format!("SECURE VIDEO ERROR  ·  {error}");
+                            continue;
                         }
                         self.video_frames.push(viewport);
                         self.pending_video_presentation_ms
                             .push(frame.presentation_ms as u64);
                         self.secure_video_status = format!(
-                            "SECURE SRTP → H.264 → RGBA  ·  frame {}  ·  A/V {} ms  ·  RTP {}",
+                            "LIVE SRTP → H.264 → RGBA  ·  frame {}  ·  A/V {} ms  ·  RTP {}",
                             frame.index + 1,
                             frame.presentation_ms,
                             frame.timestamp
@@ -291,12 +299,8 @@ impl BrowserShell {
                     if self.pending_video_presentation_ms.len() != self.video_frames.len() {
                         self.secure_video_status =
                             "SECURE VIDEO ERROR  ·  frame timeline length mismatch".into();
-                    } else if let Err(error) = self
-                        .video_clock
-                        .replace_timeline(self.pending_video_presentation_ms.clone(), now_ms)
-                    {
-                        self.secure_video_status = format!("SECURE VIDEO ERROR  ·  {error}");
                     } else {
+                        self.video_clock.seal_stream();
                         self.secure_video_complete = true;
                         self.secure_video_status = format!(
                             "SECURE SRTP COMPLETE  ·  {} decoded frames  ·  RTCP A/V clock  ·  late 0",
@@ -1151,7 +1155,11 @@ fn main() {
                     let mut shell = BrowserShell::new(Some(cx.focus_handle().tab_stop(true)));
                     cx.spawn(async move |this, cx| {
                         let started = Instant::now();
-                        let mut delay_ms = 500;
+                        let mut delay_ms = if start_with_secure_video {
+                            SECURE_VIDEO_POLL_MS
+                        } else {
+                            500
+                        };
                         loop {
                             cx.background_executor()
                                 .timer(Duration::from_millis(delay_ms))
@@ -1161,8 +1169,14 @@ fn main() {
                                     started.elapsed().as_millis().min(u64::MAX as u128) as u64;
                                 shell.poll_secure_video(now_ms);
                                 let update = shell.update_video_clock(now_ms);
+                                let next_delay_ms =
+                                    if shell.secure_video_requested && !shell.secure_video_active {
+                                        SECURE_VIDEO_POLL_MS
+                                    } else {
+                                        update.next_delay_ms
+                                    };
                                 cx.notify();
-                                update.next_delay_ms
+                                next_delay_ms
                             }) {
                                 Ok(next_delay) => delay_ms = next_delay,
                                 Err(_) => break,

@@ -280,6 +280,13 @@ absolute deadline. A late UI wake jumps directly to the due frame and counts
 intervening frames once; rendering time therefore cannot accumulate as cadence
 drift across later frames.
 
+Phase 9.36 makes AMV2 delivery progressive. When a frame sink exists, the secure
+child waits only the remaining duration to each RTCP-derived presentation time
+before writing that record. GPUI begins an unsealed playback timeline at the
+first record, appends later times without looping, polls a missing next deadline
+at 50 ms, and seals the completed six-frame timeline at EOF. Transport pacing
+and UI presentation now share the same audio-master-relative time values.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

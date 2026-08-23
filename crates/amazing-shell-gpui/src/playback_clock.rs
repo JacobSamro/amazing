@@ -1,4 +1,5 @@
 const DEFAULT_INTERVAL_MS: u64 = 500;
+const STREAM_POLL_MS: u64 = 50;
 const MIN_DELAY_MS: u64 = 16;
 const MAX_DELAY_MS: u64 = 5_000;
 
@@ -14,6 +15,7 @@ pub struct VideoPlaybackClock {
     origin_ms: u64,
     sequence: u64,
     dropped_total: u64,
+    sealed: bool,
 }
 
 impl VideoPlaybackClock {
@@ -24,57 +26,81 @@ impl VideoPlaybackClock {
             origin_ms,
             sequence: 0,
             dropped_total: 0,
+            sealed: true,
         })
     }
 
-    pub fn replace_timeline(
-        &mut self,
-        presentation_ms: Vec<u64>,
-        origin_ms: u64,
-    ) -> Result<(), &'static str> {
-        validate_timeline(&presentation_ms)?;
-        self.presentation_ms = presentation_ms;
+    pub fn begin_stream(&mut self, origin_ms: u64) {
+        self.presentation_ms.clear();
+        self.presentation_ms.push(0);
         self.origin_ms = origin_ms;
         self.sequence = 0;
         self.dropped_total = 0;
+        self.sealed = false;
+    }
+
+    pub fn append_presentation(&mut self, presentation_ms: u64) -> Result<(), &'static str> {
+        if self.sealed {
+            return Err("video presentation stream is already sealed");
+        }
+        if self
+            .presentation_ms
+            .last()
+            .is_some_and(|previous| presentation_ms <= *previous)
+        {
+            return Err("video presentation timeline must be strictly increasing");
+        }
+        self.presentation_ms.push(presentation_ms);
         Ok(())
+    }
+
+    pub fn seal_stream(&mut self) {
+        self.sealed = true;
     }
 
     pub fn update(&mut self, now_ms: u64) -> PlaybackUpdate {
         let elapsed_ms = now_ms.saturating_sub(self.origin_ms);
-        let interval_ms = self.loop_interval_ms();
-        let cycle_ms = self
-            .presentation_ms
-            .last()
-            .copied()
-            .unwrap_or_default()
-            .saturating_add(interval_ms);
-        let cycle = elapsed_ms / cycle_ms;
-        let within_cycle_ms = elapsed_ms % cycle_ms;
+        let (cycle, cycle_ms, within_cycle_ms) = if self.sealed {
+            let cycle_ms = self
+                .presentation_ms
+                .last()
+                .copied()
+                .unwrap_or_default()
+                .saturating_add(self.loop_interval_ms());
+            (elapsed_ms / cycle_ms, cycle_ms, elapsed_ms % cycle_ms)
+        } else {
+            (0, 0, elapsed_ms)
+        };
         let frame_index = self
             .presentation_ms
             .partition_point(|presentation| *presentation <= within_cycle_ms)
             .saturating_sub(1);
-        let target_sequence = cycle
-            .saturating_mul(self.presentation_ms.len() as u64)
-            .saturating_add(frame_index as u64);
+        let target_sequence = if self.sealed {
+            cycle
+                .saturating_mul(self.presentation_ms.len() as u64)
+                .saturating_add(frame_index as u64)
+        } else {
+            frame_index as u64
+        };
         let skipped = target_sequence
             .saturating_sub(self.sequence)
             .saturating_sub(1);
         self.dropped_total = self.dropped_total.saturating_add(skipped);
         self.sequence = target_sequence;
 
-        let next_within_cycle_ms = self
-            .presentation_ms
-            .get(frame_index + 1)
-            .copied()
-            .unwrap_or(cycle_ms);
-        let next_deadline_ms = cycle
-            .saturating_mul(cycle_ms)
-            .saturating_add(next_within_cycle_ms);
-        let next_delay_ms = next_deadline_ms
-            .saturating_sub(elapsed_ms)
-            .clamp(MIN_DELAY_MS, MAX_DELAY_MS);
+        let next_delay_ms = match self.presentation_ms.get(frame_index + 1).copied() {
+            Some(next_within_cycle_ms) => cycle
+                .saturating_mul(cycle_ms)
+                .saturating_add(next_within_cycle_ms)
+                .saturating_sub(elapsed_ms)
+                .clamp(MIN_DELAY_MS, MAX_DELAY_MS),
+            None if self.sealed => cycle
+                .saturating_mul(cycle_ms)
+                .saturating_add(cycle_ms)
+                .saturating_sub(elapsed_ms)
+                .clamp(MIN_DELAY_MS, MAX_DELAY_MS),
+            None => STREAM_POLL_MS,
+        };
         PlaybackUpdate {
             frame_index,
             dropped_total: self.dropped_total,
@@ -157,15 +183,40 @@ mod tests {
     }
 
     #[test]
-    fn replacement_resets_origin_sequence_and_drop_count() {
+    fn progressive_stream_resets_then_appends_without_looping() {
         let mut clock = VideoPlaybackClock::new(vec![0, 100], 0).unwrap();
         assert_eq!(clock.update(250).dropped_total, 1);
-        clock.replace_timeline(vec![0, 500], 10_000).unwrap();
+        clock.begin_stream(10_000);
         let reset = clock.update(10_000);
         assert_eq!(
             (reset.frame_index, reset.dropped_total, reset.next_delay_ms),
-            (0, 0, 500)
+            (0, 0, 50)
         );
+        clock.append_presentation(500).unwrap();
+        let second = clock.update(10_500);
+        assert_eq!(
+            (
+                second.frame_index,
+                second.dropped_total,
+                second.next_delay_ms
+            ),
+            (1, 0, 50)
+        );
+        clock.append_presentation(1_000).unwrap();
+        assert_eq!(clock.update(11_000).frame_index, 2);
+        clock.seal_stream();
+        assert_eq!(clock.update(11_000).next_delay_ms, 500);
+    }
+
+    #[test]
+    fn progressive_stream_rejects_backward_append_and_append_after_seal() {
+        let mut clock = VideoPlaybackClock::new(vec![0], 0).unwrap();
+        clock.begin_stream(0);
+        assert!(clock.append_presentation(0).is_err());
+        clock.append_presentation(500).unwrap();
+        assert!(clock.append_presentation(400).is_err());
+        clock.seal_stream();
+        assert!(clock.append_presentation(1_000).is_err());
     }
 
     #[test]

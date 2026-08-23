@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::net::TcpListener;
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[test]
 fn webrtc_loopback_command_completes_stun_and_rtp_exchange() {
@@ -216,9 +216,29 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
         stream
             .set_read_timeout(Some(Duration::from_secs(15)))
             .unwrap();
+        let started = Instant::now();
         let mut bytes = Vec::new();
-        stream.read_to_end(&mut bytes).expect("read secure frames");
-        bytes
+        let mut arrivals = Vec::new();
+        for _ in 0..6 {
+            let mut header = [0u8; 28];
+            stream
+                .read_exact(&mut header)
+                .expect("read secure frame header");
+            let length = u32::from_le_bytes(header[24..28].try_into().unwrap()) as usize;
+            let mut rgba = vec![0; length];
+            stream
+                .read_exact(&mut rgba)
+                .expect("read secure frame pixels");
+            bytes.extend_from_slice(&header);
+            bytes.extend_from_slice(&rgba);
+            arrivals.push(started.elapsed());
+        }
+        let mut trailing = Vec::new();
+        stream
+            .read_to_end(&mut trailing)
+            .expect("read secure frame EOF");
+        bytes.extend_from_slice(&trailing);
+        (bytes, arrivals)
     });
     let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
         .args(["secure-video-stream", &address.to_string()])
@@ -230,7 +250,22 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(String::from_utf8_lossy(&output.stdout).contains("secure RGBA stream frames=6"));
-    let bytes = receiver.join().expect("frame receiver thread");
+    let (bytes, arrivals) = receiver.join().expect("frame receiver thread");
+    let arrival_deltas_ms = arrivals
+        .windows(2)
+        .map(|pair| pair[1].saturating_sub(pair[0]).as_millis())
+        .collect::<Vec<_>>();
+    eprintln!("secure AMV2 arrival deltas ms={arrival_deltas_ms:?}");
+    assert!(
+        arrivals
+            .windows(2)
+            .all(|pair| pair[1].saturating_sub(pair[0]) >= Duration::from_millis(300)),
+        "secure frame arrivals were not paced: {arrivals:?}"
+    );
+    assert!(
+        arrivals[5].saturating_sub(arrivals[0]) >= Duration::from_millis(2_200),
+        "secure frame stream completed too quickly: {arrivals:?}"
+    );
     let mut cursor = 0usize;
     let mut checksums = Vec::new();
     for index in 0..6u32 {
