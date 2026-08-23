@@ -91,6 +91,11 @@ impl Dom {
         &self.nodes[idx.0 as usize]
     }
 
+    /// Number of arena slots, including detached nodes.
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
     // ---- convenience constructors ----
 
     /// Creates an element under `parent`, appended as the last child.
@@ -247,6 +252,15 @@ impl Dom {
             NodeKind::Element { name, .. } => {
                 out.push('<');
                 out.push_str(name);
+                if let NodeKind::Element { attrs, .. } = &self.get(idx).kind {
+                    for (key, value) in attrs {
+                        out.push(' ');
+                        out.push_str(key);
+                        out.push_str("=\"");
+                        out.push_str(value);
+                        out.push('"');
+                    }
+                }
                 out.push_str(">\n");
             },
             NodeKind::Text { data } => {

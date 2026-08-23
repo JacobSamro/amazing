@@ -43,6 +43,12 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-paint` | software rasterizer | Phase 4 |
 | `amazing-net` | HTTP/1.1 client | Phase 5 |
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | Phase 6 |
+| `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | Phase 7/8 |
+
+The Windows GUI shell includes tabs, address/history navigation, live DOM
+events and mutation, classic scripts/external resources, and software-paint
+reflow. CI runs the workspace build and test gate on every push and pull
+request via `.github/workflows/ci.yml`.
 
 ## Usage
 
@@ -53,6 +59,16 @@ amazing
 # parse an HTML file (or stdin) and dump the DOM tree
 amazing parse page.html
 cat page.html | amazing parse
+
+# execute a classic JavaScript file (or read the script from stdin)
+amazing run script.js
+cat script.js | amazing run
+
+# execute a script against a live parsed DOM and dump the mutation result
+amazing domrun page.html script.js
+
+# open the native Windows shell (optional initial local file or http URL)
+amazing gui [url]
 ```
 
 ```sh

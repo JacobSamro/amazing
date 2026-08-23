@@ -1,6 +1,6 @@
 //! Amazing JS — ECMA-262 lexer, parser, and tree-walking interpreter.
 //!
-//! **Status: Phase 6, milestone 1 — lexical + syntactic front half.**
+//! **Status: Phase 6, milestone 2 — lexer/parser plus tree-walking runtime.**
 //! Largest single sub-project in Amazing; comparable in scope to Phases 0–5
 //! combined. Strategy (locked): v1 is a tree-walking interpreter — no JIT,
 //! per Ladybird's LibJS precedent — and Test262 is the conformance gate
@@ -31,19 +31,15 @@
 //!   the `??`-mixing restriction.
 //! - [`errors`] — [`SyntaxError`] with line/column positions.
 //!
-//! Deferred to later Phase 6 milestones (each module documents its own
-//! list in detail): regex/tagged templates, destructuring everywhere,
-//! modules (`import`/`export`), private class members, strict-mode early
-//! errors, and then the interpreter itself (objects/prototypes, built-ins,
-//! async/Promise, Map/Set).
-//!
-//! The interpreter back half will live alongside these modules and consume
-//! [`ast::Program`]; nothing in this crate allocates unsafely or panics on
-//! any input.
+//! Deferred: regex/tagged templates, destructuring everywhere, modules,
+//! private class members, strict-mode early errors, generators, symbols,
+//! and a true asynchronous Promise job queue. Runtime errors are represented
+//! by [`value::Throw`]; no input is allowed to panic the engine.
 
 pub mod ast;
 pub mod env;
 pub mod errors;
+pub mod interp;
 pub mod lexer;
 pub mod parser;
 pub mod tokens;
@@ -51,6 +47,7 @@ pub mod value;
 
 pub use ast::Program;
 pub use errors::SyntaxError;
+pub use interp::{DomHost, HostResponse, Interpreter};
 pub use parser::parse_script;
 
 #[cfg(test)]

@@ -26,7 +26,8 @@
 //!
 //! Deferred (documented, not implemented):
 //! - Destructuring patterns everywhere (declarators, parameters, assignment
-//!   targets, for-in/of heads) — bindings are plain [`Binding::Ident`].
+//!   targets, for-in/of heads) with recursive array/object binding patterns;
+//!   assignment-pattern targets remain deferred.
 //! - `import`/`export` (the parser rejects them; modules are a later
 //!   milestone) and therefore top-level `await` context.
 //! - `for await (... of ...)` (async iteration).
@@ -159,11 +160,21 @@ pub struct Declarator {
     pub span: Span,
 }
 
-/// A binding target. Destructuring patterns are deferred; this is a
-/// placeholder that grows into a full pattern enum later.
+/// A binding target used by declarations, parameters, and `for` heads.
+/// Assignment-pattern targets remain a later parser milestone.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Binding {
     Ident(Ident),
+    Array(Vec<Option<Box<Binding>>>),
+    Object(Vec<(BindingKey, Box<Binding>)>),
+    Rest(Box<Binding>),
+    Default(Box<Binding>, Box<Expr>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BindingKey {
+    Static(String),
+    Computed(Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -529,7 +540,10 @@ mod tests {
         let e = Expr::new(
             ExprKind::Binary {
                 op: BinOp::Add,
-                left: Box::new(Expr::new(ExprKind::Num(Numeric::new("1", 10, false)), dummy_span())),
+                left: Box::new(Expr::new(
+                    ExprKind::Num(Numeric::new("1", 10, false)),
+                    dummy_span(),
+                )),
                 right: Box::new(Expr::new(
                     ExprKind::Ident(Ident::new("x", dummy_span())),
                     dummy_span(),

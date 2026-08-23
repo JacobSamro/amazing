@@ -16,22 +16,29 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ crate integrated, workspace green (61 net tests incl. loopback HTTP); `fetch` demo |
-| 6 — JS | 🔄 front half landed: lexer/tokens/ast/parser/errors, parse_script green (50 tests); interpreter back half next |
-| 7–9 | pending |
+| 6 — JS | 🔄 lexer/parser + tree-walking runtime milestone landed (142 crate tests); focused Test262 slice measured at 196/196 (100%) |
+| 7 — DOM/JS | 🔄 live DOM, events, styles, scripts, fetch, and repaint tracer landed |
+| 8 — GUI | 🔄 Windows native shell landed; desktop visual proof pending |
+| 9 — Media | pending |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
 Sync loop: edit locally → `scp -r` changed paths → build/test via ssh → commit on server.
 **No rsync on Windows. No git push from macOS (cmd.exe breaks it) — commit on the server.**
+CI artifact: `.github/workflows/ci.yml` runs the workspace build and test gate on
+push and pull request using the Windows toolchain.
 
-## Phase 1 in-flight — finish these, in this order
+## Historical Phase 1 handoff checklist (superseded)
 
-### 1. REWRITE `crates/amazing-html/src/tokenizer.rs` (broken, do not patch)
+The detailed checklist below is retained as design history only. Phase 1 was
+completed and verified; do not treat the old "in-flight" instructions as
+current work items. The authoritative current status is the completed report
+immediately below and the phase table above.
 
-The committed draft is **invalid Rust**: struct fields declared inside an
-impl block (`was_end_tag_flag`, `finish_attr_placeholder`), a half-wired
-`PendingAttr`, and a mangled `emit_tag`. Delete and rewrite from the design
-below. It was never compiled.
+### 1. Historical tokenizer rewrite design
+
+Historical note: an early draft had invalid Rust and was replaced by the
+compiled tokenizer described in the completed report below.
 
 Design that was intended (keep it):
 - `Tokenizer { input: Vec<char>, pos, state, queue: VecDeque<Token>, text_buf,
@@ -70,7 +77,8 @@ Design that was intended (keep it):
 
 ### 3. Write `crates/amazing-html/src/tree.rs` (~600–800 lines)
 
-Not started. This is the biggest piece of Phase 1. Spec: §13.2.6
+Historical planning note. This was the biggest piece of Phase 1 and is now
+implemented. Spec: §13.2.6
 "Tree construction". Required insertion modes:
 
 ```
@@ -129,10 +137,11 @@ Use the new Dom low-level API added in Phase 1: `alloc_unattached`,
   `</br>`→br; adjacent text merges into ONE node; doctype captured.
 - Gate: `cargo test --workspace` green on win-001, then commit.
 
-### 6. Report (per goal prompt format) and STOP for confirmation
+### 6. Historical phase-gate reporting requirement
 
 What's implemented vs deferred, demo command (`amazing parse page.html`),
-correctness gaps, then ask before Phase 2. Do not auto-proceed.
+correctness gaps, then ask before Phase 2. This gate was completed; later
+phase work is recorded in the sections that follow.
 
 ## Phase 1 — DONE (win-001, all tests green)
 
@@ -267,6 +276,138 @@ integration tests (exact request bytes, chunk extensions+trailers, redirect
 chains). TLS deliberately unsupported (`https` fails fast; documented).
 Driver: `amazing fetch <url|file> [-i]`. Deferred: keep-alive, non-GET,
 gzip/br, cookies/caching/auth, HTTP/2.
+
+## Phase 6 (JS) — runtime milestone landed (win-001 green)
+
+Shipped: `amazing-js/src/interp.rs` — panic-free tree-walking execution over
+the existing ECMA-262 AST. The runtime has lexical closures, `var`/`let`/
+`const`, function and arrow calls, `new`, ordinary objects and prototypes,
+arrays with length/index bookkeeping, member assignment, arithmetic/logical/
+relational/equality operators, unary/update/delete/typeof, conditionals,
+loops, switch, try/catch/finally, throw, `for-in`/`for-of`, templates,
+optional chaining, and captured `console.log`. Built-ins include `Object`,
+`Array`, `Map`, `Set`, `Promise`, `Date`, `Math.abs/max/min`, `Number`,
+`String`, `Boolean`, `Function.call/apply/bind`, `Object.keys/values`, `Object.assign`, `Array.from/of`,
+`Number.isNaN/isFinite`, `Math.floor/ceil/round/sqrt/pow/trunc/sign`,
+`JSON.parse/stringify`,
+`eval`, numeric parsing globals, and array `push`/`pop`/`join`/`slice`/
+`concat`/`includes`/`indexOf`/`map`/`filter`/`reduce`/`forEach`, plus common
+string utilities. Map and Set use
+SameValueZero keys, preserve insertion order, expose `size`, and return
+array-backed key/value/entry iterables for this milestone. Promise supports
+the constructor executor, `resolve`/`reject`, `then`/`catch`/`finally`,
+pending reaction delivery, async-function return wrapping, and a FIFO
+microtask queue drained after each top-level script. Promise combinators
+`all`/`race`/`allSettled`/`any` preserve input order and settlement kind.
+`for-of` and destructuring also consume bounded `next()` iterator objects.
+Recursive array/object binding patterns with defaults/rest now work in
+declarations, parameters, and `for` declaration heads.
+Assignment uses a
+single evaluated reference for compound/logical updates; property descriptors,
+accessors, extensibility, wrapper objects, named anonymous functions,
+completion values, labeled control flow, and per-iteration `for (let …)`
+environments, assignment-pattern defaults, and computed binding keys are
+covered by the runtime milestone.
+
+Driver: `amazing run [script.js]` (stdin when omitted) executes a classic
+script, prints captured console lines, then its completion value. The
+interpreter's focused runtime coverage is included in the `amazing-js` suite;
+`cargo test --workspace` is green on win-001 (142 tests in `amazing-js`).
+
+Conformance evidence: the official Test262 repository was shallow-sparsely
+checked out on win-001 with 641 tests across the selected classic-language
+directories. `python scripts/test262.py C:\\Users\\server\\src\\test262
+--binary target\\debug\\amazing.exe` measured 196 passed, 0 failed, and
+445 skipped; measured pass rate = **196/196 (100%)**. Skips are explicit
+for modules/async/negative tests, BigInt/Symbol/private/accessor/destructuring
+features, and unavailable harness hooks. This is a focused slice, not whole-suite
+coverage.
+
+Known gaps: the browser loop is cooperative and currently lacks network event
+sources, and generators, symbols, modules, real Symbol identity, regex
+literals, and full class semantics are deferred. Basic
+`super` property and constructor calls now work.
+The `Symbol.iterator` key bridge, lazy `next()` consumption, and abrupt-body
+closing are implemented. The runtime is
+a milestone, not Phase 6 exit-criteria completion.
+
+## Phase 7 (DOM/JS bridge) — interactive tracer slice landed (win-001 green)
+
+Shipped: `amazing_js::DomHost` keeps the JS core independent of arena DOM
+types while exposing live node wrappers. The driver implements a bounded,
+mutation-capable surface: `document.querySelector`/`querySelectorAll`,
+`getElementById`/`getElementsByTagName`/`getElementsByClassName`
+(tag/id/class selectors), `document.body`,
+`document.createElement`, element `textContent`, `id`/`className`,
+`document.createTextNode`,
+`getAttribute`, `setAttribute`, `append`/`appendChild`/`remove`,
+`hasAttribute`/`removeAttribute`,
+`matches`/`closest`,
+`innerHTML`/`innerText`, `document.title`, the `window`/`globalThis` aliases, and
+`element.dataset`, `element.classList`, and `element.style` inline properties,
+viewport globals (`innerWidth`, `innerHeight`, `devicePixelRatio`),
+`onclick`, `addEventListener`, `removeEventListener`, and `click()` event
+dispatch. Detached nodes are reparented through the arena's existing
+attach/detach API; callbacks remain JS values owned by the interpreter.
+
+Driver: `amazing domrun <page.html> <script.js>` executes a classic script,
+prints captured console output and the completion value, then dumps the
+mutated DOM. The end-to-end fixture `examples/phase7.html` +
+`examples/phase7.js` was run on win-001: `before` became `after`, an
+attribute was written, a click handler changed text and inline color, a
+listener wrote a second attribute, and a new `<span>` child was appended.
+Full `cargo test --workspace` remains green on win-001.
+
+Known gaps: selector coverage follows the CSS engine's supported subset;
+script execution is
+classic/document-order rather than full HTML
+parser scheduling; and the browser global/window surface remains a bounded
+subset of the web platform.
+
+## Phase 8 (GUI shell) — Windows native first slice landed (win-001 green)
+
+Shipped: `crates/amazing/src/gui.rs` isolates the only `unsafe` code in a
+hand-written Win32 FFI module. `amazing gui [url]` creates a native top-level
+window with a tab strip, address bar, Go, Back, Forward, and new-tab controls.
+Each tab owns its own history, rendered surface, and active page; the mouse
+wheel scrolls the painted viewport. Navigation uses the existing
+`amazing-net` fetcher, then runs the existing HTML → CSS → layout → software
+paint pipeline and blits the RGBA surface through a top-down GDI bitmap.
+Local files and plain `http://` URLs use the same fetch path as the headless
+driver; unsupported TLS remains the documented Phase 5 exception.
+
+The shell compiles and the complete workspace suite passes on win-001. The
+interactive window itself requires a Windows desktop session (not available
+to the headless SSH service), so visual GUI proof is still pending. Current
+Inline page scripts now execute against the live DOM before the first layout
+and repaint. Each tab retains its JS runtime; layout-box hit testing dispatches
+mouse clicks and repaints DOM/style mutations. Limitations are blocking
+navigation during fetch/paint, no native scrollbar thumb, no network event
+sources, and no module/async script scheduling. Classic
+external `script[src]` resources now resolve relative to the page URL/path and
+load through the existing fetcher; `setTimeout`, `setInterval`,
+`requestAnimationFrame`, and Promise microtasks use the cooperative GUI timer
+pump. `document.addEventListener("DOMContentLoaded", …)`
+is dispatched after classic scripts complete; DOM events bubble through arena
+parents and expose `currentTarget`, `stopPropagation`, and `preventDefault`;
+`DOMContentLoaded` and `load` dispatch on `document`/`window`, with a body
+load dispatch, after classic scripts and author stylesheets are fetched.
+Classic inline `on*="…"` attributes install into the same bubbling event
+registry as `addEventListener`.
+`window.location.href`/`assign`/`replace` requests resolve relative to the
+active tab and enter its history. GUI anchor clicks perform the same default
+navigation unless a handler prevents the default. Page `fetch()` is host
+mediated and returns a minimal Promise-backed Response (`ok`, `status`, `url`,
+`headers.get/has`, `text()`/`json()`); Promise resolution now adopts returned
+Promises for normal chains.
+`history.back`/`forward`/`go` and no-reload `pushState`/`replaceState` update
+the active tab’s application history.
+External `<link rel="stylesheet" href="…">` resources are fetched and merged
+into the author cascade before layout.
+
+Release artifact evidence: `cargo build --release` on win-001 produced
+`target/release/amazing.exe` (1,667,072 bytes); its `version` command reports
+the GUI subcommand and its release `render` command produced a 640×54 raster.
 
 ## Later phases (unchanged from goal prompt)
 
