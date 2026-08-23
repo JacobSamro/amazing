@@ -41,6 +41,10 @@ pub enum NodeKind {
     Comment {
         data: String,
     },
+    ProcessingInstruction {
+        target: String,
+        data: String,
+    },
 }
 
 #[derive(Debug)]
@@ -297,6 +301,13 @@ impl Dom {
                 out.push_str("<!-- ");
                 out.push_str(data);
                 out.push_str(" -->\n");
+            },
+            NodeKind::ProcessingInstruction { target, data } => {
+                out.push_str("<?");
+                out.push_str(target);
+                out.push(' ');
+                out.push_str(data);
+                out.push_str("?>\n");
             },
         }
         for child in self.children(idx) {

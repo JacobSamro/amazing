@@ -17,7 +17,6 @@
 //! - Encoding is assumed lossy UTF-8; byte-level encoding detection is not
 //!   performed (caller decodes bytes before handing them to [`parse`]).
 //! - CDATA sections (`<![CDATA[…]]>`) tokenize as bogus comments.
-//! - `<frameset>` documents are parsed as ordinary body content.
 //! - Doctype PUBLIC/SYSTEM identifiers are consumed but not captured; only
 //!   their presence feeds quirks-mode approximation.
 //! - MathML/SVG namespaces and integration points are implemented; some

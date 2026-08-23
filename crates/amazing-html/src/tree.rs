@@ -10,8 +10,6 @@
 //!
 //! Deviations from full spec (deliberate, mirroring lib.rs):
 //! - `template` is ignored everywhere; no "in template" insertion modes.
-//! - Frameset parsing is skipped entirely; frameset documents degrade to
-//!   ordinary body content.
 //! - `noscript` content is parsed as raw text regardless of scripting flag.
 //! - Foreign content implements namespace-aware SVG/MathML tree construction
 //!   and integration points, but not every foreign-attribute adjustment.
@@ -36,7 +34,7 @@ use crate::tokenizer::{Token, Tokenizer};
 /// Elements whose start tags never take children (void + obsolete empties).
 const VOID_ELEMENTS: &[&str] = &[
     "area", "base", "basefont", "bgsound", "br", "col", "embed", "hr", "img",
-    "input", "link", "meta", "param", "source", "track", "wbr",
+    "input", "link", "meta", "param", "source", "track", "wbr", "frame",
 ];
 
 /// Default-scope terminator element names (§13.2.4.3). `template` omitted.
@@ -99,9 +97,9 @@ fn strip_leading_lf(mut s: String) -> String {
     s
 }
 
-/// Insertion modes (§13.2.4.1). `InTemplate*` and frameset modes are folded
-/// away (see module deviation list). Current WHATWG select recovery is part
-/// of the in-body rules.
+/// Insertion modes (§13.2.4.1). `InTemplate*` modes are folded away (see
+/// module deviation list). Current WHATWG select recovery is part of the
+/// in-body rules.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Mode {
     Initial,
@@ -117,6 +115,9 @@ enum Mode {
     InCell,
     InCaption,
     InColumnGroup,
+    InFrameset,
+    AfterFrameset,
+    AfterAfterFrameset,
     AfterBody,
     AfterAfterBody,
 }
@@ -203,6 +204,20 @@ impl TreeBuilder {
     // ---- token routing ----
 
     fn process_token(&mut self, tok: Token) {
+        if let Token::ProcessingInstruction { target, data } = &tok {
+            let parent = match self.mode {
+                Mode::Initial
+                | Mode::BeforeHtml
+                | Mode::AfterAfterBody
+                | Mode::AfterAfterFrameset => NodeIdx(0),
+                Mode::AfterBody | Mode::AfterFrameset => {
+                    self.open.first().copied().unwrap_or(NodeIdx(0))
+                },
+                _ => self.insertion_place().0,
+            };
+            self.processing_instruction_into(parent, target, data);
+            return;
+        }
         if self.should_process_in_foreign_content(&tok) {
             self.in_foreign_content(tok);
             return;
@@ -234,6 +249,9 @@ impl TreeBuilder {
             Mode::InCell => self.in_cell(tok),
             Mode::InCaption => self.in_caption(tok),
             Mode::InColumnGroup => self.in_column_group(tok),
+            Mode::InFrameset => self.in_frameset(tok),
+            Mode::AfterFrameset => self.after_frameset(tok),
+            Mode::AfterAfterFrameset => self.after_after_frameset(tok),
             Mode::AfterBody => self.after_body(tok),
             Mode::AfterAfterBody => self.after_after_body(tok),
         }
@@ -458,6 +476,7 @@ impl TreeBuilder {
                 }
             },
             Token::Eof => self.process_token_in_html(Token::Eof),
+            Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
         }
     }
 
@@ -642,6 +661,21 @@ impl TreeBuilder {
         self.dom.attach_last(parent, c);
     }
 
+    fn processing_instruction_into(
+        &mut self,
+        parent: NodeIdx,
+        target: &str,
+        data: &str,
+    ) {
+        let instruction = self.dom.alloc_unattached(
+            NodeKind::ProcessingInstruction {
+                target: target.to_owned(),
+                data: data.to_owned(),
+            },
+        );
+        self.dom.attach_last(parent, instruction);
+    }
+
     /// Merges `new_attrs` into an existing element; first occurrence wins.
     fn merge_attrs(&mut self, idx: NodeIdx, new_attrs: Vec<(String, String)>) {
         let mut merged: Vec<(String, String)> = self
@@ -718,6 +752,7 @@ impl TreeBuilder {
                 "caption" => Some(Mode::InCaption),
                 "colgroup" => Some(Mode::InColumnGroup),
                 "table" => Some(Mode::InTable),
+                "frameset" => Some(Mode::InFrameset),
                 "body" => Some(Mode::InBody),
                 "html" => Some(if self.head.is_none() {
                     Mode::BeforeHead
@@ -752,10 +787,6 @@ impl TreeBuilder {
             }
         }
         None
-    }
-
-    fn has_active_formatting(&self, name: &str) -> bool {
-        self.fmt_pos_last_named(name).is_some()
     }
 
     fn fmt_idx_at(&self, pos: usize) -> NodeIdx {
@@ -965,7 +996,8 @@ impl TreeBuilder {
                 attrs: fattrs.clone(),
                 namespace: Namespace::Html,
             });
-            while let Some(child) = self.dom.last_child(fb_idx) {
+            let children: Vec<NodeIdx> = self.dom.children(fb_idx).collect();
+            for child in children {
                 self.dom.detach(child);
                 self.dom.attach_last(fe_clone, child);
             }
@@ -1000,9 +1032,15 @@ impl TreeBuilder {
     /// generate implied end tags (except the subject) and pop inclusively.
     fn any_other_end_tag(&mut self, name: &str) {
         for i in (0..self.open.len()).rev() {
-            if self.dom.name(self.open[i]) == Some(name) {
+            let node = self.open[i];
+            if self.dom.namespace(node) == Some(Namespace::Html)
+                && self.dom.name(node) == Some(name)
+            {
                 self.generate_implied_end_tags(Some(name));
                 self.pop_until(name);
+                return;
+            }
+            if self.is_special(node) {
                 return;
             }
         }
@@ -1211,11 +1249,17 @@ impl TreeBuilder {
     fn in_head(&mut self, tok: Token) {
         match tok {
             Token::Characters(data) => {
-                if data.chars().all(is_ws_char) {
-                    self.insert_text(&data);
-                } else {
+                let first_non_whitespace = data
+                    .char_indices()
+                    .find_map(|(index, c)| (!is_ws_char(c)).then_some(index));
+                if let Some(index) = first_non_whitespace {
+                    if index > 0 {
+                        self.insert_text(&data[..index]);
+                    }
                     self.leave_head();
-                    self.after_head(Token::Characters(data));
+                    self.after_head(Token::Characters(data[index..].to_owned()));
+                } else {
+                    self.insert_text(&data);
                 }
             },
             Token::Comment(data) => self.insert_comment_here(&data),
@@ -1274,7 +1318,26 @@ impl TreeBuilder {
                         self.frameset_ok = true;
                         self.mode = Mode::InBody;
                     },
-                    "frameset" => {}, // deviation: frameset parsing skipped
+                    "frameset" => {
+                        self.insert_and_push("frameset", attrs);
+                        self.mode = Mode::InFrameset;
+                    },
+                    "base" | "basefont" | "bgsound" | "link" | "meta"
+                    | "noframes" | "script" | "style" | "template" | "title" => {
+                        if let Some(head) = self.head {
+                            self.open.push(head);
+                            self.in_head(Token::StartTag {
+                                name: name.clone(),
+                                attrs,
+                                self_closing,
+                            });
+                            if let Some(position) =
+                                self.open.iter().position(|&node| node == head)
+                            {
+                                self.open.remove(position);
+                            }
+                        }
+                    },
                     _ => {
                         self.implied_body();
                         self.in_body(Token::StartTag {
@@ -1309,6 +1372,7 @@ impl TreeBuilder {
             },
             Token::EndTag { name } => self.in_body_end_tag(&name),
             Token::Eof => {},
+            Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
         }
     }
 
@@ -1407,8 +1471,19 @@ impl TreeBuilder {
                 self.frameset_ok = false;
             },
             "a" => {
-                if self.has_active_formatting("a") {
+                if let Some(old_pos) = self.fmt_pos_last_named("a") {
+                    let old_anchor = self.fmt_idx_at(old_pos);
                     self.adoption_agency("a");
+                    if let Some(position) = self.fmt_pos_by_idx(old_anchor) {
+                        self.fmt.remove(position);
+                    }
+                    if let Some(position) = self
+                        .open
+                        .iter()
+                        .position(|&node| node == old_anchor)
+                    {
+                        self.open.remove(position);
+                    }
                 }
                 self.reconstruct();
                 let idx = self.insert_and_push("a", attrs.clone());
@@ -1545,6 +1620,8 @@ impl TreeBuilder {
                 };
                 self.insert_foreign_element(name, attrs, namespace);
             },
+            "caption" | "col" | "colgroup" | "frame" | "head" | "tbody"
+            | "td" | "tfoot" | "th" | "thead" | "tr" => {},
             _ => {
                 self.reconstruct();
                 self.insert_and_push(name, attrs);
@@ -1582,6 +1659,25 @@ impl TreeBuilder {
                 }
                 self.close_p_element();
             },
+            "address" | "article" | "aside" | "blockquote" | "button"
+            | "center" | "details" | "dialog" | "dir" | "div" | "dl"
+            | "fieldset" | "figcaption" | "figure" | "footer" | "header"
+            | "hgroup" | "listing" | "main" | "menu" | "nav" | "ol"
+            | "pre" | "search" | "section" | "summary" | "ul" => {
+                if self.has_in_scope(name) {
+                    self.generate_implied_end_tags(None);
+                    self.pop_until(name);
+                }
+            },
+            "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
+                let has_heading = ["h1", "h2", "h3", "h4", "h5", "h6"]
+                    .iter()
+                    .any(|heading| self.has_in_scope(heading));
+                if has_heading {
+                    self.generate_implied_end_tags(None);
+                    self.pop_until_any(&["h1", "h2", "h3", "h4", "h5", "h6"]);
+                }
+            },
             "applet" | "marquee" | "object" => {
                 if self.has_in_scope(name) {
                     self.generate_implied_end_tags(None);
@@ -1589,7 +1685,13 @@ impl TreeBuilder {
                     self.clear_fmt_to_marker();
                 }
             },
-            "dd" | "dt" | "li" | "optgroup" | "option" | "rb" | "rp" | "rt" => {
+            "li" => {
+                if self.has_in_list_item_scope("li") {
+                    self.generate_implied_end_tags(Some("li"));
+                    self.pop_until("li");
+                }
+            },
+            "dd" | "dt" | "optgroup" | "option" | "rb" | "rp" | "rt" => {
                 if name == "option" {
                     if self
                         .current()
@@ -1656,6 +1758,7 @@ impl TreeBuilder {
             Token::Eof => {
                 self.open.pop();
                 self.mode = self.orig_mode;
+                self.process_token(Token::Eof);
             },
             _ => {},
         }
@@ -1678,6 +1781,7 @@ impl TreeBuilder {
             },
             Token::EndTag { name } => self.in_table_end_tag(&name),
             Token::Eof => {},
+            Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
         }
     }
 
@@ -1778,7 +1882,6 @@ impl TreeBuilder {
             },
             Token::EndTag { name } => self.in_table_body_end_tag(&name),
             other => {
-                self.foster = true;
                 self.in_table(other);
             },
         }
@@ -1887,7 +1990,6 @@ impl TreeBuilder {
                 },
             },
             other => {
-                self.foster = true;
                 self.in_table(other);
             },
         }
@@ -1920,10 +2022,10 @@ impl TreeBuilder {
                     }
                 },
                 "body" | "caption" | "col" | "colgroup" | "html" => {},
-                "tbody" | "tfoot" | "thead" | "tr" => {
-                    if self.stack_has(&name) {
-                        self.pop_until(&name);
-                        self.mode = Mode::InRow;
+                "table" | "tbody" | "tfoot" | "thead" | "tr" => {
+                    if self.has_in_table_scope(&name) {
+                        self.close_cell();
+                        self.in_row(Token::EndTag { name });
                     }
                 },
                 _ => self.in_body_end_tag(&name),
@@ -2008,6 +2110,101 @@ impl TreeBuilder {
                     }
                 },
             },
+            _ => {},
+        }
+    }
+
+    fn in_frameset(&mut self, tok: Token) {
+        match tok {
+            Token::Characters(data) if data.chars().all(is_ws_char) => {
+                self.insert_text(&data)
+            },
+            Token::Comment(data) => self.insert_comment_here(&data),
+            Token::Doctype { .. } => {},
+            Token::StartTag { name, attrs, self_closing: _ } => {
+                match name.as_str() {
+                    "html" => self.in_body_start_tag("html", attrs),
+                    "frameset" => {
+                        self.insert_and_push("frameset", attrs);
+                    },
+                    "frame" => {
+                        self.insert_void("frame", attrs);
+                    },
+                    "noframes" => self.in_head(Token::StartTag {
+                        name,
+                        attrs,
+                        self_closing: false,
+                    }),
+                    _ => {},
+                }
+            },
+            Token::EndTag { name } if name == "frameset" => {
+                if self.current().is_some_and(|node| {
+                    self.dom.namespace(node) == Some(Namespace::Html)
+                        && self.dom.name(node) == Some("frameset")
+                }) {
+                    self.open.pop();
+                    if self
+                        .current()
+                        .is_some_and(|node| self.dom.name(node) == Some("html"))
+                    {
+                        self.mode = Mode::AfterFrameset;
+                    }
+                }
+            },
+            Token::Eof => {},
+            _ => {},
+        }
+    }
+
+    fn after_frameset(&mut self, tok: Token) {
+        match tok {
+            Token::Characters(data) if data.chars().all(is_ws_char) => {
+                self.insert_text(&data)
+            },
+            Token::Comment(data) => self.insert_comment_here(&data),
+            Token::Doctype { .. } => {},
+            Token::StartTag { name, attrs, self_closing: _ }
+                if name == "html" =>
+            {
+                self.in_body_start_tag("html", attrs)
+            },
+            Token::StartTag { name, attrs, self_closing: _ }
+                if name == "noframes" =>
+            {
+                self.in_head(Token::StartTag {
+                    name,
+                    attrs,
+                    self_closing: false,
+                })
+            },
+            Token::EndTag { name } if name == "html" => {
+                self.mode = Mode::AfterAfterFrameset;
+            },
+            Token::Eof => {},
+            _ => {},
+        }
+    }
+
+    fn after_after_frameset(&mut self, tok: Token) {
+        match tok {
+            Token::Comment(data) => self.comment_into(NodeIdx(0), &data),
+            Token::Doctype { .. } => {},
+            Token::StartTag { name, attrs, self_closing: _ }
+                if name == "html" =>
+            {
+                self.in_body_start_tag("html", attrs)
+            },
+            Token::StartTag { name, attrs, self_closing: _ }
+                if name == "noframes" =>
+            {
+                self.in_head(Token::StartTag {
+                    name,
+                    attrs,
+                    self_closing: false,
+                })
+            },
+            Token::Eof => {},
             _ => {},
         }
     }
@@ -2101,6 +2298,13 @@ mod tests {
                 out.push_str("<!");
                 out.push_str(data);
                 out.push('>');
+            },
+            NodeKind::ProcessingInstruction { target, data } => {
+                out.push_str("<?");
+                out.push_str(target);
+                out.push(' ');
+                out.push_str(data);
+                out.push_str("?>");
             },
         }
     }
@@ -2308,6 +2512,114 @@ mod tests {
         assert_eq!(
             build_shape("<div>x</div></div>y"),
             "(doc html[head[]body[div[\"x\"]\"y\"]])"
+        );
+    }
+
+    #[test]
+    fn ordinary_end_tag_does_not_cross_special_element() {
+        assert_eq!(
+            build_shape("<!DOCTYPE html><span><button>foo</span>bar"),
+            "(doc html[head[]body[span[button[\"foobar\"]]]])"
+        );
+        assert_eq!(
+            build_shape("<b>A<cite>B<div>C</cite>D"),
+            "(doc html[head[]body[b[\"A\"cite[\"B\"div[\"CD\"]]]]])"
+        );
+    }
+
+    #[test]
+    fn adoption_preserves_furthest_block_child_order() {
+        assert_eq!(
+            build_shape("<font><p>hello<b>cruel</font>world"),
+            "(doc html[head[]body[font[]p[font[\"hello\"b[\"cruel\"]]b[\"world\"]]]])"
+        );
+    }
+
+    #[test]
+    fn eof_in_head_text_mode_still_implies_body() {
+        assert_eq!(
+            build_shape("<!DOCTYPE html><style> EOF"),
+            "(doc html[head[style[\" EOF\"]]body[]])"
+        );
+    }
+
+    #[test]
+    fn late_head_metadata_uses_the_head_pointer() {
+        assert_eq!(
+            build_shape("<head><meta></head><link>"),
+            "(doc html[head[meta[]link[]]body[]])"
+        );
+        assert_eq!(
+            build_shape("<body><meta><link>"),
+            "(doc html[head[]body[meta[]link[]]])"
+        );
+    }
+
+    #[test]
+    fn list_item_end_respects_nested_list_scope() {
+        assert_eq!(
+            build_shape("<ul><li><ul></li><li>a</li></ul></li></ul>"),
+            "(doc html[head[]body[ul[li[ul[li[\"a\"]]]]]])"
+        );
+    }
+
+    #[test]
+    fn table_only_start_tags_are_ignored_in_body() {
+        assert_eq!(
+            build_shape("<table></table><col><colgroup>"),
+            "(doc html[head[]body[table[]]])"
+        );
+    }
+
+    #[test]
+    fn second_anchor_removes_stale_table_scoped_anchor() {
+        assert_eq!(
+            build_shape("<a><table><a></table><p><a><div><a>"),
+            "(doc html[head[]body[a[a[]table[]]p[a[]]div[a[]]]])"
+        );
+    }
+
+    #[test]
+    fn frameset_tree_uses_frameset_insertion_modes() {
+        assert_eq!(
+            build_shape("<frameset><frame><frameset><frame></frameset><noframes></noframes></frameset>"),
+            "(doc html[head[]frameset[frame[]frameset[frame[]]noframes[]]])"
+        );
+        assert_eq!(
+            build_shape("<frameset>"),
+            "(doc html[head[]frameset[]])"
+        );
+    }
+
+    #[test]
+    fn processing_instruction_precedes_document_element() {
+        assert_eq!(
+            build_shape("<?COMMENT?>"),
+            "(doc <?COMMENT ?>html[head[]body[]])"
+        );
+        assert_eq!(
+            build_shape("<?COM--MENT?>"),
+            "(doc <?COM--MENT ?>html[head[]body[]])"
+        );
+    }
+
+    #[test]
+    fn in_head_splits_leading_whitespace_before_body_reprocessing() {
+        assert_eq!(
+            build_shape("<!DOCTYPE html><script> <!-- </script> --> </script> EOF"),
+            "(doc html[head[script[\" <!-- \"]]body[\"-->  EOF\"]])"
+        );
+    }
+
+    #[test]
+    fn processing_instruction_after_html_is_a_document_child() {
+        assert_eq!(
+            build_shape("<body></body></html><?foo?>"),
+            "(doc html[head[]body[]]<?foo ?>)"
+        );
+        assert_eq!(
+            build_shape("<frameset></frameset></html><?foo?>"),
+            "(doc html[head[]frameset[]]<?foo ?>)"
         );
     }
 

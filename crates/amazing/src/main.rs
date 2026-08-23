@@ -197,6 +197,13 @@ impl BrowserDomHost {
                 out.push_str(data);
                 out.push_str("-->");
             }
+            amazing_dom::NodeKind::ProcessingInstruction { target, data } => {
+                out.push_str("<?");
+                out.push_str(target);
+                out.push(' ');
+                out.push_str(data);
+                out.push_str("?>");
+            }
         }
     }
 
@@ -236,6 +243,12 @@ impl BrowserDomHost {
                 parent,
                 amazing_dom::NodeKind::Comment { data },
             ),
+            amazing_dom::NodeKind::ProcessingInstruction { target, data } => {
+                self.dom.append_child(
+                    parent,
+                    amazing_dom::NodeKind::ProcessingInstruction { target, data },
+                )
+            }
             amazing_dom::NodeKind::Document => return,
         };
         let children: Vec<_> = source.children(source_node).collect();

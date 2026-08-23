@@ -146,7 +146,9 @@ fn classify_children(
                         run.push(InlineNode::Text { node: child, text: collapsed, font_size });
                     }
                 },
-                NodeKind::Comment { .. } | NodeKind::Document => {},
+                NodeKind::Comment { .. }
+                | NodeKind::ProcessingInstruction { .. }
+                | NodeKind::Document => {},
                 NodeKind::Element { .. } => {
                     let child_style = styled.get(child).cloned().unwrap_or_default();
                     if is_display_none(&child_style) {
@@ -178,7 +180,9 @@ fn classify_children(
                     inlines.push(InlineNode::Text { node: child, text: collapsed, font_size });
                 }
             },
-            NodeKind::Comment { .. } | NodeKind::Document => {},
+            NodeKind::Comment { .. }
+            | NodeKind::ProcessingInstruction { .. }
+            | NodeKind::Document => {},
             NodeKind::Element { .. } => {
                 let child_style = styled.get(child).cloned().unwrap_or_default();
                 if is_display_none(&child_style) {
@@ -275,7 +279,9 @@ fn flatten_inline(
                     inlines.push(InlineNode::Text { node: child, text: collapsed, font_size });
                 }
             },
-            NodeKind::Comment { .. } | NodeKind::Document => {},
+            NodeKind::Comment { .. }
+            | NodeKind::ProcessingInstruction { .. }
+            | NodeKind::Document => {},
             NodeKind::Element { .. } => {
                 let cs = styled.get(child).cloned().unwrap_or_default();
                 if is_display_none(&cs) {

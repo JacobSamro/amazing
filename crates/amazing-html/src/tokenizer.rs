@@ -31,6 +31,10 @@ pub enum Token {
         name: String,
     },
     Comment(String),
+    ProcessingInstruction {
+        target: String,
+        data: String,
+    },
     /// One or more characters, already entity-decoded.
     Characters(String),
     Eof,
@@ -57,6 +61,11 @@ enum State {
     CommentEnd,
     CommentEndBang,
     BogusComment,
+    ProcessingInstructionOpen,
+    ProcessingInstructionTarget,
+    AfterProcessingInstructionTarget,
+    ProcessingInstructionData,
+    ProcessingInstructionQuestionable,
     BeforeDoctypeName,
     DoctypeName,
     AfterDoctypeName,
@@ -130,6 +139,8 @@ pub struct Tokenizer {
     is_end_tag: bool,
     pending: PendingAttr,
     comment_buf: String,
+    processing_target: String,
+    processing_data: String,
     doctype_name: Option<String>,
     /// End-tag name we're looking for while in RAWTEXT/RCDATA.
     raw_end: String,
@@ -167,6 +178,8 @@ impl Tokenizer {
             is_end_tag: false,
             pending: PendingAttr::default(),
             comment_buf: String::new(),
+            processing_target: String::new(),
+            processing_data: String::new(),
             doctype_name: None,
             raw_end: String::new(),
             eof_sent: false,
@@ -213,6 +226,27 @@ impl Tokenizer {
     fn emit(&mut self, tok: Token) {
         self.flush_text();
         self.queue.push_back(tok);
+    }
+
+    fn processing_target_disallowed(&self) -> bool {
+        self.processing_target.eq_ignore_ascii_case("xml")
+            || self
+                .processing_target
+                .eq_ignore_ascii_case("xml-stylesheet")
+    }
+
+    fn processing_to_bogus_comment(&mut self) {
+        self.comment_buf.clear();
+        self.comment_buf.push('?');
+        self.comment_buf.push_str(&self.processing_target);
+        self.state = State::BogusComment;
+    }
+
+    fn emit_processing_instruction(&mut self) {
+        let target = std::mem::take(&mut self.processing_target);
+        let data = std::mem::take(&mut self.processing_data);
+        self.emit(Token::ProcessingInstruction { target, data });
+        self.state = State::Data;
     }
 
     /// Public entry point per §13.2.5 "Tokenization". Runs states until a
@@ -631,6 +665,95 @@ impl Tokenizer {
                     },
                 },
 
+                State::ProcessingInstructionOpen => match self.peek() {
+                    None => {},
+                    Some(c) if is_alpha(c) || c == '_' => {
+                        self.processing_target.push(c);
+                        self.pos += 1;
+                        self.state = State::ProcessingInstructionTarget;
+                    },
+                    Some(_) => self.processing_to_bogus_comment(),
+                },
+
+                State::ProcessingInstructionTarget => match self.peek() {
+                    None => {},
+                    Some(c) if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') => {
+                        self.processing_target.push(c);
+                        self.pos += 1;
+                    },
+                    Some(c) if is_ws(c) => {
+                        if self.processing_target_disallowed() {
+                            self.processing_to_bogus_comment();
+                        } else {
+                            self.pos += 1;
+                            self.state = State::AfterProcessingInstructionTarget;
+                        }
+                    },
+                    Some('?') => {
+                        if self.processing_target_disallowed() {
+                            self.processing_to_bogus_comment();
+                        } else {
+                            self.pos += 1;
+                            self.state = State::ProcessingInstructionQuestionable;
+                        }
+                    },
+                    Some('>') => {
+                        if self.processing_target_disallowed() {
+                            self.processing_to_bogus_comment();
+                        } else {
+                            self.pos += 1;
+                            self.emit_processing_instruction();
+                        }
+                    },
+                    Some(_) => self.processing_to_bogus_comment(),
+                },
+
+                State::AfterProcessingInstructionTarget => match self.peek() {
+                    None => {},
+                    Some(c) if is_ws(c) => self.pos += 1,
+                    Some('?') => {
+                        self.pos += 1;
+                        self.state = State::ProcessingInstructionQuestionable;
+                    },
+                    Some('>') => {
+                        self.pos += 1;
+                        self.emit_processing_instruction();
+                    },
+                    Some(_) => self.state = State::ProcessingInstructionData,
+                },
+
+                State::ProcessingInstructionData => match self.peek() {
+                    None => {},
+                    Some('?') => {
+                        self.pos += 1;
+                        self.state = State::ProcessingInstructionQuestionable;
+                    },
+                    Some('>') => {
+                        self.pos += 1;
+                        self.emit_processing_instruction();
+                    },
+                    Some('\0') => {
+                        self.pos += 1;
+                        self.processing_data.push('\u{FFFD}');
+                    },
+                    Some(_) => {
+                        let c = self.bump().unwrap();
+                        self.processing_data.push(c);
+                    },
+                },
+
+                State::ProcessingInstructionQuestionable => match self.peek() {
+                    None => {},
+                    Some('>') => {
+                        self.pos += 1;
+                        self.emit_processing_instruction();
+                    },
+                    Some(_) => {
+                        self.processing_data.push('?');
+                        self.state = State::ProcessingInstructionData;
+                    },
+                },
+
                 State::BeforeDoctypeName => match self.peek() {
                     None => {},
                     Some(c) if is_ws(c) => {
@@ -837,11 +960,10 @@ impl Tokenizer {
                 self.state = State::EndTagOpen;
             },
             Some('?') => {
-                // Empty comment token; the '?' itself is reconsumed by
-                // BogusComment (spec §13.2.5.6 tag open state).
-                self.pos += 1;
-                self.comment_buf.clear();
-                self.state = State::BogusComment;
+                self.pos += 2; // consume "<?"
+                self.processing_target.clear();
+                self.processing_data.clear();
+                self.state = State::ProcessingInstructionOpen;
             },
             _ => {
                 // Not a tag open: '<' is literal text.
@@ -1122,6 +1244,11 @@ impl Tokenizer {
                 let data = std::mem::take(&mut self.comment_buf);
                 self.emit(Token::Comment(data));
             },
+            State::ProcessingInstructionOpen
+            | State::ProcessingInstructionTarget
+            | State::AfterProcessingInstructionTarget
+            | State::ProcessingInstructionData
+            | State::ProcessingInstructionQuestionable => {},
             State::BeforeDoctypeName
             | State::DoctypeName
             | State::AfterDoctypeName
@@ -1318,7 +1445,46 @@ mod tests {
         assert_eq!(tokenize("<!-- ok -->"), vec![Token::Comment(" ok ".into())]);
         assert_eq!(tokenize("<!-->"), vec![Token::Comment(String::new())]);
         assert_eq!(tokenize("<!--x--!y-->"), vec![Token::Comment("x--!y".into())]);
-        assert_eq!(tokenize("<?php echo 1 ?>"), vec![Token::Comment("?php echo 1 ?".into())]);
+        assert_eq!(
+            tokenize("<?php echo 1 ?>"),
+            vec![Token::ProcessingInstruction {
+                target: "php".into(),
+                data: "echo 1 ".into(),
+            }]
+        );
+        assert!(tokenize("<?").is_empty());
+        assert_eq!(
+            tokenize("<?xml version=\"1.0\">Hi"),
+            vec![
+                Token::Comment("?xml version=\"1.0\"".into()),
+                Token::Characters("Hi".into()),
+            ]
+        );
+        assert_eq!(tokenize("<?#"), vec![Token::Comment("?#".into())]);
+        assert_eq!(
+            tokenize("<?foo><?foo bar><?foo?x?>"),
+            vec![
+                Token::ProcessingInstruction {
+                    target: "foo".into(),
+                    data: String::new(),
+                },
+                Token::ProcessingInstruction {
+                    target: "foo".into(),
+                    data: "bar".into(),
+                },
+                Token::ProcessingInstruction {
+                    target: "foo".into(),
+                    data: "?x".into(),
+                },
+            ]
+        );
+        assert_eq!(
+            tokenize("<?a:b?>"),
+            vec![Token::Comment("?a:b?".into())]
+        );
+        for abrupt in ["<?foo", "<?foo ", "<?foo bar", "<?foo?"] {
+            assert!(tokenize(abrupt).is_empty(), "abrupt PI {abrupt:?}");
+        }
         assert_eq!(
             tokenize("FOO<!-- BAR"),
             vec![Token::Characters("FOO".into()), Token::Comment(" BAR".into())]

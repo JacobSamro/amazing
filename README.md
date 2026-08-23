@@ -39,7 +39,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 |-------|------|--------|
 | `amazing-common` | shared byte-stream/text utils | ✅ |
 | `amazing-dom` | arena-allocated DOM (`u32` indices, no `Rc<RefCell>`) | ✅ core |
-| `amazing-html` | WHATWG tokenizer + namespace-aware tree construction | 🔄 expanded html5lib/WPT subset 186/212 eligible; gaps tracked |
+| `amazing-html` | WHATWG tokenizer + namespace-aware tree construction | 🔄 expanded html5lib/WPT subset 212/212 eligible; broader gaps tracked |
 | `amazing-css` | Syntax-3 parser, selectors, cascade | ✅ Phase 2 |
 | `amazing-layout` | block/inline FC → flexbox/grid | ✅ Phase 3/3.5 |
 | `amazing-paint` | software rasterizer | ✅ Phase 4 |

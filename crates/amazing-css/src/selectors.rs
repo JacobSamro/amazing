@@ -727,7 +727,8 @@ fn is_empty(dom: &Dom, el: NodeIdx) -> bool {
     // Selectors-4: children consisting solely of whitespace still count as
     // empty; comments do not affect emptiness.
     dom.children(el).all(|c| match &dom.get(c).kind {
-        amazing_dom::NodeKind::Comment { .. } => true,
+        amazing_dom::NodeKind::Comment { .. }
+        | amazing_dom::NodeKind::ProcessingInstruction { .. } => true,
         amazing_dom::NodeKind::Text { data } => data.chars().all(char::is_whitespace),
         _ => false,
     })
@@ -921,6 +922,20 @@ mod tests {
         assert!(matches(&dom, svg_rect, &parse_selector("rect:first-of-type").unwrap()));
         assert!(matches(&dom, gradient, &parse_selector("linearGradient").unwrap()));
         assert!(!matches(&dom, gradient, &parse_selector("lineargradient").unwrap()));
+    }
+
+    #[test]
+    fn processing_instructions_do_not_break_empty() {
+        let mut dom = Dom::new();
+        let element = dom.create_element(NodeIdx(0), "div");
+        dom.append_child(
+            element,
+            amazing_dom::NodeKind::ProcessingInstruction {
+                target: "test".into(),
+                data: String::new(),
+            },
+        );
+        assert!(is_empty(&dom, element));
     }
 
     #[test]
