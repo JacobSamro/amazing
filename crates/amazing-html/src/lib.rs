@@ -17,11 +17,10 @@
 //! - Encoding is assumed lossy UTF-8; byte-level encoding detection is not
 //!   performed (caller decodes bytes before handing them to [`parse`]).
 //! - CDATA sections (`<![CDATA[…]]>`) tokenize as bogus comments.
-//! - `<frameset>` documents are parsed as ordinary body content.
-//! - `select`/`optgroup`/`option` handling is minimal.
 //! - Doctype PUBLIC/SYSTEM identifiers are consumed but not captured; only
 //!   their presence feeds quirks-mode approximation.
-//! - MathML/SVG foreign content is treated as ordinary unknown elements.
+//! - MathML/SVG namespaces and integration points are implemented; some
+//!   foreign attribute-name and namespace adjustments remain incomplete.
 //!
 //! # Example
 //!
@@ -34,7 +33,7 @@ pub mod entities;
 pub mod tokenizer;
 pub mod tree;
 
-use amazing_dom::Dom;
+use amazing_dom::{Dom, Namespace, NodeIdx};
 
 /// Parses an HTML document into an arena-backed DOM.
 ///
@@ -54,9 +53,72 @@ pub fn parse(src: &str) -> Dom {
     tree::build(src)
 }
 
+/// Parses an HTML fragment in a supported HTML context and
+/// returns the fragment children under a standalone document node.
+///
+/// Other contexts are rejected until their tokenizer/template
+/// initialization rules are implemented; callers never receive a plausible
+/// but context-insensitive tree.
+pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
+    let context = context.to_ascii_lowercase();
+    let supported = [
+        "div", "table", "tbody", "thead", "tfoot", "tr", "td", "th",
+        "caption", "colgroup",
+    ];
+    if !supported.contains(&context.as_str()) {
+        return Err("unsupported HTML fragment context".into());
+    }
+    let normalized;
+    let src = if src.contains('\r') {
+        normalized = src.replace("\r\n", "\n").replace('\r', "\n");
+        normalized.as_str()
+    } else {
+        src
+    };
+    let source = tree::build_fragment(src, &context);
+
+    fn clone_subtree(
+        source: &Dom,
+        source_node: NodeIdx,
+        target: &mut Dom,
+        parent: NodeIdx,
+    ) {
+        let created = target.append_child(parent, source.get(source_node).kind.clone());
+        for child in source.children(source_node) {
+            clone_subtree(source, child, target, created);
+        }
+    }
+
+    let root = source
+        .children(NodeIdx(0))
+        .find(|node| {
+            source.namespace(*node) == Some(Namespace::Html)
+                && source.name(*node) == Some("html")
+        })
+        .ok_or_else(|| "fragment root was not constructed".to_owned())?;
+    let context_node = source
+        .children(root)
+        .find(|node| {
+            source.namespace(*node) == Some(Namespace::Html)
+                && source.name(*node) == Some(context.as_str())
+        })
+        .ok_or_else(|| "fragment context was not constructed".to_owned())?;
+    let mut fragment = Dom::new();
+    for child in source.children(root) {
+        if child == context_node {
+            for context_child in source.children(context_node) {
+                clone_subtree(&source, context_child, &mut fragment, NodeIdx(0));
+            }
+        } else {
+            clone_subtree(&source, child, &mut fragment, NodeIdx(0));
+        }
+    }
+    Ok(fragment)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse;
+    use super::{parse, parse_fragment};
     use amazing_dom::NodeIdx;
 
     /// Integration gate: tokenizer + tree construction wired together.
@@ -79,6 +141,50 @@ mod tests {
         assert!(
             dump.contains("  <html>\n    <head>\n    <body>"),
             "whitespace leaked around implied head:\n{dump}"
+        );
+    }
+
+    #[test]
+    fn parses_div_context_fragment_without_document_wrappers() {
+        let dom = parse_fragment(
+            "div",
+            "<b><em><foo><foob><fooc><aside></b></em>",
+        )
+        .expect("fragment");
+        assert_eq!(
+            dom.dump(NodeIdx(0)),
+            "#document\n  <b>\n    <em>\n      <foo>\n        <foob>\n          <fooc>\n  <aside>\n    <b>\n"
+        );
+        let recovery = parse_fragment("div", "</div><span>x")
+            .expect("stray context end tag recovery");
+        assert_eq!(
+            recovery.dump(NodeIdx(0)),
+            "#document\n  <span>\n    \"x\"\n"
+        );
+        assert!(parse_fragment("template", "x").is_err());
+        let table = parse_fragment("table", "<td>x")
+            .expect("table fragment context");
+        assert_eq!(
+            table.dump(NodeIdx(0)),
+            "#document\n  <tbody>\n    <tr>\n      <td>\n        \"x\"\n"
+        );
+        let body = parse_fragment("tbody", "<tr><td>x")
+            .expect("tbody fragment context");
+        assert_eq!(
+            body.dump(NodeIdx(0)),
+            "#document\n  <tr>\n    <td>\n      \"x\"\n"
+        );
+        let row = parse_fragment("tr", "<td>x")
+            .expect("tr fragment context");
+        assert_eq!(
+            row.dump(NodeIdx(0)),
+            "#document\n  <td>\n    \"x\"\n"
+        );
+        let normalized = parse_fragment("div", "<span>a\r\nb\rc")
+            .expect("fragment newline normalization");
+        assert_eq!(
+            normalized.dump(NodeIdx(0)),
+            "#document\n  <span>\n    \"a\nb\nc\"\n"
         );
     }
 }

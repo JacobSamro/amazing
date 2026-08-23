@@ -297,7 +297,11 @@ impl ParsedFont {
             let loca = data.get(lo_off..lo_off + lo_len)?.to_vec();
             let (gl_off, gl_len) = find(*b"glyf")?;
             let glyf = data.get(gl_off..gl_off + gl_len)?.to_vec();
-            Some(GlyphTables { loca, glyf, long_format })
+            Some(GlyphTables {
+                loca,
+                glyf,
+                long_format,
+            })
         })();
 
         Some(ParsedFont {
@@ -373,11 +377,7 @@ impl ParsedFont {
             }
             CmapTable::Format12(d) => glyph_index_fmt12(d, code).unwrap_or(0),
         };
-        if gid >= self.num_glyphs {
-            0
-        } else {
-            gid
-        }
+        if gid >= self.num_glyphs { 0 } else { gid }
     }
 
     /// Decomposed TrueType outline of one glyph, in font units (y up).
@@ -1034,11 +1034,7 @@ static FALLBACK: FallbackFont = FallbackFont;
 // ---------------------------------------------------------------------------
 
 fn sanitize_px(px: f32) -> f32 {
-    if px.is_finite() && px > 0.0 {
-        px
-    } else {
-        0.0
-    }
+    if px.is_finite() && px > 0.0 { px } else { 0.0 }
 }
 
 fn be_u16(d: &[u8], off: usize) -> Option<u16> {
@@ -1412,8 +1408,7 @@ mod tests {
     /// Simple-glyph record from one or more contours of `(x, y, on_curve)`
     /// points; deltas are auto-encoded (mixed short/16-bit/zero paths).
     fn simple_glyph_record(contours: &[&[(i32, i32, bool)]]) -> Vec<u8> {
-        let flat: Vec<(i32, i32, bool)> =
-            contours.iter().flat_map(|c| c.iter().copied()).collect();
+        let flat: Vec<(i32, i32, bool)> = contours.iter().flat_map(|c| c.iter().copied()).collect();
         let mut rec = vec![0u8; 10];
         rec[0..2].copy_from_slice(&be16(contours.len() as u16));
         let xmin = flat.iter().map(|p| p.0).min().unwrap_or(0) as i16;
@@ -1531,7 +1526,11 @@ mod tests {
         assert_eq!(o.contours[0].points.len(), 3);
         assert_eq!(
             o.contours[0].points[1],
-            OutlinePoint { x: 500.0, y: 700.0, on_curve: true }
+            OutlinePoint {
+                x: 500.0,
+                y: 700.0,
+                on_curve: true
+            }
         );
     }
 
@@ -1614,10 +1613,26 @@ mod tests {
         assert_eq!(
             pts,
             &[
-                OutlinePoint { x: 0.0, y: 0.0, on_curve: true },
-                OutlinePoint { x: 40.0, y: 80.0, on_curve: false },
-                OutlinePoint { x: 60.0, y: 40.0, on_curve: true },
-                OutlinePoint { x: 80.0, y: 0.0, on_curve: false },
+                OutlinePoint {
+                    x: 0.0,
+                    y: 0.0,
+                    on_curve: true
+                },
+                OutlinePoint {
+                    x: 40.0,
+                    y: 80.0,
+                    on_curve: false
+                },
+                OutlinePoint {
+                    x: 60.0,
+                    y: 40.0,
+                    on_curve: true
+                },
+                OutlinePoint {
+                    x: 80.0,
+                    y: 0.0,
+                    on_curve: false
+                },
             ]
         );
     }
@@ -1625,9 +1640,7 @@ mod tests {
     #[test]
     fn all_off_curve_contour_gets_synthetic_anchor() {
         // Fully-curved loop: anchors are the pairwise midpoints.
-        let g = simple_glyph_record(&[
-            &[(0, 10, false), (10, 20, false), (20, 10, false)],
-        ]);
+        let g = simple_glyph_record(&[&[(0, 10, false), (10, 20, false), (20, 10, false)]]);
         let font = outline_font(&[Vec::new(), g], false);
         let f = ParsedFont::parse(&font).unwrap();
         let pts = &f.glyph_outline(1).unwrap().contours[0].points;
@@ -1727,4 +1740,3 @@ mod tests {
         assert!(FontSource::fallback().glyph_outline(1).is_none());
     }
 }
-

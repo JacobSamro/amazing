@@ -11,12 +11,18 @@ pub fn run(_: Option<&str>) -> std::process::ExitCode {
     std::process::ExitCode::FAILURE
 }
 
+#[cfg(not(windows))]
+pub fn play_wav_file(_: &str) -> std::process::ExitCode {
+    eprintln!("amazing play-audio: this build has no native audio adapter");
+    std::process::ExitCode::FAILURE
+}
+
 #[cfg(windows)]
 mod windows {
-    use std::ffi::c_void;
-    use std::ptr::{null, null_mut};
-    use std::process::ExitCode;
     use std::cell::RefCell;
+    use std::ffi::c_void;
+    use std::process::ExitCode;
+    use std::ptr::{null, null_mut};
     use std::rc::Rc;
 
     use amazing_dom::{Dom, NodeIdx, NodeKind};
@@ -24,7 +30,7 @@ mod windows {
     use amazing_layout::{Flow, LayoutBox};
     use amazing_paint::Surface;
 
-    use crate::BrowserDomHost;
+    use crate::{BrowserDomHost, PageMedia, load_page_media};
 
     type Handle = *mut c_void;
     type Hwnd = Handle;
@@ -63,6 +69,8 @@ mod windows {
     const VK_RETURN: usize = 0x0d;
     const GUI_TIMER_ID: usize = 1;
     const DIB_RGB_COLORS: u32 = 0;
+    const SND_NODEFAULT: u32 = 0x0002;
+    const SND_FILENAME: u32 = 0x0002_0000;
     const ID_ADDRESS: usize = 101;
     const ID_GO: usize = 102;
     const ID_BACK: usize = 103;
@@ -160,6 +168,7 @@ mod windows {
         fn DispatchMessageW(message: *const Msg) -> Lresult;
         fn GetMessageW(message: *mut Msg, hwnd: Hwnd, min: Uint, max: Uint) -> i32;
         fn GetModuleHandleW(name: *const u16) -> Hinstance;
+        fn GetConsoleWindow() -> Hwnd;
         fn GetParent(hwnd: Hwnd) -> Hwnd;
         fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
         fn InvalidateRect(hwnd: Hwnd, rect: *const Rect, erase: i32) -> i32;
@@ -167,7 +176,13 @@ mod windows {
         fn PostQuitMessage(code: i32);
         fn SetTimer(hwnd: Hwnd, id: usize, elapse: u32, callback: Handle) -> usize;
         fn KillTimer(hwnd: Hwnd, id: usize) -> i32;
-        fn CallWindowProcW(previous: isize, hwnd: Hwnd, message: Uint, w_param: Wparam, l_param: Lparam) -> Lresult;
+        fn CallWindowProcW(
+            previous: isize,
+            hwnd: Hwnd,
+            message: Uint,
+            w_param: Wparam,
+            l_param: Lparam,
+        ) -> Lresult;
         fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
         fn SetWindowTextW(hwnd: Hwnd, text: *const u16) -> i32;
         fn ShowWindow(hwnd: Hwnd, command: i32) -> i32;
@@ -195,6 +210,14 @@ mod windows {
             info: *const BitmapInfo,
             usage: u32,
         ) -> i32;
+    }
+
+    // Rust's standard library exposes no native audio-output interface, so
+    // synchronous Windows playback must cross the WinMM ABI at this isolated
+    // platform boundary.
+    #[link(name = "winmm")]
+    unsafe extern "system" {
+        fn PlaySoundW(sound: *const u16, module: Hinstance, flags: u32) -> i32;
     }
 
     struct Tab {
@@ -225,6 +248,7 @@ mod windows {
         host: Rc<RefCell<BrowserDomHost>>,
         js: amazing_js::Interpreter,
         layout: LayoutBox,
+        media: PageMedia,
     }
 
     struct RenderedPage {
@@ -251,6 +275,7 @@ mod windows {
         width: u32,
         viewport_height: i32,
         edit_previous_proc: isize,
+        presenter: Option<crate::gpu::Presenter>,
     }
 
     impl GuiState {
@@ -269,7 +294,17 @@ mod windows {
                 width: 1024,
                 viewport_height: 700,
                 edit_previous_proc: 0,
+                presenter: None,
             }
+        }
+
+        fn window_title(&self, label: &str) -> String {
+            let backend = if self.presenter.is_some() {
+                "D3D11"
+            } else {
+                "GDI"
+            };
+            format!("Ferric [{backend}] — {label}")
         }
 
         fn tab(&self) -> &Tab {
@@ -333,10 +368,10 @@ mod windows {
             self.active_tab = index;
             if let Some(url) = self.tab().current_url() {
                 set_window_text(self.address, url);
-                set_window_text(self.hwnd, &format!("Ferric — {url}"));
+                set_window_text(self.hwnd, &self.window_title(url));
             } else {
                 set_window_text(self.address, "about:blank");
-                set_window_text(self.hwnd, "Ferric — New tab");
+                set_window_text(self.hwnd, &self.window_title("New tab"));
             }
             self.update_tab_button();
             // SAFETY: hwnd is the live top-level window owned by the message
@@ -377,7 +412,7 @@ mod windows {
                         }
                     }
                     set_window_text(self.address, &input);
-                    set_window_text(self.hwnd, &format!("Ferric — {input}"));
+                    set_window_text(self.hwnd, &self.window_title(&input));
                     self.update_tab_button();
                     // SAFETY: hwnd is the live top-level window owned by the
                     // message loop; invalidating it schedules a repaint only.
@@ -385,7 +420,10 @@ mod windows {
                 }
                 Err(error) => {
                     eprintln!("amazing gui: {error}");
-                    set_window_text(self.hwnd, &format!("Ferric — error loading {input}"));
+                    set_window_text(
+                        self.hwnd,
+                        &self.window_title(&format!("error loading {input}")),
+                    );
                 }
             }
         }
@@ -400,7 +438,10 @@ mod windows {
             if base == input {
                 return input.to_owned();
             }
-            if base.starts_with("http://") || base.starts_with("https://") || base.starts_with("file:") {
+            if base.starts_with("http://")
+                || base.starts_with("https://")
+                || base.starts_with("file:")
+            {
                 if let Ok(base_url) = amazing_net::Url::parse(base) {
                     if let Ok(resolved) = amazing_net::resolve(input, &base_url) {
                         return resolved.to_string();
@@ -468,38 +509,42 @@ mod windows {
             let width = self.width;
             let page = self.tab().current_url().unwrap_or("").to_owned();
             let tab = self.tab_mut();
-            let Some(runtime) = tab.runtime.as_mut() else { return };
+            let Some(runtime) = tab.runtime.as_mut() else {
+                return;
+            };
             let host = runtime.host.clone();
             let host_ref = host.borrow();
             let mut css = String::new();
-            if let Err(error) = collect_author_css(
-                &host_ref.dom,
-                NodeIdx(0),
-                &page,
-                &mut css,
-            ) {
+            if let Err(error) = collect_author_css(&host_ref.dom, NodeIdx(0), &page, &mut css) {
                 eprintln!("amazing gui: stylesheet refresh failed: {error}");
                 return;
             }
             let fonts = amazing_layout::font::FontSource::fallback();
-            let layout = amazing_layout::layout_dom_document(
+            let media = load_page_media(&host_ref.dom, &page);
+            for warning in &media.warnings {
+                eprintln!("amazing gui: {warning}");
+            }
+            let layout = amazing_layout::layout_dom_document_with_replaced(
                 &host_ref.dom,
                 &css,
                 width.max(1) as f32,
                 &fonts,
+                &media,
             );
-            let height = (layout.border_box.y
-                + layout.border_box.h
-                + layout.margin.bottom.unwrap_or(0.0))
-                .ceil()
-                .clamp(1.0, 8192.0) as u32;
-            let surface = amazing_paint::paint_document(
+            let height =
+                (layout.border_box.y + layout.border_box.h + layout.margin.bottom.unwrap_or(0.0))
+                    .ceil()
+                    .clamp(1.0, 8192.0) as u32;
+            let surface = amazing_paint::paint_document_with_resources(
                 &layout,
                 width.max(1),
                 height,
                 &fonts,
+                &amazing_paint::RectInkProvider,
+                &media,
             );
             runtime.layout = layout;
+            runtime.media = media;
             tab.surface = Some(surface);
             tab.scroll_y = 0;
             self.clamp_scroll();
@@ -622,13 +667,22 @@ mod windows {
 
         fn apply_history_delta(&mut self, delta: i32) {
             if delta < 0 {
-                for _ in 0..delta.unsigned_abs() { self.go_back(); }
+                for _ in 0..delta.unsigned_abs() {
+                    self.go_back();
+                }
             } else {
-                for _ in 0..delta as u32 { self.go_forward(); }
+                for _ in 0..delta as u32 {
+                    self.go_forward();
+                }
             }
         }
 
-        fn apply_history_update(&mut self, url: String, replace: bool, state: amazing_js::value::JsValue) {
+        fn apply_history_update(
+            &mut self,
+            url: String,
+            replace: bool,
+            state: amazing_js::value::JsValue,
+        ) {
             let url = self.resolve_navigation(&url);
             {
                 let tab = self.tab_mut();
@@ -647,7 +701,7 @@ mod windows {
                 }
             }
             set_window_text(self.address, &url);
-            set_window_text(self.hwnd, &format!("Ferric — {url}"));
+            set_window_text(self.hwnd, &self.window_title(&url));
             self.update_tab_button();
             // SAFETY: hwnd is the live top-level window owned by the message
             // loop; invalidating it schedules a repaint only.
@@ -750,8 +804,15 @@ mod windows {
                 .find(|(name, _)| name == "rel")
                 .map(|(_, value)| value.to_ascii_lowercase())
                 .unwrap_or_default();
-            if rel.split_ascii_whitespace().any(|token| token == "stylesheet") {
-                if let Some(href) = attrs.iter().find(|(name, _)| name == "href").map(|(_, value)| value) {
+            if rel
+                .split_ascii_whitespace()
+                .any(|token| token == "stylesheet")
+            {
+                if let Some(href) = attrs
+                    .iter()
+                    .find(|(name, _)| name == "href")
+                    .map(|(_, value)| value)
+                {
                     let url = resolve_script_url(page, href);
                     let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
                         .map_err(|error| format!("stylesheet {href}: {error}"))?;
@@ -791,7 +852,11 @@ mod windows {
         }
     }
 
-    fn collect_inline_handlers(dom: &Dom, node: NodeIdx, handlers: &mut Vec<(u32, String, String)>) {
+    fn collect_inline_handlers(
+        dom: &Dom,
+        node: NodeIdx,
+        handlers: &mut Vec<(u32, String, String)>,
+    ) {
         if let Some(attrs) = dom.attrs_of(node) {
             for (name, body) in attrs {
                 if let Some(event) = name.strip_prefix("on").filter(|event| !event.is_empty()) {
@@ -808,7 +873,8 @@ mod windows {
         if source.contains("://") || source.starts_with("file:") {
             return source.to_owned();
         }
-        if page.starts_with("http://") || page.starts_with("https://") || page.starts_with("file:") {
+        if page.starts_with("http://") || page.starts_with("https://") || page.starts_with("file:")
+        {
             if let Ok(base) = amazing_net::Url::parse(page) {
                 if let Ok(resolved) = amazing_net::resolve(source, &base) {
                     return resolved.to_string();
@@ -856,11 +922,9 @@ mod windows {
             let source = match script.src {
                 Some(src) => {
                     let script_url = resolve_script_url(input, &src);
-                    let response = amazing_net::fetch(
-                        &script_url,
-                        &amazing_net::FetchOptions::default(),
-                    )
-                    .map_err(|error| format!("external script {src}: {error}"))?;
+                    let response =
+                        amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
+                            .map_err(|error| format!("external script {src}: {error}"))?;
                     response
                         .text()
                         .ok_or_else(|| format!("external script {src} was not text"))?
@@ -891,19 +955,72 @@ mod windows {
         }
         let host_ref = host.borrow();
         let fonts = amazing_layout::font::FontSource::fallback();
-        let root = amazing_layout::layout_dom_document(&host_ref.dom, &css, width.max(1) as f32, &fonts);
+        let media = load_page_media(&host_ref.dom, input);
+        for warning in &media.warnings {
+            eprintln!("amazing gui: {warning}");
+        }
+        let root = amazing_layout::layout_dom_document_with_replaced(
+            &host_ref.dom,
+            &css,
+            width.max(1) as f32,
+            &fonts,
+            &media,
+        );
         let height = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
             .ceil()
             .clamp(1.0, 8192.0) as u32;
-        let surface = amazing_paint::paint_document(&root, width.max(1), height, &fonts);
+        let surface = amazing_paint::paint_document_with_resources(
+            &root,
+            width.max(1),
+            height,
+            &fonts,
+            &amazing_paint::RectInkProvider,
+            &media,
+        );
         drop(host_ref);
         Ok(RenderedPage {
             surface,
-            runtime: PageRuntime { host, js, layout: root },
+            runtime: PageRuntime {
+                host,
+                js,
+                layout: root,
+                media,
+            },
         })
     }
 
-    fn paint(hwnd: Hwnd, state: &GuiState) {
+    fn compose_gpu_frame(
+        surface: &Surface,
+        scroll_y: i32,
+        frame_width: u32,
+        frame_height: u32,
+    ) -> Option<Vec<u8>> {
+        let frame_len = (frame_width as usize)
+            .checked_mul(frame_height as usize)?
+            .checked_mul(4)?;
+        let mut frame = vec![255; frame_len];
+        let scroll = scroll_y.max(0) as u32;
+        let visible_height = frame_height.saturating_sub(CONTROL_HEIGHT as u32);
+        let rows = surface.height.saturating_sub(scroll).min(visible_height);
+        let columns = surface.width.min(frame_width);
+        for row in 0..rows as usize {
+            let source_row = (scroll as usize + row) * surface.width as usize * 4;
+            let destination_row = (CONTROL_HEIGHT as usize + row) * frame_width as usize * 4;
+            for column in 0..columns as usize {
+                let source = source_row + column * 4;
+                let destination = destination_row + column * 4;
+                frame[destination..destination + 4].copy_from_slice(&[
+                    surface.pixels[source + 2],
+                    surface.pixels[source + 1],
+                    surface.pixels[source],
+                    surface.pixels[source + 3],
+                ]);
+            }
+        }
+        Some(frame)
+    }
+
+    fn paint(hwnd: Hwnd, state: &mut GuiState) {
         let mut paint = std::mem::MaybeUninit::<PaintStruct>::zeroed();
         // SAFETY: BeginPaint/EndPaint are paired around this WM_PAINT handler;
         // the returned HDC is valid only within that pair.
@@ -912,16 +1029,53 @@ mod windows {
             return;
         }
         let paint = unsafe { paint.assume_init() };
-        if let Some(surface) = &state.tab().surface {
-            let mut bgra = Vec::with_capacity(surface.pixels.len());
-            for pixel in surface.pixels.chunks_exact(4) {
-                bgra.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
+        if state.tab().surface.is_some() {
+            let frame_width = state.width.max(1);
+            let frame_height = (state.viewport_height + CONTROL_HEIGHT).max(1) as u32;
+            let (gpu_frame, bgra, surface_width, surface_height, scroll, visible) = {
+                let surface = state.tab().surface.as_ref().expect("checked surface");
+                let mut bgra = Vec::with_capacity(surface.pixels.len());
+                for pixel in surface.pixels.chunks_exact(4) {
+                    bgra.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
+                }
+                let scroll = state.tab().scroll_y.max(0) as usize;
+                let visible = surface
+                    .height
+                    .saturating_sub(scroll as u32)
+                    .min(state.viewport_height.max(1) as u32);
+                (
+                    compose_gpu_frame(surface, state.tab().scroll_y, frame_width, frame_height),
+                    bgra,
+                    surface.width,
+                    surface.height,
+                    scroll,
+                    visible,
+                )
+            };
+            let gpu_presented = gpu_frame.is_some_and(|frame| {
+                state.presenter.as_mut().is_some_and(|presenter| {
+                    presenter
+                        .present_bgra(&frame, frame_width, frame_height)
+                        .is_ok()
+                })
+            });
+            if gpu_presented {
+                // SAFETY: paint was initialized by BeginPaint and belongs to
+                // hwnd; DXGI presentation completed synchronously above.
+                unsafe { EndPaint(hwnd, &paint) };
+                return;
             }
+            if state.presenter.is_some() {
+                state.presenter = None;
+                let label = state.tab().current_url().unwrap_or("New tab").to_owned();
+                set_window_text(state.hwnd, &state.window_title(&label));
+            }
+
             let info = BitmapInfo {
                 header: BitmapInfoHeader {
                     size: std::mem::size_of::<BitmapInfoHeader>() as u32,
-                    width: surface.width as i32,
-                    height: -(surface.height as i32),
+                    width: surface_width as i32,
+                    height: -(surface_height as i32),
                     planes: 1,
                     bit_count: 32,
                     compression: 0,
@@ -932,13 +1086,8 @@ mod windows {
                     clr_important: 0,
                 },
             };
-            let scroll = state.tab().scroll_y.max(0) as usize;
-            let stride = surface.width as usize * 4;
+            let stride = surface_width as usize * 4;
             let skip = scroll.saturating_mul(stride).min(bgra.len());
-            let visible = surface
-                .height
-                .saturating_sub(scroll as u32)
-                .min(state.viewport_height.max(1) as u32);
             // SAFETY: bgra and info remain alive for the synchronous GDI call;
             // the source pointer starts at the selected top row and dimensions
             // match the owned Surface pixel buffer.
@@ -947,7 +1096,7 @@ mod windows {
                     hdc,
                     0,
                     CONTROL_HEIGHT,
-                    surface.width,
+                    surface_width,
                     visible,
                     0,
                     0,
@@ -1049,10 +1198,18 @@ mod windows {
                 0
             }
             WM_PAINT if !state_ptr.is_null() => {
-                paint(hwnd, unsafe { &*state_ptr });
+                paint(hwnd, unsafe { &mut *state_ptr });
                 0
             }
             WM_DESTROY => {
+                if !state_ptr.is_null() {
+                    // SAFETY: WM_DESTROY runs while hwnd is still in its
+                    // destruction callback and the GuiState pointer remains
+                    // owned by the message loop. Taking Presenter here drops
+                    // the HWND-bound swap chain before hwnd becomes invalid;
+                    // `std` cannot express DXGI/HWND lifetime coupling.
+                    unsafe { &mut *state_ptr }.presenter.take();
+                }
                 // SAFETY: the timer belongs to this top-level window and is
                 // stopped before the message loop exits.
                 unsafe { KillTimer(hwnd, GUI_TIMER_ID) };
@@ -1070,6 +1227,15 @@ mod windows {
     }
 
     pub fn run(initial: Option<&str>) -> ExitCode {
+        // SAFETY: GetConsoleWindow returns this process's optional console;
+        // hiding it leaves the native GUI visible without changing console
+        // behavior for the other command-line subcommands.
+        unsafe {
+            let console = GetConsoleWindow();
+            if !console.is_null() {
+                ShowWindow(console, 0);
+            }
+        }
         let class_name = wide("FerricWindow");
         let title = wide("Ferric — from-scratch browser engine");
         // SAFETY: null asks Windows for this process's module handle.
@@ -1116,6 +1282,10 @@ mod windows {
         }
 
         let mut state = Box::new(GuiState::new(hwnd, instance));
+        // SAFETY: hwnd is the live top-level window created above; its
+        // Presenter is explicitly taken and dropped during WM_DESTROY before
+        // hwnd becomes invalid. `std` cannot create a DXGI chain for an HWND.
+        state.presenter = unsafe { crate::gpu::Presenter::new(hwnd, 1100, 760) }.ok();
         let edit_class = wide("EDIT");
         let button_class = wide("BUTTON");
         let address_text = wide(initial.unwrap_or("examples/sample.html"));
@@ -1197,7 +1367,12 @@ mod windows {
                 null_mut(),
             );
         }
-        if state.address.is_null() || state.go.is_null() || state.back.is_null() || state.forward.is_null() || state.new_tab.is_null() {
+        if state.address.is_null()
+            || state.go.is_null()
+            || state.back.is_null()
+            || state.forward.is_null()
+            || state.new_tab.is_null()
+        {
             eprintln!("amazing gui: could not create navigation controls");
             return ExitCode::FAILURE;
         }
@@ -1220,7 +1395,8 @@ mod windows {
             );
             SetTimer(hwnd, GUI_TIMER_ID, 16, null_mut());
         }
-        unsafe { &mut *state_ptr }.navigate(initial.unwrap_or("examples/sample.html").to_owned(), true);
+        unsafe { &mut *state_ptr }
+            .navigate(initial.unwrap_or("examples/sample.html").to_owned(), true);
         // SAFETY: hwnd is a valid top-level window and the message-loop calls
         // follow the Win32 lifetime contract.
         unsafe {
@@ -1255,9 +1431,52 @@ mod windows {
         ExitCode::SUCCESS
     }
 
+    pub fn play_wav_file(path: &str) -> ExitCode {
+        let path = wide(path);
+        // SAFETY: `path` is a live, null-terminated UTF-16 filename for the
+        // duration of this synchronous WinMM call; a null module is required
+        // with SND_FILENAME and no callback or retained pointer is involved.
+        // Rust's standard library cannot express native audio playback, which
+        // is why this operation uses the platform FFI seam.
+        let played = unsafe { PlaySoundW(path.as_ptr(), null_mut(), SND_FILENAME | SND_NODEFAULT) };
+        if played == 0 {
+            eprintln!("amazing play-audio: WinMM could not play the WAV file");
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn gpu_frame_matches_gdi_scroll_and_channel_order() {
+            let mut surface = Surface::new(2, 2);
+            surface.pixels = vec![
+                255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 10, 20, 30, 255,
+            ];
+            let frame = compose_gpu_frame(&surface, 1, 2, CONTROL_HEIGHT as u32 + 1)
+                .expect("bounded GPU frame");
+
+            assert_eq!(&frame[0..4], &[255, 255, 255, 255]);
+            let page = CONTROL_HEIGHT as usize * 2 * 4;
+            assert_eq!(&frame[page..page + 8], &[255, 0, 0, 255, 30, 20, 10, 255]);
+        }
+
+        fn find_layout_box(layout: &LayoutBox, node: NodeIdx) -> Option<&LayoutBox> {
+            if layout.node == Some(node) {
+                return Some(layout);
+            }
+            let children: &[LayoutBox] = match &layout.flow {
+                Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children,
+                Flow::Inlines(_) | Flow::Empty => &[],
+            };
+            children
+                .iter()
+                .find_map(|child| find_layout_box(child, node))
+        }
 
         #[test]
         fn page_click_runtime_mutates_dom_and_repaints() {
@@ -1298,36 +1517,114 @@ mod windows {
             state.repaint_runtime();
             let host = state.tab().runtime.as_ref().unwrap().host.clone();
             let host = host.borrow();
-            assert_eq!(host.get_text_content(node).as_deref(), Some("click!"));
-            assert_eq!(host.get_attribute(node, "data-ready"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-load"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-body-load"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-window"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-dom-api"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-selector-list"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-collections"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-matches"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-dataset"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-attr-api"), Some(Some("yes".into())));
+            assert_eq!(
+                host.get_text_content(node).as_deref(),
+                Some("click handled by Ferric!")
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-ready"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-load"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-body-load"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-window"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-dom-api"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-selector-list"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-collections"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-matches"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-dataset"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-attr-api"),
+                Some(Some("yes".into()))
+            );
             assert_eq!(host.get_attribute(node, "data-temp"), Some(None));
-            assert_eq!(host.get_attribute(node, "data-classlist"), Some(Some("ready active".into())));
-            assert_eq!(host.get_attribute(node, "data-viewport"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-inner"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-inner-text"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-text-node"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-fetch"), Some(Some("fetched\n".into())));
-            assert_eq!(host.get_attribute(node, "data-header"), Some(Some("text/plain; charset=utf-8".into())));
-            assert_eq!(host.get_attribute(node, "data-json"), Some(Some("json-ok".into())));
-            assert_eq!(host.get_attribute(node, "data-clicked"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-bubbled"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-inline"), Some(Some("yes".into())));
-            assert_eq!(host.get_attribute(node, "data-timer"), Some(Some("yes".into())));
-            assert_eq!(host.get_style(node, "color").as_deref(), Some("red"));
-            assert!(state.tab().surface.as_ref().unwrap().height > 0);
+            assert_eq!(
+                host.get_attribute(node, "data-classlist"),
+                Some(Some("ready active".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-viewport"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-inner"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-inner-text"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-text-node"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-fetch"),
+                Some(Some("fetched\n".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-header"),
+                Some(Some("text/plain; charset=utf-8".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-json"),
+                Some(Some("json-ok".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-clicked"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-bubbled"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-inline"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(
+                host.get_attribute(node, "data-timer"),
+                Some(Some("yes".into()))
+            );
+            assert_eq!(host.get_style(node, "color").as_deref(), Some("white"));
+            assert_eq!(
+                host.get_style(node, "backgroundColor").as_deref(),
+                Some("red")
+            );
+            let runtime = state.tab().runtime.as_ref().unwrap();
+            let title_box = find_layout_box(&runtime.layout, NodeIdx(node)).unwrap();
+            let x = (title_box.border_box.x + title_box.border_box.w * 0.75) as u32;
+            let y = (title_box.border_box.y + title_box.border_box.h * 0.5) as u32;
+            let surface = state.tab().surface.as_ref().unwrap();
+            let offset = ((y * surface.width + x) * 4) as usize;
+            assert_eq!(&surface.pixels[offset..offset + 4], &[255, 0, 0, 255]);
         }
     }
-
 }
 
 #[cfg(windows)]
-pub use windows::run;
+pub use windows::{play_wav_file, run};

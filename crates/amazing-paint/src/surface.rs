@@ -65,7 +65,12 @@ impl Surface {
     /// Reads one pixel; `None` when out of bounds.
     pub fn get_pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
         let i = self.idx(x, y)?;
-        Some([self.pixels[i], self.pixels[i + 1], self.pixels[i + 2], self.pixels[i + 3]])
+        Some([
+            self.pixels[i],
+            self.pixels[i + 1],
+            self.pixels[i + 2],
+            self.pixels[i + 3],
+        ])
     }
 
     /// Writes one pixel (opaque overwrite); silently ignores out-of-bounds
@@ -309,7 +314,7 @@ mod tests {
         // ...then two opaque-black pixels, then the 3 pad bytes (zeros).
         assert_eq!(&bmp[57..63], &[0, 0, 0, 0, 0, 0]);
         assert_eq!(&bmp[63..66], &[0, 0, 0]); // padding of row 1
-        // Second stored row is the TOP image row (all black).
+                                              // Second stored row is the TOP image row (all black).
         assert_eq!(&bmp[66..69], &[0, 0, 0]);
         assert_eq!(&bmp[75..78], &[0, 0, 0]); // padding of row 0
     }
@@ -334,8 +339,10 @@ mod tests {
         let dir = std::env::temp_dir();
         let ppm_path = dir.join("amazing_paint_test_surface.ppm");
         let bmp_path = dir.join("amazing_paint_test_surface.bmp");
-        s.save_ppm(ppm_path.to_str().expect("utf8 temp path")).expect("ppm write");
-        s.save_bmp(bmp_path.to_str().expect("utf8 temp path")).expect("bmp write");
+        s.save_ppm(ppm_path.to_str().expect("utf8 temp path"))
+            .expect("ppm write");
+        s.save_bmp(bmp_path.to_str().expect("utf8 temp path"))
+            .expect("bmp write");
         assert_eq!(std::fs::read(&ppm_path).expect("read back"), s.encode_ppm());
         assert_eq!(std::fs::read(&bmp_path).expect("read back"), s.encode_bmp());
         let _ = std::fs::remove_file(&ppm_path);

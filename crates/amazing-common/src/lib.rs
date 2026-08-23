@@ -112,7 +112,7 @@ impl<'a> ByteReader<'a> {
             if b == b'\n' {
                 line += 1;
                 col = 1;
-            } else if b < 0x80 || b >= 0xC0 {
+            } else if !(0x80..0xC0).contains(&b) {
                 // Continuation bytes (10xxxxxx) belong to their scalar.
                 col += 1;
             }

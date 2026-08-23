@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")/.."
 echo "== amazing ci: build =="
-cargo build --workspace --all-targets
+cargo build --workspace --all-targets --locked
 echo "== amazing ci: test =="
-cargo test --workspace
+cargo test --workspace --locked
 echo "== amazing ci: ok =="

@@ -92,11 +92,15 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
             content_w = w;
         },
         MaybeLen::Auto => {
-            // Width fills what remains after the side margins; auto side
-            // margins count as zero here (they never absorb vertically).
-            let used_ml = b.margin.left.unwrap_or(0.0);
-            let used_mr = b.margin.right.unwrap_or(0.0);
-            content_w = (cbw - used_ml - bl - pl - pr - br_ - used_mr).max(0.0);
+            if let Some(size) = b.replaced_size {
+                content_w = size.width;
+            } else {
+                // Width fills what remains after the side margins; auto side
+                // margins count as zero here (they never absorb vertically).
+                let used_ml = b.margin.left.unwrap_or(0.0);
+                let used_mr = b.margin.right.unwrap_or(0.0);
+                content_w = (cbw - used_ml - bl - pl - pr - br_ - used_mr).max(0.0);
+            }
         },
     }
 
@@ -156,16 +160,23 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
             let strut = crate::inline::Strut::new(fonts, b.font_size, lh);
             let lines =
                 crate::inline::layout_lines(items, content_x, content_y, content_w, &strut, fonts);
-            let n = lines.len() as f32;
+            let height = lines.iter().map(|line| line.height).sum();
             b.lines = lines;
-            n * lh
+            height
         },
         _ => 0.0,
     };
 
     // --- height (§10.6): specified wins; % heights stay auto (the CB's
     // height is not available in this single pass) ---
-    let final_h = specified_height(b, font_px).unwrap_or(content_h);
+    let replaced_height = b.replaced_size.map(|size| {
+        if size.width > 0.0 {
+            size.height * (content_w / size.width)
+        } else {
+            size.height
+        }
+    });
+    let final_h = specified_height(b, font_px).or(replaced_height).unwrap_or(content_h);
 
     b.content_box = Rect { x: content_x, y: content_y, w: content_w, h: final_h };
     b.border_box = Rect {

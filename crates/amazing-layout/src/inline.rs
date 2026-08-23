@@ -10,7 +10,7 @@
 use amazing_dom::NodeIdx;
 
 use crate::font::FontSource;
-use crate::{InlineNode, LineBox, WordFrag};
+use crate::{InlineNode, IntrinsicSize, LineBox, ReplacedFrag, WordFrag};
 
 /// The block's typographic strut (§10.8): every line box gets this height
 /// and this baseline placement.
@@ -29,25 +29,31 @@ impl Strut {
     }
 }
 
-/// One measured word queued for placement.
-pub(crate) struct Token {
-    pub text: String,
-    pub node: NodeIdx,
-    pub font_size: f32,
-    /// A collapsible space precedes this word in the source flow.
-    pub space_before: bool,
+/// One ordered inline item queued for placement.
+pub(crate) enum Token {
+    Word {
+        text: String,
+        node: NodeIdx,
+        font_size: f32,
+        space_before: bool,
+    },
+    Break,
+    Replaced {
+        node: NodeIdx,
+        size: IntrinsicSize,
+        space_before: bool,
+    },
 }
 
 /// Splits flattened inline items into word tokens, tracking whether a
 /// collapsible space sits between consecutive words across item boundaries.
-pub(crate) fn tokenize(items: &[InlineNode]) -> (Vec<Token>, Vec<usize>) {
+pub(crate) fn tokenize(items: &[InlineNode]) -> Vec<Token> {
     let mut tokens = Vec::new();
-    let mut breaks = Vec::new();
     let mut pending_space = false;
     for item in items {
         match item {
             InlineNode::Break => {
-                breaks.push(tokens.len());
+                tokens.push(Token::Break);
                 // Whitespace following a <br> starts the new line stripped,
                 // so the pending flag survives the break.
             },
@@ -62,7 +68,7 @@ pub(crate) fn tokenize(items: &[InlineNode]) -> (Vec<Token>, Vec<usize>) {
                     if word.is_empty() {
                         continue; // the run separator itself
                     }
-                    tokens.push(Token {
+                    tokens.push(Token::Word {
                         text: word.to_owned(),
                         node: *node,
                         font_size: *font_size,
@@ -74,9 +80,17 @@ pub(crate) fn tokenize(items: &[InlineNode]) -> (Vec<Token>, Vec<usize>) {
                     pending_space = false;
                 }
             },
+            InlineNode::Replaced { node, size } => {
+                tokens.push(Token::Replaced {
+                    node: *node,
+                    size: *size,
+                    space_before: pending_space,
+                });
+                pending_space = false;
+            },
         }
     }
-    (tokens, breaks)
+    tokens
 }
 
 /// Lays out inline content inside a content box starting at
@@ -90,74 +104,81 @@ pub fn layout_lines(
     strut: &Strut,
     fonts: &FontSource,
 ) -> Vec<LineBox> {
-    let (tokens, breaks) = tokenize(items);
+    let tokens = tokenize(items);
 
     let half_leading = (strut.line_height - (strut.ascent + strut.descent)) / 2.0;
     let right_edge = content_x + content_width;
 
     let mut lines: Vec<LineBox> = Vec::new();
     let mut words: Vec<WordFrag> = Vec::new();
+    let mut replaced: Vec<ReplacedFrag> = Vec::new();
     let mut cx = content_x;
 
-    let flush = |lines: &mut Vec<LineBox>, words: &mut Vec<WordFrag>, cx: &mut f32| {
-        if words.is_empty() {
+    let flush = |lines: &mut Vec<LineBox>,
+                 words: &mut Vec<WordFrag>,
+                 replaced: &mut Vec<ReplacedFrag>,
+                 cx: &mut f32| {
+        if words.is_empty() && replaced.is_empty() {
             return;
         }
-        let index = lines.len() as u32;
-        let y_top = content_y + index as f32 * strut.line_height;
+        let image_height = replaced.iter().map(|image| image.height).fold(0.0, f32::max);
+        let height = strut.line_height.max(image_height);
+        let y_top = content_y + lines.iter().map(|line| line.height).sum::<f32>();
+        let text_baseline = y_top + half_leading + strut.ascent;
+        let baseline = text_baseline.max(y_top + image_height);
+        for image in replaced.iter_mut() {
+            image.y = baseline - image.height;
+        }
         lines.push(LineBox {
             y_top,
-            height: strut.line_height,
-            baseline: y_top + half_leading + strut.ascent,
+            height,
+            baseline,
             words: std::mem::take(words),
+            replaced: std::mem::take(replaced),
         });
         *cx = content_x;
     };
 
-    let mut break_set = breaks.as_slice();
-    for (i, tok) in tokens.iter().enumerate() {
-        // Any `<br>` positioned before this token forces the break first.
-        while let Some((b, rest)) = break_set.split_first() {
-            if *b <= i {
-                flush(&mut lines, &mut words, &mut cx);
-                break_set = rest;
-            } else {
-                break;
-            }
-        }
-
-        let word_w = fonts.measure(&tok.text, tok.font_size);
-        let space_w = if !words.is_empty() && tok.space_before {
-            fonts.measure(" ", tok.font_size)
-        } else {
-            0.0
-        };
-        // Greedy fill: wrap when the word (plus its preceding space) no
-        // longer fits beside existing content. A word alone on a line is
-        // placed regardless of overflow.
-        if !words.is_empty() && cx + space_w + word_w > right_edge + f32::EPSILON {
-            flush(&mut lines, &mut words, &mut cx);
-        }
-        let wx = cx + space_w;
-        words.push(WordFrag {
-            node: tok.node,
-            text: tok.text.clone(),
-            x: wx,
-            width: word_w,
-            font_size: tok.font_size,
-        });
-        cx = wx + word_w;
-    }
-    // Trailing `<br>` (break index == token count).
-    while let Some((b, rest)) = break_set.split_first() {
-        if *b >= tokens.len() {
-            flush(&mut lines, &mut words, &mut cx);
-            break_set = rest;
-        } else {
-            break;
+    for token in tokens {
+        let has_content = !words.is_empty() || !replaced.is_empty();
+        match token {
+            Token::Break => flush(&mut lines, &mut words, &mut replaced, &mut cx),
+            Token::Word { text, node, font_size, space_before } => {
+                let word_w = fonts.measure(&text, font_size);
+                let space_w = if has_content && space_before {
+                    fonts.measure(" ", font_size)
+                } else {
+                    0.0
+                };
+                if has_content && cx + space_w + word_w > right_edge + f32::EPSILON {
+                    flush(&mut lines, &mut words, &mut replaced, &mut cx);
+                }
+                let wx = cx + if cx > content_x { space_w } else { 0.0 };
+                words.push(WordFrag { node, text, x: wx, width: word_w, font_size });
+                cx = wx + word_w;
+            },
+            Token::Replaced { node, size, space_before } => {
+                let space_w = if has_content && space_before {
+                    fonts.measure(" ", strut.font_size)
+                } else {
+                    0.0
+                };
+                if has_content && cx + space_w + size.width > right_edge + f32::EPSILON {
+                    flush(&mut lines, &mut words, &mut replaced, &mut cx);
+                }
+                let x = cx + if cx > content_x { space_w } else { 0.0 };
+                replaced.push(ReplacedFrag {
+                    node,
+                    x,
+                    y: 0.0,
+                    width: size.width,
+                    height: size.height,
+                });
+                cx = x + size.width;
+            },
         }
     }
-    flush(&mut lines, &mut words, &mut cx);
+    flush(&mut lines, &mut words, &mut replaced, &mut cx);
 
     lines
 }

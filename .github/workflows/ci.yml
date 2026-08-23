@@ -15,6 +15,6 @@ jobs:
         with:
           toolchain: 1.97.1
       - name: Build all targets
-        run: cargo build --workspace --all-targets
+        run: cargo build --workspace --all-targets --locked
       - name: Run workspace tests
-        run: cargo test --workspace
+        run: cargo test --workspace --locked

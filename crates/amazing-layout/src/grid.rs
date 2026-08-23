@@ -47,9 +47,9 @@
 use amazing_css::ComputedStyle;
 use std::collections::HashMap;
 
+use crate::LayoutBox;
 use crate::font::FontSource;
 use crate::values::{self, MaybeLen};
-use crate::LayoutBox;
 
 // ---------------------------------------------------------------------------
 // Track model
@@ -93,7 +93,7 @@ fn parse_track_size(s: &str, font_px: f32, content_w: f32) -> TrackSize {
     match lower.as_str() {
         "auto" => return TrackSize::Auto,
         "min-content" | "max-content" => return TrackSize::Content,
-        _ => {},
+        _ => {}
     }
     match MaybeLen::parse(s, font_px, content_w) {
         Some(MaybeLen::Px(v)) => TrackSize::Px(v.max(0.0)),
@@ -112,16 +112,16 @@ fn top_tokens(value: &str) -> Vec<String> {
             '(' => {
                 depth += 1;
                 cur.push(ch);
-            },
+            }
             ')' => {
                 depth -= 1;
                 cur.push(ch);
-            },
+            }
             c if c.is_whitespace() && depth <= 0 => {
                 if !cur.is_empty() {
                     out.push(std::mem::take(&mut cur));
                 }
-            },
+            }
             c => cur.push(c),
         }
     }
@@ -154,7 +154,10 @@ fn parse_track_list(value: &str, ctx: &RepeatCtx, allow_auto_fill: bool) -> Vec<
             continue;
         }
         let lower = tok.to_ascii_lowercase();
-        if let Some(inner) = lower.strip_prefix("repeat(").and_then(|s| s.strip_suffix(')')) {
+        if let Some(inner) = lower
+            .strip_prefix("repeat(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
             // repeat(<count>, <track-list>) — count is an integer or
             // auto-fill; the inner list re-enters this parser (nesting
             // comes free, inner auto-fill degrades to 1).
@@ -170,12 +173,16 @@ fn parse_track_list(value: &str, ctx: &RepeatCtx, allow_auto_fill: bool) -> Vec<
                     if !allow_auto_fill || !count_part.trim().eq_ignore_ascii_case("auto-fill") {
                         1
                     } else {
-                        let sizes = parse_track_list(list_part, &RepeatCtx {
-                            font_px: ctx.font_px,
-                            content_w: ctx.content_w,
-                            gap: ctx.gap,
-                            fixed_before: ctx.fixed_before,
-                        }, false);
+                        let sizes = parse_track_list(
+                            list_part,
+                            &RepeatCtx {
+                                font_px: ctx.font_px,
+                                content_w: ctx.content_w,
+                                gap: ctx.gap,
+                                fixed_before: ctx.fixed_before,
+                            },
+                            false,
+                        );
                         let all_definite = sizes.iter().all(|s| matches!(*s, TrackSize::Px(_)));
                         let unit: f32 = sizes
                             .iter()
@@ -192,18 +199,22 @@ fn parse_track_list(value: &str, ctx: &RepeatCtx, allow_auto_fill: bool) -> Vec<
                             1
                         }
                     }
-                },
+                }
             };
             for _ in 0..n {
                 if out.len() >= MAX_TRACKS {
                     break;
                 }
-                let parsed = parse_track_list(list_part, &RepeatCtx {
-                    font_px: ctx.font_px,
-                    content_w: ctx.content_w,
-                    gap: ctx.gap,
-                    fixed_before: ctx.fixed_before,
-                }, false);
+                let parsed = parse_track_list(
+                    list_part,
+                    &RepeatCtx {
+                        font_px: ctx.font_px,
+                        content_w: ctx.content_w,
+                        gap: ctx.gap,
+                        fixed_before: ctx.fixed_before,
+                    },
+                    false,
+                );
                 out.extend(parsed);
             }
             continue;
@@ -251,8 +262,12 @@ fn parse_pack(v: Option<&str>) -> Pack {
 
 fn parse_item_align(v: Option<&str>) -> ItemAlign {
     match v.map(str::trim) {
-        Some(v) if v.eq_ignore_ascii_case("start") || v.eq_ignore_ascii_case("flex-start") => ItemAlign::Start,
-        Some(v) if v.eq_ignore_ascii_case("end") || v.eq_ignore_ascii_case("flex-end") => ItemAlign::End,
+        Some(v) if v.eq_ignore_ascii_case("start") || v.eq_ignore_ascii_case("flex-start") => {
+            ItemAlign::Start
+        }
+        Some(v) if v.eq_ignore_ascii_case("end") || v.eq_ignore_ascii_case("flex-end") => {
+            ItemAlign::End
+        }
         Some(v) if v.eq_ignore_ascii_case("center") => ItemAlign::Center,
         _ => ItemAlign::Stretch,
     }
@@ -317,10 +332,23 @@ struct GridSpec {
 impl GridSpec {
     fn of(style: &ComputedStyle, font_px: f32, content_w: f32) -> Self {
         let (row_gap, col_gap) = parse_gaps(style, font_px, content_w);
-        let ctx_cols = RepeatCtx { font_px, content_w, gap: col_gap, fixed_before: 0.0 };
-        let ctx_rows = RepeatCtx { font_px, content_w, gap: row_gap, fixed_before: 0.0 };
+        let ctx_cols = RepeatCtx {
+            font_px,
+            content_w,
+            gap: col_gap,
+            fixed_before: 0.0,
+        };
+        let ctx_rows = RepeatCtx {
+            font_px,
+            content_w,
+            gap: row_gap,
+            fixed_before: 0.0,
+        };
         let empty_auto = vec![TrackSize::Auto];
-        let flow = style.get("grid-auto-flow").unwrap_or("row").to_ascii_lowercase();
+        let flow = style
+            .get("grid-auto-flow")
+            .unwrap_or("row")
+            .to_ascii_lowercase();
         let words: Vec<&str> = flow.split_ascii_whitespace().collect();
         GridSpec {
             cols: style
@@ -366,7 +394,10 @@ struct LineSpec {
 }
 
 impl LineSpec {
-    const AUTO: LineSpec = LineSpec { line: None, span: 1 };
+    const AUTO: LineSpec = LineSpec {
+        line: None,
+        span: 1,
+    };
 }
 
 /// Parses one slot value: `auto`, `<integer>`, `span N`, or a bare /
@@ -381,13 +412,22 @@ fn parse_line_slot(s: &str) -> LineSpec {
     if let Some(rest) = lower.strip_prefix("span") {
         let rest = rest.trim();
         return match rest.parse::<u32>() {
-            Ok(n) if n >= 1 => LineSpec { line: None, span: n.min(1000) },
-            _ => LineSpec { line: None, span: 1 }, // `span <name>` → span 1
+            Ok(n) if n >= 1 => LineSpec {
+                line: None,
+                span: n.min(1000),
+            },
+            _ => LineSpec {
+                line: None,
+                span: 1,
+            }, // `span <name>` → span 1
         };
     }
     match s.parse::<i32>() {
         Ok(0) | Err(_) => LineSpec::AUTO, // line 0 is invalid → auto
-        Ok(n) => LineSpec { line: Some(n), span: 1 },
+        Ok(n) => LineSpec {
+            line: Some(n),
+            span: 1,
+        },
     }
 }
 
@@ -405,15 +445,15 @@ struct Placement {
 /// line numbers resolve FIRST (`-k` counts back from the END of the
 /// explicit grid: line `tracks + 2 - k`, so `-1` is the last line), then
 /// out-of-order ends swap per §8.3.2.1.
-fn combine_slots(
-    start: LineSpec,
-    end: LineSpec,
-    explicit_count: usize,
-) -> (Option<u32>, u32) {
+fn combine_slots(start: LineSpec, end: LineSpec, explicit_count: usize) -> (Option<u32>, u32) {
     let resolve = |l: i32| -> Option<u32> {
         if l < 0 {
             let from_end = explicit_count as i32 + 2 + l;
-            if from_end < 1 { None } else { Some(from_end as u32) }
+            if from_end < 1 {
+                None
+            } else {
+                Some(from_end as u32)
+            }
         } else if l == 0 {
             None
         } else {
@@ -424,12 +464,12 @@ fn combine_slots(
         (Some(a), Some(b)) => {
             let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
             (Some(lo), (hi - lo).max(1))
-        },
+        }
         (Some(a), None) => (Some(a), end.span.max(1)),
         (None, Some(b)) => {
             let span = start.span.max(1);
             (Some(if b > span { b - span } else { 1 }), span)
-        },
+        }
         (None, None) => (None, start.span.max(end.span).max(1)),
     }
 }
@@ -456,9 +496,19 @@ fn parse_placement(style: &ComputedStyle, explicit_cols: usize, explicit_rows: u
         }
         combine_slots(start, end, expl)
     };
-    let (col, col_span) = side("grid-column", "grid-column-start", "grid-column-end", explicit_cols);
+    let (col, col_span) = side(
+        "grid-column",
+        "grid-column-start",
+        "grid-column-end",
+        explicit_cols,
+    );
     let (row, row_span) = side("grid-row", "grid-row-start", "grid-row-end", explicit_rows);
-    Placement { row, row_span, col, col_span }
+    Placement {
+        row,
+        row_span,
+        col,
+        col_span,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -498,7 +548,11 @@ impl Occupancy {
 /// the grid start for every auto-placed item (backflow). Definite-major /
 /// auto-minor items scan the minor axis unboundedly (creating implicit
 /// tracks); both-auto items wrap at `expl_minor` (or the widest auto span).
-fn place_row_flow(specs: &[Placement], dense: bool, expl_minor: usize) -> Vec<(u32, u32, u32, u32)> {
+fn place_row_flow(
+    specs: &[Placement],
+    dense: bool,
+    expl_minor: usize,
+) -> Vec<(u32, u32, u32, u32)> {
     // Wrap width for both-auto items: explicit minors, at least the widest
     // auto-placed span (so wide items always get columns to fit into).
     let mut limit = expl_minor.max(1);
@@ -519,7 +573,7 @@ fn place_row_flow(specs: &[Placement], dense: bool, expl_minor: usize) -> Vec<(u
             (Some(r), Some(c)) => {
                 occ.put(r, c, rs, cs);
                 out.push((r, rs, c, cs));
-            },
+            }
             // Definite row, auto column: slide right within the locked row.
             (Some(r), None) => {
                 let mut c = if dense {
@@ -538,7 +592,7 @@ fn place_row_flow(specs: &[Placement], dense: bool, expl_minor: usize) -> Vec<(u
                 if !dense {
                     cur_c = c + cs;
                 }
-            },
+            }
             // Definite column, auto row: slide down within the locked col.
             (None, Some(c)) => {
                 if !dense && c < cur_c {
@@ -554,7 +608,7 @@ fn place_row_flow(specs: &[Placement], dense: bool, expl_minor: usize) -> Vec<(u
                     cur_r = r; // cursor resumes at the item's row start
                     cur_c = c + cs;
                 }
-            },
+            }
             // Fully automatic.
             (None, None) => {
                 let (r, c) = if dense {
@@ -592,7 +646,7 @@ fn place_row_flow(specs: &[Placement], dense: bool, expl_minor: usize) -> Vec<(u
                     cur_r = r;
                     cur_c = c + cs;
                 }
-            },
+            }
         }
     }
     out
@@ -607,9 +661,10 @@ fn place_row_flow(specs: &[Placement], dense: bool, expl_minor: usize) -> Vec<(u
 fn track_vector(explicit: &[TrackSize], autos: &[TrackSize], total: usize) -> Vec<TrackSize> {
     (0..total)
         .map(|i| {
-            explicit.get(i).copied().unwrap_or_else(|| {
-                autos[(i - explicit.len().min(i)) % autos.len()]
-            })
+            explicit
+                .get(i)
+                .copied()
+                .unwrap_or_else(|| autos[(i - explicit.len().min(i)) % autos.len()])
         })
         .collect()
 }
@@ -626,7 +681,12 @@ struct Contrib {
 /// simplification), then `fr` tracks split what is left of `available`.
 /// `available` of `None` means indefinite (fr acts like auto, which then
 /// relies on the contributions themselves).
-fn size_axis(kinds: &[TrackSize], gap: f32, available: Option<f32>, contribs: &[Contrib]) -> Vec<f32> {
+fn size_axis(
+    kinds: &[TrackSize],
+    gap: f32,
+    available: Option<f32>,
+    contribs: &[Contrib],
+) -> Vec<f32> {
     let n = kinds.len();
     // With an indefinite axis size, `fr` tracks have nothing to flex into
     // and behave like `auto` (documented) — they take contributions too.
@@ -644,19 +704,18 @@ fn size_axis(kinds: &[TrackSize], gap: f32, available: Option<f32>, contribs: &[
         let end = (c.start + c.span).min(n);
         let intr: Vec<usize> = (c.start..end)
             .filter(|&t| {
-                kinds[t].is_intrinsic()
-                    || (fr_is_intrinsic && matches!(kinds[t], TrackSize::Fr(_)))
+                kinds[t].is_intrinsic() || (fr_is_intrinsic && matches!(kinds[t], TrackSize::Fr(_)))
             })
             .collect();
         match intr.len() {
-            0 => {},
+            0 => {}
             1 => base[intr[0]] = base[intr[0]].max(c.outer),
             _ => {
                 let share = c.outer / intr.len() as f32;
                 for t in intr {
                     base[t] = base[t].max(share);
                 }
-            },
+            }
         }
     }
 
@@ -671,10 +730,13 @@ fn size_axis(kinds: &[TrackSize], gap: f32, available: Option<f32>, contribs: &[
             .sum();
         let leftover = avail - gaps - non_fr;
         if leftover > 0.0 {
-            let sum_w: f32 = kinds.iter().map(|k| match *k {
-                TrackSize::Fr(w) => w,
-                _ => 0.0,
-            }).sum();
+            let sum_w: f32 = kinds
+                .iter()
+                .map(|k| match *k {
+                    TrackSize::Fr(w) => w,
+                    _ => 0.0,
+                })
+                .sum();
             if sum_w > 0.0 {
                 for (t, k) in kinds.iter().enumerate() {
                     if let TrackSize::Fr(w) = *k {
@@ -740,7 +802,7 @@ fn height_is_auto(it: &LayoutBox) -> bool {
         Some(v) => {
             let v = v.trim();
             v.eq_ignore_ascii_case("auto") || v.ends_with('%')
-        },
+        }
     }
 }
 
@@ -831,8 +893,7 @@ pub fn layout_grid(
         .iter()
         .zip(&placed)
         .map(|(it, p)| {
-            let specified =
-                values::resolve_extent(&it.style, "width", it.font_size, content_w);
+            let specified = values::resolve_extent(&it.style, "width", it.font_size, content_w);
             let inner = match specified {
                 MaybeLen::Px(w) => w.max(0.0),
                 MaybeLen::Auto => crate::flex::max_content_width(it, fonts),
@@ -843,8 +904,13 @@ pub fn layout_grid(
             Contrib {
                 start: (p.col.unwrap_or(1) - 1) as usize,
                 span: p.col_span.max(1) as usize,
-                outer: inner + m.left.unwrap_or(0.0) + m.right.unwrap_or(0.0)
-                    + pad.left + pad.right + bor.left + bor.right,
+                outer: inner
+                    + m.left.unwrap_or(0.0)
+                    + m.right.unwrap_or(0.0)
+                    + pad.left
+                    + pad.right
+                    + bor.left
+                    + bor.right,
             }
         })
         .collect();
@@ -853,8 +919,11 @@ pub fn layout_grid(
     // Column positions (with justify-content distribution).
     let cols_sum: f32 = col_sizes.iter().sum();
     let col_gaps_total = spec.col_gap * (n_cols.saturating_sub(1)) as f32;
-    let (jc_lead, jc_between) =
-        pack_pair(spec.justify_content, content_w - cols_sum - col_gaps_total, n_cols);
+    let (jc_lead, jc_between) = pack_pair(
+        spec.justify_content,
+        content_w - cols_sum - col_gaps_total,
+        n_cols,
+    );
     let mut col_pos = Vec::with_capacity(n_cols);
     let mut cursor = content_x + jc_lead;
     for sz in &col_sizes {
@@ -866,8 +935,7 @@ pub fn layout_grid(
     let area_w_of = |p: &Placement| -> f32 {
         let s = (p.col.unwrap_or(1) - 1) as usize;
         let e = (s + p.col_span.max(1) as usize).min(n_cols);
-        col_sizes[s..e].iter().sum::<f32>()
-            + spec.col_gap * (e - s - 1) as f32
+        col_sizes[s..e].iter().sum::<f32>() + spec.col_gap * (e - s - 1) as f32
     };
 
     // --- 4. lay out every item at its final width, measure heights ------
@@ -885,9 +953,8 @@ pub fn layout_grid(
         let mr = it.margin.right.unwrap_or(0.0);
         let avail_content = (area_w - ml - mr - h_chrome(it)).max(0.0);
         let justify = container_self_align(it, "justify-self").unwrap_or(spec.justify_items);
-        let stretchable = width_auto
-            && !margin_is_auto(&it.style, "left")
-            && !margin_is_auto(&it.style, "right");
+        let stretchable =
+            width_auto && !margin_is_auto(&it.style, "left") && !margin_is_auto(&it.style, "right");
         let target = if stretchable && justify == ItemAlign::Stretch {
             avail_content
         } else {
@@ -966,7 +1033,8 @@ pub fn layout_grid(
             && !margin_is_auto(&it.style, "top")
             && !margin_is_auto(&it.style, "bottom")
         {
-            let target_h = (ah - it.margin.top.unwrap_or(0.0)
+            let target_h = (ah
+                - it.margin.top.unwrap_or(0.0)
                 - it.margin.bottom.unwrap_or(0.0)
                 - v_chrome(it))
             .max(0.0);
@@ -986,19 +1054,21 @@ pub fn layout_grid(
         let bw = it.border_box.w;
         // border_box already contains padding+border, so OUTER size here is
         // margins + border_box — no extra chrome term.
-        let bx = ax + match justify {
-            ItemAlign::End => (aw - mr - bw).max(0.0),
-            ItemAlign::Center => (ml + (aw - ml - mr - bw) / 2.0).max(0.0),
-            _ => ml, // Start; Stretch already fills via materialized width
-        };
+        let bx = ax
+            + match justify {
+                ItemAlign::End => (aw - mr - bw).max(0.0),
+                ItemAlign::Center => (ml + (aw - ml - mr - bw) / 2.0).max(0.0),
+                _ => ml, // Start; Stretch already fills via materialized width
+            };
         let mt = m.top.unwrap_or(0.0);
         let mb = m.bottom.unwrap_or(0.0);
         let bh = it.border_box.h;
-        let by = ay + match align {
-            ItemAlign::End => (ah - mb - bh).max(0.0),
-            ItemAlign::Center => (mt + (ah - mt - mb - bh) / 2.0).max(0.0),
-            _ => mt,
-        };
+        let by = ay
+            + match align {
+                ItemAlign::End => (ah - mb - bh).max(0.0),
+                ItemAlign::Center => (mt + (ah - mt - mb - bh) / 2.0).max(0.0),
+                _ => mt,
+            };
         crate::flex::translate(it, bx - it.border_box.x, by - it.border_box.y);
     }
 
@@ -1064,7 +1134,16 @@ mod tests {
         content_w: f32,
         definite_h: Option<f32>,
     ) -> f32 {
-        layout_grid(items, container, 16.0, 0.0, 0.0, content_w, definite_h, &FontSource::fallback())
+        layout_grid(
+            items,
+            container,
+            16.0,
+            0.0,
+            0.0,
+            content_w,
+            definite_h,
+            &FontSource::fallback(),
+        )
     }
 
     /// Exact-ish f32 compare (all fixtures compute to round pixels).
@@ -1092,12 +1171,17 @@ mod tests {
             "margin:0",
         );
         assert_eq!(items.len(), 4);
-        let h = lay(&mut items, &cs(&[
-            ("grid-template-columns", "[start] 100px [mid] 200px [end]"),
-            ("grid-template-rows", "50px 80px"),
-            ("row-gap", "10px"),
-            ("column-gap", "20px"),
-        ]), 320.0, None);
+        let h = lay(
+            &mut items,
+            &cs(&[
+                ("grid-template-columns", "[start] 100px [mid] 200px [end]"),
+                ("grid-template-rows", "50px 80px"),
+                ("row-gap", "10px"),
+                ("column-gap", "20px"),
+            ]),
+            320.0,
+            None,
+        );
         assert!(close(h, 140.0)); // 50 + 10 + 80
         // Row-major auto placement; items stretch to fill their areas.
         assert!(rect_eq(items[0].border_box, 0.0, 0.0, 100.0, 50.0));
@@ -1112,18 +1196,32 @@ mod tests {
     #[test]
     fn fr_tracks_split_leftover_after_fixed_tracks() {
         // 100px fixed + 50px gap leaves 250px for the single fr track.
-        let mut items = grid_fixture(2, "grid-template-columns:100px 1fr; column-gap:50px", "height:20px");
+        let mut items = grid_fixture(
+            2,
+            "grid-template-columns:100px 1fr; column-gap:50px",
+            "height:20px",
+        );
         assert_eq!(items.len(), 2);
-        lay(&mut items, &cs(&[
-            ("grid-template-columns", "100px 1fr"),
-            ("column-gap", "50px"),
-        ]), 400.0, None);
+        lay(
+            &mut items,
+            &cs(&[
+                ("grid-template-columns", "100px 1fr"),
+                ("column-gap", "50px"),
+            ]),
+            400.0,
+            None,
+        );
         assert!(rect_eq(items[0].border_box, 0.0, 0.0, 100.0, 20.0));
         assert!(rect_eq(items[1].border_box, 150.0, 0.0, 250.0, 20.0));
 
         // Pure fr: weighted equal-share of the whole content width.
         let mut items = grid_fixture(2, "grid-template-columns:1fr 3fr", "height:20px");
-        lay(&mut items, &cs(&[("grid-template-columns", "1fr 3fr")]), 400.0, None);
+        lay(
+            &mut items,
+            &cs(&[("grid-template-columns", "1fr 3fr")]),
+            400.0,
+            None,
+        );
         assert!(rect_eq(items[0].border_box, 0.0, 0.0, 100.0, 20.0));
         assert!(rect_eq(items[1].border_box, 100.0, 0.0, 300.0, 20.0));
     }
@@ -1134,7 +1232,12 @@ mod tests {
         // First item spans both columns; second wraps to row 2.
         items[0].style.set("grid-column", "span 2");
         items[0].style.set("height", "30px");
-        let h = lay(&mut items, &cs(&[("grid-template-columns", "100px 200px")]), 300.0, None);
+        let h = lay(
+            &mut items,
+            &cs(&[("grid-template-columns", "100px 200px")]),
+            300.0,
+            None,
+        );
         // The span is on COLUMNS, so item a occupies row 1 alone and its
         // whole 30px sizes that auto row; the wrapped item sizes row 2.
         assert!(close(h, 50.0), "grid height {} want 50", h);
@@ -1149,7 +1252,12 @@ mod tests {
         items[0].style.set("grid-column", "1 / -1");
         // -2 / -1 covers exactly column 2.
         items[1].style.set("grid-column", "-2 / -1");
-        lay(&mut items, &cs(&[("grid-template-columns", "100px 200px")]), 300.0, None);
+        lay(
+            &mut items,
+            &cs(&[("grid-template-columns", "100px 200px")]),
+            300.0,
+            None,
+        );
         assert!(rect_eq(items[0].border_box, 0.0, 0.0, 300.0, 20.0));
         // Item b's column-start (2) precedes the sparse cursor (3 after the
         // spanning item) AND cell (1,2) is taken — §8.5 wraps it to row 2.
@@ -1165,10 +1273,15 @@ mod tests {
         );
         assert_eq!(items.len(), 4);
         items[3].style.set("grid-column", "4");
-        lay(&mut items, &cs(&[
-            ("grid-template-columns", "100px 200px"),
-            ("grid-auto-columns", "30px 10px"),
-        ]), 340.0, None);
+        lay(
+            &mut items,
+            &cs(&[
+                ("grid-template-columns", "100px 200px"),
+                ("grid-auto-columns", "30px 10px"),
+            ]),
+            340.0,
+            None,
+        );
         // Row 2 is implicit (auto): sized by the items' 40px heights.
         assert!(rect_eq(items[2].border_box, 0.0, 40.0, 100.0, 40.0));
         // Implicit columns 3 (30px) and 4 (10px) precede item d's cell.
@@ -1183,7 +1296,12 @@ mod tests {
         let mut sparse = grid_fixture(3, "grid-template-columns:50px 50px", "height:20px");
         sparse[1].style.set("grid-column", "1");
         sparse[2].style.set("grid-column", "2");
-        lay(&mut sparse, &cs(&[("grid-template-columns", "50px 50px")]), 100.0, None);
+        lay(
+            &mut sparse,
+            &cs(&[("grid-template-columns", "50px 50px")]),
+            100.0,
+            None,
+        );
         assert!(rect_eq(sparse[0].border_box, 0.0, 0.0, 50.0, 20.0));
         assert!(rect_eq(sparse[1].border_box, 0.0, 20.0, 50.0, 20.0));
         assert!(rect_eq(sparse[2].border_box, 50.0, 20.0, 50.0, 20.0));
@@ -1195,10 +1313,15 @@ mod tests {
         );
         dense[1].style.set("grid-column", "1");
         dense[2].style.set("grid-column", "2");
-        lay(&mut dense, &cs(&[
-            ("grid-auto-flow", "dense"),
-            ("grid-template-columns", "50px 50px"),
-        ]), 100.0, None);
+        lay(
+            &mut dense,
+            &cs(&[
+                ("grid-auto-flow", "dense"),
+                ("grid-template-columns", "50px 50px"),
+            ]),
+            100.0,
+            None,
+        );
         assert!(rect_eq(dense[0].border_box, 0.0, 0.0, 50.0, 20.0));
         assert!(rect_eq(dense[1].border_box, 0.0, 20.0, 50.0, 20.0));
         assert!(rect_eq(dense[2].border_box, 50.0, 0.0, 50.0, 20.0)); // backfilled
@@ -1212,12 +1335,17 @@ mod tests {
             "width:50px; height:20px",
         );
         assert_eq!(items.len(), 1);
-        let h = lay(&mut items, &cs(&[
-            ("grid-template-columns", "200px"),
-            ("grid-template-rows", "100px"),
-            ("justify-items", "center"),
-            ("align-items", "center"),
-        ]), 200.0, None);
+        let h = lay(
+            &mut items,
+            &cs(&[
+                ("grid-template-columns", "200px"),
+                ("grid-template-rows", "100px"),
+                ("justify-items", "center"),
+                ("align-items", "center"),
+            ]),
+            200.0,
+            None,
+        );
         assert!(close(h, 100.0));
         assert!(rect_eq(items[0].border_box, 75.0, 40.0, 50.0, 20.0));
 
@@ -1229,10 +1357,15 @@ mod tests {
         );
         items[0].style.set("justify-self", "end");
         items[0].style.set("align-self", "start");
-        lay(&mut items, &cs(&[
-            ("grid-template-columns", "200px"),
-            ("grid-template-rows", "100px"),
-        ]), 200.0, None);
+        lay(
+            &mut items,
+            &cs(&[
+                ("grid-template-columns", "200px"),
+                ("grid-template-rows", "100px"),
+            ]),
+            200.0,
+            None,
+        );
         assert!(rect_eq(items[0].border_box, 150.0, 0.0, 50.0, 20.0));
     }
 
@@ -1243,10 +1376,15 @@ mod tests {
             "grid-template-columns:100px; grid-template-rows:60px",
             "padding:10px",
         );
-        let h = lay(&mut items, &cs(&[
-            ("grid-template-columns", "100px"),
-            ("grid-template-rows", "60px"),
-        ]), 100.0, None);
+        let h = lay(
+            &mut items,
+            &cs(&[
+                ("grid-template-columns", "100px"),
+                ("grid-template-rows", "60px"),
+            ]),
+            100.0,
+            None,
+        );
         assert!(close(h, 60.0));
         // Horizontal stretch laid out at 80px content; vertical stretch
         // re-flowed to 40px content inside the 60px row.
@@ -1257,7 +1395,12 @@ mod tests {
     #[test]
     fn percentage_tracks_resolve_against_content_width() {
         let mut items = grid_fixture(2, "grid-template-columns:50% 100px", "height:20px");
-        lay(&mut items, &cs(&[("grid-template-columns", "50% 100px")]), 400.0, None);
+        lay(
+            &mut items,
+            &cs(&[("grid-template-columns", "50% 100px")]),
+            400.0,
+            None,
+        );
         assert!(rect_eq(items[0].border_box, 0.0, 0.0, 200.0, 20.0));
         assert!(rect_eq(items[1].border_box, 200.0, 0.0, 100.0, 20.0));
     }
@@ -1266,14 +1409,28 @@ mod tests {
     fn repeat_fixed_count_and_auto_fill() {
         // repeat(<integer>, …) expands verbatim.
         let mut items = grid_fixture(2, "grid-template-columns:repeat(2, 100px)", "height:20px");
-        lay(&mut items, &cs(&[("grid-template-columns", "repeat(2, 100px)")]), 400.0, None);
+        lay(
+            &mut items,
+            &cs(&[("grid-template-columns", "repeat(2, 100px)")]),
+            400.0,
+            None,
+        );
         assert!(rect_eq(items[0].border_box, 0.0, 0.0, 100.0, 20.0));
         assert!(rect_eq(items[1].border_box, 100.0, 0.0, 100.0, 20.0));
 
         // auto-fill: floor((400 + 0) / 100) = 4 definite tracks.
-        let mut items = grid_fixture(4, "grid-template-columns:repeat(auto-fill, 100px)", "height:20px");
+        let mut items = grid_fixture(
+            4,
+            "grid-template-columns:repeat(auto-fill, 100px)",
+            "height:20px",
+        );
         assert_eq!(items.len(), 4);
-        lay(&mut items, &cs(&[("grid-template-columns", "repeat(auto-fill, 100px)")]), 400.0, None);
+        lay(
+            &mut items,
+            &cs(&[("grid-template-columns", "repeat(auto-fill, 100px)")]),
+            400.0,
+            None,
+        );
         assert!(rect_eq(items[3].border_box, 300.0, 0.0, 100.0, 20.0));
     }
 
@@ -1285,10 +1442,15 @@ mod tests {
             "grid-template-columns:repeat(2, 50px); justify-content:space-between",
             "height:20px",
         );
-        lay(&mut items, &cs(&[
-            ("grid-template-columns", "repeat(2, 50px)"),
-            ("justify-content", "space-between"),
-        ]), 200.0, None);
+        lay(
+            &mut items,
+            &cs(&[
+                ("grid-template-columns", "repeat(2, 50px)"),
+                ("justify-content", "space-between"),
+            ]),
+            200.0,
+            None,
+        );
         assert!(rect_eq(items[0].border_box, 0.0, 0.0, 50.0, 20.0));
         assert!(rect_eq(items[1].border_box, 150.0, 0.0, 50.0, 20.0));
     }
@@ -1300,11 +1462,16 @@ mod tests {
             "grid-template-columns:100px; grid-template-rows:20px; align-content:center",
             "height:20px",
         );
-        let h = lay(&mut items, &cs(&[
-            ("grid-template-columns", "100px"),
-            ("grid-template-rows", "20px"),
-            ("align-content", "center"),
-        ]), 100.0, Some(100.0));
+        let h = lay(
+            &mut items,
+            &cs(&[
+                ("grid-template-columns", "100px"),
+                ("grid-template-rows", "20px"),
+                ("align-content", "center"),
+            ]),
+            100.0,
+            Some(100.0),
+        );
         assert!(close(h, 20.0)); // natural track extent is returned
         // With center alignment the row shifts down by (100−20)/2.
         assert!(close(items[0].border_box.y, 40.0));
@@ -1317,8 +1484,14 @@ mod tests {
         assert_eq!(parse_track_size("1fr", 16.0, 400.0), TrackSize::Fr(1.0));
         assert_eq!(parse_track_size("2.5FR", 16.0, 400.0), TrackSize::Fr(2.5));
         assert_eq!(parse_track_size("auto", 16.0, 400.0), TrackSize::Auto);
-        assert_eq!(parse_track_size("min-content", 16.0, 400.0), TrackSize::Content);
-        assert_eq!(parse_track_size("max-content", 16.0, 400.0), TrackSize::Content);
+        assert_eq!(
+            parse_track_size("min-content", 16.0, 400.0),
+            TrackSize::Content
+        );
+        assert_eq!(
+            parse_track_size("max-content", 16.0, 400.0),
+            TrackSize::Content
+        );
         assert_eq!(parse_track_size("25px", 16.0, 400.0), TrackSize::Px(25.0));
         assert_eq!(parse_track_size("50%", 16.0, 400.0), TrackSize::Px(200.0));
         assert_eq!(parse_track_size("nonsense", 16.0, 400.0), TrackSize::Auto);
@@ -1330,18 +1503,30 @@ mod tests {
             top_tokens("repeat(2, 100px) 50px"),
             vec!["repeat(2, 100px)".to_string(), "50px".to_string()]
         );
-        assert_eq!(top_tokens("[a b] 1fr"), vec!["[a".to_string(), "b]".to_string(), "1fr".to_string()]);
+        assert_eq!(
+            top_tokens("[a b] 1fr"),
+            vec!["[a".to_string(), "b]".to_string(), "1fr".to_string()]
+        );
     }
 
     #[test]
     fn slot_combination_resolves_negatives_before_ordering() {
         let s = |l: Option<i32>, sp: u32| LineSpec { line: l, span: sp };
         // 1 / -1 over 2 explicit tracks: -1 → line 3, ordered pair (1,3).
-        assert_eq!(combine_slots(s(Some(1), 1), s(Some(-1), 1), 2), (Some(1), 2));
+        assert_eq!(
+            combine_slots(s(Some(1), 1), s(Some(-1), 1), 2),
+            (Some(1), 2)
+        );
         // -2 / -1 → lines 2..3 → starts at 2, span 1.
-        assert_eq!(combine_slots(s(Some(-2), 1), s(Some(-1), 1), 2), (Some(2), 1));
+        assert_eq!(
+            combine_slots(s(Some(-2), 1), s(Some(-1), 1), 2),
+            (Some(2), 1)
+        );
         // Swapped ends order themselves after resolution.
-        assert_eq!(combine_slots(s(Some(-1), 1), s(Some(1), 1), 2), (Some(1), 2));
+        assert_eq!(
+            combine_slots(s(Some(-1), 1), s(Some(1), 1), 2),
+            (Some(1), 2)
+        );
         // Span-only both sides take the widest span.
         assert_eq!(combine_slots(s(None, 2), s(None, 3), 0), (None, 3));
         // Start auto + end line 3 with span 2 → start at line 1.
@@ -1351,7 +1536,14 @@ mod tests {
     #[test]
     fn implicit_tracks_cycle_the_auto_list() {
         let kinds = track_vector(&[], &[TrackSize::Px(30.0), TrackSize::Px(10.0)], 3);
-        assert_eq!(kinds, vec![TrackSize::Px(30.0), TrackSize::Px(10.0), TrackSize::Px(30.0)]);
+        assert_eq!(
+            kinds,
+            vec![
+                TrackSize::Px(30.0),
+                TrackSize::Px(10.0),
+                TrackSize::Px(30.0)
+            ]
+        );
         let explicit_only = track_vector(&[TrackSize::Auto], &[TrackSize::Px(5.0)], 1);
         assert_eq!(explicit_only, vec![TrackSize::Auto]);
     }

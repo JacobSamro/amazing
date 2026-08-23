@@ -24,8 +24,8 @@
 //!
 //! - ALL border styles (dashed/dotted/double/groove/…) render as SOLID —
 //!   deliberate Phase 4 simplification.
-//! - No border-radius, no box shadows, no images/replaced content, no
-//!   list markers, no opacity, no stacking contexts/z-index reordering,
+//! - No border-radius, no box shadows, no list markers, no opacity, no
+//!   stacking contexts/z-index reordering,
 //!   no overflow clipping beyond the viewport.
 //! - Word-level color differences inside one line are not tracked by the
 //!   layout tree (`WordFrag` carries no style), so all words of a line
@@ -46,6 +46,20 @@ const CANVAS_WHITE: [u8; 4] = [255, 255, 255, 255];
 /// initial value of `color` is black.
 const FALLBACK_TEXT_COLOR: [u8; 4] = [0, 0, 0, 255];
 
+/// Seam through which the painter obtains decoded pixels for replaced nodes.
+pub trait ImageProvider {
+    fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image>;
+}
+
+/// Adapter used by callers that have no decoded images.
+pub struct NoImages;
+
+impl ImageProvider for NoImages {
+    fn image(&self, _node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
+        None
+    }
+}
+
 /// Paints `root` into a fresh `viewport_w × viewport_h` surface using the
 /// default rect-ink glyph provider.
 pub fn paint_document(
@@ -54,7 +68,14 @@ pub fn paint_document(
     viewport_h: u32,
     fonts: &FontSource,
 ) -> Surface {
-    paint_document_with(root, viewport_w, viewport_h, fonts, &RectInkProvider)
+    paint_document_with_resources(
+        root,
+        viewport_w,
+        viewport_h,
+        fonts,
+        &RectInkProvider,
+        &NoImages,
+    )
 }
 
 /// Like [`paint_document`] but with a caller-chosen [`GlyphProvider`]
@@ -66,9 +87,21 @@ pub fn paint_document_with(
     fonts: &FontSource,
     glyphs: &dyn GlyphProvider,
 ) -> Surface {
+    paint_document_with_resources(root, viewport_w, viewport_h, fonts, glyphs, &NoImages)
+}
+
+/// Paints text and decoded replaced content supplied by caller-owned adapters.
+pub fn paint_document_with_resources(
+    root: &LayoutBox,
+    viewport_w: u32,
+    viewport_h: u32,
+    fonts: &FontSource,
+    glyphs: &dyn GlyphProvider,
+    images: &dyn ImageProvider,
+) -> Surface {
     let mut surface = Surface::new(viewport_w, viewport_h);
     surface.clear(CANVAS_WHITE);
-    paint_box(&mut surface, root, fonts, glyphs);
+    paint_box(&mut surface, root, fonts, glyphs, images);
     surface
 }
 
@@ -77,17 +110,23 @@ fn paint_box(
     box_: &LayoutBox,
     fonts: &FontSource,
     glyphs: &dyn GlyphProvider,
+    images: &dyn ImageProvider,
 ) {
     let text_color = resolve_text_color(&box_.style);
     paint_background(surface, box_, text_color);
     paint_borders(surface, box_, text_color);
-    paint_lines(surface, box_, text_color, fonts, glyphs);
+    if box_.replaced_size.is_some() {
+        if let Some(image) = box_.node.and_then(|node| images.image(node)) {
+            paint_image(surface, &box_.content_box, image);
+        }
+    }
+    paint_lines(surface, box_, text_color, fonts, glyphs, images);
 
     // Children come AFTER this box's own painting (painter's algorithm).
     match &box_.flow {
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for child in children {
-                paint_box(surface, child, fonts, glyphs);
+                paint_box(surface, child, fonts, glyphs, images);
             }
         },
         Flow::Inlines(_) | Flow::Empty => {},
@@ -188,8 +227,23 @@ fn paint_lines(
     text_color: [u8; 4],
     fonts: &FontSource,
     glyphs: &dyn GlyphProvider,
+    images: &dyn ImageProvider,
 ) {
     for line in &b.lines {
+        for replaced in &line.replaced {
+            if let Some(image) = images.image(replaced.node) {
+                paint_image(
+                    surface,
+                    &amazing_layout::Rect {
+                        x: replaced.x,
+                        y: replaced.y,
+                        w: replaced.width,
+                        h: replaced.height,
+                    },
+                    image,
+                );
+            }
+        }
         for w in &line.words {
             draw_fragment(
                 surface,
@@ -201,6 +255,53 @@ fn paint_lines(
                 fonts,
                 glyphs,
             );
+        }
+    }
+}
+
+/// Nearest-neighbor image scaling with clipped, source-over RGBA pixels.
+fn paint_image(surface: &mut Surface, rect: &amazing_layout::Rect, image: &amazing_media::Image) {
+    if image.width == 0 || image.height == 0 || rect.w <= 0.0 || rect.h <= 0.0 {
+        return;
+    }
+    let x0 = rect.x.round() as i64;
+    let y0 = rect.y.round() as i64;
+    let x1 = (rect.x + rect.w).round() as i64;
+    let y1 = (rect.y + rect.h).round() as i64;
+    if x1 <= x0 || y1 <= y0 {
+        return;
+    }
+    let clipped_x0 = x0.max(0).min(surface.width as i64);
+    let clipped_y0 = y0.max(0).min(surface.height as i64);
+    let clipped_x1 = x1.max(0).min(surface.width as i64);
+    let clipped_y1 = y1.max(0).min(surface.height as i64);
+    for y in clipped_y0..clipped_y1 {
+        let source_y = (((y - y0) as u64) * image.height as u64 / (y1 - y0) as u64)
+            .min(image.height.saturating_sub(1) as u64) as u32;
+        for x in clipped_x0..clipped_x1 {
+            let source_x = (((x - x0) as u64) * image.width as u64 / (x1 - x0) as u64)
+                .min(image.width.saturating_sub(1) as u64) as u32;
+            let source_index = ((source_y as usize * image.width as usize + source_x as usize) * 4)
+                .min(image.pixels.len());
+            let Some(source) = image.pixels.get(source_index..source_index + 4) else {
+                continue;
+            };
+            let source_color = [source[0], source[1], source[2], source[3]];
+            if source_color[3] == 0 {
+                continue;
+            }
+            let destination = surface
+                .get_pixel(x as u32, y as u32)
+                .unwrap_or([0, 0, 0, 0]);
+            let alpha = source_color[3] as u16;
+            let inverse = 255 - alpha;
+            let blended = [
+                ((source_color[0] as u16 * alpha + destination[0] as u16 * inverse + 127) / 255) as u8,
+                ((source_color[1] as u16 * alpha + destination[1] as u16 * inverse + 127) / 255) as u8,
+                ((source_color[2] as u16 * alpha + destination[2] as u16 * inverse + 127) / 255) as u8,
+                255,
+            ];
+            surface.set_pixel(x as u32, y as u32, blended);
         }
     }
 }
@@ -279,6 +380,55 @@ mod tests {
         assert_eq!(surf.get_pixel(3, 2), Some([0, 0, 0, 255])); // top ink row
         assert_eq!(surf.get_pixel(3, 1), Some([255, 0, 0, 255])); // red above ink
         assert_eq!(surf.get_pixel(3, 9), Some([255, 0, 0, 255])); // red below baseline
+    }
+
+    struct OneImage {
+        node: amazing_dom::NodeIdx,
+        image: amazing_media::Image,
+    }
+
+    impl ImageProvider for OneImage {
+        fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
+            (node == self.node).then_some(&self.image)
+        }
+    }
+
+    #[test]
+    fn paints_inline_replaced_content_through_the_resource_seam() {
+        let node = amazing_dom::NodeIdx(7);
+        let mut root = block(&[], 0.0, 0.0, 4.0, 2.0);
+        root.lines.push(amazing_layout::LineBox {
+            y_top: 0.0,
+            height: 1.0,
+            baseline: 1.0,
+            words: Vec::new(),
+            replaced: vec![amazing_layout::ReplacedFrag {
+                node,
+                x: 1.0,
+                y: 0.0,
+                width: 2.0,
+                height: 1.0,
+            }],
+        });
+        let images = OneImage {
+            node,
+            image: amazing_media::Image {
+                width: 2,
+                height: 1,
+                pixels: vec![255, 0, 0, 255, 0, 255, 0, 255],
+            },
+        };
+
+        let surface = paint_document_with_resources(
+            &root,
+            4,
+            2,
+            &FontSource::fallback(),
+            &RectInkProvider,
+            &images,
+        );
+        assert_eq!(surface.get_pixel(1, 0), Some([255, 0, 0, 255]));
+        assert_eq!(surface.get_pixel(2, 0), Some([0, 255, 0, 255]));
     }
 
     // ------------------------------------------------------------------

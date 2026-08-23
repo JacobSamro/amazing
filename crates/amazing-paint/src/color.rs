@@ -64,11 +64,11 @@ fn parse_hex(h: &str) -> Option<[u8; 4]> {
         3 => {
             let d: Vec<u8> = h.bytes().map(v).collect();
             Some([d[0] * 17, d[1] * 17, d[2] * 17, 255])
-        },
+        }
         4 => {
             let d: Vec<u8> = h.bytes().map(v).collect();
             Some([d[0] * 17, d[1] * 17, d[2] * 17, d[3] * 17])
-        },
+        }
         6 | 8 => {
             let b: Vec<u8> = h
                 .as_bytes()
@@ -80,7 +80,7 @@ fn parse_hex(h: &str) -> Option<[u8; 4]> {
             } else {
                 Some([b[0], b[1], b[2], b[3]])
             }
-        },
+        }
         _ => None,
     }
 }
@@ -139,7 +139,12 @@ fn parse_rgb_args(inner: &str) -> Option<[u8; 4]> {
         let joined = joined.replace('/', " / ");
         let t: Vec<&str> = joined.split_ascii_whitespace().collect();
         match t.as_slice() {
-            [r, g, b] => Some([clamp_byte(parse_channel(r)?), clamp_byte(parse_channel(g)?), clamp_byte(parse_channel(b)?), 255]),
+            [r, g, b] => Some([
+                clamp_byte(parse_channel(r)?),
+                clamp_byte(parse_channel(g)?),
+                clamp_byte(parse_channel(b)?),
+                255,
+            ]),
             [r, g, b, slash, a] if *slash == "/" => Some([
                 clamp_byte(parse_channel(r)?),
                 clamp_byte(parse_channel(g)?),
@@ -340,9 +345,15 @@ mod tests {
     #[test]
     fn rgb_legacy_comma_syntax() {
         assert_eq!(parse_css_color("rgb(255,0,0)"), Some([255, 0, 0, 255]));
-        assert_eq!(parse_css_color("rgb( 10 , 20 , 30 )"), Some([10, 20, 30, 255]));
+        assert_eq!(
+            parse_css_color("rgb( 10 , 20 , 30 )"),
+            Some([10, 20, 30, 255])
+        );
         assert_eq!(parse_css_color("rgba(1,2,3,0.5)"), Some([1, 2, 3, 128]));
-        assert_eq!(parse_css_color("RGB(0, 128, 255)"), Some([0, 128, 255, 255]));
+        assert_eq!(
+            parse_css_color("RGB(0, 128, 255)"),
+            Some([0, 128, 255, 255])
+        );
     }
 
     #[test]
@@ -357,14 +368,23 @@ mod tests {
         assert_eq!(parse_css_color("rgb(100%,0%,0%)"), Some([255, 0, 0, 255]));
         // Mixed % and number units are invalid CSS but accepted
         // permissively here: each channel parses on its own scale.
-        assert_eq!(parse_css_color("rgb(50%, 200, 0%)"), Some([128, 200, 0, 255]));
-        assert_eq!(parse_css_color("rgba(100%,100%,100%,50%)"), Some([255, 255, 255, 128]));
+        assert_eq!(
+            parse_css_color("rgb(50%, 200, 0%)"),
+            Some([128, 200, 0, 255])
+        );
+        assert_eq!(
+            parse_css_color("rgba(100%,100%,100%,50%)"),
+            Some([255, 255, 255, 128])
+        );
     }
 
     #[test]
     fn rgb_modern_space_syntax() {
         assert_eq!(parse_css_color("rgb(255 0 0)"), Some([255, 0, 0, 255]));
-        assert_eq!(parse_css_color("rgb(255 0 0 / 0.5)"), Some([255, 0, 0, 128]));
+        assert_eq!(
+            parse_css_color("rgb(255 0 0 / 0.5)"),
+            Some([255, 0, 0, 128])
+        );
         assert_eq!(parse_css_color("rgb(1 2 3/0.25)"), Some([1, 2, 3, 64]));
         assert_eq!(parse_css_color("rgb(4 5 6 /100%)"), Some([4, 5, 6, 255]));
         assert_eq!(parse_css_color("rgba(0 0 0 / 1)"), Some([0, 0, 0, 255]));
@@ -373,11 +393,23 @@ mod tests {
     #[test]
     fn rgb_rejects_malformed_arguments() {
         for bad in [
-            "rgb()", "rgb(1,2)", "rgb(1,2,3,4,5)", "rgb(1;2;3)", "rgb(1 2)",
-            "rgb(1 2 3 4)", "rgb(1,2,3/", "rgb(nan,0,0)", "rgb(inf,0,0)",
-            "rgb(", "rgb(1,2,3))extra", "hsl(1,2,3)", "",
+            "rgb()",
+            "rgb(1,2)",
+            "rgb(1,2,3,4,5)",
+            "rgb(1;2;3)",
+            "rgb(1 2)",
+            "rgb(1 2 3 4)",
+            "rgb(1,2,3/",
+            "rgb(nan,0,0)",
+            "rgb(inf,0,0)",
+            "rgb(",
+            "rgb(1,2,3))extra",
+            "hsl(1,2,3)",
+            "",
             // Unparseable alpha rejects the whole color, like channels do.
-            "rgba(1,2,3,banana)", "rgba(1,2,3,)", "rgb(1 2 3 / nan)",
+            "rgba(1,2,3,banana)",
+            "rgba(1,2,3,)",
+            "rgb(1 2 3 / nan)",
         ] {
             assert_eq!(parse_css_color(bad), None, "expected None for {bad}");
         }
@@ -396,9 +428,23 @@ mod tests {
         // Multibyte characters must not break byte-offset slicing; odd
         // punctuation exercises every early-return path.
         let hostile = [
-            "é", "🦀", "rgb(🦀)", "(())", "(((,", ")))", "#é", "%", "/",
-            "rgb(1,2,3", "\u{0}", "rgb(\u{0}1,2,3)", "rgba(1,2,3,🦀)",
-            "-rgb(1,2,3)", "rgb--(1,2,3)", "rgb(1,,3)", "rgb((1,2,3)",
+            "é",
+            "🦀",
+            "rgb(🦀)",
+            "(())",
+            "(((,",
+            ")))",
+            "#é",
+            "%",
+            "/",
+            "rgb(1,2,3",
+            "\u{0}",
+            "rgb(\u{0}1,2,3)",
+            "rgba(1,2,3,🦀)",
+            "-rgb(1,2,3)",
+            "rgb--(1,2,3)",
+            "rgb(1,,3)",
+            "rgb((1,2,3)",
         ];
         for h in hostile {
             let _ = parse_css_color(h); // must only return None, never panic

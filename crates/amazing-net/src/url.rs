@@ -248,7 +248,7 @@ fn parse_absolute(scheme: &str, after: &str, fragment: Option<String>) -> Result
 
 /// Splits `//authority/rest` at the first `/` or `?` (fragment already gone).
 fn split_authority_end(rest: &str) -> (&str, &str) {
-    match rest.find(|c| c == '/' || c == '?') {
+    match rest.find(['/', '?']) {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, ""),
     }

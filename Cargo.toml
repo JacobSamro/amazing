@@ -7,8 +7,11 @@ members = [
     "crates/amazing-dom",
     "crates/amazing-layout",
     "crates/amazing-js",
+    "crates/amazing-media",
     "crates/amazing-net",
     "crates/amazing-paint",
+    "crates/amazing-webrtc",
+    "crates/amazing-webrtc-crypto",
     "crates/amazing",
 ]
 exclude = ["crates/amazing-shell-gpui"]

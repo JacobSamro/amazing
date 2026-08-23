@@ -1,0 +1,9 @@
+[package]
+name = "amazing-webrtc"
+description = "Phase 9 std-only WebRTC transport foundations"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

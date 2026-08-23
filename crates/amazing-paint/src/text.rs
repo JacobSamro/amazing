@@ -38,8 +38,8 @@
 //!   match true advances exactly (bars are heuristic; advances are not) —
 //!   use [`OutlineGlyphProvider`] for real letterforms.
 
-use amazing_layout::font::{FontSource, GlyphOutline, OutlinePoint};
 use crate::surface::Surface;
+use amazing_layout::font::{FontSource, GlyphOutline, OutlinePoint};
 
 /// One rasterized glyph: RGBA8 pixels, row-major, top-left origin, plus
 /// metrics relative to the pen position and the baseline.
@@ -369,23 +369,26 @@ fn blit_glyph(surface: &mut Surface, gx: i64, gy: i64, gb: &GlyphBitmap, color: 
             if cov == 0 {
                 continue;
             }
-            let dst = surface.get_pixel(dx as u32, dy as u32).unwrap_or([0, 0, 0, 255]);
+            let dst = surface
+                .get_pixel(dx as u32, dy as u32)
+                .unwrap_or([0, 0, 0, 255]);
             if cov >= 255 {
-                surface.set_pixel(dx as u32, dy as u32, [
-                    color[0], color[1], color[2], 255,
-                ]);
+                surface.set_pixel(dx as u32, dy as u32, [color[0], color[1], color[2], 255]);
                 continue;
             }
             let inv = 255 - cov;
-            let blend = |sc: u8, dc: u8| -> u8 {
-                ((sc as u32 * cov + dc as u32 * inv + 127) / 255) as u8
-            };
-            surface.set_pixel(dx as u32, dy as u32, [
-                blend(color[0], dst[0]),
-                blend(color[1], dst[1]),
-                blend(color[2], dst[2]),
-                255,
-            ]);
+            let blend =
+                |sc: u8, dc: u8| -> u8 { ((sc as u32 * cov + dc as u32 * inv + 127) / 255) as u8 };
+            surface.set_pixel(
+                dx as u32,
+                dy as u32,
+                [
+                    blend(color[0], dst[0]),
+                    blend(color[1], dst[1]),
+                    blend(color[2], dst[2]),
+                    255,
+                ],
+            );
         }
     }
 }
@@ -413,7 +416,16 @@ mod tests {
         let mut s = canvas(40, 20);
         let fonts = FontSource::fallback();
         // size 10 -> ink height = round(7.0) = 7 -> rows 8..=14 for baseline 15.
-        draw_fragment(&mut s, 2.0, 15.0, "W", 10.0, BLACK, &fonts, &RectInkProvider);
+        draw_fragment(
+            &mut s,
+            2.0,
+            15.0,
+            "W",
+            10.0,
+            BLACK,
+            &fonts,
+            &RectInkProvider,
+        );
         assert_eq!(s.get_pixel(3, 14), Some(BLACK)); // bottom ink row (on baseline)
         assert_eq!(s.get_pixel(3, 9), Some(BLACK)); // near the top of the bar
         assert_eq!(s.get_pixel(3, 8), Some(BLACK)); // top ink row (baseline-7)
@@ -425,7 +437,16 @@ mod tests {
     fn ink_starts_at_pen_x_and_stops_at_advance() {
         let mut s = canvas(40, 20);
         let fonts = FontSource::fallback();
-        draw_fragment(&mut s, 5.0, 10.0, "W", 10.0, BLACK, &fonts, &RectInkProvider);
+        draw_fragment(
+            &mut s,
+            5.0,
+            10.0,
+            "W",
+            10.0,
+            BLACK,
+            &fonts,
+            &RectInkProvider,
+        );
         // Advance of 'W' at 10px under the fallback = 0.55 * 10 = 5.5px;
         // the bar is round(5.5) = 6 wide starting at x=5 -> cols 5..=10.
         assert_eq!(s.get_pixel(4, 8), Some(WHITE));
@@ -439,7 +460,16 @@ mod tests {
     fn multiple_characters_accumulate_advances() {
         let mut s = canvas(60, 20);
         let fonts = FontSource::fallback();
-        draw_fragment(&mut s, 2.0, 12.0, "AB", 10.0, BLACK, &fonts, &RectInkProvider);
+        draw_fragment(
+            &mut s,
+            2.0,
+            12.0,
+            "AB",
+            10.0,
+            BLACK,
+            &fonts,
+            &RectInkProvider,
+        );
         // First bar covers cols 2..=7 (advance 5.5); second pen starts at
         // 7.5 -> rounds to col 8, second bar covers cols 8..=13.
         assert_eq!(s.get_pixel(2, 6), Some(BLACK));
@@ -453,7 +483,16 @@ mod tests {
     fn whitespace_produces_no_ink_but_consumes_advance() {
         let mut s = canvas(60, 20);
         let fonts = FontSource::fallback();
-        draw_fragment(&mut s, 2.0, 12.0, "A B", 10.0, BLACK, &fonts, &RectInkProvider);
+        draw_fragment(
+            &mut s,
+            2.0,
+            12.0,
+            "A B",
+            10.0,
+            BLACK,
+            &fonts,
+            &RectInkProvider,
+        );
         // 'A' bar at cols 2..=7; space advances silently; 'B' starts at
         // pen x = 2 + 5.5 + 3.0 = 10.5 -> bar around cols 10..=16.
         assert_eq!(s.get_pixel(8, 6), Some(WHITE)); // inside the gap: no ink
@@ -467,9 +506,36 @@ mod tests {
         let fonts = FontSource::fallback();
         // Baseline below the bottom edge and far right pen: everything
         // clips away; must not panic.
-        draw_fragment(&mut s, 6.0, 30.0, "WWWWWWWWW", 10.0, BLACK, &fonts, &RectInkProvider);
-        draw_fragment(&mut s, -50.0, 3.0, "WWWWWW", 10.0, BLACK, &fonts, &RectInkProvider);
-        draw_fragment(&mut s, 0.0, f32::NAN, "W", 10.0, BLACK, &fonts, &RectInkProvider);
+        draw_fragment(
+            &mut s,
+            6.0,
+            30.0,
+            "WWWWWWWWW",
+            10.0,
+            BLACK,
+            &fonts,
+            &RectInkProvider,
+        );
+        draw_fragment(
+            &mut s,
+            -50.0,
+            3.0,
+            "WWWWWW",
+            10.0,
+            BLACK,
+            &fonts,
+            &RectInkProvider,
+        );
+        draw_fragment(
+            &mut s,
+            0.0,
+            f32::NAN,
+            "W",
+            10.0,
+            BLACK,
+            &fonts,
+            &RectInkProvider,
+        );
         assert_eq!(s.get_pixel(0, 0), Some(WHITE));
     }
 
@@ -504,7 +570,16 @@ mod tests {
         let bg = parse_css_color("steelblue").unwrap(); // [70,130,180,255]
         s.fill_rect(0.0, 0.0, 10.0, 12.0, bg);
         let fonts = FontSource::fallback();
-        draw_fragment(&mut s, 1.0, 10.0, "W", 10.0, BLACK, &fonts, &RectInkProvider);
+        draw_fragment(
+            &mut s,
+            1.0,
+            10.0,
+            "W",
+            10.0,
+            BLACK,
+            &fonts,
+            &RectInkProvider,
+        );
         assert_eq!(s.get_pixel(2, 9), Some(BLACK)); // fully covered pixel
         assert_eq!(s.get_pixel(9, 5), Some(bg)); // outside the bar
     }
@@ -515,7 +590,16 @@ mod tests {
         let fonts = FontSource::fallback();
         draw_fragment(&mut s, 1.0, 4.0, "W", 0.0, BLACK, &fonts, &RectInkProvider);
         draw_fragment(&mut s, 1.0, 4.0, "W", -3.0, BLACK, &fonts, &RectInkProvider);
-        draw_fragment(&mut s, 1.0, 4.0, "W", f32::NAN, BLACK, &fonts, &RectInkProvider);
+        draw_fragment(
+            &mut s,
+            1.0,
+            4.0,
+            "W",
+            f32::NAN,
+            BLACK,
+            &fonts,
+            &RectInkProvider,
+        );
         assert_eq!(s.get_pixel(1, 3), Some(WHITE));
     }
 
@@ -542,7 +626,11 @@ mod tests {
             contours: vec![Contour {
                 points: points
                     .iter()
-                    .map(|&(x, y)| OutlinePoint { x, y, on_curve: true })
+                    .map(|&(x, y)| OutlinePoint {
+                        x,
+                        y,
+                        on_curve: true,
+                    })
                     .collect(),
             }],
         }
@@ -607,12 +695,25 @@ mod tests {
         // NONZERO winding the hole's winding cancels the outer's.
         let outer: Vec<OutlinePoint> = [(0.0, 0.0), (0.0, 800.0), (800.0, 800.0), (800.0, 0.0)]
             .iter()
-            .map(|&(x, y)| OutlinePoint { x, y, on_curve: true })
+            .map(|&(x, y)| OutlinePoint {
+                x,
+                y,
+                on_curve: true,
+            })
             .collect();
-        let hole: Vec<OutlinePoint> = [(200.0, 200.0), (600.0, 200.0), (600.0, 600.0), (200.0, 600.0)]
-            .iter()
-            .map(|&(x, y)| OutlinePoint { x, y, on_curve: true })
-            .collect();
+        let hole: Vec<OutlinePoint> = [
+            (200.0, 200.0),
+            (600.0, 200.0),
+            (600.0, 600.0),
+            (200.0, 600.0),
+        ]
+        .iter()
+        .map(|&(x, y)| OutlinePoint {
+            x,
+            y,
+            on_curve: true,
+        })
+        .collect();
         let o = GlyphOutline {
             contours: vec![Contour { points: outer }, Contour { points: hole }],
         };
@@ -631,7 +732,9 @@ mod tests {
 
     #[test]
     fn empty_and_degenerate_outlines_are_none() {
-        let none = GlyphOutline { contours: Vec::new() };
+        let none = GlyphOutline {
+            contours: Vec::new(),
+        };
         assert!(rasterize_outline(&none, 10.0, 1000, 5.0).is_none());
         // Single point: no area.
         let dot = poly(&[(100.0, 100.0)]);
@@ -656,9 +759,21 @@ mod tests {
         let o = GlyphOutline {
             contours: vec![Contour {
                 points: vec![
-                    OutlinePoint { x: 0.0, y: 0.0, on_curve: true },
-                    OutlinePoint { x: 500.0, y: 1000.0, on_curve: false },
-                    OutlinePoint { x: 1000.0, y: 0.0, on_curve: true },
+                    OutlinePoint {
+                        x: 0.0,
+                        y: 0.0,
+                        on_curve: true,
+                    },
+                    OutlinePoint {
+                        x: 500.0,
+                        y: 1000.0,
+                        on_curve: false,
+                    },
+                    OutlinePoint {
+                        x: 1000.0,
+                        y: 0.0,
+                        on_curve: true,
+                    },
                 ],
             }],
         };
@@ -668,8 +783,10 @@ mod tests {
         // Baseline row is fully covered between the anchors...
         assert_eq!(alpha_of(&gb, 5, 4), 255);
         // ...and the flanks show partial coverage somewhere (curved AA).
-        let any_partial = (0..gb.width)
-            .any(|x| { let a = alpha_of(&gb, x, 1); a > 0 && a < 255 });
+        let any_partial = (0..gb.width).any(|x| {
+            let a = alpha_of(&gb, x, 1);
+            a > 0 && a < 255
+        });
         assert!(any_partial, "expected anti-aliased flank pixels");
     }
 
@@ -749,10 +866,10 @@ mod tests {
         r[8..10].copy_from_slice(&be16(700)); // yMax
         r.extend_from_slice(&be16(3)); // endPtsOfContours[0]
         r.extend_from_slice(&be16(0)); // instructionLength
-        // Deltas from (0,0): (0,0)(+500,0)(0,+700)(-500,0); zero deltas
-        // ride the SAME bits, +/-500 use 16-bit signed words. Every byte
-        // carries ON_CURVE (0x01) — without it all four points decode as
-        // off-curve controls and the outline becomes a synthesized blob.
+                                       // Deltas from (0,0): (0,0)(+500,0)(0,+700)(-500,0); zero deltas
+                                       // ride the SAME bits, +/-500 use 16-bit signed words. Every byte
+                                       // carries ON_CURVE (0x01) — without it all four points decode as
+                                       // off-curve controls and the outline becomes a synthesized blob.
         r.extend_from_slice(&[0x31, 0x21, 0x11, 0x21]); // flags
         r.extend_from_slice(&be16(500)); // x stream: +500 ...
         r.extend_from_slice(&be16(0xFE0C)); // ... then -500 (two's complement)

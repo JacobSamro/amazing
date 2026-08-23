@@ -5,12 +5,15 @@
 //! plus its demo subcommand (`parse` in Phase 1, `style` in Phase 2).
 
 use std::cell::RefCell;
-use std::io::Read;
-use std::process::ExitCode;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::process::{Child, Command, ExitCode, ExitStatus};
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use amazing_js::DomHost;
 
+mod gpu;
 mod gui;
 
 const PIPELINE: &[(&str, &str)] = &[
@@ -47,19 +50,135 @@ const PIPELINE: &[(&str, &str)] = &[
         "amazing-gui",
         "Phase 8: native Windows shell — `gui` subcommand",
     ),
+    (
+        "amazing-media",
+        "Phase 9: image + PCM WAV media — `render` / `audio-info` / `play-audio`",
+    ),
+    (
+        "amazing-webrtc",
+        "Phase 9: ICE + SDP + DTLS-SRTP nominated UDP + two-process gate",
+    ),
+    (
+        "amazing-gpu",
+        "Phase 9: D3D11 hardware capability — `gpu-info` subcommand",
+    ),
 ];
 
 pub(crate) struct BrowserDomHost {
     pub(crate) dom: amazing_dom::Dom,
 }
 
+struct PageImage {
+    node: amazing_dom::NodeIdx,
+    image: amazing_media::Image,
+    used_size: amazing_layout::IntrinsicSize,
+}
+
+#[derive(Default)]
+pub(crate) struct PageMedia {
+    images: Vec<PageImage>,
+    pub(crate) warnings: Vec<String>,
+}
+
+impl amazing_layout::ReplacedElementProvider for PageMedia {
+    fn intrinsic_size(&self, node: amazing_dom::NodeIdx) -> Option<amazing_layout::IntrinsicSize> {
+        self.images
+            .iter()
+            .find(|entry| entry.node == node)
+            .map(|entry| entry.used_size)
+    }
+}
+
+impl amazing_paint::ImageProvider for PageMedia {
+    fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
+        self.images
+            .iter()
+            .find(|entry| entry.node == node)
+            .map(|entry| &entry.image)
+    }
+}
+
+pub(crate) fn load_page_media(dom: &amazing_dom::Dom, page: &str) -> PageMedia {
+    fn dimension(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, name: &str) -> Option<f32> {
+        dom.attrs_of(node)?
+            .iter()
+            .find(|(attribute, _)| attribute == name)?
+            .1
+            .trim()
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value > 0)
+            .map(|value| value as f32)
+    }
+
+    fn walk(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, page: &str, media: &mut PageMedia) {
+        if dom.name(node) == Some("img") {
+            let source = dom
+                .attrs_of(node)
+                .and_then(|attrs| attrs.iter().find(|(name, _)| name == "src"))
+                .map(|(_, value)| value.as_str())
+                .filter(|value| !value.trim().is_empty());
+            if let Some(source) = source {
+                let resolved = resolve_script_url(page, source);
+                match amazing_net::fetch(&resolved, &amazing_net::FetchOptions::default())
+                    .map_err(|error| error.to_string())
+                    .and_then(|response| {
+                        amazing_media::decode_image(&response.body)
+                            .map_err(|error| error.to_string())
+                    }) {
+                    Ok(image) => {
+                        let intrinsic_width = image.width as f32;
+                        let intrinsic_height = image.height as f32;
+                        let width_attr = dimension(dom, node, "width");
+                        let height_attr = dimension(dom, node, "height");
+                        let used_size = match (width_attr, height_attr) {
+                            (Some(width), Some(height)) => {
+                                amazing_layout::IntrinsicSize { width, height }
+                            }
+                            (Some(width), None) => amazing_layout::IntrinsicSize {
+                                width,
+                                height: intrinsic_height * width / intrinsic_width,
+                            },
+                            (None, Some(height)) => amazing_layout::IntrinsicSize {
+                                width: intrinsic_width * height / intrinsic_height,
+                                height,
+                            },
+                            (None, None) => amazing_layout::IntrinsicSize {
+                                width: intrinsic_width,
+                                height: intrinsic_height,
+                            },
+                        };
+                        media.images.push(PageImage {
+                            node,
+                            image,
+                            used_size,
+                        });
+                    }
+                    Err(error) => media
+                        .warnings
+                        .push(format!("image {source:?} ({resolved}): {error}")),
+                }
+            }
+        }
+        for child in dom.children(node) {
+            walk(dom, child, page, media);
+        }
+    }
+
+    let mut media = PageMedia::default();
+    walk(dom, amazing_dom::NodeIdx(0), page, &mut media);
+    media
+}
+
 impl BrowserDomHost {
     fn serialize_node(&self, node: amazing_dom::NodeIdx, out: &mut String) {
         match &self.dom.get(node).kind {
             amazing_dom::NodeKind::Document => {
-                for child in self.dom.children(node) { self.serialize_node(child, out); }
+                for child in self.dom.children(node) {
+                    self.serialize_node(child, out);
+                }
             }
-            amazing_dom::NodeKind::Element { name, attrs } => {
+            amazing_dom::NodeKind::Element { name, attrs, .. } => {
                 out.push('<');
                 out.push_str(name);
                 for (key, value) in attrs {
@@ -70,7 +189,9 @@ impl BrowserDomHost {
                     out.push('"');
                 }
                 out.push('>');
-                for child in self.dom.children(node) { self.serialize_node(child, out); }
+                for child in self.dom.children(node) {
+                    self.serialize_node(child, out);
+                }
                 out.push_str("</");
                 out.push_str(name);
                 out.push('>');
@@ -81,6 +202,13 @@ impl BrowserDomHost {
                 out.push_str(data);
                 out.push_str("-->");
             }
+            amazing_dom::NodeKind::ProcessingInstruction { target, data } => {
+                out.push_str("<?");
+                out.push_str(target);
+                out.push(' ');
+                out.push_str(data);
+                out.push_str("?>");
+            }
         }
     }
 
@@ -89,9 +217,14 @@ impl BrowserDomHost {
         node: amazing_dom::NodeIdx,
         name: &str,
     ) -> Option<amazing_dom::NodeIdx> {
-        if dom.name(node) == Some(name) { return Some(node); }
+        if dom.namespace(node) == Some(amazing_dom::Namespace::Html) && dom.name(node) == Some(name)
+        {
+            return Some(node);
+        }
         for child in dom.children(node) {
-            if let Some(found) = Self::find_named_in(dom, child, name) { return Some(found); }
+            if let Some(found) = Self::find_named_in(dom, child, name) {
+                return Some(found);
+            }
         }
         None
     }
@@ -104,15 +237,25 @@ impl BrowserDomHost {
     ) {
         let kind = source.get(source_node).kind.clone();
         let created = match kind {
-            amazing_dom::NodeKind::Element { name, attrs } => {
-                let node = self.dom.create_element(parent, &name);
-                self.dom.set_attrs(node, attrs);
-                node
-            }
-            amazing_dom::NodeKind::Text { data } => self.dom.create_text(parent, &data),
-            amazing_dom::NodeKind::Comment { data } => self.dom.append_child(
+            amazing_dom::NodeKind::Element {
+                name,
+                attrs,
+                namespace,
+            } => self.dom.append_child(
                 parent,
-                amazing_dom::NodeKind::Comment { data },
+                amazing_dom::NodeKind::Element {
+                    name,
+                    attrs,
+                    namespace,
+                },
+            ),
+            amazing_dom::NodeKind::Text { data } => self.dom.create_text(parent, &data),
+            amazing_dom::NodeKind::Comment { data } => self
+                .dom
+                .append_child(parent, amazing_dom::NodeKind::Comment { data }),
+            amazing_dom::NodeKind::ProcessingInstruction { target, data } => self.dom.append_child(
+                parent,
+                amazing_dom::NodeKind::ProcessingInstruction { target, data },
             ),
             amazing_dom::NodeKind::Document => return,
         };
@@ -144,10 +287,18 @@ impl BrowserDomHost {
         let mut quote = None;
         let mut escaped = false;
         for (index, ch) in selector.char_indices() {
-            if escaped { escaped = false; continue; }
-            if ch == '\\' && quote.is_some() { escaped = true; continue; }
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            if ch == '\\' && quote.is_some() {
+                escaped = true;
+                continue;
+            }
             if let Some(active) = quote {
-                if ch == active { quote = None; }
+                if ch == active {
+                    quote = None;
+                }
                 continue;
             }
             match ch {
@@ -164,8 +315,13 @@ impl BrowserDomHost {
             }
         }
         parts.push(selector[start..].trim());
-        if parts.iter().any(|part| part.is_empty()) { return None; }
-        parts.into_iter().map(amazing_css::selectors::parse_selector).collect()
+        if parts.iter().any(|part| part.is_empty()) {
+            return None;
+        }
+        parts
+            .into_iter()
+            .map(amazing_css::selectors::parse_selector)
+            .collect()
     }
 
     fn find_any(
@@ -173,17 +329,24 @@ impl BrowserDomHost {
         node: amazing_dom::NodeIdx,
         selectors: &[amazing_css::selectors::Selector],
     ) -> Option<u32> {
-        if selectors.iter().any(|selector| amazing_css::selectors::matches(&self.dom, node, selector)) {
+        if selectors
+            .iter()
+            .any(|selector| amazing_css::selectors::matches(&self.dom, node, selector))
+        {
             return Some(node.0);
         }
         for child in self.dom.children(node) {
-            if let Some(found) = self.find_any(child, selectors) { return Some(found); }
+            if let Some(found) = self.find_any(child, selectors) {
+                return Some(found);
+            }
         }
         None
     }
 
     fn find_all(&self, node: amazing_dom::NodeIdx, selector: &str, out: &mut Vec<u32>) {
-        let Some(selectors) = Self::parse_selector_list(selector) else { return };
+        let Some(selectors) = Self::parse_selector_list(selector) else {
+            return;
+        };
         self.find_all_parsed(node, &selectors, out);
     }
 
@@ -193,7 +356,10 @@ impl BrowserDomHost {
         selectors: &[amazing_css::selectors::Selector],
         out: &mut Vec<u32>,
     ) {
-        if selectors.iter().any(|selector| amazing_css::selectors::matches(&self.dom, node, selector)) {
+        if selectors
+            .iter()
+            .any(|selector| amazing_css::selectors::matches(&self.dom, node, selector))
+        {
             out.push(node.0);
         }
         for child in self.dom.children(node) {
@@ -225,7 +391,9 @@ impl BrowserDomHost {
             .filter_map(|declaration| {
                 let (name, value) = declaration.split_once(':')?;
                 let name = name.trim().to_ascii_lowercase();
-                if name.is_empty() { return None }
+                if name.is_empty() {
+                    return None;
+                }
                 Some((name, value.trim().to_string()))
             })
             .collect()
@@ -258,7 +426,9 @@ impl amazing_js::DomHost for BrowserDomHost {
     }
 
     fn matches_selector(&self, node: u32, selector: &str) -> bool {
-        let Some(selectors) = Self::parse_selector_list(selector) else { return false };
+        let Some(selectors) = Self::parse_selector_list(selector) else {
+            return false;
+        };
         selectors.iter().any(|selector| {
             amazing_css::selectors::matches(&self.dom, amazing_dom::NodeIdx(node), selector)
         })
@@ -268,12 +438,17 @@ impl amazing_js::DomHost for BrowserDomHost {
         if node as usize >= self.dom.node_count() {
             return None;
         }
-        self.dom.get(amazing_dom::NodeIdx(node)).parent.map(|parent| parent.0)
+        self.dom
+            .get(amazing_dom::NodeIdx(node))
+            .parent
+            .map(|parent| parent.0)
     }
 
     fn get_text_content(&self, node: u32) -> Option<String> {
         let idx = amazing_dom::NodeIdx(node);
-        if idx.0 as usize >= self.dom.node_count() { return None }
+        if idx.0 as usize >= self.dom.node_count() {
+            return None;
+        }
         let mut text = String::new();
         self.text_content(idx, &mut text);
         Some(text)
@@ -285,7 +460,9 @@ impl amazing_js::DomHost for BrowserDomHost {
             return Err("textContent requires an element".into());
         }
         let children: Vec<_> = self.dom.children(idx).collect();
-        for child in children { self.dom.detach(child); }
+        for child in children {
+            self.dom.detach(child);
+        }
         self.dom.create_text(idx, text);
         Ok(())
     }
@@ -310,11 +487,7 @@ impl amazing_js::DomHost for BrowserDomHost {
         Ok(())
     }
 
-    fn fetch(
-        &mut self,
-        base_url: &str,
-        input: &str,
-    ) -> Result<amazing_js::HostResponse, String> {
+    fn fetch(&mut self, base_url: &str, input: &str) -> Result<amazing_js::HostResponse, String> {
         let target = if base_url.is_empty() {
             input.to_owned()
         } else {
@@ -338,7 +511,9 @@ impl amazing_js::DomHost for BrowserDomHost {
     }
 
     fn get_inner_html(&self, node: u32) -> Option<String> {
-        if node as usize >= self.dom.node_count() || self.dom.name(amazing_dom::NodeIdx(node)).is_none() {
+        if node as usize >= self.dom.node_count()
+            || self.dom.name(amazing_dom::NodeIdx(node)).is_none()
+        {
             return None;
         }
         let mut output = String::new();
@@ -357,7 +532,9 @@ impl amazing_js::DomHost for BrowserDomHost {
         let fragment_root = Self::find_named_in(&parsed, amazing_dom::NodeIdx(0), "body")
             .unwrap_or(amazing_dom::NodeIdx(0));
         let children: Vec<_> = self.dom.children(target).collect();
-        for child in children { self.dom.detach(child); }
+        for child in children {
+            self.dom.detach(child);
+        }
         let source_children: Vec<_> = parsed.children(fragment_root).collect();
         for child in source_children {
             self.clone_from(&parsed, child, target);
@@ -366,15 +543,28 @@ impl amazing_js::DomHost for BrowserDomHost {
     }
 
     fn get_attribute(&self, node: u32, name: &str) -> Option<Option<String>> {
-        if node as usize >= self.dom.node_count() { return None }
+        if node as usize >= self.dom.node_count() {
+            return None;
+        }
         let attrs = self.dom.attrs_of(amazing_dom::NodeIdx(node))?;
-        Some(attrs.iter().find(|(key, _)| key == name).map(|(_, value)| value.clone()))
+        Some(
+            attrs
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.clone()),
+        )
     }
 
     fn set_attribute(&mut self, node: u32, name: &str, value: &str) -> Result<(), String> {
         let idx = amazing_dom::NodeIdx(node);
-        if node as usize >= self.dom.node_count() { return Err("unknown DOM node".into()) }
-        let mut attrs = self.dom.attrs_of(idx).ok_or_else(|| "attribute requires an element".to_string())?.to_vec();
+        if node as usize >= self.dom.node_count() {
+            return Err("unknown DOM node".into());
+        }
+        let mut attrs = self
+            .dom
+            .attrs_of(idx)
+            .ok_or_else(|| "attribute requires an element".to_string())?
+            .to_vec();
         if let Some((_, current)) = attrs.iter_mut().find(|(key, _)| key == name) {
             *current = value.to_string();
         } else {
@@ -386,21 +576,37 @@ impl amazing_js::DomHost for BrowserDomHost {
 
     fn remove_attribute(&mut self, node: u32, name: &str) -> Result<(), String> {
         let idx = amazing_dom::NodeIdx(node);
-        if node as usize >= self.dom.node_count() { return Err("unknown DOM node".into()) }
-        let mut attrs = self.dom.attrs_of(idx).ok_or_else(|| "attribute requires an element".to_string())?.to_vec();
+        if node as usize >= self.dom.node_count() {
+            return Err("unknown DOM node".into());
+        }
+        let mut attrs = self
+            .dom
+            .attrs_of(idx)
+            .ok_or_else(|| "attribute requires an element".to_string())?
+            .to_vec();
         attrs.retain(|(key, _)| key != name);
         self.dom.set_attrs(idx, attrs);
         Ok(())
     }
 
     fn create_element(&mut self, name: &str) -> Result<u32, String> {
-        Ok(self.dom.alloc_unattached(amazing_dom::NodeKind::Element {
-            name: name.to_ascii_lowercase(), attrs: Vec::new(),
-        }).0)
+        Ok(self
+            .dom
+            .alloc_unattached(amazing_dom::NodeKind::Element {
+                name: name.to_ascii_lowercase(),
+                attrs: Vec::new(),
+                namespace: amazing_dom::Namespace::Html,
+            })
+            .0)
     }
 
     fn create_text_node(&mut self, text: &str) -> Result<u32, String> {
-        Ok(self.dom.alloc_unattached(amazing_dom::NodeKind::Text { data: text.to_owned() }).0)
+        Ok(self
+            .dom
+            .alloc_unattached(amazing_dom::NodeKind::Text {
+                data: text.to_owned(),
+            })
+            .0)
     }
 
     fn append_child(&mut self, parent: u32, child: u32) -> Result<(), String> {
@@ -409,21 +615,31 @@ impl amazing_js::DomHost for BrowserDomHost {
         if parent.0 as usize >= self.dom.node_count() || child.0 as usize >= self.dom.node_count() {
             return Err("unknown DOM node".into());
         }
-        if self.dom.name(parent).is_none() { return Err("append target is not an element".into()) }
+        if self.dom.name(parent).is_none() {
+            return Err("append target is not an element".into());
+        }
         let mut ancestor = Some(parent);
         while let Some(current) = ancestor {
-            if current == child { return Err("cannot append an ancestor into its descendant".into()) }
+            if current == child {
+                return Err("cannot append an ancestor into its descendant".into());
+            }
             ancestor = self.dom.get(current).parent;
         }
-        if self.dom.get(child).parent.is_some() { self.dom.detach(child); }
+        if self.dom.get(child).parent.is_some() {
+            self.dom.detach(child);
+        }
         self.dom.attach_last(parent, child);
         Ok(())
     }
 
     fn append_text(&mut self, parent: u32, text: &str) -> Result<(), String> {
         let parent = amazing_dom::NodeIdx(parent);
-        if parent.0 as usize >= self.dom.node_count() { return Err("unknown DOM node".into()) }
-        if self.dom.name(parent).is_none() { return Err("append target is not an element".into()) }
+        if parent.0 as usize >= self.dom.node_count() {
+            return Err("unknown DOM node".into());
+        }
+        if self.dom.name(parent).is_none() {
+            return Err("append target is not an element".into());
+        }
         self.dom.create_text(parent, text);
         Ok(())
     }
@@ -441,7 +657,9 @@ impl amazing_js::DomHost for BrowserDomHost {
     }
 
     fn get_style(&self, node: u32, property: &str) -> Option<String> {
-        if node as usize >= self.dom.node_count() || self.dom.name(amazing_dom::NodeIdx(node)).is_none() {
+        if node as usize >= self.dom.node_count()
+            || self.dom.name(amazing_dom::NodeIdx(node)).is_none()
+        {
             return None;
         }
         let property = BrowserDomHost::css_property_name(property).to_ascii_lowercase();
@@ -480,6 +698,10 @@ impl amazing_js::DomHost for BrowserDomHost {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
+    #[cfg(windows)]
+    if args.len() == 1 {
+        return gui::run(None);
+    }
     match args.get(1).map(String::as_str) {
         Some("version") | None => {
             println!("amazing v{}", env!("CARGO_PKG_VERSION"));
@@ -491,19 +713,578 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("parse") => cmd_parse(args.get(2).map(String::as_str)),
+        Some("parse-fragment") => match args.get(2) {
+            Some(context) => cmd_parse_fragment(context, args.get(3).map(String::as_str)),
+            None => {
+                eprintln!("usage: amazing parse-fragment <context> [file]");
+                ExitCode::FAILURE
+            }
+        },
         Some("style") => cmd_style(&args[2..]),
         Some("layout") => cmd_layout(&args[2..]),
         Some("render") => cmd_render(&args[2..]),
+        Some("audio-info") => cmd_audio_info(&args[2..]),
+        Some("play-audio") => cmd_play_audio(&args[2..]),
+        Some("webrtc-loopback") => cmd_webrtc_loopback(),
+        Some("secure-media-loopback") => cmd_secure_media_loopback(),
+        Some("secure-media-processes") => cmd_secure_media_processes(),
+        Some("__secure-media-peer") => cmd_secure_media_peer(args.get(2).map(String::as_str)),
+        Some("gpu-info") => cmd_gpu_info(),
+        Some("gpu-present-smoke") => cmd_gpu_present_smoke(),
+        Some("sdp-roundtrip") => cmd_sdp_roundtrip(&args[2..]),
         Some("fetch") => cmd_fetch(&args[2..]),
+        Some("fetch-parse") => cmd_fetch_parse(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd_domrun(&args[2..]),
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
+            eprintln!(
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+            );
             ExitCode::FAILURE
         }
     }
+}
+
+/// Phase 9.9 artifact: vetted DTLS 1.2 key agreement and SRTP/SRTCP proof.
+fn cmd_secure_media_loopback() -> ExitCode {
+    match amazing_webrtc_crypto::run_secure_loopback() {
+        Ok(report) => {
+            println!(
+                "ICE state={} credentials={}; UDP transport={} -> {}; SDP identity={} roles={}/{}; {} {}; SRTP profile={} keying={} bytes; fingerprints={}; SRTP payload={} bytes protected={} bytes; SRTCP packets={} protected={} bytes; SRTP tamper={} replay={}; SRTCP tamper={} replay={}; secure loopback ok",
+                report.ice_state,
+                if report.ice_credentials_bound {
+                    "SDP"
+                } else {
+                    "local"
+                },
+                report.udp_client_address,
+                report.udp_server_address,
+                if report.sdp_identity_verified {
+                    "ok"
+                } else {
+                    "failed"
+                },
+                report.client_setup,
+                report.server_setup,
+                report.dtls_version,
+                report.cipher_suite,
+                report.srtp_profile,
+                report.exported_keying_material_bytes,
+                if report.fingerprints_verified {
+                    "ok"
+                } else {
+                    "failed"
+                },
+                report.rtp_payload_bytes,
+                report.protected_rtp_bytes,
+                report.rtcp_packet_count,
+                report.protected_rtcp_bytes,
+                if report.srtp_tamper_rejected {
+                    "rejected"
+                } else {
+                    "accepted"
+                },
+                if report.srtp_replay_rejected {
+                    "rejected"
+                } else {
+                    "accepted"
+                },
+                if report.srtcp_tamper_rejected {
+                    "rejected"
+                } else {
+                    "accepted"
+                },
+                if report.srtcp_replay_rejected {
+                    "rejected"
+                } else {
+                    "accepted"
+                },
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing secure-media-loopback: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+struct ChildGuard {
+    child: Option<Child>,
+}
+
+impl ChildGuard {
+    fn new(child: Child) -> Self {
+        Self { child: Some(child) }
+    }
+
+    fn child_mut(&mut self) -> &mut Child {
+        self.child.as_mut().expect("child guard is active")
+    }
+
+    fn finish(mut self, timeout: Duration) -> Result<ExitStatus, String> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            match self.child_mut().try_wait() {
+                Ok(Some(status)) => {
+                    self.child.take();
+                    return Ok(status);
+                }
+                Ok(None) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Ok(None) => {
+                    let child = self.child_mut();
+                    let _ = child.kill();
+                    let reap = child.wait();
+                    return Err(match reap {
+                        Ok(_) => {
+                            self.child.take();
+                            "secure peer completion timed out; child killed and reaped".into()
+                        }
+                        Err(error) => format!(
+                            "secure peer completion timed out; reap after kill failed and guard will retry: {error}"
+                        ),
+                    });
+                }
+                Err(wait_error) => {
+                    let child = self.child_mut();
+                    let _ = child.kill();
+                    let reap = child.wait();
+                    return Err(match reap {
+                        Ok(_) => {
+                            self.child.take();
+                            format!("poll secure peer: {wait_error}; child killed and reaped")
+                        }
+                        Err(reap_error) => format!(
+                            "poll secure peer: {wait_error}; reap after kill failed and guard will retry: {reap_error}"
+                        ),
+                    });
+                }
+            }
+        }
+    }
+}
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+fn cmd_secure_media_processes() -> ExitCode {
+    match run_secure_media_processes() {
+        Ok(()) => {
+            println!(
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing secure-media-processes: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn cmd_secure_media_peer(control_address: Option<&str>) -> ExitCode {
+    match run_secure_media_peer(control_address) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("amazing secure-media-peer: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn verify_ice_robustness_probe() -> Result<(), String> {
+    let replacement_tiebreaker =
+        amazing_webrtc_crypto::secure_random_ice_tiebreaker().map_err(|error| error.to_string())?;
+    let report = amazing_webrtc::run_live_ice_robustness_probe(replacement_tiebreaker)
+        .map_err(|error| error.to_string())?;
+    if report.request_sends != 3
+        || report.injected_drops != 2
+        || !report.role_switched
+        || !report.peer_reflexive_inserted
+    {
+        return Err("live ICE robustness probe failed".into());
+    }
+    Ok(())
+}
+
+fn run_secure_media_processes() -> Result<(), String> {
+    verify_ice_robustness_probe()?;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .map_err(|error| format!("bind signaling listener: {error}"))?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|error| format!("configure signaling listener: {error}"))?;
+    let signaling_address = listener.local_addr().map_err(|error| error.to_string())?;
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    let child = Command::new(executable)
+        .arg("__secure-media-peer")
+        .arg(signaling_address.to_string())
+        .spawn()
+        .map_err(|error| format!("spawn secure peer: {error}"))?;
+    let mut child = ChildGuard::new(child);
+    let mut control = accept_control_connection(&listener, &mut child, Duration::from_secs(5))?;
+    configure_control_stream(&control)?;
+    let mut control_reader =
+        BufReader::new(control.try_clone().map_err(|error| error.to_string())?);
+    let offer = read_signaled_description(&mut control_reader, "OFFER")?;
+
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0")
+        .map_err(|error| format!("bind parent UDP: {error}"))?;
+    let parent_address = std_socket_v4(&socket)?;
+    let child_address = description_candidate(&offer)?;
+    socket
+        .connect(child_address)
+        .map_err(|error| format!("connect parent UDP: {error}"))?;
+    let identity = amazing_webrtc_crypto::SecureIdentity::generate("ferric-parent")
+        .map_err(|error| error.to_string())?;
+    let answer = amazing_webrtc_crypto::build_local_description(
+        parent_address,
+        identity.fingerprint(),
+        "active",
+        "parenthost",
+        "parent",
+        "FerricParentPassword123456",
+        400,
+    )
+    .map_err(|error| error.to_string())?;
+    write_signaled_description(&mut control, "ANSWER", &answer)?;
+
+    let mut endpoint = amazing_webrtc_crypto::SecureUdpEndpoint::establish(
+        amazing_webrtc_crypto::SecureEndpointConfig {
+            socket,
+            identity,
+            local_description: answer,
+            remote_description: offer,
+            local_is_offerer: false,
+            ice_role: amazing_webrtc_crypto::IceRole::Controlling,
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    let outbound = amazing_webrtc::RtpPacket {
+        marker: true,
+        payload_type: 111,
+        sequence_number: 41,
+        timestamp: 960,
+        ssrc: 0x5041_5245,
+        payload: b"parent-to-child".to_vec(),
+    };
+    let outbound_wire = amazing_webrtc::encode_rtp(&outbound).map_err(|error| error.to_string())?;
+    endpoint
+        .send_rtp(&outbound_wire)
+        .map_err(|error| error.to_string())?;
+    endpoint
+        .wait_for_consent_due()
+        .map_err(|error| error.to_string())?;
+    if endpoint
+        .refresh_consent()
+        .map_err(|error| error.to_string())?
+        != amazing_webrtc::ConsentState::Fresh
+    {
+        return Err("live consent refresh did not remain Fresh".into());
+    }
+    let expiry_probe =
+        amazing_webrtc::ConsentFreshness::new(0, 5_000).map_err(|error| error.to_string())?;
+    if expiry_probe.state(30_000) != amazing_webrtc::ConsentState::Expired {
+        return Err("consent expiry probe did not expire at thirty seconds".into());
+    }
+    let child_rtp = endpoint.receive_rtp().map_err(|error| error.to_string())?;
+    let child_rtp = amazing_webrtc::parse_rtp(&child_rtp).map_err(|error| error.to_string())?;
+    if child_rtp.payload != b"child-to-parent" || child_rtp.sequence_number != 84 {
+        return Err("child process returned unexpected RTP".into());
+    }
+    let mut reception_stats = amazing_webrtc::RtpReceptionStats::new(child_rtp.ssrc);
+    reception_stats
+        .observe(&child_rtp, child_rtp.timestamp)
+        .map_err(|error| error.to_string())?;
+    let child_rtcp = endpoint.receive_rtcp().map_err(|error| error.to_string())?;
+    let child_rtcp = amazing_webrtc::parse_rtcp_compound_sender_report(&child_rtcp)
+        .map_err(|error| error.to_string())?;
+    if child_rtcp.sender.ssrc != child_rtp.ssrc
+        || child_rtcp.sender.rtp_timestamp != child_rtp.timestamp
+        || child_rtcp.sender.packet_count != 1
+        || child_rtcp.sender.octet_count != child_rtp.payload.len() as u32
+        || child_rtcp.cname != "child@ferric"
+    {
+        return Err("child process returned inconsistent SRTCP".into());
+    }
+    read_control_marker(&mut control_reader, "READY_RR")?;
+    let reception = reception_stats
+        .report((child_rtcp.sender.ntp_timestamp >> 16) as u32, 0)
+        .map_err(|error| error.to_string())?;
+    let receiver_report = amazing_webrtc::RtcpCompoundReceiverReport {
+        receiver_ssrc: 0x5252_4356,
+        reception,
+        cname: "parent@ferric".into(),
+    };
+    let receiver_report = amazing_webrtc::encode_rtcp_compound_receiver_report(&receiver_report)
+        .map_err(|error| error.to_string())?;
+    endpoint
+        .send_rtcp(&receiver_report)
+        .map_err(|error| format!("send compound receiver report: {error}"))?;
+
+    read_control_marker(&mut control_reader, "PEER_OK")?;
+    endpoint
+        .close()
+        .map_err(|error| format!("close parent secure endpoint: {error}"))?;
+    drop(control_reader);
+    drop(control);
+    let status = child.finish(Duration::from_secs(5))?;
+    if !status.success() {
+        return Err(format!("secure peer exited {status}"));
+    }
+    Ok(())
+}
+
+fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
+    let control_address =
+        control_address.ok_or_else(|| "secure peer requires a control address".to_string())?;
+    let control_address = control_address
+        .parse()
+        .map_err(|error| format!("parse signaling control address: {error}"))?;
+    let mut control = TcpStream::connect_timeout(&control_address, Duration::from_secs(5))
+        .map_err(|error| format!("connect signaling control: {error}"))?;
+    configure_control_stream(&control)?;
+    let mut control_reader =
+        BufReader::new(control.try_clone().map_err(|error| error.to_string())?);
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0")
+        .map_err(|error| format!("bind child UDP: {error}"))?;
+    let child_address = std_socket_v4(&socket)?;
+    let identity = amazing_webrtc_crypto::SecureIdentity::generate("ferric-child")
+        .map_err(|error| error.to_string())?;
+    let offer = amazing_webrtc_crypto::build_local_description(
+        child_address,
+        identity.fingerprint(),
+        "actpass",
+        "childhost",
+        "child",
+        "FerricChildPassword123456",
+        300,
+    )
+    .map_err(|error| error.to_string())?;
+    write_signaled_description(&mut control, "OFFER", &offer)?;
+    let answer = read_signaled_description(&mut control_reader, "ANSWER")?;
+    socket
+        .connect(description_candidate(&answer)?)
+        .map_err(|error| format!("connect child UDP: {error}"))?;
+    let mut endpoint = amazing_webrtc_crypto::SecureUdpEndpoint::establish(
+        amazing_webrtc_crypto::SecureEndpointConfig {
+            socket,
+            identity,
+            local_description: offer,
+            remote_description: answer,
+            local_is_offerer: true,
+            ice_role: amazing_webrtc_crypto::IceRole::Controlled,
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    let parent_rtp = endpoint.receive_rtp().map_err(|error| error.to_string())?;
+    let parent_rtp = amazing_webrtc::parse_rtp(&parent_rtp).map_err(|error| error.to_string())?;
+    if parent_rtp.payload != b"parent-to-child" || parent_rtp.sequence_number != 41 {
+        return Err("parent process sent unexpected RTP".into());
+    }
+    endpoint
+        .answer_consent()
+        .map_err(|error| error.to_string())?;
+    let response = amazing_webrtc::RtpPacket {
+        marker: true,
+        payload_type: 111,
+        sequence_number: 84,
+        timestamp: 1_920,
+        ssrc: 0x4348_494c,
+        payload: b"child-to-parent".to_vec(),
+    };
+    let response_wire = amazing_webrtc::encode_rtp(&response).map_err(|error| error.to_string())?;
+    endpoint
+        .send_rtp(&response_wire)
+        .map_err(|error| error.to_string())?;
+    let report = amazing_webrtc::RtcpSenderReport {
+        ssrc: response.ssrc,
+        ntp_timestamp: 0xe123_4567_89ab_cdef,
+        rtp_timestamp: response.timestamp,
+        packet_count: 1,
+        octet_count: response.payload.len() as u32,
+    };
+    let compound_sender = amazing_webrtc::RtcpCompoundSenderReport {
+        sender: report,
+        cname: "child@ferric".into(),
+    };
+    let compound_sender = amazing_webrtc::encode_rtcp_compound_sender_report(&compound_sender)
+        .map_err(|error| error.to_string())?;
+    endpoint
+        .send_rtcp(&compound_sender)
+        .map_err(|error| error.to_string())?;
+    writeln!(control, "READY_RR").map_err(|error| error.to_string())?;
+    control.flush().map_err(|error| error.to_string())?;
+    let receiver_report = match endpoint.receive_rtcp() {
+        Ok(report) => report,
+        Err(error) => {
+            let _ = writeln!(
+                control,
+                "PEER_ERROR receive compound receiver report: {error}"
+            );
+            let _ = control.flush();
+            return Err(format!("receive compound receiver report: {error}"));
+        }
+    };
+    let receiver_report =
+        match amazing_webrtc::parse_rtcp_compound_receiver_report(&receiver_report) {
+            Ok(report) => report,
+            Err(error) => {
+                let _ = writeln!(
+                    control,
+                    "PEER_ERROR parse compound receiver report: {error}"
+                );
+                let _ = control.flush();
+                return Err(error.to_string());
+            }
+        };
+    if receiver_report.reception.source_ssrc != response.ssrc
+        || receiver_report.reception.extended_highest_sequence != response.sequence_number as u32
+        || receiver_report.reception.last_sender_report != (report.ntp_timestamp >> 16) as u32
+        || receiver_report.cname != "parent@ferric"
+    {
+        return Err("parent process returned inconsistent compound RTCP".into());
+    }
+    endpoint
+        .close()
+        .map_err(|error| format!("close child secure endpoint: {error}"))?;
+    writeln!(control, "PEER_OK").map_err(|error| error.to_string())?;
+    control.flush().map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn accept_control_connection(
+    listener: &TcpListener,
+    child: &mut ChildGuard,
+    timeout: Duration,
+) -> Result<TcpStream, String> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => return Ok(stream),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(error) => return Err(format!("accept signaling control: {error}")),
+        }
+        if let Some(status) = child
+            .child_mut()
+            .try_wait()
+            .map_err(|error| format!("poll secure peer before signaling: {error}"))?
+        {
+            return Err(format!(
+                "secure peer exited before signaling connection: {status}"
+            ));
+        }
+        if Instant::now() >= deadline {
+            return Err("secure peer signaling connection timed out".into());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn configure_control_stream(stream: &TcpStream) -> Result<(), String> {
+    stream
+        .set_nonblocking(false)
+        .map_err(|error| format!("configure signaling blocking mode: {error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .map_err(|error| format!("configure signaling read timeout: {error}"))?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(5)))
+        .map_err(|error| format!("configure signaling write timeout: {error}"))
+}
+
+fn read_control_marker(reader: &mut impl BufRead, expected: &str) -> Result<(), String> {
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .map_err(|error| format!("read control marker {expected}: {error}"))?;
+    if line.trim() != expected {
+        return Err(format!(
+            "expected control marker {expected}, received {line:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn write_signaled_description(
+    writer: &mut impl Write,
+    label: &str,
+    description: &amazing_webrtc::SdpDescription,
+) -> Result<(), String> {
+    let sdp = amazing_webrtc::encode_sdp(description).map_err(|error| error.to_string())?;
+    writeln!(writer, "{label} {}", hex_encode(sdp.as_bytes()))
+        .map_err(|error| error.to_string())?;
+    writer.flush().map_err(|error| error.to_string())
+}
+
+fn read_signaled_description(
+    reader: &mut impl BufRead,
+    label: &str,
+) -> Result<amazing_webrtc::SdpDescription, String> {
+    let mut line = String::new();
+    if reader
+        .read_line(&mut line)
+        .map_err(|error| error.to_string())?
+        == 0
+    {
+        return Err(format!("missing {label} signaling line"));
+    }
+    let encoded = line
+        .trim_end()
+        .strip_prefix(&format!("{label} "))
+        .ok_or_else(|| format!("invalid {label} signaling line"))?;
+    let bytes = hex_decode(encoded)?;
+    let sdp = String::from_utf8(bytes).map_err(|error| error.to_string())?;
+    amazing_webrtc::parse_sdp(&sdp).map_err(|error| error.to_string())
+}
+
+fn description_candidate(
+    description: &amazing_webrtc::SdpDescription,
+) -> Result<std::net::SocketAddrV4, String> {
+    description
+        .candidates
+        .first()
+        .map(|candidate| candidate.address)
+        .ok_or_else(|| "signaled SDP has no ICE candidate".to_string())
+}
+
+fn std_socket_v4(socket: &std::net::UdpSocket) -> Result<std::net::SocketAddrV4, String> {
+    match socket.local_addr().map_err(|error| error.to_string())? {
+        std::net::SocketAddr::V4(address) => Ok(address),
+        std::net::SocketAddr::V6(_) => Err("secure process artifact requires IPv4".into()),
+    }
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        write!(output, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    output
+}
+
+fn hex_decode(text: &str) -> Result<Vec<u8>, String> {
+    if text.len() % 2 != 0 || !text.is_ascii() {
+        return Err("signaling hex has invalid length or encoding".into());
+    }
+    text.as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let pair = std::str::from_utf8(pair).expect("ASCII checked");
+            u8::from_str_radix(pair, 16).map_err(|_| "signaling hex is invalid".to_string())
+        })
+        .collect()
 }
 
 /// Reads a file (or stdin when `path` is None) as lossy UTF-8.
@@ -543,6 +1324,22 @@ fn cmd_parse(path: Option<&str>) -> ExitCode {
             print!("{}", dom.dump(amazing_dom::NodeIdx(0)));
             ExitCode::SUCCESS
         }
+        Err(code) => code,
+    }
+}
+
+fn cmd_parse_fragment(context: &str, path: Option<&str>) -> ExitCode {
+    match read_source(path, "parse-fragment") {
+        Ok(src) => match amazing_html::parse_fragment(context, &src) {
+            Ok(dom) => {
+                print!("{}", dom.dump(amazing_dom::NodeIdx(0)));
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("amazing parse-fragment: {error}");
+                ExitCode::FAILURE
+            }
+        },
         Err(code) => code,
     }
 }
@@ -614,18 +1411,32 @@ fn collect_author_css(
 ) -> Result<(), String> {
     if dom.name(node) == Some("style") {
         collect_style_text(dom, node, out);
-        return Ok(())
+        return Ok(());
     }
     if dom.name(node) == Some("link") {
         let attrs = dom.attrs_of(node).unwrap_or(&[]);
-        let rel = attrs.iter().find(|(name, _)| name == "rel")
-            .map(|(_, value)| value.to_ascii_lowercase()).unwrap_or_default();
-        if rel.split_ascii_whitespace().any(|token| token == "stylesheet") {
-            if let Some(href) = attrs.iter().find(|(name, _)| name == "href").map(|(_, value)| value) {
+        let rel = attrs
+            .iter()
+            .find(|(name, _)| name == "rel")
+            .map(|(_, value)| value.to_ascii_lowercase())
+            .unwrap_or_default();
+        if rel
+            .split_ascii_whitespace()
+            .any(|token| token == "stylesheet")
+        {
+            if let Some(href) = attrs
+                .iter()
+                .find(|(name, _)| name == "href")
+                .map(|(_, value)| value)
+            {
                 let url = resolve_script_url(page, href);
                 let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
                     .map_err(|error| format!("stylesheet {href}: {error}"))?;
-                out.push_str(&response.text().ok_or_else(|| format!("stylesheet {href} was not text"))?);
+                out.push_str(
+                    &response
+                        .text()
+                        .ok_or_else(|| format!("stylesheet {href} was not text"))?,
+                );
                 out.push('\n');
             }
         }
@@ -711,11 +1522,9 @@ fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &str) -> Res
         let source = match script.src {
             Some(src) => {
                 let script_url = resolve_script_url(page, &src);
-                let response = amazing_net::fetch(
-                    &script_url,
-                    &amazing_net::FetchOptions::default(),
-                )
-                .map_err(|error| format!("external script {src}: {error}"))?;
+                let response =
+                    amazing_net::fetch(&script_url, &amazing_net::FetchOptions::default())
+                        .map_err(|error| format!("external script {src}: {error}"))?;
                 response
                     .text()
                     .ok_or_else(|| format!("external script {src} was not text"))?
@@ -870,13 +1679,25 @@ fn cmd_render(args: &[String]) -> ExitCode {
     }
 
     let fonts = amazing_layout::font::FontSource::fallback();
-    let root = amazing_layout::layout_dom_document(&dom.dom, &css, width, &fonts);
+    let media = load_page_media(&dom.dom, html_path);
+    for warning in &media.warnings {
+        eprintln!("amazing render: {warning}");
+    }
+    let root =
+        amazing_layout::layout_dom_document_with_replaced(&dom.dom, &css, width, &fonts, &media);
     // Page height = root margin-box bottom edge (what layout_root returns),
     // clamped so a runaway document cannot exhaust memory.
     let page_h = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
         .ceil()
         .clamp(1.0, 8192.0) as u32;
-    let surface = amazing_paint::paint_document(&root, width.max(1.0) as u32, page_h, &fonts);
+    let surface = amazing_paint::paint_document_with_resources(
+        &root,
+        width.max(1.0) as u32,
+        page_h,
+        &fonts,
+        &amazing_paint::RectInkProvider,
+        &media,
+    );
 
     if let Err(e) = surface.save_bmp(out_path) {
         eprintln!("amazing render: cannot write {out_path}: {e}");
@@ -929,6 +1750,403 @@ fn cmd_fetch(args: &[String]) -> ExitCode {
     }
 }
 
+/// Phase 5 integration artifact: fetch an HTTP response and feed its decoded
+/// body directly into the Phase 1 parser before dumping the resulting DOM.
+fn cmd_fetch_parse(args: &[String]) -> ExitCode {
+    let target = match args.first() {
+        Some(target) if target.starts_with("http://") => target,
+        _ => {
+            eprintln!("usage: amazing fetch-parse <http-url>");
+            return ExitCode::FAILURE;
+        }
+    };
+    let response = match amazing_net::fetch(target, &amazing_net::FetchOptions::default()) {
+        Ok(response) if response.is_success() => response,
+        Ok(response) => {
+            eprintln!("amazing fetch-parse: HTTP status {}", response.status);
+            return ExitCode::FAILURE;
+        }
+        Err(error) => {
+            eprintln!("amazing fetch-parse: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let source = response.text().unwrap_or_default();
+    let dom = amazing_html::parse(&source);
+    print!("{}", dom.dump(amazing_dom::NodeIdx(0)));
+    ExitCode::SUCCESS
+}
+
+/// Phase 9.2 audio artifact: decode PCM WAV and report stream properties.
+fn cmd_audio_info(args: &[String]) -> ExitCode {
+    let path = match args.first() {
+        Some(path) => path,
+        None => {
+            eprintln!("usage: amazing audio-info <file.wav>");
+            return ExitCode::FAILURE;
+        }
+    };
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("amazing audio-info: cannot read {path}: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let audio = match amazing_media::decode_wav(&bytes) {
+        Ok(audio) => audio,
+        Err(error) => {
+            eprintln!("amazing audio-info: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let frames = audio.samples.len() / audio.channels as usize;
+    let duration = frames as f64 / audio.sample_rate as f64;
+    let peak = audio
+        .samples
+        .iter()
+        .map(|sample| sample.unsigned_abs())
+        .max()
+        .unwrap_or(0);
+    let channel_word = if audio.channels == 1 {
+        "channel"
+    } else {
+        "channels"
+    };
+    println!(
+        "PCM WAV: {} Hz, {} {channel_word}, {frames} frames, {duration:.6} s, peak {peak}",
+        audio.sample_rate, audio.channels
+    );
+    ExitCode::SUCCESS
+}
+
+/// Validates a PCM WAV through the core decoder, then plays it via WinMM.
+fn cmd_play_audio(args: &[String]) -> ExitCode {
+    let path = match args.first() {
+        Some(path) => path,
+        None => {
+            eprintln!("usage: amazing play-audio <file.wav>");
+            return ExitCode::FAILURE;
+        }
+    };
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("amazing play-audio: cannot read {path}: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(error) = amazing_media::decode_wav(&bytes) {
+        eprintln!("amazing play-audio: {error}");
+        return ExitCode::FAILURE;
+    }
+    gui::play_wav_file(path)
+}
+
+/// Phase 9.3 artifact: STUN discovery followed by one RTP echo over UDP.
+fn cmd_webrtc_loopback() -> ExitCode {
+    fn run() -> Result<
+        (
+            std::net::SocketAddrV4,
+            amazing_webrtc::RtpPacket,
+            amazing_webrtc::ChecklistState,
+            amazing_webrtc::RtcpSenderReport,
+        ),
+        String,
+    > {
+        use std::net::{SocketAddr, UdpSocket};
+        use std::time::Duration;
+
+        let server = UdpSocket::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
+        server
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .map_err(|error| error.to_string())?;
+        let server_address = server.local_addr().map_err(|error| error.to_string())?;
+        let SocketAddr::V4(server_v4) = server_address else {
+            return Err("loopback artifact requires IPv4".into());
+        };
+        let transaction = amazing_webrtc::TransactionId(*b"ferric-stun!");
+        let ice_key = b"ferric-loopback-password";
+        let client = UdpSocket::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .map_err(|error| error.to_string())?;
+        let SocketAddr::V4(client_address) =
+            client.local_addr().map_err(|error| error.to_string())?
+        else {
+            return Err("loopback artifact requires IPv4".into());
+        };
+        let local_candidate = amazing_webrtc::IceCandidate {
+            foundation: "local-host".into(),
+            component: 1,
+            priority: 100,
+            address: client_address,
+        };
+        let remote_candidate = amazing_webrtc::IceCandidate {
+            foundation: "remote-host".into(),
+            component: 1,
+            priority: 80,
+            address: server_v4,
+        };
+        let mut checklist =
+            amazing_webrtc::IceChecklist::new(&[local_candidate], &[remote_candidate], true);
+        let check_index = checklist
+            .next_check()
+            .ok_or_else(|| "ICE checklist had no candidate pair".to_string())?;
+        let request = amazing_webrtc::encode_ice_binding_request(
+            transaction,
+            "remote:local",
+            100,
+            0x1020_3040_5060_7080,
+            true,
+            ice_key,
+        )
+        .map_err(|error| error.to_string())?;
+        client
+            .send_to(&request, server_address)
+            .map_err(|error| error.to_string())?;
+        let mut server_buffer = [0u8; 1500];
+        let (length, peer) = server
+            .recv_from(&mut server_buffer)
+            .map_err(|error| error.to_string())?;
+        let request = amazing_webrtc::parse_stun(&server_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        if !amazing_webrtc::verify_message_integrity(&server_buffer[..length], ice_key)
+            .map_err(|error| error.to_string())?
+            || !amazing_webrtc::verify_fingerprint(&server_buffer[..length])
+                .map_err(|error| error.to_string())?
+        {
+            return Err("ICE request authentication failed".into());
+        }
+        if request.class != amazing_webrtc::StunClass::Request
+            || request.transaction_id != transaction
+        {
+            return Err("unexpected STUN Binding request".into());
+        }
+        if request.username.as_deref() != Some("remote:local")
+            || request.priority != Some(100)
+            || request.ice_controlling != Some(0x1020_3040_5060_7080)
+            || request.ice_controlled.is_some()
+            || !request.use_candidate
+        {
+            return Err("ICE request attributes failed semantic validation".into());
+        }
+        let SocketAddr::V4(peer_v4) = peer else {
+            return Err("loopback artifact requires IPv4".into());
+        };
+        let response = amazing_webrtc::encode_ice_binding_success(transaction, peer_v4, ice_key)
+            .map_err(|error| error.to_string())?;
+        server
+            .send_to(&response, peer)
+            .map_err(|error| error.to_string())?;
+
+        let mut client_buffer = [0u8; 1500];
+        let (length, source) = client
+            .recv_from(&mut client_buffer)
+            .map_err(|error| error.to_string())?;
+        if source != server_address {
+            return Err("STUN response came from the wrong endpoint".into());
+        }
+        let response = amazing_webrtc::parse_stun(&client_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        if !amazing_webrtc::verify_message_integrity(&client_buffer[..length], ice_key)
+            .map_err(|error| error.to_string())?
+            || !amazing_webrtc::verify_fingerprint(&client_buffer[..length])
+                .map_err(|error| error.to_string())?
+        {
+            return Err("ICE response authentication failed".into());
+        }
+        if response.transaction_id != transaction
+            || response.xor_mapped_address != Some(client_address)
+        {
+            return Err("STUN mapped address or transaction mismatch".into());
+        }
+        checklist
+            .mark_succeeded(check_index, request.use_candidate)
+            .map_err(|error| error.to_string())?;
+        if checklist.state() != amazing_webrtc::ChecklistState::Completed {
+            return Err("ICE checklist did not complete after nomination".into());
+        }
+
+        let outbound = amazing_webrtc::RtpPacket {
+            marker: true,
+            payload_type: 111,
+            sequence_number: 7,
+            timestamp: 960,
+            ssrc: 0xf3_22_10_01,
+            payload: b"ferric-loopback".to_vec(),
+        };
+        let wire = amazing_webrtc::encode_rtp(&outbound).map_err(|error| error.to_string())?;
+        client
+            .send_to(&wire, server_address)
+            .map_err(|error| error.to_string())?;
+        let (length, rtp_peer) = server
+            .recv_from(&mut server_buffer)
+            .map_err(|error| error.to_string())?;
+        if rtp_peer != peer {
+            return Err("RTP arrived from a different endpoint".into());
+        }
+        let received = amazing_webrtc::parse_rtp(&server_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        server
+            .send_to(&server_buffer[..length], peer)
+            .map_err(|error| error.to_string())?;
+
+        let (length, source) = client
+            .recv_from(&mut client_buffer)
+            .map_err(|error| error.to_string())?;
+        if source != server_address {
+            return Err("RTP echo came from the wrong endpoint".into());
+        }
+        let echoed = amazing_webrtc::parse_rtp(&client_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        if echoed != outbound {
+            return Err("RTP echo changed packet contents".into());
+        }
+        if received != outbound {
+            return Err("loopback server decoded different RTP contents".into());
+        }
+
+        let sender_report = amazing_webrtc::RtcpSenderReport {
+            ssrc: outbound.ssrc,
+            ntp_timestamp: 0xe123_4567_89ab_cdef,
+            rtp_timestamp: outbound.timestamp,
+            packet_count: 1,
+            octet_count: outbound.payload.len() as u32,
+        };
+        let rtcp = amazing_webrtc::encode_rtcp_sender_report(sender_report);
+        client
+            .send_to(&rtcp, server_address)
+            .map_err(|error| error.to_string())?;
+        let (length, rtcp_peer) = server
+            .recv_from(&mut server_buffer)
+            .map_err(|error| error.to_string())?;
+        if rtcp_peer != peer {
+            return Err("RTCP arrived from a different endpoint".into());
+        }
+        let server_report = amazing_webrtc::parse_rtcp_sender_report(&server_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        server
+            .send_to(&server_buffer[..length], peer)
+            .map_err(|error| error.to_string())?;
+        let (length, source) = client
+            .recv_from(&mut client_buffer)
+            .map_err(|error| error.to_string())?;
+        if source != server_address {
+            return Err("RTCP echo came from the wrong endpoint".into());
+        }
+        let echoed_report = amazing_webrtc::parse_rtcp_sender_report(&client_buffer[..length])
+            .map_err(|error| error.to_string())?;
+        if server_report != sender_report || echoed_report != sender_report {
+            return Err("RTCP Sender Report changed during loopback".into());
+        }
+        Ok((client_address, echoed, checklist.state(), echoed_report))
+    }
+
+    match run() {
+        Ok((mapped, packet, ice_state, report)) => {
+            println!(
+                "STUN mapped {mapped}; ICE state={ice_state:?} integrity=ok; RTP seq={} timestamp={} payload={} bytes; RTCP packets={} octets={}; loopback ok",
+                packet.sequence_number,
+                packet.timestamp,
+                packet.payload.len(),
+                report.packet_count,
+                report.octet_count
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing webrtc-loopback: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Phase 9.4 artifact: require a real Direct3D 11 hardware device.
+fn cmd_gpu_info() -> ExitCode {
+    match gpu::probe() {
+        Ok(info) => {
+            println!("{}, feature level {}", info.backend, info.feature_level);
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing gpu-info: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Phase 9.5 artifact: upload and present a BGRA surface through DXGI.
+fn cmd_gpu_present_smoke() -> ExitCode {
+    match gpu::presentation_smoke() {
+        Ok(info) => {
+            println!(
+                "{}, presented {}x{} BGRA",
+                info.backend, info.width, info.height
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing gpu-present-smoke: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Phase 9.8 artifact: parse, canonicalize, and reparse a bounded SDP offer.
+fn cmd_sdp_roundtrip(args: &[String]) -> ExitCode {
+    let path = match args.first() {
+        Some(path) => path,
+        None => {
+            eprintln!("usage: amazing sdp-roundtrip <offer.sdp>");
+            return ExitCode::FAILURE;
+        }
+    };
+    let source = match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("amazing sdp-roundtrip: cannot read {path}: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let parsed = match amazing_webrtc::parse_sdp(&source) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            eprintln!("amazing sdp-roundtrip: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let canonical = match amazing_webrtc::encode_sdp(&parsed) {
+        Ok(canonical) => canonical,
+        Err(error) => {
+            eprintln!("amazing sdp-roundtrip: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match amazing_webrtc::parse_sdp(&canonical) {
+        Ok(reparsed) if reparsed == parsed => {
+            println!(
+                "SDP {} payloads={} candidates={} rtpmaps={} ICE={} setup={}; roundtrip ok",
+                parsed.media,
+                parsed.payload_types.len(),
+                parsed.candidates.len(),
+                parsed.rtp_maps.len(),
+                parsed.ice_ufrag,
+                parsed.setup
+            );
+            ExitCode::SUCCESS
+        }
+        Ok(_) => {
+            eprintln!("amazing sdp-roundtrip: canonical SDP changed semantics");
+            ExitCode::FAILURE
+        }
+        Err(error) => {
+            eprintln!("amazing sdp-roundtrip: canonical SDP failed: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 /// Phase 6 demo: execute one classic JavaScript script and print captured
 /// `console.log` lines followed by the script completion value.
 fn cmd_run(path: Option<&str>) -> ExitCode {
@@ -971,12 +2189,16 @@ fn cmd_domrun(args: &[String]) -> ExitCode {
         Ok(source) => source,
         Err(code) => return code,
     };
-    let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_html::parse(&html) }));
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse(&html),
+    }));
     let mut js = amazing_js::Interpreter::new();
     js.set_dom_host(host.clone());
     match js.run_script(&script) {
         Ok(value) => {
-            for line in js.output.borrow().iter() { println!("{line}"); }
+            for line in js.output.borrow().iter() {
+                println!("{line}");
+            }
             println!("=> {:?}", value);
             print!("{}", host.borrow().dom.dump(amazing_dom::NodeIdx(0)));
             ExitCode::SUCCESS
@@ -1015,5 +2237,27 @@ fn format_js_error(value: &amazing_js::value::JsValue) -> String {
         }
         amazing_js::value::JsValue::Str(s) => s.to_string(),
         other => format!("{other:?}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn document_title_ignores_svg_title_elements() {
+        let mut host = BrowserDomHost {
+            dom: amazing_html::parse("<svg><title>foreign</title></svg>"),
+        };
+        assert_eq!(
+            <BrowserDomHost as amazing_js::DomHost>::get_document_title(&host),
+            ""
+        );
+        <BrowserDomHost as amazing_js::DomHost>::set_document_title(&mut host, "html title")
+            .expect("set title");
+        assert_eq!(
+            <BrowserDomHost as amazing_js::DomHost>::get_document_title(&host),
+            "html title"
+        );
     }
 }

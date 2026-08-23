@@ -1,0 +1,12 @@
+v=0
+o=- 1 1 IN IP4 127.0.0.1
+s=Ferric
+t=0 0
+a=ice-ufrag:ferric
+a=ice-pwd:FerricPassword1234567890AB
+a=fingerprint:sha-256 AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA
+a=setup:actpass
+m=audio 5000 UDP/TLS/RTP/SAVPF 111
+c=IN IP4 0.0.0.0
+a=candidate:host1 1 UDP 2130706431 127.0.0.1 5000 typ host
+a=rtpmap:111 opus/48000/2

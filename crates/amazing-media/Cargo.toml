@@ -1,0 +1,9 @@
+[package]
+name = "amazing-media"
+description = "Phase 9 std-only image media decoding"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

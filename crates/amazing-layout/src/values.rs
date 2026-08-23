@@ -155,10 +155,13 @@ impl SidesM {
     }
 }
 
-const MARGIN_LONGHANDS: [&str; 4] =
-    ["margin-top", "margin-right", "margin-bottom", "margin-left"];
-const PADDING_LONGHANDS: [&str; 4] =
-    ["padding-top", "padding-right", "padding-bottom", "padding-left"];
+const MARGIN_LONGHANDS: [&str; 4] = ["margin-top", "margin-right", "margin-bottom", "margin-left"];
+const PADDING_LONGHANDS: [&str; 4] = [
+    "padding-top",
+    "padding-right",
+    "padding-bottom",
+    "padding-left",
+];
 
 fn read_box_sides_auto(
     style: &ComputedStyle,
@@ -177,12 +180,21 @@ fn read_box_sides_auto(
     }
     if let Some(sh) = style.get(shorthand) {
         let parts: Vec<&str> = sh.split_ascii_whitespace().collect();
-        let slot =
-            |s: &str| MaybeLen::parse(s, em_base, percent_base).unwrap_or(MaybeLen::Px(0.0));
+        let slot = |s: &str| MaybeLen::parse(s, em_base, percent_base).unwrap_or(MaybeLen::Px(0.0));
         let expanded: [MaybeLen; 4] = match parts.len() {
             1 => [slot(parts[0]); 4],
-            2 => [slot(parts[0]), slot(parts[1]), slot(parts[0]), slot(parts[1])],
-            3 => [slot(parts[0]), slot(parts[1]), slot(parts[2]), slot(parts[1])],
+            2 => [
+                slot(parts[0]),
+                slot(parts[1]),
+                slot(parts[0]),
+                slot(parts[1]),
+            ],
+            3 => [
+                slot(parts[0]),
+                slot(parts[1]),
+                slot(parts[2]),
+                slot(parts[1]),
+            ],
             _ if parts.len() >= 4 => [
                 slot(parts[0]),
                 slot(parts[1]),
@@ -222,16 +234,37 @@ pub fn resolve_padding(style: &ComputedStyle, em_base: f32, cbw: f32) -> Sides {
 pub fn resolve_borders(style: &ComputedStyle, em_base: f32) -> Sides {
     /// Picks side `i`'s component (t r b l replication) from the most
     /// specific source that declares one.
-    fn side_component(style: &ComputedStyle, i: usize, want_width: bool, em_base: f32) -> Option<String> {
-        const WIDTH_LONGHANDS: [&str; 4] =
-            ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"];
-        const STYLE_LONGHANDS: [&str; 4] =
-            ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"];
+    fn side_component(
+        style: &ComputedStyle,
+        i: usize,
+        want_width: bool,
+        em_base: f32,
+    ) -> Option<String> {
+        const WIDTH_LONGHANDS: [&str; 4] = [
+            "border-top-width",
+            "border-right-width",
+            "border-bottom-width",
+            "border-left-width",
+        ];
+        const STYLE_LONGHANDS: [&str; 4] = [
+            "border-top-style",
+            "border-right-style",
+            "border-bottom-style",
+            "border-left-style",
+        ];
 
-        if let Some(v) = style.get(if want_width { WIDTH_LONGHANDS[i] } else { STYLE_LONGHANDS[i] }) {
+        if let Some(v) = style.get(if want_width {
+            WIDTH_LONGHANDS[i]
+        } else {
+            STYLE_LONGHANDS[i]
+        }) {
             return Some(v.to_owned());
         }
-        let shorthand = if want_width { "border-width" } else { "border-style" };
+        let shorthand = if want_width {
+            "border-width"
+        } else {
+            "border-style"
+        };
         if let Some(v) = style.get(shorthand) {
             let parts: Vec<&str> = v.split_ascii_whitespace().collect();
             return replicate_side(&parts, i).map(str::to_owned);
@@ -256,8 +289,16 @@ pub fn resolve_borders(style: &ComputedStyle, em_base: f32) -> Sides {
     fn is_style_component(s: &str) -> bool {
         matches!(
             s.to_ascii_lowercase().as_str(),
-            "none" | "hidden" | "dotted" | "dashed" | "solid"
-                | "double" | "groove" | "ridge" | "inset" | "outset"
+            "none"
+                | "hidden"
+                | "dotted"
+                | "dashed"
+                | "solid"
+                | "double"
+                | "groove"
+                | "ridge"
+                | "inset"
+                | "outset"
         )
     }
 
@@ -341,10 +382,7 @@ mod tests {
         // Width without a visible style collapses.
         let b = resolve_borders(&style_of(&[("border-top-width", "10px")]), 16.0);
         assert_eq!(b.top, 0.0);
-        let cs = style_of(&[
-            ("border-top-width", "10px"),
-            ("border-top-style", "solid"),
-        ]);
+        let cs = style_of(&[("border-top-width", "10px"), ("border-top-style", "solid")]);
         assert_eq!(resolve_borders(&cs, 16.0).top, 10.0);
         // Side-keyword shorthands…
         let cs = style_of(&[("border-width", "2px"), ("border-style", "dashed")]);

@@ -12,7 +12,8 @@
 //!   specified/auto heights, adjacent-sibling margin collapsing (max rule)
 //! - inline formatting context: greedy word wrapping, `<br>` breaks,
 //!   half-leading line boxes, per-word effective font sizes (nested spans
-//!   flattened into the parent's line boxes)
+//!   flattened into the parent's line boxes), and baseline-aligned replaced
+//!   images whose intrinsic height can grow a line box
 //! - anonymous block boxes for block/inline mixed content (§9.2.1), with
 //!   block descendants hoisted out of inline wrappers in document order
 //! - box model: margin/padding/border shorthand + longhand resolution,
@@ -32,9 +33,10 @@
 //! - inline-block/inline-table are flattened like inline elements;
 //!   `list-item` renders as block without markers
 //! - no min/max-width clamping, no `box-sizing` (content-box always), no
-//!   text-align beyond left, no replaced elements (img) yet
-//! - line boxes use the block's strut (font + line-height) for height and
-//!   baseline; per-fragment line-height differences don't grow lines
+//!   text-align beyond left
+//! - text-only line boxes use the block's strut (font + line-height);
+//!   replaced images grow the line while per-text-fragment line-height
+//!   differences still do not
 //!
 //! Phase 3.5 additions — flexbox ([`flex`], css-flexbox-1 subset):
 //! - `display:flex`/`inline-flex`, flex-direction (all four), flex-wrap,
@@ -61,6 +63,28 @@ pub mod values;
 
 use amazing_css::ComputedStyle;
 use amazing_dom::NodeIdx;
+
+/// Intrinsic dimensions supplied for replaced content such as `<img>`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IntrinsicSize {
+    pub width: f32,
+    pub height: f32,
+}
+
+/// Seam through which layout learns replaced-element dimensions without
+/// depending on fetchers, decoders, or platform code.
+pub trait ReplacedElementProvider {
+    fn intrinsic_size(&self, node: NodeIdx) -> Option<IntrinsicSize>;
+}
+
+/// Adapter used by callers that have no decoded replaced content.
+pub struct NoReplacedElements;
+
+impl ReplacedElementProvider for NoReplacedElements {
+    fn intrinsic_size(&self, _node: NodeIdx) -> Option<IntrinsicSize> {
+        None
+    }
+}
 
 /// Absolute-positioned rectangle in CSS px (border-box or content-box
 /// depending on the field).
@@ -97,6 +121,8 @@ pub struct LayoutBox {
     pub font_size: f32,
     pub line_height: f32,
     pub flow: Flow,
+    /// Intrinsic dimensions when this box itself is replaced content.
+    pub replaced_size: Option<IntrinsicSize>,
 
     // --- box model, resolved at layout time ---
     pub margin: values::SidesM,
@@ -121,6 +147,7 @@ impl LayoutBox {
             font_size,
             line_height,
             flow: Flow::Empty,
+            replaced_size: None,
             margin: values::SidesM::default(),
             padding: values::Sides::default(),
             border: values::Sides::default(),
@@ -159,6 +186,8 @@ pub enum InlineNode {
     Text { node: NodeIdx, text: String, font_size: f32 },
     /// `<br>` — force a line break.
     Break,
+    /// Replaced inline content with dimensions resolved before layout.
+    Replaced { node: NodeIdx, size: IntrinsicSize },
 }
 
 /// One laid-out line of an inline formatting context.
@@ -171,6 +200,17 @@ pub struct LineBox {
     /// Baseline y (absolute px).
     pub baseline: f32,
     pub words: Vec<WordFrag>,
+    pub replaced: Vec<ReplacedFrag>,
+}
+
+/// One positioned replaced element in an inline formatting context.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ReplacedFrag {
+    pub node: NodeIdx,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 /// A placed word (post-wrapping) with its absolute position.
@@ -201,9 +241,26 @@ pub fn layout_dom_document(
     viewport_width: f32,
     fonts: &font::FontSource,
 ) -> LayoutBox {
+    layout_dom_document_with_replaced(
+        dom,
+        author_css,
+        viewport_width,
+        fonts,
+        &NoReplacedElements,
+    )
+}
+
+/// Lays out a live DOM while consulting an adapter for replaced content.
+pub fn layout_dom_document_with_replaced(
+    dom: &amazing_dom::Dom,
+    author_css: &str,
+    viewport_width: f32,
+    fonts: &font::FontSource,
+    replaced: &dyn ReplacedElementProvider,
+) -> LayoutBox {
     let sheet = amazing_css::parse_stylesheet(author_css);
     let styled = amazing_css::compute(&dom, &[sheet]);
-    let mut root = box_tree::build_layout_tree(&dom, &styled, fonts);
+    let mut root = box_tree::build_layout_tree_with_replaced(&dom, &styled, fonts, replaced);
     block::layout_root(&mut root, viewport_width, fonts);
     root
 }
@@ -257,6 +314,12 @@ fn dump_rec(dom: &amazing_dom::Dom, b: &LayoutBox, depth: usize, out: &mut Strin
         for w in &line.words {
             out.push_str(&format!(" | {:?}@x={:.1} {}px w={:.1}", w.text, w.x, w.font_size, w.width));
         }
+        for image in &line.replaced {
+            out.push_str(&format!(
+                " | <img node={}>@({:.1},{:.1}) {:.1}x{:.1}",
+                image.node.0, image.x, image.y, image.width, image.height
+            ));
+        }
         out.push('\n');
     }
     match &b.flow {
@@ -266,5 +329,79 @@ fn dump_rec(dom: &amazing_dom::Dom, b: &LayoutBox, depth: usize, out: &mut Strin
             }
         },
         Flow::Inlines(_) | Flow::Empty => {},
+    }
+}
+
+#[cfg(test)]
+mod replaced_tests {
+    use super::*;
+
+    struct OneImage(NodeIdx);
+
+    impl ReplacedElementProvider for OneImage {
+        fn intrinsic_size(&self, node: NodeIdx) -> Option<IntrinsicSize> {
+            (node == self.0).then_some(IntrinsicSize { width: 40.0, height: 30.0 })
+        }
+    }
+
+    fn find<'a>(layout: &'a LayoutBox, node: NodeIdx) -> Option<&'a LayoutBox> {
+        if layout.node == Some(node) {
+            return Some(layout);
+        }
+        match &layout.flow {
+            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
+                children.iter().find_map(|child| find(child, node))
+            },
+            Flow::Inlines(_) | Flow::Empty => None,
+        }
+    }
+
+    #[test]
+    fn inline_replaced_content_participates_in_line_geometry() {
+        let dom = amazing_html::parse("<body><p>before <img src=x.ppm> after</p></body>");
+        let image = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("img"))
+            .expect("img node");
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .expect("paragraph node");
+        let root = layout_dom_document_with_replaced(
+            &dom,
+            "",
+            300.0,
+            &font::FontSource::fallback(),
+            &OneImage(image),
+        );
+        let line = &find(&root, paragraph).expect("paragraph box").lines[0];
+
+        assert_eq!(line.replaced.len(), 1);
+        assert_eq!((line.replaced[0].width, line.replaced[0].height), (40.0, 30.0));
+        assert!(line.words[0].x < line.replaced[0].x);
+        assert!(line.replaced[0].x + 40.0 <= line.words[1].x);
+        assert_eq!(line.height, 30.0);
+    }
+
+    #[test]
+    fn block_replaced_content_uses_intrinsic_box_dimensions() {
+        let dom = amazing_html::parse(
+            "<body><img src=x.ppm style=\"display:block\"></body>",
+        );
+        let image = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("img"))
+            .expect("img node");
+        let root = layout_dom_document_with_replaced(
+            &dom,
+            "",
+            300.0,
+            &font::FontSource::fallback(),
+            &OneImage(image),
+        );
+        let image_box = find(&root, image).expect("image layout box");
+
+        assert_eq!(image_box.content_box.w, 40.0);
+        assert_eq!(image_box.content_box.h, 30.0);
     }
 }
