@@ -228,6 +228,24 @@ impl Tokenizer {
         self.queue.push_back(tok);
     }
 
+    /// Enters the tokenizer state requested by tree construction after it
+    /// has inserted an HTML text element. Foreign elements with the same
+    /// local name never call this hook.
+    pub(crate) fn enter_text_element(&mut self, name: &str) {
+        match name {
+            "textarea" | "title" => {
+                self.raw_end = name.to_owned();
+                self.state = State::RcData;
+            },
+            "script" | "style" | "xmp" | "iframe" | "noembed"
+            | "noframes" | "noscript" => {
+                self.raw_end = name.to_owned();
+                self.state = State::RawText;
+            },
+            _ => {},
+        }
+    }
+
     fn processing_target_disallowed(&self) -> bool {
         self.processing_target.eq_ignore_ascii_case("xml")
             || self
@@ -269,6 +287,9 @@ impl Tokenizer {
     /// Drives states until input is exhausted and everything is emitted.
     fn run(&mut self) {
         loop {
+            if !self.queue.is_empty() {
+                return;
+            }
             if self.pos >= self.input.len() {
                 self.finish_eof();
                 return;
@@ -1101,10 +1122,9 @@ impl Tokenizer {
         }
     }
 
-    /// Emits a start/end tag from [`self.tag`]. Start tags named
-    /// script/style switch to RAWTEXT and textarea/title to RCDATA (the
-    /// tree builder would request this anyway; doing it here keeps the two
-    /// components decoupled — documented deviation in lib.rs).
+    /// Emits a start/end tag from [`self.tag`]. Tree construction requests
+    /// RAWTEXT/RCDATA after namespace-aware insertion via
+    /// [`enter_text_element`](Self::enter_text_element).
     fn emit_tag(&mut self, self_closing: bool) {
         self.finish_attr();
         let tag = self.tag.take().expect("tag builder present");
@@ -1119,17 +1139,7 @@ impl Tokenizer {
             self.state = State::Data;
             self.emit(Token::EndTag { name });
         } else {
-            match name.as_str() {
-                "script" | "style" => {
-                    self.raw_end = name.clone();
-                    self.state = State::RawText;
-                },
-                "textarea" | "title" => {
-                    self.raw_end = name.clone();
-                    self.state = State::RcData;
-                },
-                _ => self.state = State::Data,
-            }
+            self.state = State::Data;
             self.emit(Token::StartTag {
                 name,
                 attrs: tag.attrs,
@@ -1400,6 +1410,9 @@ mod tests {
             let tok = t.next_token();
             if tok == Token::Eof {
                 break;
+            }
+            if let Token::StartTag { name, self_closing: false, .. } = &tok {
+                t.enter_text_element(name);
             }
             out.push(tok);
         }

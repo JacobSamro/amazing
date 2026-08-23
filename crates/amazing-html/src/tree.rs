@@ -1568,6 +1568,7 @@ impl TreeBuilder {
                 self.mode = Mode::Text;
             },
             "iframe" => self.start_generic_text_element("iframe", attrs),
+            "noembed" => self.start_generic_text_element("noembed", attrs),
             "noscript" => self.start_generic_text_element("noscript", attrs),
             "select" => {
                 if self.has_in_scope("select") {
@@ -2233,13 +2234,37 @@ impl TreeBuilder {
 }
 
 /// Convenience: tokenize `src` and run tree construction to completion.
+fn feed_with_tokenizer_feedback(
+    builder: &mut TreeBuilder,
+    tokenizer: &mut Tokenizer,
+    tok: Token,
+) -> bool {
+    let eof = tok == Token::Eof;
+    let start_name = match &tok {
+        Token::StartTag { name, .. } => Some(name.clone()),
+        _ => None,
+    };
+    builder.feed(tok);
+    if let Some(name) = start_name {
+        let inserted_html_text_element = builder.mode == Mode::Text
+            && builder.current().is_some_and(|current| {
+                builder.dom.namespace(current) == Some(Namespace::Html)
+                    && builder.dom.name(current) == Some(name.as_str())
+            });
+        if inserted_html_text_element {
+            tokenizer.enter_text_element(&name);
+        }
+    }
+    eof
+}
+
+/// Convenience: tokenize `src` and run tree construction to completion.
 pub fn build(src: &str) -> Dom {
     let mut builder = TreeBuilder::new();
     let mut tokenizer = Tokenizer::new(src.chars().collect());
     loop {
         let tok = tokenizer.next_token();
-        let eof = tok == Token::Eof;
-        builder.feed(tok);
+        let eof = feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok);
         if eof {
             break;
         }
@@ -2251,15 +2276,23 @@ pub fn build(src: &str) -> Dom {
 /// synthetic `html` root is on the open-elements stack but is not part of the
 /// returned fragment; callers extract its children. Unlike wrapper parsing,
 /// a stray `</div>` cannot close the synthetic root or discard later nodes.
-pub(crate) fn build_div_fragment(src: &str) -> Dom {
+pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
     let mut builder = TreeBuilder::new();
     builder.insert_and_push("html", Vec::new());
-    builder.mode = Mode::InBody;
+    builder.insert_and_push(context, Vec::new());
+    builder.mode = match context {
+        "table" => Mode::InTable,
+        "tbody" | "thead" | "tfoot" => Mode::InTableBody,
+        "tr" => Mode::InRow,
+        "td" | "th" => Mode::InCell,
+        "caption" => Mode::InCaption,
+        "colgroup" => Mode::InColumnGroup,
+        _ => Mode::InBody,
+    };
     let mut tokenizer = Tokenizer::new(src.chars().collect());
     loop {
         let tok = tokenizer.next_token();
-        let eof = tok == Token::Eof;
-        builder.feed(tok);
+        let eof = feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok);
         if eof {
             break;
         }
@@ -2628,6 +2661,22 @@ mod tests {
         assert_eq!(
             build_shape("<!DOCTYPE html><script> <!-- </script> --> </script> EOF"),
             "(doc html[head[script[\" <!-- \"]]body[\"-->  EOF\"]])"
+        );
+    }
+
+    #[test]
+    fn self_closing_syntax_does_not_disable_html_text_state() {
+        assert_eq!(
+            build_shape("<textarea/>x<b>y</textarea><p>z"),
+            "(doc html[head[]body[textarea[\"x<b>y\"]p[\"z\"]]])"
+        );
+    }
+
+    #[test]
+    fn noembed_uses_raw_text_in_body() {
+        assert_eq!(
+            build_shape("<noembed><b>x</b></noembed><p>y"),
+            "(doc html[head[]body[noembed[\"<b>x</b>\"]p[\"y\"]]])"
         );
     }
 

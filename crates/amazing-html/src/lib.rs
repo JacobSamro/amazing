@@ -53,15 +53,20 @@ pub fn parse(src: &str) -> Dom {
     tree::build(src)
 }
 
-/// Parses an HTML fragment in the supported ordinary HTML `div` context and
+/// Parses an HTML fragment in a supported HTML context and
 /// returns the fragment children under a standalone document node.
 ///
-/// Other contexts are rejected until their tokenizer and table/template
+/// Other contexts are rejected until their tokenizer/template
 /// initialization rules are implemented; callers never receive a plausible
 /// but context-insensitive tree.
 pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
-    if !context.eq_ignore_ascii_case("div") {
-        return Err("only the HTML div fragment context is supported".into());
+    let context = context.to_ascii_lowercase();
+    let supported = [
+        "div", "table", "tbody", "thead", "tfoot", "tr", "td", "th",
+        "caption", "colgroup",
+    ];
+    if !supported.contains(&context.as_str()) {
+        return Err("unsupported HTML fragment context".into());
     }
     let normalized;
     let src = if src.contains('\r') {
@@ -70,7 +75,7 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     } else {
         src
     };
-    let source = tree::build_div_fragment(src);
+    let source = tree::build_fragment(src, &context);
 
     fn clone_subtree(
         source: &Dom,
@@ -91,9 +96,22 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
                 && source.name(*node) == Some("html")
         })
         .ok_or_else(|| "fragment root was not constructed".to_owned())?;
+    let context_node = source
+        .children(root)
+        .find(|node| {
+            source.namespace(*node) == Some(Namespace::Html)
+                && source.name(*node) == Some(context.as_str())
+        })
+        .ok_or_else(|| "fragment context was not constructed".to_owned())?;
     let mut fragment = Dom::new();
     for child in source.children(root) {
-        clone_subtree(&source, child, &mut fragment, NodeIdx(0));
+        if child == context_node {
+            for context_child in source.children(context_node) {
+                clone_subtree(&source, context_child, &mut fragment, NodeIdx(0));
+            }
+        } else {
+            clone_subtree(&source, child, &mut fragment, NodeIdx(0));
+        }
     }
     Ok(fragment)
 }
@@ -143,7 +161,25 @@ mod tests {
             recovery.dump(NodeIdx(0)),
             "#document\n  <span>\n    \"x\"\n"
         );
-        assert!(parse_fragment("table", "<td>x").is_err());
+        assert!(parse_fragment("template", "x").is_err());
+        let table = parse_fragment("table", "<td>x")
+            .expect("table fragment context");
+        assert_eq!(
+            table.dump(NodeIdx(0)),
+            "#document\n  <tbody>\n    <tr>\n      <td>\n        \"x\"\n"
+        );
+        let body = parse_fragment("tbody", "<tr><td>x")
+            .expect("tbody fragment context");
+        assert_eq!(
+            body.dump(NodeIdx(0)),
+            "#document\n  <tr>\n    <td>\n      \"x\"\n"
+        );
+        let row = parse_fragment("tr", "<td>x")
+            .expect("tr fragment context");
+        assert_eq!(
+            row.dump(NodeIdx(0)),
+            "#document\n  <td>\n    \"x\"\n"
+        );
         let normalized = parse_fragment("div", "<span>a\r\nb\rc")
             .expect("fragment newline normalization");
         assert_eq!(
