@@ -23,8 +23,8 @@ fn webrtc_loopback_command_completes_stun_and_rtp_exchange() {
 
 #[test]
 fn sdp_roundtrip_command_reports_ice_dtls_media_summary() {
-    let offer = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/phase9-offer.sdp");
+    let offer =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/phase9-offer.sdp");
     let result = Command::new(env!("CARGO_BIN_EXE_amazing"))
         .args(["sdp-roundtrip", offer.to_str().expect("UTF-8 offer path")])
         .output()
@@ -65,7 +65,10 @@ fn secure_media_loopback_uses_vetted_dtls_srtp() {
         "{stdout}"
     );
     assert!(stdout.contains("DTLS1.2"), "{stdout}");
-    assert!(stdout.contains("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"), "{stdout}");
+    assert!(
+        stdout.contains("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"),
+        "{stdout}"
+    );
     assert!(stdout.contains("SRTP profile=AEAD_AES_128_GCM"), "{stdout}");
     assert!(stdout.contains("fingerprints=ok"), "{stdout}");
     assert!(stdout.contains("SRTP payload=15 bytes"), "{stdout}");
@@ -97,7 +100,7 @@ fn secure_media_two_processes_exchange_protected_media() {
     assert!(stdout.contains("signaling=tcp-loopback"), "{stdout}");
     assert!(stdout.contains("ICE credentials=SDP"), "{stdout}");
     assert!(
-        stdout.contains("ICE retransmit=7 role-conflict=resolved"),
+        stdout.contains("ICE live-loss=2 sends=3 487=resolved prflx=learned"),
         "{stdout}"
     );
     assert!(stdout.contains("consent=Fresh expiry=detected"), "{stdout}");

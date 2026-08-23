@@ -37,6 +37,7 @@ pub struct TransactionId(pub [u8; 12]);
 pub enum StunClass {
     Request,
     SuccessResponse,
+    ErrorResponse,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +50,7 @@ pub struct StunMessage {
     pub ice_controlling: Option<u64>,
     pub ice_controlled: Option<u64>,
     pub use_candidate: bool,
+    pub error_code: Option<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,7 +139,7 @@ impl RtpReceptionStats {
             None => {
                 self.base_sequence = Some(packet.sequence_number);
                 self.max_sequence = packet.sequence_number;
-            },
+            }
             Some(_) => {
                 if packet.sequence_number < self.max_sequence
                     && self.max_sequence - packet.sequence_number > 0x8000
@@ -149,7 +151,7 @@ impl RtpReceptionStats {
                 {
                     self.max_sequence = packet.sequence_number;
                 }
-            },
+            }
         }
         self.received = self.received.saturating_add(1);
         let transit = arrival_timestamp_units.wrapping_sub(packet.timestamp) as i32;
@@ -302,9 +304,7 @@ impl ConsentFreshness {
     }
 
     pub fn state(&self, now_ms: u64) -> ConsentState {
-        if self.expired
-            || now_ms.saturating_sub(self.last_success_ms) >= Self::EXPIRY_MS
-        {
+        if self.expired || now_ms.saturating_sub(self.last_success_ms) >= Self::EXPIRY_MS {
             ConsentState::Expired
         } else {
             ConsentState::Fresh
@@ -332,15 +332,15 @@ impl ConsentFreshness {
     ) -> Result<(), WebRtcError> {
         Self::validate_interval(next_interval_ms)?;
         match self.poll(now_ms) {
-            ConsentPoll::SendNow => {},
+            ConsentPoll::SendNow => {}
             ConsentPoll::Expired => {
                 return Err(WebRtcError::InvalidPacket("consent has expired"));
-            },
+            }
             ConsentPoll::WaitUntil(_) => {
                 return Err(WebRtcError::InvalidPacket(
                     "consent request was recorded before its due time",
                 ));
-            },
+            }
         }
         if self.outstanding.len() >= 8 {
             return Err(WebRtcError::InvalidPacket(
@@ -463,8 +463,8 @@ impl StunRetransmission {
             let delay = self.rto_ms.saturating_mul(1u64 << exponent);
             self.next_send_ms = now_ms.saturating_add(delay);
         } else {
-            self.final_deadline_ms = now_ms
-                .saturating_add(self.rto_ms.saturating_mul(Self::FINAL_WAIT_MULTIPLIER));
+            self.final_deadline_ms =
+                now_ms.saturating_add(self.rto_ms.saturating_mul(Self::FINAL_WAIT_MULTIPLIER));
         }
         Ok(())
     }
@@ -472,9 +472,9 @@ impl StunRetransmission {
     pub fn succeed(&mut self, now_ms: u64) -> bool {
         if self.sends == 0
             || matches!(
-            self.poll(now_ms),
-            StunRetransmitPoll::Failed | StunRetransmitPoll::Cancelled
-        )
+                self.poll(now_ms),
+                StunRetransmitPoll::Failed | StunRetransmitPoll::Cancelled
+            )
         {
             return false;
         }
@@ -527,14 +527,14 @@ pub fn resolve_ice_role_conflict(
             } else {
                 IceRoleConflict::SwitchTo(IceAgentRole::Controlled)
             }
-        },
+        }
         (IceAgentRole::Controlled, IceRoleAttribute::Controlled(remote_tiebreaker)) => {
             if local_tiebreaker >= remote_tiebreaker {
                 IceRoleConflict::SwitchTo(IceAgentRole::Controlling)
             } else {
                 IceRoleConflict::Reject487
             }
-        },
+        }
         _ => IceRoleConflict::Accept,
     }
 }
@@ -548,6 +548,15 @@ pub fn role_after_487(sent: IceRoleAttribute) -> IceAgentRole {
 
 pub struct IceChecklist {
     pub pairs: Vec<CandidatePair>,
+    local_is_controlling: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LiveIceRobustnessReport {
+    pub request_sends: u8,
+    pub injected_drops: u8,
+    pub role_switched: bool,
+    pub peer_reflexive_inserted: bool,
 }
 
 impl IceChecklist {
@@ -580,7 +589,10 @@ impl IceChecklist {
         if let Some(first) = pairs.first_mut() {
             first.state = CandidatePairState::Waiting;
         }
-        Self { pairs }
+        Self {
+            pairs,
+            local_is_controlling,
+        }
     }
 
     pub fn next_check(&mut self) -> Option<usize> {
@@ -660,6 +672,69 @@ impl IceChecklist {
             ChecklistState::Running
         }
     }
+
+    /// Adds the remote candidate discovered from the source address of an
+    /// authenticated check and schedules its pair as a triggered check.
+    pub fn add_peer_reflexive_remote(
+        &mut self,
+        base_pair_index: usize,
+        address: SocketAddrV4,
+        priority: u32,
+    ) -> Result<usize, WebRtcError> {
+        let base = self
+            .pairs
+            .get(base_pair_index)
+            .ok_or(WebRtcError::InvalidPacket(
+                "ICE base pair index is out of range",
+            ))?
+            .clone();
+        if let Some(index) = self.pairs.iter().position(|pair| {
+            pair.local == base.local
+                && pair.remote.component == base.remote.component
+                && pair.remote.address == address
+        }) {
+            if self.pairs[index].state == CandidatePairState::Frozen {
+                self.pairs[index].state = CandidatePairState::Waiting;
+            }
+            return Ok(index);
+        }
+        let remote = IceCandidate {
+            foundation: format!(
+                "prflx-{}-{}-{}",
+                base.remote.component,
+                address.ip(),
+                address.port()
+            ),
+            component: base.remote.component,
+            priority,
+            address,
+        };
+        let (controlling, controlled) = if self.local_is_controlling {
+            (base.local.priority, remote.priority)
+        } else {
+            (remote.priority, base.local.priority)
+        };
+        self.pairs.push(CandidatePair {
+            local: base.local,
+            remote,
+            priority: candidate_pair_priority(controlling, controlled),
+            state: CandidatePairState::Waiting,
+            nominated: false,
+        });
+        Ok(self.pairs.len() - 1)
+    }
+
+    pub fn set_local_role(&mut self, controlling: bool) {
+        self.local_is_controlling = controlling;
+        for pair in &mut self.pairs {
+            let (controlling_priority, controlled_priority) = if controlling {
+                (pair.local.priority, pair.remote.priority)
+            } else {
+                (pair.remote.priority, pair.local.priority)
+            };
+            pair.priority = candidate_pair_priority(controlling_priority, controlled_priority);
+        }
+    }
 }
 
 pub fn candidate_pair_priority(controlling: u32, controlled: u32) -> u64 {
@@ -691,7 +766,9 @@ pub fn encode_binding_success(
     packet.extend_from_slice(&8u16.to_be_bytes());
     packet.push(0);
     packet.push(1);
-    packet.extend_from_slice(&(mapped_address.port() ^ (STUN_MAGIC_COOKIE >> 16) as u16).to_be_bytes());
+    packet.extend_from_slice(
+        &(mapped_address.port() ^ (STUN_MAGIC_COOKIE >> 16) as u16).to_be_bytes(),
+    );
     let address = u32::from_be_bytes(mapped_address.ip().octets()) ^ STUN_MAGIC_COOKIE;
     packet.extend_from_slice(&address.to_be_bytes());
     packet
@@ -705,18 +782,248 @@ pub fn encode_ice_binding_request(
     use_candidate: bool,
     key: &[u8],
 ) -> Result<Vec<u8>, WebRtcError> {
+    encode_ice_binding_request_with_role(
+        transaction_id,
+        username,
+        priority,
+        IceRoleAttribute::Controlling(controlling_tie_breaker),
+        use_candidate,
+        key,
+    )
+}
+
+pub fn encode_ice_binding_request_with_role(
+    transaction_id: TransactionId,
+    username: &str,
+    priority: u32,
+    role: IceRoleAttribute,
+    use_candidate: bool,
+    key: &[u8],
+) -> Result<Vec<u8>, WebRtcError> {
     let mut packet = stun_header(0x0001, transaction_id);
     append_stun_attribute(&mut packet, 0x0006, username.as_bytes())?;
     append_stun_attribute(&mut packet, 0x0024, &priority.to_be_bytes())?;
-    append_stun_attribute(
-        &mut packet,
-        0x802a,
-        &controlling_tie_breaker.to_be_bytes(),
-    )?;
+    let (attribute, tie_breaker) = match role {
+        IceRoleAttribute::Controlling(value) => (0x802a, value),
+        IceRoleAttribute::Controlled(value) => (0x8029, value),
+    };
+    append_stun_attribute(&mut packet, attribute, &tie_breaker.to_be_bytes())?;
     if use_candidate {
         append_stun_attribute(&mut packet, 0x0025, &[])?;
     }
     finish_authenticated_stun(packet, key)
+}
+
+pub fn encode_ice_role_conflict_error(
+    transaction_id: TransactionId,
+    key: &[u8],
+) -> Result<Vec<u8>, WebRtcError> {
+    let mut packet = stun_header(0x0111, transaction_id);
+    let mut error = vec![0, 0, 4, 87];
+    error.extend_from_slice(b"Role Conflict");
+    append_stun_attribute(&mut packet, 0x0009, &error)?;
+    finish_authenticated_stun(packet, key)
+}
+
+/// Runs a real loopback UDP ICE exchange: two requests are intentionally
+/// dropped, the third receives an authenticated 487, and a new controlled
+/// retry succeeds. The receiver learns the request's source as a peer-
+/// reflexive remote candidate.
+pub fn run_live_ice_robustness_probe(
+    replacement_tiebreaker: u64,
+) -> Result<LiveIceRobustnessReport, WebRtcError> {
+    use std::net::{SocketAddr, UdpSocket};
+    use std::time::Duration;
+
+    let server = UdpSocket::bind("127.0.0.1:0")
+        .map_err(|_| WebRtcError::InvalidPacket("cannot bind ICE probe server"))?;
+    let client = UdpSocket::bind("127.0.0.1:0")
+        .map_err(|_| WebRtcError::InvalidPacket("cannot bind ICE probe client"))?;
+    server
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .map_err(|_| WebRtcError::InvalidPacket("cannot configure ICE probe server"))?;
+    client
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .map_err(|_| WebRtcError::InvalidPacket("cannot configure ICE probe client"))?;
+    let SocketAddr::V4(server_address) = server
+        .local_addr()
+        .map_err(|_| WebRtcError::InvalidPacket("cannot read ICE probe server address"))?
+    else {
+        return Err(WebRtcError::Unsupported("ICE probe requires IPv4"));
+    };
+    let SocketAddr::V4(client_address) = client
+        .local_addr()
+        .map_err(|_| WebRtcError::InvalidPacket("cannot read ICE probe client address"))?
+    else {
+        return Err(WebRtcError::Unsupported("ICE probe requires IPv4"));
+    };
+
+    let local = IceCandidate {
+        foundation: "probe-server".into(),
+        component: 1,
+        priority: 100,
+        address: server_address,
+    };
+    let signaled_remote = IceCandidate {
+        foundation: "probe-signaled".into(),
+        component: 1,
+        priority: 80,
+        address: SocketAddrV4::new(Ipv4Addr::LOCALHOST, 9),
+    };
+    let mut server_checklist = IceChecklist::new(&[local], &[signaled_remote], true);
+    let key = b"live-ice-probe-password";
+    if replacement_tiebreaker == 0 || replacement_tiebreaker == 10 {
+        return Err(WebRtcError::InvalidPacket(
+            "ICE replacement tie-breaker must be new and nonzero",
+        ));
+    }
+    let transaction = TransactionId(*b"live-loss!!!");
+    let send_times = [0, 500, 1_500];
+    let mut retransmission = StunRetransmission::new(0, 500)?;
+    let mut buffer = [0u8; 1024];
+    let mut peer_reflexive_index = None;
+
+    for (position, now_ms) in send_times.into_iter().enumerate() {
+        retransmission.record_sent(now_ms)?;
+        let request = encode_ice_binding_request_with_role(
+            transaction,
+            "server:client",
+            90,
+            IceRoleAttribute::Controlling(10),
+            true,
+            key,
+        )?;
+        client
+            .send_to(&request, server_address)
+            .map_err(|_| WebRtcError::InvalidPacket("cannot send ICE probe request"))?;
+        let (length, source) = server
+            .recv_from(&mut buffer)
+            .map_err(|_| WebRtcError::InvalidPacket("cannot receive ICE probe request"))?;
+        let SocketAddr::V4(source) = source else {
+            return Err(WebRtcError::Unsupported("ICE probe requires IPv4"));
+        };
+        let parsed = parse_stun(&buffer[..length])?;
+        if source != client_address
+            || parsed.class != StunClass::Request
+            || parsed.transaction_id != transaction
+            || parsed.username.as_deref() != Some("server:client")
+            || parsed.priority != Some(90)
+            || parsed.ice_controlling != Some(10)
+            || !parsed.use_candidate
+            || !verify_message_integrity(&buffer[..length], key)?
+            || !verify_fingerprint(&buffer[..length])?
+        {
+            return Err(WebRtcError::InvalidPacket(
+                "ICE probe request authentication failed",
+            ));
+        }
+        let index = server_checklist.add_peer_reflexive_remote(
+            0,
+            source,
+            parsed.priority.ok_or(WebRtcError::InvalidPacket(
+                "ICE probe request omitted PRIORITY",
+            ))?,
+        )?;
+        peer_reflexive_index = Some(index);
+        if position < 2 {
+            continue;
+        }
+        let remote_role = parsed
+            .ice_controlling
+            .map(IceRoleAttribute::Controlling)
+            .or_else(|| parsed.ice_controlled.map(IceRoleAttribute::Controlled))
+            .ok_or(WebRtcError::InvalidPacket("ICE probe request omitted role"))?;
+        if resolve_ice_role_conflict(IceAgentRole::Controlling, 20, remote_role)
+            != IceRoleConflict::Reject487
+        {
+            return Err(WebRtcError::InvalidPacket("ICE probe did not require 487"));
+        }
+        let error = encode_ice_role_conflict_error(transaction, key)?;
+        server
+            .send_to(&error, source)
+            .map_err(|_| WebRtcError::InvalidPacket("cannot send ICE probe 487"))?;
+    }
+
+    let (length, error_source) = client
+        .recv_from(&mut buffer)
+        .map_err(|_| WebRtcError::InvalidPacket("cannot receive ICE probe 487"))?;
+    let error = parse_stun(&buffer[..length])?;
+    if error_source != SocketAddr::V4(server_address)
+        || error.class != StunClass::ErrorResponse
+        || error.transaction_id != transaction
+        || error.error_code != Some(487)
+        || !verify_message_integrity(&buffer[..length], key)?
+        || !verify_fingerprint(&buffer[..length])?
+    {
+        return Err(WebRtcError::InvalidPacket(
+            "ICE probe 487 authentication failed",
+        ));
+    }
+    retransmission.cancel(1_500);
+    let client_role = role_after_487(IceRoleAttribute::Controlling(10));
+    let retry_role = match client_role {
+        IceAgentRole::Controlling => IceRoleAttribute::Controlling(replacement_tiebreaker),
+        IceAgentRole::Controlled => IceRoleAttribute::Controlled(replacement_tiebreaker),
+    };
+    let retry_transaction = TransactionId(*b"live-retry!!");
+    let retry = encode_ice_binding_request_with_role(
+        retry_transaction,
+        "server:client",
+        90,
+        retry_role,
+        false,
+        key,
+    )?;
+    client
+        .send_to(&retry, server_address)
+        .map_err(|_| WebRtcError::InvalidPacket("cannot send ICE probe retry"))?;
+    let (length, source) = server
+        .recv_from(&mut buffer)
+        .map_err(|_| WebRtcError::InvalidPacket("cannot receive ICE probe retry"))?;
+    let parsed_retry = parse_stun(&buffer[..length])?;
+    if source != SocketAddr::V4(client_address)
+        || parsed_retry.class != StunClass::Request
+        || parsed_retry.transaction_id != retry_transaction
+        || parsed_retry.username.as_deref() != Some("server:client")
+        || parsed_retry.priority != Some(90)
+        || parsed_retry.ice_controlled != Some(replacement_tiebreaker)
+        || parsed_retry.use_candidate
+        || !verify_message_integrity(&buffer[..length], key)?
+        || !verify_fingerprint(&buffer[..length])?
+    {
+        return Err(WebRtcError::InvalidPacket(
+            "ICE probe retry did not switch role",
+        ));
+    }
+    let SocketAddr::V4(source_v4) = source else {
+        return Err(WebRtcError::Unsupported("ICE probe requires IPv4"));
+    };
+    let success = encode_ice_binding_success(retry_transaction, source_v4, key)?;
+    server
+        .send_to(&success, source)
+        .map_err(|_| WebRtcError::InvalidPacket("cannot send ICE probe success"))?;
+    let (length, success_source) = client
+        .recv_from(&mut buffer)
+        .map_err(|_| WebRtcError::InvalidPacket("cannot receive ICE probe success"))?;
+    let parsed_success = parse_stun(&buffer[..length])?;
+    if success_source != SocketAddr::V4(server_address)
+        || parsed_success.class != StunClass::SuccessResponse
+        || parsed_success.transaction_id != retry_transaction
+        || parsed_success.xor_mapped_address != Some(client_address)
+        || !verify_message_integrity(&buffer[..length], key)?
+        || !verify_fingerprint(&buffer[..length])?
+    {
+        return Err(WebRtcError::InvalidPacket(
+            "ICE probe retry did not succeed",
+        ));
+    }
+    Ok(LiveIceRobustnessReport {
+        request_sends: 3,
+        injected_drops: 2,
+        role_switched: client_role == IceAgentRole::Controlled,
+        peer_reflexive_inserted: peer_reflexive_index
+            .is_some_and(|index| server_checklist.pairs[index].remote.address == client_address),
+    })
 }
 
 pub fn encode_ice_binding_success(
@@ -727,9 +1034,8 @@ pub fn encode_ice_binding_success(
     let mut packet = stun_header(0x0101, transaction_id);
     let mut mapped = [0u8; 8];
     mapped[1] = 1;
-    mapped[2..4].copy_from_slice(
-        &(mapped_address.port() ^ (STUN_MAGIC_COOKIE >> 16) as u16).to_be_bytes(),
-    );
+    mapped[2..4]
+        .copy_from_slice(&(mapped_address.port() ^ (STUN_MAGIC_COOKIE >> 16) as u16).to_be_bytes());
     let address = u32::from_be_bytes(mapped_address.ip().octets()) ^ STUN_MAGIC_COOKIE;
     mapped[4..8].copy_from_slice(&address.to_be_bytes());
     append_stun_attribute(&mut packet, 0x0020, &mapped)?;
@@ -782,7 +1088,9 @@ fn finish_authenticated_stun(mut packet: Vec<u8>, key: &[u8]) -> Result<Vec<u8>,
     let fingerprint_end = packet
         .len()
         .checked_add(8)
-        .ok_or(WebRtcError::InvalidPacket("STUN fingerprint length overflow"))?;
+        .ok_or(WebRtcError::InvalidPacket(
+            "STUN fingerprint length overflow",
+        ))?;
     set_stun_body_length(&mut packet, fingerprint_end)?;
     let fingerprint = crc32(&packet) ^ 0x5354_554e;
     append_stun_attribute(&mut packet, 0x8028, &fingerprint.to_be_bytes())?;
@@ -795,7 +1103,9 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
     }
     let message_type = u16::from_be_bytes([packet[0], packet[1]]);
     if message_type & 0xc000 != 0 {
-        return Err(WebRtcError::InvalidPacket("STUN type uses reserved high bits"));
+        return Err(WebRtcError::InvalidPacket(
+            "STUN type uses reserved high bits",
+        ));
     }
     let body_len = u16::from_be_bytes([packet[2], packet[3]]) as usize;
     if body_len % 4 != 0 || packet.len() != 20 + body_len {
@@ -807,6 +1117,7 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
     let class = match message_type {
         0x0001 => StunClass::Request,
         0x0101 => StunClass::SuccessResponse,
+        0x0111 => StunClass::ErrorResponse,
         _ => return Err(WebRtcError::Unsupported("STUN method or class")),
     };
     let mut transaction = [0; 12];
@@ -817,12 +1128,15 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
     let mut ice_controlling = None;
     let mut ice_controlled = None;
     let mut use_candidate = false;
+    let mut error_code = None;
     let mut integrity_seen = false;
     let mut fingerprint_seen = false;
     let mut cursor = 20;
     while cursor < packet.len() {
         if cursor + 4 > packet.len() {
-            return Err(WebRtcError::InvalidPacket("truncated STUN attribute header"));
+            return Err(WebRtcError::InvalidPacket(
+                "truncated STUN attribute header",
+            ));
         }
         let attribute_type = u16::from_be_bytes([packet[cursor], packet[cursor + 1]]);
         let attribute_len = u16::from_be_bytes([packet[cursor + 2], packet[cursor + 3]]) as usize;
@@ -861,7 +1175,7 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
                     Ipv4Addr::from(encoded_address ^ STUN_MAGIC_COOKIE),
                     port,
                 ));
-            },
+            }
             0x0006 => {
                 if username.is_some() {
                     return Err(WebRtcError::InvalidPacket("duplicate USERNAME"));
@@ -871,7 +1185,7 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
                         .map_err(|_| WebRtcError::InvalidPacket("USERNAME is not UTF-8"))?
                         .to_owned(),
                 );
-            },
+            }
             0x0024 => {
                 if priority.is_some() || attribute_len != 4 {
                     return Err(WebRtcError::InvalidPacket("invalid or duplicate PRIORITY"));
@@ -881,7 +1195,7 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
                         .try_into()
                         .expect("priority length checked"),
                 ));
-            },
+            }
             0x802a => {
                 if ice_controlling.is_some() || attribute_len != 8 {
                     return Err(WebRtcError::InvalidPacket(
@@ -893,7 +1207,7 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
                         .try_into()
                         .expect("tie-breaker length checked"),
                 ));
-            },
+            }
             0x8029 => {
                 if ice_controlled.is_some() || attribute_len != 8 {
                     return Err(WebRtcError::InvalidPacket(
@@ -905,7 +1219,7 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
                         .try_into()
                         .expect("tie-breaker length checked"),
                 ));
-            },
+            }
             0x0025 => {
                 if use_candidate || attribute_len != 0 {
                     return Err(WebRtcError::InvalidPacket(
@@ -913,7 +1227,28 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
                     ));
                 }
                 use_candidate = true;
-            },
+            }
+            0x0009 => {
+                if error_code.is_some() || attribute_len < 4 {
+                    return Err(WebRtcError::InvalidPacket(
+                        "invalid or duplicate ERROR-CODE",
+                    ));
+                }
+                if packet[value_start] != 0
+                    || packet[value_start + 1] != 0
+                    || packet[value_start + 2] & 0xf8 != 0
+                {
+                    return Err(WebRtcError::InvalidPacket(
+                        "ERROR-CODE reserved bits are nonzero",
+                    ));
+                }
+                let class = packet[value_start + 2] & 0x07;
+                let number = packet[value_start + 3];
+                if !(3..=6).contains(&class) || number >= 100 {
+                    return Err(WebRtcError::InvalidPacket("invalid ERROR-CODE value"));
+                }
+                error_code = Some(class as u16 * 100 + number as u16);
+            }
             0x0008 => {
                 if integrity_seen || attribute_len != 20 {
                     return Err(WebRtcError::InvalidPacket(
@@ -921,23 +1256,40 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
                     ));
                 }
                 integrity_seen = true;
-            },
+            }
             0x8028 => {
                 if attribute_len != 4 || value_end != packet.len() {
                     return Err(WebRtcError::InvalidPacket("FINGERPRINT is not final"));
                 }
                 fingerprint_seen = true;
-            },
-            _ => {},
+            }
+            _ => {}
         }
         let padded_len = attribute_len
             .checked_add(3)
-            .ok_or(WebRtcError::InvalidPacket("STUN attribute padding overflow"))?
+            .ok_or(WebRtcError::InvalidPacket(
+                "STUN attribute padding overflow",
+            ))?
             / 4
             * 4;
         cursor = value_start
             .checked_add(padded_len)
             .ok_or(WebRtcError::InvalidPacket("STUN attribute cursor overflow"))?;
+    }
+    if class == StunClass::ErrorResponse && error_code.is_none() {
+        return Err(WebRtcError::InvalidPacket(
+            "STUN error response has no ERROR-CODE",
+        ));
+    }
+    if class != StunClass::ErrorResponse && error_code.is_some() {
+        return Err(WebRtcError::InvalidPacket(
+            "ERROR-CODE appears outside an error response",
+        ));
+    }
+    if ice_controlling.is_some() && ice_controlled.is_some() {
+        return Err(WebRtcError::InvalidPacket(
+            "ICE-CONTROLLING and ICE-CONTROLLED appear together",
+        ));
     }
     Ok(StunMessage {
         class,
@@ -948,12 +1300,15 @@ pub fn parse_stun(packet: &[u8]) -> Result<StunMessage, WebRtcError> {
         ice_controlling,
         ice_controlled,
         use_candidate,
+        error_code,
     })
 }
 
 pub fn encode_rtp(packet: &RtpPacket) -> Result<Vec<u8>, WebRtcError> {
     if packet.payload_type > 127 {
-        return Err(WebRtcError::InvalidPacket("RTP payload type exceeds seven bits"));
+        return Err(WebRtcError::InvalidPacket(
+            "RTP payload type exceeds seven bits",
+        ));
     }
     let mut wire = Vec::with_capacity(12 + packet.payload.len());
     wire.push(0x80);
@@ -973,7 +1328,9 @@ pub fn parse_rtp(packet: &[u8]) -> Result<RtpPacket, WebRtcError> {
         return Err(WebRtcError::InvalidPacket("RTP version is not 2"));
     }
     if packet[0] & 0x3f != 0 {
-        return Err(WebRtcError::Unsupported("RTP padding, extension, or CSRC list"));
+        return Err(WebRtcError::Unsupported(
+            "RTP padding, extension, or CSRC list",
+        ));
     }
     Ok(RtpPacket {
         marker: packet[1] & 0x80 != 0,
@@ -1004,13 +1361,19 @@ pub fn parse_rtcp_sender_report(packet: &[u8]) -> Result<RtcpSenderReport, WebRt
         return Err(WebRtcError::InvalidPacket("truncated RTCP header"));
     }
     if packet[0] >> 6 != 2 || packet[0] & 0x20 != 0 {
-        return Err(WebRtcError::InvalidPacket("RTCP version or padding is invalid"));
+        return Err(WebRtcError::InvalidPacket(
+            "RTCP version or padding is invalid",
+        ));
     }
     if packet[0] & 0x1f != 0 {
-        return Err(WebRtcError::Unsupported("RTCP Sender Report reception blocks"));
+        return Err(WebRtcError::Unsupported(
+            "RTCP Sender Report reception blocks",
+        ));
     }
     if packet[1] != 200 {
-        return Err(WebRtcError::Unsupported("RTCP packet is not a Sender Report"));
+        return Err(WebRtcError::Unsupported(
+            "RTCP packet is not a Sender Report",
+        ));
     }
     let words_minus_one = u16::from_be_bytes([packet[2], packet[3]]) as usize;
     let declared_len = words_minus_one
@@ -1018,7 +1381,9 @@ pub fn parse_rtcp_sender_report(packet: &[u8]) -> Result<RtcpSenderReport, WebRt
         .and_then(|words| words.checked_mul(4))
         .ok_or(WebRtcError::InvalidPacket("RTCP length overflow"))?;
     if declared_len != packet.len() || packet.len() != 28 {
-        return Err(WebRtcError::InvalidPacket("RTCP Sender Report length mismatch"));
+        return Err(WebRtcError::InvalidPacket(
+            "RTCP Sender Report length mismatch",
+        ));
     }
     let word = |offset| {
         u32::from_be_bytes(
@@ -1056,7 +1421,12 @@ pub fn encode_rtcp_compound_receiver_report(
     wire.extend_from_slice(&report.reception.extended_highest_sequence.to_be_bytes());
     wire.extend_from_slice(&report.reception.interarrival_jitter.to_be_bytes());
     wire.extend_from_slice(&report.reception.last_sender_report.to_be_bytes());
-    wire.extend_from_slice(&report.reception.delay_since_last_sender_report.to_be_bytes());
+    wire.extend_from_slice(
+        &report
+            .reception
+            .delay_since_last_sender_report
+            .to_be_bytes(),
+    );
 
     append_sdes_cname(&mut wire, report.receiver_ssrc, &report.cname)?;
     Ok(wire)
@@ -1129,18 +1499,16 @@ pub fn parse_rtcp_compound_sender_report(
         .checked_mul(4)
         .ok_or(WebRtcError::InvalidPacket("RTCP SR length overflow"))?;
     if sender_len != 28 || packet.len() < sender_len + 12 {
-        return Err(WebRtcError::InvalidPacket("compound RTCP SR length mismatch"));
+        return Err(WebRtcError::InvalidPacket(
+            "compound RTCP SR length mismatch",
+        ));
     }
     let sender = parse_rtcp_sender_report(&packet[..sender_len])?;
     let cname = parse_sdes_cname(&packet[sender_len..], sender.ssrc)?;
     Ok(RtcpCompoundSenderReport { sender, cname })
 }
 
-fn append_sdes_cname(
-    wire: &mut Vec<u8>,
-    ssrc: u32,
-    cname: &str,
-) -> Result<(), WebRtcError> {
+fn append_sdes_cname(wire: &mut Vec<u8>, ssrc: u32, cname: &str) -> Result<(), WebRtcError> {
     let cname = cname.as_bytes();
     if cname.is_empty() || cname.len() > u8::MAX as usize || cname.contains(&0) {
         return Err(WebRtcError::InvalidPacket("invalid RTCP SDES CNAME"));
@@ -1339,7 +1707,9 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                             .all(|ch| ch.is_ascii_digit() || (b'A'..=b'F').contains(&ch))
                 })
             {
-                return Err(WebRtcError::InvalidPacket("invalid SHA-256 SDP fingerprint"));
+                return Err(WebRtcError::InvalidPacket(
+                    "invalid SHA-256 SDP fingerprint",
+                ));
             }
             fingerprint_algorithm = Some(algorithm.to_owned());
             fingerprint = Some(digest.to_owned());
@@ -1365,7 +1735,9 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 return Err(WebRtcError::Unsupported("SDP candidate form"));
             }
             if fields[0].len() > 32 {
-                return Err(WebRtcError::InvalidPacket("candidate foundation is too long"));
+                return Err(WebRtcError::InvalidPacket(
+                    "candidate foundation is too long",
+                ));
             }
             let component = fields[1]
                 .parse()
@@ -1417,7 +1789,9 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 .map_err(|_| WebRtcError::InvalidPacket("invalid rtpmap channels"))?
                 .unwrap_or(1);
             if channels == 0 || !payload_types.contains(&payload_type) {
-                return Err(WebRtcError::InvalidPacket("rtpmap does not match media payloads"));
+                return Err(WebRtcError::InvalidPacket(
+                    "rtpmap does not match media payloads",
+                ));
             }
             rtp_maps.push(RtpMap {
                 payload_type,
@@ -1432,8 +1806,9 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
         origin: origin.to_owned(),
         session_name: session_name.to_owned(),
         timing: timing.to_owned(),
-        connection_address: connection_address
-            .ok_or(WebRtcError::InvalidPacket("SDP media connection is missing"))?,
+        connection_address: connection_address.ok_or(WebRtcError::InvalidPacket(
+            "SDP media connection is missing",
+        ))?,
         media: media.ok_or(WebRtcError::InvalidPacket("SDP media section is missing"))?,
         port,
         protocol,
@@ -1442,8 +1817,7 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
         ice_pwd: ice_pwd.ok_or(WebRtcError::InvalidPacket("SDP ice-pwd is missing"))?,
         fingerprint_algorithm: fingerprint_algorithm
             .ok_or(WebRtcError::InvalidPacket("SDP fingerprint is missing"))?,
-        fingerprint: fingerprint
-            .ok_or(WebRtcError::InvalidPacket("SDP fingerprint is missing"))?,
+        fingerprint: fingerprint.ok_or(WebRtcError::InvalidPacket("SDP fingerprint is missing"))?,
         setup: setup.ok_or(WebRtcError::InvalidPacket("SDP setup is missing"))?,
         candidates,
         rtp_maps,
@@ -1480,10 +1854,7 @@ pub fn encode_sdp(description: &SdpDescription) -> Result<String, WebRtcError> {
             .collect::<Vec<_>>()
             .join(" ")
     ));
-    output.push_str(&format!(
-        "c=IN IP4 {}\r\n",
-        description.connection_address
-    ));
+    output.push_str(&format!("c=IN IP4 {}\r\n", description.connection_address));
     for candidate in &description.candidates {
         output.push_str(&format!(
             "a=candidate:{} {} UDP {} {} {} typ host\r\n",
@@ -1525,7 +1896,9 @@ pub fn verify_message_integrity(packet: &[u8], key: &[u8]) -> Result<bool, WebRt
         .ok_or(WebRtcError::InvalidPacket("missing MESSAGE-INTEGRITY"))?;
     let (_, offset, value_start, value_end) = attributes[integrity_index];
     if value_end - value_start != 20 {
-        return Err(WebRtcError::InvalidPacket("MESSAGE-INTEGRITY length is not 20"));
+        return Err(WebRtcError::InvalidPacket(
+            "MESSAGE-INTEGRITY length is not 20",
+        ));
     }
     for (position, (kind, _, _, end)) in attributes.iter().enumerate().skip(integrity_index + 1) {
         if *kind != 0x8028 || position + 1 != attributes.len() || *end != packet.len() {
@@ -1538,7 +1911,9 @@ pub fn verify_message_integrity(packet: &[u8], key: &[u8]) -> Result<bool, WebRt
         .checked_add(24)
         .and_then(|end| end.checked_sub(20))
         .and_then(|length| u16::try_from(length).ok())
-        .ok_or(WebRtcError::InvalidPacket("MESSAGE-INTEGRITY offset overflow"))?;
+        .ok_or(WebRtcError::InvalidPacket(
+            "MESSAGE-INTEGRITY offset overflow",
+        ))?;
     let mut authenticated = packet[..offset].to_vec();
     authenticated[2..4].copy_from_slice(&adjusted_body_len.to_be_bytes());
     let computed = hmac_sha1(key, &authenticated);
@@ -1556,7 +1931,9 @@ pub fn verify_fingerprint(packet: &[u8]) -> Result<bool, WebRtcError> {
         .find(|(kind, _, _, _)| *kind == 0x8028)
         .ok_or(WebRtcError::InvalidPacket("missing FINGERPRINT"))?;
     if value_end - value_start != 4 || value_end != packet.len() {
-        return Err(WebRtcError::InvalidPacket("FINGERPRINT must be the final four-byte attribute"));
+        return Err(WebRtcError::InvalidPacket(
+            "FINGERPRINT must be the final four-byte attribute",
+        ));
     }
     let expected = u32::from_be_bytes(
         packet[value_start..value_end]
@@ -1566,9 +1943,7 @@ pub fn verify_fingerprint(packet: &[u8]) -> Result<bool, WebRtcError> {
     Ok(crc32(&packet[..offset]) ^ 0x5354_554e == expected)
 }
 
-fn stun_attribute_ranges(
-    packet: &[u8],
-) -> Result<Vec<(u16, usize, usize, usize)>, WebRtcError> {
+fn stun_attribute_ranges(packet: &[u8]) -> Result<Vec<(u16, usize, usize, usize)>, WebRtcError> {
     if packet.len() < 20 {
         return Err(WebRtcError::InvalidPacket("truncated STUN header"));
     }
@@ -1583,7 +1958,9 @@ fn stun_attribute_ranges(
     let mut offset = 20;
     while offset < packet.len() {
         if offset + 4 > packet.len() {
-            return Err(WebRtcError::InvalidPacket("truncated STUN attribute header"));
+            return Err(WebRtcError::InvalidPacket(
+                "truncated STUN attribute header",
+            ));
         }
         let kind = u16::from_be_bytes([packet[offset], packet[offset + 1]]);
         let length = u16::from_be_bytes([packet[offset + 2], packet[offset + 3]]) as usize;
@@ -1604,7 +1981,9 @@ fn stun_attribute_ranges(
             .checked_add(padded)
             .ok_or(WebRtcError::InvalidPacket("STUN cursor overflow"))?;
         if offset > packet.len() {
-            return Err(WebRtcError::InvalidPacket("truncated STUN attribute padding"));
+            return Err(WebRtcError::InvalidPacket(
+                "truncated STUN attribute padding",
+            ));
         }
     }
     Ok(attributes)
@@ -1651,11 +2030,9 @@ fn sha1(message: &[u8]) -> [u8; 20] {
             *word = u32::from_be_bytes(chunk[start..start + 4].try_into().expect("word size"));
         }
         for index in 16..80 {
-            words[index] = (words[index - 3]
-                ^ words[index - 8]
-                ^ words[index - 14]
-                ^ words[index - 16])
-                .rotate_left(1);
+            words[index] =
+                (words[index - 3] ^ words[index - 8] ^ words[index - 14] ^ words[index - 16])
+                    .rotate_left(1);
         }
         let [mut a, mut b, mut c, mut d, mut e] = state;
         for (index, word) in words.iter().enumerate() {
@@ -1770,8 +2147,7 @@ mod tests {
 
     #[test]
     fn rfc5769_request_integrity_and_fingerprint_verify() {
-        let packet = hex(
-            "
+        let packet = hex("
             000100582112a442b7e7a701bc34d686fa87dfae
             802200105354554e207465737420636c69656e74
             002400046e0001ff
@@ -1779,8 +2155,7 @@ mod tests {
             000600096576746a3a68367659202020
             000800149aeaa70cbfd8cb56781ef2b5b2d3f249c1b571a2
             80280004e57a3bcf
-            ",
-        );
+            ");
         let key = b"VOkJxbRl1RmTxUk/WvJxBt";
 
         assert!(verify_message_integrity(&packet, key).expect("integrity parse"));
@@ -1814,6 +2189,53 @@ mod tests {
         tampered[24] ^= 1;
         assert!(!verify_message_integrity(&tampered, key).expect("tampered integrity parse"));
         assert!(!verify_fingerprint(&tampered).expect("tampered fingerprint parse"));
+    }
+
+    #[test]
+    fn authenticated_487_and_controlled_retry_round_trip() {
+        let transaction = TransactionId(*b"ferric-487!!");
+        let key = b"local-ice-password";
+        let error =
+            encode_ice_role_conflict_error(transaction, key).expect("encodable role conflict");
+        let parsed = parse_stun(&error).expect("valid role conflict");
+        assert_eq!(parsed.class, StunClass::ErrorResponse);
+        assert_eq!(parsed.error_code, Some(487));
+        assert!(verify_message_integrity(&error, key).unwrap());
+        assert!(verify_fingerprint(&error).unwrap());
+        let mut reserved = error.clone();
+        reserved[26] |= 0x80;
+        assert!(parse_stun(&reserved).is_err());
+
+        let retry = encode_ice_binding_request_with_role(
+            transaction,
+            "remote:local",
+            100,
+            IceRoleAttribute::Controlled(9),
+            false,
+            key,
+        )
+        .expect("encodable controlled retry");
+        let parsed_retry = parse_stun(&retry).expect("valid controlled retry");
+        assert_eq!(parsed_retry.ice_controlling, None);
+        assert_eq!(parsed_retry.ice_controlled, Some(9));
+    }
+
+    #[test]
+    fn rejects_conflicting_ice_role_attributes() {
+        let transaction = TransactionId(*b"hostile-role");
+        let key = b"local-ice-password";
+        let mut packet = stun_header(0x0001, transaction);
+        append_stun_attribute(&mut packet, 0x0006, b"remote:local").unwrap();
+        append_stun_attribute(&mut packet, 0x0024, &100u32.to_be_bytes()).unwrap();
+        append_stun_attribute(&mut packet, 0x802a, &7u64.to_be_bytes()).unwrap();
+        append_stun_attribute(&mut packet, 0x8029, &8u64.to_be_bytes()).unwrap();
+        let packet = finish_authenticated_stun(packet, key).unwrap();
+        assert!(matches!(
+            parse_stun(&packet),
+            Err(WebRtcError::InvalidPacket(
+                "ICE-CONTROLLING and ICE-CONTROLLED appear together"
+            ))
+        ));
     }
 
     #[test]
@@ -1883,7 +2305,10 @@ mod tests {
         assert_eq!(parsed.candidates.len(), 1);
         assert_eq!(parsed.rtp_maps[0].encoding, "opus");
         assert_eq!(parsed.rtp_maps[0].clock_rate, 48_000);
-        assert_eq!(parse_sdp(&encode_sdp(&parsed).expect("serializable SDP")).unwrap(), parsed);
+        assert_eq!(
+            parse_sdp(&encode_sdp(&parsed).expect("serializable SDP")).unwrap(),
+            parsed
+        );
     }
 
     #[test]
@@ -1905,8 +2330,8 @@ mod tests {
         let transaction = TransactionId(*b"ferric-ice!!");
         let address: SocketAddrV4 = "198.51.100.7:50000".parse().expect("test address");
         let key = b"remote-ice-password";
-        let packet = encode_ice_binding_success(transaction, address, key)
-            .expect("encodable ICE success");
+        let packet =
+            encode_ice_binding_success(transaction, address, key).expect("encodable ICE success");
         let parsed = parse_stun(&packet).expect("valid ICE success");
 
         assert_eq!(parsed.xor_mapped_address, Some(address));
@@ -1922,20 +2347,71 @@ mod tests {
             priority,
             address: SocketAddrV4::new(Ipv4Addr::LOCALHOST, port),
         };
-        let local = [candidate("local-high", 100, 5000), candidate("local-low", 50, 5001)];
+        let local = [
+            candidate("local-high", 100, 5000),
+            candidate("local-low", 50, 5001),
+        ];
         let remote = [candidate("remote", 80, 6000)];
         let mut checklist = IceChecklist::new(&local, &remote, true);
 
         assert_eq!(checklist.pairs.len(), 2);
-        assert_eq!(checklist.pairs[0].priority, candidate_pair_priority(100, 80));
+        assert_eq!(
+            checklist.pairs[0].priority,
+            candidate_pair_priority(100, 80)
+        );
         assert_eq!(checklist.pairs[0].state, CandidatePairState::Waiting);
         assert_eq!(checklist.pairs[1].state, CandidatePairState::Frozen);
         assert!(checklist.mark_succeeded(1, true).is_err());
         let selected = checklist.next_check().expect("highest-priority check");
         assert_eq!(selected, 0);
         assert_eq!(checklist.pairs[0].state, CandidatePairState::InProgress);
-        checklist.mark_succeeded(selected, true).expect("valid pair index");
+        checklist
+            .mark_succeeded(selected, true)
+            .expect("valid pair index");
         assert_eq!(checklist.state(), ChecklistState::Completed);
+    }
+
+    #[test]
+    fn checklist_adds_and_deduplicates_peer_reflexive_pair() {
+        let candidate = |foundation: &str, priority, port| IceCandidate {
+            foundation: foundation.into(),
+            component: 1,
+            priority,
+            address: SocketAddrV4::new(Ipv4Addr::LOCALHOST, port),
+        };
+        let local = [candidate("local", 100, 5000)];
+        let remote = [candidate("signaled", 80, 6000)];
+        let mut checklist = IceChecklist::new(&local, &remote, true);
+        let address: SocketAddrV4 = "127.0.0.1:7000".parse().unwrap();
+        let index = checklist
+            .add_peer_reflexive_remote(0, address, 90)
+            .expect("peer-reflexive pair");
+        assert_eq!(checklist.pairs[index].remote.address, address);
+        assert!(
+            checklist.pairs[index]
+                .remote
+                .foundation
+                .starts_with("prflx-")
+        );
+        assert_eq!(checklist.pairs[index].state, CandidatePairState::Waiting);
+        assert_eq!(
+            checklist.add_peer_reflexive_remote(0, address, 90).unwrap(),
+            index
+        );
+        assert_eq!(checklist.pairs.len(), 2);
+        let controlling_priority = checklist.pairs[index].priority;
+        checklist.set_local_role(false);
+        assert_ne!(checklist.pairs[index].priority, controlling_priority);
+    }
+
+    #[test]
+    fn live_ice_probe_drops_packets_switches_role_and_learns_remote() {
+        let report =
+            run_live_ice_robustness_probe(0xfeed_face_cafe_beef).expect("live ICE robustness");
+        assert_eq!(report.request_sends, 3);
+        assert_eq!(report.injected_drops, 2);
+        assert!(report.role_switched);
+        assert!(report.peer_reflexive_inserted);
     }
 
     #[test]
@@ -1955,8 +2431,8 @@ mod tests {
         };
         let wire = encode_rtcp_compound_receiver_report(&report)
             .expect("encodable compound receiver report");
-        let parsed = parse_rtcp_compound_receiver_report(&wire)
-            .expect("valid compound receiver report");
+        let parsed =
+            parse_rtcp_compound_receiver_report(&wire).expect("valid compound receiver report");
 
         assert_eq!(parsed, report);
         assert_eq!(wire[1], 201);
@@ -1976,8 +2452,8 @@ mod tests {
             },
             cname: "child@ferric".into(),
         };
-        let wire = encode_rtcp_compound_sender_report(&report)
-            .expect("encodable compound sender report");
+        let wire =
+            encode_rtcp_compound_sender_report(&report).expect("encodable compound sender report");
         assert_eq!(parse_rtcp_compound_sender_report(&wire).unwrap(), report);
         assert_eq!(wire[1], 200);
         assert_eq!(wire[29], 202);
@@ -1995,18 +2471,22 @@ mod tests {
         consent
             .record_sent(5_000, transaction, 5_500)
             .expect("new one-shot consent request");
-        assert!(consent
-            .record_authenticated_response(7_000, transaction)
-            .expect("matching authenticated response"));
+        assert!(
+            consent
+                .record_authenticated_response(7_000, transaction)
+                .expect("matching authenticated response")
+        );
         assert_eq!(consent.poll(10_499), ConsentPoll::WaitUntil(10_500));
         assert_eq!(consent.poll(10_500), ConsentPoll::SendNow);
         assert!(consent.record_sent(10_500, transaction, 5_000).is_err());
         assert_eq!(consent.poll(36_999), ConsentPoll::SendNow);
         assert_eq!(consent.poll(37_000), ConsentPoll::Expired);
         assert_eq!(consent.state(37_000), ConsentState::Expired);
-        assert!(!consent
-            .record_authenticated_response(37_001, transaction)
-            .expect("late response cannot restore expired consent"));
+        assert!(
+            !consent
+                .record_authenticated_response(37_001, transaction)
+                .expect("late response cannot restore expired consent")
+        );
     }
 
     #[test]

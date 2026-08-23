@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 13-subphase foundation milestone landed; codecs/video/TURN/browser interop remain |
+| 9 — Media | 🔄 14-subphase foundation milestone landed; codecs/video/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1012,6 +1012,42 @@ loss-injected live ICE gate, then add peer-reflexive candidates before starting
 an RTP jitter buffer and codec boundary. The user's explicit “do all phases
 now” instruction pre-authorizes continuing.
 
+## Phase 9.14 (live ICE robustness) — loss, 487, peer-reflexive remote
+
+Shipped: authenticated Binding error responses now encode and parse ERROR-CODE
+487 with MESSAGE-INTEGRITY and FINGERPRINT. ICE requests can carry either role
+attribute, so a controlling client can process the 487, switch to controlled,
+generate a fresh nonzero tie-breaker from the vetted system RNG, and retry with
+a new transaction ID. `IceChecklist` inserts and deduplicates a
+peer-reflexive remote candidate from an authenticated request source address,
+recomputes pair priority when the local role changes, and schedules the learned
+pair as Waiting.
+
+The release artifact now uses real loopback UDP rather than the old pure-state
+probe: it deliberately drops the first two checks, sends the third with the
+same transaction ID according to the RFC retransmission state, authenticates an
+encoded 487, switches role, and completes a controlled retry. The receiving
+checklist verifies that the client source became a peer-reflexive pair. The
+two-process artifact reports `ICE live-loss=2 sends=3 487=resolved
+prflx=learned` before continuing DTLS-SRTP and compound RTCP exchange.
+
+Runnable artifact: `target\release\amazing.exe secure-media-processes`.
+
+Known gaps: peer-reflexive local candidates, triggered-check queue ordering,
+multi-pair foundation unfreezing, RTT-derived RTO, TURN/IPv6, ICE restart
+execution, and browser interoperability remain.
+The next transport milestone is an RTP jitter buffer and codec boundary.
+
+Conformance: the Phase 9.14 authenticated 487, mutually exclusive role,
+peer-reflexive insertion/deduplication, and live loss/retry public gates pass
+4/4; the enhanced two-process secure integration gate passes 1/1. No WebRTC
+WPT subset is imported yet.
+
+Final win-001 gate: all 480 hardware-independent workspace tests/doctests
+passed with `--locked`; the three strict first-party Clippy gates, exact CI
+build, stripped ThinLTO release, and enhanced two-process artifact passed. The
+release binary is 4,617,216 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1020,7 +1056,7 @@ now” instruction pre-authorizes continuing.
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
   (images/audio, authenticated ICE/RTP/RTCP, SDP, and D3D11 presentation
-  milestones landed; live loss/487 ICE and jitter buffering next).
+  milestones landed; jitter buffering/codecs next).
 
 ## Numbered-phase completion audit (2026-08-23, win-001 authoritative)
 
@@ -1065,7 +1101,7 @@ now” instruction pre-authorizes continuing.
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** thirteen committed subphases provide decoded images/audio,
+- **Phase 9:** fourteen committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1077,9 +1113,9 @@ and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **476**
+remeasured after the audit fixes before each commit. Current gate: **480**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **4,602,880 bytes**.
+stripped ThinLTO release is **4,617,216 bytes**.
 
 ## Server cheat sheet
 

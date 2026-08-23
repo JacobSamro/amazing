@@ -1239,6 +1239,19 @@ fn socket_v4(address: SocketAddr) -> Result<SocketAddrV4, SecureMediaError> {
     }
 }
 
+pub fn secure_random_ice_tiebreaker() -> Result<u64, SecureMediaError> {
+    loop {
+        let mut bytes = [0u8; 8];
+        SystemRandom::new()
+            .fill(&mut bytes)
+            .map_err(|_| SecureMediaError::new("secure random ICE tie-breaker failed"))?;
+        let value = u64::from_be_bytes(bytes);
+        if value != 0 && value != 10 {
+            return Ok(value);
+        }
+    }
+}
+
 fn random_transaction_id() -> Result<amazing_webrtc::TransactionId, SecureMediaError> {
     let mut bytes = [0u8; 12];
     SystemRandom::new()
