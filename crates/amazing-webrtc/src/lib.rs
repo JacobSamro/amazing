@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 
 pub mod jitter;
+pub mod sync;
 pub mod video;
 
 pub use jitter::{
@@ -17,6 +18,7 @@ pub use jitter::{
     JitterPush, JitterStats, L16Decoder, NegotiatedAudioCodec, NegotiatedAudioCodecs, PcmuDecoder,
     RtpAudioDecoder, RtpJitterBuffer, negotiate_audio_codecs, run_jitter_codec_probe,
 };
+pub use sync::{AvSyncDecision, AvSyncTimeline, MediaClockAnchor};
 pub use video::{
     EncodedVideoFrame, TimedVideoFrame, VideoAssembly, VideoFrameAssembler, VideoFrameConfig,
     VideoFrameProbeReport, VideoPlayoutConfig, VideoPlayoutQueue, VideoQueuePush, VideoQueueStats,

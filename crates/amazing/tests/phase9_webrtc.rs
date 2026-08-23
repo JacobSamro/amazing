@@ -185,6 +185,7 @@ fn secure_media_two_processes_exchange_protected_media() {
         stdout.contains("video=H264 secure frames=6 32x32 clock=90k changed=yes"),
         "{stdout}"
     );
+    assert!(stdout.contains("avsync=RTCP-SR 6/6 aligned"), "{stdout}");
     assert!(stdout.contains("consent=Fresh expiry=detected"), "{stdout}");
     assert!(stdout.contains("RTP parent->child=ok"), "{stdout}");
     assert!(stdout.contains("RTP child->parent=ok"), "{stdout}");

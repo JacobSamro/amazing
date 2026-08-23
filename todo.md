@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 31-subphase foundation milestone landed; A/V sync/TURN/browser interop remain |
+| 9 — Media | 🔄 32-subphase foundation milestone landed; UI media clock/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1573,6 +1573,34 @@ locked ThinLTO shell build, strict root gates, and 502/502 workspace tests pass.
 Final win-001 sizes: root release 8,515,584 bytes; standalone GPUI release
 14,231,552 bytes.
 
+## Phase 9.32 (A/V synchronization) — RTCP SR anchored media timeline
+
+Shipped: new std-only `MediaClockAnchor` converts an RTCP Sender Report's 32.32
+NTP timestamp plus signed wrap-safe RTP delta into nanoseconds at the negotiated
+clock rate. `AvSyncTimeline` uses separate audio/video anchors and a bounded
+tolerance to classify each video timestamp as `Hold`, `Present`, or `Drop`
+against the audio-master RTP timestamp.
+
+Public gates cover NTP fractional conversion, RTP wrap through `u32::MAX → 0`,
+and exact ±100 ms hold/drop decisions around a 20 ms tolerance. Invalid zero
+clock, same-SSRC anchors, and excessive tolerance are rejected.
+
+The secure parent sends authenticated compound Sender Reports for Opus audio at
+the common NTP origin and H.264 video at its final 2.5-second point. The child
+validates SSRC/CNAME/count/timestamp, constructs the timeline, and requires all
+six decoded video frames to be `Present` against audio timestamps advancing by
+24000 samples per 500 ms. Output reports `avsync=RTCP-SR 6/6 aligned`.
+
+Runnable artifact: `target\release\amazing.exe secure-media-processes`.
+
+Known gaps: NTP anchors are fixture timestamps rather than wall-clock samples;
+there is no drift/skew estimator, periodic SR refresh, audio device cursor,
+resampling/time-stretch, discontinuity recovery, or GPUI due-time integration.
+
+Conformance: two public media-clock/sync gates and enhanced secure A/V gate
+pass. Workspace tests pass 504/504; strict WebRTC/application Clippy and
+stripped ThinLTO artifact pass. Release binary is 8,521,216 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1628,7 +1656,7 @@ Final win-001 sizes: root release 8,515,584 bytes; standalone GPUI release
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** thirty-one committed subphases provide decoded images/audio,
+- **Phase 9:** thirty-two committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1640,9 +1668,9 @@ and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **502**
+remeasured after the audit fixes before each commit. Current gate: **504**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **8,515,584 bytes**.
+stripped ThinLTO release is **8,521,216 bytes**.
 
 ## Server cheat sheet
 

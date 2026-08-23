@@ -255,6 +255,11 @@ channel. The GPUI timer creates render images on the UI context, replaces the
 synthetic frame set on first secure media, and continues cycling without
 blocking browser input.
 
+Phase 9.32 uses RTCP Sender Reports as the A/V clock seam. `MediaClockAnchor`
+maps wrapping RTP timestamps onto signed nanosecond NTP time; `AvSyncTimeline`
+classifies video as hold/present/drop against audio master time. The secure
+sender provides separate audio/video anchors on the bundled association.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
