@@ -244,6 +244,11 @@ units share one SRTP context, preserve 90 kHz timestamps through jitter/frame
 assembly, decode with persistent reference state, and leave the queue in due
 order. This proves continuous secure media independently of the UI process.
 
+Phase 9.30 exports the decoded queue through a narrow localhost seam. The
+secure child writes bounded `AMVF` records containing index, dimensions, RTP
+timestamp, byte length, and owned RGBA. The consumer receives no DTLS, SRTP,
+codec, or arena types; EOF terminates the six-frame stream.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

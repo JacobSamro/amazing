@@ -733,7 +733,11 @@ fn main() -> ExitCode {
         Some("h264-roundtrip-probe") => cmd_h264_roundtrip_probe(),
         Some("secure-media-loopback") => cmd_secure_media_loopback(),
         Some("secure-media-processes") => cmd_secure_media_processes(),
-        Some("__secure-media-peer") => cmd_secure_media_peer(args.get(2).map(String::as_str)),
+        Some("secure-video-stream") => cmd_secure_video_stream(args.get(2).map(String::as_str)),
+        Some("__secure-media-peer") => cmd_secure_media_peer(
+            args.get(2).map(String::as_str),
+            args.get(3).map(String::as_str),
+        ),
         Some("gpu-info") => cmd_gpu_info(),
         Some("gpu-present-smoke") => cmd_gpu_present_smoke(),
         Some("sdp-roundtrip") => cmd_sdp_roundtrip(&args[2..]),
@@ -745,7 +749,7 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
             );
             ExitCode::FAILURE
         }
@@ -988,7 +992,7 @@ impl Drop for ChildGuard {
 }
 
 fn cmd_secure_media_processes() -> ExitCode {
-    match run_secure_media_processes() {
+    match run_secure_media_processes(None) {
         Ok(()) => {
             println!(
                 "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP Opus+L16+PCMU+H264; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 Opus parent->child=960 PCMU child->parent=320; video=H264 secure frames=6 32x32 clock=90k changed=yes; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
@@ -1002,8 +1006,25 @@ fn cmd_secure_media_processes() -> ExitCode {
     }
 }
 
-fn cmd_secure_media_peer(control_address: Option<&str>) -> ExitCode {
-    match run_secure_media_peer(control_address) {
+fn cmd_secure_video_stream(frame_sink: Option<&str>) -> ExitCode {
+    let Some(frame_sink) = frame_sink else {
+        eprintln!("usage: amazing secure-video-stream <host:port>");
+        return ExitCode::FAILURE;
+    };
+    match run_secure_media_processes(Some(frame_sink)) {
+        Ok(()) => {
+            println!("secure RGBA stream frames=6 size=32x32 timestamps=90k; stream ok");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing secure-video-stream: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn cmd_secure_media_peer(control_address: Option<&str>, frame_sink: Option<&str>) -> ExitCode {
+    match run_secure_media_peer(control_address, frame_sink) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("amazing secure-media-peer: {error}");
@@ -1077,7 +1098,7 @@ fn negotiated_video_media<'a>(
     Ok(offered)
 }
 
-fn run_secure_media_processes() -> Result<(), String> {
+fn run_secure_media_processes(frame_sink: Option<&str>) -> Result<(), String> {
     verify_ice_robustness_probe()?;
     let listener = TcpListener::bind("127.0.0.1:0")
         .map_err(|error| format!("bind signaling listener: {error}"))?;
@@ -1086,9 +1107,14 @@ fn run_secure_media_processes() -> Result<(), String> {
         .map_err(|error| format!("configure signaling listener: {error}"))?;
     let signaling_address = listener.local_addr().map_err(|error| error.to_string())?;
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
-    let child = Command::new(executable)
+    let mut child_command = Command::new(executable);
+    child_command
         .arg("__secure-media-peer")
-        .arg(signaling_address.to_string())
+        .arg(signaling_address.to_string());
+    if let Some(frame_sink) = frame_sink {
+        child_command.arg(frame_sink);
+    }
+    let child = child_command
         .spawn()
         .map_err(|error| format!("spawn secure peer: {error}"))?;
     let mut child = ChildGuard::new(child);
@@ -1305,7 +1331,10 @@ fn run_secure_media_processes() -> Result<(), String> {
     Ok(())
 }
 
-fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
+fn run_secure_media_peer(
+    control_address: Option<&str>,
+    frame_sink: Option<&str>,
+) -> Result<(), String> {
     let control_address =
         control_address.ok_or_else(|| "secure peer requires a control address".to_string())?;
     let control_address = control_address
@@ -1314,6 +1343,19 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
     let mut control = TcpStream::connect_timeout(&control_address, Duration::from_secs(5))
         .map_err(|error| format!("connect signaling control: {error}"))?;
     configure_control_stream(&control)?;
+    let mut frame_sink = frame_sink
+        .map(|address| {
+            let address = address
+                .parse()
+                .map_err(|error| format!("parse secure frame sink address: {error}"))?;
+            let stream = TcpStream::connect_timeout(&address, Duration::from_secs(5))
+                .map_err(|error| format!("connect secure frame sink: {error}"))?;
+            stream
+                .set_write_timeout(Some(Duration::from_secs(5)))
+                .map_err(|error| format!("configure secure frame sink: {error}"))?;
+            Ok::<_, String>(stream)
+        })
+        .transpose()?;
     let mut control_reader =
         BufReader::new(control.try_clone().map_err(|error| error.to_string())?);
     let socket = std::net::UdpSocket::bind("127.0.0.1:0")
@@ -1536,10 +1578,21 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
             None => first_checksum = Some(frame.frame.checksum),
             _ => {}
         }
+        if let Some(frame_sink) = frame_sink.as_mut() {
+            write_secure_rgba_frame(
+                frame_sink,
+                decoded_frames as u32,
+                frame.timestamp,
+                &frame.frame,
+            )?;
+        }
         decoded_frames += 1;
     }
     if decoded_frames != 6 || !pixels_changed || playout.stats().emitted != 6 {
         return Err("secure H.264 clocked playout was incomplete".into());
+    }
+    if let Some(frame_sink) = frame_sink.as_mut() {
+        frame_sink.flush().map_err(|error| error.to_string())?;
     }
     endpoint
         .close()
@@ -1547,6 +1600,33 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
     writeln!(control, "PEER_OK").map_err(|error| error.to_string())?;
     control.flush().map_err(|error| error.to_string())?;
     Ok(())
+}
+
+fn write_secure_rgba_frame(
+    stream: &mut TcpStream,
+    index: u32,
+    timestamp: u32,
+    frame: &amazing_webrtc_codecs::DecodedVideoFrame,
+) -> Result<(), String> {
+    const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
+    let expected = (frame.width as usize)
+        .checked_mul(frame.height as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or_else(|| "secure RGBA frame dimensions overflow".to_string())?;
+    if frame.rgba.len() != expected || expected > MAX_FRAME_BYTES {
+        return Err("secure RGBA frame length is invalid".into());
+    }
+    stream
+        .write_all(b"AMVF")
+        .map_err(|error| error.to_string())?;
+    for value in [index, frame.width, frame.height, timestamp, expected as u32] {
+        stream
+            .write_all(&value.to_le_bytes())
+            .map_err(|error| error.to_string())?;
+    }
+    stream
+        .write_all(&frame.rgba)
+        .map_err(|error| error.to_string())
 }
 
 fn accept_control_connection(

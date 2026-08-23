@@ -111,6 +111,7 @@ amazing h264-roundtrip-probe
 amazing sdp-roundtrip examples/phase9-offer.sdp
 amazing secure-media-loopback
 amazing secure-media-processes
+amazing secure-video-stream 127.0.0.1:<listener-port>
 
 # Phase 9 hardware capability artifact (Windows)
 amazing gpu-info
