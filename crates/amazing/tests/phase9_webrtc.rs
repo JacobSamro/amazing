@@ -216,6 +216,13 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
         stream
             .set_read_timeout(Some(Duration::from_secs(15)))
             .unwrap();
+        let mut audio_header = [0u8; 20];
+        stream
+            .read_exact(&mut audio_header)
+            .expect("read secure audio header");
+        let audio_length = u32::from_le_bytes(audio_header[16..20].try_into().unwrap()) as usize;
+        let mut pcm = vec![0; audio_length];
+        stream.read_exact(&mut pcm).expect("read secure PCM track");
         let started = Instant::now();
         let mut bytes = Vec::new();
         let mut arrivals = Vec::new();
@@ -238,7 +245,7 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
             .read_to_end(&mut trailing)
             .expect("read secure frame EOF");
         bytes.extend_from_slice(&trailing);
-        (bytes, arrivals)
+        (audio_header, pcm, bytes, arrivals)
     });
     let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
         .args(["secure-video-stream", &address.to_string()])
@@ -250,17 +257,35 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("secure RGBA stream frames=6"), "{stdout}");
+    assert!(
+        stdout.contains("secure AV stream audio=PCM48k/30s frames=6"),
+        "{stdout}"
+    );
     assert!(
         stdout.contains("pace=RTCP decode=incremental loss=RTP1 recovery=PLI+IDR"),
         "{stdout}"
     );
-    let (bytes, arrivals) = receiver.join().expect("frame receiver thread");
+    let (audio_header, pcm, bytes, arrivals) = receiver.join().expect("frame receiver thread");
+    assert_eq!(&audio_header[..4], b"AMA3");
+    assert_eq!(
+        u32::from_le_bytes(audio_header[4..8].try_into().unwrap()),
+        48_000
+    );
+    assert_eq!(
+        u32::from_le_bytes(audio_header[8..12].try_into().unwrap()),
+        1
+    );
+    assert_eq!(
+        u32::from_le_bytes(audio_header[12..16].try_into().unwrap()),
+        1_440_000
+    );
+    assert_eq!(pcm.len(), 2_880_000);
+    assert!(pcm.chunks_exact(2).any(|sample| sample != [0, 0]));
     let arrival_deltas_ms = arrivals
         .windows(2)
         .map(|pair| pair[1].saturating_sub(pair[0]).as_millis())
         .collect::<Vec<_>>();
-    eprintln!("secure AMV2 arrival deltas ms={arrival_deltas_ms:?}");
+    eprintln!("secure AMV3 arrival deltas ms={arrival_deltas_ms:?}");
     assert!(
         arrivals
             .windows(2)
@@ -276,7 +301,7 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
     let timestamps = [90_000, 135_000, 270_000, 315_000, 360_000, 405_000];
     let presentations = [0, 500, 2_000, 2_500, 3_000, 3_500];
     for index in 0..6u32 {
-        assert_eq!(&bytes[cursor..cursor + 4], b"AMV2");
+        assert_eq!(&bytes[cursor..cursor + 4], b"AMV3");
         cursor += 4;
         let mut read_u32 = || {
             let value = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());

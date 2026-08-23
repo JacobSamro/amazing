@@ -1,5 +1,6 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
+mod audio_output;
 mod engine_viewport;
 mod playback_clock;
 mod secure_video;
@@ -13,6 +14,7 @@ use gpui::{
 };
 use gpui_platform::application;
 
+use audio_output::AudioDeviceClock;
 use engine_viewport::EngineViewport;
 use playback_clock::{PlaybackUpdate, VideoPlaybackClock};
 use secure_video::{FRAME_EVENT_CAPACITY, SecureVideoEvent, spawn_secure_video_source};
@@ -52,6 +54,7 @@ struct BrowserShell {
     secure_video_active: bool,
     secure_video_complete: bool,
     secure_video_recoveries: u64,
+    audio_device_clock: Option<AudioDeviceClock>,
     secure_video_status: String,
     address_focus: Option<FocusHandle>,
     address: String,
@@ -129,6 +132,7 @@ impl BrowserShell {
             secure_video_active: false,
             secure_video_complete: false,
             secure_video_recoveries: 0,
+            audio_device_clock: None,
             secure_video_status: "H.264 → I420 → RGBA".into(),
             address_focus,
             address: "amazing://status".to_string(),
@@ -250,8 +254,23 @@ impl BrowserShell {
         let update = self.video_clock.update(now_ms);
         self.video_frame_index = update.frame_index;
         if self.secure_video_complete {
+            let audio_ms = self
+                .audio_device_clock
+                .as_ref()
+                .map_or(now_ms, AudioDeviceClock::position_ms);
+            let audio_state = if self
+                .audio_device_clock
+                .as_ref()
+                .is_some_and(AudioDeviceClock::is_active)
+            {
+                "playing"
+            } else {
+                "done"
+            };
             self.secure_video_status = format!(
-                "SECURE SRTP COMPLETE  ·  {} frames  ·  RTP loss {}  ·  IDR {}  ·  late {}  ·  queue {}",
+                "SECURE COMPLETE  ·  AUDIO 48k {} ms {}  ·  {}f  ·  loss {}  ·  IDR {}  ·  late {}  ·  q{}",
+                audio_ms,
+                audio_state,
                 self.video_frames.len(),
                 self.secure_video_recoveries,
                 self.secure_video_recoveries,
@@ -271,6 +290,22 @@ impl BrowserShell {
         }
         for event in events {
             match event {
+                SecureVideoEvent::Audio(audio) => {
+                    match AudioDeviceClock::start(audio.sample_rate, audio.channels, audio.samples)
+                    {
+                        Ok(clock) => {
+                            self.secure_video_status = format!(
+                                "AUDIO DEVICE  ·  {} Hz  ·  {} ms queued",
+                                audio.sample_rate,
+                                clock.total_ms()
+                            );
+                            self.audio_device_clock = Some(clock);
+                        }
+                        Err(error) => {
+                            self.secure_video_status = format!("SECURE AUDIO ERROR  ·  {error}");
+                        }
+                    }
+                }
                 SecureVideoEvent::Frame(frame) => {
                     if let Ok(viewport) =
                         EngineViewport::from_rgba(frame.width, frame.height, frame.rgba)
@@ -282,7 +317,12 @@ impl BrowserShell {
                             self.secure_video_active = true;
                             self.secure_video_complete = false;
                             self.secure_video_recoveries = 0;
-                            self.video_clock.begin_stream(now_ms);
+                            self.video_clock
+                                .begin_stream(if self.audio_device_clock.is_some() {
+                                    0
+                                } else {
+                                    now_ms
+                                });
                         } else if let Err(error) = self
                             .video_clock
                             .append_presentation(frame.presentation_ms as u64)
@@ -316,8 +356,13 @@ impl BrowserShell {
                     } else {
                         self.video_clock.seal_stream();
                         self.secure_video_complete = true;
+                        let audio_ms = self
+                            .audio_device_clock
+                            .as_ref()
+                            .map_or(now_ms, AudioDeviceClock::position_ms);
                         self.secure_video_status = format!(
-                            "SECURE SRTP COMPLETE  ·  {} frames  ·  RTP loss {}  ·  IDR {}  ·  late 0  ·  queue {}",
+                            "SECURE COMPLETE  ·  AUDIO 48k {} ms  ·  {}f  ·  loss {}  ·  IDR {}  ·  late 0  ·  q{}",
+                            audio_ms,
                             self.video_frames.len(),
                             self.secure_video_recoveries,
                             self.secure_video_recoveries,
@@ -1182,10 +1227,14 @@ fn main() {
                                 .timer(Duration::from_millis(delay_ms))
                                 .await;
                             match this.update(cx, |shell: &mut BrowserShell, cx| {
-                                let now_ms =
+                                let fallback_now_ms =
                                     started.elapsed().as_millis().min(u64::MAX as u128) as u64;
-                                shell.poll_secure_video(now_ms);
-                                let update = shell.update_video_clock(now_ms);
+                                shell.poll_secure_video(fallback_now_ms);
+                                let clock_now_ms = shell
+                                    .audio_device_clock
+                                    .as_ref()
+                                    .map_or(fallback_now_ms, AudioDeviceClock::position_ms);
+                                let update = shell.update_video_clock(clock_now_ms);
                                 let next_delay_ms =
                                     if shell.secure_video_requested && !shell.secure_video_active {
                                         SECURE_VIDEO_POLL_MS

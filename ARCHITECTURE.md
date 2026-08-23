@@ -315,6 +315,14 @@ that dependent delta and triggers the authenticated PLI. A forced IDR on the nex
 sequence restores decode, so the native status can distinguish one RTP loss and
 one recovery without treating damaged codec bytes as network loss.
 
+Phase 9.41 makes the audio device the UI clock. AMA3 prepends bounded decoded
+48 kHz PCM to the AMV3 video stream. The Windows-only `audio_output` adapter owns
+WinMM `waveOut` handle/header/buffer state on a named thread and publishes only
+an atomic consumed-sample cursor. All unsafe calls and lifetime justifications
+remain in that module; the crate root denies unsafe elsewhere. GPUI samples the
+device cursor after event polling and feeds it to `VideoPlaybackClock`, whose
+existing absolute catch-up policy now follows audible progress.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

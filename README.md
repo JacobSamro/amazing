@@ -46,7 +46,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-net` | HTTP/1.1 client | ✅ Phase 5 |
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | ✅ Phase 6 milestone |
 | `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
-| `amazing-webrtc` | ICE + RTCP-synchronized secure A/V | Phase 9.3–9.40 |
+| `amazing-webrtc` | ICE + RTCP-synchronized secure A/V | Phase 9.3–9.41 |
 | `amazing-webrtc-codecs` | Opus, VP8 decode, H.264 encode/decode | Phase 9.20–9.23 |
 | `amazing-webrtc-crypto` | vetted DTLS-SRTP + secure UDP endpoint | Phase 9.9–9.13 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | ✅ Phase 7/8 |
@@ -93,6 +93,9 @@ Authenticated PLI/IDR recovery proof:
 
 Actual RTP-loss recovery proof:
 [complete session](docs/screenshots/gpui-rtp-loss-recovery-win001.png).
+
+Windows audio-device clock proof: [cursor A](docs/screenshots/gpui-audio-clock-a-win001.png)
+and [cursor B](docs/screenshots/gpui-audio-clock-b-win001.png).
 
 Phase 4 visual gate (Amazing at left, Edge reference at right; 800×804):
 

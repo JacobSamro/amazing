@@ -1014,7 +1014,7 @@ fn cmd_secure_video_stream(frame_sink: Option<&str>) -> ExitCode {
     match run_secure_media_processes(Some(frame_sink)) {
         Ok(()) => {
             println!(
-                "secure RGBA stream frames=6 size=32x32 timestamps=90k pace=RTCP decode=incremental loss=RTP1 recovery=PLI+IDR; stream ok"
+                "secure AV stream audio=PCM48k/30s frames=6 size=32x32 timestamps=90k pace=RTCP decode=incremental loss=RTP1 recovery=PLI+IDR; stream ok"
             );
             ExitCode::SUCCESS
         }
@@ -1473,6 +1473,9 @@ fn run_secure_media_peer(
     if parent_audio.samples.len() != 960 {
         return Err("parent Opus playout sample count was incorrect".into());
     }
+    if let Some(frame_sink) = frame_sink.as_mut() {
+        write_secure_pcm_track(frame_sink, &parent_audio)?;
+    }
     endpoint
         .answer_consent()
         .map_err(|error| error.to_string())?;
@@ -1810,7 +1813,7 @@ fn write_secure_rgba_frame(
         return Err("secure RGBA frame length is invalid".into());
     }
     stream
-        .write_all(b"AMV2")
+        .write_all(b"AMV3")
         .map_err(|error| error.to_string())?;
     for value in [
         index,
@@ -1827,6 +1830,49 @@ fn write_secure_rgba_frame(
     stream
         .write_all(&frame.rgba)
         .map_err(|error| error.to_string())
+}
+
+fn write_secure_pcm_track(
+    stream: &mut TcpStream,
+    audio: &amazing_webrtc::DecodedAudioFrame,
+) -> Result<(), String> {
+    const TRACK_SECONDS: usize = 30;
+    const MAX_AUDIO_BYTES: usize = 16 * 1024 * 1024;
+    if audio.sample_rate != 48_000
+        || !matches!(audio.channels, 1 | 2)
+        || audio.samples.is_empty()
+        || !audio.samples.len().is_multiple_of(audio.channels as usize)
+    {
+        return Err("secure PCM source is invalid".into());
+    }
+    let sample_frames = audio.sample_rate as usize * TRACK_SECONDS;
+    let sample_count = sample_frames
+        .checked_mul(audio.channels as usize)
+        .ok_or_else(|| "secure PCM sample count overflow".to_string())?;
+    let byte_length = sample_count
+        .checked_mul(std::mem::size_of::<i16>())
+        .ok_or_else(|| "secure PCM byte length overflow".to_string())?;
+    if byte_length > MAX_AUDIO_BYTES || byte_length > u32::MAX as usize {
+        return Err("secure PCM track exceeds the byte cap".into());
+    }
+    stream
+        .write_all(b"AMA3")
+        .map_err(|error| error.to_string())?;
+    for value in [
+        audio.sample_rate,
+        audio.channels as u32,
+        sample_frames as u32,
+        byte_length as u32,
+    ] {
+        stream
+            .write_all(&value.to_le_bytes())
+            .map_err(|error| error.to_string())?;
+    }
+    let mut pcm = Vec::with_capacity(byte_length);
+    for sample in audio.samples.iter().cycle().take(sample_count) {
+        pcm.extend_from_slice(&sample.to_le_bytes());
+    }
+    stream.write_all(&pcm).map_err(|error| error.to_string())
 }
 
 fn accept_control_connection(

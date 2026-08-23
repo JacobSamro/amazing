@@ -5,7 +5,14 @@ use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::time::{Duration, Instant};
 
 const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
+const MAX_AUDIO_BYTES: usize = 16 * 1024 * 1024;
 pub const FRAME_EVENT_CAPACITY: usize = 3;
+
+pub struct SecureAudioTrack {
+    pub sample_rate: u32,
+    pub channels: u16,
+    pub samples: Vec<i16>,
+}
 
 pub struct SecureVideoFrame {
     pub index: u32,
@@ -17,6 +24,7 @@ pub struct SecureVideoFrame {
 }
 
 pub enum SecureVideoEvent {
+    Audio(SecureAudioTrack),
     Frame(SecureVideoFrame),
     Complete,
     Error(String),
@@ -100,6 +108,9 @@ fn read_stream(
     stream: &mut TcpStream,
     sender: &SyncSender<SecureVideoEvent>,
 ) -> Result<(), String> {
+    sender
+        .send(SecureVideoEvent::Audio(read_audio_track(stream)?))
+        .map_err(|_| "secure frame receiver closed".to_string())?;
     let mut expected_index = 0u32;
     let mut previous_presentation_ms = None;
     loop {
@@ -115,7 +126,7 @@ fn read_stream(
             Err(error) if error.kind() == ErrorKind::Interrupted => continue,
             Err(error) => return Err(error.to_string()),
         }
-        if &magic != b"AMV2" {
+        if &magic != b"AMV3" {
             return Err("secure frame magic is invalid".into());
         }
         let index = read_u32(stream)?;
@@ -161,6 +172,46 @@ fn read_stream(
     }
 }
 
+fn read_audio_track(stream: &mut impl Read) -> Result<SecureAudioTrack, String> {
+    let mut magic = [0u8; 4];
+    stream
+        .read_exact(&mut magic)
+        .map_err(|error| format!("read secure audio magic: {error}"))?;
+    if &magic != b"AMA3" {
+        return Err("secure audio magic is invalid".into());
+    }
+    let sample_rate = read_u32(stream)?;
+    let channels = read_u32(stream)?;
+    let sample_frames = read_u32(stream)? as usize;
+    let length = read_u32(stream)? as usize;
+    let expected_length = sample_frames
+        .checked_mul(channels as usize)
+        .and_then(|samples| samples.checked_mul(std::mem::size_of::<i16>()))
+        .ok_or_else(|| "secure audio dimensions overflow".to_string())?;
+    if !(8_000..=192_000).contains(&sample_rate)
+        || !matches!(channels, 1 | 2)
+        || sample_frames == 0
+        || sample_frames > sample_rate as usize * 60
+        || length != expected_length
+        || length > MAX_AUDIO_BYTES
+    {
+        return Err("secure audio header is inconsistent".into());
+    }
+    let mut bytes = vec![0; length];
+    stream
+        .read_exact(&mut bytes)
+        .map_err(|error| format!("read secure PCM track: {error}"))?;
+    let samples = bytes
+        .chunks_exact(2)
+        .map(|sample| i16::from_le_bytes([sample[0], sample[1]]))
+        .collect();
+    Ok(SecureAudioTrack {
+        sample_rate,
+        channels: channels as u16,
+        samples,
+    })
+}
+
 fn read_u32(stream: &mut impl Read) -> Result<u32, String> {
     let mut bytes = [0u8; 4];
     stream
@@ -174,8 +225,16 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    fn write_audio(stream: &mut TcpStream) {
+        stream.write_all(b"AMA3").unwrap();
+        for value in [8_000u32, 1, 2, 4] {
+            stream.write_all(&value.to_le_bytes()).unwrap();
+        }
+        stream.write_all(&[1, 0, 2, 0]).unwrap();
+    }
+
     fn write_frame(stream: &mut TcpStream, index: u32, timestamp: u32, presentation_ms: u32) {
-        stream.write_all(b"AMV2").unwrap();
+        stream.write_all(b"AMV3").unwrap();
         for value in [index, 2, 1, timestamp, presentation_ms, 8] {
             stream.write_all(&value.to_le_bytes()).unwrap();
         }
@@ -188,12 +247,18 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let writer = std::thread::spawn(move || {
             let mut stream = TcpStream::connect(address).unwrap();
+            write_audio(&mut stream);
             write_frame(&mut stream, 0, 90_000, 0);
         });
-        let (sender, receiver) = mpsc::sync_channel(1);
+        let (sender, receiver) = mpsc::sync_channel(2);
         let (mut stream, _) = listener.accept().unwrap();
         read_stream(&mut stream, &sender).unwrap();
         writer.join().unwrap();
+        let SecureVideoEvent::Audio(audio) = receiver.recv().unwrap() else {
+            panic!("expected audio track");
+        };
+        assert_eq!((audio.sample_rate, audio.channels), (8_000, 1));
+        assert_eq!(audio.samples, [1, 2]);
         let SecureVideoEvent::Frame(frame) = receiver.recv().unwrap() else {
             panic!("expected frame");
         };
@@ -209,7 +274,8 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let writer = std::thread::spawn(move || {
             let mut stream = TcpStream::connect(address).unwrap();
-            stream.write_all(b"AMV2").unwrap();
+            write_audio(&mut stream);
+            stream.write_all(b"AMV3").unwrap();
             for value in [0u32, 1, 1, 90_000, 500, 4] {
                 stream.write_all(&value.to_le_bytes()).unwrap();
             }
@@ -228,6 +294,7 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let writer = std::thread::spawn(move || {
             let mut stream = TcpStream::connect(address).unwrap();
+            write_audio(&mut stream);
             write_frame(&mut stream, 0, 90_000, 0);
             write_frame(&mut stream, 1, 135_000, 500);
         });
@@ -244,6 +311,9 @@ mod tests {
                 .is_err(),
             "reader bypassed bounded channel backpressure"
         );
+        let SecureVideoEvent::Audio(_) = receiver.recv().unwrap() else {
+            panic!("expected audio track");
+        };
         let SecureVideoEvent::Frame(first) = receiver.recv().unwrap() else {
             panic!("expected first frame");
         };

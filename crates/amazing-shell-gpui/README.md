@@ -34,6 +34,8 @@ first real engine viewport:
   renderer backpressures TCP instead of growing decoded-frame memory;
 - a presentation discontinuity after an actual missing RTP sequence records one
   authenticated PLI/forced-IDR recovery in the native status surface;
+- AMA3 carries bounded decoded Opus PCM into an isolated WinMM `waveOut`
+  adapter; its hardware-consumed sample cursor drives the GPUI video clock;
 - real TrueType glyph rasterization using the Windows UI font;
 - responsive 1080×760 startup bounds for the win-001 RDP desktop.
 
@@ -75,6 +77,9 @@ Bounded-queue proof: [complete session](../../docs/screenshots/gpui-bounded-queu
 PLI/IDR recovery proof: [complete session](../../docs/screenshots/gpui-pli-recovery-win001.png).
 
 RTP-loss recovery proof: [complete session](../../docs/screenshots/gpui-rtp-loss-recovery-win001.png).
+
+Audio-device clock proof: [cursor A](../../docs/screenshots/gpui-audio-clock-a-win001.png)
+and [cursor B](../../docs/screenshots/gpui-audio-clock-b-win001.png).
 
 Build and launch on win-001:
 

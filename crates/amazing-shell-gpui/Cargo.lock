@@ -226,6 +226,7 @@ dependencies = [
  "gpui",
  "gpui_platform",
  "image",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

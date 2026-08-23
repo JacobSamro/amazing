@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 40-subphase foundation landed; live audio device/TURN/browser interop remain |
+| 9 — Media | 🔄 41-subphase foundation landed; TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1875,6 +1875,47 @@ retained media gates pass. Root workspace remains 506/506; standalone GPUI is
 22/22. Strict changed-package Clippy and locked stripped ThinLTO builds pass on
 win-001. Release sizes are 8,525,312 bytes (`amazing.exe`) and 14,237,184 bytes
 (`amazing-shell.exe`).
+
+## Phase 9.41 (audio-device master) — secure PCM → WinMM cursor → GPUI
+
+Shipped: the localhost stream is versioned to AMA3/AMV3. A 20-byte AMA3 header
+declares 48 kHz mono PCM, 1,440,000 sample frames, and 2,880,000 little-endian
+bytes. The child derives the track solely from the decoded secure Opus frame and
+repeats it to a bounded 30-second device buffer. Six AMV3 RGBA records follow,
+making the exact stream 2,904,764 bytes with no trailing data.
+
+The standalone shell directly pins `windows-sys` 0.61.2 with only
+`Win32_Media_Audio`. New `audio_output` is the sole unsafe module: a named thread
+opens `WAVE_MAPPER` for PCM16, keeps boxed samples and `WAVEHDR` stable through
+prepare/write/done/unprepare/close, polls `waveOutGetPosition` in samples (or
+bytes when substituted), and publishes cursor/active state through atomics. The
+crate root changed from `forbid` to `deny` unsafe so only this explicitly allowed
+platform adapter can contain reviewed unsafe blocks.
+
+GPUI starts audio on the AMA3 event, roots the progressive video timeline at
+device sample zero, and samples the device cursor after each event poll. Native
+captures measured cursor A at 10,518 ms and cursor B at 11,526 ms—1,008 ms apart—
+while decoded pixels changed:
+
+- A `b65244c682117580d072307d0bd6596615a3d705bf7943c5530c943d1d2e3d9c`;
+- B `69fa4b8d14ba812f9e8e3bbe5c674e998fd0b2e12f5691c432e40b960026eab3`.
+
+The device remained `playing`. Six late video frames were counted once when the
+unfocused RDP window was throttled; the count stayed stable while the hardware
+cursor and video advanced, proving absolute audio-master catch-up rather than
+ongoing cadence drift.
+
+Known gaps: the 20 ms secure Opus fixture is repeated rather than receiving a
+continuous audio RTP stream. The whole 30-second PCM track is buffered at once;
+there is no streaming wave-header ring, underrun recovery, volume/mute control,
+pause on visibility, device-change handling, or playback beyond 30 seconds.
+TURN and external browser interoperability also remain open.
+
+Conformance: AMA3 bounds/PCM assertions pass inside the enhanced secure-stream
+gate; two pure audio cursor/validation gates bring standalone GPUI to 24/24.
+Root workspace remains 506/506. Strict changed-package Clippy and locked stripped
+ThinLTO builds pass on win-001. Release sizes are 8,526,848 bytes (`amazing.exe`)
+and 14,268,928 bytes (`amazing-shell.exe`).
 
 ## Later phases (unchanged from goal prompt)
 
