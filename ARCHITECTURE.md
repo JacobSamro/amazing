@@ -265,6 +265,14 @@ computes each next delay from the 90 kHz delta, clamps 16–5000 ms, and uses th
 last observed interval for loop wrap. The asynchronous timer is media-clock
 driven rather than hard-coded, while audio-master correction remains upstream.
 
+Phase 9.34 versions that process seam to `AMV2`. Each record adds an audio-master
+relative `presentation_ms` derived by mapping the decoded video RTP timestamp
+through its RTCP Sender Report anchor and subtracting the audio anchor origin.
+The reader requires a zero first presentation time and strictly increasing
+successors. GPUI schedules directly from those bounded presentation deltas, so
+the RTCP A/V timeline—not knowledge of a 90 kHz video clock—now crosses the
+process boundary.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

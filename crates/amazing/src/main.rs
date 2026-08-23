@@ -1626,6 +1626,7 @@ fn run_secure_media_peer(
     let mut first_checksum = None;
     let mut pixels_changed = false;
     let mut previous_timestamp = None;
+    let av_origin_ns = av_sync.audio.presentation_nanoseconds(parent_rtp.timestamp);
     while let Some(frame) = playout.pop_due(3_000) {
         let audio_timestamp = parent_rtp
             .timestamp
@@ -1649,10 +1650,18 @@ fn run_secure_media_peer(
             _ => {}
         }
         if let Some(frame_sink) = frame_sink.as_mut() {
+            let presentation_ns = av_sync
+                .video
+                .presentation_nanoseconds(frame.timestamp)
+                .saturating_sub(av_origin_ns);
+            if presentation_ns < 0 || presentation_ns / 1_000_000 > u32::MAX as i128 {
+                return Err("secure frame presentation time is out of range".into());
+            }
             write_secure_rgba_frame(
                 frame_sink,
                 decoded_frames as u32,
                 frame.timestamp,
+                (presentation_ns / 1_000_000) as u32,
                 &frame.frame,
             )?;
         }
@@ -1676,6 +1685,7 @@ fn write_secure_rgba_frame(
     stream: &mut TcpStream,
     index: u32,
     timestamp: u32,
+    presentation_ms: u32,
     frame: &amazing_webrtc_codecs::DecodedVideoFrame,
 ) -> Result<(), String> {
     const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
@@ -1687,9 +1697,16 @@ fn write_secure_rgba_frame(
         return Err("secure RGBA frame length is invalid".into());
     }
     stream
-        .write_all(b"AMVF")
+        .write_all(b"AMV2")
         .map_err(|error| error.to_string())?;
-    for value in [index, frame.width, frame.height, timestamp, expected as u32] {
+    for value in [
+        index,
+        frame.width,
+        frame.height,
+        timestamp,
+        presentation_ms,
+        expected as u32,
+    ] {
         stream
             .write_all(&value.to_le_bytes())
             .map_err(|error| error.to_string())?;

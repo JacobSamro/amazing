@@ -67,8 +67,9 @@ impl EngineViewport {
         if address == "amazing://status" {
             return Ok((Self::demo(), address.to_string()));
         }
-        let mut options = FetchOptions::default();
-        options.timeout = std::time::Duration::from_secs(3);
+        let options = FetchOptions {
+            timeout: std::time::Duration::from_secs(3),
+        };
         let response = fetch(address, &options).map_err(|error| error.to_string())?;
         let content_type = response
             .content_type()

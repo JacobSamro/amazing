@@ -1630,6 +1630,44 @@ secure stream, warning-free locked ThinLTO build, and two-frame native proof
 pass. Shell release is 14,232,576 bytes; root remains 504 tests and 8,521,216
 bytes.
 
+## Phase 9.34 (UI A/V timeline) — RTCP presentation time reaches GPUI
+
+Shipped: the localhost frame protocol is versioned from AMVF to AMV2. Its
+28-byte little-endian header contains magic, index, dimensions, original RTP
+timestamp, audio-master-relative presentation milliseconds, and RGBA length.
+The secure child maps each decoded video timestamp through the video RTCP Sender
+Report and subtracts the audio Sender Report origin, producing exact presentation
+times 0, 500, 1000, 1500, 2000, and 2500 ms for the six-frame session.
+
+The standalone reader rejects old magic, non-monotonic indices, a non-zero
+presentation origin, backward/equal presentation times, overflowing dimensions,
+non-exact RGBA lengths, frames above 16 MiB, and non-opaque alpha. The GPUI model
+stores only the resulting presentation milliseconds beside render images;
+`next_video_delay_ms` uses their direct difference and the last observed interval
+for loop wrap, clamped to 16–5000 ms. It no longer reconstructs timing from a
+hard-coded 90 kHz video clock.
+
+`--secure-video` reports `SECURE SRTP COMPLETE · 6 decoded frames · RTCP A/V
+clock`. Native captures from one live win-001 session retain that badge while
+showing different decoded frames:
+
+- A `55250245860f1c9bd5bfd4381dd95293fb9701b0a8d3a3f7c8265a979abe71a3`;
+- B `eafee00629defccce91375a9a06875a63765187fed5fdb33fda93a1e5f02b538`.
+
+Known gaps: the presentation timeline is a completed local burst that loops;
+there is still no live audio device cursor, periodic Sender Report refresh,
+drift/skew correction, visibility pause, backpressure/drop policy, or restart
+after a failed secure session. AMV2 is a fixed local protocol version without a
+capability-negotiation handshake.
+
+Conformance: the exact stream integration gate receives six AMV2 records and
+24,744 bytes with no trailing data. Standalone shell tests pass 15/15, including
+malformed-origin rejection and irregular 100/200 ms scheduling. Root workspace
+tests remain 504/504. Strict `-D warnings` Clippy passes for both changed
+application packages with `--no-deps`; locked stripped ThinLTO builds pass.
+Final win-001 sizes are 8,521,728 bytes for `amazing.exe` and 14,233,600 bytes
+for `amazing-shell.exe`.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.

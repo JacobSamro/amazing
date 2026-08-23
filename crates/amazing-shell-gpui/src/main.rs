@@ -41,7 +41,7 @@ struct BrowserShell {
     tabs: Vec<Tab>,
     viewport: EngineViewport,
     video_frames: Vec<EngineViewport>,
-    video_timestamps: Vec<u32>,
+    video_presentation_ms: Vec<u64>,
     video_frame_index: usize,
     secure_video_receiver: Option<std::sync::mpsc::Receiver<SecureVideoEvent>>,
     secure_video_requested: bool,
@@ -114,7 +114,7 @@ impl BrowserShell {
             ],
             viewport: EngineViewport::demo(),
             video_frames: EngineViewport::video_demo_frames().expect("decode GPUI video demo"),
-            video_timestamps: (0..6).map(|index| index * 45_000).collect(),
+            video_presentation_ms: (0..6).map(|index| index * 500).collect(),
             video_frame_index: 0,
             secure_video_receiver: None,
             secure_video_requested: false,
@@ -204,7 +204,7 @@ impl BrowserShell {
                 self.committed_address = final_address;
             }
             Err(error) => {
-                self.viewport = EngineViewport::error(&address, &error);
+                self.viewport = EngineViewport::error(address, &error);
                 self.address = address.to_string();
                 self.committed_address = address.to_string();
             }
@@ -243,19 +243,20 @@ impl BrowserShell {
     }
 
     fn next_video_delay_ms(&self) -> u64 {
-        if self.video_timestamps.len() != self.video_frames.len() || self.video_timestamps.len() < 2
+        if self.video_presentation_ms.len() != self.video_frames.len()
+            || self.video_presentation_ms.len() < 2
         {
             return 500;
         }
         let current = self.video_frame_index;
-        let next = (current + 1) % self.video_timestamps.len();
+        let next = (current + 1) % self.video_presentation_ms.len();
         let delta = if next > current {
-            self.video_timestamps[next].wrapping_sub(self.video_timestamps[current])
+            self.video_presentation_ms[next].saturating_sub(self.video_presentation_ms[current])
         } else {
-            let last = self.video_timestamps.len() - 1;
-            self.video_timestamps[last].wrapping_sub(self.video_timestamps[last - 1])
+            let last = self.video_presentation_ms.len() - 1;
+            self.video_presentation_ms[last].saturating_sub(self.video_presentation_ms[last - 1])
         };
-        ((delta as u64).saturating_mul(1_000) / 90_000).clamp(16, 5_000)
+        delta.clamp(16, 5_000)
     }
 
     fn poll_secure_video(&mut self) {
@@ -273,22 +274,24 @@ impl BrowserShell {
                     {
                         if !self.secure_video_active {
                             self.video_frames.clear();
-                            self.video_timestamps.clear();
+                            self.video_presentation_ms.clear();
                             self.video_frame_index = 0;
                             self.secure_video_active = true;
                         }
                         self.video_frames.push(viewport);
-                        self.video_timestamps.push(frame.timestamp);
+                        self.video_presentation_ms
+                            .push(frame.presentation_ms as u64);
                         self.secure_video_status = format!(
-                            "SECURE SRTP → H.264 → RGBA  ·  frame {}  ·  RTP {}",
+                            "SECURE SRTP → H.264 → RGBA  ·  frame {}  ·  A/V {} ms  ·  RTP {}",
                             frame.index + 1,
+                            frame.presentation_ms,
                             frame.timestamp
                         );
                     }
                 }
                 SecureVideoEvent::Complete => {
                     self.secure_video_status = format!(
-                        "SECURE SRTP COMPLETE  ·  {} decoded frames  ·  90 kHz clock",
+                        "SECURE SRTP COMPLETE  ·  {} decoded frames  ·  RTCP A/V clock",
                         self.video_frames.len()
                     );
                 }
@@ -1176,6 +1179,17 @@ fn main() {
     });
 }
 
+fn normalize_address(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else if value.contains("://") {
+        Some(value.to_string())
+    } else {
+        Some(format!("https://{value}"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1255,10 +1269,10 @@ mod tests {
     }
 
     #[test]
-    fn video_timer_uses_bounded_ninety_kilohertz_timestamp_deltas() {
+    fn video_timer_uses_bounded_audio_master_presentation_deltas() {
         let mut shell = BrowserShell::new(None);
         shell.video_frames.truncate(3);
-        shell.video_timestamps = vec![0, 9_000, 27_000];
+        shell.video_presentation_ms = vec![0, 100, 300];
         assert_eq!(shell.next_video_delay_ms(), 100);
         shell.advance_video();
         assert_eq!(shell.next_video_delay_ms(), 200);
@@ -1295,16 +1309,5 @@ mod tests {
         assert_eq!(shell.history_index, 2);
         shell.go_forward();
         assert_eq!(shell.committed_address, "https://branch.test");
-    }
-}
-
-fn normalize_address(value: &str) -> Option<String> {
-    let value = value.trim();
-    if value.is_empty() {
-        None
-    } else if value.contains("://") {
-        Some(value.to_string())
-    } else {
-        Some(format!("https://{value}"))
     }
 }

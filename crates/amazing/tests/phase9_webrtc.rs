@@ -234,7 +234,7 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
     let mut cursor = 0usize;
     let mut checksums = Vec::new();
     for index in 0..6u32 {
-        assert_eq!(&bytes[cursor..cursor + 4], b"AMVF");
+        assert_eq!(&bytes[cursor..cursor + 4], b"AMV2");
         cursor += 4;
         let mut read_u32 = || {
             let value = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
@@ -245,6 +245,7 @@ fn secure_video_stream_delivers_six_timestamped_rgba_frames() {
         assert_eq!(read_u32(), 32);
         assert_eq!(read_u32(), 32);
         assert_eq!(read_u32(), 90_000 + index * 45_000);
+        assert_eq!(read_u32(), index * 500);
         let length = read_u32() as usize;
         assert_eq!(length, 32 * 32 * 4);
         let rgba = &bytes[cursor..cursor + length];

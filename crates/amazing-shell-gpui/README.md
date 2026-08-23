@@ -23,9 +23,10 @@ first real engine viewport:
 - a native media tab that encodes H.264, decodes I420, converts to RGBA, and
   presents the resulting 320×180 frame through GPUI;
 - six statefully encoded/decoded frames advanced by a detached GPUI timer whose
-  16–5000 ms delays derive from 90 kHz RTP timestamp deltas;
-- `--secure-video` launches the root DTLS-SRTP driver, validates framed RGBA on
-  a background localhost reader, and replaces the synthetic loop with the six
+  16–5000 ms delays derive from audio-master-relative presentation times;
+- `--secure-video` launches the root DTLS-SRTP driver, validates versioned AMV2
+  RGBA records and strictly increasing RTCP-derived presentation times on a
+  background localhost reader, and replaces the synthetic loop with the six
   actual secure-session frames;
 - real TrueType glyph rasterization using the Windows UI font;
 - responsive 1080×760 startup bounds for the win-001 RDP desktop.
@@ -50,6 +51,9 @@ and [frame B](../../docs/screenshots/gpui-secure-video-b-win001.png).
 
 RTP-clock proof: [frame A](../../docs/screenshots/gpui-rtp-clock-a-win001.png)
 and [frame B](../../docs/screenshots/gpui-rtp-clock-b-win001.png).
+
+RTCP A/V-clock proof: [frame A](../../docs/screenshots/gpui-rtcp-av-clock-a-win001.png)
+and [frame B](../../docs/screenshots/gpui-rtcp-av-clock-b-win001.png).
 
 Build and launch on win-001:
 

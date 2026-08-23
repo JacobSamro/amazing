@@ -11,6 +11,7 @@ pub struct SecureVideoFrame {
     pub width: u32,
     pub height: u32,
     pub timestamp: u32,
+    pub presentation_ms: u32,
     pub rgba: Vec<u8>,
 }
 
@@ -96,6 +97,7 @@ pub fn spawn_secure_video_source() -> Result<Receiver<SecureVideoEvent>, String>
 
 fn read_stream(stream: &mut TcpStream, sender: &Sender<SecureVideoEvent>) -> Result<(), String> {
     let mut expected_index = 0u32;
+    let mut previous_presentation_ms = None;
     loop {
         let mut magic = [0u8; 4];
         match stream.read(&mut magic) {
@@ -109,19 +111,28 @@ fn read_stream(stream: &mut TcpStream, sender: &Sender<SecureVideoEvent>) -> Res
             Err(error) if error.kind() == ErrorKind::Interrupted => continue,
             Err(error) => return Err(error.to_string()),
         }
-        if &magic != b"AMVF" {
+        if &magic != b"AMV2" {
             return Err("secure frame magic is invalid".into());
         }
         let index = read_u32(stream)?;
         let width = read_u32(stream)?;
         let height = read_u32(stream)?;
         let timestamp = read_u32(stream)?;
+        let presentation_ms = read_u32(stream)?;
         let length = read_u32(stream)? as usize;
         let expected_length = (width as usize)
             .checked_mul(height as usize)
             .and_then(|pixels| pixels.checked_mul(4))
             .ok_or_else(|| "secure frame dimensions overflow".to_string())?;
-        if index != expected_index || length != expected_length || length > MAX_FRAME_BYTES {
+        let presentation_is_valid = match previous_presentation_ms {
+            None => presentation_ms == 0,
+            Some(previous) => presentation_ms > previous,
+        };
+        if index != expected_index
+            || !presentation_is_valid
+            || length != expected_length
+            || length > MAX_FRAME_BYTES
+        {
             return Err("secure frame header is inconsistent".into());
         }
         let mut rgba = vec![0; length];
@@ -137,9 +148,11 @@ fn read_stream(stream: &mut TcpStream, sender: &Sender<SecureVideoEvent>) -> Res
                 width,
                 height,
                 timestamp,
+                presentation_ms,
                 rgba,
             }))
             .map_err(|_| "secure frame receiver closed".to_string())?;
+        previous_presentation_ms = Some(presentation_ms);
         expected_index = expected_index.saturating_add(1);
     }
 }
@@ -163,8 +176,8 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let writer = std::thread::spawn(move || {
             let mut stream = TcpStream::connect(address).unwrap();
-            stream.write_all(b"AMVF").unwrap();
-            for value in [0u32, 2, 1, 90_000, 8] {
+            stream.write_all(b"AMV2").unwrap();
+            for value in [0u32, 2, 1, 90_000, 0, 8] {
                 stream.write_all(&value.to_le_bytes()).unwrap();
             }
             stream.write_all(&[1, 2, 3, 255, 4, 5, 6, 255]).unwrap();
@@ -178,6 +191,26 @@ mod tests {
         };
         assert_eq!((frame.index, frame.width, frame.height), (0, 2, 1));
         assert_eq!(frame.timestamp, 90_000);
+        assert_eq!(frame.presentation_ms, 0);
         assert_eq!(frame.rgba.len(), 8);
+    }
+
+    #[test]
+    fn frame_header_reader_rejects_nonzero_presentation_origin() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let writer = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(address).unwrap();
+            stream.write_all(b"AMV2").unwrap();
+            for value in [0u32, 1, 1, 90_000, 500, 4] {
+                stream.write_all(&value.to_le_bytes()).unwrap();
+            }
+            stream.write_all(&[1, 2, 3, 255]).unwrap();
+        });
+        let (sender, _receiver) = mpsc::channel();
+        let (mut stream, _) = listener.accept().unwrap();
+        let error = read_stream(&mut stream, &sender).unwrap_err();
+        writer.join().unwrap();
+        assert_eq!(error, "secure frame header is inconsistent");
     }
 }
