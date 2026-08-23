@@ -1,6 +1,7 @@
 param(
     [string]$Address = "file:///C:/Users/server/src/amazing/examples/gpui-navigation.html",
-    [string]$OutputPath = "target\gpui-address-navigation.png"
+    [string]$OutputPath = "target\gpui-address-navigation.png",
+    [switch]$ScrollViewport
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,5 +46,14 @@ $shell = New-Object -ComObject WScript.Shell
 $shell.SendKeys($Address)
 $shell.SendKeys("{ENTER}")
 Start-Sleep -Seconds 3
+
+if ($ScrollViewport) {
+    $viewportX = $rect.Left + (($rect.Right - $rect.Left) / 2)
+    $viewportY = $rect.Top + 460
+    [AmazingAddressSmokeNative]::SetCursorPos($viewportX, $viewportY) | Out-Null
+    # MOUSEEVENTF_WHEEL with a negative delta scrolls the document down.
+    [AmazingAddressSmokeNative]::mouse_event(0x0800, 0, 0, 4294966576, [UIntPtr]::Zero)
+    Start-Sleep -Seconds 2
+}
 
 & "$PSScriptRoot\capture-gpui-shell.ps1" -OutputPath $OutputPath

@@ -11,6 +11,9 @@
       .intro { display: block; width: 720px; margin: 0px 0px 30px 0px; color: #4e5664; font-size: 18px; }
       .proof { display: block; padding: 22px; background: #ffffff; border: 1px solid #cfd9d2; color: #315f3b; font-size: 15px; }
       .detail { display: block; width: 720px; margin: 24px 0px 0px 0px; color: #737b88; font-size: 13px; }
+      .section { display: block; margin: 42px 0px 0px 0px; padding: 28px; background: #e7efe9; border-left: 5px solid #3f7d4e; }
+      .section strong { color: #315f3b; font-size: 18px; }
+      .section p { display: block; margin: 12px 0px 0px 0px; color: #4e5664; font-size: 14px; }
     </style>
   </head>
   <body>
@@ -20,6 +23,9 @@
       <p class="intro">The address bar initiated a file response, then Amazing parsed this HTML, collected its style element, ran layout, and painted the resulting page.</p>
       <p class="proof">NETWORK RESPONSE → DOM → CSS → LAYOUT → RGBA8 → GPUI</p>
       <p class="detail">This fixture is intentionally local and deterministic. The same adapter accepts plain HTTP responses; HTTPS remains explicit until the vetted TLS exception lands.</p>
+      <section class="section"><strong>Document height is content-driven.</strong><p>Amazing paints beyond the first screen instead of flattening every page into a fixed viewport.</p></section>
+      <section class="section"><strong>Wheel scrolling stays in GPUI.</strong><p>The native shell clips and scrolls one engine-owned pixel surface while the browser chrome remains fixed.</p></section>
+      <section class="section"><strong>One boundary, two responsibilities.</strong><p>The engine owns web semantics and pixels. GPUI owns windowing, input routing, composition, and presentation.</p></section>
     </main>
   </body>
 </html>

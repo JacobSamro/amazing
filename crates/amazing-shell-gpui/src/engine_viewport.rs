@@ -133,8 +133,28 @@ fn render_surface(html: &str, css: &str) -> Surface {
 fn render_dom(dom: &amazing_dom::Dom, css: &str) -> Surface {
     let fonts = load_ui_font();
     let root = amazing_layout::layout_dom_document(dom, css, VIEWPORT_WIDTH as f32, &fonts);
+    let page_height = layout_bottom(&root)
+        .ceil()
+        .clamp(VIEWPORT_HEIGHT as f32, 8192.0) as u32;
     let glyphs = OutlineGlyphProvider::new(&fonts);
-    paint_document_with(&root, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, &fonts, &glyphs)
+    paint_document_with(&root, VIEWPORT_WIDTH, page_height, &fonts, &glyphs)
+}
+
+fn layout_bottom(layout: &amazing_layout::LayoutBox) -> f32 {
+    let mut bottom = layout.border_box.y + layout.border_box.h;
+    for line in &layout.lines {
+        bottom = bottom.max(line.y_top + line.height);
+    }
+    let children = match &layout.flow {
+        amazing_layout::Flow::Blocks(children)
+        | amazing_layout::Flow::Flex(children)
+        | amazing_layout::Flow::Grid(children) => children.as_slice(),
+        amazing_layout::Flow::Inlines(_) | amazing_layout::Flow::Empty => &[],
+    };
+    for child in children {
+        bottom = bottom.max(layout_bottom(child));
+    }
+    bottom
 }
 
 fn collect_inline_styles(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut String) {
@@ -223,5 +243,15 @@ mod tests {
         assert!(css.contains("background: #010203"));
         let viewport = EngineViewport::from_dom(&dom, &css);
         assert_eq!((viewport.width, viewport.height), (960, 570));
+    }
+
+    #[test]
+    fn tall_documents_keep_their_painted_height() {
+        let viewport = EngineViewport::from_document(
+            "<main><p>top</p><div></div><p>bottom</p></main>",
+            "main { padding: 20px; } div { display: block; height: 900px; }",
+        );
+        assert_eq!(viewport.width, 960);
+        assert!(viewport.height > 900, "height was {}", viewport.height);
     }
 }

@@ -582,14 +582,15 @@ impl BrowserShell {
                         .p_3()
                         .child(
                             div()
+                                .id("engine-viewport-scroll")
                                 .size_full()
-                                .overflow_hidden()
+                                .overflow_y_scroll()
                                 .rounded_md()
                                 .border_1()
                                 .border_color(rgb(BORDER))
                                 .bg(rgb(SURFACE))
                                 .shadow_md()
-                                .child(img(self.viewport.image.clone()).size_full()),
+                                .child(img(self.viewport.image.clone()).w_full()),
                         )
                         .child(
                             div()
