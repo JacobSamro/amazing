@@ -15,7 +15,7 @@ use gpui_platform::application;
 
 use engine_viewport::EngineViewport;
 use playback_clock::{PlaybackUpdate, VideoPlaybackClock};
-use secure_video::{SecureVideoEvent, spawn_secure_video_source};
+use secure_video::{FRAME_EVENT_CAPACITY, SecureVideoEvent, spawn_secure_video_source};
 
 const STRIP: u32 = 0xd5dae2;
 const STRIP_HOVER: u32 = 0xc6ccd6;
@@ -249,9 +249,10 @@ impl BrowserShell {
         self.video_frame_index = update.frame_index;
         if self.secure_video_complete {
             self.secure_video_status = format!(
-                "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  RTCP A/V clock  ·  late {}",
+                "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  RTCP A/V clock  ·  late {}  ·  queue {}",
                 self.video_frames.len(),
-                update.dropped_total
+                update.dropped_total,
+                FRAME_EVENT_CAPACITY
             );
         }
         update
@@ -303,8 +304,9 @@ impl BrowserShell {
                         self.video_clock.seal_stream();
                         self.secure_video_complete = true;
                         self.secure_video_status = format!(
-                            "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  RTCP A/V clock  ·  late 0",
-                            self.video_frames.len()
+                            "SECURE SRTP COMPLETE  ·  {} incremental frames  ·  RTCP A/V clock  ·  late 0  ·  queue {}",
+                            self.video_frames.len(),
+                            FRAME_EVENT_CAPACITY
                         );
                     }
                 }

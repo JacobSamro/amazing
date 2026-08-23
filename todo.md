@@ -1779,6 +1779,37 @@ changed-package Clippy and locked stripped ThinLTO builds pass on win-001.
 Release sizes are 8,523,264 bytes (`amazing.exe`) and 14,236,160 bytes
 (`amazing-shell.exe`).
 
+## Phase 9.38 (bounded UI handoff) — decoded-frame backpressure
+
+Shipped: the background AMV2 reader now sends `SecureVideoEvent` values through
+a synchronous channel with capacity three instead of an unbounded MPSC queue.
+When GPUI is slow, the fourth pending event blocks the reader; unread TCP bytes
+then apply kernel/socket backpressure to the secure child writer, whose existing
+five-second timeout turns a persistently stalled consumer into a bounded error.
+Decoded RGBA memory is therefore independent of stream duration.
+
+The interface-level saturation gate uses capacity one and writes two complete,
+ordered AMV2 records. It proves the reader cannot finish during a measured 50 ms
+interval while the first event occupies the channel, then drains frame indices
+0 and 1, unblocks the second send, observes EOF, and joins the reader within one
+second. Header, alpha, index, timeline, and byte bounds remain enforced before
+an event can occupy queue capacity.
+
+The production `--secure-video` run completed all six incremental frames with
+`late 0 · queue 3`, proving that the 2 fps path remains lossless. Native evidence:
+`4cbb6c8ab4983ae47482f55a1c47e2255a5dd10b4959e7f30c9e0c633d37b8de`.
+
+Known gaps: saturation blocks rather than selecting a stale frame to drop, and
+a consumer stalled longer than the child write timeout fails the session. There
+is no high/low-water telemetry, adaptive queue sizing, restart/resume, visibility
+pause, producer-side late-drop policy, or long-running network peer yet.
+
+Conformance: standalone GPUI passes 21/21, including the deterministic bounded
+handoff gate. The incremental secure stream and root workspace remain 504/504.
+Strict changed-package Clippy and locked stripped ThinLTO builds pass on win-001.
+Release sizes are 8,523,264 bytes (`amazing.exe`) and 14,236,672 bytes
+(`amazing-shell.exe`).
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.

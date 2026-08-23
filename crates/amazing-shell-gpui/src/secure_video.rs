@@ -1,10 +1,11 @@
 use std::io::{ErrorKind, Read};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::time::{Duration, Instant};
 
 const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
+pub const FRAME_EVENT_CAPACITY: usize = 3;
 
 pub struct SecureVideoFrame {
     pub index: u32,
@@ -35,7 +36,7 @@ pub fn spawn_secure_video_source() -> Result<Receiver<SecureVideoEvent>, String>
             driver.display()
         ));
     }
-    let (sender, receiver) = mpsc::channel();
+    let (sender, receiver) = mpsc::sync_channel(FRAME_EVENT_CAPACITY);
     std::thread::Builder::new()
         .name("amazing-secure-video".into())
         .spawn(move || {
@@ -95,7 +96,10 @@ pub fn spawn_secure_video_source() -> Result<Receiver<SecureVideoEvent>, String>
     Ok(receiver)
 }
 
-fn read_stream(stream: &mut TcpStream, sender: &Sender<SecureVideoEvent>) -> Result<(), String> {
+fn read_stream(
+    stream: &mut TcpStream,
+    sender: &SyncSender<SecureVideoEvent>,
+) -> Result<(), String> {
     let mut expected_index = 0u32;
     let mut previous_presentation_ms = None;
     loop {
@@ -170,19 +174,23 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    fn write_frame(stream: &mut TcpStream, index: u32, timestamp: u32, presentation_ms: u32) {
+        stream.write_all(b"AMV2").unwrap();
+        for value in [index, 2, 1, timestamp, presentation_ms, 8] {
+            stream.write_all(&value.to_le_bytes()).unwrap();
+        }
+        stream.write_all(&[1, 2, 3, 255, 4, 5, 6, 255]).unwrap();
+    }
+
     #[test]
     fn frame_header_reader_decodes_bounded_rgba() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let writer = std::thread::spawn(move || {
             let mut stream = TcpStream::connect(address).unwrap();
-            stream.write_all(b"AMV2").unwrap();
-            for value in [0u32, 2, 1, 90_000, 0, 8] {
-                stream.write_all(&value.to_le_bytes()).unwrap();
-            }
-            stream.write_all(&[1, 2, 3, 255, 4, 5, 6, 255]).unwrap();
+            write_frame(&mut stream, 0, 90_000, 0);
         });
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::sync_channel(1);
         let (mut stream, _) = listener.accept().unwrap();
         read_stream(&mut stream, &sender).unwrap();
         writer.join().unwrap();
@@ -207,10 +215,46 @@ mod tests {
             }
             stream.write_all(&[1, 2, 3, 255]).unwrap();
         });
-        let (sender, _receiver) = mpsc::channel();
+        let (sender, _receiver) = mpsc::sync_channel(1);
         let (mut stream, _) = listener.accept().unwrap();
         let error = read_stream(&mut stream, &sender).unwrap_err();
         writer.join().unwrap();
         assert_eq!(error, "secure frame header is inconsistent");
+    }
+
+    #[test]
+    fn bounded_event_channel_backpressures_until_the_ui_drains() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let writer = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(address).unwrap();
+            write_frame(&mut stream, 0, 90_000, 0);
+            write_frame(&mut stream, 1, 135_000, 500);
+        });
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let (done_sender, done_receiver) = mpsc::channel();
+        let (mut stream, _) = listener.accept().unwrap();
+        let reader = std::thread::spawn(move || {
+            done_sender.send(read_stream(&mut stream, &sender)).unwrap();
+        });
+        writer.join().unwrap();
+        assert!(
+            done_receiver
+                .recv_timeout(Duration::from_millis(50))
+                .is_err(),
+            "reader bypassed bounded channel backpressure"
+        );
+        let SecureVideoEvent::Frame(first) = receiver.recv().unwrap() else {
+            panic!("expected first frame");
+        };
+        let SecureVideoEvent::Frame(second) = receiver.recv().unwrap() else {
+            panic!("expected second frame");
+        };
+        assert_eq!((first.index, second.index), (0, 1));
+        done_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .unwrap();
+        reader.join().unwrap();
     }
 }

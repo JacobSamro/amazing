@@ -30,6 +30,8 @@ first real engine viewport:
   background localhost reader, progressively presents each frame after its
   per-packet jitter/assembly/H.264 decode path, then seals the six-frame replay
   timeline at EOF;
+- the reader/UI handoff is a bounded three-event synchronous channel, so a slow
+  renderer backpressures TCP instead of growing decoded-frame memory;
 - real TrueType glyph rasterization using the Windows UI font;
 - responsive 1080×760 startup bounds for the win-001 RDP desktop.
 
@@ -65,6 +67,8 @@ and [frame 2](../../docs/screenshots/gpui-live-stream-b-win001.png).
 
 Incremental-decode proof: [frame 1](../../docs/screenshots/gpui-incremental-decode-a-win001.png)
 and [frame 2](../../docs/screenshots/gpui-incremental-decode-b-win001.png).
+
+Bounded-queue proof: [complete session](../../docs/screenshots/gpui-bounded-queue-win001.png).
 
 Build and launch on win-001:
 

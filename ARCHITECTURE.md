@@ -295,6 +295,12 @@ jitter deadline, frame assembly, persistent H.264 decode, decoded playout, and
 AMV2 write before receiving its successor. The non-UI secure-media command keeps
 its fast unpaced path through the same implementation.
 
+Phase 9.38 bounds the final background-thread/UI seam with a synchronous channel
+of three events. A full queue blocks the AMV2 reader, which stops consuming TCP
+and propagates backpressure to the child writer and its existing timeout rather
+than accumulating decoded RGBA indefinitely. GPUI drains in order on its timer;
+the current two-frame-per-second secure path completes losslessly with the bound.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
