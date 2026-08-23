@@ -20,3 +20,21 @@ fn gpu_info_reports_a_real_d3d11_hardware_device() {
         "{stdout}"
     );
 }
+
+#[test]
+#[cfg(windows)]
+#[ignore = "requires a real D3D11 hardware adapter; run explicitly on win-001"]
+fn gpu_present_smoke_uploads_and_presents_a_surface() {
+    let result = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .arg("gpu-present-smoke")
+        .output()
+        .expect("run GPU presentation artifact");
+    assert!(
+        result.status.success(),
+        "gpu-present-smoke failed: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let stdout = String::from_utf8(result.stdout).expect("UTF-8 command output");
+    assert!(stdout.contains("D3D11 hardware swap chain"), "{stdout}");
+    assert!(stdout.contains("presented 64x64 BGRA"), "{stdout}");
+}

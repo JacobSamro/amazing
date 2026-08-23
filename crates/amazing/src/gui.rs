@@ -269,6 +269,7 @@ mod windows {
         width: u32,
         viewport_height: i32,
         edit_previous_proc: isize,
+        presenter: Option<crate::gpu::Presenter>,
     }
 
     impl GuiState {
@@ -287,7 +288,13 @@ mod windows {
                 width: 1024,
                 viewport_height: 700,
                 edit_previous_proc: 0,
+                presenter: None,
             }
+        }
+
+        fn window_title(&self, label: &str) -> String {
+            let backend = if self.presenter.is_some() { "D3D11" } else { "GDI" };
+            format!("Ferric [{backend}] — {label}")
         }
 
         fn tab(&self) -> &Tab {
@@ -351,10 +358,10 @@ mod windows {
             self.active_tab = index;
             if let Some(url) = self.tab().current_url() {
                 set_window_text(self.address, url);
-                set_window_text(self.hwnd, &format!("Ferric — {url}"));
+                set_window_text(self.hwnd, &self.window_title(url));
             } else {
                 set_window_text(self.address, "about:blank");
-                set_window_text(self.hwnd, "Ferric — New tab");
+                set_window_text(self.hwnd, &self.window_title("New tab"));
             }
             self.update_tab_button();
             // SAFETY: hwnd is the live top-level window owned by the message
@@ -395,7 +402,7 @@ mod windows {
                         }
                     }
                     set_window_text(self.address, &input);
-                    set_window_text(self.hwnd, &format!("Ferric — {input}"));
+                    set_window_text(self.hwnd, &self.window_title(&input));
                     self.update_tab_button();
                     // SAFETY: hwnd is the live top-level window owned by the
                     // message loop; invalidating it schedules a repaint only.
@@ -403,7 +410,10 @@ mod windows {
                 }
                 Err(error) => {
                     eprintln!("amazing gui: {error}");
-                    set_window_text(self.hwnd, &format!("Ferric — error loading {input}"));
+                    set_window_text(
+                        self.hwnd,
+                        &self.window_title(&format!("error loading {input}")),
+                    );
                 }
             }
         }
@@ -673,7 +683,7 @@ mod windows {
                 }
             }
             set_window_text(self.address, &url);
-            set_window_text(self.hwnd, &format!("Ferric — {url}"));
+            set_window_text(self.hwnd, &self.window_title(&url));
             self.update_tab_button();
             // SAFETY: hwnd is the live top-level window owned by the message
             // loop; invalidating it schedules a repaint only.
@@ -946,7 +956,39 @@ mod windows {
         })
     }
 
-    fn paint(hwnd: Hwnd, state: &GuiState) {
+    fn compose_gpu_frame(
+        surface: &Surface,
+        scroll_y: i32,
+        frame_width: u32,
+        frame_height: u32,
+    ) -> Option<Vec<u8>> {
+        let frame_len = (frame_width as usize)
+            .checked_mul(frame_height as usize)?
+            .checked_mul(4)?;
+        let mut frame = vec![255; frame_len];
+        let scroll = scroll_y.max(0) as u32;
+        let visible_height = frame_height.saturating_sub(CONTROL_HEIGHT as u32);
+        let rows = surface.height.saturating_sub(scroll).min(visible_height);
+        let columns = surface.width.min(frame_width);
+        for row in 0..rows as usize {
+            let source_row = (scroll as usize + row) * surface.width as usize * 4;
+            let destination_row =
+                (CONTROL_HEIGHT as usize + row) * frame_width as usize * 4;
+            for column in 0..columns as usize {
+                let source = source_row + column * 4;
+                let destination = destination_row + column * 4;
+                frame[destination..destination + 4].copy_from_slice(&[
+                    surface.pixels[source + 2],
+                    surface.pixels[source + 1],
+                    surface.pixels[source],
+                    surface.pixels[source + 3],
+                ]);
+            }
+        }
+        Some(frame)
+    }
+
+    fn paint(hwnd: Hwnd, state: &mut GuiState) {
         let mut paint = std::mem::MaybeUninit::<PaintStruct>::zeroed();
         // SAFETY: BeginPaint/EndPaint are paired around this WM_PAINT handler;
         // the returned HDC is valid only within that pair.
@@ -955,16 +997,65 @@ mod windows {
             return;
         }
         let paint = unsafe { paint.assume_init() };
-        if let Some(surface) = &state.tab().surface {
-            let mut bgra = Vec::with_capacity(surface.pixels.len());
-            for pixel in surface.pixels.chunks_exact(4) {
-                bgra.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
+        if state.tab().surface.is_some() {
+            let frame_width = state.width.max(1);
+            let frame_height = (state.viewport_height + CONTROL_HEIGHT).max(1) as u32;
+            let (gpu_frame, bgra, surface_width, surface_height, scroll, visible) = {
+                let surface = state.tab().surface.as_ref().expect("checked surface");
+                let mut bgra = Vec::with_capacity(surface.pixels.len());
+                for pixel in surface.pixels.chunks_exact(4) {
+                    bgra.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
+                }
+                let scroll = state.tab().scroll_y.max(0) as usize;
+                let visible = surface
+                    .height
+                    .saturating_sub(scroll as u32)
+                    .min(state.viewport_height.max(1) as u32);
+                (
+                    compose_gpu_frame(
+                        surface,
+                        state.tab().scroll_y,
+                        frame_width,
+                        frame_height,
+                    ),
+                    bgra,
+                    surface.width,
+                    surface.height,
+                    scroll,
+                    visible,
+                )
+            };
+            let gpu_presented = gpu_frame.is_some_and(|frame| {
+                state
+                    .presenter
+                    .as_mut()
+                    .is_some_and(|presenter| {
+                        presenter
+                            .present_bgra(&frame, frame_width, frame_height)
+                            .is_ok()
+                    })
+            });
+            if gpu_presented {
+                // SAFETY: paint was initialized by BeginPaint and belongs to
+                // hwnd; DXGI presentation completed synchronously above.
+                unsafe { EndPaint(hwnd, &paint) };
+                return;
             }
+            if state.presenter.is_some() {
+                state.presenter = None;
+                let label = state
+                    .tab()
+                    .current_url()
+                    .unwrap_or("New tab")
+                    .to_owned();
+                set_window_text(state.hwnd, &state.window_title(&label));
+            }
+
             let info = BitmapInfo {
                 header: BitmapInfoHeader {
                     size: std::mem::size_of::<BitmapInfoHeader>() as u32,
-                    width: surface.width as i32,
-                    height: -(surface.height as i32),
+                    width: surface_width as i32,
+                    height: -(surface_height as i32),
                     planes: 1,
                     bit_count: 32,
                     compression: 0,
@@ -975,13 +1066,8 @@ mod windows {
                     clr_important: 0,
                 },
             };
-            let scroll = state.tab().scroll_y.max(0) as usize;
-            let stride = surface.width as usize * 4;
+            let stride = surface_width as usize * 4;
             let skip = scroll.saturating_mul(stride).min(bgra.len());
-            let visible = surface
-                .height
-                .saturating_sub(scroll as u32)
-                .min(state.viewport_height.max(1) as u32);
             // SAFETY: bgra and info remain alive for the synchronous GDI call;
             // the source pointer starts at the selected top row and dimensions
             // match the owned Surface pixel buffer.
@@ -990,7 +1076,7 @@ mod windows {
                     hdc,
                     0,
                     CONTROL_HEIGHT,
-                    surface.width,
+                    surface_width,
                     visible,
                     0,
                     0,
@@ -1092,10 +1178,18 @@ mod windows {
                 0
             }
             WM_PAINT if !state_ptr.is_null() => {
-                paint(hwnd, unsafe { &*state_ptr });
+                paint(hwnd, unsafe { &mut *state_ptr });
                 0
             }
             WM_DESTROY => {
+                if !state_ptr.is_null() {
+                    // SAFETY: WM_DESTROY runs while hwnd is still in its
+                    // destruction callback and the GuiState pointer remains
+                    // owned by the message loop. Taking Presenter here drops
+                    // the HWND-bound swap chain before hwnd becomes invalid;
+                    // `std` cannot express DXGI/HWND lifetime coupling.
+                    unsafe { &mut *state_ptr }.presenter.take();
+                }
                 // SAFETY: the timer belongs to this top-level window and is
                 // stopped before the message loop exits.
                 unsafe { KillTimer(hwnd, GUI_TIMER_ID) };
@@ -1166,6 +1260,10 @@ mod windows {
         }
 
         let mut state = Box::new(GuiState::new(hwnd, instance));
+        // SAFETY: hwnd is the live top-level window created above; its
+        // Presenter is explicitly taken and dropped during WM_DESTROY before
+        // hwnd becomes invalid. `std` cannot create a DXGI chain for an HWND.
+        state.presenter = unsafe { crate::gpu::Presenter::new(hwnd, 1100, 760) }.ok();
         let edit_class = wide("EDIT");
         let button_class = wide("BUTTON");
         let address_text = wide(initial.unwrap_or("examples/sample.html"));
@@ -1326,6 +1424,26 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn gpu_frame_matches_gdi_scroll_and_channel_order() {
+            let mut surface = Surface::new(2, 2);
+            surface.pixels = vec![
+                255, 0, 0, 255, 0, 255, 0, 255,
+                0, 0, 255, 255, 10, 20, 30, 255,
+            ];
+            let frame = compose_gpu_frame(
+                &surface,
+                1,
+                2,
+                CONTROL_HEIGHT as u32 + 1,
+            )
+            .expect("bounded GPU frame");
+
+            assert_eq!(&frame[0..4], &[255, 255, 255, 255]);
+            let page = CONTROL_HEIGHT as usize * 2 * 4;
+            assert_eq!(&frame[page..page + 8], &[255, 0, 0, 255, 30, 20, 10, 255]);
+        }
 
         fn find_layout_box(layout: &LayoutBox, node: NodeIdx) -> Option<&LayoutBox> {
             if layout.node == Some(node) {

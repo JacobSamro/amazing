@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (142 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 9.1 images + 9.2 audio + 9.3 STUN/RTP + 9.4 D3D11 hardware gate landed |
+| 9 — Media | 🔄 9.1 images + 9.2 audio + 9.3 STUN/RTP + 9.4/9.5 D3D11 presentation landed |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -557,6 +557,45 @@ existing software surface, retaining the current GDI path as a fallback and
 adding pixel/dimension equivalence evidence. The user's explicit “do all
 phases now” instruction pre-authorizes continuing.
 
+## Phase 9.5 (hardware acceleration) — D3D11 surface presentation
+
+Shipped: the Windows GPU adapter now creates a hardware D3D11 device plus
+DXGI swap chain, obtains the back-buffer texture, uploads tightly packed BGRA
+frames through `ID3D11DeviceContext::UpdateSubresource`, handles buffer
+resizes, calls `IDXGISwapChain::Present`, and releases every COM reference in
+dependency order. COM method indices and ABI structures were verified against
+the installed Windows 10 SDK headers. The headless SSH session correctly
+reports DXGI presentation unavailable; an interactive-session run of
+`gpu-present-smoke` completed with `GPU_PRESENT_RESULT=0`.
+
+Ferric's real `WM_PAINT` path now composes the software RGBA surface into a
+full-client BGRA frame (including scroll offset and white control region),
+presents it through D3D11 when available, and permanently falls back to the
+existing GDI blit if creation or presentation fails. Window titles expose the
+active backend as `[D3D11]` or `[GDI]`. A deterministic unit gate proves the
+GPU frame matches GDI scroll semantics and RGBA→BGRA channel order.
+
+Final win-001 code gate: all 424 hardware-independent workspace
+tests/doctests passed; two hardware tests remain explicitly ignored in normal
+CI and are invoked only in a real desktop/hardware environment. The release
+binary is 1,756,160 bytes and `gpu-info` still reports feature level 11.1.
+
+Conformance baseline remains 17/17 curated CSS2, 22/22 curated flex/grid, and
+196/196 supported Test262 tests. No GPU-specific WPT subset is imported yet;
+the hardware capability and presentation gates are each 1/1 when explicitly
+run in an interactive win-001 session.
+
+Known gaps: the GPU presents the existing CPU-rasterized surface; style,
+layout, text, and paint commands are not GPU-native. Device-loss recreation,
+dirty rectangles, adaptive frame pacing/tearing, HDR/color management, and
+multi-window resource sharing remain pending. A final `[D3D11]` desktop
+screenshot is pending the user's required acceptance of Windows App's RDP
+certificate warning; the hidden swap-chain artifact is already verified.
+
+Recommended next sub-phase: Phase 9.6 deepen WebRTC with ICE checklist/state,
+authenticated STUN, RTCP, and DTLS-SRTP foundations. The user's explicit “do
+all phases now” instruction pre-authorizes continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -564,8 +603,8 @@ phases now” instruction pre-authorizes continuing.
 - **3.5 Flexbox/Grid** · **4 Paint** software rasterizer + PPM writer ·
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
-  (9.1 images, 9.2 audio, 9.3 STUN/RTP, and 9.4 D3D11 capability landed;
-  swap-chain presentation next).
+  (9.1 images, 9.2 audio, 9.3 STUN/RTP, and 9.4/9.5 D3D11 presentation
+  landed; deeper WebRTC next).
 
 ## Server cheat sheet
 

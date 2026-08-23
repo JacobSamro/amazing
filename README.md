@@ -91,6 +91,7 @@ amazing webrtc-loopback
 
 # Phase 9 hardware capability artifact (Windows)
 amazing gpu-info
+amazing gpu-present-smoke
 ```
 
 ```sh

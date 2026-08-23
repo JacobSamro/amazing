@@ -616,13 +616,14 @@ fn main() -> ExitCode {
         Some("play-audio") => cmd_play_audio(&args[2..]),
         Some("webrtc-loopback") => cmd_webrtc_loopback(),
         Some("gpu-info") => cmd_gpu_info(),
+        Some("gpu-present-smoke") => cmd_gpu_present_smoke(),
         Some("fetch") => cmd_fetch(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd_domrun(&args[2..]),
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|gpu-info|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
+            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
             ExitCode::FAILURE
         }
     }
@@ -1255,6 +1256,23 @@ fn cmd_gpu_info() -> ExitCode {
         },
         Err(error) => {
             eprintln!("amazing gpu-info: {error}");
+            ExitCode::FAILURE
+        },
+    }
+}
+
+/// Phase 9.5 artifact: upload and present a BGRA surface through DXGI.
+fn cmd_gpu_present_smoke() -> ExitCode {
+    match gpu::presentation_smoke() {
+        Ok(info) => {
+            println!(
+                "{}, presented {}x{} BGRA",
+                info.backend, info.width, info.height
+            );
+            ExitCode::SUCCESS
+        },
+        Err(error) => {
+            eprintln!("amazing gpu-present-smoke: {error}");
             ExitCode::FAILURE
         },
     }
