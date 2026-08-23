@@ -351,6 +351,13 @@ that exact RFC 6184 configuration point, and advertises only implemented PLI
 feedback. Local ICE identity/candidates and inverted media directions produce a
 canonical answer that parses back identically.
 
+Phase 9.46 implements RFC 6184 packetization-mode 1. The packetizer splits
+Annex-B access units into single-NAL RTP payloads or consecutive FU-A fragments
+under a caller MTU, preserving F/NRI/type and marking only the access unit's last
+packet. The stateful depacketizer validates sequence/timestamp/FU state and byte
+caps, reconstructs normalized Annex-B, drops damage on gaps, and resumes at a
+later complete access unit.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

@@ -120,6 +120,25 @@ fn h264_roundtrip_probe_encodes_and_decodes_changed_pixels() {
 }
 
 #[test]
+fn h264_rtp_probe_fragments_and_reconstructs_real_access_unit() {
+    let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .arg("h264-rtp-probe")
+        .output()
+        .expect("run H.264 RTP probe");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("H264 AnnexB="), "{stdout}");
+    assert!(stdout.contains("RTP="), "{stdout}");
+    assert!(stdout.contains("FU-A="), "{stdout}");
+    assert!(stdout.contains("max-payload=1200 size=320x180"), "{stdout}");
+    assert!(stdout.contains("h264 rtp probe ok"), "{stdout}");
+}
+
+#[test]
 fn sdp_roundtrip_command_reports_ice_dtls_media_summary() {
     let offer =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/phase9-offer.sdp");

@@ -351,6 +351,16 @@ pub struct H264ProbeReport {
     pub pixels_changed: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct H264RtpProbeReport {
+    pub annex_b_bytes: usize,
+    pub rtp_packets: usize,
+    pub fu_a_packets: usize,
+    pub max_payload_bytes: usize,
+    pub width: u32,
+    pub height: u32,
+}
+
 pub struct H264EncoderAdapter {
     encoder: openh264::encoder::Encoder,
 }
@@ -457,6 +467,71 @@ pub fn run_h264_probe() -> Result<H264ProbeReport, CodecError> {
     })
 }
 
+pub fn run_h264_rtp_probe() -> Result<H264RtpProbeReport, CodecError> {
+    const WIDTH: usize = 320;
+    const HEIGHT: usize = 180;
+    const MAX_PAYLOAD: usize = 1_200;
+    let mut rgb = Vec::with_capacity(WIDTH * HEIGHT * 3);
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            rgb.extend_from_slice(&[
+                (x.wrapping_mul(7) ^ y.wrapping_mul(3)) as u8,
+                (y.wrapping_mul(11) ^ x.wrapping_mul(5)) as u8,
+                ((x + y).wrapping_mul(13)) as u8,
+            ]);
+        }
+    }
+    let encoded = H264EncoderAdapter::new()?.encode_rgb(&rgb, (WIDTH, HEIGHT))?;
+    let packets = amazing_webrtc::packetize_h264_access_unit(
+        &encoded,
+        amazing_webrtc::H264PacketizationConfig {
+            payload_type: 102,
+            first_sequence_number: u16::MAX - 2,
+            timestamp: 90_000,
+            ssrc: 0x4252_5753,
+            max_payload_bytes: MAX_PAYLOAD,
+        },
+    )
+    .map_err(|error| CodecError(format!("packetize H.264 RTP: {error}")))?;
+    let fu_a_packets = packets
+        .iter()
+        .filter(|packet| packet.payload[0] & 0x1f == 28)
+        .count();
+    let max_payload_bytes = packets
+        .iter()
+        .map(|packet| packet.payload.len())
+        .max()
+        .unwrap_or(0);
+    let mut depacketizer = amazing_webrtc::H264Depacketizer::new(102, 0x4252_5753, 1_000_000)
+        .map_err(|error| CodecError(format!("create H.264 depacketizer: {error}")))?;
+    let mut recovered = None;
+    for packet in packets.iter().cloned() {
+        if let amazing_webrtc::H264Depacketization::AccessUnit(access_unit) = depacketizer
+            .push(packet)
+            .map_err(|error| CodecError(format!("depacketize H.264 RTP: {error}")))?
+        {
+            recovered = Some(access_unit);
+        }
+    }
+    let recovered =
+        recovered.ok_or_else(|| CodecError("H.264 RTP produced no access unit".into()))?;
+    let decoded = H264DecoderAdapter::new()?.decode(&recovered)?;
+    if (decoded.width, decoded.height) != (WIDTH as u32, HEIGHT as u32)
+        || fu_a_packets == 0
+        || max_payload_bytes > MAX_PAYLOAD
+    {
+        return Err(CodecError("H.264 RTP probe invariants failed".into()));
+    }
+    Ok(H264RtpProbeReport {
+        annex_b_bytes: encoded.len(),
+        rtp_packets: packets.len(),
+        fu_a_packets,
+        max_payload_bytes,
+        width: decoded.width,
+        height: decoded.height,
+    })
+}
+
 fn yuv_checksum(source: &impl openh264::formats::YUVSource) -> u64 {
     source
         .y()
@@ -553,6 +628,16 @@ mod tests {
         assert!(report.first_bytes > 0 && report.second_bytes > 0);
         assert_eq!((report.width, report.height), (32, 32));
         assert!(report.pixels_changed);
+    }
+
+    #[test]
+    fn h264_rtp_packetization_round_trips_real_openh264_access_unit() {
+        let report = run_h264_rtp_probe().unwrap();
+        assert!(report.annex_b_bytes > report.max_payload_bytes);
+        assert!(report.rtp_packets >= report.fu_a_packets);
+        assert!(report.fu_a_packets >= 2);
+        assert_eq!(report.max_payload_bytes, 1_200);
+        assert_eq!((report.width, report.height), (320, 180));
     }
 
     #[test]

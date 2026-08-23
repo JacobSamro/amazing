@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 45-subphase foundation landed; RTP packetization/live browser interop remains |
+| 9 — Media | 🔄 46-subphase foundation landed; live browser DTLS-SRTP interop remains |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -2068,6 +2068,43 @@ changed-package Clippy and the locked stripped ThinLTO root build pass on
 win-001. Release sizes are 8,599,040 bytes (`amazing.exe`) and 14,268,928 bytes
 (`amazing-shell.exe`).
 
+## Phase 9.46 (RFC 6184 packetization) — Annex-B → single NAL/FU-A RTP
+
+Shipped: new std-only `h264_rtp` module implements H.264 packetization-mode 1
+behind one packetization function and one stateful depacketizer interface. It
+splits three- or four-byte Annex-B start codes, validates F/NRI/type, emits NAL
+types 1–23 directly when they fit, and fragments larger NALs into consecutive
+FU-A packets. FU indicator F/NRI is preserved; start/end/type headers are exact,
+sequence numbers wrap, every fragment keeps one RTP timestamp, and only the
+final packet of the access unit carries marker.
+
+Depacketization validates payload type/SSRC, ascending sequence, stable
+timestamp, FU start/continuation/end state, reserved/start+end bits, reconstructed
+NAL header, and a caller byte cap. It emits normalized four-byte Annex-B start
+codes, drops an access unit on sequence/timestamp damage, and accepts the next
+complete marker-delimited unit. STAP/MTAP/FU-B are rejected rather than silently
+misparsed.
+
+The real codec gate encodes a deterministic 320×180 OpenH264 keyframe, packets it
+under a 1,200-byte RTP payload cap, depacketizes it, and decodes the result back
+to 320×180 pixels. The stripped win-001 artifact measured:
+
+`H264 AnnexB=34652 bytes RTP=31 packets FU-A=29 max-payload=1200 size=320x180;
+h264 rtp probe ok`.
+
+Runnable artifact: `target\release\amazing.exe h264-rtp-probe`.
+
+Known gaps: packetization-mode 1 supports single NAL and FU-A only; it does not
+aggregate SPS/PPS into STAP-A. Interleaved mode, DON, FU-B/MTAP, retransmission,
+and congestion-driven MTU changes are absent. The packetizer is not yet wired to
+a live Chromium SRTP sender.
+
+Conformance: three core packetization/damage gates, one real-codec gate, and one
+root artifact gate bring the workspace to 519/519; standalone GPUI remains
+24/24. Strict changed-package Clippy and the locked stripped ThinLTO root build
+pass on win-001. Release sizes are 8,614,400 bytes (`amazing.exe`) and 14,268,928
+bytes (`amazing-shell.exe`).
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -2123,21 +2160,21 @@ win-001. Release sizes are 8,599,040 bytes (`amazing.exe`) and 14,268,928 bytes
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** forty-five committed subphases now include decoded media,
+- **Phase 9:** forty-six committed subphases now include decoded media,
   authenticated ICE/consent/TURN, compound RTCP, browser-shaped SDP answers,
   vetted two-process DTLS-SRTP, D3D11/GPUI presentation, Windows audio-master
-  playback, RTP loss recovery, and bounded handoff state. Each subphase records
-  its bounded scope; live browser DTLS-SRTP/media proof and WebRTC WPT remain
-  future production work rather than hidden completion claims.
+  playback, RTP loss recovery, RFC 6184 packetization, and bounded handoff state.
+  Each subphase records its bounded scope; live browser DTLS-SRTP/media proof and
+  WebRTC WPT remain future production work rather than hidden completion claims.
 
 Completion is not yet claimed. The current audit has real external measurements
 and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **504**
+remeasured after the audit fixes before each commit. Current gate: **519**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **8,521,216 bytes**.
+stripped ThinLTO release is **8,614,400 bytes**.
 
 ## Server cheat sheet
 

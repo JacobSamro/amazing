@@ -9,11 +9,15 @@
 
 #![forbid(unsafe_code)]
 
+pub mod h264_rtp;
 pub mod jitter;
 pub mod sync;
 pub mod turn;
 pub mod video;
 
+pub use h264_rtp::{
+    H264Depacketization, H264Depacketizer, H264PacketizationConfig, packetize_h264_access_unit,
+};
 pub use jitter::{
     AdaptivePlayoutConfig, DecodedAudioFrame, JitterBufferConfig, JitterCodecReport, JitterOutput,
     JitterPush, JitterStats, L16Decoder, NegotiatedAudioCodec, NegotiatedAudioCodecs, PcmuDecoder,
