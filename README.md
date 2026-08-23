@@ -47,7 +47,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | ✅ Phase 6 milestone |
 | `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
 | `amazing-webrtc` | ICE + RTP/RTCP + audio playout + video frames | Phase 9.3–9.21 |
-| `amazing-webrtc-codecs` | isolated bundled Opus encode/decode/PLC | Phase 9.20 |
+| `amazing-webrtc-codecs` | isolated Opus + stateful VP8 decoder | Phase 9.20/9.22 |
 | `amazing-webrtc-crypto` | vetted DTLS-SRTP + secure UDP endpoint | Phase 9.9–9.13 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | ✅ Phase 7/8 |
 
@@ -101,6 +101,7 @@ amazing webrtc-loopback
 amazing rtp-jitter-probe
 amazing opus-probe
 amazing video-frame-probe
+amazing vp8-decode-probe
 amazing sdp-roundtrip examples/phase9-offer.sdp
 amazing secure-media-loopback
 amazing secure-media-processes

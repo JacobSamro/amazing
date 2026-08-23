@@ -729,6 +729,7 @@ fn main() -> ExitCode {
         Some("rtp-jitter-probe") => cmd_rtp_jitter_probe(),
         Some("opus-probe") => cmd_opus_probe(),
         Some("video-frame-probe") => cmd_video_frame_probe(),
+        Some("vp8-decode-probe") => cmd_vp8_decode_probe(),
         Some("secure-media-loopback") => cmd_secure_media_loopback(),
         Some("secure-media-processes") => cmd_secure_media_processes(),
         Some("__secure-media-peer") => cmd_secure_media_peer(args.get(2).map(String::as_str)),
@@ -743,7 +744,7 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|opus-probe|video-frame-probe|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
             );
             ExitCode::FAILURE
         }
@@ -808,6 +809,28 @@ fn cmd_video_frame_probe() -> ExitCode {
         }
         Err(error) => {
             eprintln!("amazing video-frame-probe: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn cmd_vp8_decode_probe() -> ExitCode {
+    match amazing_webrtc_codecs::run_vp8_probe(include_bytes!(
+        "../../../examples/vp80-02-inter-1402.ivf"
+    )) {
+        Ok(report) => {
+            println!(
+                "VP8 frames={} interframes={} size={}x{} pixels_changed={}; vp8 decode probe ok",
+                report.frames,
+                report.interframes,
+                report.width,
+                report.height,
+                if report.checksum_changed { "yes" } else { "no" },
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing vp8-decode-probe: {error}");
             ExitCode::FAILURE
         }
     }

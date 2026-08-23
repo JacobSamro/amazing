@@ -198,6 +198,13 @@ bytes, concatenates one timestamp through the RTP marker, and discards a
 damaged frame until its marker. Encoded frames can later cross a VP8/H.264
 decoder seam without teaching transport about codec payload syntax.
 
+Phase 9.22 extends the isolated codec adapter with stateful VP8 decoding. It
+pins vcpkg `2026.07.29` and libvpx 1.16.0 static `/MD`; `media-codec-vpx`
+contains all FFI/unsafe and first-party Rust continues to forbid unsafe. The
+adapter accepts complete encoded frames and returns measured I420 geometry and
+pixel data. Encoding remains a separate gate because the compatible maintained
+wrapper intentionally ships decoder-only.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

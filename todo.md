@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 21-subphase foundation milestone landed; video codecs/TURN/browser interop remain |
+| 9 — Media | 🔄 22-subphase foundation milestone landed; VP8 encode/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1264,6 +1264,39 @@ Final win-001 gate: all 494 hardware-independent workspace tests/doctests
 passed with `--locked`; strict WebRTC/application Clippy, stripped ThinLTO
 release, and video-frame artifact passed. The release binary is 5,218,816 bytes.
 
+## Phase 9.22 (video decode) — stateful VP8 key/interframe reconstruction
+
+Shipped: the isolated codec adapter now uses maintained `media-codec-vpx` 0.8.0
+over libvpx 1.16.0. vcpkg is pinned to release `2026.07.29` commit
+`9e593bb18ea69cc5095e012465dcd675a822ed0d`; the static `/MD` triplet matches
+Rust's MSVC runtime without linker warnings. Explicit pkg-config/include/lib
+environment values make clean builds reproducible. FFI and unsafe remain in
+third-party adapter dependencies, not first-party Rust or the std-only core.
+
+`Vp8DecoderAdapter` drives a stateful decoder and exposes decoded dimensions,
+plane count, and pixel checksum. The committed 22,766-byte official libvpx
+vector `vp80-02-inter-1402.ivf` matches published SHA-1
+`71ea772d3e9d315b8cbecf41207b8a237c34853b`; the probe decodes its keyframe and
+nine following interframes to three-plane I420 at 176×144, with changing pixel
+checksums proving reconstructed frame output rather than header parsing.
+
+Runnable artifact: `target\release\amazing.exe vp8-decode-probe`, reporting
+`VP8 frames=10 interframes=9 size=176x144 pixels_changed=yes; vp8 decode probe
+ok`.
+
+Known gaps: the compatible maintained wrapper is intentionally decoder-only.
+VP8 encode, RTP VP8 payload descriptors/fragmentation, SDP video negotiation,
+secure video transport, keyframe detection/PLI, A/V sync, scaling, and GPUI
+presentation remain.
+
+Conformance: official key/interframe vector gate passes 1/1; command integration
+passes 1/1. No WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 496 hardware-independent workspace tests/doctests
+passed with `--locked`; strict codec/WebRTC/application Clippy, stripped
+ThinLTO release, and embedded official VP8 artifact passed. The release binary
+is 7,724,032 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1319,7 +1352,7 @@ release, and video-frame artifact passed. The release binary is 5,218,816 bytes.
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** twenty-one committed subphases provide decoded images/audio,
+- **Phase 9:** twenty-two committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1331,9 +1364,9 @@ and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **494**
+remeasured after the audit fixes before each commit. Current gate: **496**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **5,218,816 bytes**.
+stripped ThinLTO release is **7,724,032 bytes**.
 
 ## Server cheat sheet
 
