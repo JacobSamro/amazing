@@ -13,7 +13,8 @@ pub mod jitter;
 
 pub use jitter::{
     DecodedAudioFrame, JitterBufferConfig, JitterCodecReport, JitterOutput, JitterPush,
-    JitterStats, L16Decoder, PcmuDecoder, RtpAudioDecoder, RtpJitterBuffer, run_jitter_codec_probe,
+    JitterStats, L16Decoder, NegotiatedAudioCodec, NegotiatedAudioCodecs, PcmuDecoder,
+    RtpAudioDecoder, RtpJitterBuffer, negotiate_audio_codecs, run_jitter_codec_probe,
 };
 
 use std::collections::HashSet;

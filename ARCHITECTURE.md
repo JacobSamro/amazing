@@ -164,6 +164,12 @@ state, and invokes a negotiated decoder adapter before building reception
 statistics and RTCP. Secure transport still handles bytes only; codec and
 playout policy remain in the std-only protocol module and caller.
 
+Phase 9.17 makes SDP codec mappings authoritative. `NegotiatedAudioCodecs`
+intersects offer/answer `rtpmap` entries without renumbering, rejects changed
+clock/channel parameters, and constructs both jitter configuration and a
+decoder adapter for an actually negotiated payload type. Secure endpoints
+advertise the L16/PCMU set they send; unnegotiated RTP cannot enter playout.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

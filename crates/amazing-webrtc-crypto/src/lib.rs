@@ -702,7 +702,7 @@ async fn run_secure_loopback_async() -> Result<SecureLoopbackReport, SecureMedia
 
     let rtp_packet = amazing_webrtc::RtpPacket {
         marker: true,
-        payload_type: 111,
+        payload_type: 0,
         sequence_number: 7,
         timestamp: 960,
         ssrc: 0xf322_1001,
@@ -737,7 +737,7 @@ async fn run_secure_loopback_async() -> Result<SecureLoopbackReport, SecureMedia
 
     let server_rtp_packet = amazing_webrtc::RtpPacket {
         marker: true,
-        payload_type: 111,
+        payload_type: 0,
         sequence_number: 11,
         timestamp: 1_920,
         ssrc: 0xa440_2002,
@@ -1022,7 +1022,7 @@ pub fn build_local_description(
         media: "audio".into(),
         port: address.port(),
         protocol: "UDP/TLS/RTP/SAVPF".into(),
-        payload_types: vec![111],
+        payload_types: vec![96, 0],
         ice_ufrag: ice_ufrag.into(),
         ice_pwd: ice_pwd.into(),
         fingerprint_algorithm: "sha-256".into(),
@@ -1034,12 +1034,20 @@ pub fn build_local_description(
             priority: 2_130_706_431,
             address,
         }],
-        rtp_maps: vec![amazing_webrtc::RtpMap {
-            payload_type: 111,
-            encoding: "opus".into(),
-            clock_rate: 48_000,
-            channels: 2,
-        }],
+        rtp_maps: vec![
+            amazing_webrtc::RtpMap {
+                payload_type: 96,
+                encoding: "L16".into(),
+                clock_rate: 48_000,
+                channels: 1,
+            },
+            amazing_webrtc::RtpMap {
+                payload_type: 0,
+                encoding: "PCMU".into(),
+                clock_rate: 8_000,
+                channels: 1,
+            },
+        ],
     };
     let wire = amazing_webrtc::encode_sdp(&description)
         .map_err(|error| SecureMediaError::new(format!("encode secure SDP: {error}")))?;

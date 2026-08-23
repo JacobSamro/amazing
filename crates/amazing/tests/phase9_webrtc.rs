@@ -113,6 +113,7 @@ fn secure_media_two_processes_exchange_protected_media() {
     assert!(stdout.contains("processes=2"), "{stdout}");
     assert!(stdout.contains("signaling=tcp-loopback"), "{stdout}");
     assert!(stdout.contains("ICE credentials=SDP"), "{stdout}");
+    assert!(stdout.contains("codecs=SDP L16+PCMU"), "{stdout}");
     assert!(
         stdout.contains("ICE live-loss=2 sends=3 487=resolved prflx=learned"),
         "{stdout}"
