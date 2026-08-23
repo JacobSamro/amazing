@@ -120,6 +120,15 @@ A timeout-bounded loopback TCP control channel carries canonical SDP, including
 the ICE credentials required by STUN; it never carries certificate private
 keys, DTLS/exporter secrets, or SRTP keys.
 
+Phase 9.12 adds two std-only protocol modules. `ConsentFreshness` owns the
+RFC 7675 4–6 second schedule, unique outstanding transaction history, and
+30-second irreversible expiry decision anchored at ICE success; the secure
+endpoint refuses RTP/RTCP after expiry. The adapter alone generates
+transaction IDs with the vetted system RNG and moves authenticated STUN through
+the live demux. The RTCP codec now emits/parses RFC 3550 compound Sender or
+Receiver Reports followed by mandatory SDES/CNAME, which SRTCP protects
+unchanged.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

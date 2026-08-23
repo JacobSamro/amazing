@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+use std::collections::HashSet;
 use std::fmt;
 use std::net::{Ipv4Addr, SocketAddrV4};
 
@@ -29,7 +30,7 @@ impl fmt::Display for WebRtcError {
 
 impl std::error::Error for WebRtcError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TransactionId(pub [u8; 12]);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,6 +68,30 @@ pub struct RtcpSenderReport {
     pub rtp_timestamp: u32,
     pub packet_count: u32,
     pub octet_count: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReceptionReport {
+    pub source_ssrc: u32,
+    pub fraction_lost: u8,
+    pub cumulative_lost: i32,
+    pub extended_highest_sequence: u32,
+    pub interarrival_jitter: u32,
+    pub last_sender_report: u32,
+    pub delay_since_last_sender_report: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RtcpCompoundReceiverReport {
+    pub receiver_ssrc: u32,
+    pub reception: ReceptionReport,
+    pub cname: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RtcpCompoundSenderReport {
+    pub sender: RtcpSenderReport,
+    pub cname: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -129,6 +154,137 @@ pub enum ChecklistState {
     Failed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsentState {
+    Fresh,
+    Expired,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsentPoll {
+    WaitUntil(u64),
+    SendNow,
+    Expired,
+}
+
+/// RFC 7675 consent scheduling over a monotonic millisecond clock.
+pub struct ConsentFreshness {
+    last_success_ms: u64,
+    next_check_ms: u64,
+    outstanding: Vec<TransactionId>,
+    used_transactions: HashSet<TransactionId>,
+    expired: bool,
+}
+
+impl ConsentFreshness {
+    pub const EXPIRY_MS: u64 = 30_000;
+    pub const MIN_INTERVAL_MS: u64 = 4_000;
+    pub const MAX_INTERVAL_MS: u64 = 6_000;
+    pub const MAX_TRANSACTION_HISTORY: usize = 65_536;
+
+    pub fn new(now_ms: u64, first_interval_ms: u64) -> Result<Self, WebRtcError> {
+        Self::validate_interval(first_interval_ms)?;
+        Ok(Self {
+            last_success_ms: now_ms,
+            next_check_ms: now_ms.saturating_add(first_interval_ms),
+            outstanding: Vec::new(),
+            used_transactions: HashSet::new(),
+            expired: false,
+        })
+    }
+
+    pub fn state(&self, now_ms: u64) -> ConsentState {
+        if self.expired
+            || now_ms.saturating_sub(self.last_success_ms) >= Self::EXPIRY_MS
+        {
+            ConsentState::Expired
+        } else {
+            ConsentState::Fresh
+        }
+    }
+
+    pub fn poll(&mut self, now_ms: u64) -> ConsentPoll {
+        if self.state(now_ms) == ConsentState::Expired {
+            self.expired = true;
+            self.outstanding.clear();
+            ConsentPoll::Expired
+        } else if now_ms >= self.next_check_ms {
+            ConsentPoll::SendNow
+        } else {
+            ConsentPoll::WaitUntil(self.next_check_ms)
+        }
+    }
+
+    /// Records a new transaction exactly once and schedules the next check.
+    pub fn record_sent(
+        &mut self,
+        now_ms: u64,
+        transaction: TransactionId,
+        next_interval_ms: u64,
+    ) -> Result<(), WebRtcError> {
+        Self::validate_interval(next_interval_ms)?;
+        match self.poll(now_ms) {
+            ConsentPoll::SendNow => {},
+            ConsentPoll::Expired => {
+                return Err(WebRtcError::InvalidPacket("consent has expired"));
+            },
+            ConsentPoll::WaitUntil(_) => {
+                return Err(WebRtcError::InvalidPacket(
+                    "consent request was recorded before its due time",
+                ));
+            },
+        }
+        if self.outstanding.len() >= 8 {
+            return Err(WebRtcError::InvalidPacket(
+                "too many outstanding consent transactions",
+            ));
+        }
+        if self.used_transactions.len() >= Self::MAX_TRANSACTION_HISTORY {
+            return Err(WebRtcError::InvalidPacket(
+                "consent transaction history exhausted; ICE restart required",
+            ));
+        }
+        if !self.used_transactions.insert(transaction) {
+            return Err(WebRtcError::InvalidPacket(
+                "consent transaction identifier was reused",
+            ));
+        }
+        self.outstanding.push(transaction);
+        self.next_check_ms = now_ms.saturating_add(next_interval_ms);
+        Ok(())
+    }
+
+    /// Accepts a matching authenticated response, including an older request.
+    pub fn record_authenticated_response(
+        &mut self,
+        now_ms: u64,
+        transaction: TransactionId,
+    ) -> Result<bool, WebRtcError> {
+        if self.poll(now_ms) == ConsentPoll::Expired {
+            return Ok(false);
+        }
+        let Some(index) = self
+            .outstanding
+            .iter()
+            .position(|candidate| *candidate == transaction)
+        else {
+            return Ok(false);
+        };
+        self.outstanding.swap_remove(index);
+        self.last_success_ms = now_ms;
+        Ok(true)
+    }
+
+    fn validate_interval(interval_ms: u64) -> Result<(), WebRtcError> {
+        if !(Self::MIN_INTERVAL_MS..=Self::MAX_INTERVAL_MS).contains(&interval_ms) {
+            return Err(WebRtcError::InvalidPacket(
+                "consent interval must be between four and six seconds",
+            ));
+        }
+        Ok(())
+    }
+}
+
 pub struct IceChecklist {
     pub pairs: Vec<CandidatePair>,
 }
@@ -159,7 +315,7 @@ impl IceChecklist {
                 });
             }
         }
-        pairs.sort_by(|left, right| right.priority.cmp(&left.priority));
+        pairs.sort_by_key(|pair| std::cmp::Reverse(pair.priority));
         if let Some(first) = pairs.first_mut() {
             first.state = CandidatePairState::Waiting;
         }
@@ -617,6 +773,165 @@ pub fn parse_rtcp_sender_report(packet: &[u8]) -> Result<RtcpSenderReport, WebRt
         packet_count: word(20),
         octet_count: word(24),
     })
+}
+
+/// Encodes an RFC 3550 compound RTCP packet: RR(1 block) + SDES(CNAME).
+pub fn encode_rtcp_compound_receiver_report(
+    report: &RtcpCompoundReceiverReport,
+) -> Result<Vec<u8>, WebRtcError> {
+    if !(-8_388_608..=8_388_607).contains(&report.reception.cumulative_lost) {
+        return Err(WebRtcError::InvalidPacket(
+            "RTCP cumulative loss exceeds signed 24 bits",
+        ));
+    }
+    let mut wire = Vec::with_capacity(48 + report.cname.len());
+    wire.extend_from_slice(&[0x81, 201]);
+    wire.extend_from_slice(&7u16.to_be_bytes());
+    wire.extend_from_slice(&report.receiver_ssrc.to_be_bytes());
+    wire.extend_from_slice(&report.reception.source_ssrc.to_be_bytes());
+    wire.push(report.reception.fraction_lost);
+    let cumulative = (report.reception.cumulative_lost as u32) & 0x00ff_ffff;
+    wire.extend_from_slice(&cumulative.to_be_bytes()[1..]);
+    wire.extend_from_slice(&report.reception.extended_highest_sequence.to_be_bytes());
+    wire.extend_from_slice(&report.reception.interarrival_jitter.to_be_bytes());
+    wire.extend_from_slice(&report.reception.last_sender_report.to_be_bytes());
+    wire.extend_from_slice(&report.reception.delay_since_last_sender_report.to_be_bytes());
+
+    append_sdes_cname(&mut wire, report.receiver_ssrc, &report.cname)?;
+    Ok(wire)
+}
+
+/// Parses the bounded compound RR(1 block) + SDES(CNAME) shape above.
+pub fn parse_rtcp_compound_receiver_report(
+    packet: &[u8],
+) -> Result<RtcpCompoundReceiverReport, WebRtcError> {
+    if packet.len() < 44 || packet[0] != 0x81 || packet[1] != 201 {
+        return Err(WebRtcError::InvalidPacket(
+            "compound RTCP must start with an unpadded one-block RR",
+        ));
+    }
+    let rr_len = (u16::from_be_bytes([packet[2], packet[3]]) as usize + 1)
+        .checked_mul(4)
+        .ok_or(WebRtcError::InvalidPacket("RTCP RR length overflow"))?;
+    if rr_len != 32 || packet.len() < rr_len + 12 {
+        return Err(WebRtcError::InvalidPacket("RTCP RR length mismatch"));
+    }
+    let word = |offset| {
+        u32::from_be_bytes(
+            packet[offset..offset + 4]
+                .try_into()
+                .expect("RTCP word bounds checked"),
+        )
+    };
+    let receiver_ssrc = word(4);
+    let cumulative_raw = u32::from_be_bytes([0, packet[13], packet[14], packet[15]]);
+    let cumulative_lost = if cumulative_raw & 0x0080_0000 != 0 {
+        (cumulative_raw | 0xff00_0000) as i32
+    } else {
+        cumulative_raw as i32
+    };
+    let reception = ReceptionReport {
+        source_ssrc: word(8),
+        fraction_lost: packet[12],
+        cumulative_lost,
+        extended_highest_sequence: word(16),
+        interarrival_jitter: word(20),
+        last_sender_report: word(24),
+        delay_since_last_sender_report: word(28),
+    };
+
+    let cname = parse_sdes_cname(&packet[rr_len..], receiver_ssrc)?;
+    Ok(RtcpCompoundReceiverReport {
+        receiver_ssrc,
+        reception,
+        cname,
+    })
+}
+
+pub fn encode_rtcp_compound_sender_report(
+    report: &RtcpCompoundSenderReport,
+) -> Result<Vec<u8>, WebRtcError> {
+    let mut wire = encode_rtcp_sender_report(report.sender);
+    append_sdes_cname(&mut wire, report.sender.ssrc, &report.cname)?;
+    Ok(wire)
+}
+
+pub fn parse_rtcp_compound_sender_report(
+    packet: &[u8],
+) -> Result<RtcpCompoundSenderReport, WebRtcError> {
+    if packet.len() < 40 || packet[1] != 200 {
+        return Err(WebRtcError::InvalidPacket(
+            "compound RTCP must start with a Sender Report",
+        ));
+    }
+    let sender_len = (u16::from_be_bytes([packet[2], packet[3]]) as usize + 1)
+        .checked_mul(4)
+        .ok_or(WebRtcError::InvalidPacket("RTCP SR length overflow"))?;
+    if sender_len != 28 || packet.len() < sender_len + 12 {
+        return Err(WebRtcError::InvalidPacket("compound RTCP SR length mismatch"));
+    }
+    let sender = parse_rtcp_sender_report(&packet[..sender_len])?;
+    let cname = parse_sdes_cname(&packet[sender_len..], sender.ssrc)?;
+    Ok(RtcpCompoundSenderReport { sender, cname })
+}
+
+fn append_sdes_cname(
+    wire: &mut Vec<u8>,
+    ssrc: u32,
+    cname: &str,
+) -> Result<(), WebRtcError> {
+    let cname = cname.as_bytes();
+    if cname.is_empty() || cname.len() > u8::MAX as usize || cname.contains(&0) {
+        return Err(WebRtcError::InvalidPacket("invalid RTCP SDES CNAME"));
+    }
+    let sdes_start = wire.len();
+    wire.extend_from_slice(&[0x81, 202, 0, 0]);
+    wire.extend_from_slice(&ssrc.to_be_bytes());
+    wire.push(1);
+    wire.push(cname.len() as u8);
+    wire.extend_from_slice(cname);
+    wire.push(0);
+    while (wire.len() - sdes_start) % 4 != 0 {
+        wire.push(0);
+    }
+    let words_minus_one = (wire.len() - sdes_start) / 4 - 1;
+    let words_minus_one = u16::try_from(words_minus_one)
+        .map_err(|_| WebRtcError::InvalidPacket("RTCP SDES packet is too long"))?;
+    wire[sdes_start + 2..sdes_start + 4].copy_from_slice(&words_minus_one.to_be_bytes());
+    Ok(())
+}
+
+fn parse_sdes_cname(sdes: &[u8], expected_ssrc: u32) -> Result<String, WebRtcError> {
+    if sdes.len() < 12 || sdes[0] != 0x81 || sdes[1] != 202 {
+        return Err(WebRtcError::InvalidPacket(
+            "compound RTCP report must be followed by one-chunk SDES",
+        ));
+    }
+    let sdes_len = (u16::from_be_bytes([sdes[2], sdes[3]]) as usize + 1)
+        .checked_mul(4)
+        .ok_or(WebRtcError::InvalidPacket("RTCP SDES length overflow"))?;
+    if sdes_len != sdes.len() {
+        return Err(WebRtcError::InvalidPacket("RTCP SDES length mismatch"));
+    }
+    let sdes_ssrc = u32::from_be_bytes(sdes[4..8].try_into().expect("SDES SSRC bounds checked"));
+    if sdes_ssrc != expected_ssrc || sdes[8] != 1 {
+        return Err(WebRtcError::InvalidPacket(
+            "RTCP SDES CNAME chunk does not match report SSRC",
+        ));
+    }
+    let cname_len = sdes[9] as usize;
+    let cname_end = 10usize
+        .checked_add(cname_len)
+        .ok_or(WebRtcError::InvalidPacket("RTCP CNAME length overflow"))?;
+    if cname_len == 0 || cname_end >= sdes.len() || sdes[cname_end] != 0 {
+        return Err(WebRtcError::InvalidPacket("invalid RTCP SDES CNAME item"));
+    }
+    if sdes[cname_end + 1..].iter().any(|byte| *byte != 0) {
+        return Err(WebRtcError::InvalidPacket("nonzero RTCP SDES padding"));
+    }
+    std::str::from_utf8(&sdes[10..cname_end])
+        .map(str::to_owned)
+        .map_err(|_| WebRtcError::InvalidPacket("RTCP CNAME is not UTF-8"))
 }
 
 pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
@@ -1360,5 +1675,76 @@ mod tests {
         assert_eq!(checklist.pairs[0].state, CandidatePairState::InProgress);
         checklist.mark_succeeded(selected, true).expect("valid pair index");
         assert_eq!(checklist.state(), ChecklistState::Completed);
+    }
+
+    #[test]
+    fn compound_receiver_report_round_trips_with_sdes_cname() {
+        let report = RtcpCompoundReceiverReport {
+            receiver_ssrc: 0x4348_494c,
+            reception: ReceptionReport {
+                source_ssrc: 0x5041_5245,
+                fraction_lost: 3,
+                cumulative_lost: -2,
+                extended_highest_sequence: 65_577,
+                interarrival_jitter: 17,
+                last_sender_report: 0x1234_5678,
+                delay_since_last_sender_report: 0x0001_8000,
+            },
+            cname: "child@ferric".into(),
+        };
+        let wire = encode_rtcp_compound_receiver_report(&report)
+            .expect("encodable compound receiver report");
+        let parsed = parse_rtcp_compound_receiver_report(&wire)
+            .expect("valid compound receiver report");
+
+        assert_eq!(parsed, report);
+        assert_eq!(wire[1], 201);
+        let rr_length = (u16::from_be_bytes([wire[2], wire[3]]) as usize + 1) * 4;
+        assert_eq!(wire[rr_length + 1], 202);
+    }
+
+    #[test]
+    fn compound_sender_report_round_trips_with_sdes_cname() {
+        let report = RtcpCompoundSenderReport {
+            sender: RtcpSenderReport {
+                ssrc: 0x4348_494c,
+                ntp_timestamp: 0xe123_4567_89ab_cdef,
+                rtp_timestamp: 1_920,
+                packet_count: 1,
+                octet_count: 15,
+            },
+            cname: "child@ferric".into(),
+        };
+        let wire = encode_rtcp_compound_sender_report(&report)
+            .expect("encodable compound sender report");
+        assert_eq!(parse_rtcp_compound_sender_report(&wire).unwrap(), report);
+        assert_eq!(wire[1], 200);
+        assert_eq!(wire[29], 202);
+    }
+
+    #[test]
+    fn consent_freshness_schedules_refresh_and_expires_after_thirty_seconds() {
+        let mut consent = ConsentFreshness::new(0, 5_000).expect("valid consent timer");
+        let transaction = TransactionId(*b"consent-one!");
+
+        assert_eq!(consent.state(0), ConsentState::Fresh);
+        assert_eq!(consent.poll(4_999), ConsentPoll::WaitUntil(5_000));
+        assert!(consent.record_sent(4_999, transaction, 5_000).is_err());
+        assert_eq!(consent.poll(5_000), ConsentPoll::SendNow);
+        consent
+            .record_sent(5_000, transaction, 5_500)
+            .expect("new one-shot consent request");
+        assert!(consent
+            .record_authenticated_response(7_000, transaction)
+            .expect("matching authenticated response"));
+        assert_eq!(consent.poll(10_499), ConsentPoll::WaitUntil(10_500));
+        assert_eq!(consent.poll(10_500), ConsentPoll::SendNow);
+        assert!(consent.record_sent(10_500, transaction, 5_000).is_err());
+        assert_eq!(consent.poll(36_999), ConsentPoll::SendNow);
+        assert_eq!(consent.poll(37_000), ConsentPoll::Expired);
+        assert_eq!(consent.state(37_000), ConsentState::Expired);
+        assert!(!consent
+            .record_authenticated_response(37_001, transaction)
+            .expect("late response cannot restore expired consent"));
     }
 }

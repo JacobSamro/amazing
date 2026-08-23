@@ -46,8 +46,8 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-net` | HTTP/1.1 client | Phase 5 |
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | Phase 6 |
 | `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
-| `amazing-webrtc` | authenticated ICE + RTP/RTCP transport | Phase 9.3/9.6/9.7 |
-| `amazing-webrtc-crypto` | vetted DTLS-SRTP + secure UDP endpoint | Phase 9.9–9.11 |
+| `amazing-webrtc` | ICE + RTP/compound RTCP + consent state | Phase 9.3–9.12 |
+| `amazing-webrtc-crypto` | vetted DTLS-SRTP + secure UDP endpoint | Phase 9.9–9.12 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | Phase 7/8 |
 
 The Windows GUI shell includes tabs, address/history navigation, live DOM

@@ -866,6 +866,66 @@ failure, then RTCP Receiver Reports plus mandatory SDES/CNAME compound packet
 handling. The user's explicit “do all phases now” instruction pre-authorizes
 continuing.
 
+## Phase 9.12 (session maintenance) — consent + compound RTCP
+
+Shipped: std-only `ConsentFreshness` models RFC 7675 on a caller-supplied
+monotonic millisecond clock anchored immediately after successful ICE, before
+DTLS setup. Refresh checks can be recorded only when due in the required
+randomized 4–6 second window, while 30 seconds without a matching authenticated
+response expires consent and clears all outstanding transactions. Requests are
+one-shot, up to eight may be outstanding, authenticated responses to any older
+outstanding request refresh consent, every transaction ID remains unique for
+the session, and the history is capped at 65,536 IDs with a required ICE
+restart rather than reuse or unbounded memory growth.
+
+The secure adapter now routes STUN through the live RFC 7983 demux alongside
+DTLS and SRTP/SRTCP. `SecureUdpEndpoint::refresh_consent` waits until due,
+generates a 96-bit transaction ID and next interval with ring's system RNG,
+authenticates once with the parsed remote ICE password, and accepts only a
+matching authenticated response. Once consent expires, endpoint RTP and RTCP
+sends fail until a new ICE session; late responses cannot restore it. The
+controlled peer validates parsed
+USERNAME/PRIORITY/role semantics and answers from its local SDP password. The
+two-process artifact performs one real refresh and separately gates exact
+30-second expiry, reporting `consent=Fresh expiry=detected`.
+
+The std-only RTCP module now supports one-block Receiver Reports and bounded
+RFC 3550 compound Sender/Receiver shapes: SR or RR first, then one-chunk SDES
+with mandatory CNAME. Signed 24-bit cumulative loss, sequence/jitter/LSR/DLSR
+fields, packet lengths, SSRC agreement, CNAME UTF-8, END item, and zero padding
+are validated. In the two-process artifact, the child sends compound
+SR+`child@ferric`; the parent validates it and reports the child's received RTP
+from a receiver-only SSRC. The child decrypts and validates source SSRC,
+highest sequence, LSR correlation to the Sender Report's middle NTP 32 bits,
+and `parent@ferric` CNAME. Output reports compound SR+CNAME child-to-parent
+and RR+CNAME parent-to-child success.
+
+Runnable artifact: `target\release\amazing.exe secure-media-processes`.
+
+Known gaps: consent refresh is caller-driven for one demonstrated cycle, not
+a continuous event-loop timer; RTT-based response waiting, immediate consent
+revocation, ICE restart execution, credential rotation, and multi-pair consent
+remain pending. RTCP still lacks multiple report blocks, computed loss/jitter/
+RTT statistics, periodic bandwidth scheduling, BYE/APP, feedback/NACK/PLI/TWCC,
+and reduced-size negotiation. TURN/IPv6, remote browser interop, codecs,
+jitter/congestion, multi-SSRC routing, SCTP/data channels, and WebRTC WPT also
+remain pending.
+
+Conformance: consent scheduling/expiry plus compound SR/RR+CNAME public gates
+pass 3/3; the enhanced two-process secure integration gate passes 1/1. Existing
+baselines remain 17/17 CSS2, 22/22 flex/grid, and 196/196 supported Test262;
+no WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 438 hardware-independent workspace tests/doctests
+passed with `--locked`; all three strict first-party Clippy gates, the exact CI
+build, stripped ThinLTO release, and enhanced two-process artifact passed. The
+release binary is 4,559,872 bytes.
+
+Recommended next sub-phase: integrate periodic consent into the cooperative
+event loop, then add ICE retransmission/role conflict and computed RTCP
+reception statistics before moving to jitter buffering/codecs. The user's
+explicit “do all phases now” instruction pre-authorizes continuing.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -874,7 +934,7 @@ continuing.
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
   (images/audio, authenticated ICE/RTP/RTCP, SDP, and D3D11 presentation
-  milestones landed; consent freshness and compound RTCP next).
+  milestones landed; ICE robustness and reception statistics next).
 
 ## Server cheat sheet
 

@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 amazing-webrtc = { path = "../amazing-webrtc" }
 async-trait = "=0.1.92"
+ring = "=0.17.14"
 sha2 = "=0.10.9"
 tokio = { version = "=1.53.1", features = ["net", "rt", "sync", "time"] }
 webrtc-dtls = "=0.12.0"

@@ -12,9 +12,10 @@ use std::fmt;
 use std::fmt::Write as _;
 use std::net::{SocketAddr, SocketAddrV4};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use ring::rand::{SecureRandom, SystemRandom};
 use sha2::{Digest, Sha256};
 use tokio::net::UdpSocket;
 use tokio::runtime::Builder;
@@ -42,6 +43,7 @@ const MASTER_SALT_LEN: usize = 12;
 const EXPORTED_KEYING_MATERIAL_LEN: usize = 2 * (MASTER_KEY_LEN + MASTER_SALT_LEN);
 const REPLAY_WINDOW: usize = 64;
 const UDP_TIMEOUT: Duration = Duration::from_secs(2);
+const CONSENT_RESPONSE_TIMEOUT: Duration = Duration::from_secs(7);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SecureLoopbackReport {
@@ -137,8 +139,14 @@ pub struct SecureUdpEndpoint {
     socket: Arc<UdpSocket>,
     dtls: Option<DTLSConn>,
     demux_task: JoinHandle<()>,
+    stun_rx: mpsc::Receiver<Vec<u8>>,
     media_rx: mpsc::Receiver<Vec<u8>>,
     session: SecureMediaSession,
+    local_description: amazing_webrtc::SdpDescription,
+    remote_description: amazing_webrtc::SdpDescription,
+    ice_role: IceRole,
+    consent: amazing_webrtc::ConsentFreshness,
+    consent_clock: Instant,
 }
 
 impl SecureUdpEndpoint {
@@ -151,6 +159,8 @@ impl SecureUdpEndpoint {
             local_is_offerer,
             ice_role,
         } = config;
+        let endpoint_local_description = local_description.clone();
+        let endpoint_remote_description = remote_description.clone();
         std_socket.set_nonblocking(true).map_err(|error| {
             SecureMediaError::new(format!("configure UDP nonblocking: {error}"))
         })?;
@@ -180,12 +190,19 @@ impl SecureUdpEndpoint {
             socket,
             dtls: Some(parts.dtls),
             demux_task: parts.demux_task,
+            stun_rx: parts.stun_rx,
             media_rx: parts.media_rx,
             session: parts.session,
+            local_description: endpoint_local_description,
+            remote_description: endpoint_remote_description,
+            ice_role,
+            consent: parts.consent,
+            consent_clock: parts.consent_clock,
         })
     }
 
     pub fn send_rtp(&mut self, plaintext: &[u8]) -> Result<usize, SecureMediaError> {
+        self.require_consent_to_send()?;
         let packet = self.session.protect_rtp(plaintext)?;
         let length = packet.len();
         self.runtime
@@ -201,6 +218,7 @@ impl SecureUdpEndpoint {
     }
 
     pub fn send_rtcp(&mut self, plaintext: &[u8]) -> Result<usize, SecureMediaError> {
+        self.require_consent_to_send()?;
         let packet = self.session.protect_rtcp(plaintext)?;
         let length = packet.len();
         self.runtime
@@ -215,6 +233,145 @@ impl SecureUdpEndpoint {
         self.session.unprotect_rtcp(&packet)
     }
 
+    pub fn wait_for_consent_due(&mut self) -> Result<(), SecureMediaError> {
+        loop {
+            let now_ms = self.consent_now_ms();
+            match self.consent.poll(now_ms) {
+                amazing_webrtc::ConsentPoll::SendNow => return Ok(()),
+                amazing_webrtc::ConsentPoll::Expired => {
+                    return Err(SecureMediaError::new("ICE consent has expired"));
+                }
+                amazing_webrtc::ConsentPoll::WaitUntil(due_ms) => {
+                    std::thread::sleep(Duration::from_millis(due_ms.saturating_sub(now_ms)));
+                }
+            }
+        }
+    }
+
+    pub fn refresh_consent(&mut self) -> Result<amazing_webrtc::ConsentState, SecureMediaError> {
+        if self.ice_role != IceRole::Controlling {
+            return Err(SecureMediaError::new(
+                "only the controlling endpoint sends this consent check",
+            ));
+        }
+        self.wait_for_consent_due()?;
+        let transaction = random_transaction_id()?;
+        let next_interval = random_consent_interval()?;
+        let now_ms = self.consent_now_ms();
+        self.consent
+            .record_sent(now_ms, transaction, next_interval)
+            .map_err(|error| SecureMediaError::new(error.to_string()))?;
+        let local = self
+            .local_description
+            .candidates
+            .first()
+            .ok_or_else(|| SecureMediaError::new("local consent candidate is missing"))?;
+        let username = format!(
+            "{}:{}",
+            self.remote_description.ice_ufrag, self.local_description.ice_ufrag
+        );
+        let key = self.remote_description.ice_pwd.as_bytes();
+        let request = amazing_webrtc::encode_ice_binding_request(
+            transaction,
+            &username,
+            local.priority,
+            0x1020_3040_5060_7080,
+            false,
+            key,
+        )
+        .map_err(|error| SecureMediaError::new(error.to_string()))?;
+        self.runtime
+            .block_on(send_datagram(&self.socket, &request))?;
+        let response = self
+            .runtime
+            .block_on(receive_stun_datagram(&mut self.stun_rx, UDP_TIMEOUT))?;
+        let parsed = amazing_webrtc::parse_stun(&response)
+            .map_err(|error| SecureMediaError::new(error.to_string()))?;
+        if parsed.class != amazing_webrtc::StunClass::SuccessResponse
+            || parsed.xor_mapped_address != Some(local.address)
+            || !amazing_webrtc::verify_message_integrity(&response, key)
+                .map_err(|error| SecureMediaError::new(error.to_string()))?
+            || !amazing_webrtc::verify_fingerprint(&response)
+                .map_err(|error| SecureMediaError::new(error.to_string()))?
+        {
+            return Err(SecureMediaError::new(
+                "consent response failed authentication or transaction matching",
+            ));
+        }
+        let response_time_ms = self.consent_now_ms();
+        if !self
+            .consent
+            .record_authenticated_response(response_time_ms, parsed.transaction_id)
+            .map_err(|error| SecureMediaError::new(error.to_string()))?
+        {
+            return Err(SecureMediaError::new(
+                "consent response did not match an outstanding transaction",
+            ));
+        }
+        Ok(self.consent.state(response_time_ms))
+    }
+
+    pub fn answer_consent(&mut self) -> Result<(), SecureMediaError> {
+        if self.ice_role != IceRole::Controlled {
+            return Err(SecureMediaError::new(
+                "only the controlled endpoint answers this consent check",
+            ));
+        }
+        let request = self.runtime.block_on(receive_stun_datagram(
+            &mut self.stun_rx,
+            CONSENT_RESPONSE_TIMEOUT,
+        ))?;
+        let parsed = amazing_webrtc::parse_stun(&request)
+            .map_err(|error| SecureMediaError::new(error.to_string()))?;
+        let remote = self
+            .remote_description
+            .candidates
+            .first()
+            .ok_or_else(|| SecureMediaError::new("remote consent candidate is missing"))?;
+        let username = format!(
+            "{}:{}",
+            self.local_description.ice_ufrag, self.remote_description.ice_ufrag
+        );
+        let key = self.local_description.ice_pwd.as_bytes();
+        if parsed.class != amazing_webrtc::StunClass::Request
+            || parsed.username.as_deref() != Some(username.as_str())
+            || parsed.priority != Some(remote.priority)
+            || parsed.ice_controlling.is_none()
+            || parsed.ice_controlled.is_some()
+            || parsed.use_candidate
+            || !amazing_webrtc::verify_message_integrity(&request, key)
+                .map_err(|error| SecureMediaError::new(error.to_string()))?
+            || !amazing_webrtc::verify_fingerprint(&request)
+                .map_err(|error| SecureMediaError::new(error.to_string()))?
+        {
+            return Err(SecureMediaError::new(
+                "consent request failed SDP authentication",
+            ));
+        }
+        let response =
+            amazing_webrtc::encode_ice_binding_success(parsed.transaction_id, remote.address, key)
+                .map_err(|error| SecureMediaError::new(error.to_string()))?;
+        self.runtime
+            .block_on(send_datagram(&self.socket, &response))
+    }
+
+    pub fn consent_state(&self) -> amazing_webrtc::ConsentState {
+        self.consent.state(self.consent_now_ms())
+    }
+
+    fn consent_now_ms(&self) -> u64 {
+        u64::try_from(self.consent_clock.elapsed().as_millis()).unwrap_or(u64::MAX)
+    }
+
+    fn require_consent_to_send(&self) -> Result<(), SecureMediaError> {
+        if self.consent_state() == amazing_webrtc::ConsentState::Expired {
+            return Err(SecureMediaError::new(
+                "ICE consent expired; application traffic is forbidden until ICE restart",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn close(mut self) -> Result<(), SecureMediaError> {
         self.shutdown()
     }
@@ -222,7 +379,8 @@ impl SecureUdpEndpoint {
     fn shutdown(&mut self) -> Result<(), SecureMediaError> {
         if let Some(dtls) = self.dtls.take() {
             self.runtime
-                .block_on(dtls.close())
+                .block_on(async { timeout(UDP_TIMEOUT, dtls.close()).await })
+                .map_err(|_| SecureMediaError::new("DTLS endpoint close timed out"))?
                 .map_err(|error| SecureMediaError::new(format!("close DTLS endpoint: {error}")))?;
         }
         self.demux_task.abort();
@@ -241,8 +399,11 @@ impl Drop for SecureUdpEndpoint {
 struct EstablishedEndpoint {
     dtls: DTLSConn,
     demux_task: JoinHandle<()>,
+    stun_rx: mpsc::Receiver<Vec<u8>>,
     media_rx: mpsc::Receiver<Vec<u8>>,
     session: SecureMediaSession,
+    consent: amazing_webrtc::ConsentFreshness,
+    consent_clock: Instant,
 }
 
 impl SecureMediaSession {
@@ -285,6 +446,13 @@ struct DtlsDemuxConn {
     local_address: SocketAddr,
     remote_address: SocketAddr,
     dtls_rx: Mutex<mpsc::Receiver<Vec<u8>>>,
+}
+
+struct DemuxParts {
+    dtls: Arc<dyn Conn + Send + Sync>,
+    stun_rx: mpsc::Receiver<Vec<u8>>,
+    media_rx: mpsc::Receiver<Vec<u8>>,
+    task: JoinHandle<()>,
 }
 
 #[async_trait]
@@ -447,12 +615,22 @@ async fn run_secure_loopback_async() -> Result<SecureLoopbackReport, SecureMedia
     let mut server_config = common(server_identity.certificate);
     server_config.client_auth = ClientAuthType::RequireAnyClientCert;
 
-    let (client_dtls_transport, mut client_media_rx, client_demux_task) = start_demux(
+    let DemuxParts {
+        dtls: client_dtls_transport,
+        stun_rx: _client_stun_rx,
+        media_rx: mut client_media_rx,
+        task: client_demux_task,
+    } = start_demux(
         Arc::clone(&client_transport),
         client_address,
         server_address,
     );
-    let (server_dtls_transport, mut server_media_rx, server_demux_task) = start_demux(
+    let DemuxParts {
+        dtls: server_dtls_transport,
+        stun_rx: _server_stun_rx,
+        media_rx: mut server_media_rx,
+        task: server_demux_task,
+    } = start_demux(
         Arc::clone(&server_transport),
         server_address,
         client_address,
@@ -584,7 +762,12 @@ async fn run_secure_loopback_async() -> Result<SecureLoopbackReport, SecureMedia
         packet_count: 1,
         octet_count: server_rtp_packet.payload.len() as u32,
     };
-    let rtcp_plaintext = amazing_webrtc::encode_rtcp_sender_report(sender_report);
+    let compound_sender = amazing_webrtc::RtcpCompoundSenderReport {
+        sender: sender_report,
+        cname: "server@ferric".into(),
+    };
+    let rtcp_plaintext = amazing_webrtc::encode_rtcp_compound_sender_report(&compound_sender)
+        .map_err(|error| SecureMediaError::new(error.to_string()))?;
     let protected_rtcp = server_session.protect_rtcp(&rtcp_plaintext)?;
     let mut tampered_rtcp = protected_rtcp.to_vec();
     let last = tampered_rtcp
@@ -600,11 +783,11 @@ async fn run_secure_loopback_async() -> Result<SecureLoopbackReport, SecureMedia
     send_datagram(&server_transport, &protected_rtcp).await?;
     let wire = receive_media_datagram(&mut client_media_rx).await?;
     let decrypted_rtcp = client_session.unprotect_rtcp(&wire)?;
-    let decoded_report = amazing_webrtc::parse_rtcp_sender_report(&decrypted_rtcp)
+    let decoded_compound = amazing_webrtc::parse_rtcp_compound_sender_report(&decrypted_rtcp)
         .map_err(|error| SecureMediaError::new(error.to_string()))?;
-    if decoded_report != sender_report {
+    if decoded_compound != compound_sender {
         return Err(SecureMediaError::new(
-            "SRTCP round trip changed sender report",
+            "SRTCP round trip changed compound sender report",
         ));
     }
     send_datagram(&server_transport, &protected_rtcp).await?;
@@ -612,6 +795,33 @@ async fn run_secure_loopback_async() -> Result<SecureLoopbackReport, SecureMedia
     let srtcp_replay_rejected = client_session.unprotect_rtcp(&wire).is_err();
     if !srtcp_replay_rejected {
         return Err(SecureMediaError::new("replayed SRTCP packet was accepted"));
+    }
+
+    let compound = amazing_webrtc::RtcpCompoundReceiverReport {
+        receiver_ssrc: 0x5252_4356,
+        reception: amazing_webrtc::ReceptionReport {
+            source_ssrc: server_rtp_packet.ssrc,
+            fraction_lost: 0,
+            cumulative_lost: 0,
+            extended_highest_sequence: server_rtp_packet.sequence_number as u32,
+            interarrival_jitter: 0,
+            last_sender_report: (sender_report.ntp_timestamp >> 16) as u32,
+            delay_since_last_sender_report: 0,
+        },
+        cname: "client@ferric".into(),
+    };
+    let compound_wire = amazing_webrtc::encode_rtcp_compound_receiver_report(&compound)
+        .map_err(|error| SecureMediaError::new(error.to_string()))?;
+    let compound_protected = client_session.protect_rtcp(&compound_wire)?;
+    send_datagram(&client_transport, &compound_protected).await?;
+    let compound_received = receive_media_datagram(&mut server_media_rx).await?;
+    let compound_plaintext = server_session.unprotect_rtcp(&compound_received)?;
+    let compound_parsed = amazing_webrtc::parse_rtcp_compound_receiver_report(&compound_plaintext)
+        .map_err(|error| SecureMediaError::new(error.to_string()))?;
+    if compound_parsed != compound {
+        return Err(SecureMediaError::new(
+            "compound SRTCP round trip changed receiver report",
+        ));
     }
 
     let _ = tokio::join!(client.close(), server.close());
@@ -638,7 +848,7 @@ async fn run_secure_loopback_async() -> Result<SecureLoopbackReport, SecureMedia
         exported_keying_material_bytes: EXPORTED_KEYING_MATERIAL_LEN,
         rtp_payload_bytes: rtp_packet.payload.len(),
         protected_rtp_bytes: protected_rtp.len(),
-        rtcp_packet_count: decoded_report.packet_count,
+        rtcp_packet_count: decoded_compound.sender.packet_count,
         protected_rtcp_bytes: protected_rtcp.len(),
         fingerprints_verified: true,
         srtp_tamper_rejected,
@@ -670,14 +880,21 @@ async fn establish_endpoint_async(
             run_ice_controlled(&socket, &local_description, &remote_description).await?;
         }
     }
+    let consent_clock = Instant::now();
+    let consent = amazing_webrtc::ConsentFreshness::new(0, random_consent_interval()?)
+        .map_err(|error| SecureMediaError::new(error.to_string()))?;
     let local_address = socket
         .local_addr()
         .map_err(|error| SecureMediaError::new(format!("endpoint local address: {error}")))?;
     let remote_address = socket
         .peer_addr()
         .map_err(|error| SecureMediaError::new(format!("endpoint peer address: {error}")))?;
-    let (dtls_transport, media_rx, demux_task) =
-        start_demux(Arc::clone(&socket), local_address, remote_address);
+    let DemuxParts {
+        dtls: dtls_transport,
+        stun_rx,
+        media_rx,
+        task: demux_task,
+    } = start_demux(Arc::clone(&socket), local_address, remote_address);
     let is_dtls_client = local_dtls_is_client(
         &local_description.setup,
         &remote_description.setup,
@@ -721,8 +938,11 @@ async fn establish_endpoint_async(
     Ok(EstablishedEndpoint {
         dtls,
         demux_task,
+        stun_rx,
         media_rx,
         session,
+        consent,
+        consent_clock,
     })
 }
 
@@ -1019,22 +1239,38 @@ fn socket_v4(address: SocketAddr) -> Result<SocketAddrV4, SecureMediaError> {
     }
 }
 
+fn random_transaction_id() -> Result<amazing_webrtc::TransactionId, SecureMediaError> {
+    let mut bytes = [0u8; 12];
+    SystemRandom::new()
+        .fill(&mut bytes)
+        .map_err(|_| SecureMediaError::new("secure random consent transaction failed"))?;
+    Ok(amazing_webrtc::TransactionId(bytes))
+}
+
+fn random_consent_interval() -> Result<u64, SecureMediaError> {
+    let mut bytes = [0u8; 2];
+    SystemRandom::new()
+        .fill(&mut bytes)
+        .map_err(|_| SecureMediaError::new("secure random consent interval failed"))?;
+    Ok(
+        amazing_webrtc::ConsentFreshness::MIN_INTERVAL_MS
+            + u16::from_be_bytes(bytes) as u64 % 2_001,
+    )
+}
+
 fn start_demux(
     socket: Arc<UdpSocket>,
     local_address: SocketAddr,
     remote_address: SocketAddr,
-) -> (
-    Arc<dyn Conn + Send + Sync>,
-    mpsc::Receiver<Vec<u8>>,
-    JoinHandle<()>,
-) {
+) -> DemuxParts {
     let (dtls_tx, dtls_rx) = mpsc::channel(32);
+    let (stun_tx, stun_rx) = mpsc::channel(32);
     let (media_tx, media_rx) = mpsc::channel(32);
     let reader_socket = Arc::clone(&socket);
     let task = tokio::spawn(async move {
         let mut buffer = vec![0u8; 2_048];
         loop {
-            if dtls_tx.is_closed() && media_tx.is_closed() {
+            if dtls_tx.is_closed() && stun_tx.is_closed() && media_tx.is_closed() {
                 break;
             }
             let Ok(length) = reader_socket.recv(&mut buffer).await else {
@@ -1045,6 +1281,9 @@ fn start_demux(
             }
             let packet = buffer[..length].to_vec();
             match packet[0] {
+                0..=3 => {
+                    let _ = stun_tx.try_send(packet);
+                }
                 20..=63 => {
                     // UDP congestion is represented as packet loss. Never
                     // block the sole socket reader behind either protocol
@@ -1055,8 +1294,8 @@ fn start_demux(
                     let _ = media_tx.try_send(packet);
                 }
                 _ => {
-                    // STUN was consumed before this router started. TURN,
-                    // ZRTP, and unknown datagrams are outside this milestone.
+                    // TURN, ZRTP, and unknown datagrams are outside this
+                    // milestone.
                 }
             }
         }
@@ -1067,7 +1306,12 @@ fn start_demux(
         remote_address,
         dtls_rx: Mutex::new(dtls_rx),
     });
-    (connection, media_rx, task)
+    DemuxParts {
+        dtls: connection,
+        stun_rx,
+        media_rx,
+        task,
+    }
 }
 
 async fn send_datagram(socket: &UdpSocket, packet: &[u8]) -> Result<(), SecureMediaError> {
@@ -1089,6 +1333,16 @@ async fn receive_datagram(socket: &UdpSocket) -> Result<Vec<u8>, SecureMediaErro
         .map_err(|error| SecureMediaError::new(format!("UDP receive: {error}")))?;
     buffer.truncate(length);
     Ok(buffer)
+}
+
+async fn receive_stun_datagram(
+    receiver: &mut mpsc::Receiver<Vec<u8>>,
+    wait: Duration,
+) -> Result<Vec<u8>, SecureMediaError> {
+    timeout(wait, receiver.recv())
+        .await
+        .map_err(|_| SecureMediaError::new("STUN consent receive timed out"))?
+        .ok_or_else(|| SecureMediaError::new("STUN consent demux closed"))
 }
 
 async fn receive_media_datagram(

@@ -741,7 +741,7 @@ fn cmd_secure_media_processes() -> ExitCode {
     match run_secure_media_processes() {
         Ok(()) => {
             println!(
-                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; RTP parent->child=ok; RTP child->parent=ok; SRTCP child->parent=ok; two-process interop ok"
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; two-process interop ok"
             );
             ExitCode::SUCCESS
         },
@@ -825,30 +825,59 @@ fn run_secure_media_processes() -> Result<(), String> {
     endpoint
         .send_rtp(&outbound_wire)
         .map_err(|error| error.to_string())?;
+    endpoint
+        .wait_for_consent_due()
+        .map_err(|error| error.to_string())?;
+    if endpoint.refresh_consent().map_err(|error| error.to_string())?
+        != amazing_webrtc::ConsentState::Fresh
+    {
+        return Err("live consent refresh did not remain Fresh".into());
+    }
+    let expiry_probe = amazing_webrtc::ConsentFreshness::new(0, 5_000)
+        .map_err(|error| error.to_string())?;
+    if expiry_probe.state(30_000) != amazing_webrtc::ConsentState::Expired {
+        return Err("consent expiry probe did not expire at thirty seconds".into());
+    }
     let child_rtp = endpoint.receive_rtp().map_err(|error| error.to_string())?;
     let child_rtp = amazing_webrtc::parse_rtp(&child_rtp).map_err(|error| error.to_string())?;
     if child_rtp.payload != b"child-to-parent" || child_rtp.sequence_number != 84 {
         return Err("child process returned unexpected RTP".into());
     }
     let child_rtcp = endpoint.receive_rtcp().map_err(|error| error.to_string())?;
-    let child_rtcp = amazing_webrtc::parse_rtcp_sender_report(&child_rtcp)
+    let child_rtcp = amazing_webrtc::parse_rtcp_compound_sender_report(&child_rtcp)
         .map_err(|error| error.to_string())?;
-    if child_rtcp.ssrc != child_rtp.ssrc
-        || child_rtcp.rtp_timestamp != child_rtp.timestamp
-        || child_rtcp.packet_count != 1
-        || child_rtcp.octet_count != child_rtp.payload.len() as u32
+    if child_rtcp.sender.ssrc != child_rtp.ssrc
+        || child_rtcp.sender.rtp_timestamp != child_rtp.timestamp
+        || child_rtcp.sender.packet_count != 1
+        || child_rtcp.sender.octet_count != child_rtp.payload.len() as u32
+        || child_rtcp.cname != "child@ferric"
     {
         return Err("child process returned inconsistent SRTCP".into());
     }
-    endpoint.close().map_err(|error| error.to_string())?;
-
-    let mut peer_result = String::new();
-    control_reader
-        .read_line(&mut peer_result)
+    read_control_marker(&mut control_reader, "READY_RR")?;
+    let receiver_report = amazing_webrtc::RtcpCompoundReceiverReport {
+        receiver_ssrc: 0x5252_4356,
+        reception: amazing_webrtc::ReceptionReport {
+            source_ssrc: child_rtp.ssrc,
+            fraction_lost: 0,
+            cumulative_lost: 0,
+            extended_highest_sequence: child_rtp.sequence_number as u32,
+            interarrival_jitter: 0,
+            last_sender_report: (child_rtcp.sender.ntp_timestamp >> 16) as u32,
+            delay_since_last_sender_report: 0,
+        },
+        cname: "parent@ferric".into(),
+    };
+    let receiver_report = amazing_webrtc::encode_rtcp_compound_receiver_report(&receiver_report)
         .map_err(|error| error.to_string())?;
-    if peer_result.trim() != "PEER_OK" {
-        return Err(format!("secure peer did not report success: {peer_result:?}"));
-    }
+    endpoint
+        .send_rtcp(&receiver_report)
+        .map_err(|error| format!("send compound receiver report: {error}"))?;
+
+    read_control_marker(&mut control_reader, "PEER_OK")?;
+    endpoint
+        .close()
+        .map_err(|error| format!("close parent secure endpoint: {error}"))?;
     drop(control_reader);
     drop(control);
     let status = child.finish(Duration::from_secs(5))?;
@@ -904,6 +933,9 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
     if parent_rtp.payload != b"parent-to-child" || parent_rtp.sequence_number != 41 {
         return Err("parent process sent unexpected RTP".into());
     }
+    endpoint
+        .answer_consent()
+        .map_err(|error| error.to_string())?;
     let response = amazing_webrtc::RtpPacket {
         marker: true,
         payload_type: 111,
@@ -923,10 +955,46 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
         packet_count: 1,
         octet_count: response.payload.len() as u32,
     };
-    endpoint
-        .send_rtcp(&amazing_webrtc::encode_rtcp_sender_report(report))
+    let compound_sender = amazing_webrtc::RtcpCompoundSenderReport {
+        sender: report,
+        cname: "child@ferric".into(),
+    };
+    let compound_sender = amazing_webrtc::encode_rtcp_compound_sender_report(&compound_sender)
         .map_err(|error| error.to_string())?;
-    endpoint.close().map_err(|error| error.to_string())?;
+    endpoint
+        .send_rtcp(&compound_sender)
+        .map_err(|error| error.to_string())?;
+    writeln!(control, "READY_RR").map_err(|error| error.to_string())?;
+    control.flush().map_err(|error| error.to_string())?;
+    let receiver_report = match endpoint.receive_rtcp() {
+        Ok(report) => report,
+        Err(error) => {
+            let _ = writeln!(control, "PEER_ERROR receive compound receiver report: {error}");
+            let _ = control.flush();
+            return Err(format!("receive compound receiver report: {error}"));
+        },
+    };
+    let receiver_report = match amazing_webrtc::parse_rtcp_compound_receiver_report(&receiver_report)
+    {
+        Ok(report) => report,
+        Err(error) => {
+            let _ = writeln!(control, "PEER_ERROR parse compound receiver report: {error}");
+            let _ = control.flush();
+            return Err(error.to_string());
+        },
+    };
+    if receiver_report.reception.source_ssrc != response.ssrc
+        || receiver_report.reception.extended_highest_sequence
+            != response.sequence_number as u32
+        || receiver_report.reception.last_sender_report
+            != (report.ntp_timestamp >> 16) as u32
+        || receiver_report.cname != "parent@ferric"
+    {
+        return Err("parent process returned inconsistent compound RTCP".into());
+    }
+    endpoint
+        .close()
+        .map_err(|error| format!("close child secure endpoint: {error}"))?;
     writeln!(control, "PEER_OK").map_err(|error| error.to_string())?;
     control.flush().map_err(|error| error.to_string())?;
     Ok(())
@@ -962,11 +1030,27 @@ fn accept_control_connection(
 
 fn configure_control_stream(stream: &TcpStream) -> Result<(), String> {
     stream
+        .set_nonblocking(false)
+        .map_err(|error| format!("configure signaling blocking mode: {error}"))?;
+    stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(|error| format!("configure signaling read timeout: {error}"))?;
     stream
         .set_write_timeout(Some(Duration::from_secs(5)))
         .map_err(|error| format!("configure signaling write timeout: {error}"))
+}
+
+fn read_control_marker(reader: &mut impl BufRead, expected: &str) -> Result<(), String> {
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .map_err(|error| format!("read control marker {expected}: {error}"))?;
+    if line.trim() != expected {
+        return Err(format!(
+            "expected control marker {expected}, received {line:?}"
+        ));
+    }
+    Ok(())
 }
 
 fn write_signaled_description(
