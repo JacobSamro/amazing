@@ -121,6 +121,10 @@ fn secure_media_two_processes_exchange_protected_media() {
     assert!(stdout.contains("RTP parent->child=ok"), "{stdout}");
     assert!(stdout.contains("RTP child->parent=ok"), "{stdout}");
     assert!(
+        stdout.contains("playout=L16 parent->child=2 PCMU child->parent=2"),
+        "{stdout}"
+    );
+    assert!(
         stdout.contains("SRTCP SR+CNAME child->parent=ok"),
         "{stdout}"
     );
