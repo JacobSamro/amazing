@@ -33,7 +33,7 @@ pub mod entities;
 pub mod tokenizer;
 pub mod tree;
 
-use amazing_dom::Dom;
+use amazing_dom::{Dom, Namespace, NodeIdx};
 
 /// Parses an HTML document into an arena-backed DOM.
 ///
@@ -53,9 +53,54 @@ pub fn parse(src: &str) -> Dom {
     tree::build(src)
 }
 
+/// Parses an HTML fragment in the supported ordinary HTML `div` context and
+/// returns the fragment children under a standalone document node.
+///
+/// Other contexts are rejected until their tokenizer and table/template
+/// initialization rules are implemented; callers never receive a plausible
+/// but context-insensitive tree.
+pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
+    if !context.eq_ignore_ascii_case("div") {
+        return Err("only the HTML div fragment context is supported".into());
+    }
+    let normalized;
+    let src = if src.contains('\r') {
+        normalized = src.replace("\r\n", "\n").replace('\r', "\n");
+        normalized.as_str()
+    } else {
+        src
+    };
+    let source = tree::build_div_fragment(src);
+
+    fn clone_subtree(
+        source: &Dom,
+        source_node: NodeIdx,
+        target: &mut Dom,
+        parent: NodeIdx,
+    ) {
+        let created = target.append_child(parent, source.get(source_node).kind.clone());
+        for child in source.children(source_node) {
+            clone_subtree(source, child, target, created);
+        }
+    }
+
+    let root = source
+        .children(NodeIdx(0))
+        .find(|node| {
+            source.namespace(*node) == Some(Namespace::Html)
+                && source.name(*node) == Some("html")
+        })
+        .ok_or_else(|| "fragment root was not constructed".to_owned())?;
+    let mut fragment = Dom::new();
+    for child in source.children(root) {
+        clone_subtree(&source, child, &mut fragment, NodeIdx(0));
+    }
+    Ok(fragment)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse;
+    use super::{parse, parse_fragment};
     use amazing_dom::NodeIdx;
 
     /// Integration gate: tokenizer + tree construction wired together.
@@ -78,6 +123,32 @@ mod tests {
         assert!(
             dump.contains("  <html>\n    <head>\n    <body>"),
             "whitespace leaked around implied head:\n{dump}"
+        );
+    }
+
+    #[test]
+    fn parses_div_context_fragment_without_document_wrappers() {
+        let dom = parse_fragment(
+            "div",
+            "<b><em><foo><foob><fooc><aside></b></em>",
+        )
+        .expect("fragment");
+        assert_eq!(
+            dom.dump(NodeIdx(0)),
+            "#document\n  <b>\n    <em>\n      <foo>\n        <foob>\n          <fooc>\n  <aside>\n    <b>\n"
+        );
+        let recovery = parse_fragment("div", "</div><span>x")
+            .expect("stray context end tag recovery");
+        assert_eq!(
+            recovery.dump(NodeIdx(0)),
+            "#document\n  <span>\n    \"x\"\n"
+        );
+        assert!(parse_fragment("table", "<td>x").is_err());
+        let normalized = parse_fragment("div", "<span>a\r\nb\rc")
+            .expect("fragment newline normalization");
+        assert_eq!(
+            normalized.dump(NodeIdx(0)),
+            "#document\n  <span>\n    \"a\nb\nc\"\n"
         );
     }
 }

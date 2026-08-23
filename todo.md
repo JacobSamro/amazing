@@ -9,7 +9,7 @@
 | Phase | Status |
 |-------|--------|
 | 0 — skeleton | ✅ done, all exit criteria met on win-001 |
-| 1 — HTML parser | 🔄 expanded html5lib/WPT tree subset 212/212 eligible; fragment/template/foreign-attribute gaps remain |
+| 1 — HTML parser | 🔄 expanded html5lib/WPT tree subset 213/213; general fragment/template/foreign-attribute gaps remain |
 | 2 — CSS | ✅ done on win-001 (88 workspace tests green) — see Phase 2 section |
 | 3 — Layout | ✅ done on win-001 (workspace green; curated css/CSS2 subset 17/17) |
 | 3.5 — Flexbox | ✅ done on win-001 (13 flex tests; row/column/wrap/grow/shrink/justify/align/gaps/auto-margins/order) |
@@ -162,8 +162,9 @@ Actual upstream conformance (completion audit): at WPT revision
 `53bc812da2ed81179ebd1ba76b2d197cc4747d12`, `scripts/html5lib.py` runs the
 migrated html5lib tree files `blocks.dat`, `comments01.dat`, `tables01.dat`,
 `adoption01.dat`, and `tests1.dat` through the public release `parse` artifact.
-It discovered 213 cases: 212 passed, 0 failed, 1 fragment/script-mode case
-skipped; measured eligible pass rate **212/212 (100.00%)**. This runner compares the DOM tree
+It discovered 213 cases: 213 passed, 0 failed, 0 skipped; measured pass rate
+**213/213 (100.00%)**. The declared `div` fragment case runs through the public
+`parse-fragment` artifact. This runner compares the DOM tree
 minus doctype, because the public dump stores doctype separately. The audit fixed EOF comment token
 order, a bare `<table><th>` implicit-row recursion/stack-overflow bug,
 namespace-aware SVG/MathML integration, table-adjusted adoption placement,
@@ -1027,11 +1028,10 @@ now” instruction pre-authorizes continuing.
   build/test gates on pushes/PRs. Workspace structure and architecture decisions
   are committed.
 - **Phase 1:** release `parse examples\sample.html` produced a 1,528-byte
-  indented DOM dump. The 56-test `amazing-html` unit suite covers malformed recovery,
+  indented DOM dump. The 57-test `amazing-html` unit suite covers malformed recovery,
   insertion modes, implicit table structure, foster parenting, and adoption
   agency. Expanded migrated html5lib/WPT DOM-minus-doctype tree measurement is
-  212/212 eligible with no failures and one skipped fragment/script-mode case.
-  Template, fragment parsing, and remaining foreign-attribute
+  213/213 with no failures or skips. Template, general fragment parsing, and remaining foreign-attribute
   gaps mean full parser completion is not claimed.
 - **Phase 2:** release `style examples\sample.html` produced a 2,307-byte
   computed-style tree through the HTML→CSS cascade pipeline; selector,
@@ -1073,12 +1073,12 @@ now” instruction pre-authorizes continuing.
 
 Completion is not yet claimed. The current audit has real external measurements
 and runnable artifacts for every numbered phase. Phase 1's original four-file
-foundation is 100/100 and its expanded upstream subset is 212/212, but broader
+foundation is 100/100 and its expanded upstream subset is 213/213, but broader
 parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **472**
+remeasured after the audit fixes before each commit. Current gate: **473**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **4,587,008 bytes**.
+stripped ThinLTO release is **4,592,128 bytes**.
 
 ## Server cheat sheet
 

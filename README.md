@@ -39,7 +39,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 |-------|------|--------|
 | `amazing-common` | shared byte-stream/text utils | ✅ |
 | `amazing-dom` | arena-allocated DOM (`u32` indices, no `Rc<RefCell>`) | ✅ core |
-| `amazing-html` | WHATWG tokenizer + namespace-aware tree construction | 🔄 expanded html5lib/WPT subset 212/212 eligible; broader gaps tracked |
+| `amazing-html` | WHATWG tokenizer + namespace-aware tree construction | 🔄 expanded html5lib/WPT subset 213/213; broader gaps tracked |
 | `amazing-css` | Syntax-3 parser, selectors, cascade | ✅ Phase 2 |
 | `amazing-layout` | block/inline FC → flexbox/grid | ✅ Phase 3/3.5 |
 | `amazing-paint` | software rasterizer | ✅ Phase 4 |
@@ -76,6 +76,7 @@ amazing version
 # parse an HTML file (or stdin) and dump the DOM tree
 amazing parse page.html
 cat page.html | amazing parse
+cat fragment.html | amazing parse-fragment div
 
 # execute a classic JavaScript file (or read the script from stdin)
 amazing run script.js

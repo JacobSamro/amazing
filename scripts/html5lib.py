@@ -21,6 +21,7 @@ class Case:
     index: int
     data: str
     expected: list[tuple[int, str]]
+    context: str | None
     skip_reason: str | None
 
 
@@ -79,10 +80,12 @@ def load_cases(path: Path) -> list[Case]:
         data, remainder = block.split("#errors\n", 1)
         data = data.removesuffix("\n")
         skip_reason = None
+        context = None
         before_document, document = remainder.split("#document\n", 1)
         if "#document-fragment" in before_document:
-            skip_reason = "fragment context is not exposed by the parse CLI"
-        elif "#script-on" in before_document or "#script-off" in before_document:
+            fragment = before_document.split("#document-fragment\n", 1)[1]
+            context = fragment.splitlines()[0].strip()
+        if "#script-on" in before_document or "#script-off" in before_document:
             skip_reason = "script-mode variant is not exposed by the parse CLI"
         cases.append(
             Case(
@@ -90,6 +93,7 @@ def load_cases(path: Path) -> list[Case]:
                 index=index,
                 data=data,
                 expected=canonical_expected(document),
+                context=context,
                 skip_reason=skip_reason,
             )
         )
@@ -130,8 +134,11 @@ def main() -> int:
         if case.skip_reason:
             skipped += 1
             continue
+        command = [str(args.binary), "parse"]
+        if case.context:
+            command = [str(args.binary), "parse-fragment", case.context]
         process = subprocess.run(
-            [str(args.binary), "parse"],
+            command,
             input=case.data,
             text=True,
             encoding="utf-8",

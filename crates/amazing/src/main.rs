@@ -632,6 +632,16 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("parse") => cmd_parse(args.get(2).map(String::as_str)),
+        Some("parse-fragment") => match args.get(2) {
+            Some(context) => cmd_parse_fragment(
+                context,
+                args.get(3).map(String::as_str),
+            ),
+            None => {
+                eprintln!("usage: amazing parse-fragment <context> [file]");
+                ExitCode::FAILURE
+            },
+        },
         Some("style") => cmd_style(&args[2..]),
         Some("layout") => cmd_layout(&args[2..]),
         Some("render") => cmd_render(&args[2..]),
@@ -651,7 +661,7 @@ fn main() -> ExitCode {
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: amazing [version|parse [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
+            eprintln!("usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|secure-media-loopback|secure-media-processes|sdp-roundtrip <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]");
             ExitCode::FAILURE
         }
     }
@@ -1201,6 +1211,22 @@ fn cmd_parse(path: Option<&str>) -> ExitCode {
             print!("{}", dom.dump(amazing_dom::NodeIdx(0)));
             ExitCode::SUCCESS
         }
+        Err(code) => code,
+    }
+}
+
+fn cmd_parse_fragment(context: &str, path: Option<&str>) -> ExitCode {
+    match read_source(path, "parse-fragment") {
+        Ok(src) => match amazing_html::parse_fragment(context, &src) {
+            Ok(dom) => {
+                print!("{}", dom.dump(amazing_dom::NodeIdx(0)));
+                ExitCode::SUCCESS
+            },
+            Err(error) => {
+                eprintln!("amazing parse-fragment: {error}");
+                ExitCode::FAILURE
+            },
+        },
         Err(code) => code,
     }
 }

@@ -2247,6 +2247,26 @@ pub fn build(src: &str) -> Dom {
     builder.into_dom()
 }
 
+/// Fragment tree construction for an ordinary HTML `div` context. The
+/// synthetic `html` root is on the open-elements stack but is not part of the
+/// returned fragment; callers extract its children. Unlike wrapper parsing,
+/// a stray `</div>` cannot close the synthetic root or discard later nodes.
+pub(crate) fn build_div_fragment(src: &str) -> Dom {
+    let mut builder = TreeBuilder::new();
+    builder.insert_and_push("html", Vec::new());
+    builder.mode = Mode::InBody;
+    let mut tokenizer = Tokenizer::new(src.chars().collect());
+    loop {
+        let tok = tokenizer.next_token();
+        let eof = tok == Token::Eof;
+        builder.feed(tok);
+        if eof {
+            break;
+        }
+    }
+    builder.into_dom()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
