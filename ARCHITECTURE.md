@@ -158,6 +158,12 @@ codec seam with two std-only adapters: network-order L16 PCM and G.711 PCMU.
 The platform and secure-transport crates do not learn codec implementation
 details.
 
+Phase 9.16 connects that seam after SRTP authentication/decryption. The
+two-process driver parses decrypted RTP, passes it through per-source jitter
+state, and invokes a negotiated decoder adapter before building reception
+statistics and RTCP. Secure transport still handles bytes only; codec and
+playout policy remain in the std-only protocol module and caller.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |

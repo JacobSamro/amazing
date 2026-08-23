@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 15-subphase foundation milestone landed; compressed codecs/video/TURN/browser interop remain |
+| 9 — Media | 🔄 16-subphase foundation milestone landed; compressed codecs/video/TURN/browser interop remain |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -1070,10 +1070,10 @@ samples=3+2; jitter/codec probe ok`.
 
 Known gaps: playout delay is fixed rather than adaptive; one buffer tracks one
 SSRC/payload type; timestamp discontinuities and source changes require a new
-buffer; gaps are reported but concealment is caller-owned. Secure two-process
-media does not yet feed this playout path. Frame aggregation, codec encoders,
-Opus, video codecs, audio-device playout, congestion feedback, and WebRTC WPT
-remain.
+buffer; gaps are reported but concealment is caller-owned. The secure
+two-process path currently carries one packet per direction, so it does not
+force live reordering or loss. Frame aggregation, codec encoders, Opus, video
+codecs, audio-device playout, congestion feedback, and WebRTC WPT remain.
 
 Conformance: jitter wrap/reordering, timed gap, bounded duplicate/late/overflow,
 two real codec adapters, and public-probe gates pass 5/5; the command integration
@@ -1085,6 +1085,34 @@ passed with `--locked`; strict WebRTC/application Clippy, exact CI build,
 stripped ThinLTO release, and the runnable jitter/codec artifact passed. The
 release binary is 4,636,160 bytes.
 
+## Phase 9.16 (secure playout) — SRTP → jitter → decoded audio
+
+Shipped: the two-process DTLS-SRTP artifact now carries real codec payloads
+instead of opaque marker text. After authenticated SRTP removal and RTP parsing,
+each process creates negotiated per-source jitter state, waits for the fixed
+playout deadline, and invokes the codec seam. The parent sends two network-order
+L16 samples that the child validates as `1000, -1000`; the child returns PCMU
+samples that the parent validates as `0, 32124`. RTCP sender/reception accounting
+continues from the same decoded RTP packets.
+
+Runnable artifact: `target\release\amazing.exe secure-media-processes`, which
+now reports `playout=L16 parent->child=2 PCMU child->parent=2` before the compound
+SRTCP/RTCP results and `two-process interop ok`.
+
+Known gaps: this gate proves one secure packet per direction, not live network
+reordering, gap concealment, adaptive delay, continuous clock-driven playout,
+or audio-device output. Codec negotiation is still fixture-owned; SDP rtpmap/
+fmtp does not construct adapters. Opus, video frame assembly/codecs, NACK/PLI,
+congestion control, TURN, and browser interoperability remain.
+
+Conformance: the enhanced secure two-process playout gate passes 1/1 alongside
+the 5/5 jitter/codec public gates. No WebRTC WPT subset is imported yet.
+
+Final win-001 gate: all 486 hardware-independent workspace tests/doctests
+passed with `--locked`; strict application Clippy, stripped ThinLTO release,
+and the secure two-process playout artifact passed. The release binary is
+4,642,304 bytes.
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -1093,8 +1121,8 @@ release binary is 4,636,160 bytes.
   **5 Net** HTTP/1.1 (TLS exception decision due) · **6 JS** Test262-gated ·
   **7 DOM/JS bridge** · **8 GUI shell** (one OS first) · **9 stretch media**
   (images/audio, authenticated ICE/RTP/RTCP, bounded jitter playout, L16/PCMU,
-  SDP, and D3D11 presentation milestones landed; secure playout integration
-  and compressed codecs next).
+  SDP, secure two-process playout, and D3D11 presentation milestones landed;
+  SDP-driven codecs, adaptive playout, and compressed codecs next).
 
 ## Numbered-phase completion audit (2026-08-23, win-001 authoritative)
 
@@ -1139,7 +1167,7 @@ release binary is 4,636,160 bytes.
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** fifteen committed subphases provide decoded images/audio,
+- **Phase 9:** sixteen committed subphases provide decoded images/audio,
   authenticated ICE/consent, RTP and compound RTCP, SDP identity, vetted
   two-process DTLS-SRTP, D3D11 presentation, retransmission/role state, and
   computed reception statistics. Each subphase records its bounded scope;
@@ -1153,7 +1181,7 @@ parser modes remain partial; Phase 9 is a foundation with explicit media/interop
 gaps. Final workspace count/size are
 remeasured after the audit fixes before each commit. Current gate: **486**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **4,636,160 bytes**.
+stripped ThinLTO release is **4,642,304 bytes**.
 
 ## Server cheat sheet
 

@@ -12,6 +12,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use amazing_js::DomHost;
+use amazing_webrtc::RtpAudioDecoder;
 
 mod gpu;
 mod gui;
@@ -906,7 +907,7 @@ fn cmd_secure_media_processes() -> ExitCode {
     match run_secure_media_processes() {
         Ok(()) => {
             println!(
-                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
+                "processes=2 signaling=tcp-loopback; ICE credentials=SDP; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=L16 parent->child=2 PCMU child->parent=2; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok"
             );
             ExitCode::SUCCESS
         }
@@ -997,11 +998,11 @@ fn run_secure_media_processes() -> Result<(), String> {
     .map_err(|error| error.to_string())?;
     let outbound = amazing_webrtc::RtpPacket {
         marker: true,
-        payload_type: 111,
+        payload_type: 96,
         sequence_number: 41,
         timestamp: 960,
         ssrc: 0x5041_5245,
-        payload: b"parent-to-child".to_vec(),
+        payload: [1_000i16.to_be_bytes(), (-1_000i16).to_be_bytes()].concat(),
     };
     let outbound_wire = amazing_webrtc::encode_rtp(&outbound).map_err(|error| error.to_string())?;
     endpoint
@@ -1024,8 +1025,31 @@ fn run_secure_media_processes() -> Result<(), String> {
     }
     let child_rtp = endpoint.receive_rtp().map_err(|error| error.to_string())?;
     let child_rtp = amazing_webrtc::parse_rtp(&child_rtp).map_err(|error| error.to_string())?;
-    if child_rtp.payload != b"child-to-parent" || child_rtp.sequence_number != 84 {
+    if child_rtp.payload_type != 0 || child_rtp.sequence_number != 84 {
         return Err("child process returned unexpected RTP".into());
+    }
+    let mut child_jitter =
+        amazing_webrtc::RtpJitterBuffer::new(amazing_webrtc::JitterBufferConfig {
+            ssrc: child_rtp.ssrc,
+            payload_type: child_rtp.payload_type,
+            clock_rate: 8_000,
+            playout_delay_ms: 60,
+            capacity: 8,
+        })
+        .map_err(|error| error.to_string())?;
+    child_jitter
+        .push(child_rtp.clone(), 0)
+        .map_err(|error| error.to_string())?;
+    let Some(amazing_webrtc::JitterOutput::Packet(played_child_rtp)) = child_jitter.pop_ready(60)
+    else {
+        return Err("child RTP did not reach jitter playout".into());
+    };
+    let mut pcmu = amazing_webrtc::PcmuDecoder::new(0, 8_000).map_err(|error| error.to_string())?;
+    let child_audio = pcmu
+        .decode(&played_child_rtp)
+        .map_err(|error| error.to_string())?;
+    if child_audio.samples != [0, 32_124] {
+        return Err("child PCMU playout samples were incorrect".into());
     }
     let mut reception_stats = amazing_webrtc::RtpReceptionStats::new(child_rtp.ssrc);
     reception_stats
@@ -1114,19 +1138,43 @@ fn run_secure_media_peer(control_address: Option<&str>) -> Result<(), String> {
     .map_err(|error| error.to_string())?;
     let parent_rtp = endpoint.receive_rtp().map_err(|error| error.to_string())?;
     let parent_rtp = amazing_webrtc::parse_rtp(&parent_rtp).map_err(|error| error.to_string())?;
-    if parent_rtp.payload != b"parent-to-child" || parent_rtp.sequence_number != 41 {
+    if parent_rtp.payload_type != 96 || parent_rtp.sequence_number != 41 {
         return Err("parent process sent unexpected RTP".into());
+    }
+    let mut parent_jitter =
+        amazing_webrtc::RtpJitterBuffer::new(amazing_webrtc::JitterBufferConfig {
+            ssrc: parent_rtp.ssrc,
+            payload_type: parent_rtp.payload_type,
+            clock_rate: 48_000,
+            playout_delay_ms: 60,
+            capacity: 8,
+        })
+        .map_err(|error| error.to_string())?;
+    parent_jitter
+        .push(parent_rtp.clone(), 0)
+        .map_err(|error| error.to_string())?;
+    let Some(amazing_webrtc::JitterOutput::Packet(played_parent_rtp)) = parent_jitter.pop_ready(60)
+    else {
+        return Err("parent RTP did not reach jitter playout".into());
+    };
+    let mut l16 =
+        amazing_webrtc::L16Decoder::new(96, 48_000, 1).map_err(|error| error.to_string())?;
+    let parent_audio = l16
+        .decode(&played_parent_rtp)
+        .map_err(|error| error.to_string())?;
+    if parent_audio.samples != [1_000, -1_000] {
+        return Err("parent L16 playout samples were incorrect".into());
     }
     endpoint
         .answer_consent()
         .map_err(|error| error.to_string())?;
     let response = amazing_webrtc::RtpPacket {
         marker: true,
-        payload_type: 111,
+        payload_type: 0,
         sequence_number: 84,
         timestamp: 1_920,
         ssrc: 0x4348_494c,
-        payload: b"child-to-parent".to_vec(),
+        payload: vec![0xff, 0x80],
     };
     let response_wire = amazing_webrtc::encode_rtp(&response).map_err(|error| error.to_string())?;
     endpoint
