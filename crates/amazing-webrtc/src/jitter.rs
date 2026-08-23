@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::{RtpPacket, WebRtcError};
+use crate::{RtpPacket, SdpDescription, WebRtcError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JitterBufferConfig {
@@ -331,6 +331,122 @@ fn decode_mulaw(encoded: u8) -> i16 {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AudioCodecKind {
+    L16,
+    Pcmu,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NegotiatedAudioCodec {
+    pub payload_type: u8,
+    pub encoding: String,
+    pub clock_rate: u32,
+    pub channels: u16,
+    kind: AudioCodecKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NegotiatedAudioCodecs {
+    codecs: Vec<NegotiatedAudioCodec>,
+}
+
+impl NegotiatedAudioCodecs {
+    pub fn codecs(&self) -> &[NegotiatedAudioCodec] {
+        &self.codecs
+    }
+
+    pub fn codec(&self, payload_type: u8) -> Result<&NegotiatedAudioCodec, WebRtcError> {
+        self.codecs
+            .iter()
+            .find(|codec| codec.payload_type == payload_type)
+            .ok_or(WebRtcError::Unsupported(
+                "RTP payload type was not negotiated",
+            ))
+    }
+
+    pub fn jitter_config(
+        &self,
+        payload_type: u8,
+        ssrc: u32,
+        playout_delay_ms: u64,
+        capacity: usize,
+    ) -> Result<JitterBufferConfig, WebRtcError> {
+        let codec = self.codec(payload_type)?;
+        Ok(JitterBufferConfig {
+            ssrc,
+            payload_type,
+            clock_rate: codec.clock_rate,
+            playout_delay_ms,
+            capacity,
+        })
+    }
+
+    pub fn decoder(&self, payload_type: u8) -> Result<Box<dyn RtpAudioDecoder>, WebRtcError> {
+        let codec = self.codec(payload_type)?;
+        match codec.kind {
+            AudioCodecKind::L16 => Ok(Box::new(L16Decoder::new(
+                codec.payload_type,
+                codec.clock_rate,
+                codec.channels,
+            )?)),
+            AudioCodecKind::Pcmu => Ok(Box::new(PcmuDecoder::new(
+                codec.payload_type,
+                codec.clock_rate,
+            )?)),
+        }
+    }
+}
+
+pub fn negotiate_audio_codecs(
+    offer: &SdpDescription,
+    answer: &SdpDescription,
+) -> Result<NegotiatedAudioCodecs, WebRtcError> {
+    if offer.media != "audio" || answer.media != "audio" {
+        return Err(WebRtcError::Unsupported(
+            "audio codec negotiation requires audio media",
+        ));
+    }
+    let mut codecs = Vec::new();
+    for offered in &offer.rtp_maps {
+        let Some(accepted) = answer
+            .rtp_maps
+            .iter()
+            .find(|mapping| mapping.payload_type == offered.payload_type)
+        else {
+            continue;
+        };
+        if !offered.encoding.eq_ignore_ascii_case(&accepted.encoding)
+            || offered.clock_rate != accepted.clock_rate
+            || offered.channels != accepted.channels
+        {
+            return Err(WebRtcError::InvalidPacket(
+                "answer changed offered RTP codec parameters",
+            ));
+        }
+        let kind = if offered.encoding.eq_ignore_ascii_case("L16") {
+            AudioCodecKind::L16
+        } else if offered.encoding.eq_ignore_ascii_case("PCMU") && offered.channels == 1 {
+            AudioCodecKind::Pcmu
+        } else {
+            continue;
+        };
+        codecs.push(NegotiatedAudioCodec {
+            payload_type: offered.payload_type,
+            encoding: offered.encoding.to_ascii_uppercase(),
+            clock_rate: offered.clock_rate,
+            channels: offered.channels,
+            kind,
+        });
+    }
+    if codecs.is_empty() {
+        return Err(WebRtcError::Unsupported(
+            "offer and answer have no supported common audio codec",
+        ));
+    }
+    Ok(NegotiatedAudioCodecs { codecs })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JitterCodecReport {
     pub emitted_packets: u8,
     pub reordered: bool,
@@ -528,5 +644,78 @@ mod tests {
         assert!(report.reordered);
         assert!(report.duplicate_rejected);
         assert_eq!((report.l16_samples, report.pcmu_samples), (3, 2));
+    }
+
+    fn description(maps: Vec<crate::RtpMap>) -> SdpDescription {
+        SdpDescription {
+            origin: "- 1 1 IN IP4 127.0.0.1".into(),
+            session_name: "codec test".into(),
+            timing: "0 0".into(),
+            connection_address: "127.0.0.1".parse().unwrap(),
+            media: "audio".into(),
+            port: 5000,
+            protocol: "UDP/TLS/RTP/SAVPF".into(),
+            payload_types: maps.iter().map(|mapping| mapping.payload_type).collect(),
+            ice_ufrag: "test".into(),
+            ice_pwd: "TestPassword123456789012".into(),
+            fingerprint_algorithm: "sha-256".into(),
+            fingerprint: "AA".into(),
+            setup: "actpass".into(),
+            candidates: Vec::new(),
+            rtp_maps: maps,
+        }
+    }
+
+    #[test]
+    fn sdp_negotiation_constructs_jitter_and_both_decoders() {
+        let maps = vec![
+            crate::RtpMap {
+                payload_type: 96,
+                encoding: "L16".into(),
+                clock_rate: 48_000,
+                channels: 1,
+            },
+            crate::RtpMap {
+                payload_type: 0,
+                encoding: "PCMU".into(),
+                clock_rate: 8_000,
+                channels: 1,
+            },
+        ];
+        let negotiated = negotiate_audio_codecs(&description(maps.clone()), &description(maps))
+            .expect("common codecs");
+        assert_eq!(negotiated.codecs().len(), 2);
+        assert_eq!(
+            negotiated.jitter_config(96, 7, 60, 8).unwrap().clock_rate,
+            48_000
+        );
+        assert_eq!(negotiated.decoder(0).unwrap().payload_type(), 0);
+        assert!(negotiated.decoder(111).is_err());
+    }
+
+    #[test]
+    fn sdp_negotiation_rejects_changed_or_unsupported_codec_sets() {
+        let opus = crate::RtpMap {
+            payload_type: 111,
+            encoding: "opus".into(),
+            clock_rate: 48_000,
+            channels: 2,
+        };
+        assert!(
+            negotiate_audio_codecs(&description(vec![opus.clone()]), &description(vec![opus]))
+                .is_err()
+        );
+
+        let offer = crate::RtpMap {
+            payload_type: 96,
+            encoding: "L16".into(),
+            clock_rate: 48_000,
+            channels: 1,
+        };
+        let mut answer = offer.clone();
+        answer.clock_rate = 44_100;
+        assert!(
+            negotiate_audio_codecs(&description(vec![offer]), &description(vec![answer])).is_err()
+        );
     }
 }
