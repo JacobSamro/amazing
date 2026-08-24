@@ -4,7 +4,10 @@ param(
     [string]$ExecutablePath = "target\release\amazing-shell.exe",
     [int]$WaitSeconds = 12,
     [switch]$ReuseRunningShell,
-    [switch]$KeepWidgets
+    [switch]$KeepWidgets,
+    [int]$ClickX = -1,
+    [int]$ClickY = -1,
+    [int]$PostClickWaitSeconds = 4
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,6 +38,28 @@ $shell.SendKeys("^v")
 Start-Sleep -Milliseconds 300
 $shell.SendKeys("{ENTER}")
 Start-Sleep -Seconds $WaitSeconds
+if ($ClickX -ge 0 -and $ClickY -ge 0) {
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class AmazingProbePointer {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Rect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr handle, out Rect rect);
+    [DllImport("user32.dll")]
+    public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")]
+    public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+}
+"@
+    $rect = New-Object AmazingProbePointer+Rect
+    [AmazingProbePointer]::GetWindowRect($process.MainWindowHandle, [ref]$rect) | Out-Null
+    [AmazingProbePointer]::SetCursorPos($rect.Left + $ClickX, $rect.Top + $ClickY) | Out-Null
+    [AmazingProbePointer]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
+    [AmazingProbePointer]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Seconds $PostClickWaitSeconds
+}
 $shell.SendKeys("{ESC}")
 Start-Sleep -Milliseconds 500
 if (-not $KeepWidgets) {
@@ -48,5 +73,6 @@ Start-Sleep -Seconds 1
 
 & (Join-Path $PSScriptRoot "capture-gpui-shell.ps1") -OutputPath $output
 Write-Output "ADDRESS=$Address"
+Write-Output "CLICK=$ClickX,$ClickY"
 Write-Output "PROCESS_ID=$($process.Id)"
 Write-Output "SCREENSHOT=$output"

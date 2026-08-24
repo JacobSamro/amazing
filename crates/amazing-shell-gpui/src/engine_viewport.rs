@@ -124,6 +124,16 @@ pub struct EngineViewport {
     pub image: Arc<RenderImage>,
     pub width: u32,
     pub height: u32,
+    links: Arc<Vec<LinkRegion>>,
+}
+
+#[derive(Debug, Clone)]
+struct LinkRegion {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    target: String,
 }
 
 pub struct LoadedPage {
@@ -179,7 +189,12 @@ impl EngineViewport {
         let title = document_title(&dom);
         let favicon = load_favicon(&dom, &final_address, &options);
         Ok(LoadedPage {
-            viewport: Self::from_dom_with_resources(&dom, &css, &resources),
+            viewport: Self::from_dom_with_resources(
+                &dom,
+                &css,
+                &resources,
+                Some(&final_address),
+            ),
             final_address,
             title,
             favicon,
@@ -241,6 +256,7 @@ impl EngineViewport {
                 image,
                 width: decoded.width,
                 height: decoded.height,
+                links: Arc::new(Vec::new()),
             });
         }
         Ok(frames)
@@ -258,6 +274,7 @@ impl EngineViewport {
             image: Arc::new(rgba_to_render_image(width, height, rgba)),
             width,
             height,
+            links: Arc::new(Vec::new()),
         })
     }
 
@@ -267,15 +284,16 @@ impl EngineViewport {
     }
 
     fn from_dom(dom: &amazing_dom::Dom, css: &str) -> Self {
-        Self::from_dom_with_resources(dom, css, &PageResources::default())
+        Self::from_dom_with_resources(dom, css, &PageResources::default(), None)
     }
 
     fn from_dom_with_resources(
         dom: &amazing_dom::Dom,
         css: &str,
         resources: &PageResources,
+        document_url: Option<&str>,
     ) -> Self {
-        let surface = render_dom_with_resources(dom, css, resources);
+        let (surface, links) = render_dom_with_resources(dom, css, resources, document_url);
         let width = surface.width;
         let height = surface.height;
         let image = Arc::new(surface_to_render_image(surface));
@@ -283,7 +301,21 @@ impl EngineViewport {
             image,
             width,
             height,
+            links: Arc::new(links),
         }
+    }
+
+    pub fn link_at(&self, x: f32, y: f32) -> Option<&str> {
+        self.links
+            .iter()
+            .rev()
+            .find(|region| {
+                x >= region.x
+                    && x <= region.x + region.width
+                    && y >= region.y
+                    && y <= region.y + region.height
+            })
+            .map(|region| region.target.as_str())
     }
 }
 
@@ -295,14 +327,15 @@ fn render_demo_surface() -> Surface {
 #[cfg(test)]
 fn render_surface(html: &str, css: &str) -> Surface {
     let dom = amazing_html::parse(html);
-    render_dom_with_resources(&dom, css, &PageResources::default())
+    render_dom_with_resources(&dom, css, &PageResources::default(), None).0
 }
 
 fn render_dom_with_resources(
     dom: &amazing_dom::Dom,
     css: &str,
     resources: &PageResources,
-) -> Surface {
+    document_url: Option<&str>,
+) -> (Surface, Vec<LinkRegion>) {
     let fonts = load_ui_font();
     let root = amazing_layout::layout_dom_document_with_replaced(
         dom,
@@ -315,14 +348,90 @@ fn render_dom_with_resources(
         .ceil()
         .clamp(VIEWPORT_HEIGHT as f32, 8192.0) as u32;
     let glyphs = OutlineGlyphProvider::new(&fonts);
-    amazing_paint::paint_document_with_resources(
+    let links = document_url
+        .map(|url| collect_link_regions(dom, &root, url))
+        .unwrap_or_default();
+    let surface = amazing_paint::paint_document_with_resources(
         &root,
         VIEWPORT_WIDTH,
         page_height,
         &fonts,
         &glyphs,
         resources,
-    )
+    );
+    (surface, links)
+}
+
+fn collect_link_regions(
+    dom: &amazing_dom::Dom,
+    layout: &amazing_layout::LayoutBox,
+    document_url: &str,
+) -> Vec<LinkRegion> {
+    fn target_for_node(
+        dom: &amazing_dom::Dom,
+        mut node: amazing_dom::NodeIdx,
+        document_url: &str,
+    ) -> Option<String> {
+        loop {
+            if dom.name(node) == Some("a")
+                && let Some(href) = dom.attrs_of(node).and_then(|attrs| {
+                    attrs
+                        .iter()
+                        .find(|(name, _)| name.eq_ignore_ascii_case("href"))
+                        .map(|(_, value)| value.as_str())
+                })
+            {
+                return resolve_resource_address(document_url, href);
+            }
+            node = dom.get(node).parent?;
+        }
+    }
+
+    fn walk(
+        dom: &amazing_dom::Dom,
+        layout: &amazing_layout::LayoutBox,
+        document_url: &str,
+        regions: &mut Vec<LinkRegion>,
+    ) {
+        for line in &layout.lines {
+            for word in &line.words {
+                if let Some(target) = target_for_node(dom, word.node, document_url) {
+                    regions.push(LinkRegion {
+                        x: word.x,
+                        y: line.y_top,
+                        width: word.width.max(1.0),
+                        height: line.height.max(1.0),
+                        target,
+                    });
+                }
+            }
+            for replaced in &line.replaced {
+                if let Some(target) = target_for_node(dom, replaced.node, document_url) {
+                    regions.push(LinkRegion {
+                        x: replaced.x,
+                        y: replaced.y,
+                        width: replaced.width.max(1.0),
+                        height: replaced.height.max(1.0),
+                        target,
+                    });
+                }
+            }
+        }
+
+        let children = match &layout.flow {
+            amazing_layout::Flow::Blocks(children)
+            | amazing_layout::Flow::Flex(children)
+            | amazing_layout::Flow::Grid(children) => children.as_slice(),
+            amazing_layout::Flow::Inlines(_) | amazing_layout::Flow::Empty => &[],
+        };
+        for child in children {
+            walk(dom, child, document_url, regions);
+        }
+    }
+
+    let mut regions = Vec::new();
+    walk(dom, layout, document_url, &mut regions);
+    regions
 }
 
 fn layout_bottom(layout: &amazing_layout::LayoutBox) -> f32 {
@@ -867,6 +976,27 @@ mod tests {
         server.join().unwrap();
         assert!(icon.is_some());
     }
+
+    #[test]
+    fn layout_exposes_resolved_link_hit_regions() {
+        let dom = amazing_html::parse("<p><a href=../next.html>Next page</a></p>");
+        let viewport = EngineViewport::from_dom_with_resources(
+            &dom,
+            "a { color: blue; }",
+            &PageResources::default(),
+            Some("https://example.test/docs/current.html"),
+        );
+        let region = viewport.links.first().expect("link region");
+        assert_eq!(region.target, "https://example.test/next.html");
+        assert_eq!(
+            viewport.link_at(
+                region.x + region.width / 2.0,
+                region.y + region.height / 2.0
+            ),
+            Some("https://example.test/next.html")
+        );
+    }
+
 
     #[test]
     fn tall_documents_keep_their_painted_height() {

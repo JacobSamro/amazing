@@ -10,8 +10,9 @@ use std::time::{Duration, Instant};
 
 use gpui::{
     App, Bounds, ClipboardItem, Context, CursorStyle, FocusHandle, IntoElement, KeyBinding,
-    KeyDownEvent, ParentElement, Render, RenderImage, SharedString, Styled, Window, WindowBounds,
-    WindowControlArea, WindowOptions, actions, div, img, prelude::*, px, rgb, size,
+    KeyDownEvent, MouseButton, MouseDownEvent, ParentElement, Render, RenderImage, SharedString,
+    Styled, Window, WindowBounds, WindowControlArea, WindowOptions, actions, canvas, div, img,
+    prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
 
@@ -1578,8 +1579,9 @@ impl BrowserShell {
             .when(!self.menu_open, |menu| menu.hidden())
     }
 
-    fn page(&self) -> impl IntoElement {
+    fn page(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let tab = &self.tabs[self.active];
+        let entity = cx.entity();
         let video_viewport = &self.video_frames[self.video_frame_index];
         let video_badge = if self.secure_video_requested {
             self.secure_video_status.clone()
@@ -1617,7 +1619,45 @@ impl BrowserShell {
                                 .border_color(rgb(BORDER))
                                 .bg(rgb(SURFACE))
                                 .shadow_md()
-                                .child(img(viewport.image.clone()).w_full()),
+                                .child(
+                                    div()
+                                        .relative()
+                                        .w_full()
+                                        .child(img(viewport.image.clone()).w_full())
+                                        .child(
+                                            canvas(
+                                                |bounds, _, _| bounds,
+                                                move |bounds, _, window, _| {
+                                                    let entity = entity.clone();
+                                                    window.on_mouse_event(move |event: &MouseDownEvent, _, _, app| {
+                                                        if event.button != MouseButton::Left
+                                                            || !bounds.contains(&event.position)
+                                                            || bounds.size.width.as_f32() <= 0.0
+                                                        {
+                                                            return;
+                                                        }
+                                                        entity.update(app, |this, cx| {
+                                                            let Some(viewport) = this.tabs[this.active].viewport.as_ref() else {
+                                                                return;
+                                                            };
+                                                            let scale = viewport.width as f32
+                                                                / bounds.size.width.as_f32();
+                                                            let x = (event.position.x - bounds.origin.x).as_f32() * scale;
+                                                            let y = (event.position.y - bounds.origin.y).as_f32() * scale;
+                                                            let Some(target) = viewport.link_at(x, y).map(str::to_string) else {
+                                                                return;
+                                                            };
+                                                            this.address = target;
+                                                            this.commit_navigation();
+                                                            cx.notify();
+                                                        });
+                                                    });
+                                                },
+                                            )
+                                            .absolute()
+                                            .inset_0(),
+                                        ),
+                                ),
                         )
                         .child(
                             div()
@@ -2055,10 +2095,10 @@ impl Render for BrowserShell {
                                 .flex_1()
                                 .min_w_0()
                                 .child(self.navigation_toolbar(cx, true))
-                                .child(self.page()),
+                                .child(self.page(cx)),
                         )
                     })
-                    .when(!sidebar, |body| body.child(self.page())),
+                    .when(!sidebar, |body| body.child(self.page(cx))),
             )
             .child(self.downloads_panel(cx))
             .child(self.site_info_panel(cx))

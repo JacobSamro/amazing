@@ -32,6 +32,8 @@ first real engine viewport:
   errors;
 - verified HTTPS navigation plus bounded PNG/JPEG/GIF/WebP/ICO image loading
   through the layout and paint resource seams;
+- layout-derived painted-link hit regions with real relative navigation from
+  the GPUI viewport;
 - content-height painting up to the engine safety cap and native GPUI wheel
   scrolling while browser chrome stays fixed;
 - a native media tab that encodes H.264, decodes I420, converts to RGBA, and
@@ -60,6 +62,8 @@ first real engine viewport:
 ![Amazing GPUI page information on win-001](../../docs/screenshots/gpui-site-info-win001.png)
 
 ![Amazing GPUI live Google resources](../../docs/screenshots/gpui-google-resources-win001.png)
+
+![Amazing GPUI painted link navigation](../../docs/screenshots/gpui-link-navigation-win001.png)
 
 ![Amazing GPUI grouped sidebar on win-001](../../docs/screenshots/gpui-shell-sidebar-win001.png)
 

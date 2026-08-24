@@ -4,7 +4,7 @@ Canonical sequence for turning the GPUI shell from a document viewer into a
 usable browser. Resolve one ticket, verify its exit criteria on `win-001`, then
 update this map before starting the next ticket.
 
-Frontier: **#5 — page hit testing and navigation**
+Frontier: **#5a — form controls**
 
 ## #1: Verified HTTPS navigation
 
@@ -87,16 +87,36 @@ the final address and viewport. Tabs render the favicon in horizontal/sidebar
 modes and fall back to the site initial only when metadata is absent. The live
 Google tab displays “Google” and its fetched icon after redirect.
 
-## #5: Page hit testing and navigation
+## #5: Painted link hit testing and navigation
 
 Blocked by: #2, #3
+Type: Prototype
+Status: ✅ Resolved
+
+### Question
+
+How should painted links and linked images expose hit regions and route
+activation back into per-tab navigation?
+
+### Answer
+
+Derive link rectangles from laid-out word and replaced-image fragments, resolve
+each ancestor anchor against the final document URL, and store page-coordinate
+regions beside the rendered surface. A bounds-aware GPUI canvas maps window
+pointer input back into those coordinates without product screen constants.
+The dynamic probe clicked a painted local link and verified the target title,
+address, and page content.
+
+## #5a: Text inputs, buttons, and basic forms
+
+Blocked by: #5
 Type: Prototype
 Status: ⏳ Next
 
 ### Question
 
-How should painted links, buttons, text inputs, and forms expose hit regions
-and route activation back into per-tab navigation?
+How should painted text inputs and buttons expose focus/edit state, and how
+should GET/POST form submission construct the next navigation request?
 
 ### Answer
 
@@ -104,7 +124,7 @@ Pending.
 
 ## #6: External scripts and live DOM repaint
 
-Blocked by: #5
+Blocked by: #5a
 Type: Prototype
 Status: ⬜ Pending
 
@@ -119,7 +139,7 @@ Pending.
 
 ## #7: Browser session state
 
-Blocked by: #5, #6
+Blocked by: #5a, #6
 Type: Discuss
 Status: ⬜ Pending
 
