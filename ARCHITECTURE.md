@@ -233,6 +233,24 @@ application-data tree; download payloads go to `Downloads/Amazing`. Engine and
 provider types do not enter the persisted format. Cache memory is bounded and
 never persisted.
 
+### 6a.2. GPUI owns all production presentation
+
+GPUI is Amazing's sole production desktop presentation adapter. It renders all
+shell chrome, menus, overlays, focus/edit surfaces, accessibility surfaces,
+scrolling containers, media presentation surfaces, and the final browsing-frame
+composition. The render engine remains a deep provider-neutral module behind
+this seam: it returns owned document pixels, geometry, hit regions, control and
+accessibility descriptors, media slots, and invalidation state without importing
+GPUI types. GPUI consumes those results and owns platform presentation; it does
+not recompute CSS layout or glyph advances.
+
+Amazing will not embed Chromium, WebView2, or another browser view to fill
+standards gaps. The hand-written Win32 shell is a diagnostic fallback only, not
+a second production UI. Existing native media tabs and codec probes establish
+transport/codec/timing capability but are not the product media surface:
+production `<audio>` and `<video>` must participate in the owning document's
+lifecycle, layout, controls, paint order, events, and browsing-frame capture.
+
 Phase 9.10 keeps that DTLS association live while media flows. A single
 RFC 7983-style reader routes DTLS and SRTP/SRTCP into separate channels on the
 same authenticated ICE-nominated UDP five-tuple. Routing is nonblocking:

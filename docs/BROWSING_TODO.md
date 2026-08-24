@@ -4,7 +4,7 @@ Canonical sequence for turning the GPUI shell from a document viewer into a
 usable browser. Resolve one ticket, verify its exit criteria on `win-001`, then
 update this map before starting the next ticket.
 
-Frontier: **Complete — all mapped tickets resolved**
+Frontier: **#8 — GPUI browsing-frame media and visual precision**
 
 ## #1: Verified HTTPS navigation
 
@@ -189,3 +189,36 @@ history directives update per-tab history without repainting/reloading. Live
 evidence proves storage survives a process restart (visit 1 → 2), downloads are
 saved under `Downloads/Amazing` and shown after restart, and final Google
 navigation still succeeds.
+
+## #8: GPUI browsing-frame media and visual precision
+
+Blocked by: render-engine #6 and #7, browsing #7
+Type: Prototype
+Status: 🌫️ Fog
+
+### Question
+
+How will GPUI compose precise shell chrome, document interaction overlays, and
+standards-driven `<audio>`/`<video>` playback inside one browsing frame while
+the engine cores remain provider-neutral?
+
+### Exit criteria
+
+- The checked-in shell reference has measured geometry, typography, icon,
+  focus, hover, disabled, menu, sidebar, and viewport screenshot assertions at
+  the win-001 reference size; the target window is captured unobscured through
+  `scripts\capture-gpui-shell.ps1`.
+- HTML media elements own resource selection, ready/network/playback state,
+  timing, events, layout slots, paint order, accessibility, and controls inside
+  the active document. Existing media tabs and codec probes are regression
+  dependencies, not acceptance evidence.
+- GPUI renders every visible desktop surface and consumes only owned engine
+  presentation data; no Chromium/WebView or second production UI path is used.
+- Pinned applicable WPT/testharness cases, local interaction fixtures, A/V
+  timing probes, full regression gates, and repeat screenshot artifacts are
+  recorded with measured results.
+
+### Answer
+
+Pending until the render-engine paint/compositing and replaced-content phases
+expose the required presentation descriptors.

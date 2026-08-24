@@ -466,13 +466,18 @@ Status: 🌫️ Fog
 
 ### Question
 
-Which of form controls, image object fitting, SVG, Canvas 2D, and embedded
-content belongs in this convergence program, and which requires a separate
-engine surface and conformance map?
+Which of form controls, image object fitting, SVG, Canvas 2D, embedded content,
+and in-document `<audio>`/`<video>` belongs in this convergence program, and
+what owned presentation descriptors let GPUI compose every surface without
+leaking platform types into engine cores?
 
 ### Answer
 
-Pending; scope will be chosen from measured WPT dependency clusters.
+Pending; scope will be chosen from measured WPT dependency clusters. The
+product requirement is already fixed: media tabs and codec probes are evidence
+for internal adapters only. End-user playback must live inside the browsing
+frame with HTML media-element lifecycle, layout, controls, timing, events,
+accessibility, and screenshot proof rendered through GPUI.
 
 ## #8: Continuous convergence gate
 

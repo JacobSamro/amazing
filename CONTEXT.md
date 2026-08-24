@@ -8,6 +8,21 @@ Shared language for describing Amazing's compatibility evidence and progress.
 The style, layout, and paint pipeline that turns a document into pixels.
 _Avoid_: Renderer, when referring only to rasterization
 
+**Shell chrome**:
+The persistent browser controls surrounding document content: windows, tabs,
+address and navigation controls, sidebars, menus, overlays, and status surfaces.
+_Avoid_: Render engine, page chrome
+
+**Browsing frame**:
+The shell region that presents and interacts with one document, including its
+page pixels, controls, selection, scrolling, and in-document media.
+_Avoid_: WebView, viewport when referring to the whole interactive surface
+
+**In-document media**:
+Audio or video owned by an HTML media element and presented inside its browsing
+frame with document lifecycle, layout, controls, timing, and events.
+_Avoid_: Media tab, codec demo, playback probe
+
 **Standard conformance**:
 Behavior required by the applicable web specification and measured by a pinned,
 unmodified upstream WPT case.
