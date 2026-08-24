@@ -122,6 +122,16 @@ the shell's separate locked manifest during development. `amazing gui` remains
 the explicit Win32 fallback. GPUI types and dependencies never enter the engine
 workspace graph.
 
+### 6a.1. GPUI browsing-session ownership
+
+Cookies, cache, origin storage, persisted history/bookmarks, and downloads are
+embedding policy, not parser/layout state. `BrowserSession` owns them in the
+GPUI shell and supplies validated request headers and bounded GET/POST bodies
+to `amazing-net`. State is persisted only under the current user's local
+application-data tree; download payloads go to `Downloads/Amazing`. Engine and
+provider types do not enter the persisted format. Cache memory is bounded and
+never persisted.
+
 Phase 9.10 keeps that DTLS association live while media flows. A single
 RFC 7983-style reader routes DTLS and SRTP/SRTCP into separate channels on the
 same authenticated ICE-nominated UDP five-tuple. Routing is nonblocking:

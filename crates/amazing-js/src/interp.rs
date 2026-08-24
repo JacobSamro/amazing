@@ -93,6 +93,18 @@ pub trait DomHost {
     fn remove_node(&mut self, node: u32) -> Result<(), String>;
     fn get_style(&self, node: u32, property: &str) -> Option<String>;
     fn set_style(&mut self, node: u32, property: &str, value: &str) -> Result<(), String>;
+    fn storage_get(&self, _origin: &str, _key: &str) -> Option<String> {
+        None
+    }
+    fn storage_set(&mut self, _origin: &str, _key: &str, _value: &str) -> Result<(), String> {
+        Err("localStorage is unavailable".into())
+    }
+    fn storage_remove(&mut self, _origin: &str, _key: &str) -> Result<(), String> {
+        Ok(())
+    }
+    fn storage_clear(&mut self, _origin: &str) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 pub struct Interpreter {
@@ -200,7 +212,38 @@ impl Interpreter {
         i.install_builtins();
         i.install_location();
         i.install_history();
+        i.install_storage();
         i
+    }
+
+    fn install_storage(&mut self) {
+        let storage = self.object_value();
+        if let JsValue::Object(storage) = &storage {
+            storage.borrow_mut().set_own(
+                "getItem",
+                Self::native("getItem", native_storage_get_item, &self.function_proto),
+            );
+            storage.borrow_mut().set_own(
+                "setItem",
+                Self::native("setItem", native_storage_set_item, &self.function_proto),
+            );
+            storage.borrow_mut().set_own(
+                "removeItem",
+                Self::native(
+                    "removeItem",
+                    native_storage_remove_item,
+                    &self.function_proto,
+                ),
+            );
+            storage.borrow_mut().set_own(
+                "clear",
+                Self::native("clear", native_storage_clear, &self.function_proto),
+            );
+        }
+        self.global_obj
+            .borrow_mut()
+            .set_own("localStorage", storage.clone());
+        let _ = self.global_env.declare_var("localStorage", storage);
     }
 
     fn install_history(&mut self) {

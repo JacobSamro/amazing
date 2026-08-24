@@ -11,7 +11,9 @@ fn fetched_http_body_is_parsed_into_dom() {
         .expect("configure HTTP fixture");
     let address = listener.local_addr().expect("fixture address");
     let server = std::thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(2);
+        // Process startup on the shared Windows builder can exceed two seconds
+        // while Defender scans a freshly linked test artifact.
+        let deadline = Instant::now() + Duration::from_secs(10);
         let (mut stream, _) = loop {
             match listener.accept() {
                 Ok(connection) => break connection,
@@ -22,6 +24,9 @@ fn fetched_http_body_is_parsed_into_dom() {
                 Err(error) => panic!("accept browser request: {error}"),
             }
         };
+        stream
+            .set_nonblocking(false)
+            .expect("restore blocking fixture stream");
         let mut request = [0u8; 1024];
         let length = stream.read(&mut request).expect("read request");
         assert!(String::from_utf8_lossy(&request[..length]).starts_with("GET /page HTTP/1.1\r\n"));

@@ -38,12 +38,22 @@ pub struct FetchOptions {
     /// Socket read/write timeout applied per connection. Default: 10 s.
     /// Note this bounds each blocking read, not total transfer time.
     pub timeout: Duration,
+    /// Additional request headers supplied by the embedding browser session.
+    /// Names/values containing HTTP control characters are ignored.
+    pub request_headers: Vec<(String, String)>,
+    /// Request method. The current browser surface supports GET and POST.
+    pub method: String,
+    /// Fully-buffered request body, bounded by the embedding caller.
+    pub body: Vec<u8>,
 }
 
 impl Default for FetchOptions {
     fn default() -> Self {
         Self {
             timeout: Duration::from_secs(10),
+            request_headers: Vec::new(),
+            method: "GET".into(),
+            body: Vec::new(),
         }
     }
 }
@@ -63,9 +73,10 @@ pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> 
         other => NetError::Url(other),
     })?;
     let mut redirects = 0usize;
+    let mut request_options = options.clone();
     loop {
         let response = match current.scheme.as_str() {
-            "http" | "https" => http::get(&current, options)?,
+            "http" | "https" => http::get(&current, &request_options)?,
             "file" => {
                 let fs_path = current.to_file_path()?;
                 let reported = current.to_string();
@@ -86,6 +97,16 @@ pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> 
             .get("location")
             .ok_or(NetError::MissingLocation)?
             .to_string();
+        if matches!(response.status, 301 | 302 | 303)
+            && request_options.method.eq_ignore_ascii_case("POST")
+        {
+            request_options.method = "GET".into();
+            request_options.body.clear();
+            request_options.request_headers.retain(|(name, _)| {
+                !name.eq_ignore_ascii_case("content-type")
+                    && !name.eq_ignore_ascii_case("content-length")
+            });
+        }
         current = resolve(&location, &current)?;
     }
 }

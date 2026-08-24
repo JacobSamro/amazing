@@ -4,7 +4,7 @@ Canonical sequence for turning the GPUI shell from a document viewer into a
 usable browser. Resolve one ticket, verify its exit criteria on `win-001`, then
 update this map before starting the next ticket.
 
-Frontier: **#7 — browser session state**
+Frontier: **Complete — all mapped tickets resolved**
 
 ## #1: Verified HTTPS navigation
 
@@ -124,8 +124,9 @@ Layout-derived control regions distinguish editable text-like inputs from
 submit controls. Clicking a text input creates a visible GPUI edit overlay;
 typing, selection, paste, deletion, Escape, and Enter are handled by shell
 focus. GET submission resolves the form action and URL-encodes named values.
-The dynamic probe verified `q=rust+browser` navigation. POST is rejected rather
-than rewritten because the network core does not yet expose request bodies.
+POST sends a bounded form body with content type/length through the same
+session/TLS path. The dynamic probe verified `q=rust+browser` GET navigation;
+loopback gates verify real POST bytes and rendered POST responses.
 
 ## #6: External scripts and live DOM repaint
 
@@ -170,7 +171,7 @@ without leaving the source URL.
 
 Blocked by: #5a, #6a
 Type: Discuss
-Status: ⬜ Pending
+Status: ✅ Resolved
 
 ### Question
 
@@ -179,4 +180,12 @@ history semantics required for normal authenticated browsing?
 
 ### Answer
 
-Pending.
+The device-local `BrowserSession` owns domain/path/secure cookies, a
+cookie-varying 64-entry/16 MiB response cache, per-origin persistent
+`localStorage`, bounded persisted history/bookmarks, sanitized unique download
+paths, and persisted download records. `amazing-net` accepts validated embedding
+headers and bounded GET/POST bodies while keeping policy in the shell. Script
+history directives update per-tab history without repainting/reloading. Live
+evidence proves storage survives a process restart (visit 1 → 2), downloads are
+saved under `Downloads/Amazing` and shown after restart, and final Google
+navigation still succeeds.

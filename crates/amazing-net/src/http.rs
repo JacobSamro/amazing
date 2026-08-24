@@ -40,18 +40,45 @@ pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetErro
     // ToSocketAddrs for (&str, u16) parses IP literals itself, but bracketed
     // IPv6 ("[::1]") does not parse — hand it the bare address instead.
     let connect_host = url.host.trim_start_matches('[').trim_end_matches(']');
-    let request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",
+    let method = options.method.to_ascii_uppercase();
+    if !matches!(method.as_str(), "GET" | "POST") {
+        return Err(NetError::UnsupportedMethod(method));
+    }
+    let mut request = format!(
+        "{} {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n",
+        method,
         url.request_target(),
         url.host_header(),
         USER_AGENT,
     );
+    for (name, value) in &options.request_headers {
+        if !name.is_empty()
+            && name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            && !value.bytes().any(|byte| matches!(byte, b'\r' | b'\n' | 0))
+        {
+            request.push_str(name);
+            request.push_str(": ");
+            request.push_str(value);
+            request.push_str("\r\n");
+        }
+    }
+    if !options.body.is_empty()
+        && !options
+            .request_headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+    {
+        request.push_str(&format!("Content-Length: {}\r\n", options.body.len()));
+    }
+    request.push_str("\r\n");
+    let mut request = request.into_bytes();
+    request.extend_from_slice(&options.body);
     let (raw, require_explicit_body_length) = match url.scheme.as_str() {
         "http" => {
             let mut stream = TcpStream::connect((connect_host, url.port))?;
             stream.set_read_timeout(Some(options.timeout))?;
             stream.set_write_timeout(Some(options.timeout))?;
-            stream.write_all(request.as_bytes())?;
+            stream.write_all(&request)?;
             stream.flush()?;
             (read_to_eof(&stream)?, false)
         }
@@ -59,7 +86,7 @@ pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetErro
             let response = amazing_net_tls::exchange(
                 connect_host,
                 url.port,
-                request.as_bytes(),
+                &request,
                 options.timeout,
                 MAX_BODY_BYTES,
             )
@@ -336,6 +363,57 @@ pub(crate) mod tests {
         assert!(request.contains("User-Agent: Ferric/0.1\r\n"));
         assert!(request.contains("Accept: */*\r\n"));
         assert!(request.contains("Connection: close\r\n"));
+    }
+
+    #[test]
+    fn embedding_headers_are_sent_and_control_injection_is_ignored() {
+        let (port, requests) = serve(vec![
+            b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(),
+        ]);
+        let options = FetchOptions {
+            timeout: Duration::from_secs(5),
+            request_headers: vec![
+                ("Cookie".into(), "sid=abc".into()),
+                ("Bad\r\nInjected".into(), "yes".into()),
+                ("X-Test".into(), "bad\nvalue".into()),
+            ],
+            method: "GET".into(),
+            body: Vec::new(),
+        };
+        crate::fetch::fetch(&format!("http://127.0.0.1:{port}/headers"), &options).unwrap();
+        let request = String::from_utf8(requests.recv_timeout(Duration::from_secs(5)).unwrap())
+            .unwrap();
+        assert!(request.contains("Cookie: sid=abc\r\n"));
+        assert!(!request.contains("Injected"));
+        assert!(!request.contains("bad\nvalue"));
+    }
+
+    #[test]
+    fn post_request_sends_content_type_length_and_body() {
+        let (port, requests) = serve(vec![
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".to_vec(),
+        ]);
+        let options = FetchOptions {
+            timeout: Duration::from_secs(5),
+            request_headers: vec![(
+                "Content-Type".into(),
+                "application/x-www-form-urlencoded".into(),
+            )],
+            method: "POST".into(),
+            body: b"q=rust+browser".to_vec(),
+        };
+        let response = crate::fetch::fetch(
+            &format!("http://127.0.0.1:{port}/submit"),
+            &options,
+        )
+        .unwrap();
+        assert_eq!(response.text().as_deref(), Some("ok"));
+        let request = requests.recv_timeout(Duration::from_secs(5)).unwrap();
+        let request = String::from_utf8(request).unwrap();
+        assert!(request.starts_with("POST /submit HTTP/1.1\r\n"));
+        assert!(request.contains("Content-Type: application/x-www-form-urlencoded\r\n"));
+        assert!(request.contains("Content-Length: 14\r\n"));
+        assert!(request.ends_with("\r\n\r\nq=rust+browser"));
     }
 
     #[test]

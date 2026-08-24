@@ -291,6 +291,61 @@ fn native_history_replace_state(
     Ok(JsValue::Undefined)
 }
 
+fn native_storage_get_item(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let key = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let origin = i.location_url.clone();
+    Ok(dom_host(i)?
+        .borrow()
+        .storage_get(&origin, &key)
+        .map_or(JsValue::Null, JsValue::str))
+}
+
+fn native_storage_set_item(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let key = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let value = i.to_string(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    let origin = i.location_url.clone();
+    dom_host(i)?
+        .borrow_mut()
+        .storage_set(&origin, &key, &value)
+        .map_err(Throw::type_error)?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_storage_remove_item(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let key = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let origin = i.location_url.clone();
+    dom_host(i)?
+        .borrow_mut()
+        .storage_remove(&origin, &key)
+        .map_err(Throw::type_error)?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_storage_clear(
+    i: &mut Interpreter,
+    _: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let origin = i.location_url.clone();
+    dom_host(i)?
+        .borrow_mut()
+        .storage_clear(&origin)
+        .map_err(Throw::type_error)?;
+    Ok(JsValue::Undefined)
+}
+
 fn native_fetch(
     i: &mut Interpreter,
     _: JsValue,

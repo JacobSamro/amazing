@@ -1,0 +1,18 @@
+<!doctype html>
+<title>Storage test</title>
+<style>
+html, body { margin: 0px; padding: 0px; background: #e0f2f1; color: #00695c; }
+main { display: block; padding: 72px; }
+h1 { display: block; font-size: 42px; }
+p { display: block; font-size: 20px; }
+</style>
+<main>
+  <h1 id="visits">Loading storage</h1>
+  <p>Close and reopen Amazing; this count must increase.</p>
+</main>
+<script>
+var visits = Number(localStorage.getItem('ticket7-visits') || '0') + 1;
+localStorage.setItem('ticket7-visits', String(visits));
+document.querySelector('#visits').textContent = 'Persistent visits: ' + visits;
+document.title = 'Storage visit ' + visits;
+</script>

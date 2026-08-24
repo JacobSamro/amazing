@@ -7,6 +7,9 @@ fn google_https_returns_html() {
         "https://google.com/",
         &amazing_net::FetchOptions {
             timeout: Duration::from_secs(10),
+            request_headers: Vec::new(),
+            method: "GET".into(),
+            body: Vec::new(),
         },
     )
     .expect("Google HTTPS fetch");

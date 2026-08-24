@@ -8,6 +8,7 @@ use gpui::RenderImage;
 use image::{Frame, RgbaImage};
 
 use crate::dom_runtime::ShellDomHost;
+use crate::session_state::BrowserSession;
 
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 570;
@@ -171,6 +172,12 @@ struct ControlRegion {
 
 pub type ControlRect = (f32, f32, f32, f32);
 
+pub struct FormRequest {
+    pub target: String,
+    pub method: String,
+    pub body: Vec<u8>,
+}
+
 pub struct LoadedPage {
     pub viewport: EngineViewport,
     pub final_address: String,
@@ -184,6 +191,8 @@ pub struct RuntimeUpdate {
     pub title: Option<String>,
     pub favicon: Option<Arc<RenderImage>>,
     pub navigation: Option<String>,
+    pub history_delta: Option<i32>,
+    pub history_update: Option<(String, bool)>,
     pub default_prevented: bool,
 }
 
@@ -192,6 +201,7 @@ pub struct PageRuntime {
     interpreter: amazing_js::Interpreter,
     document_url: String,
     options: FetchOptions,
+    session: Rc<RefCell<BrowserSession>>,
 }
 
 impl PageRuntime {
@@ -200,8 +210,13 @@ impl PageRuntime {
         document_url: String,
         options: FetchOptions,
         scripts: Vec<String>,
+        session: Rc<RefCell<BrowserSession>>,
     ) -> Self {
-        let host = Rc::new(RefCell::new(ShellDomHost::new(dom)));
+        let host = Rc::new(RefCell::new(ShellDomHost::new(
+            dom,
+            document_url.clone(),
+            session.clone(),
+        )));
         let mut interpreter = amazing_js::Interpreter::new();
         interpreter.set_dom_host(host.clone());
         interpreter.set_location_url(document_url.clone());
@@ -219,15 +234,31 @@ impl PageRuntime {
             interpreter,
             document_url,
             options,
+            session,
         }
     }
 
     fn snapshot(&mut self, default_prevented: bool) -> RuntimeUpdate {
         let navigation = self.interpreter.take_navigation();
+        let history_delta = self.interpreter.take_history_delta();
+        let history_update = self
+            .interpreter
+            .take_history_update()
+            .map(|(url, replace, _)| (url, replace));
         let host = self.host.borrow();
         let dom = &host.dom;
-        let css = load_document_styles(dom, &self.document_url, &self.options);
-        let resources = load_page_resources(dom, &self.document_url, &self.options);
+        let css = load_document_styles(
+            dom,
+            &self.document_url,
+            &self.options,
+            Some(&self.session),
+        );
+        let resources = load_page_resources(
+            dom,
+            &self.document_url,
+            &self.options,
+            Some(&self.session),
+        );
         RuntimeUpdate {
             viewport: EngineViewport::from_dom_with_resources(
                 dom,
@@ -236,8 +267,15 @@ impl PageRuntime {
                 Some(&self.document_url),
             ),
             title: document_title(dom),
-            favicon: load_favicon(dom, &self.document_url, &self.options),
+            favicon: load_favicon(
+                dom,
+                &self.document_url,
+                &self.options,
+                Some(&self.session),
+            ),
             navigation,
+            history_delta,
+            history_update,
             default_prevented,
         }
     }
@@ -262,6 +300,15 @@ impl PageRuntime {
             None
         }
     }
+
+    pub fn set_history_length(&mut self, length: usize) {
+        self.interpreter.set_history_length(length);
+    }
+
+    pub fn set_document_url(&mut self, url: String) {
+        self.document_url = url.clone();
+        self.interpreter.set_location_url(url);
+    }
 }
 
 impl EngineViewport {
@@ -273,7 +320,12 @@ impl EngineViewport {
         Self::from_document(NEW_TAB_HTML, NEW_TAB_CSS)
     }
 
-    pub fn load_address(address: &str) -> Result<LoadedPage, String> {
+    pub fn load_request(
+        address: &str,
+        method: &str,
+        body: Vec<u8>,
+        session: Rc<RefCell<BrowserSession>>,
+    ) -> Result<LoadedPage, String> {
         if address == "amazing://status" {
             return Ok(LoadedPage {
                 viewport: Self::demo(),
@@ -294,26 +346,48 @@ impl EngineViewport {
         }
         let options = FetchOptions {
             timeout: std::time::Duration::from_secs(3),
+            request_headers: if method.eq_ignore_ascii_case("POST") {
+                vec![(
+                    "Content-Type".into(),
+                    "application/x-www-form-urlencoded".into(),
+                )]
+            } else {
+                Vec::new()
+            },
+            method: method.to_string(),
+            body,
         };
-        let response = fetch(address, &options).map_err(|error| error.to_string())?;
+        let response = session
+            .borrow_mut()
+            .fetch(address, &options)
+            .map_err(|error| error.to_string())?;
         let content_type = response
             .content_type()
             .unwrap_or("application/octet-stream");
         if content_type != "text/html" && content_type != "application/xhtml+xml" {
-            return Err(format!("cannot render response type {content_type}"));
+            return match session.borrow_mut().save_download(&response) {
+                Ok(download) => Err(format!(
+                    "downloaded {} to {}",
+                    download.name, download.path
+                )),
+                Err(error) => Err(format!(
+                    "cannot render response type {content_type}; download failed: {error}"
+                )),
+            };
         }
         let final_address = response.url.clone();
         let html = response
             .text()
             .ok_or_else(|| "response body was not decodable text".to_string())?;
         let dom = amazing_html::parse(&html);
-        let scripts = collect_document_scripts(&dom, &final_address, &options);
+        let scripts = collect_document_scripts(&dom, &final_address, &options, Some(&session));
         if !scripts.is_empty() {
             let mut runtime = PageRuntime::new(
                 dom,
                 final_address.clone(),
                 options,
                 scripts,
+                session,
             );
             let update = runtime.snapshot(false);
             return Ok(LoadedPage {
@@ -324,10 +398,10 @@ impl EngineViewport {
                 runtime: Some(runtime),
             });
         }
-        let css = load_document_styles(&dom, &final_address, &options);
-        let resources = load_page_resources(&dom, &final_address, &options);
+        let css = load_document_styles(&dom, &final_address, &options, Some(&session));
+        let resources = load_page_resources(&dom, &final_address, &options, Some(&session));
         let title = document_title(&dom);
-        let favicon = load_favicon(&dom, &final_address, &options);
+        let favicon = load_favicon(&dom, &final_address, &options, Some(&session));
         Ok(LoadedPage {
             viewport: Self::from_dom_with_resources(
                 &dom,
@@ -345,15 +419,27 @@ impl EngineViewport {
     pub fn error(address: &str, error: &str) -> Self {
         let safe_address = escape_html(address);
         let safe_error = escape_html(error);
-        let html = format!(
-            r#"<!doctype html><html><body><main>
-            <p class="eyebrow">AMAZING NAVIGATION ERROR</p>
-            <h1>This address could not be loaded.</h1>
-            <p class="intro">Amazing kept the failure inside the viewport and preserved the requested address.</p>
-            <p class="address">{safe_address}</p>
-            <p class="note">{safe_error}</p>
-            </main></body></html>"#
-        );
+        let html = if error.starts_with("downloaded ") {
+            format!(
+                r#"<!doctype html><html><body><main>
+                <p class="eyebrow">AMAZING DOWNLOAD</p>
+                <h1>Download complete.</h1>
+                <p class="intro">The response was saved locally and added to Downloads.</p>
+                <p class="address">{safe_address}</p>
+                <p class="note">{safe_error}</p>
+                </main></body></html>"#
+            )
+        } else {
+            format!(
+                r#"<!doctype html><html><body><main>
+                <p class="eyebrow">AMAZING NAVIGATION ERROR</p>
+                <h1>This address could not be loaded.</h1>
+                <p class="intro">Amazing kept the failure inside the viewport and preserved the requested address.</p>
+                <p class="address">{safe_address}</p>
+                <p class="note">{safe_error}</p>
+                </main></body></html>"#
+            )
+        };
         Self::from_document(&html, NAVIGATION_CSS)
     }
 
@@ -480,9 +566,9 @@ impl EngineViewport {
         ))
     }
 
-    pub fn form_target(&self, index: usize, edited_value: Option<&str>) -> Option<String> {
+    pub fn form_request(&self, index: usize, edited_value: Option<&str>) -> Option<FormRequest> {
         let control = self.controls.get(index)?;
-        if !control.method.eq_ignore_ascii_case("get") {
+        if !matches!(control.method.as_str(), "get" | "post") {
             return None;
         }
         let mut fields = control.fields.clone();
@@ -510,15 +596,29 @@ impl EngineViewport {
             })
             .collect::<Vec<_>>()
             .join("&");
-        if query.is_empty() {
-            Some(control.action.clone())
+        if control.method == "post" {
+            Some(FormRequest {
+                target: control.action.clone(),
+                method: "POST".into(),
+                body: query.into_bytes(),
+            })
+        } else if query.is_empty() {
+            Some(FormRequest {
+                target: control.action.clone(),
+                method: "GET".into(),
+                body: Vec::new(),
+            })
         } else {
-            Some(format!(
-                "{}{}{}",
-                control.action,
-                if control.action.contains('?') { "&" } else { "?" },
-                query
-            ))
+            Some(FormRequest {
+                target: format!(
+                    "{}{}{}",
+                    control.action,
+                    if control.action.contains('?') { "&" } else { "?" },
+                    query
+                ),
+                method: "GET".into(),
+                body: Vec::new(),
+            })
         }
     }
 }
@@ -829,10 +929,22 @@ fn collect_inline_styles(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out
     }
 }
 
+fn fetch_resource(
+    session: Option<&Rc<RefCell<BrowserSession>>>,
+    address: &str,
+    options: &FetchOptions,
+) -> Result<amazing_net::Response, amazing_net::NetError> {
+    match session {
+        Some(session) => session.borrow_mut().fetch(address, options),
+        None => fetch(address, options),
+    }
+}
+
 fn load_document_styles(
     dom: &amazing_dom::Dom,
     document_url: &str,
     options: &FetchOptions,
+    session: Option<&Rc<RefCell<BrowserSession>>>,
 ) -> String {
     let mut css = String::new();
     let mut external_count = 0usize;
@@ -841,6 +953,7 @@ fn load_document_styles(
         amazing_dom::NodeIdx(0),
         document_url,
         options,
+        session,
         &mut external_count,
         &mut css,
     );
@@ -851,12 +964,14 @@ fn collect_document_scripts(
     dom: &amazing_dom::Dom,
     document_url: &str,
     options: &FetchOptions,
+    session: Option<&Rc<RefCell<BrowserSession>>>,
 ) -> Vec<String> {
     fn collect(
         dom: &amazing_dom::Dom,
         node: amazing_dom::NodeIdx,
         document_url: &str,
         options: &FetchOptions,
+        session: Option<&Rc<RefCell<BrowserSession>>>,
         scripts: &mut Vec<String>,
         total_bytes: &mut usize,
     ) {
@@ -878,7 +993,7 @@ fn collect_document_scripts(
                     .iter()
                     .find(|(name, _)| name.eq_ignore_ascii_case("src"))
                     .and_then(|(_, source)| resolve_resource_address(document_url, source))
-                    .and_then(|address| fetch(&address, options).ok())
+                    .and_then(|address| fetch_resource(session, &address, options).ok())
                     .filter(|response| response.status == 200)
                     .and_then(|response| response.text())
                     .or_else(|| {
@@ -906,6 +1021,7 @@ fn collect_document_scripts(
                 child,
                 document_url,
                 options,
+                session,
                 scripts,
                 total_bytes,
             );
@@ -919,6 +1035,7 @@ fn collect_document_scripts(
         amazing_dom::NodeIdx(0),
         document_url,
         options,
+        session,
         &mut scripts,
         &mut total_bytes,
     );
@@ -930,6 +1047,7 @@ fn collect_style_sources(
     node: amazing_dom::NodeIdx,
     document_url: &str,
     options: &FetchOptions,
+    session: Option<&Rc<RefCell<BrowserSession>>>,
     external_count: &mut usize,
     out: &mut String,
 ) {
@@ -972,7 +1090,7 @@ fn collect_style_sources(
             && let Some(address) = resolve_resource_address(document_url, href)
         {
             *external_count += 1;
-            if let Ok(response) = fetch(&address, options)
+            if let Ok(response) = fetch_resource(session, &address, options)
                 && response.status == 200
                 && response
                     .content_type()
@@ -994,6 +1112,7 @@ fn collect_style_sources(
             child,
             document_url,
             options,
+            session,
             external_count,
             out,
         );
@@ -1025,6 +1144,7 @@ fn load_page_resources(
     dom: &amazing_dom::Dom,
     document_url: &str,
     options: &FetchOptions,
+    session: Option<&Rc<RefCell<BrowserSession>>>,
 ) -> PageResources {
     fn dimension(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, name: &str) -> Option<f32> {
         dom.attrs_of(node)?
@@ -1043,6 +1163,7 @@ fn load_page_resources(
         node: amazing_dom::NodeIdx,
         document_url: &str,
         options: &FetchOptions,
+        session: Option<&Rc<RefCell<BrowserSession>>>,
         resources: &mut PageResources,
     ) {
         if resources.images.len() >= MAX_PAGE_IMAGES {
@@ -1058,7 +1179,7 @@ fn load_page_resources(
                 })
                 .map(|(_, value)| value.as_str())
             && let Some(address) = resolve_resource_address(document_url, source)
-            && let Ok(response) = fetch(&address, options)
+            && let Ok(response) = fetch_resource(session, &address, options)
             && response.status == 200
             && let Some(image) = decode_web_image(&response.body)
         {
@@ -1089,7 +1210,7 @@ fn load_page_resources(
         }
 
         for child in dom.children(node) {
-            walk(dom, child, document_url, options, resources);
+            walk(dom, child, document_url, options, session, resources);
         }
     }
 
@@ -1099,6 +1220,7 @@ fn load_page_resources(
         amazing_dom::NodeIdx(0),
         document_url,
         options,
+        session,
         &mut resources,
     );
     resources
@@ -1147,6 +1269,7 @@ fn load_favicon(
     dom: &amazing_dom::Dom,
     document_url: &str,
     options: &FetchOptions,
+    session: Option<&Rc<RefCell<BrowserSession>>>,
 ) -> Option<Arc<RenderImage>> {
     fn explicit_icon_href(
         dom: &amazing_dom::Dom,
@@ -1180,7 +1303,7 @@ fn load_favicon(
         .as_deref()
         .and_then(|href| resolve_resource_address(document_url, href))
         .or_else(|| resolve_resource_address(document_url, "/favicon.ico"))?;
-    let response = fetch(&address, options).ok()?;
+    let response = fetch_resource(session, &address, options).ok()?;
     if response.status != 200 {
         return None;
     }
@@ -1320,6 +1443,7 @@ mod tests {
             &dom,
             &format!("http://127.0.0.1:{port}/pages/index.html"),
             &FetchOptions::default(),
+            None,
         );
         server.join().unwrap();
 
@@ -1367,6 +1491,7 @@ mod tests {
             &dom,
             &format!("http://127.0.0.1:{port}/pages/index.html"),
             &FetchOptions::default(),
+            None,
         );
         server.join().unwrap();
         assert_eq!(resources.images.len(), 1);
@@ -1416,6 +1541,7 @@ mod tests {
             &dom,
             &format!("http://127.0.0.1:{port}/pages/index.html"),
             &FetchOptions::default(),
+            None,
         );
         server.join().unwrap();
         assert!(icon.is_some());
@@ -1467,14 +1593,71 @@ mod tests {
             .iter()
             .position(|control| control.kind == ControlKind::Submit)
             .expect("submit control");
+        let text_request = viewport.form_request(text, Some("rust browser")).unwrap();
+        assert_eq!(text_request.target, "https://example.test/search?q=rust+browser");
+        assert_eq!(text_request.method, "GET");
+        assert!(text_request.body.is_empty());
+        let submit_request = viewport.form_request(submit, None).unwrap();
         assert_eq!(
-            viewport.form_target(text, Some("rust browser")),
-            Some("https://example.test/search?q=rust+browser".into())
+            submit_request.target,
+            "https://example.test/search?q=old&source=amazing"
         );
-        assert_eq!(
-            viewport.form_target(submit, None),
-            Some("https://example.test/search?q=old&source=amazing".into())
+    }
+
+    #[test]
+    fn post_form_controls_build_request_body() {
+        let dom = amazing_html::parse(
+            "<form action=/submit method=post><input name=q value=old></form>",
         );
+        let viewport = EngineViewport::from_dom_with_resources(
+            &dom,
+            "input { display: block; width: 300px; height: 40px; }",
+            &PageResources::default(),
+            Some("https://example.test/form"),
+        );
+        let request = viewport.form_request(0, Some("rust browser")).unwrap();
+        assert_eq!(request.target, "https://example.test/submit");
+        assert_eq!(request.method, "POST");
+        assert_eq!(request.body, b"q=rust+browser");
+    }
+
+    #[test]
+    fn post_navigation_loads_html_response_through_session() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 2048];
+            loop {
+                let count = stream.read(&mut buffer).unwrap();
+                request.extend_from_slice(&buffer[..count]);
+                if request.ends_with(b"q=rust+browser") {
+                    break;
+                }
+            }
+            let request = String::from_utf8(request).unwrap();
+            assert!(request.starts_with("POST /submit HTTP/1.1\r\n"));
+            assert!(request.contains("Content-Type: application/x-www-form-urlencoded\r\n"));
+            let body = b"<title>POST complete</title><h1>POST complete</h1>";
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(body).unwrap();
+        });
+        let session = Rc::new(RefCell::new(BrowserSession::ephemeral()));
+        let page = EngineViewport::load_request(
+            &format!("http://127.0.0.1:{port}/submit"),
+            "POST",
+            b"q=rust+browser".to_vec(),
+            session,
+        )
+        .unwrap();
+        server.join().unwrap();
+        assert_eq!(page.title.as_deref(), Some("POST complete"));
     }
 
     #[test]
@@ -1506,8 +1689,14 @@ mod tests {
         );
         let document_url = format!("http://127.0.0.1:{port}/pages/index.html");
         let options = FetchOptions::default();
-        let scripts = collect_document_scripts(&dom, &document_url, &options);
-        let runtime = PageRuntime::new(dom, document_url, options, scripts);
+        let scripts = collect_document_scripts(&dom, &document_url, &options, None);
+        let runtime = PageRuntime::new(
+            dom,
+            document_url,
+            options,
+            scripts,
+            Rc::new(RefCell::new(BrowserSession::ephemeral())),
+        );
         server.join().unwrap();
         let host = runtime.host.borrow();
         let dom = &host.dom;
@@ -1544,6 +1733,7 @@ mod tests {
                  event.preventDefault();\
                  document.querySelector('#action').textContent = 'JS click handled';\
                  document.title = 'Event handled';\
+                 history.pushState({id: 1}, '', 'virtual.html');\
                });\
                setTimeout(function() {\
                  document.querySelector('#timer').textContent = 'Timer fired';\
@@ -1552,14 +1742,24 @@ mod tests {
         );
         let document_url = "https://example.test/page.html".to_string();
         let options = FetchOptions::default();
-        let scripts = collect_document_scripts(&dom, &document_url, &options);
-        let mut runtime = PageRuntime::new(dom, document_url, options, scripts);
+        let scripts = collect_document_scripts(&dom, &document_url, &options, None);
+        let mut runtime = PageRuntime::new(
+            dom,
+            document_url,
+            options,
+            scripts,
+            Rc::new(RefCell::new(BrowserSession::ephemeral())),
+        );
         let initial = runtime.snapshot(false);
         let node = initial.viewport.links.first().unwrap().node;
         let clicked = runtime.dispatch_click(node);
         assert!(clicked.default_prevented);
         assert_eq!(clicked.title.as_deref(), Some("Event handled"));
         assert!(clicked.navigation.is_none());
+        assert_eq!(
+            clicked.history_update.as_ref().map(|(url, replace)| (url.as_str(), *replace)),
+            Some(("virtual.html", false))
+        );
 
         std::thread::sleep(Duration::from_millis(30));
         assert!(runtime.pump().is_some());

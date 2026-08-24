@@ -77,6 +77,8 @@ pub enum NetError {
     Url(UrlError),
     /// Scheme known to the parser but outside `http`/`https`/`file`.
     UnsupportedScheme(String),
+    /// HTTP method outside the current GET/POST browser surface.
+    UnsupportedMethod(String),
     /// Certificate validation, handshake, or encrypted transport failure.
     Tls(String),
     /// More than [`fetch::MAX_REDIRECTS`] hops, or a bad hop along the way.
@@ -97,6 +99,7 @@ impl std::fmt::Display for NetError {
             NetError::Io(e) => write!(f, "i/o error: {e}"),
             NetError::Url(e) => write!(f, "invalid url: {e}"),
             NetError::UnsupportedScheme(s) => write!(f, "unsupported scheme: {s}"),
+            NetError::UnsupportedMethod(method) => write!(f, "unsupported method: {method}"),
             NetError::Tls(error) => write!(f, "{error}"),
             NetError::TooManyRedirects => write!(f, "too many redirects"),
             NetError::MissingLocation => write!(f, "redirect without Location header"),

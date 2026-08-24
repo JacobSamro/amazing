@@ -9,7 +9,8 @@ param(
     [int]$ClickY = -1,
     [int]$PostClickWaitSeconds = 4,
     [string]$TypeText = "",
-    [switch]$SubmitAfterType
+    [switch]$SubmitAfterType,
+    [switch]$OpenDownloads
 )
 
 $ErrorActionPreference = "Stop"
@@ -81,10 +82,15 @@ if (-not $shell.AppActivate($process.Id)) {
     throw "Could not reactivate Amazing GPUI process $($process.Id) before capture"
 }
 Start-Sleep -Seconds 1
+if ($OpenDownloads) {
+    $shell.SendKeys("^j")
+    Start-Sleep -Seconds 1
+}
 
 & (Join-Path $PSScriptRoot "capture-gpui-shell.ps1") -OutputPath $output
 Write-Output "ADDRESS=$Address"
 Write-Output "CLICK=$ClickX,$ClickY"
 Write-Output "TYPED_CHARS=$($TypeText.Length)"
+Write-Output "OPEN_DOWNLOADS=$OpenDownloads"
 Write-Output "PROCESS_ID=$($process.Id)"
 Write-Output "SCREENSHOT=$output"

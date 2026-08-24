@@ -35,10 +35,13 @@ first real engine viewport:
 - layout-derived painted-link hit regions with real relative navigation from
   the GPUI viewport;
 - native text-input focus/edit overlays and encoded GET form submission;
+- bounded POST form bodies through the verified session/network path;
 - bounded inline/external classic-script execution against the arena DOM before
   relayout and repaint;
 - per-tab retained DOM/interpreter state with post-paint click dispatch,
   `preventDefault`, future timer turns, and automatic repaint;
+- device-local cookies, bounded cache, persistent per-origin `localStorage`,
+  history/bookmarks, and saved download records/files;
 - content-height painting up to the engine safety cap and native GPUI wheel
   scrolling while browser chrome stays fixed;
 - a native media tab that encodes H.264, decodes I420, converts to RGBA, and
@@ -75,6 +78,10 @@ first real engine viewport:
 ![Amazing GPUI external script execution](../../docs/screenshots/gpui-script-execution-win001.png)
 
 ![Amazing GPUI retained event runtime](../../docs/screenshots/gpui-event-runtime-win001.png)
+
+![Amazing GPUI persistent localStorage](../../docs/screenshots/gpui-storage-persistence-win001.png)
+
+![Amazing GPUI completed download](../../docs/screenshots/gpui-download-final-win001.png)
 
 ![Amazing GPUI grouped sidebar on win-001](../../docs/screenshots/gpui-shell-sidebar-win001.png)
 

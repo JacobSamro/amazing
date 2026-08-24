@@ -1,14 +1,27 @@
 use amazing_dom::{Dom, Namespace, NodeIdx, NodeKind};
 use amazing_js::{DomHost, HostResponse};
+use std::{cell::RefCell, rc::Rc};
+
+use crate::session_state::BrowserSession;
 
 #[derive(Debug)]
 pub struct ShellDomHost {
     pub dom: Dom,
+    document_url: String,
+    session: Rc<RefCell<BrowserSession>>,
 }
 
 impl ShellDomHost {
-    pub fn new(dom: Dom) -> Self {
-        Self { dom }
+    pub fn new(
+        dom: Dom,
+        document_url: String,
+        session: Rc<RefCell<BrowserSession>>,
+    ) -> Self {
+        Self {
+            dom,
+            document_url,
+            session,
+        }
     }
 
     fn selector_list(selector: &str) -> Option<Vec<amazing_css::selectors::Selector>> {
@@ -149,7 +162,10 @@ impl DomHost for ShellDomHost {
                 .map_err(|error| error.to_string())?
                 .to_string()
         };
-        let response = amazing_net::fetch(&target, &amazing_net::FetchOptions::default())
+        let response = self
+            .session
+            .borrow_mut()
+            .fetch(&target, &amazing_net::FetchOptions::default())
             .map_err(|error| error.to_string())?;
         let body = response
             .text()
@@ -273,5 +289,78 @@ impl DomHost for ShellDomHost {
             .collect::<Vec<_>>()
             .join(" ");
         self.set_attribute(node.0, "style", &serialized)
+    }
+
+    fn storage_get(&self, _origin: &str, key: &str) -> Option<String> {
+        self.session
+            .borrow()
+            .storage_get(&storage_origin(&self.document_url), key)
+    }
+
+    fn storage_set(&mut self, _origin: &str, key: &str, value: &str) -> Result<(), String> {
+        self.session
+            .borrow_mut()
+            .storage_set(&storage_origin(&self.document_url), key, value);
+        Ok(())
+    }
+
+    fn storage_remove(&mut self, _origin: &str, key: &str) -> Result<(), String> {
+        self.session
+            .borrow_mut()
+            .storage_remove(&storage_origin(&self.document_url), key);
+        Ok(())
+    }
+
+    fn storage_clear(&mut self, _origin: &str) -> Result<(), String> {
+        self.session
+            .borrow_mut()
+            .storage_clear(&storage_origin(&self.document_url));
+        Ok(())
+    }
+}
+
+fn storage_origin(url: &str) -> String {
+    amazing_net::Url::parse(url).map_or_else(
+        |_| url.to_string(),
+        |url| {
+            let default_port = matches!((url.scheme.as_str(), url.port), ("http", 80) | ("https", 443));
+            if default_port {
+                format!("{}://{}", url.scheme, url.host)
+            } else {
+                format!("{}://{}:{}", url.scheme, url.host, url.port)
+            }
+        },
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_storage_is_scoped_to_origin_and_backed_by_session() {
+        let session = Rc::new(RefCell::new(BrowserSession::ephemeral()));
+        let host = Rc::new(RefCell::new(ShellDomHost::new(
+            amazing_html::parse("<p>storage</p>"),
+            "https://example.test/page".into(),
+            session.clone(),
+        )));
+        let mut interpreter = amazing_js::Interpreter::new();
+        interpreter.set_dom_host(host);
+        interpreter.set_location_url("https://example.test/page");
+        let value = interpreter
+            .run_script("localStorage.setItem('theme', 'dark'); localStorage.getItem('theme');")
+            .unwrap();
+        match value {
+            amazing_js::value::JsValue::Str(value) => assert_eq!(value.as_ref(), "dark"),
+            other => panic!("expected stored string, got {other:?}"),
+        }
+        assert_eq!(
+            session
+                .borrow()
+                .storage_get("https://example.test", "theme")
+                .as_deref(),
+            Some("dark")
+        );
     }
 }

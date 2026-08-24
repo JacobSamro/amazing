@@ -4,8 +4,11 @@ mod audio_output;
 mod dom_runtime;
 mod engine_viewport;
 mod playback_clock;
+mod session_state;
 mod secure_video;
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -18,8 +21,9 @@ use gpui::{
 use gpui_platform::application;
 
 use audio_output::AudioDeviceClock;
-use engine_viewport::{EngineViewport, PageRuntime, RuntimeUpdate};
+use engine_viewport::{EngineViewport, FormRequest, PageRuntime, RuntimeUpdate};
 use playback_clock::{PlaybackUpdate, VideoPlaybackClock};
+use session_state::BrowserSession;
 use secure_video::{FRAME_EVENT_CAPACITY, SecureVideoEvent, spawn_secure_video_source};
 
 const STRIP: u32 = 0xd5dae2;
@@ -102,6 +106,13 @@ struct PageInputState {
     selected: bool,
 }
 
+struct RuntimeDirective {
+    default_prevented: bool,
+    navigation: Option<String>,
+    history_delta: Option<i32>,
+    history_update: Option<(String, bool)>,
+}
+
 impl Tab {
     fn from_spec(spec: TabSpec<'_>, viewport: Option<EngineViewport>) -> Self {
         Self {
@@ -152,11 +163,18 @@ struct BrowserShell {
     site_info_open: bool,
     profile_open: bool,
     page_input: Option<PageInputState>,
+    session: Rc<RefCell<BrowserSession>>,
 }
 
 impl BrowserShell {
     fn new(address_focus: Option<FocusHandle>) -> Self {
-        Self {
+        let session = if address_focus.is_some() {
+            BrowserSession::load_default()
+        } else {
+            BrowserSession::ephemeral()
+        };
+        let session = Rc::new(RefCell::new(session));
+        let mut shell = Self {
             tabs: vec![
                 Tab::from_spec(
                     TabSpec {
@@ -265,7 +283,12 @@ impl BrowserShell {
             site_info_open: false,
             profile_open: false,
             page_input: None,
+            session,
+        };
+        for tab in &mut shell.tabs {
+            tab.bookmarked = shell.session.borrow().is_bookmarked(&tab.url);
         }
+        shell
     }
 
     fn select_tab(&mut self, index: usize) {
@@ -336,6 +359,10 @@ impl BrowserShell {
 
     fn toggle_bookmark(&mut self) {
         self.tabs[self.active].bookmarked = !self.tabs[self.active].bookmarked;
+        let tab = &self.tabs[self.active];
+        self.session
+            .borrow_mut()
+            .set_bookmarked(&tab.url, tab.bookmarked);
     }
 
     fn focus_shell(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -518,14 +545,13 @@ impl BrowserShell {
             },
             "enter" => {
                 let input = input.clone();
-                let target = self.tabs[input.tab]
+                let request = self.tabs[input.tab]
                     .viewport
                     .as_ref()
-                    .and_then(|viewport| viewport.form_target(input.control, Some(&input.value)));
+                    .and_then(|viewport| viewport.form_request(input.control, Some(&input.value)));
                 self.page_input = None;
-                if let Some(target) = target {
-                    self.address = target;
-                    self.commit_navigation();
+                if let Some(request) = request {
+                    self.submit_form(request);
                 }
             },
             _ => {
@@ -549,18 +575,44 @@ impl BrowserShell {
             self.address = self.committed_address.clone();
             return;
         };
-        self.load_navigation(&address);
+        self.commit_request(address, "GET", Vec::new());
+    }
+
+    fn commit_request(&mut self, address: String, method: &str, body: Vec<u8>) {
+        self.load_request(&address, method, body);
         let tab = &mut self.tabs[self.active];
         if tab.history[tab.history_index] != self.committed_address {
             tab.history.truncate(tab.history_index + 1);
             tab.history.push(self.committed_address.clone());
             tab.history_index = tab.history.len() - 1;
         }
+        let history_len = tab.history.len();
+        if let Some(runtime) = self.page_runtimes[self.active].as_mut() {
+            runtime.set_history_length(history_len);
+        }
+        self.session
+            .borrow_mut()
+            .record_history(&self.committed_address);
+    }
+
+    fn submit_form(&mut self, request: FormRequest) {
+        self.address = request.target.clone();
+        self.commit_request(request.target, &request.method, request.body);
     }
 
     fn load_navigation(&mut self, address: &str) {
+        self.load_request(address, "GET", Vec::new());
+    }
+
+    fn load_request(&mut self, address: &str, method: &str, body: Vec<u8>) {
         self.page_input = None;
-        let (viewport, final_address, title, favicon, runtime) = match EngineViewport::load_address(address) {
+        let (viewport, final_address, title, favicon, runtime) =
+            match EngineViewport::load_request(
+                address,
+                method,
+                body,
+                self.session.clone(),
+            ) {
             Ok(page) => (
                 page.viewport,
                 page.final_address,
@@ -575,7 +627,7 @@ impl BrowserShell {
                 None,
                 None,
             ),
-        };
+            };
         self.address = final_address.clone();
         self.committed_address = final_address.clone();
         let tab = &mut self.tabs[self.active];
@@ -623,26 +675,80 @@ impl BrowserShell {
         self.load_navigation(&address);
     }
 
-    fn apply_runtime_update(&mut self, index: usize, update: RuntimeUpdate) -> (bool, Option<String>) {
-        let prevented = update.default_prevented;
-        let navigation = update.navigation;
+    fn apply_runtime_update(&mut self, index: usize, update: RuntimeUpdate) -> RuntimeDirective {
+        let directive = RuntimeDirective {
+            default_prevented: update.default_prevented,
+            navigation: update.navigation,
+            history_delta: update.history_delta,
+            history_update: update.history_update,
+        };
         let tab = &mut self.tabs[index];
         tab.viewport = Some(update.viewport);
         if let Some(title) = update.title {
             tab.title = title;
         }
         tab.favicon = update.favicon;
-        (prevented, navigation)
+        directive
     }
 
-    fn dispatch_runtime_click(&mut self, node: u32) -> (bool, Option<String>) {
+    fn dispatch_runtime_click(&mut self, node: u32) -> RuntimeDirective {
         let index = self.active;
         let update = self.page_runtimes[index]
             .as_mut()
             .map(|runtime| runtime.dispatch_click(node));
-        update.map_or((false, None), |update| {
-            self.apply_runtime_update(index, update)
-        })
+        update.map_or(
+            RuntimeDirective {
+                default_prevented: false,
+                navigation: None,
+                history_delta: None,
+                history_update: None,
+            },
+            |update| self.apply_runtime_update(index, update),
+        )
+    }
+
+    fn apply_runtime_directive(&mut self, directive: RuntimeDirective) -> bool {
+        if let Some((url, replace)) = directive.history_update {
+            let target = if url.is_empty() {
+                self.committed_address.clone()
+            } else if let Ok(base) = amazing_net::Url::parse(&self.committed_address) {
+                amazing_net::resolve(&url, &base)
+                    .map(|url| url.to_string())
+                    .unwrap_or(url)
+            } else {
+                url
+            };
+            let tab = &mut self.tabs[self.active];
+            if replace {
+                tab.history[tab.history_index] = target.clone();
+            } else {
+                tab.history.truncate(tab.history_index + 1);
+                tab.history.push(target.clone());
+                tab.history_index = tab.history.len() - 1;
+            }
+            tab.url = target.clone();
+            self.address = target.clone();
+            self.committed_address = target.clone();
+            self.session.borrow_mut().record_history(&target);
+            if let Some(runtime) = self.page_runtimes[self.active].as_mut() {
+                runtime.set_document_url(target);
+                runtime.set_history_length(tab.history.len());
+            }
+        }
+        if let Some(delta) = directive.history_delta {
+            for _ in 0..delta.unsigned_abs().min(32) {
+                if delta < 0 {
+                    self.go_back();
+                } else if delta > 0 {
+                    self.go_forward();
+                }
+            }
+        }
+        if let Some(navigation) = directive.navigation {
+            self.address = navigation;
+            self.commit_navigation();
+        }
+        directive.default_prevented
     }
 
     fn pump_active_runtime(&mut self) {
@@ -651,11 +757,8 @@ impl BrowserShell {
             .as_mut()
             .and_then(PageRuntime::pump);
         if let Some(update) = update {
-            let (_, navigation) = self.apply_runtime_update(index, update);
-            if let Some(navigation) = navigation {
-                self.address = navigation;
-                self.commit_navigation();
-            }
+            let directive = self.apply_runtime_update(index, update);
+            self.apply_runtime_directive(directive);
         }
     }
 
@@ -1347,6 +1450,7 @@ impl BrowserShell {
     }
 
     fn downloads_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let downloads = self.session.borrow().downloads().to_vec();
         div()
             .absolute()
             .top(px(82.0))
@@ -1387,29 +1491,61 @@ impl BrowserShell {
                             .child("×"),
                     ),
             )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .justify_center()
-                    .h(px(150.0))
-                    .gap_2()
-                    .text_color(rgb(DIM))
-                    .child(div().text_size(px(28.0)).child("⇩"))
-                    .child(
-                        div()
-                            .text_size(px(13.0))
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .text_color(rgb(TEXT))
-                            .child("No downloads yet"),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(12.0))
-                            .child("Downloaded files will appear here."),
+            .when(downloads.is_empty(), |panel| {
+                panel.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .justify_center()
+                        .h(px(150.0))
+                        .gap_2()
+                        .text_color(rgb(DIM))
+                        .child(div().text_size(px(28.0)).child("⇩"))
+                        .child(
+                            div()
+                                .text_size(px(13.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(rgb(TEXT))
+                                .child("No downloads yet"),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(12.0))
+                                .child("Downloaded files will appear here."),
+                        ),
+                )
+            })
+            .when(!downloads.is_empty(), |panel| {
+                panel.child(
+                    div().flex().flex_col().gap_1().mt_2().children(
+                        downloads.into_iter().rev().take(6).map(|download| {
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .p_2()
+                                .rounded_md()
+                                .hover(|style| style.bg(rgb(SURFACE_2)))
+                                .child(
+                                    div()
+                                        .text_size(px(12.5))
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .child(download.name),
+                                )
+                                .child(
+                                    div()
+                                        .overflow_hidden()
+                                        .text_ellipsis()
+                                        .whitespace_nowrap()
+                                        .text_size(px(10.5))
+                                        .text_color(rgb(DIM))
+                                        .child(download.path),
+                                )
+                        }),
                     ),
-            )
+                )
+            })
             .when(!self.downloads_open, |panel| panel.hidden())
     }
 
@@ -1775,26 +1911,26 @@ impl BrowserShell {
                                                                     (index, value.to_string(), rect)
                                                                 })
                                                             });
-                                                            let submit_target = control
+                                                            let submit_request = control
                                                                 .filter(|index| {
                                                                     viewport.text_control(*index).is_none()
                                                                 })
                                                                 .and_then(|index| {
-                                                                    viewport.form_target(index, None)
+                                                                    viewport.form_request(index, None)
                                                                 });
                                                             if let Some((node, target)) = link {
-                                                                let (prevented, script_navigation) =
+                                                                let directive =
                                                                     this.dispatch_runtime_click(node);
-                                                                if let Some(target) = script_navigation {
-                                                                    this.address = target;
-                                                                    this.commit_navigation();
-                                                                } else if !prevented {
+                                                                let script_navigated =
+                                                                    directive.navigation.is_some();
+                                                                let prevented = this
+                                                                    .apply_runtime_directive(directive);
+                                                                if !prevented && !script_navigated {
                                                                     this.address = target;
                                                                     this.commit_navigation();
                                                                 }
-                                                            } else if let Some(target) = submit_target {
-                                                                this.address = target;
-                                                                this.commit_navigation();
+                                                            } else if let Some(request) = submit_request {
+                                                                this.submit_form(request);
                                                             } else if let Some((control, value, rect)) = text_control {
                                                                 this.page_input = Some(PageInputState {
                                                                     tab: this.active,
@@ -2608,6 +2744,31 @@ mod tests {
         assert_eq!(shell.tabs[0].history_index, 2);
         shell.go_forward();
         assert_eq!(shell.committed_address, "https://branch.test");
+    }
+
+    #[test]
+    fn script_history_directives_update_tab_without_reloading() {
+        let mut shell = BrowserShell::new(None);
+        shell.committed_address = "https://example.test/root".into();
+        shell.address = shell.committed_address.clone();
+        shell.tabs[0].url = shell.committed_address.clone();
+        shell.tabs[0].history = vec![shell.committed_address.clone()];
+        let original_image = shell.tabs[0].viewport.as_ref().unwrap().image.clone();
+        shell.apply_runtime_directive(RuntimeDirective {
+            default_prevented: false,
+            navigation: None,
+            history_delta: None,
+            history_update: Some(("virtual/page".into(), false)),
+        });
+        assert_eq!(
+            shell.committed_address,
+            "https://example.test/virtual/page"
+        );
+        assert_eq!(shell.tabs[0].history.len(), 2);
+        assert!(Arc::ptr_eq(
+            &original_image,
+            &shell.tabs[0].viewport.as_ref().unwrap().image
+        ));
     }
 
     #[test]
