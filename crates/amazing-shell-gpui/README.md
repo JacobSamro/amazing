@@ -18,6 +18,8 @@ first real engine viewport:
   fallback and Ctrl+A/C/X/V clipboard editing;
 - interactive bookmark, Downloads, site-information, and main-menu surfaces;
   every visible main-menu item performs its stated action;
+- functional title-bar and toolbar side-panel toggles plus a local-profile
+  surface that accurately reports device-local browsing state;
 - Chrome keyboard behavior across the shell: Ctrl+L/F6 focuses the address
   bar, Ctrl+T/W creates and closes tabs, Ctrl+R/F5 reloads, Alt+Left/Right
   traverses per-tab history, Ctrl+J opens Downloads, and Escape dismisses

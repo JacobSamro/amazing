@@ -135,6 +135,7 @@ struct BrowserShell {
     downloads_open: bool,
     menu_open: bool,
     site_info_open: bool,
+    profile_open: bool,
 }
 
 impl BrowserShell {
@@ -245,6 +246,7 @@ impl BrowserShell {
             downloads_open: false,
             menu_open: false,
             site_info_open: false,
+            profile_open: false,
         }
     }
 
@@ -257,6 +259,7 @@ impl BrowserShell {
             self.downloads_open = false;
             self.menu_open = false;
             self.site_info_open = false;
+            self.profile_open = false;
         }
     }
 
@@ -330,6 +333,7 @@ impl BrowserShell {
         self.downloads_open = false;
         self.menu_open = false;
         self.site_info_open = false;
+        self.profile_open = false;
         cx.notify();
     }
 
@@ -381,6 +385,7 @@ impl BrowserShell {
         self.downloads_open = true;
         self.menu_open = false;
         self.site_info_open = false;
+        self.profile_open = false;
         cx.notify();
     }
 
@@ -388,6 +393,7 @@ impl BrowserShell {
         self.downloads_open = false;
         self.menu_open = false;
         self.site_info_open = false;
+        self.profile_open = false;
         self.focus_shell(window, cx);
         cx.notify();
     }
@@ -659,24 +665,38 @@ impl BrowserShell {
 
     fn toggle_sidebar(&mut self) {
         self.sidebar = !self.sidebar;
+        self.downloads_open = false;
+        self.menu_open = false;
+        self.site_info_open = false;
+        self.profile_open = false;
     }
 
     fn toggle_downloads(&mut self) {
         self.downloads_open = !self.downloads_open;
         self.menu_open = false;
         self.site_info_open = false;
+        self.profile_open = false;
     }
 
     fn toggle_menu(&mut self) {
         self.menu_open = !self.menu_open;
         self.downloads_open = false;
         self.site_info_open = false;
+        self.profile_open = false;
     }
 
     fn toggle_site_info(&mut self) {
         self.site_info_open = !self.site_info_open;
         self.downloads_open = false;
         self.menu_open = false;
+        self.profile_open = false;
+    }
+
+    fn toggle_profile(&mut self) {
+        self.profile_open = !self.profile_open;
+        self.downloads_open = false;
+        self.menu_open = false;
+        self.site_info_open = false;
     }
 
     fn icon_button(label: &'static str, enabled: bool) -> impl IntoElement {
@@ -945,6 +965,7 @@ impl BrowserShell {
             )
             .child(
                 div()
+                    .id("profile-toggle")
                     .flex()
                     .items_center()
                     .justify_center()
@@ -955,6 +976,12 @@ impl BrowserShell {
                     .text_color(rgb(0xffffff))
                     .text_size(px(11.0))
                     .font_weight(gpui::FontWeight::BOLD)
+                    .cursor_pointer()
+                    .hover(|style| style.bg(rgb(0x934522)))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.toggle_profile();
+                        cx.notify();
+                    }))
                     .child("J"),
             )
             .child(
@@ -1042,7 +1069,7 @@ impl BrowserShell {
                         this.address_selected = true;
                         cx.notify();
                     }))
-                    .child("⌕  Search tabs"),
+                    .child("⌕  Search or type URL"),
             )
             .child(
                 div()
@@ -1317,6 +1344,87 @@ impl BrowserShell {
                     .child(div().text_color(rgb(DIM)).child("Amazing engine")),
             )
             .when(!self.site_info_open, |panel| panel.hidden())
+    }
+
+    fn profile_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .absolute()
+            .top(px(80.0))
+            .right(px(48.0))
+            .w(px(300.0))
+            .p_3()
+            .rounded_lg()
+            .border_1()
+            .border_color(rgb(BORDER))
+            .bg(rgb(SURFACE))
+            .shadow_lg()
+            .text_color(rgb(TEXT))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(42.0))
+                            .rounded_full()
+                            .bg(rgb(ACCENT))
+                            .text_color(rgb(SURFACE))
+                            .text_size(px(16.0))
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .child("J"),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_size(px(14.0))
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .child("jMac"),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(11.5))
+                                    .text_color(rgb(DIM))
+                                    .child("Local profile"),
+                            ),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        div()
+                            .id("profile-close")
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(28.0))
+                            .rounded_full()
+                            .cursor_pointer()
+                            .hover(|style| style.bg(rgb(SURFACE_2)))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.profile_open = false;
+                                cx.notify();
+                            }))
+                            .child("×"),
+                    ),
+            )
+            .child(
+                div()
+                    .mt_3()
+                    .p_3()
+                    .rounded_md()
+                    .bg(rgb(SURFACE_2))
+                    .text_size(px(12.0))
+                    .line_height(gpui::relative(1.4))
+                    .text_color(rgb(DIM))
+                    .child("Browsing data stays on this device. Sync is off."),
+            )
+            .when(!self.profile_open, |panel| panel.hidden())
     }
 
     fn browser_menu(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1638,6 +1746,7 @@ impl Render for BrowserShell {
                     .pl_2()
                     .child(
                         div()
+                            .id("title-sidebar-toggle")
                             .flex()
                             .items_center()
                             .justify_center()
@@ -1646,6 +1755,12 @@ impl Render for BrowserShell {
                             .mr_2()
                             .rounded_md()
                             .text_color(rgb(ICON))
+                            .cursor_pointer()
+                            .hover(|style| style.bg(rgb(STRIP_HOVER)))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.toggle_sidebar();
+                                cx.notify();
+                            }))
                             .child("▣"),
                     )
                     .child(
@@ -1906,6 +2021,7 @@ impl Render for BrowserShell {
             )
             .child(self.downloads_panel(cx))
             .child(self.site_info_panel(cx))
+            .child(self.profile_panel(cx))
             .child(self.browser_menu(cx))
     }
 }
@@ -2149,6 +2265,9 @@ mod tests {
         shell.toggle_site_info();
         assert!(shell.site_info_open);
         assert!(!shell.menu_open);
+        shell.toggle_profile();
+        assert!(shell.profile_open);
+        assert!(!shell.site_info_open);
         shell.toggle_bookmark();
         assert!(shell.tabs[0].bookmarked);
         shell.toggle_bookmark();
