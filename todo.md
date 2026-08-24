@@ -19,7 +19,7 @@
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
-| 9 — Media | 🔄 46-subphase foundation landed; live browser DTLS-SRTP interop remains |
+| 9 — Media | ✅ 47-subphase stretch milestone includes live Chromium DTLS-SRTP video |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
@@ -2105,6 +2105,52 @@ root artifact gate bring the workspace to 519/519; standalone GPUI remains
 pass on win-001. Release sizes are 8,614,400 bytes (`amazing.exe`) and 14,268,928
 bytes (`amazing-shell.exe`).
 
+## Phase 9.47 (live browser interop) — Edge ICE/DTLS-SRTP/H.264 decode
+
+Shipped: new `browser_peer` module exposes one `run_browser_peer(port)` interface
+that owns local signaling, answer generation, secure transport, timed media, and
+the browser result. Its HTTP adapter caps headers at 16 KiB and offer/result
+bodies at 256 KiB, requires HTTP/1.1 plus exact Content-Length, serves one
+same-origin page, and closes every response. A deterministic parser gate covers
+exact bodies and oversized rejection.
+
+The page creates recvonly audio/video transceivers, gathers a real Edge offer,
+POSTs SDP, installs Amazing's sendonly answer, attaches the remote video track,
+and reports only after five `requestVideoFrameCallback` callbacks. It draws the
+decoded frame to canvas and returns size/checksum/connection state. Amazing binds
+UDP on all local interfaces, selects Edge's literal IPv4 host candidate, answers
+with the routed local address, and runs as controlled ICE. The endpoint now
+accepts a browser's pre-nomination check before USE-CANDIDATE and accepts
+`c=0.0.0.0` when the concrete candidate matches the connected socket.
+
+After ICE nomination and DTLS-SRTP key export, a persistent OpenH264 encoder
+sends 45 frames at 10 fps. Every access unit crosses the RFC 6184 packetizer with
+a 1,200-byte payload cap and is protected by the negotiated AEAD_AES_128_GCM
+SRTP profile. The stripped release session measured:
+
+`BROWSER_INTEROP http=127.0.0.1:8787 browser=192.168.0.3:50061
+media=192.168.0.3:65272 PT=102 frames=45 RTP=264 result=decoded frames=5
+size=320x180 checksum=4156991624 state=connected; browser peer ok`.
+
+Edge visibly displayed the decoded pixels. Native evidence:
+`383ef2dd28d76502359b6f87b7d9873ac46c233b1a5c8d22563c32402c3be780`.
+
+Runnable artifact: `target\release\amazing.exe browser-peer 8787`, then open
+`http://127.0.0.1:8787/` in Chromium. The authoritative run used Edge with mDNS
+host obfuscation disabled and autoplay enabled.
+
+Known gaps: the live proof is same-host IPv4 and video-only; Edge's mDNS hiding
+was disabled instead of resolving `.local` names. Browser audio RTP, external
+TURN relay use, trickle updates, renegotiation, long-running RTCP/congestion
+control, and automated interactive CI remain production follow-ons. The artifact
+closes after the first verified decode report.
+
+Conformance: the HTTP parser gate brings the static workspace to 520/520; the
+live Edge gate separately proves cross-implementation ICE/DTLS-SRTP and decoded
+media. Standalone GPUI remains 24/24. Strict changed-package Clippy and the locked
+stripped ThinLTO root build pass on win-001. Release sizes are 8,649,728 bytes
+(`amazing.exe`) and 14,268,928 bytes (`amazing-shell.exe`).
+
 ## Later phases (unchanged from goal prompt)
 
 - **3 Layout** block+inline FC, box model, TTF glyph metrics parser.
@@ -2160,21 +2206,21 @@ bytes (`amazing-shell.exe`).
   final `[D3D11]` title screenshot remains optional proof pending the user's
   acceptance of Windows App's certificate warning; hardware presentation
   itself passed the interactive smoke gate.
-- **Phase 9:** forty-six committed subphases now include decoded media,
+- **Phase 9:** forty-seven committed subphases now include decoded media,
   authenticated ICE/consent/TURN, compound RTCP, browser-shaped SDP answers,
   vetted two-process DTLS-SRTP, D3D11/GPUI presentation, Windows audio-master
-  playback, RTP loss recovery, RFC 6184 packetization, and bounded handoff state.
-  Each subphase records its bounded scope; live browser DTLS-SRTP/media proof and
-  WebRTC WPT remain future production work rather than hidden completion claims.
+  playback, RTP loss recovery, RFC 6184 packetization, bounded handoff state, and
+  live Chromium H.264 decode. Each subphase records its bounded scope; broader
+  WebRTC WPT and production-network coverage remain follow-on work.
 
-Completion is not yet claimed. The current audit has real external measurements
-and runnable artifacts for every numbered phase. Phase 1's original four-file
+Numbered milestone completion is now claimed. The current audit has real
+external measurements and runnable artifacts for every numbered phase. Phase 1's original four-file
 foundation is 100/100 and its expanded upstream subset is 243/243, but broader
-parser modes remain partial; Phase 9 is a foundation with explicit media/interop
-gaps. Final workspace count/size are
-remeasured after the audit fixes before each commit. Current gate: **519**
+parser modes remain partial; Phase 9 is a stretch milestone with explicit
+production gaps. Final workspace count/size are remeasured after the audit fixes
+before each commit. Current gate: **520**
 hardware-independent workspace tests/doctests pass with `--locked`; the
-stripped ThinLTO release is **8,614,400 bytes**.
+stripped ThinLTO release is **8,649,728 bytes**.
 
 ## Server cheat sheet
 

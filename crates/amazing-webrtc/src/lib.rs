@@ -2028,7 +2028,7 @@ pub fn parse_sdp(text: &str) -> Result<SdpDescription, WebRtcError> {
                 .map_err(|_| WebRtcError::InvalidPacket("invalid candidate priority"))?;
             let address = match fields[4].parse::<Ipv4Addr>() {
                 Ok(address) => address,
-                Err(_) if kind == IceCandidateKind::Host && fields[4].ends_with(".local") => {
+                Err(_) if kind == IceCandidateKind::Host => {
                     continue;
                 }
                 Err(_) => return Err(WebRtcError::Unsupported("non-IPv4 SDP candidate")),

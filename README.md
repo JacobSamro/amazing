@@ -46,7 +46,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-net` | HTTP/1.1 client | ✅ Phase 5 |
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | ✅ Phase 6 milestone |
 | `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
-| `amazing-webrtc` | ICE/TURN + browser SDP/RFC 6184 + secure A/V | Phase 9.3–9.46 |
+| `amazing-webrtc` | ICE/TURN + live Chromium DTLS-SRTP media | Phase 9.3–9.47 |
 | `amazing-webrtc-codecs` | Opus, VP8 decode, H.264 encode/decode | Phase 9.20–9.23 |
 | `amazing-webrtc-crypto` | vetted DTLS-SRTP + secure UDP endpoint | Phase 9.9–9.13 |
 | `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | ✅ Phase 7/8 |
@@ -97,6 +97,9 @@ Actual RTP-loss recovery proof:
 Windows audio-device clock proof: [cursor A](docs/screenshots/gpui-audio-clock-a-win001.png)
 and [cursor B](docs/screenshots/gpui-audio-clock-b-win001.png).
 
+Live Chromium interoperability proof:
+[decoded H.264 session](docs/screenshots/chromium-webrtc-interop-win001.png).
+
 Phase 4 visual gate (Amazing at left, Edge reference at right; 800×804):
 
 ![Ferric Phase 4 visual comparison](docs/screenshots/phase4-side-by-side.png)
@@ -143,6 +146,7 @@ amazing h264-rtp-probe
 amazing sdp-roundtrip examples/phase9-offer.sdp
 amazing sdp-roundtrip examples/phase9-chromium-offer.sdp
 amazing sdp-browser-answer examples/phase9-chromium-offer.sdp
+amazing browser-peer 8787
 amazing secure-media-loopback
 amazing secure-media-processes
 amazing secure-video-stream 127.0.0.1:<listener-port>

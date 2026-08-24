@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use amazing_js::DomHost;
 
+mod browser_peer;
 mod gpu;
 mod gui;
 
@@ -744,6 +745,7 @@ fn main() -> ExitCode {
         Some("gpu-present-smoke") => cmd_gpu_present_smoke(),
         Some("sdp-roundtrip") => cmd_sdp_roundtrip(&args[2..]),
         Some("sdp-browser-answer") => cmd_sdp_browser_answer(&args[2..]),
+        Some("browser-peer") => cmd_browser_peer(args.get(2).map(String::as_str)),
         Some("fetch") => cmd_fetch(&args[2..]),
         Some("fetch-parse") => cmd_fetch_parse(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
@@ -752,7 +754,7 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|browser-peer [http-port]|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
             );
             ExitCode::FAILURE
         }
@@ -2941,6 +2943,39 @@ fn cmd_sdp_browser_answer(args: &[String]) -> ExitCode {
         }
         Err(error) => {
             eprintln!("amazing sdp-browser-answer: encode answer: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn cmd_browser_peer(port: Option<&str>) -> ExitCode {
+    let port = match port.unwrap_or("8787").parse::<u16>() {
+        Ok(port) if port > 0 => port,
+        _ => {
+            eprintln!("usage: amazing browser-peer [http-port]");
+            return ExitCode::FAILURE;
+        }
+    };
+    match browser_peer::run_browser_peer(port) {
+        Ok(report) if !report.browser_result.starts_with("ERROR") => {
+            println!(
+                "BROWSER_INTEROP http={} browser={} media={} PT={} frames={} RTP={} result={}; browser peer ok",
+                report.http_address,
+                report.browser_address,
+                report.local_media_address,
+                report.payload_type,
+                report.frames_sent,
+                report.rtp_packets_sent,
+                report.browser_result
+            );
+            ExitCode::SUCCESS
+        }
+        Ok(report) => {
+            eprintln!("amazing browser-peer: {}", report.browser_result);
+            ExitCode::FAILURE
+        }
+        Err(error) => {
+            eprintln!("amazing browser-peer: {error}");
             ExitCode::FAILURE
         }
     }

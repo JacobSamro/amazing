@@ -1006,7 +1006,8 @@ fn validate_description_socket(
     if local_candidate.address != local_address
         || remote_candidate.address != remote_address
         || local_media.connection_address != *local_address.ip()
-        || remote_media.connection_address != *remote_address.ip()
+        || (remote_media.connection_address != std::net::Ipv4Addr::UNSPECIFIED
+            && remote_media.connection_address != *remote_address.ip())
     {
         return Err(SecureMediaError::new(
             "SDP candidates do not match the connected endpoint socket",
@@ -1366,43 +1367,49 @@ async fn run_ice_controlled(
     let pair = checklist
         .next_check()
         .ok_or_else(|| SecureMediaError::new("controlled ICE checklist had no pair"))?;
-    let request_wire = receive_datagram(socket).await?;
-    let parsed_request = amazing_webrtc::parse_stun(&request_wire)
-        .map_err(|error| SecureMediaError::new(error.to_string()))?;
     let username = format!("{}:{}", local_signal.ice_ufrag, remote_signal.ice_ufrag);
     let key = local_signal.ice_pwd.as_bytes();
-    if parsed_request.class != amazing_webrtc::StunClass::Request
-        || parsed_request.username.as_deref() != Some(username.as_str())
-        || parsed_request.priority != Some(remote.priority)
-        || parsed_request.ice_controlling.is_none()
-        || parsed_request.ice_controlled.is_some()
-        || !parsed_request.use_candidate
-        || !amazing_webrtc::verify_message_integrity(&request_wire, key)
-            .map_err(|error| SecureMediaError::new(error.to_string()))?
-        || !amazing_webrtc::verify_fingerprint(&request_wire)
-            .map_err(|error| SecureMediaError::new(error.to_string()))?
-    {
-        return Err(SecureMediaError::new(
-            "controlled ICE request failed SDP authentication",
-        ));
-    }
-    let response = amazing_webrtc::encode_ice_binding_success(
-        parsed_request.transaction_id,
-        remote.address,
-        key,
-    )
-    .map_err(|error| SecureMediaError::new(error.to_string()))?;
-    send_datagram(socket, &response).await?;
-    checklist
-        .mark_succeeded(pair, parsed_request.use_candidate)
+    for _ in 0..8 {
+        let request_wire = receive_datagram(socket).await?;
+        let parsed_request = amazing_webrtc::parse_stun(&request_wire)
+            .map_err(|error| SecureMediaError::new(error.to_string()))?;
+        if parsed_request.class != amazing_webrtc::StunClass::Request
+            || parsed_request.username.as_deref() != Some(username.as_str())
+            || parsed_request.priority.is_none()
+            || parsed_request.ice_controlling.is_none()
+            || parsed_request.ice_controlled.is_some()
+            || !amazing_webrtc::verify_message_integrity(&request_wire, key)
+                .map_err(|error| SecureMediaError::new(error.to_string()))?
+            || !amazing_webrtc::verify_fingerprint(&request_wire)
+                .map_err(|error| SecureMediaError::new(error.to_string()))?
+        {
+            return Err(SecureMediaError::new(
+                "controlled ICE request failed SDP authentication",
+            ));
+        }
+        let response = amazing_webrtc::encode_ice_binding_success(
+            parsed_request.transaction_id,
+            remote.address,
+            key,
+        )
         .map_err(|error| SecureMediaError::new(error.to_string()))?;
-    let state = checklist.state();
-    if state != amazing_webrtc::ChecklistState::Completed {
-        return Err(SecureMediaError::new(
-            "controlled ICE checklist did not complete",
-        ));
+        send_datagram(socket, &response).await?;
+        if parsed_request.use_candidate {
+            checklist
+                .mark_succeeded(pair, true)
+                .map_err(|error| SecureMediaError::new(error.to_string()))?;
+            let state = checklist.state();
+            if state != amazing_webrtc::ChecklistState::Completed {
+                return Err(SecureMediaError::new(
+                    "controlled ICE checklist did not complete",
+                ));
+            }
+            return Ok(state);
+        }
     }
-    Ok(state)
+    Err(SecureMediaError::new(
+        "controlled ICE checklist was never nominated",
+    ))
 }
 
 fn socket_v4(address: SocketAddr) -> Result<SocketAddrV4, SecureMediaError> {

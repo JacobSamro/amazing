@@ -358,6 +358,13 @@ packet. The stateful depacketizer validates sequence/timestamp/FU state and byte
 caps, reconstructs normalized Annex-B, drops damage on gaps, and resumes at a
 later complete access unit.
 
+Phase 9.47 closes the external-browser loop. A bounded local HTTP module serves
+the Chromium offer page, returns the synthesized SDP answer, adopts a connected
+UDP socket as controlled ICE, completes DTLS-SRTP with the browser, and sends 45
+timed OpenH264 frames through RFC 6184. The page reports only after five decoded
+video callbacks and a canvas checksum, producing cross-implementation visual and
+terminal evidence from the same session.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
