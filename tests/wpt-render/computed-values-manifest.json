@@ -1,0 +1,110 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "schema": 1,
+  "selection": {
+    "kind": "ticket-2a-computed-values",
+    "source": "cascade-manifest.json"
+  },
+  "sparse_paths": [
+    "css/css-cascade",
+    "css/css-variables"
+  ],
+  "tests": [
+    {
+      "id": "css-cascade__scope-pseudo-element.html",
+      "test": "css/css-cascade/scope-pseudo-element.html"
+    },
+    {
+      "id": "css-cascade__all-prop-revert-visited.html",
+      "test": "css/css-cascade/all-prop-revert-visited.html"
+    },
+    {
+      "id": "css-cascade__all-prop-001.html",
+      "test": "css/css-cascade/all-prop-001.html"
+    },
+    {
+      "id": "css-cascade__scope-featureless.html",
+      "test": "css/css-cascade/scope-featureless.html"
+    },
+    {
+      "id": "css-cascade__revert-layer-002.html",
+      "test": "css/css-cascade/revert-layer-002.html"
+    },
+    {
+      "id": "css-cascade__all-prop-revert-color.html",
+      "test": "css/css-cascade/all-prop-revert-color.html"
+    },
+    {
+      "id": "css-cascade__revert-layer-011.html",
+      "test": "css/css-cascade/revert-layer-011.html"
+    },
+    {
+      "id": "css-cascade__all-prop-initial-color.html",
+      "test": "css/css-cascade/all-prop-initial-color.html"
+    },
+    {
+      "id": "css-cascade__all-prop-002.html",
+      "test": "css/css-cascade/all-prop-002.html"
+    },
+    {
+      "id": "css-cascade__revert-layer-005.html",
+      "test": "css/css-cascade/revert-layer-005.html"
+    },
+    {
+      "id": "css-cascade__initial-background-color.html",
+      "test": "css/css-cascade/initial-background-color.html"
+    },
+    {
+      "id": "css-cascade__initial-color-background-001.html",
+      "test": "css/css-cascade/initial-color-background-001.html"
+    },
+    {
+      "id": "css-variables__variable-supports-11.html",
+      "test": "css/css-variables/variable-supports-11.html"
+    },
+    {
+      "id": "css-variables__variable-reference-01.html",
+      "test": "css/css-variables/variable-reference-01.html"
+    },
+    {
+      "id": "css-variables__variable-reference-09.html",
+      "test": "css/css-variables/variable-reference-09.html"
+    },
+    {
+      "id": "css-variables__variable-declaration-39.html",
+      "test": "css/css-variables/variable-declaration-39.html"
+    },
+    {
+      "id": "css-variables__variable-supports-15.html",
+      "test": "css/css-variables/variable-supports-15.html"
+    },
+    {
+      "id": "css-variables__variable-supports-37.html",
+      "test": "css/css-variables/variable-supports-37.html"
+    },
+    {
+      "id": "css-variables__variable-declaration-38.html",
+      "test": "css/css-variables/variable-declaration-38.html"
+    },
+    {
+      "id": "css-variables__variable-declaration-11.html",
+      "test": "css/css-variables/variable-declaration-11.html"
+    },
+    {
+      "id": "css-variables__variable-supports-03.html",
+      "test": "css/css-variables/variable-supports-03.html"
+    },
+    {
+      "id": "css-variables__variable-supports-01.html",
+      "test": "css/css-variables/variable-supports-01.html"
+    },
+    {
+      "id": "css-variables__variable-supports-22.html",
+      "test": "css/css-variables/variable-supports-22.html"
+    },
+    {
+      "id": "css-variables__variable-declaration-12.html",
+      "test": "css/css-variables/variable-declaration-12.html"
+    }
+  ]
+}

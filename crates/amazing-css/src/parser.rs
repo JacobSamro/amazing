@@ -9,12 +9,11 @@
 //!   parsing continues
 //!
 //! Deferred/deviations:
-//! - at-rules (@media/@import/…) are consumed and DISCARDED (their blocks
-//!   still parse correctly as far as brace matching goes) — conditional
-//!   rule processing is a later-phase feature
-//! - nested rules / style attributes / custom properties not handled
-//! - declaration values stay strings; property-specific value parsing lands
-//!   when layout needs it
+//! - `@supports` evaluates the static variable-bearing declaration conditions
+//!   used by the computed-value gate; other at-rules are consumed and dropped
+//! - nested style rules remain deferred
+//! - declaration values stay normalized strings; the private computed-value
+//!   module tokenizes them for custom-property substitution and defaulting
 
 use crate::syntax::{tokenize, serialize, Token};
 
@@ -42,24 +41,12 @@ pub struct Stylesheet {
 /// Parses a full stylesheet. Invalid constructs are dropped with recovery.
 pub fn parse_stylesheet(src: &str) -> Stylesheet {
     let toks = tokenize(src);
-    let mut p = Parser { toks: &toks, pos: 0 };
-    let mut sheet = Stylesheet::default();
-    while let Some(tok) = p.peek() {
-        match tok {
-            Token::Whitespace | Token::Semicolon => {
-                p.pos += 1;
-            },
-            Token::AtKeyword(_) => p.skip_at_rule(),
-            _ => {
-                if let Some(rule) = p.qualified_rule() {
-                    if !rule.selector_srcs.is_empty() && !rule.declarations.is_empty() {
-                        sheet.rules.push(rule);
-                    }
-                }
-            },
-        }
-    }
-    sheet
+    parse_rule_list(&toks)
+}
+
+fn parse_rule_list(tokens: &[Token]) -> Stylesheet {
+    let mut parser = Parser { toks: tokens, pos: 0 };
+    parser.rule_list()
 }
 
 /// Parses a standalone declaration block — the contents of an inline
@@ -79,6 +66,75 @@ struct Parser<'t> {
 impl Parser<'_> {
     fn peek(&self) -> Option<&Token> {
         self.toks.get(self.pos)
+    }
+
+    fn rule_list(&mut self) -> Stylesheet {
+        let mut sheet = Stylesheet::default();
+        while let Some(token) = self.peek() {
+            match token {
+                Token::Whitespace | Token::Semicolon => self.pos += 1,
+                Token::AtKeyword(name) if name.eq_ignore_ascii_case("supports") => {
+                    sheet.rules.extend(self.supports_rule());
+                },
+                Token::AtKeyword(_) => self.skip_at_rule(),
+                _ => {
+                    if let Some(rule) = self.qualified_rule()
+                        && !rule.selector_srcs.is_empty()
+                        && !rule.declarations.is_empty()
+                    {
+                        sheet.rules.push(rule);
+                    }
+                },
+            }
+        }
+        sheet
+    }
+
+    fn supports_rule(&mut self) -> Vec<Rule> {
+        debug_assert!(matches!(self.peek(), Some(Token::AtKeyword(name)) if name.eq_ignore_ascii_case("supports")));
+        self.pos += 1;
+        let prelude_start = self.pos;
+        let mut depth = 0usize;
+        while let Some(token) = self.peek() {
+            match token {
+                Token::OpenParen | Token::OpenSquare => depth += 1,
+                Token::CloseParen | Token::CloseSquare => depth = depth.saturating_sub(1),
+                Token::OpenCurly if depth == 0 => break,
+                Token::Semicolon if depth == 0 => {
+                    self.pos += 1;
+                    return Vec::new();
+                },
+                _ => {},
+            }
+            self.pos += 1;
+        }
+        if self.peek() != Some(&Token::OpenCurly) {
+            return Vec::new();
+        }
+        let prelude_end = self.pos;
+        self.pos += 1;
+        let body_start = self.pos;
+        let mut braces = 1usize;
+        while let Some(token) = self.peek() {
+            match token {
+                Token::OpenCurly => braces += 1,
+                Token::CloseCurly => {
+                    braces -= 1;
+                    if braces == 0 {
+                        let body_end = self.pos;
+                        self.pos += 1;
+                        return if supports_condition(&self.toks[prelude_start..prelude_end]) {
+                            parse_rule_list(&self.toks[body_start..body_end]).rules
+                        } else {
+                            Vec::new()
+                        };
+                    }
+                },
+                _ => {},
+            }
+            self.pos += 1;
+        }
+        Vec::new()
     }
 
     /// Skips an at-rule: through the next ';' or its balanced {} block.
@@ -238,6 +294,7 @@ impl Parser<'_> {
     fn finish_declaration(&self, toks: &[Token]) -> Option<Declaration> {
         // leading whitespace / stray semicolons already filtered upstream
         let property = match toks.first() {
+            Some(Token::Ident(name)) if name.starts_with("--") => name.clone(),
             Some(Token::Ident(name)) => name.to_ascii_lowercase(),
             _ => return None, // missing colon / garbage → drop (recovery)
         };
@@ -267,20 +324,19 @@ impl Parser<'_> {
         let mut important = false;
         // pattern: ... '!' WS? Ident("important")
         let mut scan = end;
-        if scan > start {
-            if let Some(Token::Ident(name)) = toks.get(scan - 1) {
-                if name.eq_ignore_ascii_case("important") {
-                    scan -= 1;
-                    while scan > start && matches!(toks.get(scan - 1), Some(Token::Whitespace)) {
-                        scan -= 1;
-                    }
-                    if scan > start && toks.get(scan - 1) == Some(&Token::Delim('!')) {
-                        important = true;
-                        end = scan - 1;
-                        while end > start && matches!(toks.get(end - 1), Some(Token::Whitespace)) {
-                            end -= 1;
-                        }
-                    }
+        if scan > start
+            && let Some(Token::Ident(name)) = toks.get(scan - 1)
+            && name.eq_ignore_ascii_case("important")
+        {
+            scan -= 1;
+            while scan > start && matches!(toks.get(scan - 1), Some(Token::Whitespace)) {
+                scan -= 1;
+            }
+            if scan > start && toks.get(scan - 1) == Some(&Token::Delim('!')) {
+                important = true;
+                end = scan - 1;
+                while end > start && matches!(toks.get(end - 1), Some(Token::Whitespace)) {
+                    end -= 1;
                 }
             }
         }
@@ -288,12 +344,140 @@ impl Parser<'_> {
         if start >= end {
             return None;
         }
-        let value = serialize(&toks[start..end]);
+        let value_tokens = &toks[start..end];
+        if !crate::computed::valid_variable_syntax(value_tokens)
+            || (property.starts_with("--")
+                && !crate::computed::valid_custom_property_value(value_tokens))
+        {
+            return None;
+        }
+        let value = serialize(value_tokens);
         if value.is_empty() {
             return None;
         }
         Some(Declaration { property, value, important })
     }
+}
+
+fn supports_condition(tokens: &[Token]) -> bool {
+    let tokens = trim_ws(tokens);
+    if tokens.is_empty() {
+        return false;
+    }
+    if matches!(tokens.first(), Some(Token::Ident(name)) if name.eq_ignore_ascii_case("not")) {
+        return !supports_condition(trim_ws(&tokens[1..]));
+    }
+
+    let mut paren_depth = 0usize;
+    let mut square_depth = 0usize;
+    let mut operator: Option<bool> = None; // true = and, false = or
+    let mut segments = Vec::new();
+    let mut start = 0usize;
+    for (index, token) in tokens.iter().enumerate() {
+        match token {
+            Token::OpenParen => paren_depth += 1,
+            Token::CloseParen if paren_depth > 0 => paren_depth -= 1,
+            Token::OpenSquare => square_depth += 1,
+            Token::CloseSquare if square_depth > 0 => square_depth -= 1,
+            Token::Ident(name) if paren_depth == 0 && square_depth == 0 => {
+                let current = if name.eq_ignore_ascii_case("and") {
+                    Some(true)
+                } else if name.eq_ignore_ascii_case("or") {
+                    Some(false)
+                } else {
+                    None
+                };
+                if let Some(current) = current {
+                    if operator.is_some_and(|operator| operator != current) {
+                        return false;
+                    }
+                    operator = Some(current);
+                    segments.push(&tokens[start..index]);
+                    start = index + 1;
+                }
+            },
+            _ => {},
+        }
+    }
+    if let Some(and) = operator {
+        segments.push(&tokens[start..]);
+        return if and {
+            segments.into_iter().all(supports_condition)
+        } else {
+            segments.into_iter().any(supports_condition)
+        };
+    }
+
+    let Some(inner) = strip_outer_parentheses(tokens) else {
+        return false;
+    };
+    if let Some(colon) = top_level_colon(inner) {
+        return supports_declaration(&inner[..colon], &inner[colon + 1..]);
+    }
+    supports_condition(inner)
+}
+
+fn supports_declaration(name_tokens: &[Token], value_tokens: &[Token]) -> bool {
+    let [Token::Ident(name)] = trim_ws(name_tokens) else {
+        return false;
+    };
+    let value_tokens = trim_ws(value_tokens);
+    if value_tokens.is_empty() || !crate::computed::valid_variable_syntax(value_tokens) {
+        return false;
+    }
+    if name.starts_with("--") {
+        return crate::computed::valid_custom_property_value(value_tokens);
+    }
+    crate::computed::is_supported_property(name)
+        && value_tokens.iter().any(
+            |token| matches!(token, Token::Function(function) if function.eq_ignore_ascii_case("var")),
+        )
+}
+
+fn trim_ws(mut tokens: &[Token]) -> &[Token] {
+    while matches!(tokens.first(), Some(Token::Whitespace)) {
+        tokens = &tokens[1..];
+    }
+    while matches!(tokens.last(), Some(Token::Whitespace)) {
+        tokens = &tokens[..tokens.len() - 1];
+    }
+    tokens
+}
+
+fn strip_outer_parentheses(tokens: &[Token]) -> Option<&[Token]> {
+    if tokens.first() != Some(&Token::OpenParen) {
+        return None;
+    }
+    let mut depth = 0usize;
+    for (index, token) in tokens.iter().enumerate() {
+        match token {
+            Token::OpenParen => depth += 1,
+            Token::CloseParen => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return (index == tokens.len() - 1).then_some(&tokens[1..index]);
+                }
+            },
+            _ => {},
+        }
+    }
+    None
+}
+
+fn top_level_colon(tokens: &[Token]) -> Option<usize> {
+    let mut paren_depth = 0usize;
+    let mut square_depth = 0usize;
+    for (index, token) in tokens.iter().enumerate() {
+        match token {
+            Token::OpenParen => paren_depth += 1,
+            Token::CloseParen if paren_depth > 0 => paren_depth -= 1,
+            Token::OpenSquare => square_depth += 1,
+            Token::CloseSquare if square_depth > 0 => square_depth -= 1,
+            Token::Colon if paren_depth == 0 && square_depth == 0 => return Some(index),
+            _ => {},
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -386,5 +570,45 @@ mod tests {
     fn whitespace_normalized_in_values() {
         let d = decls("p{ margin:\n\t 1px   2px }");
         assert_eq!(d, vec![("margin".into(), "1px 2px".into(), false)]);
+    }
+
+    #[test]
+    fn custom_property_names_preserve_case() {
+        let declarations = decls("p{--A:green;--a:crimson;COLOR:blue}");
+        assert_eq!(
+            declarations,
+            vec![
+                ("--A".into(), "green".into(), false),
+                ("--a".into(), "crimson".into(), false),
+                ("color".into(), "blue".into(), false),
+            ]
+        );
+    }
+
+    #[test]
+    fn invalid_top_level_var_fallback_remnants_drop_the_declaration() {
+        let declarations = decls(
+            "p{--a:green;--a:var(--b,!);--b:blue;--b:var(--c,;);color:var(--a,(;))}",
+        );
+        assert_eq!(
+            declarations,
+            vec![
+                ("--a".into(), "green".into(), false),
+                ("--b".into(), "blue".into(), false),
+                ("color".into(), "var(--a,(;))".into(), false),
+            ]
+        );
+    }
+
+    #[test]
+    fn supports_accepts_valid_variable_grammar_and_boolean_and() {
+        let sheet = parse_stylesheet(
+            "@supports (color:1px var(--a)) { p{color:green} }\
+             @supports (--a:a) and (--a:var(--b,)) { div{color:blue} }\
+             @supports (unknown:var(--a)) { span{color:red} }",
+        );
+        assert_eq!(sheet.rules.len(), 2);
+        assert_eq!(sheet.rules[0].selector_srcs, ["p"]);
+        assert_eq!(sheet.rules[1].selector_srcs, ["div"]);
     }
 }

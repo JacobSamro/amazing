@@ -1,75 +1,31 @@
 //! Cascade, inheritance, and computed styles over the arena DOM.
 //!
-//! Phase 2 subset — implemented:
+//! Implemented:
 //! - rule compilation: selector strings from [`crate::parser`] are parsed
 //!   once up front; per css-selectors a rule whose selector list contains
 //!   ANY invalid selector is dropped whole (never partially applied)
 //! - cascade per property with the full key: importance → origin
 //!   (UA < author; reversed for `!important`) → inline style beats sheets →
 //!   specificity → source order
-//! - inheritance of the standard inheritable-property set down the tree,
-//!   initial values for everything else we track
+//! - per-declaration source order and the specificity of the most-specific
+//!   selector in a list that actually matches
+//! - a private specified-to-computed stage for property metadata,
+//!   custom-property inheritance/cycles, `var()` substitution, CSS-wide
+//!   keywords, `all`, and supported shorthand expansion
 //! - a minimal built-in user-agent stylesheet (display defaults for HTML,
 //!   heading sizes, link color) so Phase 3 layout starts from real values
 //!
 //! Deferred/deviations:
-//! - shorthand↔longhand interaction is NOT modeled: `margin` and
-//!   `margin-top` are independent cascade keys until layout needs expansion
 //! - presentational attributes (`bgcolor`, `width=…`) and `<style media>`
 //!   conditions are ignored
-//! - unknown/unsupported properties still cascade and appear in computed
-//!   styles but get no inheritance or initial value
+//! - `revert`/`revert-layer` require retaining lower origin/layer candidates
+//!   and remain unresolved; unknown properties get no initial metadata
 
+use crate::computed::{self, ComputedStyle};
 use crate::parser::{parse_declarations, parse_stylesheet, Declaration, Stylesheet};
 use crate::selectors::{parse_selector, Specificity, Selector};
 use amazing_dom::{Dom, NodeIdx};
 use std::collections::{BTreeMap, HashMap};
-
-// ---------------------------------------------------------------------------
-// Computed style output type
-// ---------------------------------------------------------------------------
-
-/// Final computed declarations for one element. Keys are lowercased property
-/// names in sorted order (deterministic printing).
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct ComputedStyle {
-    props: BTreeMap<String, String>,
-}
-
-impl ComputedStyle {
-    pub fn get(&self, prop: &str) -> Option<&str> {
-        self.props.get(prop).map(String::as_str)
-    }
-
-    /// Sorted (property, value) pairs.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.props.iter().map(|(k, v)| (k.as_str(), v.as_str()))
-    }
-
-    fn insert(&mut self, prop: String, value: String) {
-        self.props.insert(prop, value);
-    }
-
-    /// Public mutation for layout-time synthesis: flexbox materializes
-    /// absorbed auto margins and flexed widths back into the style so the
-    /// box-model resolver sees concrete values.
-    pub fn set(&mut self, prop: &str, value: &str) {
-        self.props
-            .insert(prop.to_ascii_lowercase(), value.to_owned());
-    }
-}
-
-/// Collecting (property, value) pairs into a style — used by callers that
-/// synthesize styles (tests, demos) rather than cascading them.
-impl FromIterator<(String, String)> for ComputedStyle {
-    fn from_iter<I: IntoIterator<Item = (String, String)>>(iter: I) -> Self {
-        let mut s = ComputedStyle::default();
-        for (prop, value) in iter {
-            s.insert(prop.to_ascii_lowercase(), value);
-        }
-        s
-    }
-}
 
 /// Computed styles for a whole document, keyed by arena index.
 #[derive(Debug, Default)]
@@ -105,11 +61,10 @@ impl StyledDom {
 /// sheet with the given author sheets (in order).
 pub fn compute(dom: &Dom, author_sheets: &[Stylesheet]) -> StyledDom {
     // Compile UA + author rules up front; invalid selectors drop their rule.
-    let mut order = 0u32;
-    let ua_rules = compile_sheet(&parse_stylesheet(UA_SHEET), true, &mut order);
+    let ua_rules = compile_sheet(&parse_stylesheet(UA_SHEET), true);
     let mut author_rules = Vec::new();
     for sheet in author_sheets {
-        author_rules.extend(compile_sheet(sheet, false, &mut order));
+        author_rules.extend(compile_sheet(sheet, false));
     }
 
     let mut out = StyledDom::default();
@@ -148,13 +103,12 @@ fn style_subtree(
 struct CompiledRule {
     selectors: Vec<(Selector, Specificity)>,
     decls: Vec<Declaration>,
-    order: u32,
     ua: bool,
 }
 
 /// Parses every selector of a rule. Per spec, one bad selector invalidates
 /// the entire rule, so any parse failure drops all of them.
-fn compile_sheet(sheet: &Stylesheet, ua: bool, order: &mut u32) -> Vec<CompiledRule> {
+fn compile_sheet(sheet: &Stylesheet, ua: bool) -> Vec<CompiledRule> {
     let mut out = Vec::new();
     for rule in &sheet.rules {
         let mut selectors = Vec::with_capacity(rule.selector_srcs.len());
@@ -171,9 +125,12 @@ fn compile_sheet(sheet: &Stylesheet, ua: bool, order: &mut u32) -> Vec<CompiledR
                 },
             }
         }
-        *order += 1;
         if valid && !rule.declarations.is_empty() {
-            out.push(CompiledRule { selectors, decls: rule.declarations.clone(), order: *order, ua });
+            out.push(CompiledRule {
+                selectors,
+                decls: rule.declarations.clone(),
+                ua,
+            });
         }
     }
     out
@@ -186,7 +143,7 @@ struct Candidate<'a> {
     inline: bool,
     ua: bool,
     spec: Specificity,
-    order: u32,
+    order: u64,
 }
 
 /// Full cascade key (css-cascade-4 §6): importance first; origin next, which
@@ -242,7 +199,7 @@ fn compute_one(
         inline: bool,
         ua: bool,
         spec: Specificity,
-        order: u32,
+        order: u64,
     }
 
     // Collect declarations from every matching rule plus the inline
@@ -251,24 +208,30 @@ fn compute_one(
     // `border: 5px solid` must beat a UA `border-top-style: none`
     // even though the computed map is flat.
     let mut pool: Vec<FlatDecl> = Vec::new();
+    let mut source_order = 0u64;
     for rule in ua_rules.iter().chain(author_rules.iter()) {
-        let matched = rule
+        let matched_specificity = rule
             .selectors
             .iter()
-            .any(|(sel, _)| crate::selectors::matches(dom, el, sel));
-        if !matched {
+            .filter(|(selector, _)| crate::selectors::matches(dom, el, selector))
+            .map(|(_, specificity)| *specificity)
+            .max();
+        let Some(specificity) = matched_specificity else {
             continue;
-        }
+        };
         for decl in &rule.decls {
-            for (p, v) in expand_shorthand(&decl.property, &decl.value) {
+            source_order += 1;
+            for (property, value) in
+                computed::expand_declaration(&decl.property, &decl.value)
+            {
                 pool.push(FlatDecl {
-                    prop: p,
-                    value: v,
+                    prop: property,
+                    value,
                     important: decl.important,
                     inline: false,
                     ua: rule.ua,
-                    spec: rule.selectors.iter().map(|(_, s)| *s).max().unwrap_or_default(),
-                    order: rule.order,
+                    spec: specificity,
+                    order: source_order,
                 });
             }
         }
@@ -278,15 +241,16 @@ fn compute_one(
         .map(parse_declarations)
         .unwrap_or_default();
     for decl in &inline_decls {
-        for (p, v) in expand_shorthand(&decl.property, &decl.value) {
+        source_order += 1;
+        for (property, value) in computed::expand_declaration(&decl.property, &decl.value) {
             pool.push(FlatDecl {
-                prop: p,
-                value: v,
+                prop: property,
+                value,
                 important: decl.important,
                 inline: true,
                 ua: false,
                 spec: Specificity::default(),
-                order: 0,
+                order: source_order,
             });
         }
     }
@@ -306,35 +270,11 @@ fn compute_one(
         consider(&mut champs, &d.prop, cand);
     }
 
-    // Merge: cascaded winner > inherited (inheritable props only) > initial.
-    let mut result = ComputedStyle::default();
-    for &(prop, init) in DEFAULTS {
-        if let Some(c) = champs.remove(prop) {
-            result.insert(prop.to_owned(), c.value.to_owned());
-        } else if INHERITED.contains(&prop) {
-            // Inheritable: take the parent's computed value, else initial.
-            let inherited =
-                parent_style.and_then(|p| p.get(prop)).unwrap_or(init);
-            result.insert(prop.to_owned(), inherited.to_owned());
-        } else {
-            result.insert(prop.to_owned(), init.to_owned());
-        }
-    }
-    for prop in INHERITED.iter().copied() {
-        if DEFAULTS.iter().any(|(p, _)| *p == prop) {
-            continue; // already handled above
-        }
-        if let Some(c) = champs.remove(prop) {
-            result.insert(prop.to_owned(), c.value.to_owned());
-        } else if let Some(v) = parent_style.and_then(|p| p.get(prop)) {
-            result.insert(prop.to_owned(), v.to_owned());
-        }
-    }
-    // Properties outside our tracked set still surface when declared.
-    for (prop, c) in champs {
-        result.insert(prop.to_owned(), c.value.to_owned());
-    }
-    result
+    let cascaded = champs
+        .into_iter()
+        .map(|(property, candidate)| (property.to_owned(), candidate.value.to_owned()))
+        .collect();
+    computed::resolve(parent_style, cascaded)
 }
 
 fn attr_of<'d>(dom: &'d Dom, el: NodeIdx, name: &str) -> Option<&'d str> {
@@ -343,183 +283,6 @@ fn attr_of<'d>(dom: &'d Dom, el: NodeIdx, name: &str) -> Option<&'d str> {
         .find(|kv| kv.0 == name)
         .map(|(_, v)| v.as_str())
 }
-
-// ---------------------------------------------------------------------------
-// Shorthand expansion
-// ---------------------------------------------------------------------------
-
-/// Expands the box/border shorthands this engine tracks into their
-/// longhand (property, value) pairs; every other property passes through
-/// unchanged. Expansion happens BEFORE cascading so each longhand competes
-/// with its source's origin and specificity (CSS2.1 §8.1–§8.5 shorthand
-/// semantics), which the flat computed-value map could not express.
-fn expand_shorthand(prop: &str, value: &str) -> Vec<(String, String)> {
-    const SIDES: [&str; 4] = ["top", "right", "bottom", "left"];
-    let parts: Vec<&str> = value.split_ascii_whitespace().collect();
-    match prop {
-        // 1–4 value replication (CSS2.1 §8.3): t | t r | t r b | t r b l.
-        "margin" | "padding" | "border-width" | "border-style" | "border-color" => {
-            if parts.is_empty() {
-                return vec![(prop.to_owned(), value.to_owned())];
-            }
-            SIDES
-                .iter()
-                .enumerate()
-                .map(|(i, side)| {
-                    let v = parts[replicate_index(parts.len(), i)];
-                    (longhand_name(prop, side), v.to_owned())
-                })
-                .collect()
-        },
-        // `border: <line-width> || <line-style> || <color>` — components in
-        // any order; omitted ones reset to their initial values on all sides.
-        "border" if !parts.is_empty() => {
-            let mut w = "medium";
-            let mut st = "none";
-            let mut co = "currentcolor";
-            for p in &parts {
-                if is_border_style(p) {
-                    st = p;
-                } else if is_border_width(p) {
-                    w = p;
-                } else {
-                    co = p;
-                }
-            }
-            let mut out = Vec::with_capacity(12);
-            for side in SIDES {
-                out.push((format!("border-{side}-width"), w.to_owned()));
-                out.push((format!("border-{side}-style"), st.to_owned()));
-                out.push((format!("border-{side}-color"), co.to_owned()));
-            }
-            out
-        },
-        _ => vec![(prop.to_owned(), value.to_owned())],
-    }
-}
-
-/// Replication of a 1–4 component list onto side `i` (t r b l).
-fn replicate_index(n: usize, i: usize) -> usize {
-    match n {
-        0 => 0,
-        1 => 0,
-        2 => i % 2,
-        3 if i == 3 => 1,
-        3 => i.min(2),
-        _ => i.min(3),
-    }
-}
-
-/// `margin` → `margin-top`; `border-width` → `border-top-width`.
-fn longhand_name(shorthand: &str, side: &str) -> String {
-    match shorthand.rsplit_once('-') {
-        Some((head, tail)) => format!("{head}-{side}-{tail}"),
-        None => format!("{shorthand}-{side}"),
-    }
-}
-
-fn is_border_style(s: &str) -> bool {
-    matches!(
-        s.to_ascii_lowercase().as_str(),
-        "none" | "hidden" | "dotted" | "dashed" | "solid"
-            | "double" | "groove" | "ridge" | "inset" | "outset"
-    )
-}
-
-/// Width keywords or anything that starts like a length/percentage
-/// (no color keyword begins with a digit or sign).
-fn is_border_width(s: &str) -> bool {
-    if matches!(
-        s.to_ascii_lowercase().as_str(),
-        "thin" | "medium" | "thick"
-    ) {
-        return true;
-    }
-    matches!(
-        s.chars().next(),
-        Some('0'..='9') | Some('.') | Some('-') | Some('+')
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Initial values + inheritance sets
-// ---------------------------------------------------------------------------
-
-/// Initial (CSS-defined default) values for the properties this engine
-/// tracks. Shorthands intentionally absent — see module deviations.
-const DEFAULTS: &[(&str, &str)] = &[
-    ("background-color", "transparent"),
-    ("border-bottom-color", "currentcolor"),
-    ("border-bottom-style", "none"),
-    ("border-bottom-width", "medium"),
-    ("border-left-color", "currentcolor"),
-    ("border-left-style", "none"),
-    ("border-left-width", "medium"),
-    ("border-right-color", "currentcolor"),
-    ("border-right-style", "none"),
-    ("border-right-width", "medium"),
-    ("border-top-color", "currentcolor"),
-    ("border-top-style", "none"),
-    ("border-top-width", "medium"),
-    ("clear", "none"),
-    ("color", "black"),
-    ("direction", "ltr"),
-    ("display", "inline"),
-    ("float", "none"),
-    ("font-size", "medium"),
-    ("font-style", "normal"),
-    ("font-variant", "normal"),
-    ("font-weight", "normal"),
-    ("height", "auto"),
-    ("letter-spacing", "normal"),
-    ("line-height", "normal"),
-    ("list-style-image", "none"),
-    ("list-style-position", "outside"),
-    ("list-style-type", "disc"),
-    ("opacity", "1"),
-    ("overflow", "visible"),
-    ("position", "static"),
-    ("text-align", "start"),
-    ("text-decoration", "none"),
-    ("text-indent", "0"),
-    ("text-transform", "none"),
-    ("vertical-align", "baseline"),
-    ("visibility", "visible"),
-    ("white-space", "normal"),
-    ("width", "auto"),
-    ("word-spacing", "normal"),
-    ("z-index", "auto"),
-];
-
-/// Standard inheritable properties (CSS2.1 §6.4.1 + common CSS3 additions
-/// relevant here).
-const INHERITED: &[&str] = &[
-    "border-collapse",
-    "caption-side",
-    "color",
-    "cursor",
-    "direction",
-    "empty-cells",
-    "font-family",
-    "font-size",
-    "font-style",
-    "font-variant",
-    "font-weight",
-    "letter-spacing",
-    "line-height",
-    "list-style-image",
-    "list-style-position",
-    "list-style-type",
-    "orphans",
-    "quotes",
-    "text-align",
-    "text-indent",
-    "text-transform",
-    "visibility",
-    "white-space",
-    "widows",
-    "word-spacing",
-];
 
 // ---------------------------------------------------------------------------
 // Built-in user-agent stylesheet
@@ -817,5 +580,87 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn later_declarations_win_within_one_rule() {
+        let (dom, els) = fixture();
+        let styled = compute(
+            &dom,
+            &[parse_stylesheet("p { color:red; color:green }")],
+        );
+        assert_eq!(styled.get(els[5]).unwrap().get("color"), Some("green"));
+    }
+
+    #[test]
+    fn selector_list_uses_the_most_specific_selector_that_actually_matches() {
+        let (mut dom, els) = fixture();
+        dom.set_attrs(
+            els[5],
+            vec![("id".into(), "intro".into()), ("class".into(), "target".into())],
+        );
+        let styled = compute(
+            &dom,
+            &[parse_stylesheet(
+                "p, #does-not-match { color:red } .target { color:green }",
+            )],
+        );
+        assert_eq!(styled.get(els[5]).unwrap().get("color"), Some("green"));
+    }
+
+    #[test]
+    fn custom_properties_preserve_case_inherit_and_substitute() {
+        let (dom, els) = fixture();
+        let styled = compute(
+            &dom,
+            &[parse_stylesheet(
+                ":root { --A:green; --a:crimson } p { color:var(--A); background-color:var(--a) }",
+            )],
+        );
+        let paragraph = styled.get(els[5]).unwrap();
+        assert_eq!(paragraph.get("color"), Some("green"));
+        assert_eq!(paragraph.get("background-color"), Some("crimson"));
+    }
+
+    #[test]
+    fn invalid_var_winner_defaults_instead_of_reviving_previous_declaration() {
+        let (dom, els) = fixture();
+        let styled = compute(
+            &dom,
+            &[parse_stylesheet(
+                "body { color:blue } p { color:green; color:var(--missing) }",
+            )],
+        );
+        assert_eq!(styled.get(els[5]).unwrap().get("color"), Some("blue"));
+    }
+
+    #[test]
+    fn all_resets_supported_properties_but_not_direction_or_unicode_bidi() {
+        let (dom, els) = fixture();
+        let styled = compute(
+            &dom,
+            &[parse_stylesheet(
+                "p { color:red; background-color:blue; margin:10px; direction:rtl; \
+                 unicode-bidi:bidi-override; all:initial; color:green }",
+            )],
+        );
+        let paragraph = styled.get(els[5]).unwrap();
+        assert_eq!(paragraph.get("color"), Some("green"));
+        assert_eq!(paragraph.get("background-color"), Some("transparent"));
+        assert_eq!(paragraph.get("margin-left"), Some("0"));
+        assert_eq!(paragraph.get("direction"), Some("rtl"));
+        assert_eq!(paragraph.get("unicode-bidi"), Some("bidi-override"));
+    }
+
+    #[test]
+    fn all_does_not_reset_inherited_custom_properties() {
+        let (dom, els) = fixture();
+        let styled = compute(
+            &dom,
+            &[parse_stylesheet(
+                ":root { --tone:green } p { all:initial; color:var(--tone) }",
+            )],
+        );
+        assert_eq!(styled.get(els[5]).unwrap().get("color"), Some("green"));
     }
 }

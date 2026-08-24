@@ -255,7 +255,9 @@ fn parse_pack(v: Option<&str>) -> Pack {
         Some(v) if v.eq_ignore_ascii_case("space-between") => Pack::SpaceBetween,
         Some(v) if v.eq_ignore_ascii_case("space-around") => Pack::SpaceAround,
         Some(v) if v.eq_ignore_ascii_case("space-evenly") => Pack::SpaceEvenly,
-        Some(v) if v.eq_ignore_ascii_case("stretch") => Pack::Stretch,
+        Some(v) if v.eq_ignore_ascii_case("normal") || v.eq_ignore_ascii_case("stretch") => {
+            Pack::Stretch
+        },
         _ => Pack::Start,
     }
 }

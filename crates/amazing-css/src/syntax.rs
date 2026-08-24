@@ -81,7 +81,7 @@ impl<'a> Lexer<'a> {
         debug_assert_eq!(self.peek(), Some('\\'));
         match self.peek_at(1) {
             None => None, // trailing backslash at EOF
-            Some(c) if c == '\n' => None,
+            Some('\n') => None,
             Some(c) if c.is_ascii_hexdigit() => {
                 self.pos += 1; // past '\'
                 let mut value: u32 = 0;
@@ -230,7 +230,7 @@ pub fn tokenize(src: &str) -> Vec<Token> {
     loop {
         let tok = match lx.peek() {
             None => break,
-            Some(c) if matches!(c, ' ' | '\t' | '\n' | '\r' | '\u{000C}') => {
+            Some(' ' | '\t' | '\n' | '\r' | '\u{000C}') => {
                 while lx
                     .peek()
                     .is_some_and(|c| matches!(c, ' ' | '\t' | '\n' | '\r' | '\u{000C}'))

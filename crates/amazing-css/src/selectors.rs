@@ -468,13 +468,9 @@ impl<'t> SelParser<'t> {
     fn anb(&mut self) -> Option<(i32, i32)> {
         self.skip_ws();
         let mut text = String::new();
-        loop {
+        while let Some(tok) = self.peek().cloned() {
             // Work on an owned token each round so `self.pos` can advance
             // without borrow conflicts (Token is Clone but not Copy).
-            let tok = match self.peek() {
-                Some(t) => t.clone(),
-                None => break,
-            };
             let consumed = match tok {
                 Token::Dimension(..) => {
                     // `2n` arrives as one Dimension token; re-serialize it so

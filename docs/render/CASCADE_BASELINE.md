@@ -5,6 +5,11 @@ Measured 2026-08-24 on `win-001` against upstream WPT revision
 viewport, device scale 1, using Amazing's fallback metrics and
 `RectInkProvider`.
 
+This is the pre-ticket-#2a baseline. The computed-value implementation and
+post-change evidence are recorded in `tests/wpt-render/computed-values-results.json`
+and `tests/wpt-render/cascade-results-ticket2a.json`; the original measurements
+below remain unchanged for before/after auditability.
+
 ## Method
 
 `scripts/inventory-render-wpt.ps1` recursively inventories CSS Syntax,
@@ -92,7 +97,7 @@ where Amazing mismatches.
 This is the largest coherent first target. Variables mismatch 12/12 while
 Blink and WebKit pass 12/12. Six selected cases exercise direct declaration or
 reference behavior; six exercise variable-aware `@supports` conditions.
-Amazing currently lowercases every declaration name, although custom-property
+At this baseline, Amazing lowercased every declaration name, although custom-property
 names are case-sensitive, preserves most specified values as raw strings, and
 has no `var()` substitution, fallback, cycle detection, or invalid-at-computed-
 value-time handling. The normative model is defined by [CSS Custom

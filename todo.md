@@ -10,7 +10,7 @@
 |-------|--------|
 | 0 — skeleton | ✅ done, all exit criteria met on win-001 |
 | 1 — HTML parser | ✅ milestone exit criteria met; expanded html5lib/WPT tree subset 243/243, broader conformance gaps tracked |
-| 2 — CSS | ✅ done on win-001 (88 workspace tests green) — see Phase 2 section |
+| 2 — CSS | ✅ parser/cascade/computed-value core green on win-001 (52 CSS tests; Variables WPT shard 12/12) |
 | 3 — Layout | ✅ done on win-001 (workspace green; curated css/CSS2 subset 17/17) |
 | 3.5 — Flexbox | ✅ done on win-001 (13 flex tests; row/column/wrap/grow/shrink/justify/align/gaps/auto-margins/order) |
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
@@ -20,7 +20,7 @@
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
 | 9 — Media | ✅ 47-subphase stretch milestone includes live Chromium DTLS-SRTP video |
-| 10 — Render conformance | 🟨 72-case cascade/value baseline measured (30 pass, 42 mismatch); computed-value/custom-properties engine is next |
+| 10 — Render conformance | 🟨 72-case cascade/value corpus now 43 pass / 29 mismatch (baseline 30/42); block/inline/sizing cluster is next |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).

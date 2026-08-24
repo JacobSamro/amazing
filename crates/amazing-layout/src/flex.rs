@@ -99,7 +99,9 @@ impl ContainerSpec {
         let align_items = parse_align(style.get("align-items"), Pack::Stretch);
         let align_content = if style
             .get("align-content")
-            .map(|v| v.eq_ignore_ascii_case("stretch"))
+            .map(|v| {
+                v.eq_ignore_ascii_case("normal") || v.eq_ignore_ascii_case("stretch")
+            })
             .unwrap_or(true)
         {
             Pack::Stretch

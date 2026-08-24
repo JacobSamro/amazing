@@ -4,7 +4,7 @@ Canonical sequence for moving Amazing's style → layout → paint pipeline towa
 standards conformance. Resolve one ticket, verify its exit criteria on
 `win-001`, record measured results, then stop at the phase boundary for review.
 
-Frontier: **#2a — specified-to-computed-value engine**
+Frontier: **#3 — block, inline, sizing, and positioning convergence**
 
 ## Evidence contract (resolved)
 
@@ -24,7 +24,9 @@ Frontier: **#2a — specified-to-computed-value engine**
 - Automated, unmodified upstream WPT render smoke cases: **2** at revision
   `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` (**1 pass, 1 mismatch**).
 - Deterministic cascade/value baseline: **72 cases** at the same revision
-  (**30 pass, 42 mismatch; 0 timeout/unsupported/crash**), repeat-hash stable.
+  initially **30 pass / 42 mismatch**, now **43 pass / 29 mismatch** after #2a.
+- Variables shard: **12/12 pass** (baseline 0/12), matching the exact-revision
+  Blink/WebKit consensus; the 24-case computed-value shard is **16/24**.
 - Existing curated CSS2 geometry subset: **17/17**.
 - Existing feature regressions: **13 flex**, **16 grid**, **74 layout unit
   tests**, and **51 paint unit tests**.
@@ -93,9 +95,10 @@ no eligible static shard and needs a future testharness runner. Amazing passed
 30 and mismatched 42. Exact-revision wpt.fyi data shows Blink and WebKit both
 pass 64 selected cases; Amazing is 26/64 in that consensus subset.
 
-The largest coherent cluster is the absent specified-to-computed-value stage:
+At the #2 baseline, the largest coherent cluster was the absent
+specified-to-computed-value stage:
 Variables is 0/12 versus Blink/WebKit 12/12, and Cascade is 4/12 with failures
-centered on CSS-wide keywords, `all`, layers, and scope. Current code lowercases
+centered on CSS-wide keywords, `all`, layers, and scope. That baseline code lowercased
 case-sensitive custom-property names, retains raw specified strings, skips all
 at-rules, and cannot substitute `var()` or represent invalid-at-computed-value
 time. Full methodology, category tables, oracle runs, caveats, and links to
@@ -105,7 +108,7 @@ generated evidence are in `docs/render/CASCADE_BASELINE.md`.
 
 Blocked by: #2
 Type: Prototype
-Status: ⬜ Pending
+Status: ✅ Resolved
 
 ### Question
 
@@ -128,13 +131,33 @@ or paint?
 
 ### Answer
 
-Pending.
+The prototype validated a deep in-process module behind the unchanged
+`compute(dom, sheets) -> StyledDom` interface; its terminal shell was deleted
+after absorption. Cascade now uses per-declaration order and matched-selector
+specificity, expands supported shorthands before ranking, then hands one winner
+per property to the private computed-value module. That module centralizes
+property metadata, case-sensitive inherited custom values, dependency-cycle
+detection, nested `var()` substitution and comma-preserving fallbacks,
+guaranteed-invalid behavior, token-boundary-safe serialization, CSS-wide
+`initial`/`inherit`/`unset`, and `all` excluding `direction`/`unicode-bidi`.
+Static variable-bearing `@supports` conditions cross the same syntax rules.
+
+On `win-001`, CSS tests increased from 34 to 52 and the full workspace passed.
+The pinned Variables shard moved from 0/12 to 12/12; two identical 24-case
+runs measured 16 pass / 8 mismatch (baseline 4/20) with stable projection hash
+`ea1a1c7b…a053b`. The full 72-case corpus moved from 30/42 to 43/29. The one
+former `:scope` false pass now exposes its real selector gap; two other green
+changes remain uncredited because they are downstream-inert. Remaining
+computed-shard mismatches require layers/revert, scope, inline-fragment color,
+bidi, positioning, or inline-block. Evidence lives in
+`tests/wpt-render/computed-values-results.json` and
+`tests/wpt-render/cascade-results-ticket2a.json`.
 
 ## #3: Block, inline, sizing, and positioning convergence
 
 Blocked by: #2a
 Type: Prototype
-Status: 🌫️ Fog
+Status: ⬜ Pending
 
 ### Question
 
@@ -143,7 +166,9 @@ CSS2/CSS Sizing WPT cluster without encoding test-specific behavior?
 
 ### Answer
 
-Pending until #2 identifies the first cluster.
+Pending. #2a removed custom-property/defaulting noise; the next baseline must
+select a coherent CSS2/Sizing geometry cluster and reject downstream-inert
+pixel passes.
 
 ## #4: Standards-grade text pipeline
 

@@ -37,3 +37,9 @@ The committed `cascade-inventory.json`, `cascade-manifest.json`,
 `cascade-results.json`, and `cascade-oracles.json` preserve the exact selection,
 measured baseline, and exact-revision Blink/WebKit comparison.
 Inventory provisions the pinned sparse checkout unless `-SkipFetch` is passed.
+
+Ticket #2a uses `computed-values-manifest.json`, the fixed 24-case
+Cascade+Variables projection of the baseline. `computed-values-results.json`
+records its repeat-stable 4/24 → 16/24 result; the Variables half moved from
+0/12 to 12/12. `cascade-results-ticket2a.json` records the full-corpus
+30/72 → 43/72 measurement without overwriting the original baseline.

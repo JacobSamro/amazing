@@ -72,6 +72,19 @@ HTML tokenizer states and CSS Syntax token names are copied verbatim from the
 specs. Error-recovery behavior *is* the interop contract — never invent a
 "simpler" grammar.
 
+### 4a. Computed values stay behind the CSS seam
+
+`amazing_css::compute` remains the only external style-computation interface.
+Cascade ranks declarations, then a private in-process module owns the
+specified-to-computed transition: property metadata, supported shorthand
+expansion, case-sensitive inherited custom properties, dependency-cycle
+detection, `var()` substitution/fallback, invalid-at-computed-value-time
+defaulting, and CSS-wide `initial`/`inherit`/`unset` behavior. Layout and paint
+receive `ComputedStyle`; they never inspect custom-property graphs or perform
+string substitution. Normal values remain string-backed until their individual
+typed grammars land, but substitution preserves token boundaries so it cannot
+manufacture a different token during reparse.
+
 ### 5. unsafe policy
 
 No first-party `unsafe` outside platform-boundary modules (windowing FFI,

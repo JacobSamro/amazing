@@ -144,10 +144,11 @@ fn wpt_flexbox_grid_subset_report() {
             );
             let d = find(&root, &dom, "div").ok_or("no div")?;
             let k = kids(d);
-            // §10.3.3: specified width + auto side margins centers the
-            // 300px container inside body's 784px content box → x = 242.
-            at(rect(&k[0]), 8.0 + 242.0, 8.0, 200.0, 20.0)?;
-            at(rect(&k[1]), 8.0 + 242.0, 8.0 + 20.0, 200.0, 20.0)
+            // Initial margins are zero, so the 300px container stays at the
+            // body's content edge. The older fixture accidentally treated
+            // absent margins as `auto`.
+            at(rect(&k[0]), 8.0, 8.0, 200.0, 20.0)?;
+            at(rect(&k[1]), 8.0, 8.0 + 20.0, 200.0, 20.0)
         })(),
     ));
 
@@ -377,11 +378,11 @@ fn wpt_flexbox_grid_subset_report() {
             );
             let d = find(&root, &dom, "div").ok_or("no div")?;
             let k = kids(d);
-            // Container centers (auto margins, §10.3.3) → x = 217. Three
-            // 100px tracks fit into 350px, so all items share row 1.
-            at(rect(&k[0]), 8.0 + 217.0, 8.0, 100.0, 20.0)?;
-            at(rect(&k[1]), 8.0 + 217.0 + 100.0, 8.0, 100.0, 20.0)?;
-            at(rect(&k[2]), 8.0 + 217.0 + 200.0, 8.0, 100.0, 20.0)
+            // Initial margins are zero. Three 100px tracks fit into 350px,
+            // so all items share row 1 from the body content edge.
+            at(rect(&k[0]), 8.0, 8.0, 100.0, 20.0)?;
+            at(rect(&k[1]), 8.0 + 100.0, 8.0, 100.0, 20.0)?;
+            at(rect(&k[2]), 8.0 + 200.0, 8.0, 100.0, 20.0)
         })(),
     ));
 
