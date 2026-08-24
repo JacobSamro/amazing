@@ -15,8 +15,9 @@ first real engine viewport:
 - back/forward/reload controls and an address surface;
 - focused address-bar editing with select-on-click, Backspace, Escape, and
   Enter-to-navigate behavior, plus Chrome-style URL detection and search-query
-  fallback;
-- interactive bookmark, Downloads, and main-menu surfaces;
+  fallback and Ctrl+A/C/X/V clipboard editing;
+- interactive bookmark, Downloads, site-information, and main-menu surfaces;
+  every visible main-menu item performs its stated action;
 - Chrome keyboard behavior across the shell: Ctrl+L/F6 focuses the address
   bar, Ctrl+T/W creates and closes tabs, Ctrl+R/F5 reloads, Alt+Left/Right
   traverses per-tab history, Ctrl+J opens Downloads, and Escape dismisses
@@ -50,6 +51,8 @@ first real engine viewport:
 ![Amazing GPUI shell on win-001](../../docs/screenshots/gpui-shell-win001.png)
 
 ![Amazing GPUI functional new tab on win-001](../../docs/screenshots/gpui-new-tab-win001.png)
+
+![Amazing GPUI page information on win-001](../../docs/screenshots/gpui-site-info-win001.png)
 
 ![Amazing GPUI grouped sidebar on win-001](../../docs/screenshots/gpui-shell-sidebar-win001.png)
 

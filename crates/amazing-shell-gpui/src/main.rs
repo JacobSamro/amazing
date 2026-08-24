@@ -8,9 +8,9 @@ mod secure_video;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    App, Bounds, Context, CursorStyle, FocusHandle, IntoElement, KeyBinding, KeyDownEvent,
-    ParentElement, Render, SharedString, Styled, Window, WindowBounds, WindowControlArea,
-    WindowOptions, actions, div, img, prelude::*, px, rgb, size,
+    App, Bounds, ClipboardItem, Context, CursorStyle, FocusHandle, IntoElement, KeyBinding,
+    KeyDownEvent, ParentElement, Render, SharedString, Styled, Window, WindowBounds,
+    WindowControlArea, WindowOptions, actions, div, img, prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
 
@@ -41,6 +41,7 @@ actions!(
         ReloadPage,
         NavigateBack,
         NavigateForward,
+        ToggleBookmark,
         ShowDownloads,
         DismissChrome
     ]
@@ -133,6 +134,7 @@ struct BrowserShell {
     sidebar: bool,
     downloads_open: bool,
     menu_open: bool,
+    site_info_open: bool,
 }
 
 impl BrowserShell {
@@ -242,6 +244,7 @@ impl BrowserShell {
             sidebar: false,
             downloads_open: false,
             menu_open: false,
+            site_info_open: false,
         }
     }
 
@@ -253,6 +256,7 @@ impl BrowserShell {
             self.address_selected = false;
             self.downloads_open = false;
             self.menu_open = false;
+            self.site_info_open = false;
         }
     }
 
@@ -325,6 +329,7 @@ impl BrowserShell {
         self.address_selected = true;
         self.downloads_open = false;
         self.menu_open = false;
+        self.site_info_open = false;
         cx.notify();
     }
 
@@ -362,15 +367,27 @@ impl BrowserShell {
         cx.notify();
     }
 
+    fn toggle_bookmark_action(
+        &mut self,
+        _: &ToggleBookmark,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.toggle_bookmark();
+        cx.notify();
+    }
+
     fn show_downloads(&mut self, _: &ShowDownloads, _: &mut Window, cx: &mut Context<Self>) {
         self.downloads_open = true;
         self.menu_open = false;
+        self.site_info_open = false;
         cx.notify();
     }
 
     fn dismiss_chrome(&mut self, _: &DismissChrome, window: &mut Window, cx: &mut Context<Self>) {
         self.downloads_open = false;
         self.menu_open = false;
+        self.site_info_open = false;
         self.focus_shell(window, cx);
         cx.notify();
     }
@@ -383,6 +400,32 @@ impl BrowserShell {
     ) {
         cx.stop_propagation();
         match event.keystroke.key.as_str() {
+            "a" if event.keystroke.modifiers.control => {
+                self.address_selected = true;
+            }
+            "c" if event.keystroke.modifiers.control => {
+                if self.address_selected {
+                    cx.write_to_clipboard(ClipboardItem::new_string(self.address.clone()));
+                }
+            }
+            "x" if event.keystroke.modifiers.control => {
+                if self.address_selected {
+                    cx.write_to_clipboard(ClipboardItem::new_string(self.address.clone()));
+                    self.address.clear();
+                    self.address_selected = false;
+                }
+            }
+            "v" if event.keystroke.modifiers.control => {
+                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                    let text = text.replace(['\r', '\n'], " ");
+                    if self.address_selected {
+                        self.address = text;
+                    } else {
+                        self.address.push_str(&text);
+                    }
+                    self.address_selected = false;
+                }
+            }
             "enter" => {
                 self.commit_navigation();
                 self.focus_shell(window, cx);
@@ -391,7 +434,7 @@ impl BrowserShell {
                 self.address = self.committed_address.clone();
                 self.focus_shell(window, cx);
             }
-            "backspace" => {
+            "backspace" | "delete" => {
                 if self.address_selected {
                     self.address.clear();
                     self.address_selected = false;
@@ -440,10 +483,8 @@ impl BrowserShell {
         tab.url = final_address.clone();
         tab.kind = TabKind::Engine;
         tab.viewport = Some(viewport);
-        if tab.title.starts_with("New tab") {
-            tab.title = address_title(&final_address);
-            tab.mono = site_initial(&final_address).to_string();
-        }
+        tab.title = navigation_title(&final_address);
+        tab.mono = site_initial(&final_address).to_string();
         self.address_selected = false;
     }
 
@@ -623,11 +664,19 @@ impl BrowserShell {
     fn toggle_downloads(&mut self) {
         self.downloads_open = !self.downloads_open;
         self.menu_open = false;
+        self.site_info_open = false;
     }
 
     fn toggle_menu(&mut self) {
         self.menu_open = !self.menu_open;
         self.downloads_open = false;
+        self.site_info_open = false;
+    }
+
+    fn toggle_site_info(&mut self) {
+        self.site_info_open = !self.site_info_open;
+        self.downloads_open = false;
+        self.menu_open = false;
     }
 
     fn icon_button(label: &'static str, enabled: bool) -> impl IntoElement {
@@ -761,6 +810,13 @@ impl BrowserShell {
         let bookmarked = self.tabs[self.active].bookmarked;
         let back_enabled = self.can_go_back();
         let forward_enabled = self.can_go_forward();
+        let site_glyph = if self.committed_address.starts_with("amazing://") {
+            "A"
+        } else if self.committed_address.starts_with("https://") {
+            "●"
+        } else {
+            "ⓘ"
+        };
         div()
             .flex()
             .items_center()
@@ -821,7 +877,7 @@ impl BrowserShell {
                         cx.notify();
                     }))
                     .on_key_down(cx.listener(Self::on_address_key_down))
-                    .child("▣")
+                    .child(site_glyph)
                     .child(
                         div()
                             .flex_1()
@@ -861,6 +917,11 @@ impl BrowserShell {
                             .rounded_full()
                             .cursor_pointer()
                             .hover(|style| style.bg(rgb(SURFACE_2_HOVER)))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.toggle_site_info();
+                                cx.notify();
+                            }))
                             .child("◈"),
                     ),
             )
@@ -1176,7 +1237,99 @@ impl BrowserShell {
             .when(!self.downloads_open, |panel| panel.hidden())
     }
 
+    fn site_info_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let (connection, color) = if self.committed_address.starts_with("amazing://") {
+            ("Internal Amazing page", ACCENT)
+        } else if self.committed_address.starts_with("https://") {
+            ("HTTPS address", 0x3f7d4e)
+        } else if self.committed_address.starts_with("http://") {
+            ("Not secure", 0xb3261e)
+        } else {
+            ("Page information", DIM)
+        };
+        div()
+            .absolute()
+            .top(px(80.0))
+            .right(px(145.0))
+            .w(px(360.0))
+            .p_3()
+            .rounded_lg()
+            .border_1()
+            .border_color(rgb(BORDER))
+            .bg(rgb(SURFACE))
+            .shadow_lg()
+            .text_color(rgb(TEXT))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .text_size(px(14.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child(div().text_color(rgb(color)).child("●"))
+                            .child(connection),
+                    )
+                    .child(
+                        div()
+                            .id("site-info-close")
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(28.0))
+                            .rounded_full()
+                            .cursor_pointer()
+                            .hover(|style| style.bg(rgb(SURFACE_2)))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.site_info_open = false;
+                                cx.notify();
+                            }))
+                            .child("×"),
+                    ),
+            )
+            .child(
+                div()
+                    .mt_2()
+                    .px_2()
+                    .py_2()
+                    .rounded_md()
+                    .bg(rgb(SURFACE_2))
+                    .text_size(px(12.0))
+                    .text_color(rgb(DIM))
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .whitespace_nowrap()
+                    .child(self.committed_address.clone()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .mt_3()
+                    .px_1()
+                    .text_size(px(12.0))
+                    .child("Renderer")
+                    .child(div().text_color(rgb(DIM)).child("Amazing engine")),
+            )
+            .when(!self.site_info_open, |panel| panel.hidden())
+    }
+
     fn browser_menu(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let bookmark_label = if self.tabs[self.active].bookmarked {
+            "Remove bookmark"
+        } else {
+            "Bookmark this tab"
+        };
+        let sidebar_label = if self.sidebar {
+            "Hide side panel"
+        } else {
+            "Show side panel"
+        };
         let item = |label: &'static str, shortcut: &'static str| {
             div()
                 .flex()
@@ -1233,6 +1386,26 @@ impl BrowserShell {
             )
             .child(
                 div()
+                    .id("menu-history-forward")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.go_forward();
+                        this.menu_open = false;
+                        cx.notify();
+                    }))
+                    .child(item("Forward", "Alt+Right")),
+            )
+            .child(
+                div()
+                    .id("menu-reload")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.reload();
+                        this.menu_open = false;
+                        cx.notify();
+                    }))
+                    .child(item("Reload", "Ctrl+R")),
+            )
+            .child(
+                div()
                     .id("menu-downloads")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.menu_open = false;
@@ -1242,11 +1415,26 @@ impl BrowserShell {
                     .child(item("Downloads", "Ctrl+J")),
             )
             .child(div().h(px(1.0)).my_1().bg(rgb(RULE)))
-            .child(item("Zoom", "100%"))
-            .child(item("Print…", "Ctrl+P"))
-            .child(div().h(px(1.0)).my_1().bg(rgb(RULE)))
-            .child(item("Settings", ""))
-            .child(item("About Amazing", ""))
+            .child(
+                div()
+                    .id("menu-bookmark")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.toggle_bookmark();
+                        this.menu_open = false;
+                        cx.notify();
+                    }))
+                    .child(item(bookmark_label, "Ctrl+D")),
+            )
+            .child(
+                div()
+                    .id("menu-sidebar")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.toggle_sidebar();
+                        this.menu_open = false;
+                        cx.notify();
+                    }))
+                    .child(item(sidebar_label, "")),
+            )
             .when(!self.menu_open, |menu| menu.hidden())
     }
 
@@ -1433,6 +1621,7 @@ impl Render for BrowserShell {
             .on_action(cx.listener(Self::reload_page))
             .on_action(cx.listener(Self::navigate_back))
             .on_action(cx.listener(Self::navigate_forward))
+            .on_action(cx.listener(Self::toggle_bookmark_action))
             .on_action(cx.listener(Self::show_downloads))
             .on_action(cx.listener(Self::dismiss_chrome))
             .flex()
@@ -1716,6 +1905,7 @@ impl Render for BrowserShell {
                     .when(!sidebar, |body| body.child(self.page())),
             )
             .child(self.downloads_panel(cx))
+            .child(self.site_info_panel(cx))
             .child(self.browser_menu(cx))
     }
 }
@@ -1742,6 +1932,7 @@ fn main() {
             KeyBinding::new("f5", ReloadPage, None),
             KeyBinding::new("alt-left", NavigateBack, None),
             KeyBinding::new("alt-right", NavigateForward, None),
+            KeyBinding::new("ctrl-d", ToggleBookmark, None),
             KeyBinding::new("ctrl-j", ShowDownloads, None),
             KeyBinding::new("escape", DismissChrome, None),
         ]);
@@ -1871,6 +2062,14 @@ fn address_title(address: &str) -> String {
         .to_string()
 }
 
+fn navigation_title(address: &str) -> String {
+    match address {
+        "amazing://status" => "Amazing — Phase 9 status".into(),
+        "amazing://newtab" => "New tab".into(),
+        _ => address_title(address),
+    }
+}
+
 fn site_initial(address: &str) -> char {
     address_title(address)
         .chars()
@@ -1937,6 +2136,23 @@ mod tests {
         assert!(shell.sidebar);
         shell.select_tab(99);
         assert_eq!(shell.active, 4, "out-of-range selection is ignored");
+    }
+
+    #[test]
+    fn chrome_popovers_are_exclusive_and_bookmarks_toggle() {
+        let mut shell = BrowserShell::new(None);
+        shell.toggle_downloads();
+        assert!(shell.downloads_open);
+        shell.toggle_menu();
+        assert!(shell.menu_open);
+        assert!(!shell.downloads_open);
+        shell.toggle_site_info();
+        assert!(shell.site_info_open);
+        assert!(!shell.menu_open);
+        shell.toggle_bookmark();
+        assert!(shell.tabs[0].bookmarked);
+        shell.toggle_bookmark();
+        assert!(!shell.tabs[0].bookmarked);
     }
 
     #[test]
