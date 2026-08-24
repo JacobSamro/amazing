@@ -231,6 +231,7 @@ dependencies = [
  "amazing-dom",
  "amazing-html",
  "amazing-layout",
+ "amazing-media",
  "amazing-net",
  "amazing-paint",
  "amazing-webrtc-codecs",

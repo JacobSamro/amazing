@@ -1,14 +1,49 @@
 use std::sync::Arc;
 
 use amazing_layout::font::{FontSource, ParsedFont};
-use amazing_net::{FetchOptions, fetch};
-use amazing_paint::{OutlineGlyphProvider, Surface, paint_document_with};
+use amazing_net::{FetchOptions, Url, fetch, resolve};
+use amazing_paint::{OutlineGlyphProvider, Surface};
 use gpui::RenderImage;
 use image::{Frame, RgbaImage};
 
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 570;
 const WINDOWS_UI_FONT: &str = r"C:\Windows\Fonts\segoeui.ttf";
+const MAX_STYLESHEETS: usize = 32;
+const MAX_STYLESHEET_BYTES: usize = 4 * 1024 * 1024;
+const MAX_PAGE_IMAGES: usize = 32;
+
+struct PageImage {
+    node: amazing_dom::NodeIdx,
+    image: amazing_media::Image,
+    used_size: amazing_layout::IntrinsicSize,
+}
+
+#[derive(Default)]
+struct PageResources {
+    images: Vec<PageImage>,
+}
+
+impl amazing_layout::ReplacedElementProvider for PageResources {
+    fn intrinsic_size(
+        &self,
+        node: amazing_dom::NodeIdx,
+    ) -> Option<amazing_layout::IntrinsicSize> {
+        self.images
+            .iter()
+            .find(|entry| entry.node == node)
+            .map(|entry| entry.used_size)
+    }
+}
+
+impl amazing_paint::ImageProvider for PageResources {
+    fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
+        self.images
+            .iter()
+            .find(|entry| entry.node == node)
+            .map(|entry| &entry.image)
+    }
+}
 
 const DEMO_HTML: &str = r#"
 <!doctype html>
@@ -122,9 +157,12 @@ impl EngineViewport {
             .text()
             .ok_or_else(|| "response body was not decodable text".to_string())?;
         let dom = amazing_html::parse(&html);
-        let mut css = String::new();
-        collect_inline_styles(&dom, amazing_dom::NodeIdx(0), &mut css);
-        Ok((Self::from_dom(&dom, &css), final_address))
+        let css = load_document_styles(&dom, &final_address, &options);
+        let resources = load_page_resources(&dom, &final_address, &options);
+        Ok((
+            Self::from_dom_with_resources(&dom, &css, &resources),
+            final_address,
+        ))
     }
 
     pub fn error(address: &str, error: &str) -> Self {
@@ -208,7 +246,15 @@ impl EngineViewport {
     }
 
     fn from_dom(dom: &amazing_dom::Dom, css: &str) -> Self {
-        let surface = render_dom(dom, css);
+        Self::from_dom_with_resources(dom, css, &PageResources::default())
+    }
+
+    fn from_dom_with_resources(
+        dom: &amazing_dom::Dom,
+        css: &str,
+        resources: &PageResources,
+    ) -> Self {
+        let surface = render_dom_with_resources(dom, css, resources);
         let width = surface.width;
         let height = surface.height;
         let image = Arc::new(surface_to_render_image(surface));
@@ -228,17 +274,34 @@ fn render_demo_surface() -> Surface {
 #[cfg(test)]
 fn render_surface(html: &str, css: &str) -> Surface {
     let dom = amazing_html::parse(html);
-    render_dom(&dom, css)
+    render_dom_with_resources(&dom, css, &PageResources::default())
 }
 
-fn render_dom(dom: &amazing_dom::Dom, css: &str) -> Surface {
+fn render_dom_with_resources(
+    dom: &amazing_dom::Dom,
+    css: &str,
+    resources: &PageResources,
+) -> Surface {
     let fonts = load_ui_font();
-    let root = amazing_layout::layout_dom_document(dom, css, VIEWPORT_WIDTH as f32, &fonts);
+    let root = amazing_layout::layout_dom_document_with_replaced(
+        dom,
+        css,
+        VIEWPORT_WIDTH as f32,
+        &fonts,
+        resources,
+    );
     let page_height = layout_bottom(&root)
         .ceil()
         .clamp(VIEWPORT_HEIGHT as f32, 8192.0) as u32;
     let glyphs = OutlineGlyphProvider::new(&fonts);
-    paint_document_with(&root, VIEWPORT_WIDTH, page_height, &fonts, &glyphs)
+    amazing_paint::paint_document_with_resources(
+        &root,
+        VIEWPORT_WIDTH,
+        page_height,
+        &fonts,
+        &glyphs,
+        resources,
+    )
 }
 
 fn layout_bottom(layout: &amazing_layout::LayoutBox) -> f32 {
@@ -273,6 +336,225 @@ fn collect_inline_styles(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out
     }
 }
 
+fn load_document_styles(
+    dom: &amazing_dom::Dom,
+    document_url: &str,
+    options: &FetchOptions,
+) -> String {
+    let mut css = String::new();
+    let mut external_count = 0usize;
+    collect_style_sources(
+        dom,
+        amazing_dom::NodeIdx(0),
+        document_url,
+        options,
+        &mut external_count,
+        &mut css,
+    );
+    css
+}
+
+fn collect_style_sources(
+    dom: &amazing_dom::Dom,
+    node: amazing_dom::NodeIdx,
+    document_url: &str,
+    options: &FetchOptions,
+    external_count: &mut usize,
+    out: &mut String,
+) {
+    if dom.name(node) == Some("style") {
+        collect_inline_styles(dom, node, out);
+        return;
+    }
+
+    if dom.name(node) == Some("link")
+        && *external_count < MAX_STYLESHEETS
+        && out.len() < MAX_STYLESHEET_BYTES
+        && let Some(attrs) = dom.attrs_of(node)
+    {
+        let rel = attrs
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("rel"))
+            .map(|(_, value)| value.as_str())
+            .unwrap_or("");
+        let media = attrs
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("media"))
+            .map(|(_, value)| value.trim())
+            .unwrap_or("");
+        let disabled = attrs
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("disabled"));
+        let is_stylesheet = rel
+            .split_ascii_whitespace()
+            .any(|token| token.eq_ignore_ascii_case("stylesheet"));
+        let applies_to_screen = media.is_empty()
+            || media.eq_ignore_ascii_case("all")
+            || media.eq_ignore_ascii_case("screen");
+        if is_stylesheet
+            && applies_to_screen
+            && !disabled
+            && let Some(href) = attrs
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("href"))
+                .map(|(_, value)| value.as_str())
+            && let Some(address) = resolve_resource_address(document_url, href)
+        {
+            *external_count += 1;
+            if let Ok(response) = fetch(&address, options)
+                && response.status == 200
+                && response
+                    .content_type()
+                    .is_none_or(|kind| kind == "text/css" || kind == "text/plain")
+                && let Some(sheet) = response.text()
+            {
+                let remaining = MAX_STYLESHEET_BYTES.saturating_sub(out.len());
+                if sheet.len() <= remaining {
+                    out.push_str(&sheet);
+                    out.push('\n');
+                }
+            }
+        }
+    }
+
+    for child in dom.children(node) {
+        collect_style_sources(
+            dom,
+            child,
+            document_url,
+            options,
+            external_count,
+            out,
+        );
+    }
+}
+
+fn resolve_resource_address(document_url: &str, reference: &str) -> Option<String> {
+    let reference = reference.trim();
+    if reference.is_empty() {
+        return None;
+    }
+    if let Ok(base) = Url::parse(document_url) {
+        return resolve(reference, &base).ok().map(|url| url.to_string());
+    }
+
+    let reference_path = std::path::Path::new(reference);
+    let path = if reference_path.is_absolute() {
+        reference_path.to_path_buf()
+    } else {
+        std::path::Path::new(document_url)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new(""))
+            .join(reference_path)
+    };
+    Some(path.to_string_lossy().into_owned())
+}
+
+fn load_page_resources(
+    dom: &amazing_dom::Dom,
+    document_url: &str,
+    options: &FetchOptions,
+) -> PageResources {
+    fn dimension(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, name: &str) -> Option<f32> {
+        dom.attrs_of(node)?
+            .iter()
+            .find(|(attribute, _)| attribute.eq_ignore_ascii_case(name))?
+            .1
+            .trim()
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value > 0)
+            .map(|value| value as f32)
+    }
+
+    fn walk(
+        dom: &amazing_dom::Dom,
+        node: amazing_dom::NodeIdx,
+        document_url: &str,
+        options: &FetchOptions,
+        resources: &mut PageResources,
+    ) {
+        if resources.images.len() >= MAX_PAGE_IMAGES {
+            return;
+        }
+        if dom.name(node) == Some("img")
+            && let Some(source) = dom
+                .attrs_of(node)
+                .and_then(|attrs| {
+                    attrs
+                        .iter()
+                        .find(|(name, _)| name.eq_ignore_ascii_case("src"))
+                })
+                .map(|(_, value)| value.as_str())
+            && let Some(address) = resolve_resource_address(document_url, source)
+            && let Ok(response) = fetch(&address, options)
+            && response.status == 200
+            && let Some(image) = decode_web_image(&response.body)
+        {
+            let intrinsic_width = image.width as f32;
+            let intrinsic_height = image.height as f32;
+            let width_attr = dimension(dom, node, "width");
+            let height_attr = dimension(dom, node, "height");
+            let used_size = match (width_attr, height_attr) {
+                (Some(width), Some(height)) => amazing_layout::IntrinsicSize { width, height },
+                (Some(width), None) => amazing_layout::IntrinsicSize {
+                    width,
+                    height: intrinsic_height * width / intrinsic_width,
+                },
+                (None, Some(height)) => amazing_layout::IntrinsicSize {
+                    width: intrinsic_width * height / intrinsic_height,
+                    height,
+                },
+                (None, None) => amazing_layout::IntrinsicSize {
+                    width: intrinsic_width,
+                    height: intrinsic_height,
+                },
+            };
+            resources.images.push(PageImage {
+                node,
+                image,
+                used_size,
+            });
+        }
+
+        for child in dom.children(node) {
+            walk(dom, child, document_url, options, resources);
+        }
+    }
+
+    let mut resources = PageResources::default();
+    walk(
+        dom,
+        amazing_dom::NodeIdx(0),
+        document_url,
+        options,
+        &mut resources,
+    );
+    resources
+}
+
+fn decode_web_image(bytes: &[u8]) -> Option<amazing_media::Image> {
+    if let Ok(image) = amazing_media::decode_image(bytes) {
+        return Some(image);
+    }
+
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .ok()?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(8192);
+    limits.max_image_height = Some(8192);
+    limits.max_alloc = Some(64 * 1024 * 1024);
+    reader.limits(limits);
+    let rgba = reader.decode().ok()?.into_rgba8();
+    let (width, height) = rgba.dimensions();
+    Some(amazing_media::Image {
+        width,
+        height,
+        pixels: rgba.into_raw(),
+    })
+}
+
 fn escape_html(value: &str) -> String {
     value
         .replace('&', "&amp;")
@@ -305,6 +587,9 @@ fn rgba_to_render_image(width: u32, height: u32, mut bgra: Vec<u8>) -> RenderIma
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::time::Duration;
 
     #[test]
     fn engine_demo_produces_an_opaque_non_white_surface() {
@@ -355,6 +640,100 @@ mod tests {
         assert!(css.contains("background: #010203"));
         let viewport = EngineViewport::from_dom(&dom, &css);
         assert_eq!((viewport.width, viewport.height), (960, 570));
+    }
+
+    #[test]
+    fn external_stylesheets_resolve_and_keep_document_order() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
+            let mut stream = (0..100)
+                .find_map(|_| match listener.accept() {
+                    Ok((stream, _)) => Some(stream),
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(10));
+                        None
+                    },
+                    Err(error) => panic!("stylesheet fixture accept: {error}"),
+                })
+                .expect("stylesheet request timed out");
+            let mut request = [0u8; 2048];
+            let count = stream.read(&mut request).unwrap();
+            assert!(String::from_utf8_lossy(&request[..count]).starts_with(
+                "GET /theme.css HTTP/1.1\r\n"
+            ));
+            let body = b".external { color: #123456; }";
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/css\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(body).unwrap();
+        });
+
+        let dom = amazing_html::parse(
+            "<style>.first { color: red; }</style>\
+             <link rel=stylesheet href=../theme.css>\
+             <style>.last { color: blue; }</style>",
+        );
+        let css = load_document_styles(
+            &dom,
+            &format!("http://127.0.0.1:{port}/pages/index.html"),
+            &FetchOptions::default(),
+        );
+        server.join().unwrap();
+
+        let first = css.find(".first").unwrap();
+        let external = css.find(".external").unwrap();
+        let last = css.find(".last").unwrap();
+        assert!(first < external && external < last);
+    }
+
+    #[test]
+    fn web_images_feed_intrinsic_layout_and_paint_resources() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
+            let mut stream = (0..100)
+                .find_map(|_| match listener.accept() {
+                    Ok((stream, _)) => Some(stream),
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(10));
+                        None
+                    },
+                    Err(error) => panic!("image fixture accept: {error}"),
+                })
+                .expect("image request timed out");
+            let mut request = [0u8; 2048];
+            let count = stream.read(&mut request).unwrap();
+            assert!(
+                String::from_utf8_lossy(&request[..count])
+                    .starts_with("GET /assets/pixel.ppm HTTP/1.1\r\n")
+            );
+            let body = b"P6\n2 1\n255\n\xff\x00\x00\x00\xff\x00";
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: image/x-portable-pixmap\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(body).unwrap();
+        });
+
+        let dom = amazing_html::parse("<img src=../assets/pixel.ppm width=8>");
+        let resources = load_page_resources(
+            &dom,
+            &format!("http://127.0.0.1:{port}/pages/index.html"),
+            &FetchOptions::default(),
+        );
+        server.join().unwrap();
+        assert_eq!(resources.images.len(), 1);
+        assert_eq!(resources.images[0].used_size.width, 8.0);
+        assert_eq!(resources.images[0].used_size.height, 4.0);
+        assert_eq!(resources.images[0].image.pixels[0..4], [255, 0, 0, 255]);
     }
 
     #[test]

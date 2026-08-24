@@ -4,7 +4,7 @@ Canonical sequence for turning the GPUI shell from a document viewer into a
 usable browser. Resolve one ticket, verify its exit criteria on `win-001`, then
 update this map before starting the next ticket.
 
-Frontier: **#2 — external stylesheets**
+Frontier: **#4 — document identity**
 
 ## #1: Verified HTTPS navigation
 
@@ -33,7 +33,7 @@ the GPUI address bar reaches `https://www.google.com` without an error page.
 
 Blocked by: #1
 Type: Prototype
-Status: ⏳ Next
+Status: ✅ Resolved
 
 ### Question
 
@@ -42,15 +42,18 @@ inline styles, and contained when one stylesheet fails?
 
 ### Answer
 
-Pending. Exit requires a deterministic redirect/relative-URL fixture, an
-external-CSS regression test, and visibly styled Google chrome without a
-navigation failure when an individual sheet cannot load.
+Walk `<style>` and applicable `<link rel="stylesheet">` nodes in document
+order. Resolve links against the final post-redirect URL, cap the page at 32
+external sheets/4 MiB CSS, and isolate individual fetch/type failures. A
+loopback regression proves relative resolution and cascade order. Google's
+current linked sheet legitimately returns an empty body; the remaining visual
+differences are CSS-engine coverage rather than a resource-fetch failure.
 
 ## #3: Web image resources
 
 Blocked by: #1, #2
 Type: Prototype
-Status: ⬜ Pending
+Status: ✅ Resolved
 
 ### Question
 
@@ -59,15 +62,17 @@ paint surfaces while keeping image codecs outside engine cores?
 
 ### Answer
 
-Pending. Reuse the GPUI shell's existing `image` dependency as the codec
-adapter and feed owned RGBA images through the established replaced-element
-and `ImageProvider` seams.
+Reuse core BMP/PPM decoding first, then the GPUI shell's existing `image`
+dependency for bounded PNG/JPEG/GIF/WebP/ICO decoding. Resolved `<img>` pixels
+flow through `ReplacedElementProvider` and `ImageProvider`; width/height
+attributes preserve aspect ratio. The loopback intrinsic-size test passes and
+the live Google logo is visible in the GPUI viewport.
 
 ## #4: Document identity
 
 Blocked by: #2, #3
 Type: Prototype
-Status: ⬜ Pending
+Status: ⏳ Next
 
 ### Question
 

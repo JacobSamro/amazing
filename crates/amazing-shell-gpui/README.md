@@ -28,7 +28,10 @@ first real engine viewport:
 - a live `amazing-layout` → `amazing-paint` RGBA8 page surface, converted to
   GPUI's native BGRA image without crossing the engine-core boundary;
 - response-driven HTML for `file://` and plain `http://` navigation, including
-  inline `<style>` collection and explicit in-viewport fetch errors;
+  ordered inline/external stylesheet collection and explicit in-viewport fetch
+  errors;
+- verified HTTPS navigation plus bounded PNG/JPEG/GIF/WebP/ICO image loading
+  through the layout and paint resource seams;
 - content-height painting up to the engine safety cap and native GPUI wheel
   scrolling while browser chrome stays fixed;
 - a native media tab that encodes H.264, decodes I420, converts to RGBA, and
@@ -55,6 +58,8 @@ first real engine viewport:
 ![Amazing GPUI functional new tab on win-001](../../docs/screenshots/gpui-new-tab-win001.png)
 
 ![Amazing GPUI page information on win-001](../../docs/screenshots/gpui-site-info-win001.png)
+
+![Amazing GPUI live Google resources](../../docs/screenshots/gpui-google-resources-win001.png)
 
 ![Amazing GPUI grouped sidebar on win-001](../../docs/screenshots/gpui-shell-sidebar-win001.png)
 
@@ -115,8 +120,8 @@ target\release\amazing-shell.exe --secure-video
 ```
 
 The shell now proves the full local presentation path from address input through
-Amazing's file/HTTP/HTTPS response layer, DOM and inline CSS collection, layout,
-and software paint into a GPUI image. External stylesheets and media, full text
+Amazing's file/HTTP/HTTPS response layer, DOM, ordered stylesheet and image
+resource loading, layout, and software paint into a GPUI image. Full text
 editing/IME behavior, history persistence, and a production tab lifecycle
-remain the next UI integration steps. The ordered plan lives in
+remain next UI integration steps. The ordered plan lives in
 [`docs/BROWSING_TODO.md`](../../docs/BROWSING_TODO.md).

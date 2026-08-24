@@ -10,12 +10,13 @@ rust-version = "1.89"
 amazing-dom = { path = "../amazing-dom" }
 amazing-html = { path = "../amazing-html" }
 amazing-layout = { path = "../amazing-layout" }
+amazing-media = { path = "../amazing-media" }
 amazing-net = { path = "../amazing-net" }
 amazing-paint = { path = "../amazing-paint" }
 amazing-webrtc-codecs = { path = "../amazing-webrtc-codecs" }
 gpui = { git = "https://github.com/zed-industries/zed", rev = "d9ad6aff67e47de43abb270d22de75dd950f1b48" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "d9ad6aff67e47de43abb270d22de75dd950f1b48" }
-image = { version = "0.25.9", default-features = false }
+image = { version = "0.25.9", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "pnm", "webp"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Media_Audio"] }
 
 [[bin]]
