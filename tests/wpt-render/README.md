@@ -1,0 +1,26 @@
+# Upstream WPT render gate
+
+`smoke.json` pins an exact commit from
+`https://github.com/web-platform-tests/wpt.git`. The source is sparse-checked
+out under ignored `target/wpt`; upstream test and reference files are never
+copied into or modified by this repository.
+
+Run on `win-001` from the repository root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1
+```
+
+The runner accepts alternate manifest, source, output, executable, viewport,
+and timeout parameters. It reads each test's upstream `rel=match` or
+`rel=mismatch` link, renders both sides through `amazing render-wpt`, applies
+exact or upstream `meta name=fuzzy` pixel limits, and writes PPM
+actual/reference/diff images plus a JSON report. A manifest's `expected` field
+validates the harness smoke outcome; it cannot change the upstream assertion.
+
+`-SkipFetch` requires `WptRoot` already to be at the manifest revision.
+`-SkipBuild` uses the selected existing executable.
+
+`baseline.json` is the normalized, committed evidence from the ticket #1
+repeatability gate. It records results and hashes only; `smoke.json` remains
+the executable selection and expected harness outcome.

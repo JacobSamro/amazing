@@ -1,0 +1,18 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "sparse_paths": [
+    "css/css-backgrounds"
+  ],
+  "tests": [
+    {
+      "id": "background-color-clip",
+      "test": "css/css-backgrounds/background-color-clip.html",
+      "expected": "pass"
+    },
+    {
+      "id": "border-radius-horizontal-zero",
+      "test": "css/css-backgrounds/border-radius-horizontal-value-is-zero.html",
+      "expected": "mismatch"
+    }
+  ]
+}

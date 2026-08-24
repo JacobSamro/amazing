@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "measured_at_utc": "2026-08-24T05:50:51Z",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing fallback metrics with RectInkProvider",
+  "repeat_runs": 2,
+  "repeat_hashes_identical": true,
+  "counts": {
+    "pass": 1,
+    "mismatch": 1,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "tests": [
+    {
+      "id": "background-color-clip",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "reference/background-color-clip.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "94787ced3b30ab256d7ae13536e37084b9adc34792283505625448a9a97d8a2a",
+      "reference_sha256": "94787ced3b30ab256d7ae13536e37084b9adc34792283505625448a9a97d8a2a",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "border-radius-horizontal-zero",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/border-radius-horizontal-value-is-zero-ref.html",
+      "differing_pixels": 23552,
+      "max_difference": 255,
+      "actual_sha256": "a510a710a2e1b4677cee56072f19e704cfad01e2b0561091af7d3fa85428ef13",
+      "reference_sha256": "0d264d1d0239145938b4b8b38be2a3ebbf811f441684fffe7a424cf5e7668958",
+      "diff_sha256": "dd04ea3500c0f5ed2eb9cbf05c18e5e427aaefe1cfc6cc95c69287dfd9641af8"
+    }
+  ]
+}

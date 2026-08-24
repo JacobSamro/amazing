@@ -4,7 +4,7 @@ Canonical sequence for moving Amazing's style → layout → paint pipeline towa
 standards conformance. Resolve one ticket, verify its exit criteria on
 `win-001`, record measured results, then stop at the phase boundary for review.
 
-Frontier: **#1 — reproducible upstream WPT render harness**
+Frontier: **#2 — cascade and computed-value conformance baseline**
 
 ## Evidence contract (resolved)
 
@@ -21,7 +21,8 @@ Frontier: **#1 — reproducible upstream WPT render harness**
 
 ### Current measured baseline
 
-- Automated, unmodified upstream WPT render cases: **0**.
+- Automated, unmodified upstream WPT render smoke cases: **2** at revision
+  `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` (**1 pass, 1 mismatch**).
 - Existing curated CSS2 geometry subset: **17/17**.
 - Existing feature regressions: **13 flex**, **16 grid**, **74 layout unit
   tests**, and **51 paint unit tests**.
@@ -32,7 +33,7 @@ Frontier: **#1 — reproducible upstream WPT render harness**
 
 Blocked by: none
 Type: Prototype
-Status: ⬜ Pending
+Status: ✅ Resolved
 
 ### Question
 
@@ -54,13 +55,27 @@ and emit machine-readable measured results on `win-001`?
 
 ### Answer
 
-Pending.
+`amazing render-wpt` paints an exact caller-supplied viewport through the real
+style → layout → paint pipeline. `scripts/run-render-wpt.ps1` accepts manifest,
+source root, output directory, executable, viewport, and timeout parameters;
+it sparse-checks out the manifest's exact upstream revision, derives the
+reference and relation from the unmodified test's `rel=match`/`rel=mismatch`
+link, applies supported upstream fuzzy limits, bounds each renderer process,
+and emits PPM actual/reference/diff images plus JSON and SHA-256 evidence.
+
+The smoke manifest proved both branches on `win-001`: `background-color-clip`
+passed with 0 differing pixels, while `border-radius-horizontal-zero` produced
+the expected mismatch (23,552 pixels, maximum channel difference 255). Two
+repeat runs had identical classifications and all image hashes; normalized
+evidence is retained in `tests/wpt-render/baseline.json`. The full
+workspace test gate passed, including two fixed-viewport command tests; strict
+Clippy passed for the changed `amazing` package with dependencies excluded.
 
 ## #2: Cascade and computed-value conformance baseline
 
 Blocked by: #1
 Type: Research
-Status: 🌫️ Fog
+Status: ⬜ Pending
 
 ### Question
 

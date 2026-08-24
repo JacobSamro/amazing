@@ -784,6 +784,7 @@ fn main() -> ExitCode {
         Some("style") => cmd_style(&args[2..]),
         Some("layout") => cmd_layout(&args[2..]),
         Some("render") => cmd_render(&args[2..]),
+        Some("render-wpt") => cmd_render_wpt(&args[2..]),
         Some("audio-info") => cmd_audio_info(&args[2..]),
         Some("play-audio") => cmd_play_audio(&args[2..]),
         Some("webrtc-loopback") => cmd_webrtc_loopback(),
@@ -814,7 +815,7 @@ fn main() -> ExitCode {
         Some(other) => {
             eprintln!("unknown command: {other}");
             eprintln!(
-                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|browser-peer [http-port]|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
+                "usage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css…]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|render-wpt <page.html> <out.ppm> <width> <height>|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|browser-peer [http-port]|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]"
             );
             ExitCode::FAILURE
         }
@@ -2494,50 +2495,23 @@ fn cmd_render(args: &[String]) -> ExitCode {
         Ok(s) => s,
         Err(code) => return code,
     };
-    let host = Rc::new(RefCell::new(BrowserDomHost {
-        dom: amazing_html::parse(&html),
-    }));
-    if let Err(error) = execute_inline_scripts(&host, html_path) {
-        eprintln!("amazing render: {error}");
-        return ExitCode::FAILURE;
-    }
-
-    let mut css = String::new();
-    let dom = host.borrow();
-    if let Err(error) = collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut css) {
-        eprintln!("amazing render: {error}");
-        return ExitCode::FAILURE;
-    }
+    let mut extra_css = String::new();
     for extra in args.get(3..).unwrap_or(&[]) {
         match read_source(Some(extra), "render") {
             Ok(s) => {
-                css.push('\n');
-                css.push_str(&s);
+                extra_css.push('\n');
+                extra_css.push_str(&s);
             }
             Err(code) => return code,
         }
     }
-
-    let fonts = amazing_layout::font::FontSource::fallback();
-    let media = load_page_media(&dom.dom, html_path);
-    for warning in &media.warnings {
-        eprintln!("amazing render: {warning}");
-    }
-    let root =
-        amazing_layout::layout_dom_document_with_replaced(&dom.dom, &css, width, &fonts, &media);
-    // Page height = root margin-box bottom edge (what layout_root returns),
-    // clamped so a runaway document cannot exhaust memory.
-    let page_h = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
-        .ceil()
-        .clamp(1.0, 8192.0) as u32;
-    let surface = amazing_paint::paint_document_with_resources(
-        &root,
-        width.max(1.0) as u32,
-        page_h,
-        &fonts,
-        &amazing_paint::RectInkProvider,
-        &media,
-    );
+    let surface = match render_surface(html_path, &html, width, None, &extra_css) {
+        Ok(surface) => surface,
+        Err(error) => {
+            eprintln!("amazing render: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     if let Err(e) = surface.save_bmp(out_path) {
         eprintln!("amazing render: cannot write {out_path}: {e}");
@@ -2556,6 +2530,98 @@ fn cmd_render(args: &[String]) -> ExitCode {
         surface.width, surface.height
     );
     ExitCode::SUCCESS
+}
+
+/// Deterministic rendering primitive for WPT reftests. Unlike `render`, the
+/// output surface is always exactly the requested viewport and only the PPM
+/// artifact is written. Test orchestration and comparison live outside the
+/// engine so this command remains a reusable style → layout → paint boundary.
+fn cmd_render_wpt(args: &[String]) -> ExitCode {
+    if args.len() != 4 {
+        eprintln!("usage: amazing render-wpt <page.html> <out.ppm> <width> <height>");
+        return ExitCode::FAILURE;
+    }
+    let html_path = &args[0];
+    let out_path = &args[1];
+    let dimension = |value: &str, name: &str| -> Result<u32, String> {
+        value
+            .parse::<u32>()
+            .ok()
+            .filter(|parsed| (1..=8192).contains(parsed))
+            .ok_or_else(|| format!("{name} must be an integer from 1 through 8192"))
+    };
+    let width = match dimension(&args[2], "width") {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("amazing render-wpt: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let height = match dimension(&args[3], "height") {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("amazing render-wpt: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let html = match read_source(Some(html_path), "render-wpt") {
+        Ok(source) => source,
+        Err(code) => return code,
+    };
+    let surface = match render_surface(html_path, &html, width as f32, Some(height), "") {
+        Ok(surface) => surface,
+        Err(error) => {
+            eprintln!("amazing render-wpt: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(error) = surface.save_ppm(out_path) {
+        eprintln!("amazing render-wpt: cannot write {out_path}: {error}");
+        return ExitCode::FAILURE;
+    }
+    println!("rendered fixed viewport {width}x{height} px → {out_path}");
+    ExitCode::SUCCESS
+}
+
+fn render_surface(
+    html_path: &str,
+    html: &str,
+    width: f32,
+    fixed_height: Option<u32>,
+    extra_css: &str,
+) -> Result<amazing_paint::Surface, String> {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse(html),
+    }));
+    execute_inline_scripts(&host, html_path)?;
+
+    let mut css = String::new();
+    let dom = host.borrow();
+    collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut css)?;
+    css.push_str(extra_css);
+
+    let fonts = amazing_layout::font::FontSource::fallback();
+    let media = load_page_media(&dom.dom, html_path);
+    for warning in &media.warnings {
+        eprintln!("amazing render: {warning}");
+    }
+    let root =
+        amazing_layout::layout_dom_document_with_replaced(&dom.dom, &css, width, &fonts, &media);
+    let page_height = fixed_height.unwrap_or_else(|| {
+        // Normal document rendering follows content height; WPT rendering
+        // supplies a fixed viewport instead.
+        (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
+            .ceil()
+            .clamp(1.0, 8192.0) as u32
+    });
+    Ok(amazing_paint::paint_document_with_resources(
+        &root,
+        width.max(1.0) as u32,
+        page_height,
+        &fonts,
+        &amazing_paint::RectInkProvider,
+        &media,
+    ))
 }
 
 /// Phase 5 demo: `amazing fetch <url|file|path> [-i]`. Performs an HTTP/1.1
