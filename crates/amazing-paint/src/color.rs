@@ -122,7 +122,7 @@ fn parse_rgb_args(inner: &str) -> Option<[u8; 4]> {
         }
         let parts: Vec<&str> = inner.split(',').map(str::trim).collect();
         let (r, g, b) = (
-            parse_channel(parts.get(0)?),
+            parse_channel(parts.first()?),
             parse_channel(parts.get(1)?),
             parse_channel(parts.get(2)?),
         );

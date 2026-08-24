@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "runs": [
+    {
+      "engine": "Blink",
+      "browser": "chrome",
+      "browser_version": "154.0.8016.0",
+      "wpt_fyi_run_id": 5182906107691008
+    },
+    {
+      "engine": "WebKit",
+      "browser": "safari",
+      "browser_version": "26.6 (21624.4.5.11.5)",
+      "wpt_fyi_run_id": 5141363439173632
+    }
+  ],
+  "tests": [
+    { "id": "negative-margin-shrinking-container-001", "blink": "pass", "webkit": "pass" },
+    { "id": "negative-margin-shrinking-container-002", "blink": "pass", "webkit": "pass" },
+    { "id": "collapse-through-zero-height-block", "blink": "pass", "webkit": "pass" },
+    { "id": "collapse-through-percentage-height-block", "blink": "pass", "webkit": "pass" },
+    { "id": "margin-collapse-min-height-001", "blink": "pass", "webkit": "fail" },
+    { "id": "margin-collapse-min-height-002", "blink": "pass", "webkit": "fail" },
+    { "id": "margin-collapse-min-height-003", "blink": "pass", "webkit": "pass" },
+    { "id": "min-height-separates-margin", "blink": "pass", "webkit": "fail" },
+    { "id": "max-height-separates-margin", "blink": "pass", "webkit": "fail" }
+  ],
+  "consensus_pass": 5
+}

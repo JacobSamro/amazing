@@ -1,0 +1,262 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "schema": 1,
+  "selection": {
+    "kind": "sha256-path-stratified",
+    "per_category": 12
+  },
+  "sparse_paths": [
+    "css/CSS2",
+    "css/css-box",
+    "css/css-display",
+    "css/css-inline",
+    "css/css-position",
+    "css/css-sizing"
+  ],
+  "tests": [
+    {
+      "id": "CSS2__floats__float-nowrap-3.html",
+      "test": "css/CSS2/floats/float-nowrap-3.html"
+    },
+    {
+      "id": "CSS2__floats__float-table-align-left-quirk.html",
+      "test": "css/CSS2/floats/float-table-align-left-quirk.html"
+    },
+    {
+      "id": "CSS2__text__bidi-span-001.html",
+      "test": "css/CSS2/text/bidi-span-001.html"
+    },
+    {
+      "id": "CSS2__floats__float-nowrap-4.html",
+      "test": "css/CSS2/floats/float-nowrap-4.html"
+    },
+    {
+      "id": "CSS2__linebox__line-height-oof-descendants-001.html",
+      "test": "css/CSS2/linebox/line-height-oof-descendants-001.html"
+    },
+    {
+      "id": "CSS2__normal-flow__margin-collapse-min-height-002.html",
+      "test": "css/CSS2/normal-flow/margin-collapse-min-height-002.html"
+    },
+    {
+      "id": "CSS2__normal-flow__margin-collapse-min-height-001.html",
+      "test": "css/CSS2/normal-flow/margin-collapse-min-height-001.html"
+    },
+    {
+      "id": "CSS2__css21-errata__s-11-1-1b-009.html",
+      "test": "css/CSS2/css21-errata/s-11-1-1b-009.html"
+    },
+    {
+      "id": "CSS2__linebox__vertical-align-nested-top-001.html",
+      "test": "css/CSS2/linebox/vertical-align-nested-top-001.html"
+    },
+    {
+      "id": "CSS2__normal-flow__block-in-inline-align-justify-001.html",
+      "test": "css/CSS2/normal-flow/block-in-inline-align-justify-001.html"
+    },
+    {
+      "id": "CSS2__linebox__split-inline-borders.html",
+      "test": "css/CSS2/linebox/split-inline-borders.html"
+    },
+    {
+      "id": "CSS2__floats__float-nowrap-3-ref.html",
+      "test": "css/CSS2/floats/float-nowrap-3-ref.html"
+    },
+    {
+      "id": "css-box__margin-trim__flex-inline-end-trimmed-only.html",
+      "test": "css/css-box/margin-trim/flex-inline-end-trimmed-only.html"
+    },
+    {
+      "id": "css-box__margin-trim__block-container-non-adjoining-item.html",
+      "test": "css/css-box/margin-trim/block-container-non-adjoining-item.html"
+    },
+    {
+      "id": "css-box__margin-trim__flex-block-end-trimmed-only.html",
+      "test": "css/css-box/margin-trim/flex-block-end-trimmed-only.html"
+    },
+    {
+      "id": "css-box__margin-trim__grid-block-end.html",
+      "test": "css/css-box/margin-trim/grid-block-end.html"
+    },
+    {
+      "id": "css-box__margin-trim__flex-inline-trimmed-only.html",
+      "test": "css/css-box/margin-trim/flex-inline-trimmed-only.html"
+    },
+    {
+      "id": "css-box__margin-trim__block-container-block-end-collapsed-margins.html",
+      "test": "css/css-box/margin-trim/block-container-block-end-collapsed-margins.html"
+    },
+    {
+      "id": "css-box__margin-trim__block-container-block-start-self-collapsing-item-larger-block-start.html",
+      "test": "css/css-box/margin-trim/block-container-block-start-self-collapsing-item-larger-block-start.html"
+    },
+    {
+      "id": "css-box__margin-trim__block-container-block-start-self-collapsing-item-has-larger-block-end.html",
+      "test": "css/css-box/margin-trim/block-container-block-start-self-collapsing-item-has-larger-block-end.html"
+    },
+    {
+      "id": "css-box__margin-trim__flex-block-trimmed-only.html",
+      "test": "css/css-box/margin-trim/flex-block-trimmed-only.html"
+    },
+    {
+      "id": "css-box__margin-trim__flex-trim-all-margins.html",
+      "test": "css/css-box/margin-trim/flex-trim-all-margins.html"
+    },
+    {
+      "id": "css-box__margin-trim__flex-column-inline-multiline.html",
+      "test": "css/css-box/margin-trim/flex-column-inline-multiline.html"
+    },
+    {
+      "id": "css-box__margin-trim__flex-row-block-multiline.html",
+      "test": "css/css-box/margin-trim/flex-row-block-multiline.html"
+    },
+    {
+      "id": "css-display__display-contents-text-inherit.html",
+      "test": "css/css-display/display-contents-text-inherit.html"
+    },
+    {
+      "id": "css-display__display-contents-sharing-001.html",
+      "test": "css/css-display/display-contents-sharing-001.html"
+    },
+    {
+      "id": "css-display__display-contents-fieldset-nested-legend.html",
+      "test": "css/css-display/display-contents-fieldset-nested-legend.html"
+    },
+    {
+      "id": "css-display__display-contents-button.html",
+      "test": "css/css-display/display-contents-button.html"
+    },
+    {
+      "id": "css-display__display-flow-root-list-item-001.html",
+      "test": "css/css-display/display-flow-root-list-item-001.html"
+    },
+    {
+      "id": "css-display__display-contents-block-002.html",
+      "test": "css/css-display/display-contents-block-002.html"
+    },
+    {
+      "id": "css-display__display-contents-before-after-002.html",
+      "test": "css/css-display/display-contents-before-after-002.html"
+    },
+    {
+      "id": "css-display__display-contents-oof-002.html",
+      "test": "css/css-display/display-contents-oof-002.html"
+    },
+    {
+      "id": "css-display__display-contents-before-after-001.html",
+      "test": "css/css-display/display-contents-before-after-001.html"
+    },
+    {
+      "id": "css-display__display-contents-alignment-002.html",
+      "test": "css/css-display/display-contents-alignment-002.html"
+    },
+    {
+      "id": "css-display__display-contents-td-001.html",
+      "test": "css/css-display/display-contents-td-001.html"
+    },
+    {
+      "id": "css-display__display-contents-first-letter-002.html",
+      "test": "css/css-display/display-contents-first-letter-002.html"
+    },
+    {
+      "id": "css-inline__empty-span-size-002.html",
+      "test": "css/css-inline/empty-span-size-002.html"
+    },
+    {
+      "id": "css-position__position-absolute-semi-replaced-stretch-button.html",
+      "test": "css/css-position/position-absolute-semi-replaced-stretch-button.html"
+    },
+    {
+      "id": "css-position__position-relative-table-tr-top.html",
+      "test": "css/css-position/position-relative-table-tr-top.html"
+    },
+    {
+      "id": "css-position__position-relative-table-caption.html",
+      "test": "css/css-position/position-relative-table-caption.html"
+    },
+    {
+      "id": "css-position__position-fixed-overflow-print.html",
+      "test": "css/css-position/position-fixed-overflow-print.html"
+    },
+    {
+      "id": "css-position__position-absolute-root-element-flex.html",
+      "test": "css/css-position/position-absolute-root-element-flex.html"
+    },
+    {
+      "id": "css-position__position-fixed-root-element-grid.html",
+      "test": "css/css-position/position-fixed-root-element-grid.html"
+    },
+    {
+      "id": "css-position__position-relative-table-thead-left-absolute-child.html",
+      "test": "css/css-position/position-relative-table-thead-left-absolute-child.html"
+    },
+    {
+      "id": "css-position__position-relative-table-tr-left.html",
+      "test": "css/css-position/position-relative-table-tr-left.html"
+    },
+    {
+      "id": "css-position__position-absolute-large-negative-inset.html",
+      "test": "css/css-position/position-absolute-large-negative-inset.html"
+    },
+    {
+      "id": "css-position__position-relative-table-tfoot-left-absolute-child.html",
+      "test": "css/css-position/position-relative-table-tfoot-left-absolute-child.html"
+    },
+    {
+      "id": "css-position__position-relative-table-tfoot-top.html",
+      "test": "css/css-position/position-relative-table-tfoot-top.html"
+    },
+    {
+      "id": "css-position__sticky__position-sticky-rtl.html",
+      "test": "css/css-position/sticky/position-sticky-rtl.html"
+    },
+    {
+      "id": "css-sizing__slice-nowrap-intrinsic-size.html",
+      "test": "css/css-sizing/slice-nowrap-intrinsic-size.html"
+    },
+    {
+      "id": "css-sizing__div-max-content-auto-margin-top.tentative.html",
+      "test": "css/css-sizing/div-max-content-auto-margin-top.tentative.html"
+    },
+    {
+      "id": "css-sizing__auto-scrollbar-inside-stf-abspos.html",
+      "test": "css/css-sizing/auto-scrollbar-inside-stf-abspos.html"
+    },
+    {
+      "id": "css-sizing__intrinsic-percent-non-replaced-004.html",
+      "test": "css/css-sizing/intrinsic-percent-non-replaced-004.html"
+    },
+    {
+      "id": "css-sizing__clone-intrinsic-size.html",
+      "test": "css/css-sizing/clone-intrinsic-size.html"
+    },
+    {
+      "id": "css-sizing__contain-intrinsic-size__contain-intrinsic-size-022.html",
+      "test": "css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-022.html"
+    },
+    {
+      "id": "css-sizing__div-min-content-auto-margin-bottom.tentative.html",
+      "test": "css/css-sizing/div-min-content-auto-margin-bottom.tentative.html"
+    },
+    {
+      "id": "css-sizing__intrinsic-height-abspos-stretch-percentage-child.html",
+      "test": "css/css-sizing/intrinsic-height-abspos-stretch-percentage-child.html"
+    },
+    {
+      "id": "css-sizing__border-box-and-max-content-001.html",
+      "test": "css/css-sizing/border-box-and-max-content-001.html"
+    },
+    {
+      "id": "css-sizing__contain-intrinsic-size__contain-intrinsic-size-024.html",
+      "test": "css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-024.html"
+    },
+    {
+      "id": "css-sizing__div-fit-content-block-size.tentative.html",
+      "test": "css/css-sizing/div-fit-content-block-size.tentative.html"
+    },
+    {
+      "id": "css-sizing__contain-intrinsic-size__contain-intrinsic-size-005.html",
+      "test": "css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-005.html"
+    }
+  ]
+}

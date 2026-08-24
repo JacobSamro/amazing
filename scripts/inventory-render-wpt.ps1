@@ -10,6 +10,7 @@ param(
         "css-fonts",
         "css-variables"
     ),
+    [string]$CategoryCsv = "",
     [int]$PerCategory = 12,
     [string]$InventoryPath = "",
     [string]$ManifestPath = "",
@@ -20,6 +21,9 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+if ($CategoryCsv) {
+    $Categories = @($CategoryCsv.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
 if (-not $WptRoot) { $WptRoot = Join-Path $repositoryRoot "target\wpt" }
 if (-not $InventoryPath) { $InventoryPath = Join-Path $repositoryRoot "target\wpt-cascade-inventory.json" }
 if (-not $ManifestPath) { $ManifestPath = Join-Path $repositoryRoot "target\wpt-cascade-baseline.json" }
@@ -121,7 +125,7 @@ $categoryRows = New-Object Collections.Generic.List[object]
 $selectedTests = New-Object Collections.Generic.List[object]
 
 foreach ($category in $Categories) {
-    if ($category -notmatch '^[a-z0-9-]+$') { throw "Invalid category: $category" }
+    if ($category -notmatch '^[A-Za-z0-9-]+$') { throw "Invalid category: $category" }
     $categoryRoot = Join-Path (Join-Path $WptRoot "css") $category
     if (-not (Test-Path -LiteralPath $categoryRoot -PathType Container)) {
         throw "Sparse checkout does not contain css/$category"
@@ -143,8 +147,16 @@ foreach ($category in $Categories) {
             continue
         }
         $reftestCount++
+        if (@(".xht", ".xhtml") -contains $file.Extension.ToLowerInvariant()) {
+            Add-Reason $reasons "xml-parser-mode"
+            continue
+        }
         if (-not (Test-Path -LiteralPath $link.reference_path -PathType Leaf)) {
             Add-Reason $reasons "missing-reference"
+            continue
+        }
+        if (@(".xht", ".xhtml") -contains [IO.Path]::GetExtension($link.reference_path).ToLowerInvariant()) {
+            Add-Reason $reasons "xml-reference-mode"
             continue
         }
         $referenceSource = Get-Content -LiteralPath $link.reference_path -Raw
@@ -193,7 +205,7 @@ foreach ($category in $Categories) {
 $inventory = [ordered]@{
     schema = 1
     wpt_revision = $Revision
-    selection_policy = "For each category, SHA-256 rank the normalized path of every local-reference, script-free, flag-free, resource-free reftest; select the lowest hashes."
+    selection_policy = "For each category, SHA-256 rank the normalized path of every HTML-parser-compatible, local-reference, script-free, flag-free, resource-free reftest; select the lowest hashes."
     per_category = $PerCategory
     categories = $categoryRows
 }

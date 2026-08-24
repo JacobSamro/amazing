@@ -10,6 +10,12 @@ post-change evidence are recorded in `tests/wpt-render/computed-values-results.j
 and `tests/wpt-render/cascade-results-ticket2a.json`; the original measurements
 below remain unchanged for before/after auditability.
 
+Ticket #3 later proved that 13 selected tests or references are XHTML/XML and
+had been parsed incorrectly as HTML. Those historical pixel classifications
+are superseded by `tests/wpt-render/cascade-results-xhtml-safe.json`: corrected
+baseline 23 pass / 36 mismatch / 13 unsupported, corrected post-#2a 35/24/13,
+and current 33/26/13. The Variables 0/12 → 12/12 result is unaffected.
+
 ## Method
 
 `scripts/inventory-render-wpt.ps1` recursively inventories CSS Syntax,

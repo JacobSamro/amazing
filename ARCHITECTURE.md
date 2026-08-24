@@ -85,6 +85,18 @@ string substitution. Normal values remain string-backed until their individual
 typed grammars land, but substitution preserves token boundaries so it cannot
 manufacture a different token during reparse.
 
+### 4b. Flow geometry returns collapsed state; paint carries clips
+
+Block stacking keeps one signed adjoining-margin accumulator and returns both
+its content end and trailing collapsed margin. The owning block—not its
+children—decides whether that margin escapes, is trapped by a min/max-height
+constraint, or contributes inside a new formatting context. This keeps
+negative margins and collapse-through empty blocks behind `layout_root`.
+Raster traversal separately carries an intersected clip rectangle; a box paints
+its own border/background under the inherited clip, then non-visible overflow
+clips all descendant backgrounds, borders, glyphs, and images to its padding
+box. Layout does not mutate pixels, and paint does not reconstruct flow state.
+
 ### 5. unsafe policy
 
 No first-party `unsafe` outside platform-boundary modules (windowing FFI,

@@ -17,6 +17,8 @@ and timeout parameters. It reads each test's upstream `rel=match` or
 exact or upstream `meta name=fuzzy` pixel limits, and writes PPM
 actual/reference/diff images plus a JSON report. A manifest's `expected` field
 validates the harness smoke outcome; it cannot change the upstream assertion.
+`.xht`/`.xhtml` tests and references are classified `unsupported`: WPT serves
+them as XML, and Amazing does not yet have an XHTML parser mode.
 
 `-SkipFetch` requires `WptRoot` already to be at the manifest revision.
 `-SkipBuild` uses the selected existing executable.
@@ -43,3 +45,18 @@ Cascade+Variables projection of the baseline. `computed-values-results.json`
 records its repeat-stable 4/24 → 16/24 result; the Variables half moved from
 0/12 to 12/12. `cascade-results-ticket2a.json` records the full-corpus
 30/72 → 43/72 measurement without overwriting the original baseline.
+
+Ticket #3 corrects those historical totals in
+`cascade-results-xhtml-safe.json`, then adds an HTML-only geometry inventory:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\inventory-render-wpt.ps1 `
+  -CategoryCsv CSS2,css-box,css-display,css-inline,css-position,css-sizing `
+  -InventoryPath target\wpt-geometry-inventory.json `
+  -ManifestPath target\wpt-geometry-manifest.json
+```
+
+The committed `geometry-*` files preserve its 61-case broad diagnostic. The
+nine-case `block-collapse-manifest.json` is the ticket gate;
+`block-collapse-results.json` records 6/9 → 9/9 repeat-stable evidence and
+`block-collapse-oracles.json` records exact-revision Blink/WebKit outcomes.

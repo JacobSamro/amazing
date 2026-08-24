@@ -18,6 +18,8 @@
 //!   baseline; fragment color is the containing block's `color`
 //! - everything clips to the viewport surface (`Surface::fill_rect`
 //!   saturating-cast clipping; glyphs clip per pixel)
+//! - non-`visible` overflow clips descendant backgrounds, borders, text, and
+//!   images to the ancestor padding box, with nested clip intersection
 //! - flex children paint in flow order exactly like block children
 //!
 //! # Deferred / deviations
@@ -25,8 +27,7 @@
 //! - ALL border styles (dashed/dotted/double/groove/…) render as SOLID —
 //!   deliberate Phase 4 simplification.
 //! - No border-radius, no box shadows, no list markers, no opacity, no
-//!   stacking contexts/z-index reordering,
-//!   no overflow clipping beyond the viewport.
+//!   stacking contexts/z-index reordering.
 //! - Word-level color differences inside one line are not tracked by the
 //!   layout tree (`WordFrag` carries no style), so all words of a line
 //!   use the container's color.
@@ -39,12 +40,49 @@ use amazing_layout::{Flow, LayoutBox};
 
 use crate::color::parse_css_color;
 use crate::surface::Surface;
-use crate::text::{draw_fragment, GlyphProvider, RectInkProvider};
+use crate::text::{draw_fragment_clipped, GlyphProvider, RectInkProvider};
 
 const CANVAS_WHITE: [u8; 4] = [255, 255, 255, 255];
 /// Used when the `color` property exists but does not parse: the CSS
 /// initial value of `color` is black.
 const FALLBACK_TEXT_COLOR: [u8; 4] = [0, 0, 0, 255];
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ClipRect {
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+}
+
+impl ClipRect {
+    fn viewport(surface: &Surface) -> Self {
+        Self {
+            x0: 0.0,
+            y0: 0.0,
+            x1: surface.width as f32,
+            y1: surface.height as f32,
+        }
+    }
+
+    fn intersect(self, x: f32, y: f32, width: f32, height: f32) -> Self {
+        Self {
+            x0: self.x0.max(x),
+            y0: self.y0.max(y),
+            x1: self.x1.min(x + width),
+            y1: self.y1.min(y + height),
+        }
+    }
+
+    fn pixels(self) -> [i64; 4] {
+        [
+            self.x0.round() as i64,
+            self.y0.round() as i64,
+            self.x1.round() as i64,
+            self.y1.round() as i64,
+        ]
+    }
+}
 
 /// Seam through which the painter obtains decoded pixels for replaced nodes.
 pub trait ImageProvider {
@@ -101,7 +139,8 @@ pub fn paint_document_with_resources(
 ) -> Surface {
     let mut surface = Surface::new(viewport_w, viewport_h);
     surface.clear(CANVAS_WHITE);
-    paint_box(&mut surface, root, fonts, glyphs, images);
+    let clip = ClipRect::viewport(&surface);
+    paint_box(&mut surface, root, fonts, glyphs, images, clip);
     surface
 }
 
@@ -111,26 +150,72 @@ fn paint_box(
     fonts: &FontSource,
     glyphs: &dyn GlyphProvider,
     images: &dyn ImageProvider,
+    clip: ClipRect,
 ) {
     let text_color = resolve_text_color(&box_.style);
-    paint_background(surface, box_, text_color);
-    paint_borders(surface, box_, text_color);
+    paint_background(surface, box_, text_color, clip);
+    paint_borders(surface, box_, text_color, clip);
     if box_.replaced_size.is_some() {
         if let Some(image) = box_.node.and_then(|node| images.image(node)) {
-            paint_image(surface, &box_.content_box, image);
+            paint_image(surface, &box_.content_box, image, clip);
         }
     }
-    paint_lines(surface, box_, text_color, fonts, glyphs, images);
+    let descendant_clip = overflow_clip(box_, clip);
+    paint_lines(
+        surface,
+        box_,
+        text_color,
+        fonts,
+        glyphs,
+        images,
+        descendant_clip,
+    );
 
     // Children come AFTER this box's own painting (painter's algorithm).
     match &box_.flow {
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for child in children {
-                paint_box(surface, child, fonts, glyphs, images);
+                paint_box(surface, child, fonts, glyphs, images, descendant_clip);
             }
         },
         Flow::Inlines(_) | Flow::Empty => {},
     }
+}
+
+fn overflow_clip(box_: &LayoutBox, inherited: ClipRect) -> ClipRect {
+    let clips = box_
+        .style
+        .get("overflow")
+        .is_some_and(|value| !value.eq_ignore_ascii_case("visible"));
+    if !clips {
+        return inherited;
+    }
+    let content = box_.content_box;
+    inherited.intersect(
+        content.x - box_.padding.left,
+        content.y - box_.padding.top,
+        content.w + box_.padding.left + box_.padding.right,
+        content.h + box_.padding.top + box_.padding.bottom,
+    )
+}
+
+fn fill_rect_clipped(
+    surface: &mut Surface,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    color: [u8; 4],
+    clip: ClipRect,
+) {
+    let clipped = clip.intersect(x, y, width, height);
+    surface.fill_rect(
+        clipped.x0,
+        clipped.y0,
+        (clipped.x1 - clipped.x0).max(0.0),
+        (clipped.y1 - clipped.y0).max(0.0),
+        color,
+    );
 }
 
 /// The element's computed `color`, used both for ink and as the meaning of
@@ -158,19 +243,26 @@ fn resolve_color(style: &ComputedStyle, prop: &str, text_color: [u8; 4]) -> Opti
 
 /// Fills the padding box (content box grown by the resolved paddings).
 /// A transparent or unparseable background paints nothing.
-fn paint_background(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4]) {
+fn paint_background(
+    surface: &mut Surface,
+    b: &LayoutBox,
+    text_color: [u8; 4],
+    clip: ClipRect,
+) {
     let bg = match resolve_color(&b.style, "background-color", text_color) {
         Some(c) => c,
         None => return,
     };
     let cb = &b.content_box;
     let p = &b.padding;
-    surface.fill_rect(
+    fill_rect_clipped(
+        surface,
         cb.x - p.left,
         cb.y - p.top,
         cb.w + p.left + p.right,
         cb.h + p.top + p.bottom,
         bg,
+        clip,
     );
 }
 
@@ -178,7 +270,12 @@ fn paint_background(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4]) {
 /// width; left/right sit between them so corners are painted once.
 /// Sides whose style is none/hidden or whose resolved width is <= 0 are
 /// skipped defensively (layout already zeroes them).
-fn paint_borders(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4]) {
+fn paint_borders(
+    surface: &mut Surface,
+    b: &LayoutBox,
+    text_color: [u8; 4],
+    clip: ClipRect,
+) {
     let bb = &b.border_box;
 
     let width_of = |side: &str| -> f32 {
@@ -206,16 +303,40 @@ fn paint_borders(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4]) {
     let bl = width_of("left");
 
     if bt > 0.0 {
-        surface.fill_rect(bb.x, bb.y, bb.w, bt, color_of("top"));
+        fill_rect_clipped(surface, bb.x, bb.y, bb.w, bt, color_of("top"), clip);
     }
     if bbw > 0.0 {
-        surface.fill_rect(bb.x, bb.y + bb.h - bbw, bb.w, bbw, color_of("bottom"));
+        fill_rect_clipped(
+            surface,
+            bb.x,
+            bb.y + bb.h - bbw,
+            bb.w,
+            bbw,
+            color_of("bottom"),
+            clip,
+        );
     }
     if bl > 0.0 {
-        surface.fill_rect(bb.x, bb.y + bt, bl, bb.h - bt - bbw, color_of("left"));
+        fill_rect_clipped(
+            surface,
+            bb.x,
+            bb.y + bt,
+            bl,
+            bb.h - bt - bbw,
+            color_of("left"),
+            clip,
+        );
     }
     if br > 0.0 {
-        surface.fill_rect(bb.x + bb.w - br, bb.y + bt, br, bb.h - bt - bbw, color_of("right"));
+        fill_rect_clipped(
+            surface,
+            bb.x + bb.w - br,
+            bb.y + bt,
+            br,
+            bb.h - bt - bbw,
+            color_of("right"),
+            clip,
+        );
     }
 }
 
@@ -228,6 +349,7 @@ fn paint_lines(
     fonts: &FontSource,
     glyphs: &dyn GlyphProvider,
     images: &dyn ImageProvider,
+    clip: ClipRect,
 ) {
     for line in &b.lines {
         for replaced in &line.replaced {
@@ -241,11 +363,12 @@ fn paint_lines(
                         h: replaced.height,
                     },
                     image,
+                    clip,
                 );
             }
         }
         for w in &line.words {
-            draw_fragment(
+            draw_fragment_clipped(
                 surface,
                 w.x,
                 line.baseline,
@@ -254,13 +377,19 @@ fn paint_lines(
                 text_color,
                 fonts,
                 glyphs,
+                Some(clip.pixels()),
             );
         }
     }
 }
 
 /// Nearest-neighbor image scaling with clipped, source-over RGBA pixels.
-fn paint_image(surface: &mut Surface, rect: &amazing_layout::Rect, image: &amazing_media::Image) {
+fn paint_image(
+    surface: &mut Surface,
+    rect: &amazing_layout::Rect,
+    image: &amazing_media::Image,
+    clip: ClipRect,
+) {
     if image.width == 0 || image.height == 0 || rect.w <= 0.0 || rect.h <= 0.0 {
         return;
     }
@@ -271,10 +400,11 @@ fn paint_image(surface: &mut Surface, rect: &amazing_layout::Rect, image: &amazi
     if x1 <= x0 || y1 <= y0 {
         return;
     }
-    let clipped_x0 = x0.max(0).min(surface.width as i64);
-    let clipped_y0 = y0.max(0).min(surface.height as i64);
-    let clipped_x1 = x1.max(0).min(surface.width as i64);
-    let clipped_y1 = y1.max(0).min(surface.height as i64);
+    let pixel_clip = clip.pixels();
+    let clipped_x0 = x0.max(0).max(pixel_clip[0]).min(surface.width as i64);
+    let clipped_y0 = y0.max(0).max(pixel_clip[1]).min(surface.height as i64);
+    let clipped_x1 = x1.max(0).min(pixel_clip[2]).min(surface.width as i64);
+    let clipped_y1 = y1.max(0).min(pixel_clip[3]).min(surface.height as i64);
     for y in clipped_y0..clipped_y1 {
         let source_y = (((y - y0) as u64) * image.height as u64 / (y1 - y0) as u64)
             .min(image.height.saturating_sub(1) as u64) as u32;
@@ -380,6 +510,19 @@ mod tests {
         assert_eq!(surf.get_pixel(3, 2), Some([0, 0, 0, 255])); // top ink row
         assert_eq!(surf.get_pixel(3, 1), Some([255, 0, 0, 255])); // red above ink
         assert_eq!(surf.get_pixel(3, 9), Some([255, 0, 0, 255])); // red below baseline
+    }
+
+    #[test]
+    fn overflow_hidden_clips_descendant_background_to_padding_box() {
+        let mut parent = block(&[("overflow", "hidden")], 0.0, 0.0, 10.0, 10.0);
+        let child = block(&[("background-color", "red")], 0.0, 8.0, 10.0, 10.0);
+        parent.flow = Flow::Blocks(vec![child]);
+
+        let surface = paint_document(&parent, 10, 20, &FontSource::fallback());
+        assert_eq!(surface.get_pixel(5, 8), Some([255, 0, 0, 255]));
+        assert_eq!(surface.get_pixel(5, 9), Some([255, 0, 0, 255]));
+        assert_eq!(surface.get_pixel(5, 10), Some(WHITE));
+        assert_eq!(surface.get_pixel(5, 17), Some(WHITE));
     }
 
     struct OneImage {

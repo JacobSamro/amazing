@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "ticket-3-html-block-margin-collapse-family"
+  },
+  "sparse_paths": [
+    "css/CSS2",
+    "css/reference"
+  ],
+  "tests": [
+    {
+      "id": "negative-margin-shrinking-container-001",
+      "test": "css/CSS2/normal-flow/negative-margin-shrinking-container-size-001.html"
+    },
+    {
+      "id": "negative-margin-shrinking-container-002",
+      "test": "css/CSS2/normal-flow/negative-margin-shrinking-container-size-002.html"
+    },
+    {
+      "id": "collapse-through-zero-height-block",
+      "test": "css/CSS2/normal-flow/margin-collapse-through-zero-height-block.html"
+    },
+    {
+      "id": "collapse-through-percentage-height-block",
+      "test": "css/CSS2/normal-flow/margin-collapse-through-percentage-height-block.html"
+    },
+    {
+      "id": "margin-collapse-min-height-001",
+      "test": "css/CSS2/normal-flow/margin-collapse-min-height-001.html"
+    },
+    {
+      "id": "margin-collapse-min-height-002",
+      "test": "css/CSS2/normal-flow/margin-collapse-min-height-002.html"
+    },
+    {
+      "id": "margin-collapse-min-height-003",
+      "test": "css/CSS2/normal-flow/margin-collapse-min-height-003.html"
+    },
+    {
+      "id": "min-height-separates-margin",
+      "test": "css/CSS2/normal-flow/min-height-separates-margin.html"
+    },
+    {
+      "id": "max-height-separates-margin",
+      "test": "css/CSS2/normal-flow/max-height-separates-margin.html"
+    }
+  ]
+}

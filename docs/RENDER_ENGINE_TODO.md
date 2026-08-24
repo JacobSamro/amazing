@@ -4,7 +4,7 @@ Canonical sequence for moving Amazing's style → layout → paint pipeline towa
 standards conformance. Resolve one ticket, verify its exit criteria on
 `win-001`, record measured results, then stop at the phase boundary for review.
 
-Frontier: **#3 — block, inline, sizing, and positioning convergence**
+Frontier: **#3a — positioned and out-of-flow layout**
 
 ## Evidence contract (resolved)
 
@@ -23,13 +23,15 @@ Frontier: **#3 — block, inline, sizing, and positioning convergence**
 
 - Automated, unmodified upstream WPT render smoke cases: **2** at revision
   `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` (**1 pass, 1 mismatch**).
-- Deterministic cascade/value baseline: **72 cases** at the same revision
-  initially **30 pass / 42 mismatch**, now **43 pass / 29 mismatch** after #2a.
+- XHTML-safe cascade/value corpus: **33 pass / 26 mismatch / 13 unsupported**
+  at the same revision (corrected baseline **23/36/13**).
 - Variables shard: **12/12 pass** (baseline 0/12), matching the exact-revision
-  Blink/WebKit consensus; the 24-case computed-value shard is **16/24**.
+  Blink/WebKit consensus.
+- HTML-only geometry corpus: **35 pass / 26 mismatch**; focused signed-margin,
+  min/max-height, and collapse-through family: **9/9** (baseline 6/9).
 - Existing curated CSS2 geometry subset: **17/17**.
-- Existing feature regressions: **13 flex**, **16 grid**, **74 layout unit
-  tests**, and **51 paint unit tests**.
+- Existing feature regressions: **13 flex**, **16 grid**, **80 layout unit
+  tests**, and **52 paint unit tests**.
 - These numbers establish regression coverage only; they do not establish
   compatibility with Blink, WebKit, or the broader web platform.
 
@@ -99,8 +101,8 @@ At the #2 baseline, the largest coherent cluster was the absent
 specified-to-computed-value stage:
 Variables is 0/12 versus Blink/WebKit 12/12, and Cascade is 4/12 with failures
 centered on CSS-wide keywords, `all`, layers, and scope. That baseline code lowercased
-case-sensitive custom-property names, retains raw specified strings, skips all
-at-rules, and cannot substitute `var()` or represent invalid-at-computed-value
+case-sensitive custom-property names, retained raw specified strings, skipped all
+at-rules, and could not substitute `var()` or represent invalid-at-computed-value
 time. Full methodology, category tables, oracle runs, caveats, and links to
 generated evidence are in `docs/render/CASCADE_BASELINE.md`.
 
@@ -144,20 +146,22 @@ Static variable-bearing `@supports` conditions cross the same syntax rules.
 
 On `win-001`, CSS tests increased from 34 to 52 and the full workspace passed.
 The pinned Variables shard moved from 0/12 to 12/12; two identical 24-case
-runs measured 16 pass / 8 mismatch (baseline 4/20) with stable projection hash
-`ea1a1c7b…a053b`. The full 72-case corpus moved from 30/42 to 43/29. The one
+runs measured 16 pass / 8 mismatch under the original harness. Ticket #3 found
+13 XHTML tests/references that require an unimplemented XML parser mode; the
+corrected 24-case projection is 14 pass / 6 mismatch / 4 unsupported (baseline
+3/17/4), while the genuine Variables result is unchanged. The one
 former `:scope` false pass now exposes its real selector gap; two other green
 changes remain uncredited because they are downstream-inert. Remaining
 computed-shard mismatches require layers/revert, scope, inline-fragment color,
 bidi, positioning, or inline-block. Evidence lives in
 `tests/wpt-render/computed-values-results.json` and
-`tests/wpt-render/cascade-results-ticket2a.json`.
+`tests/wpt-render/cascade-results-xhtml-safe.json`.
 
 ## #3: Block, inline, sizing, and positioning convergence
 
 Blocked by: #2a
 Type: Prototype
-Status: ⬜ Pending
+Status: ✅ Resolved
 
 ### Question
 
@@ -166,13 +170,60 @@ CSS2/CSS Sizing WPT cluster without encoding test-specific behavior?
 
 ### Answer
 
-Pending. #2a removed custom-property/defaulting noise; the next baseline must
-select a coherent CSS2/Sizing geometry cluster and reject downstream-inert
-pixel passes.
+The deterministic HTML-only inventory scanned 13,655 documents across CSS2,
+Box, Display, Inline, Position, and Sizing and selected 61 executable static
+reftests. It also fixed the harness to classify `.xht`/`.xhtml` tests or
+references as unsupported instead of parsing XML as HTML. The broad corpus is
+35 pass / 26 mismatch; one former inert inline-table pass now exposes a real
+unsupported feature.
+
+The first coherent algorithmic family is vertical margin collapse: nine HTML
+reftests covering mixed-sign margins, negative auto-height shrinkage, trailing
+margins inside BFCs, empty-block collapse-through, and min/max-height
+separation. A throwaway logic prototype validated a signed positive/negative
+accumulator and trailing-margin result, then was deleted after absorption.
+`stack_blocks` now returns both content extent and collapsed trailing state;
+the parent decides whether it escapes, is trapped by a size constraint, or
+contributes inside a BFC. Six interface-level tests raise layout to 80 tests.
+
+The family moved from 6/9 to 9/9 and is repeat-hash stable; all five
+Blink/WebKit-consensus cases pass. The last failure required inherited
+padding-box overflow clips through backgrounds, borders, glyphs, and images,
+raising paint to 52 tests. Full methodology and evidence are in
+`docs/render/GEOMETRY_BASELINE.md` and
+`tests/wpt-render/block-collapse-results.json`.
+
+## #3a: Positioned and out-of-flow layout
+
+Blocked by: #3
+Type: Prototype
+Status: ⬜ Pending
+
+### Question
+
+What deep layout interface can remove absolute/fixed boxes from normal flow,
+retain their static position, select the correct containing block, solve
+insets/auto sizes and margins, apply relative offsets without moving siblings,
+and place fixed descendants against the viewport?
+
+### Exit criteria
+
+- Absolute/fixed descendants do not contribute to normal-flow size or flex/grid
+  item placement; relative boxes retain their original flow slot.
+- Containing-block selection and top/right/bottom/left resolution cover fixed,
+  auto, percentage, negative, and over-constrained values in both directions.
+- Interface-level tests cover block, inline, flex, and grid parents plus nested
+  positioned ancestors.
+- A pinned HTML-only upstream Position shard improves with no regression in the
+  nine-case block-collapse family or full workspace.
+
+### Answer
+
+Pending.
 
 ## #4: Standards-grade text pipeline
 
-Blocked by: #1, #3
+Blocked by: #1, #3a
 Type: Research
 Status: 🌫️ Fog
 

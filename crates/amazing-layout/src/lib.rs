@@ -9,7 +9,8 @@
 //! Phase 3 subset — implemented:
 //! - block formatting context: vertical stacking, auto widths (fill the
 //!   containing block), §10.3.3 constraint with `auto`-margin centering,
-//!   specified/auto heights, adjacent-sibling margin collapsing (max rule)
+//!   specified/auto/min/max heights; signed adjoining-margin collapse,
+//!   collapse-through empty blocks, and BFC trailing-margin containment
 //! - inline formatting context: greedy word wrapping, `<br>` breaks,
 //!   half-leading line boxes, per-word effective font sizes (nested spans
 //!   flattened into the parent's line boxes), and baseline-aligned replaced
@@ -25,15 +26,15 @@
 //!
 //! Deferred/deviations (documented, revisit in later phases):
 //! - floats, absolute/fixed positioning, z-index: not implemented
-//! - parent/child margin collapsing is approximated: a first child's
+//! - parent/child margin propagation is approximated: a first child's
 //!   margin-top shrinks against the parent's margin-top by
 //!   `max(0, child − parent)` inside the parent (the collapsed excess does
-//!   not propagate above the parent's border edge); sibling collapsing is
-//!   exact
+//!   not propagate above the parent's border edge); sibling signed collapse
+//!   and direct empty-block collapse-through are modeled
 //! - inline-block/inline-table are flattened like inline elements;
 //!   `list-item` renders as block without markers
-//! - no min/max-width clamping, no `box-sizing` (content-box always), no
-//!   text-align beyond left
+//! - no min/max-width clamping or intrinsic width keywords, no `box-sizing`
+//!   (content-box always), no text-align beyond left
 //! - text-only line boxes use the block's strut (font + line-height);
 //!   replaced images grow the line while per-text-fragment line-height
 //!   differences still do not

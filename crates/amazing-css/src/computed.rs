@@ -142,6 +142,10 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "margin-left", initial: "0", inherited: false },
     PropertyMetadata { name: "margin-right", initial: "0", inherited: false },
     PropertyMetadata { name: "margin-top", initial: "0", inherited: false },
+    PropertyMetadata { name: "max-height", initial: "none", inherited: false },
+    PropertyMetadata { name: "max-width", initial: "none", inherited: false },
+    PropertyMetadata { name: "min-height", initial: "0", inherited: false },
+    PropertyMetadata { name: "min-width", initial: "0", inherited: false },
     PropertyMetadata { name: "opacity", initial: "1", inherited: false },
     PropertyMetadata { name: "order", initial: "0", inherited: false },
     PropertyMetadata { name: "orphans", initial: "2", inherited: true },
@@ -225,6 +229,14 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             }
             expanded
         },
+        "background" if parts.len() == 1 => vec![(
+            "background-color".to_owned(),
+            if parts[0].eq_ignore_ascii_case("none") {
+                "transparent".to_owned()
+            } else {
+                parts[0].to_owned()
+            },
+        )],
         "gap" if !parts.is_empty() => {
             let row = parts[0];
             let column = parts.get(1).copied().unwrap_or(row);

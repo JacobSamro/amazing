@@ -314,6 +314,7 @@ fn rasterize_outline(
 /// per-character advances from `fonts`. Coordinates are rounded to whole
 /// pixels; every glyph is clipped to the surface. Non-finite coordinates
 /// are a silent no-op. Never panics.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_fragment(
     surface: &mut Surface,
     x: f32,
@@ -323,6 +324,31 @@ pub fn draw_fragment(
     color: [u8; 4],
     fonts: &FontSource,
     glyphs: &dyn GlyphProvider,
+) {
+    draw_fragment_clipped(
+        surface,
+        x,
+        baseline_y,
+        text,
+        font_size,
+        color,
+        fonts,
+        glyphs,
+        None,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_fragment_clipped(
+    surface: &mut Surface,
+    x: f32,
+    baseline_y: f32,
+    text: &str,
+    font_size: f32,
+    color: [u8; 4],
+    fonts: &FontSource,
+    glyphs: &dyn GlyphProvider,
+    clip: Option<[i64; 4]>,
 ) {
     if !x.is_finite() || !baseline_y.is_finite() || !font_size.is_finite() {
         return;
@@ -335,7 +361,7 @@ pub fn draw_fragment(
         if let Some(gb) = glyphs.rasterize(ch, font_size) {
             let gx = round_i64(pen_x + gb.bearing_x);
             let gy = round_i64(baseline_y - gb.bearing_y);
-            blit_glyph(surface, gx, gy, &gb, color);
+            blit_glyph(surface, gx, gy, &gb, color, clip);
         }
         pen_x += adv;
     }
@@ -348,20 +374,32 @@ fn round_i64(v: f32) -> i64 {
 /// Composites one glyph onto the surface: integer `src over dst`, treating
 /// the glyph's alpha as coverage and the destination as opaque (engine
 /// surfaces always start from an opaque canvas). Deterministic, no floats.
-fn blit_glyph(surface: &mut Surface, gx: i64, gy: i64, gb: &GlyphBitmap, color: [u8; 4]) {
+fn blit_glyph(
+    surface: &mut Surface,
+    gx: i64,
+    gy: i64,
+    gb: &GlyphBitmap,
+    color: [u8; 4],
+    clip: Option<[i64; 4]>,
+) {
     if gb.pixels.len() < gb.width * gb.height * 4 {
         return; // malformed provider output: skip rather than panic
     }
     let sw = surface.width as i64;
     let sh = surface.height as i64;
+    let clip = clip.unwrap_or([0, 0, sw, sh]);
+    let clip_x0 = clip[0].max(0).min(sw);
+    let clip_y0 = clip[1].max(0).min(sh);
+    let clip_x1 = clip[2].max(0).min(sw);
+    let clip_y1 = clip[3].max(0).min(sh);
     for row in 0..gb.height as i64 {
         let dy = gy + row;
-        if dy < 0 || dy >= sh {
+        if dy < clip_y0 || dy >= clip_y1 {
             continue;
         }
         for col in 0..gb.width as i64 {
             let dx = gx + col;
-            if dx < 0 || dx >= sw {
+            if dx < clip_x0 || dx >= clip_x1 {
                 continue;
             }
             let src = &gb.pixels[((row as usize) * gb.width + col as usize) * 4..][..4];

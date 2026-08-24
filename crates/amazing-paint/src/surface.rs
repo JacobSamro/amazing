@@ -177,7 +177,7 @@ impl Surface {
                 out.push(p[1]); // G
                 out.push(p[0]); // R
             }
-            out.extend(std::iter::repeat(0u8).take(pad));
+            out.extend(std::iter::repeat_n(0u8, pad));
         }
         out
     }

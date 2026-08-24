@@ -1,0 +1,182 @@
+{
+  "categories": [
+    {
+      "category": "CSS2",
+      "document_files": 11323,
+      "eligible_static_self_contained": 120,
+      "excluded": {
+        "css-resource": 12,
+        "embedded-resource": 6,
+        "external-stylesheet": 26,
+        "flagged-environment": 61,
+        "missing-reference": 100,
+        "not-reftest": 5054,
+        "remote-reference": 1,
+        "scripted": 24,
+        "xml-parser-mode": 5895,
+        "xml-reference-mode": 24
+      },
+      "reftests": 6268,
+      "selected": 12,
+      "selected_paths": [
+        "css/CSS2/floats/float-nowrap-3.html",
+        "css/CSS2/floats/float-table-align-left-quirk.html",
+        "css/CSS2/text/bidi-span-001.html",
+        "css/CSS2/floats/float-nowrap-4.html",
+        "css/CSS2/linebox/line-height-oof-descendants-001.html",
+        "css/CSS2/normal-flow/margin-collapse-min-height-002.html",
+        "css/CSS2/normal-flow/margin-collapse-min-height-001.html",
+        "css/CSS2/css21-errata/s-11-1-1b-009.html",
+        "css/CSS2/linebox/vertical-align-nested-top-001.html",
+        "css/CSS2/normal-flow/block-in-inline-align-justify-001.html",
+        "css/CSS2/linebox/split-inline-borders.html",
+        "css/CSS2/floats/float-nowrap-3-ref.html"
+      ],
+      "testharness_files": 66
+    },
+    {
+      "category": "css-box",
+      "document_files": 179,
+      "eligible_static_self_contained": 20,
+      "excluded": {
+        "missing-reference": 44,
+        "not-reftest": 109,
+        "scripted": 6
+      },
+      "reftests": 70,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-box/margin-trim/flex-inline-end-trimmed-only.html",
+        "css/css-box/margin-trim/block-container-non-adjoining-item.html",
+        "css/css-box/margin-trim/flex-block-end-trimmed-only.html",
+        "css/css-box/margin-trim/grid-block-end.html",
+        "css/css-box/margin-trim/flex-inline-trimmed-only.html",
+        "css/css-box/margin-trim/block-container-block-end-collapsed-margins.html",
+        "css/css-box/margin-trim/block-container-block-start-self-collapsing-item-larger-block-start.html",
+        "css/css-box/margin-trim/block-container-block-start-self-collapsing-item-has-larger-block-end.html",
+        "css/css-box/margin-trim/flex-block-trimmed-only.html",
+        "css/css-box/margin-trim/flex-trim-all-margins.html",
+        "css/css-box/margin-trim/flex-column-inline-multiline.html",
+        "css/css-box/margin-trim/flex-row-block-multiline.html"
+      ],
+      "testharness_files": 83
+    },
+    {
+      "category": "css-display",
+      "document_files": 390,
+      "eligible_static_self_contained": 34,
+      "excluded": {
+        "css-resource": 1,
+        "embedded-resource": 2,
+        "external-stylesheet": 7,
+        "missing-reference": 6,
+        "not-reftest": 177,
+        "scripted": 30,
+        "xml-parser-mode": 133
+      },
+      "reftests": 213,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-display/display-contents-text-inherit.html",
+        "css/css-display/display-contents-sharing-001.html",
+        "css/css-display/display-contents-fieldset-nested-legend.html",
+        "css/css-display/display-contents-button.html",
+        "css/css-display/display-flow-root-list-item-001.html",
+        "css/css-display/display-contents-block-002.html",
+        "css/css-display/display-contents-before-after-002.html",
+        "css/css-display/display-contents-oof-002.html",
+        "css/css-display/display-contents-before-after-001.html",
+        "css/css-display/display-contents-alignment-002.html",
+        "css/css-display/display-contents-td-001.html",
+        "css/css-display/display-contents-first-letter-002.html"
+      ],
+      "testharness_files": 33
+    },
+    {
+      "category": "css-inline",
+      "document_files": 393,
+      "eligible_static_self_contained": 1,
+      "excluded": {
+        "css-resource": 1,
+        "embedded-resource": 2,
+        "external-stylesheet": 70,
+        "flagged-environment": 64,
+        "missing-reference": 14,
+        "not-reftest": 214,
+        "scripted": 27
+      },
+      "reftests": 179,
+      "selected": 1,
+      "selected_paths": [
+        "css/css-inline/empty-span-size-002.html"
+      ],
+      "testharness_files": 58
+    },
+    {
+      "category": "css-position",
+      "document_files": 485,
+      "eligible_static_self_contained": 32,
+      "excluded": {
+        "embedded-resource": 2,
+        "external-stylesheet": 38,
+        "flagged-environment": 10,
+        "missing-reference": 89,
+        "not-reftest": 234,
+        "scripted": 79,
+        "xml-reference-mode": 1
+      },
+      "reftests": 251,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-position/position-absolute-semi-replaced-stretch-button.html",
+        "css/css-position/position-relative-table-tr-top.html",
+        "css/css-position/position-relative-table-caption.html",
+        "css/css-position/position-fixed-overflow-print.html",
+        "css/css-position/position-absolute-root-element-flex.html",
+        "css/css-position/position-fixed-root-element-grid.html",
+        "css/css-position/position-relative-table-thead-left-absolute-child.html",
+        "css/css-position/position-relative-table-tr-left.html",
+        "css/css-position/position-absolute-large-negative-inset.html",
+        "css/css-position/position-relative-table-tfoot-left-absolute-child.html",
+        "css/css-position/position-relative-table-tfoot-top.html",
+        "css/css-position/sticky/position-sticky-rtl.html"
+      ],
+      "testharness_files": 111
+    },
+    {
+      "category": "css-sizing",
+      "document_files": 885,
+      "eligible_static_self_contained": 82,
+      "excluded": {
+        "embedded-resource": 40,
+        "external-stylesheet": 8,
+        "flagged-environment": 8,
+        "missing-reference": 403,
+        "not-reftest": 323,
+        "scripted": 11,
+        "xml-parser-mode": 10
+      },
+      "reftests": 562,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-sizing/slice-nowrap-intrinsic-size.html",
+        "css/css-sizing/div-max-content-auto-margin-top.tentative.html",
+        "css/css-sizing/auto-scrollbar-inside-stf-abspos.html",
+        "css/css-sizing/intrinsic-percent-non-replaced-004.html",
+        "css/css-sizing/clone-intrinsic-size.html",
+        "css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-022.html",
+        "css/css-sizing/div-min-content-auto-margin-bottom.tentative.html",
+        "css/css-sizing/intrinsic-height-abspos-stretch-percentage-child.html",
+        "css/css-sizing/border-box-and-max-content-001.html",
+        "css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-024.html",
+        "css/css-sizing/div-fit-content-block-size.tentative.html",
+        "css/css-sizing/contain-intrinsic-size/contain-intrinsic-size-005.html"
+      ],
+      "testharness_files": 178
+    }
+  ],
+  "per_category": 12,
+  "schema": 1,
+  "selection_policy": "For each category, SHA-256 rank the normalized path of every HTML-parser-compatible, local-reference, script-free, flag-free, resource-free reftest; select the lowest hashes.",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+}
