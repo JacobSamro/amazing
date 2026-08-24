@@ -3,25 +3,27 @@
 #![forbid(unsafe_code)]
 
 use amazing_text::{
-    font_match_score, resolve_synthesis, BreakKind, BreakOpportunity, Direction,
-    FallbackTextSystem, FontAttributes, FontKey, FontMetrics, FontSlant, GlyphCacheKey,
-    GlyphContent, GlyphFlags, GlyphId, GlyphImage, GlyphRasterRequest, Paragraph,
-    ShapedGlyph, ShapedParagraph, ShapedRun, ShapingBoundary, TextError, TextStyle, TextSystem,
-    WritingMode,
+    BreakKind, BreakOpportunity, Direction, FallbackTextSystem, FontAttributes, FontKey,
+    FontMetrics, FontSlant, GlyphCacheKey, GlyphContent, GlyphFlags, GlyphId, GlyphImage,
+    GlyphRasterRequest, LineRequest, Paragraph, ShapedGlyph, ShapedLine, ShapedParagraph,
+    ShapedRun, ShapingBoundary, TextError, TextStyle, TextSystem, WritingMode, font_match_score,
+    resolve_synthesis,
 };
 use harfrust::{
     BufferFlags, Feature, FontRef as HarfFontRef, ShapeOptions, ShaperData, ShaperInstance, Tag,
     UnicodeBuffer, Variation,
 };
+use icu_segmenter::options::{LineBreakOptions, LineBreakStrictness, LineBreakWordOption};
 use icu_segmenter::{GraphemeClusterSegmenter, LineSegmenter};
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::io::{Cursor, Write};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use swash::scale::image::Content;
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
-use swash::{zeno, FontRef as SwashFontRef};
+use swash::{FontRef as SwashFontRef, zeno};
+use unicode_bidi::{BidiClass, BidiInfo, Level, bidi_class};
 
 const MAX_COMPRESSED_FONT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_SFNT_FONT_BYTES: usize = 32 * 1024 * 1024;
@@ -34,6 +36,11 @@ const MAX_GLYPH_DIMENSION: u32 = 4096;
 const MAX_GLYPH_BYTES: usize = 64 * 1024 * 1024;
 const MAX_RASTER_CACHE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_RASTER_CACHE_ENTRIES: usize = 4096;
+const MAX_TEXT_CLUSTERS: usize = 262_144;
+const MAX_ITEMIZED_SPANS: usize = 524_288;
+const MAX_BIDI_SCOPE_SEGMENTS: usize = 524_288;
+const MAX_BIDI_SCOPE_BREAK_OPERATIONS: usize = 16 * 1024 * 1024;
+const MAX_FONT_MATCH_OPERATIONS: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FontFormat {
@@ -181,24 +188,52 @@ impl TextProvider {
         best.map(|(index, _)| index)
     }
 
-    fn itemize_font_spans(&self, text: &str, spans: &[amazing_text::TextSpan]) -> FontItemization {
+    fn itemize_font_spans(
+        &self,
+        text: &str,
+        spans: &[amazing_text::TextSpan],
+    ) -> Result<FontItemization, TextError> {
         let segmenter = GraphemeClusterSegmenter::new();
         let mut itemized = Vec::new();
         let mut selected = Vec::new();
         let mut clusters = Vec::new();
         let mut previous_font = None;
-        let boundaries = segmenter.segment_str(text).collect::<Vec<_>>();
+        let boundaries = segmenter
+            .segment_str(text)
+            .take(MAX_TEXT_CLUSTERS + 2)
+            .collect::<Vec<_>>();
+        if boundaries.len() > MAX_TEXT_CLUSTERS + 1 {
+            return Err(TextError::ResourceLimit);
+        }
+        let cluster_count = boundaries.len().saturating_sub(1);
+        let max_families = spans
+            .iter()
+            .map(|span| span.style.families.len())
+            .max()
+            .unwrap_or(0)
+            .max(1);
+        let match_operations = cluster_count
+            .checked_mul(self.fonts.len().max(1))
+            .and_then(|count| count.checked_mul(max_families))
+            .ok_or(TextError::ResourceLimit)?;
+        if match_operations > MAX_FONT_MATCH_OPERATIONS {
+            return Err(TextError::ResourceLimit);
+        }
+        let mut span_index = 0usize;
         for pair in boundaries.windows(2) {
             let cluster = pair[0]..pair[1];
-            let owner = spans
-                .iter()
-                .find(|span| span.range.contains(&cluster.start))
-                .unwrap_or(&spans[0]);
+            while span_index < spans.len() && spans[span_index].range.end <= cluster.start {
+                span_index += 1;
+            }
+            let owner = spans.get(span_index).ok_or(TextError::InvalidParagraph)?;
             let font = self.matching_font(&owner.style, Some(&text[cluster.clone()]));
-            for span in spans
-                .iter()
-                .filter(|span| span.range.start < cluster.end && span.range.end > cluster.start)
+            let mut overlap_index = span_index;
+            while let Some(span) = spans.get(overlap_index)
+                && span.range.start < cluster.end
             {
+                if itemized.len() >= MAX_ITEMIZED_SPANS {
+                    return Err(TextError::ResourceLimit);
+                }
                 let range = span.range.start.max(cluster.start)..span.range.end.min(cluster.end);
                 let mut boundary = if range.start == span.range.start {
                     span.boundary_before
@@ -220,13 +255,14 @@ impl TextProvider {
                 selected.push(font);
                 clusters.push(cluster.clone());
                 previous_font = font;
+                overlap_index += 1;
             }
         }
-        FontItemization {
+        Ok(FontItemization {
             spans: itemized,
             fonts: selected,
             clusters,
-        }
+        })
     }
 }
 
@@ -243,67 +279,71 @@ impl TextSystem for TextProvider {
     }
 
     fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError> {
-        let validated = self.fallback.shape(Paragraph {
+        amazing_text::validate_paragraph(&Paragraph {
             text: paragraph.text,
             spans: paragraph.spans,
+            sources: paragraph.sources,
+            bidi_scopes: paragraph.bidi_scopes,
+            base_direction: paragraph.base_direction,
         })?;
         if paragraph.text.is_empty() {
-            return Ok(validated);
+            return Ok(ShapedParagraph::default());
         }
-
-        let itemization = self.itemize_font_spans(paragraph.text, paragraph.spans);
-        let itemized = itemization.spans;
-        self.fallback.shape(Paragraph {
-            text: paragraph.text,
-            spans: &itemized,
-        })?;
-        let selected = itemization.fonts;
-        let clusters = itemization.clusters;
-        let mut result = ShapedParagraph {
-            runs: Vec::new(),
-            breaks: line_breaks(paragraph.text),
-        };
-        let mut index = 0usize;
-        while index < itemized.len() {
-            let Some(font_index) = selected[index] else {
-                let cluster = clusters[index].clone();
-                let mut end = index + 1;
-                while end < itemized.len()
-                    && selected[end].is_none()
-                    && clusters[end] == cluster
-                {
-                    end += 1;
-                }
-                result.runs.push(fallback_grapheme_run(
-                    &self.fallback,
-                    paragraph.text,
-                    cluster,
-                    &itemized[index],
-                )?);
-                index = end;
-                continue;
-            };
-            let mut end = index + 1;
-            while end < itemized.len()
-                && selected[end] == Some(font_index)
-                && itemized[end].boundary_before == ShapingBoundary::Continue
-                && itemized[end].style == itemized[index].style
-            {
-                end += 1;
-            }
-            let target = itemized[index].range.start..itemized[end - 1].range.end;
-            let hard_context = hard_context_range(&itemized, index, end, paragraph.text.len());
-            let shaped = shape_range(
-                &self.fonts[font_index],
+        let runs = self.shape_runs(
                 paragraph.text,
-                &itemized[index..end],
-                target,
-                hard_context,
+                paragraph.spans,
+                0..paragraph.text.len(),
+                paragraph.base_direction,
+                paragraph.bidi_scopes,
             )?;
-            result.runs.extend(shaped);
-            index = end;
-        }
+        let mut breaks = line_breaks(paragraph.text, paragraph.spans);
+        breaks.sort_by_key(|opportunity| opportunity.offset);
+        let unsafe_breaks = unsafe_break_offsets(&runs, &breaks);
+        let result = ShapedParagraph {
+            runs,
+            breaks,
+            unsafe_breaks,
+            sources: paragraph.sources.to_vec(),
+        };
         Ok(result)
+    }
+
+    fn shape_line(&self, request: LineRequest<'_>) -> Result<ShapedLine, TextError> {
+        let text = request.paragraph.text;
+        if request.range.start >= request.range.end
+            || request.range.end > text.len()
+            || !text.is_char_boundary(request.range.start)
+            || !text.is_char_boundary(request.range.end)
+            {
+            return Err(TextError::InvalidParagraph);
+            }
+        amazing_text::validate_paragraph(&Paragraph {
+            text,
+            spans: request.paragraph.spans,
+            sources: request.paragraph.sources,
+            bidi_scopes: request.paragraph.bidi_scopes,
+            base_direction: request.paragraph.base_direction,
+        })?;
+        let logical_runs = self.shape_runs(
+            text,
+            request.paragraph.spans,
+            request.range.clone(),
+            request.paragraph.base_direction,
+            request.paragraph.bidi_scopes,
+            )?;
+        let visual_clusters = visual_clusters(
+            text,
+            request.paragraph.spans,
+            request.range.clone(),
+            request.paragraph.base_direction,
+            request.paragraph.bidi_scopes,
+        )?;
+        let runs = runs_in_visual_cluster_order(&logical_runs, &visual_clusters);
+        Ok(ShapedLine {
+            text_range: request.range,
+            runs,
+            visual_clusters,
+        })
     }
 
     fn rasterize(&self, request: GlyphRasterRequest<'_>) -> Result<Option<GlyphImage>, TextError> {
@@ -337,7 +377,127 @@ impl TextSystem for TextProvider {
     }
 }
 
+fn runs_in_visual_cluster_order(
+    runs: &[ShapedRun],
+    visual_clusters: &[std::ops::Range<usize>],
+) -> Vec<ShapedRun> {
+    let mut by_cluster: HashMap<usize, Vec<ShapedRun>> = HashMap::new();
+    for run in runs {
+        let mut glyphs_by_cluster: HashMap<usize, Vec<ShapedGlyph>> = HashMap::new();
+        for glyph in &run.glyphs {
+            glyphs_by_cluster
+                .entry(glyph.cluster.start)
+                .or_default()
+                .push(glyph.clone());
+        }
+        for (cluster_start, glyphs) in glyphs_by_cluster {
+            let text_range = glyphs
+                .iter()
+                .map(|glyph| glyph.cluster.clone())
+                .reduce(|left, right| left.start.min(right.start)..left.end.max(right.end))
+                .unwrap_or(cluster_start..cluster_start);
+            let visual_run = clone_run_with_glyphs(run, text_range, glyphs);
+            by_cluster
+                .entry(cluster_start)
+                .or_default()
+                .push(visual_run);
+        }
+    }
+    let mut visual_runs = Vec::new();
+    for cluster in visual_clusters {
+        if let Some(mut runs) = by_cluster.remove(&cluster.start) {
+            visual_runs.append(&mut runs);
+        }
+    }
+    visual_runs
+}
+
+fn clone_run_with_glyphs(
+    run: &ShapedRun,
+    text_range: std::ops::Range<usize>,
+    glyphs: Vec<ShapedGlyph>,
+) -> ShapedRun {
+    ShapedRun {
+        text_range,
+        source: run.source,
+        font: run.font,
+        font_size: run.font_size,
+        direction: run.direction,
+        writing_mode: run.writing_mode,
+        metrics: run.metrics,
+        variations: run.variations.clone(),
+        synthesis: run.synthesis,
+        glyphs,
+    }
+}
+
 impl TextProvider {
+    fn shape_runs(
+        &self,
+        text: &str,
+        spans: &[amazing_text::TextSpan],
+        selected_range: std::ops::Range<usize>,
+        base_direction: Direction,
+        bidi_scopes: &[amazing_text::BidiScope],
+    ) -> Result<Vec<ShapedRun>, TextError> {
+        let itemization = self.itemize_font_spans(text, spans)?;
+        let itemized = itemization.spans;
+        amazing_text::validate_paragraph(&Paragraph {
+            text,
+            spans: &itemized,
+            sources: &[],
+            bidi_scopes: &[],
+            base_direction,
+        })?;
+        let selected = itemization.fonts;
+        let clusters = itemization.clusters;
+        let directions = bidi_directions(text, spans, &itemized, base_direction, bidi_scopes)?;
+        let mut runs = Vec::new();
+        let mut index = 0usize;
+        while index < itemized.len() {
+            let Some(font_index) = selected[index] else {
+                let cluster = clusters[index].clone();
+                let mut end = index + 1;
+                while end < itemized.len() && selected[end].is_none() && clusters[end] == cluster {
+                    end += 1;
+                }
+                if cluster.start < selected_range.end && selected_range.start < cluster.end {
+                    let mut run =
+                        fallback_grapheme_run(&self.fallback, text, cluster, &itemized[index])?;
+                    run.direction = directions[index];
+                    runs.push(run);
+                }
+                index = end;
+                continue;
+            };
+            let mut end = index + 1;
+            while end < itemized.len()
+                && selected[end] == Some(font_index)
+                && itemized[end].boundary_before == ShapingBoundary::Continue
+                && itemized[end].style == itemized[index].style
+                && directions[end] == directions[index]
+            {
+                end += 1;
+            }
+            let group_range = itemized[index].range.start..itemized[end - 1].range.end;
+            let target = group_range.start.max(selected_range.start)
+                ..group_range.end.min(selected_range.end);
+            if target.start < target.end {
+                let hard_context = hard_context_range(&itemized, index, end, text.len());
+                runs.extend(shape_range(
+                    &self.fonts[font_index],
+                    text,
+                    &itemized[index..end],
+                    target,
+                    hard_context,
+                    directions[index],
+                )?);
+            }
+            index = end;
+        }
+        Ok(runs)
+    }
+
     fn cache_raster(&self, key: GlyphCacheKey, image: Option<GlyphImage>) {
         let entry_overhead = std::mem::size_of::<(GlyphCacheKey, Option<GlyphImage>)>();
         let charge =
@@ -532,6 +692,9 @@ fn fallback_grapheme_run(
     let mut shaped = fallback.shape(Paragraph {
         text: &first,
         spans: &local_spans,
+        sources: &[],
+        bidi_scopes: &[],
+        base_direction: span.style.direction,
     })?;
     let mut run = shaped.runs.pop().ok_or(TextError::InvalidParagraph)?;
     run.text_range = cluster.clone();
@@ -541,19 +704,398 @@ fn fallback_grapheme_run(
     Ok(run)
 }
 
-fn line_breaks(text: &str) -> Vec<BreakOpportunity> {
-    LineSegmenter::new_auto(Default::default())
-        .segment_str(text)
-        .filter(|offset| *offset != 0)
-        .map(|offset| BreakOpportunity {
-            offset,
-            kind: if offset == text.len() {
-                BreakKind::Mandatory
+fn line_breaks(text: &str, spans: &[amazing_text::TextSpan]) -> Vec<BreakOpportunity> {
+    let mut policies = Vec::new();
+    for span in spans {
+        let policy = (span.style.line_break, span.style.word_break);
+        if !policies.contains(&policy) {
+            policies.push(policy);
+        }
+    }
+    let mut opportunities = Vec::new();
+    for (line_break, word_break) in policies {
+        let mut options = LineBreakOptions::default();
+        options.strictness = match line_break {
+            amazing_text::LineBreak::Auto => None,
+            amazing_text::LineBreak::Loose => Some(LineBreakStrictness::Loose),
+            amazing_text::LineBreak::Normal => Some(LineBreakStrictness::Normal),
+            amazing_text::LineBreak::Strict => Some(LineBreakStrictness::Strict),
+            amazing_text::LineBreak::Anywhere => Some(LineBreakStrictness::Anywhere),
+        };
+        options.word_option = Some(match word_break {
+            amazing_text::WordBreak::Normal => LineBreakWordOption::Normal,
+            amazing_text::WordBreak::BreakAll => LineBreakWordOption::BreakAll,
+            amazing_text::WordBreak::KeepAll => LineBreakWordOption::KeepAll,
+        });
+        opportunities.extend(
+            LineSegmenter::new_auto(options)
+                .segment_str(text)
+                .filter(|offset| *offset != 0)
+                .filter(|offset| {
+                    *offset == text.len()
+                        || mandatory_break_before(text, *offset)
+                        || style_at_break(text, spans, *offset).is_some_and(|style| {
+                            style.line_break == line_break && style.word_break == word_break
+                        })
+                })
+                .filter_map(|offset| {
+                    break_kind(text, spans, offset)
+                        .map(|kind| BreakOpportunity { offset, kind })
+                }),
+        );
+    }
+    opportunities.extend(
+        GraphemeClusterSegmenter::new()
+            .segment_str(text)
+            .filter(|offset| *offset != 0 && *offset != text.len())
+            .filter(|offset| {
+                style_at_break(text, spans, *offset).is_some_and(|style| {
+                    style.overflow_wrap != amazing_text::OverflowWrap::Normal
+                        && white_space_wraps(style.white_space)
+                })
+            })
+            .map(|offset| BreakOpportunity {
+                offset,
+                kind: BreakKind::Emergency,
+            }),
+    );
+    opportunities.sort_by_key(|opportunity| (opportunity.offset, break_priority(opportunity.kind)));
+    opportunities.dedup_by_key(|opportunity| opportunity.offset);
+    opportunities
+}
+
+fn style_at_break<'a>(
+    text: &str,
+    spans: &'a [amazing_text::TextSpan],
+    offset: usize,
+) -> Option<&'a TextStyle> {
+    let character_start = text[..offset].char_indices().next_back()?.0;
+    let index = spans.partition_point(|span| span.range.end <= character_start);
+    spans
+        .get(index)
+        .filter(|span| span.range.contains(&character_start))
+        .map(|span| &span.style)
+}
+
+fn break_priority(kind: BreakKind) -> u8 {
+    match kind {
+        BreakKind::Mandatory => 0,
+        BreakKind::Hyphen => 1,
+        BreakKind::Allowed => 2,
+        BreakKind::Emergency => 3,
+    }
+}
+
+fn unsafe_break_offsets(runs: &[ShapedRun], breaks: &[BreakOpportunity]) -> Vec<usize> {
+    let offsets = breaks
+        .iter()
+        .map(|opportunity| opportunity.offset)
+        .collect::<Vec<_>>();
+    let mut unsafe_offsets = BTreeSet::new();
+    for glyph in runs.iter().flat_map(|run| &run.glyphs) {
+        let first_internal = offsets.partition_point(|offset| *offset <= glyph.cluster.start);
+        let after_internal = offsets.partition_point(|offset| *offset < glyph.cluster.end);
+        unsafe_offsets.extend(offsets[first_internal..after_internal].iter().copied());
+        if (glyph.flags.unsafe_to_break || glyph.flags.unsafe_to_concat)
+            && offsets.binary_search(&glyph.cluster.start).is_ok()
+        {
+            unsafe_offsets.insert(glyph.cluster.start);
+        }
+    }
+    offsets
+        .into_iter()
+        .filter(|offset| unsafe_offsets.contains(offset))
+        .collect()
+}
+
+fn break_kind(text: &str, spans: &[amazing_text::TextSpan], offset: usize) -> Option<BreakKind> {
+    if offset == text.len() || mandatory_break_before(text, offset) {
+        return Some(BreakKind::Mandatory);
+    }
+    let (_, previous) = text[..offset].char_indices().next_back()?;
+    let style = style_at_break(text, spans, offset);
+    if style.is_some_and(|style| !white_space_wraps(style.white_space)) {
+        return None;
+    }
+    if previous != '\u{00ad}' {
+        return Some(BreakKind::Allowed);
+    }
+    match style
+        .map(|style| style.hyphens)
+        .unwrap_or(amazing_text::Hyphens::Manual)
+    {
+        amazing_text::Hyphens::None => None,
+        amazing_text::Hyphens::Manual | amazing_text::Hyphens::Auto => Some(BreakKind::Hyphen),
+    }
+}
+
+fn white_space_wraps(white_space: amazing_text::WhiteSpace) -> bool {
+    !matches!(
+        white_space,
+        amazing_text::WhiteSpace::NoWrap | amazing_text::WhiteSpace::Pre
+    )
+}
+
+fn mandatory_break_before(text: &str, offset: usize) -> bool {
+    text[..offset].chars().next_back().is_some_and(|ch| {
+        matches!(
+            ch,
+            '\n' | '\r' | '\u{000b}' | '\u{000c}' | '\u{0085}' | '\u{2028}' | '\u{2029}'
+        )
+    })
+}
+
+fn visual_clusters(
+    text: &str,
+    spans: &[amazing_text::TextSpan],
+    line: std::ops::Range<usize>,
+    base_direction: Direction,
+    bidi_scopes: &[amazing_text::BidiScope],
+) -> Result<Vec<std::ops::Range<usize>>, TextError> {
+    let default_level = Some(match base_direction {
+        Direction::LeftToRight => Level::ltr(),
+        Direction::RightToLeft => Level::rtl(),
+    });
+    let analysis = bidi_analysis(text, spans, bidi_scopes)?;
+    let bidi = BidiInfo::new(&analysis.text, default_level);
+    let analysis_line =
+        analysis.original_to_analysis[line.start]..analysis.original_to_analysis[line.end];
+    let paragraph = bidi
+        .paragraphs
+        .iter()
+        .find(|paragraph| {
+            paragraph.range.start <= analysis_line.start && analysis_line.end <= paragraph.range.end
+        })
+        .ok_or(TextError::InvalidParagraph)?;
+    let (_, visual_runs) = bidi.visual_runs(paragraph, analysis_line);
+    let boundaries = GraphemeClusterSegmenter::new()
+        .segment_str(&text[line.clone()])
+        .map(|offset| line.start + offset)
+        .collect::<Vec<_>>();
+    let logical_clusters = boundaries
+        .windows(2)
+        .map(|pair| pair[0]..pair[1])
+        .collect::<Vec<_>>();
+    let mut visual = Vec::with_capacity(logical_clusters.len());
+    for run in visual_runs {
+        let mut clusters = logical_clusters
+            .iter()
+            .filter(|cluster| run.contains(&analysis.original_to_analysis[cluster.start]))
+            .cloned()
+            .collect::<Vec<_>>();
+        if bidi
+            .levels
+            .get(run.start)
+            .is_some_and(|level| level.is_rtl())
+        {
+            clusters.reverse();
+        }
+        visual.extend(clusters);
+    }
+    if visual.len() != logical_clusters.len() {
+        return Err(TextError::InvalidParagraph);
+    }
+    Ok(visual)
+}
+
+fn bidi_directions(
+    text: &str,
+    spans: &[amazing_text::TextSpan],
+    itemized: &[amazing_text::TextSpan],
+    base_direction: Direction,
+    bidi_scopes: &[amazing_text::BidiScope],
+) -> Result<Vec<Direction>, TextError> {
+    let default_level = Some(match base_direction {
+        Direction::LeftToRight => Level::ltr(),
+        Direction::RightToLeft => Level::rtl(),
+    });
+    let analysis = bidi_analysis(text, spans, bidi_scopes)?;
+    let bidi = BidiInfo::new(&analysis.text, default_level);
+    itemized
+        .iter()
+        .map(|span| {
+            bidi.levels
+                .get(analysis.original_to_analysis[span.range.start])
+                .map(|level| {
+                    if level.is_rtl() {
+                        Direction::RightToLeft
             } else {
-                BreakKind::Allowed
-            },
+                        Direction::LeftToRight
+                    }
+                })
+                .ok_or(TextError::InvalidParagraph)
         })
         .collect()
+}
+
+struct BidiAnalysis {
+    text: String,
+    original_to_analysis: Vec<usize>,
+}
+
+fn bidi_analysis(
+    text: &str,
+    spans: &[amazing_text::TextSpan],
+    bidi_scopes: &[amazing_text::BidiScope],
+) -> Result<BidiAnalysis, TextError> {
+    let synthesized;
+    let scopes = if bidi_scopes.is_empty() {
+        synthesized = spans
+            .iter()
+            .filter(|span| span.style.unicode_bidi != amazing_text::UnicodeBidi::Normal)
+            .map(|span| amazing_text::BidiScope {
+                range: span.range.clone(),
+                direction: span.style.direction,
+                unicode_bidi: span.style.unicode_bidi,
+            })
+            .collect::<Vec<_>>();
+        synthesized.as_slice()
+    } else {
+        bidi_scopes
+    };
+    let mut ordered = scopes.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|scope| (scope.range.start, std::cmp::Reverse(scope.range.end)));
+    let mut stack = Vec::new();
+    for scope in &ordered {
+        while stack.last().is_some_and(|end| scope.range.start >= *end) {
+            stack.pop();
+        }
+        if stack.last().is_some_and(|end| scope.range.end > *end) {
+            return Err(TextError::InvalidParagraph);
+        }
+        stack.push(scope.range.end);
+    }
+    let paragraph_breaks = paragraph_break_ranges(text);
+    let mut scope_break_operations = 0usize;
+    let mut scope_break_windows = Vec::with_capacity(scopes.len());
+    for scope in scopes {
+        let first = paragraph_breaks.partition_point(|range| range.end <= scope.range.start);
+        let end = paragraph_breaks.partition_point(|range| range.start < scope.range.end);
+        scope_break_operations = scope_break_operations
+            .checked_add(end.saturating_sub(first))
+            .ok_or(TextError::ResourceLimit)?;
+        if scope_break_operations > MAX_BIDI_SCOPE_BREAK_OPERATIONS {
+            return Err(TextError::ResourceLimit);
+        }
+        scope_break_windows.push(first..end);
+    }
+    let mut split_scopes = Vec::new();
+    for (scope, break_window) in scopes.iter().zip(scope_break_windows) {
+        let mut segment_start = scope.range.start;
+        for paragraph_break in &paragraph_breaks[break_window] {
+            if segment_start < paragraph_break.start {
+                if split_scopes.len() >= MAX_BIDI_SCOPE_SEGMENTS {
+                    return Err(TextError::ResourceLimit);
+                }
+                split_scopes.push(amazing_text::BidiScope {
+                    range: segment_start..paragraph_break.start,
+                    direction: scope.direction,
+                    unicode_bidi: scope.unicode_bidi,
+                });
+            }
+            segment_start = paragraph_break.end.min(scope.range.end);
+        }
+        if segment_start < scope.range.end {
+            if split_scopes.len() >= MAX_BIDI_SCOPE_SEGMENTS {
+                return Err(TextError::ResourceLimit);
+            }
+            split_scopes.push(amazing_text::BidiScope {
+                range: segment_start..scope.range.end,
+                direction: scope.direction,
+                unicode_bidi: scope.unicode_bidi,
+            });
+        }
+    }
+    let capacity = split_scopes
+        .len()
+        .checked_mul(12)
+        .and_then(|extra| text.len().checked_add(extra))
+        .ok_or(TextError::ResourceLimit)?;
+    let mut openings: BTreeMap<usize, Vec<&amazing_text::BidiScope>> = BTreeMap::new();
+    let mut closings: BTreeMap<usize, Vec<&amazing_text::BidiScope>> = BTreeMap::new();
+    for scope in &split_scopes {
+        openings.entry(scope.range.start).or_default().push(scope);
+        closings.entry(scope.range.end).or_default().push(scope);
+    }
+    for values in openings.values_mut() {
+        values.sort_by_key(|scope| std::cmp::Reverse(scope.range.end));
+    }
+    for values in closings.values_mut() {
+        values.sort_by_key(|scope| std::cmp::Reverse(scope.range.start));
+    }
+    let mut analysis = String::with_capacity(capacity);
+    let mut original_to_analysis = vec![0; text.len() + 1];
+    for (original, ch) in text.char_indices() {
+        if let Some(values) = closings.get(&original) {
+            for scope in values {
+                analysis.push_str(bidi_controls(scope.direction, scope.unicode_bidi).1);
+            }
+        }
+        if let Some(values) = openings.get(&original) {
+            for scope in values {
+                analysis.push_str(bidi_controls(scope.direction, scope.unicode_bidi).0);
+            }
+        }
+        let analysis_start = analysis.len();
+        for byte in 0..ch.len_utf8() {
+            original_to_analysis[original + byte] = analysis_start + byte;
+        }
+        analysis.push(ch);
+        original_to_analysis[original + ch.len_utf8()] = analysis.len();
+    }
+    if let Some(values) = closings.get(&text.len()) {
+        for scope in values {
+            analysis.push_str(bidi_controls(scope.direction, scope.unicode_bidi).1);
+        }
+    }
+    original_to_analysis[text.len()] = analysis.len();
+    if spans.is_empty() || spans[0].range.start != 0 || spans.last().unwrap().range.end != text.len() {
+        return Err(TextError::InvalidParagraph);
+    }
+    Ok(BidiAnalysis {
+        text: analysis,
+        original_to_analysis,
+    })
+}
+
+fn bidi_controls(
+    direction: Direction,
+    unicode_bidi: amazing_text::UnicodeBidi,
+) -> (&'static str, &'static str) {
+    match (direction, unicode_bidi) {
+        (_, amazing_text::UnicodeBidi::Normal) => ("", ""),
+        (Direction::LeftToRight, amazing_text::UnicodeBidi::Embed) => ("\u{202a}", "\u{202c}"),
+        (Direction::RightToLeft, amazing_text::UnicodeBidi::Embed) => ("\u{202b}", "\u{202c}"),
+        (Direction::LeftToRight, amazing_text::UnicodeBidi::BidiOverride) => {
+            ("\u{202d}", "\u{202c}")
+        }
+        (Direction::RightToLeft, amazing_text::UnicodeBidi::BidiOverride) => {
+            ("\u{202e}", "\u{202c}")
+        }
+        (Direction::LeftToRight, amazing_text::UnicodeBidi::Isolate) => ("\u{2066}", "\u{2069}"),
+        (Direction::RightToLeft, amazing_text::UnicodeBidi::Isolate) => ("\u{2067}", "\u{2069}"),
+        (Direction::LeftToRight, amazing_text::UnicodeBidi::IsolateOverride) => {
+            ("\u{2068}\u{202d}", "\u{202c}\u{2069}")
+        }
+        (Direction::RightToLeft, amazing_text::UnicodeBidi::IsolateOverride) => {
+            ("\u{2068}\u{202e}", "\u{202c}\u{2069}")
+        }
+        (_, amazing_text::UnicodeBidi::Plaintext) => ("\u{2068}", "\u{2069}"),
+    }
+}
+
+fn paragraph_break_ranges(text: &str) -> Vec<std::ops::Range<usize>> {
+    let mut breaks = Vec::new();
+    let mut characters = text.char_indices().peekable();
+    while let Some((start, ch)) = characters.next() {
+        if ch == '\r' && characters.peek().is_some_and(|(_, next)| *next == '\n') {
+            let (lf_start, lf) = characters.next().unwrap();
+            breaks.push(start..lf_start + lf.len_utf8());
+        } else if bidi_class(ch) == BidiClass::B {
+            breaks.push(start..start + ch.len_utf8());
+        }
+    }
+    breaks
 }
 
 fn hard_context_range(
@@ -585,6 +1127,7 @@ fn shape_range(
     spans: &[amazing_text::TextSpan],
     target: std::ops::Range<usize>,
     context: std::ops::Range<usize>,
+    direction: Direction,
 ) -> Result<Vec<ShapedRun>, TextError> {
     let style = &spans[0].style;
     let metrics = font_metrics(font, style.size)?;
@@ -609,7 +1152,7 @@ fn shape_range(
         if target.end < context.end {
             buffer.set_post_context(&text[target.end..context.end]);
         }
-        buffer.set_direction(match (style.writing_mode, style.direction) {
+        buffer.set_direction(match (style.writing_mode, direction) {
             (WritingMode::HorizontalTb, Direction::LeftToRight) => harfrust::Direction::LeftToRight,
             (WritingMode::HorizontalTb, Direction::RightToLeft) => harfrust::Direction::RightToLeft,
             (_, _) => harfrust::Direction::TopToBottom,
@@ -661,6 +1204,7 @@ fn shape_range(
                 offset_y: position.y_offset as f32 / 64.0,
                 flags: GlyphFlags {
                     unsafe_to_break: info.unsafe_to_break(),
+                    unsafe_to_concat: info.unsafe_to_concat(),
                 },
             };
             if let Some(run) = runs.last_mut()
@@ -676,7 +1220,7 @@ fn shape_range(
                 source: source_span.source,
                 font: font.key,
                 font_size: style.size,
-                direction: style.direction,
+                direction,
                 writing_mode: style.writing_mode,
                 metrics,
                 variations: style.variations.clone(),
@@ -813,7 +1357,10 @@ fn rasterize_font_glyph(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use amazing_text::{ShapingBoundary, TextSpan};
+    use amazing_text::{
+        Hyphens, LineBreak, LineRequest, OverflowWrap, ShapingBoundary, TextSpan, UnicodeBidi,
+        WordBreak,
+    };
 
     fn be16(value: u16) -> Vec<u8> {
         value.to_be_bytes().to_vec()
@@ -976,11 +1523,8 @@ mod tests {
             .map(|index| 12 + index * 16)
             .find(|offset| &too_many_glyphs[*offset..*offset + 4] == b"maxp")
             .map(|offset| {
-                u32::from_be_bytes(
-                    too_many_glyphs[offset + 8..offset + 12]
-                        .try_into()
-                        .unwrap(),
-                ) as usize
+                u32::from_be_bytes(too_many_glyphs[offset + 8..offset + 12].try_into().unwrap())
+                    as usize
             })
             .unwrap();
         too_many_glyphs[maxp_offset + 4..maxp_offset + 6]
@@ -1053,6 +1597,9 @@ mod tests {
             .shape(Paragraph {
                 text: "A",
                 spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
             })
             .unwrap();
         assert_eq!(shaped.runs.len(), 1);
@@ -1121,6 +1668,9 @@ mod tests {
             .shape(Paragraph {
                 text: "AB",
                 spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
             })
             .unwrap();
         assert_eq!(shaped.runs.len(), 2);
@@ -1160,6 +1710,9 @@ mod tests {
             .shape(Paragraph {
                 text: "A\u{200d}",
                 spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
             })
             .unwrap();
         assert!(!shaped.runs.is_empty());
@@ -1213,11 +1766,614 @@ mod tests {
             .shape(Paragraph {
                 text: "A\u{0301}",
                 spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
             })
             .unwrap();
         assert_eq!(shaped.runs.len(), 1);
         assert_eq!(shaped.runs[0].glyphs.len(), 1);
         assert_eq!(shaped.runs[0].glyphs[0].cluster, 0..3);
         assert!(shaped.runs.iter().all(|run| run.font == FontKey(0)));
+    }
+
+    #[test]
+    fn mixed_bidi_line_reorders_whole_grapheme_clusters() {
+        let provider = TextProvider::new();
+        let text = "abc אב\u{05b0}ג";
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 30,
+            style: TextStyle::default(),
+            boundary_before: ShapingBoundary::Continue,
+        }];
+
+        let line = provider
+            .shape_line(LineRequest {
+                paragraph: Paragraph {
+                    text,
+                    spans: &spans,
+                    sources: &[],
+                bidi_scopes: &[],
+                    base_direction: Direction::LeftToRight,
+                },
+                range: 0..text.len(),
+            })
+            .unwrap();
+
+        assert_eq!(
+            line.visual_clusters,
+            vec![0..1, 1..2, 2..3, 3..4, 10..12, 6..10, 4..6]
+        );
+        let run_clusters = line
+            .runs
+            .iter()
+            .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.cluster.clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(run_clusters, line.visual_clusters);
+    }
+
+    #[test]
+    fn break_all_adds_only_grapheme_cluster_opportunities() {
+        let provider = TextProvider::new();
+        let text = "A\u{0301}B";
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 31,
+            style: TextStyle {
+                word_break: WordBreak::BreakAll,
+                ..TextStyle::default()
+            },
+            boundary_before: ShapingBoundary::Continue,
+        }];
+
+        let shaped = provider
+            .shape(Paragraph {
+                text,
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+
+        assert_eq!(
+            shaped.breaks,
+            vec![
+                BreakOpportunity {
+                    offset: 3,
+                    kind: BreakKind::Allowed,
+                },
+                BreakOpportunity {
+                    offset: 4,
+                    kind: BreakKind::Mandatory,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn bidi_override_applies_css_direction_to_every_cluster() {
+        let provider = TextProvider::new();
+        let text = "abאב";
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 32,
+            style: TextStyle {
+                direction: Direction::RightToLeft,
+                unicode_bidi: UnicodeBidi::BidiOverride,
+                ..TextStyle::default()
+            },
+            boundary_before: ShapingBoundary::Continue,
+        }];
+
+        let line = provider
+            .shape_line(LineRequest {
+                paragraph: Paragraph {
+                    text,
+                    spans: &spans,
+                    sources: &[],
+                bidi_scopes: &[],
+                    base_direction: Direction::LeftToRight,
+                },
+                range: 0..text.len(),
+            })
+            .unwrap();
+
+        assert_eq!(line.visual_clusters, vec![4..6, 2..4, 1..2, 0..1]);
+    }
+
+    #[test]
+    fn manual_soft_hyphen_exposes_a_discretionary_break() {
+        let provider = TextProvider::new();
+        let text = "ab\u{00ad}cd";
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 33,
+            style: TextStyle {
+                hyphens: Hyphens::Manual,
+                ..TextStyle::default()
+            },
+            boundary_before: ShapingBoundary::Continue,
+        }];
+
+        let shaped = provider
+            .shape(Paragraph {
+                text,
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+
+        assert!(shaped.breaks.contains(&BreakOpportunity {
+            offset: 4,
+            kind: BreakKind::Hyphen,
+        }));
+    }
+
+    #[test]
+    fn line_break_anywhere_adds_typographic_character_boundaries() {
+        let provider = TextProvider::new();
+        let text = "A\u{0301}B";
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 34,
+            style: TextStyle {
+                line_break: LineBreak::Anywhere,
+                ..TextStyle::default()
+            },
+            boundary_before: ShapingBoundary::Continue,
+        }];
+
+        let shaped = provider
+            .shape(Paragraph {
+                text,
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+
+        assert_eq!(
+            shaped.breaks,
+            vec![
+                BreakOpportunity {
+                    offset: 3,
+                    kind: BreakKind::Allowed,
+                },
+                BreakOpportunity {
+                    offset: 4,
+                    kind: BreakKind::Mandatory,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn overflow_wrap_exposes_separate_emergency_cluster_breaks() {
+        let provider = TextProvider::new();
+        let text = "A\u{0301}B";
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 35,
+            style: TextStyle {
+                overflow_wrap: OverflowWrap::BreakWord,
+                ..TextStyle::default()
+            },
+            boundary_before: ShapingBoundary::Continue,
+        }];
+
+        let shaped = provider
+            .shape(Paragraph {
+                text,
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+
+        assert_eq!(
+            shaped.breaks,
+            vec![
+                BreakOpportunity {
+                    offset: 3,
+                    kind: BreakKind::Emergency,
+                },
+                BreakOpportunity {
+                    offset: 4,
+                    kind: BreakKind::Mandatory,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn keep_all_preserves_the_break_after_ideographic_space() {
+        let provider = TextProvider::new();
+        let text = "字字　字字";
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 36,
+            style: TextStyle {
+                word_break: WordBreak::KeepAll,
+                ..TextStyle::default()
+            },
+            boundary_before: ShapingBoundary::Continue,
+        }];
+
+        let shaped = provider
+            .shape(Paragraph {
+                text,
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+
+        assert_eq!(
+            shaped.breaks,
+            vec![
+                BreakOpportunity {
+                    offset: 9,
+                    kind: BreakKind::Allowed,
+                },
+                BreakOpportunity {
+                    offset: 15,
+                    kind: BreakKind::Mandatory,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn css_override_remains_resolved_when_a_line_ends_inside_the_span() {
+        let provider = TextProvider::new();
+        let text = "> abcd > אבגד >";
+        let outer = TextStyle::default();
+        let inner = TextStyle {
+            direction: Direction::RightToLeft,
+            unicode_bidi: UnicodeBidi::BidiOverride,
+            ..TextStyle::default()
+        };
+        let spans = [
+            TextSpan {
+                range: 0..2,
+                source: 40,
+                style: outer.clone(),
+                boundary_before: ShapingBoundary::Continue,
+            },
+            TextSpan {
+                range: 2..17,
+                source: 41,
+                style: inner,
+                boundary_before: ShapingBoundary::Continue,
+            },
+            TextSpan {
+                range: 17..19,
+                source: 42,
+                style: outer,
+                boundary_before: ShapingBoundary::Continue,
+            },
+        ];
+
+        let line = provider
+            .shape_line(LineRequest {
+                paragraph: Paragraph {
+                    text,
+                    spans: &spans,
+                    sources: &[],
+                bidi_scopes: &[],
+                    base_direction: Direction::LeftToRight,
+                },
+                range: 0..8,
+            })
+            .unwrap();
+
+        assert_eq!(
+            line.visual_clusters,
+            vec![0..1, 1..2, 7..8, 6..7, 5..6, 4..5, 3..4, 2..3]
+        );
+    }
+
+    #[test]
+    fn ltr_paragraph_keeps_an_rtl_isolate_before_a_following_number() {
+        let provider = TextProvider::new();
+        let text = "א 3";
+        let spans = [
+            TextSpan {
+                range: 0..2,
+                source: 43,
+                style: TextStyle {
+                    direction: Direction::RightToLeft,
+                    unicode_bidi: UnicodeBidi::Isolate,
+                    ..TextStyle::default()
+                },
+                boundary_before: ShapingBoundary::Continue,
+            },
+            TextSpan {
+                range: 2..4,
+                source: 44,
+                style: TextStyle::default(),
+                boundary_before: ShapingBoundary::Continue,
+            },
+        ];
+
+        let line = provider
+            .shape_line(LineRequest {
+                paragraph: Paragraph {
+                    text,
+                    spans: &spans,
+                    sources: &[],
+                bidi_scopes: &[],
+                    base_direction: Direction::LeftToRight,
+                },
+                range: 0..text.len(),
+            })
+            .unwrap();
+
+        assert_eq!(line.visual_clusters, vec![0..2, 2..3, 3..4]);
+    }
+
+    #[test]
+    fn line_break_tailoring_follows_each_style_span() {
+        let provider = TextProvider::new();
+        let text = "AB CD";
+        let spans = [
+            TextSpan {
+                range: 0..2,
+                source: 45,
+                style: TextStyle {
+                    word_break: WordBreak::BreakAll,
+                    ..TextStyle::default()
+                },
+                boundary_before: ShapingBoundary::Continue,
+            },
+            TextSpan {
+                range: 2..5,
+                source: 46,
+                style: TextStyle::default(),
+                boundary_before: ShapingBoundary::StyleChange,
+            },
+        ];
+        let shaped = provider
+            .shape(Paragraph {
+                text,
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap();
+
+        assert_eq!(
+            shaped.breaks,
+            vec![
+                BreakOpportunity {
+                    offset: 1,
+                    kind: BreakKind::Allowed,
+                },
+                BreakOpportunity {
+                    offset: 3,
+                    kind: BreakKind::Allowed,
+                },
+                BreakOpportunity {
+                    offset: 5,
+                    kind: BreakKind::Mandatory,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn nested_bidi_scope_is_stable_across_descendant_style_spans() {
+        let provider = TextProvider::new();
+        let text = "א 3";
+        let style = TextStyle::default();
+        let single = [TextSpan {
+            range: 0..text.len(),
+            source: 47,
+            style: style.clone(),
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let split = [
+            TextSpan {
+                range: 0..2,
+                source: 47,
+                style: style.clone(),
+                boundary_before: ShapingBoundary::Continue,
+            },
+            TextSpan {
+                range: 2..text.len(),
+                source: 48,
+                style,
+                boundary_before: ShapingBoundary::StyleChange,
+            },
+        ];
+        let scopes = [amazing_text::BidiScope {
+            range: 0..text.len(),
+            direction: Direction::RightToLeft,
+            unicode_bidi: UnicodeBidi::Isolate,
+        }];
+        let shape = |spans: &[TextSpan]| {
+            provider
+                .shape_line(LineRequest {
+                    paragraph: Paragraph {
+                        text,
+                        spans,
+                        sources: &[],
+                        bidi_scopes: &scopes,
+                        base_direction: Direction::LeftToRight,
+                    },
+                    range: 0..text.len(),
+                })
+                .unwrap()
+                .visual_clusters
+        };
+
+        assert_eq!(shape(&single), shape(&split));
+    }
+
+    #[test]
+    fn bidi_scope_closes_before_and_reopens_after_paragraph_break() {
+        for (text, expected) in [
+            ("א\nא", "\u{2067}א\u{2069}\n\u{2067}א\u{2069}"),
+            ("א\r\nא", "\u{2067}א\u{2069}\r\n\u{2067}א\u{2069}"),
+            ("א\u{001c}א", "\u{2067}א\u{2069}\u{001c}\u{2067}א\u{2069}"),
+        ] {
+            let spans = [TextSpan {
+                range: 0..text.len(),
+                source: 47,
+                style: TextStyle::default(),
+                boundary_before: ShapingBoundary::Continue,
+            }];
+            let scopes = [amazing_text::BidiScope {
+                range: 0..text.len(),
+                direction: Direction::RightToLeft,
+                unicode_bidi: UnicodeBidi::Isolate,
+            }];
+
+            let analysis = bidi_analysis(text, &spans, &scopes).unwrap();
+
+            assert_eq!(analysis.text, expected);
+        }
+    }
+
+    #[test]
+    fn bidi_scope_does_not_reset_at_a_non_b_line_separator() {
+        let text = "א\u{2028}א";
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 47,
+            style: TextStyle::default(),
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let scopes = [amazing_text::BidiScope {
+            range: 0..text.len(),
+            direction: Direction::RightToLeft,
+            unicode_bidi: UnicodeBidi::Isolate,
+        }];
+
+        let analysis = bidi_analysis(text, &spans, &scopes).unwrap();
+
+        assert_eq!(analysis.text, "\u{2067}א\u{2028}א\u{2069}");
+    }
+
+    #[test]
+    fn isolate_override_uses_first_strong_isolate_around_override() {
+        assert_eq!(
+            bidi_controls(Direction::LeftToRight, UnicodeBidi::IsolateOverride),
+            ("\u{2068}\u{202d}", "\u{202c}\u{2069}")
+        );
+        assert_eq!(
+            bidi_controls(Direction::RightToLeft, UnicodeBidi::IsolateOverride),
+            ("\u{2068}\u{202e}", "\u{202c}\u{2069}")
+        );
+    }
+
+    #[test]
+    fn bidi_scope_paragraph_break_cross_product_has_an_operation_cap() {
+        let text = "\n".repeat(4097);
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 47,
+            style: TextStyle::default(),
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        let scopes = (0..4097)
+            .map(|_| amazing_text::BidiScope {
+                range: 0..text.len(),
+                direction: Direction::RightToLeft,
+                unicode_bidi: UnicodeBidi::Isolate,
+            })
+            .collect::<Vec<_>>();
+
+        assert!(matches!(
+            bidi_analysis(&text, &spans, &scopes),
+            Err(TextError::ResourceLimit)
+        ));
+    }
+
+    #[test]
+    fn unsafe_breaks_include_internal_and_flagged_harf_edges() {
+        let run = ShapedRun {
+            text_range: 0..3,
+            source: 1,
+            font: FontKey(0),
+            font_size: 16.0,
+            direction: Direction::LeftToRight,
+            writing_mode: WritingMode::HorizontalTb,
+            metrics: FontMetrics {
+                ascent: 10.0,
+                descent: 3.0,
+                leading: 0.0,
+                x_height: 5.0,
+                cap_height: 7.0,
+            },
+            variations: Vec::new(),
+            synthesis: amazing_text::FontSynthesis::default(),
+            glyphs: vec![
+                ShapedGlyph {
+                    id: GlyphId(1),
+                    cluster: 0..2,
+                    advance_x: 1.0,
+                    advance_y: 0.0,
+                    offset_x: 0.0,
+                    offset_y: 0.0,
+                    flags: GlyphFlags::default(),
+                },
+                ShapedGlyph {
+                    id: GlyphId(2),
+                    cluster: 2..3,
+                    advance_x: 1.0,
+                    advance_y: 0.0,
+                    offset_x: 0.0,
+                    offset_y: 0.0,
+                    flags: GlyphFlags {
+                        unsafe_to_break: true,
+                        unsafe_to_concat: false,
+                    },
+                },
+            ],
+        };
+        let breaks = [
+            BreakOpportunity {
+                offset: 1,
+                kind: BreakKind::Allowed,
+            },
+            BreakOpportunity {
+                offset: 2,
+                kind: BreakKind::Allowed,
+            },
+        ];
+
+        assert_eq!(unsafe_break_offsets(&[run], &breaks), vec![1, 2]);
+    }
+
+    #[test]
+    fn paragraph_cluster_limit_is_checked_before_itemized_output_allocation() {
+        let provider = TextProvider::new();
+        let text = "a".repeat(MAX_TEXT_CLUSTERS + 1);
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 49,
+            style: TextStyle::default(),
+            boundary_before: ShapingBoundary::Continue,
+        }];
+
+        assert_eq!(
+            provider.shape(Paragraph {
+                text: &text,
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            }),
+            Err(TextError::ResourceLimit)
+        );
     }
 }

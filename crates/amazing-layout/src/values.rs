@@ -3,7 +3,8 @@
 //!
 //! Phase 3 subset — implemented:
 //! - absolute lengths: px, pt, pc, in, cm, mm (96dpi device model)
-//! - font-relative lengths: em, rem; percentages against a caller-supplied
+//! - font-relative lengths: em, rem, ch (the current 0-glyph approximation);
+//!   percentages against a caller-supplied
 //!   base (containing-block width for margins/padding/width, parent font for
 //!   font-size)
 //! - shorthand expansion (`margin`/`padding` 1–4 value forms) layered under
@@ -13,7 +14,7 @@
 //! - font-size keywords (medium = 16px ladder), unitless line-height numbers
 //!
 //! Deferred/deviations:
-//! - calc(), ch/ex units, vmin/vmax, `smaller`/`larger` are not resolved
+//! - calc(), ex units, vmin/vmax, `smaller`/`larger` are not resolved
 //! - border-width keywords map thin/medium/thick → 1/3/5px regardless of the
 //!   computed font-size scaling browsers apply to them
 
@@ -76,6 +77,7 @@ impl MaybeLen {
             "mm" => MaybeLen::Px(n * PX_PER_IN / 25.4),
             "em" => MaybeLen::Px(n * em_base),
             "rem" => MaybeLen::Px(n * ROOT_FONT_SIZE),
+            "ch" => MaybeLen::Px(n * em_base * 0.6),
             "%" => MaybeLen::Px(n * percent_base / 100.0),
             "" if n == 0.0 => MaybeLen::Px(0.0),
             _ => return None,
@@ -367,6 +369,7 @@ mod tests {
         assert_eq!(parse_len("50%", 16.0, 400.0), Some(200.0));
         assert_eq!(parse_len("0", 16.0, 100.0), Some(0.0));
         assert_eq!(parse_len("1rem", 16.0, 100.0), Some(16.0));
+        assert_eq!(parse_len("16ch", 32.0, 100.0), Some(307.2));
         assert_eq!(parse_len("bogus", 16.0, 100.0), None);
         assert_eq!(parse_len("14", 16.0, 100.0), None); // bare nonzero number
     }

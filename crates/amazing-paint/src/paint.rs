@@ -672,6 +672,8 @@ mod tests {
                 font: amazing_text::FontKey(0),
                 glyph: amazing_text::GlyphId('A' as u32),
                 cluster: 0..1,
+                source_range: 0..1,
+                source_mappings: Vec::new(),
                 x: 2.0,
                 y: 0.0,
                 advance_x: 5.5,

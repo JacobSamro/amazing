@@ -90,3 +90,17 @@ pixel-hash projections. `text-results-ticket4a.json` records the broad sample's
 19/48 → 12/48 raw and 8/29 → 7/29 consensus movement; those decreases are
 classified as former inert equal-pixel results becoming real mismatches after
 web/system glyphs replaced heuristic rectangles.
+
+Ticket #4b uses the 16-case `text-flow-manifest.json` and reusable dynamic
+profile:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1 `
+  -ProfilePath tests\wpt-render\text-flow-profile.json
+```
+
+`text-flow-oracles.json` records exact-revision Blink/WebKit outcomes.
+`text-flow-results-ticket4b.json` records the 0/16 → 14/16 movement, the
+0/14 → 14/14 consensus movement, two repeat-stable run ids, every final pixel
+hash, and the normalized projection SHA-256. The remaining two mismatches are
+triaged as static-position/float geometry rather than text shaping.

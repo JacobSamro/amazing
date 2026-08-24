@@ -142,6 +142,37 @@ can unwind into an engine core.
 Exact provider selection and evidence are recorded in
 `docs/render/TEXT_PIPELINE_RESEARCH.md`.
 
+### 4e. Line layout is cluster-indexed and source-preserving
+
+CSS white-space transformation, legal/emergency line opportunities,
+discretionary hyphens, bidi levels, visual order, and caret/source mapping all
+use original logical grapheme/glyph-cluster ranges. No stage may reorder or
+break Unicode scalars independently. Layout owns typed CSS policy and original
+DOM source maps; the provider owns Unicode algorithms and OpenType behavior.
+
+`Paragraph` carries an explicit containing-block base direction, style spans,
+paired nested bidi scopes, and transformed-to-source mappings. `shape` returns logical paragraph glyphs
+and tailored opportunities; `shape_line` accepts a selected logical range,
+applies UAX #9 line reordering, and reshapes directional/font runs with full
+pre/post hard-boundary context. Layout advances the returned visual stream;
+a separately shaped discretionary hyphen participates in fitting and is
+inserted at the selected visual edge. Paint continues to
+rasterize those exact font/glyph ids and never repeats Unicode analysis or
+measurement. Paragraph bytes, spans, mappings, font data, and caches all have
+independent limits.
+
+CSS tailoring may change at style-span boundaries, but ICU grapheme
+segmentation is paragraph-global. Harf unsafe flags are surfaced on break
+offsets; selected soft edges are reshaped with full surrounding context so CSS
+Text joining behavior survives the wrap. Glyph fragments retain every
+intersecting source mapping rather than collapsing a cross-node cluster to one
+caret range.
+
+Line paragraphs retain `<br>` separators and U+FFFC atomic anchors inside
+paired bidi scopes. Visual reordering therefore moves replaced fragments and
+rebuilds inline decoration geometry together with glyphs rather than painting
+logical-order boxes behind a visual-order glyph stream.
+
 ### 5. unsafe policy
 
 No first-party `unsafe` outside platform-boundary modules (windowing FFI,

@@ -4,7 +4,7 @@ Canonical sequence for moving Amazing's style → layout → paint pipeline towa
 standards conformance. Resolve one ticket, verify its exit criteria on
 `win-001`, record measured results, then stop at the phase boundary for review.
 
-Frontier: **#4b — CSS-tailored breaking and bidirectional lines**
+Frontier: **#4c — Vertical metrics, writing modes, and ruby text**
 
 ## Evidence contract (resolved)
 
@@ -360,7 +360,7 @@ stayed 9/9 and Position stayed 9/12. Evidence is in
 
 Blocked by: #4a
 Type: Prototype
-Status: ⬜ Pending
+Status: ✅ Resolved
 
 ### Question
 
@@ -380,6 +380,36 @@ without losing source-cluster and caret mappings?
   soft hyphens have focused interface tests.
 - A pinned CSS Text/Bidi/white-space WPT family improves with repeat-stable
   hashes, exact-revision Blink/WebKit triage, and no #4a or geometry regression.
+
+### Answer
+
+The throwaway model proved that transformed text, source mappings, legal and
+emergency breaks, discretionary insertions, and visual order must all use one
+indivisible grapheme/glyph-cluster index; a scalar-indexed emergency case split
+a Devanagari conjunct and was rejected before production code. The terminal
+shell was deleted after the decision was absorbed.
+
+`amazing-text` now carries typed white-space, word/line/overflow break,
+hyphenation, Unicode-bidi, explicit paragraph-direction, source-map, safe-edge,
+and visual-line data through the existing std-only seam. The provider applies
+ICU CSS tailoring and UAX #9, synthesizes CSS bidi controls internally, shapes
+resolved directional runs, and reshapes selected line ranges with full
+pre/post context. Layout coalesces collapsible DOM-edge spaces without losing
+source ranges, retains preserved segment breaks/tabs, selects provider cluster
+opportunities, consumes visual runs, and inserts a hyphen only when a manual
+soft-hyphen break is selected. Paint still consumes exact glyph ids only.
+
+The 16-case unmodified upstream gate moved from **0/16 to 14/16** and from
+**0/14 to 14/14** on exact-revision Blink/WebKit-consensus cases. Two final
+800×600 runs have identical classifications and pixel hashes; normalized
+projection SHA-256 is
+`5585ae3cc21d9284ac54a6222bad5dedbac0cccc83683cc9ecd4bd3f4293d332`.
+The two remaining cases have matching glyph shapes but exercise the existing
+absolute static-position/float geometry defect; Blink passes and WebKit fails
+both at this revision. Evidence is in
+`tests/wpt-render/text-flow-results-ticket4b.json`.
+Phase #4a remains 12/12, block collapse remains 9/9, Position remains 9/12,
+and the full Rust 1.89 workspace plus locked GPUI check pass.
 
 ## #4c: Vertical metrics, writing modes, and ruby text
 

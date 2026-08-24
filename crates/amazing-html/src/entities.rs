@@ -13,6 +13,7 @@ pub const MAX_NAME_LEN: usize = 12;
 /// `(name including semicolon, replacement)` — probed longest-first.
 pub const NAMED: &[(&str, &str)] = &[
     ("&nbsp;", "\u{00A0}"),
+    ("&NewLine;", "\u{000A}"),
     ("&AMP;", "&"),
     ("&AElig;", "\u{00C6}"),
     ("&aacute;", "\u{00E1}"),
@@ -73,9 +74,11 @@ pub const NAMED: &[(&str, &str)] = &[
     ("&reg;", "\u{00AE}"),
     ("&rsquo;", "\u{2019}"),
     ("&sect;", "\u{00A7}"),
+    ("&shy;", "\u{00AD}"),
     ("&sup2;", "\u{00B2}"),
     ("&sup3;", "\u{00B3}"),
     ("&szlig;", "\u{00DF}"),
+    ("&Tab;", "\u{0009}"),
     ("&thetasym;", "\u{03D1}"),
     ("&times;", "\u{00D7}"),
     ("&trade;", "\u{2122}"),

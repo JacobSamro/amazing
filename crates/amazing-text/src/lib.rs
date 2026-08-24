@@ -7,7 +7,12 @@
 
 #![forbid(unsafe_code)]
 
+use std::collections::BTreeMap;
 use std::ops::Range;
+
+const MAX_PARAGRAPH_BYTES: usize = 8 * 1024 * 1024;
+const MAX_PARAGRAPH_SPANS: usize = 65_536;
+const MAX_SOURCE_MAPPINGS: usize = 262_144;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FontKey(pub u64);
@@ -28,6 +33,62 @@ pub enum WritingMode {
     HorizontalTb,
     VerticalRl,
     VerticalLr,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum WhiteSpace {
+    #[default]
+    Normal,
+    NoWrap,
+    Pre,
+    PreWrap,
+    PreLine,
+    BreakSpaces,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum WordBreak {
+    #[default]
+    Normal,
+    BreakAll,
+    KeepAll,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum UnicodeBidi {
+    #[default]
+    Normal,
+    Embed,
+    Isolate,
+    BidiOverride,
+    IsolateOverride,
+    Plaintext,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Hyphens {
+    None,
+    #[default]
+    Manual,
+    Auto,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum LineBreak {
+    #[default]
+    Auto,
+    Loose,
+    Normal,
+    Strict,
+    Anywhere,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum OverflowWrap {
+    #[default]
+    Normal,
+    BreakWord,
+    Anywhere,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -119,6 +180,12 @@ pub struct TextStyle {
     pub slant: FontSlant,
     pub direction: Direction,
     pub writing_mode: WritingMode,
+    pub white_space: WhiteSpace,
+    pub word_break: WordBreak,
+    pub unicode_bidi: UnicodeBidi,
+    pub hyphens: Hyphens,
+    pub line_break: LineBreak,
+    pub overflow_wrap: OverflowWrap,
     pub language: Option<String>,
     pub features: Vec<FeatureSetting>,
     pub variations: Vec<VariationSetting>,
@@ -135,6 +202,12 @@ impl Default for TextStyle {
             slant: FontSlant::Normal,
             direction: Direction::LeftToRight,
             writing_mode: WritingMode::HorizontalTb,
+            white_space: WhiteSpace::Normal,
+            word_break: WordBreak::Normal,
+            unicode_bidi: UnicodeBidi::Normal,
+            hyphens: Hyphens::Manual,
+            line_break: LineBreak::Auto,
+            overflow_wrap: OverflowWrap::Normal,
             language: None,
             features: Vec::new(),
             variations: Vec::new(),
@@ -151,9 +224,33 @@ pub struct TextSpan {
     pub boundary_before: ShapingBoundary,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceMapping {
+    /// Byte range in the transformed paragraph text.
+    pub text_range: Range<usize>,
+    pub source: u32,
+    /// Byte range in the original DOM text node.
+    pub source_range: Range<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BidiScope {
+    pub range: Range<usize>,
+    pub direction: Direction,
+    pub unicode_bidi: UnicodeBidi,
+}
+
 pub struct Paragraph<'a> {
     pub text: &'a str,
     pub spans: &'a [TextSpan],
+    pub sources: &'a [SourceMapping],
+    pub bidi_scopes: &'a [BidiScope],
+    pub base_direction: Direction,
+}
+
+pub struct LineRequest<'a> {
+    pub paragraph: Paragraph<'a>,
+    pub range: Range<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -174,6 +271,7 @@ impl FontMetrics {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct GlyphFlags {
     pub unsafe_to_break: bool,
+    pub unsafe_to_concat: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -204,6 +302,8 @@ pub struct ShapedRun {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BreakKind {
     Allowed,
+    Hyphen,
+    Emergency,
     Mandatory,
 }
 
@@ -217,6 +317,18 @@ pub struct BreakOpportunity {
 pub struct ShapedParagraph {
     pub runs: Vec<ShapedRun>,
     pub breaks: Vec<BreakOpportunity>,
+    /// Break offsets whose adjacent Harf cluster requires line-edge reshaping.
+    pub unsafe_breaks: Vec<usize>,
+    pub sources: Vec<SourceMapping>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ShapedLine {
+    pub text_range: Range<usize>,
+    pub runs: Vec<ShapedRun>,
+    /// Original logical cluster ranges in display order. Callers use this for
+    /// placement, hit testing, and caret mapping without reversing scalars.
+    pub visual_clusters: Vec<Range<usize>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -317,6 +429,7 @@ pub trait TextSystem {
     fn generation(&self) -> u64;
     fn metrics(&self, style: &TextStyle) -> Result<FontMetrics, TextError>;
     fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError>;
+    fn shape_line(&self, request: LineRequest<'_>) -> Result<ShapedLine, TextError>;
     fn rasterize(&self, request: GlyphRasterRequest<'_>) -> Result<Option<GlyphImage>, TextError>;
 }
 
@@ -347,7 +460,10 @@ impl TextSystem for FallbackTextSystem {
 
     fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError> {
         validate_paragraph(&paragraph)?;
-        let mut shaped = ShapedParagraph::default();
+        let mut shaped = ShapedParagraph {
+            sources: paragraph.sources.to_vec(),
+            ..ShapedParagraph::default()
+        };
         for span in paragraph.spans {
             let metrics = self.metrics(&span.style)?;
             let mut glyphs = paragraph.text[span.range.clone()]
@@ -388,9 +504,31 @@ impl TextSystem for FallbackTextSystem {
             });
         }
         for (start, ch) in paragraph.text.char_indices() {
+            let offset = start + ch.len_utf8();
+            let style = paragraph
+                .spans
+                .iter()
+                .find(|span| span.range.contains(&start))
+                .map(|span| &span.style);
             if ch.is_whitespace() {
                 shaped.breaks.push(BreakOpportunity {
-                    offset: start + ch.len_utf8(),
+                    offset,
+                    kind: if is_mandatory_break(ch) {
+                        BreakKind::Mandatory
+                    } else {
+                        BreakKind::Allowed
+                    },
+                });
+            } else if ch == '\u{00ad}'
+                && style.is_some_and(|style| style.hyphens == Hyphens::Manual)
+            {
+                shaped.breaks.push(BreakOpportunity {
+                    offset,
+                    kind: BreakKind::Hyphen,
+                });
+            } else if style.is_some_and(|style| style.word_break == WordBreak::BreakAll) {
+                shaped.breaks.push(BreakOpportunity {
+                    offset,
                     kind: BreakKind::Allowed,
                 });
             }
@@ -401,7 +539,56 @@ impl TextSystem for FallbackTextSystem {
                 kind: BreakKind::Mandatory,
             });
         }
+        shaped.breaks.retain(|opportunity| {
+            opportunity.kind == BreakKind::Mandatory
+                || style_at_break(paragraph.text, paragraph.spans, opportunity.offset)
+                    .is_none_or(|style| white_space_wraps(style.white_space))
+        });
+        shaped.breaks.sort_by_key(|opportunity| opportunity.offset);
+        shaped.breaks.dedup_by(|right, left| {
+            if left.offset != right.offset {
+                return false;
+            }
+            if right.kind == BreakKind::Mandatory {
+                left.kind = BreakKind::Mandatory;
+            }
+            true
+        });
         Ok(shaped)
+    }
+
+    fn shape_line(&self, request: LineRequest<'_>) -> Result<ShapedLine, TextError> {
+        validate_line_request(&request)?;
+        let shaped = self.shape(Paragraph {
+            text: request.paragraph.text,
+            spans: request.paragraph.spans,
+            sources: request.paragraph.sources,
+            bidi_scopes: request.paragraph.bidi_scopes,
+            base_direction: request.paragraph.base_direction,
+        })?;
+        let mut visual_clusters = shaped
+            .runs
+            .iter()
+            .flat_map(|run| run.glyphs.iter().map(|glyph| glyph.cluster.clone()))
+            .filter(|cluster| request.range.contains(&cluster.start))
+            .collect::<Vec<_>>();
+        visual_clusters.sort_by_key(|cluster| cluster.start);
+        visual_clusters.dedup();
+        if request
+            .paragraph
+            .spans
+            .iter()
+            .find(|span| span.range.contains(&request.range.start))
+            .is_some_and(|span| span.style.direction == Direction::RightToLeft)
+        {
+            visual_clusters.reverse();
+        }
+        let runs = runs_in_visual_cluster_order(&shaped.runs, &visual_clusters);
+        Ok(ShapedLine {
+            text_range: request.range,
+            runs,
+            visual_clusters,
+        })
     }
 
     fn rasterize(&self, request: GlyphRasterRequest<'_>) -> Result<Option<GlyphImage>, TextError> {
@@ -412,7 +599,7 @@ impl TextSystem for FallbackTextSystem {
         let Some(ch) = char::from_u32(key.glyph.0) else {
             return Err(TextError::InvalidParagraph);
         };
-        if ch.is_whitespace() {
+        if ch.is_whitespace() || is_default_ignorable(ch) {
             return Ok(None);
         }
         let size = key.size();
@@ -436,6 +623,60 @@ impl TextSystem for FallbackTextSystem {
     }
 }
 
+fn runs_in_visual_cluster_order(
+    runs: &[ShapedRun],
+    visual_clusters: &[Range<usize>],
+) -> Vec<ShapedRun> {
+    let mut by_cluster: BTreeMap<usize, Vec<ShapedRun>> = BTreeMap::new();
+    for run in runs {
+        let mut glyphs_by_cluster: BTreeMap<usize, Vec<ShapedGlyph>> = BTreeMap::new();
+        for glyph in &run.glyphs {
+            glyphs_by_cluster
+                .entry(glyph.cluster.start)
+                .or_default()
+                .push(glyph.clone());
+        }
+        for (cluster_start, glyphs) in glyphs_by_cluster {
+            let text_range = glyphs
+                .iter()
+                .map(|glyph| glyph.cluster.clone())
+                .reduce(|left, right| left.start.min(right.start)..left.end.max(right.end))
+                .unwrap_or(cluster_start..cluster_start);
+            let visual_run = clone_run_with_glyphs(run, text_range, glyphs);
+            by_cluster
+                .entry(cluster_start)
+                .or_default()
+                .push(visual_run);
+        }
+    }
+    let mut visual_runs = Vec::new();
+    for cluster in visual_clusters {
+        if let Some(mut runs) = by_cluster.remove(&cluster.start) {
+            visual_runs.append(&mut runs);
+        }
+    }
+    visual_runs
+}
+
+fn clone_run_with_glyphs(
+    run: &ShapedRun,
+    text_range: Range<usize>,
+    glyphs: Vec<ShapedGlyph>,
+) -> ShapedRun {
+    ShapedRun {
+        text_range,
+        source: run.source,
+        font: run.font,
+        font_size: run.font_size,
+        direction: run.direction,
+        writing_mode: run.writing_mode,
+        metrics: run.metrics,
+        variations: run.variations.clone(),
+        synthesis: run.synthesis,
+        glyphs,
+    }
+}
+
 fn validate_style(style: &TextStyle) -> Result<(), TextError> {
     if !style.size.is_finite()
         || style.size <= 0.0
@@ -456,9 +697,21 @@ fn validate_style(style: &TextStyle) -> Result<(), TextError> {
     Ok(())
 }
 
-fn validate_paragraph(paragraph: &Paragraph<'_>) -> Result<(), TextError> {
+/// Validates bounded paragraph/style/source structure without shaping or
+/// allocating provider output.
+pub fn validate_paragraph(paragraph: &Paragraph<'_>) -> Result<(), TextError> {
+    if paragraph.text.len() > MAX_PARAGRAPH_BYTES
+        || paragraph.spans.len() > MAX_PARAGRAPH_SPANS
+        || paragraph.sources.len() > MAX_SOURCE_MAPPINGS
+        || paragraph.bidi_scopes.len() > MAX_PARAGRAPH_SPANS
+    {
+        return Err(TextError::ResourceLimit);
+    }
     if paragraph.text.is_empty() {
-        return if paragraph.spans.is_empty() {
+        return if paragraph.spans.is_empty()
+            && paragraph.sources.is_empty()
+            && paragraph.bidi_scopes.is_empty()
+        {
             Ok(())
         } else {
             Err(TextError::InvalidParagraph)
@@ -480,11 +733,43 @@ fn validate_paragraph(paragraph: &Paragraph<'_>) -> Result<(), TextError> {
     if cursor != paragraph.text.len() {
         return Err(TextError::InvalidParagraph);
     }
+    if paragraph.sources.iter().any(|mapping| {
+        mapping.text_range.start >= mapping.text_range.end
+            || mapping.text_range.end > paragraph.text.len()
+            || !paragraph.text.is_char_boundary(mapping.text_range.start)
+            || !paragraph.text.is_char_boundary(mapping.text_range.end)
+            || mapping.source_range.start > mapping.source_range.end
+    }) {
+        return Err(TextError::InvalidParagraph);
+    }
+    if paragraph.bidi_scopes.iter().any(|scope| {
+        scope.range.start >= scope.range.end
+            || scope.range.end > paragraph.text.len()
+            || !paragraph.text.is_char_boundary(scope.range.start)
+            || !paragraph.text.is_char_boundary(scope.range.end)
+            || scope.unicode_bidi == UnicodeBidi::Normal
+    }) {
+        return Err(TextError::InvalidParagraph);
+    }
+    Ok(())
+}
+
+fn validate_line_request(request: &LineRequest<'_>) -> Result<(), TextError> {
+    validate_paragraph(&request.paragraph)?;
+    if request.range.start >= request.range.end
+        || request.range.end > request.paragraph.text.len()
+        || !request.paragraph.text.is_char_boundary(request.range.start)
+        || !request.paragraph.text.is_char_boundary(request.range.end)
+    {
+        return Err(TextError::InvalidParagraph);
+    }
     Ok(())
 }
 
 fn fallback_advance(ch: char, size: f32) -> f32 {
-    let em = if ch.is_ascii_alphanumeric() {
+    let em = if is_default_ignorable(ch) {
+        0.0
+    } else if ch.is_ascii_alphanumeric() {
         0.55
     } else if ch.is_ascii_punctuation() || ch.is_whitespace() {
         0.30
@@ -492,6 +777,32 @@ fn fallback_advance(ch: char, size: f32) -> f32 {
         1.0
     };
     em * size
+}
+
+fn is_mandatory_break(ch: char) -> bool {
+    matches!(
+        ch,
+        '\n' | '\r' | '\u{000b}' | '\u{000c}' | '\u{0085}' | '\u{2028}' | '\u{2029}'
+    )
+}
+
+fn is_default_ignorable(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x00AD | 0x061C | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x206F | 0xFEFF
+    )
+}
+
+fn style_at_break<'a>(text: &str, spans: &'a [TextSpan], offset: usize) -> Option<&'a TextStyle> {
+    let character_start = text[..offset].char_indices().next_back()?.0;
+    spans
+        .iter()
+        .find(|span| span.range.contains(&character_start))
+        .map(|span| &span.style)
+}
+
+fn white_space_wraps(white_space: WhiteSpace) -> bool {
+    !matches!(white_space, WhiteSpace::NoWrap | WhiteSpace::Pre)
 }
 
 #[cfg(test)]
@@ -512,6 +823,9 @@ mod tests {
             .shape(Paragraph {
                 text: "Aب",
                 spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
             })
             .unwrap();
 
@@ -558,11 +872,19 @@ mod tests {
             .shape(Paragraph {
                 text: "A",
                 spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
             })
             .unwrap();
 
         assert_eq!(shaped.runs[0].glyphs[0].advance_x, 0.0);
         assert!(shaped.runs[0].glyphs[0].advance_y > 0.0);
+    }
+
+    #[test]
+    fn fallback_soft_hyphen_has_no_advance_until_selected() {
+        assert_eq!(fallback_advance('\u{00ad}', 16.0), 0.0);
     }
 
     #[test]
@@ -628,6 +950,9 @@ mod tests {
             FallbackTextSystem::new().shape(Paragraph {
                 text: "A",
                 spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
             }),
             Err(TextError::InvalidStyle)
         );

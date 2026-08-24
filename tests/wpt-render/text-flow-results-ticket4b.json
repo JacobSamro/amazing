@@ -1,0 +1,209 @@
+{
+  "schema": 1,
+  "phase": "ticket-4b-css-text-bidi-lines",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "WPT web fonts plus Windows generic-family candidates through the Amazing shaped-text provider",
+  "baseline": {
+    "pass": 0,
+    "mismatch": 16,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0,
+    "run_directory": "run-20260824T125509184Z-11464"
+  },
+  "counts": {
+    "pass": 14,
+    "mismatch": 2,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "blink_webkit_consensus": {
+    "case_count": 14,
+    "before_pass": 0,
+    "after_pass": 14
+  },
+  "repeat_runs": [
+    "run-20260824T171622013Z-10452",
+    "run-20260824T171649948Z-7956"
+  ],
+  "normalized_projection_sha256": "5585ae3cc21d9284ac54a6222bad5dedbac0cccc83683cc9ecd4bd3f4293d332",
+  "regression_gates": {
+    "phase4a_shaping": {
+      "run_directory": "run-20260824T170639613Z-10276",
+      "pass": 12,
+      "mismatch": 0
+    },
+    "block_collapse": {
+      "run_directory": "run-20260824T170721180Z-16236",
+      "pass": 9,
+      "mismatch": 0
+    },
+    "position": {
+      "run_directory": "run-20260824T170754663Z-10516",
+      "pass": 9,
+      "mismatch": 3
+    },
+    "rust_1_89_workspace": "pass",
+    "gpui_locked_check": "pass"
+  },
+  "remaining_mismatches": {
+    "count": 2,
+    "ids": [
+      "css-text__overflow-wrap__overflow-wrap-shaping-001.html",
+      "css-text__line-break__line-break-shaping-001.html"
+    ],
+    "triage": "Glyph shapes match their explicit references; mismatch is the existing absolute static-position/float geometry used to place the blue test box. Blink passes and WebKit fails both cases at the pinned revision, so neither is part of the 14-case cross-engine consensus gate."
+  },
+  "tests": [
+    {
+      "id": "css-writing-modes__bidi-normal-001.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "8112479e2060685ffadee9330ab48f7791bb77293310518324cc56d39795f3a6",
+      "reference_sha256": "8112479e2060685ffadee9330ab48f7791bb77293310518324cc56d39795f3a6",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__bidi-embed-001.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "a6b4258918c23eb0d3638ebb3c86f4681c1fb2a4879e3e0d8f313b33dcc4d97d",
+      "reference_sha256": "a6b4258918c23eb0d3638ebb3c86f4681c1fb2a4879e3e0d8f313b33dcc4d97d",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__bidi-override-001.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "d4aa418dda326ab7c5cd05c502efc51fa624be478fd04e6984ee1dd2cc55850f",
+      "reference_sha256": "d4aa418dda326ab7c5cd05c502efc51fa624be478fd04e6984ee1dd2cc55850f",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__bidi-isolate-001.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "a6b4258918c23eb0d3638ebb3c86f4681c1fb2a4879e3e0d8f313b33dcc4d97d",
+      "reference_sha256": "a6b4258918c23eb0d3638ebb3c86f4681c1fb2a4879e3e0d8f313b33dcc4d97d",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__bidi-isolate-007.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "79e743a39eaa1815341dd3b37d0d257a7a9d6c8a6b567dc1d489e85638f712af",
+      "reference_sha256": "79e743a39eaa1815341dd3b37d0d257a7a9d6c8a6b567dc1d489e85638f712af",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__bidi-isolate-override-001.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "d4aa418dda326ab7c5cd05c502efc51fa624be478fd04e6984ee1dd2cc55850f",
+      "reference_sha256": "d4aa418dda326ab7c5cd05c502efc51fa624be478fd04e6984ee1dd2cc55850f",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__bidi-plaintext-001.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "d055ba178c7d76153d26bc90d243251a555a67a56c8ba14c3a3a6a1cbdfeab6d",
+      "reference_sha256": "d055ba178c7d76153d26bc90d243251a555a67a56c8ba14c3a3a6a1cbdfeab6d",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__bidi-plaintext-011.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "be27d438b5570c34a3a3b5959c2f8ba325975bab7fe69305ab7f953253c41d23",
+      "reference_sha256": "be27d438b5570c34a3a3b5959c2f8ba325975bab7fe69305ab7f953253c41d23",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__white-space__white-space-normal-011.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "6aa26c83b713f22a63b9dfb41ce3a7fbcac343d7cb8c714ad1eb8cc5fcd546a7",
+      "reference_sha256": "6aa26c83b713f22a63b9dfb41ce3a7fbcac343d7cb8c714ad1eb8cc5fcd546a7",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__white-space__white-space-pre-011.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "d3767518aa81655dbe47573c94832cb838bd49eb852685d410b50efd22e9772e",
+      "reference_sha256": "d3767518aa81655dbe47573c94832cb838bd49eb852685d410b50efd22e9772e",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__word-break__word-break-break-all-014.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "5256f063529ddb5f318d3adcfcb6cd9f2a3e934dbcba245e8af179c5f19c09c0",
+      "reference_sha256": "5256f063529ddb5f318d3adcfcb6cd9f2a3e934dbcba245e8af179c5f19c09c0",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__word-break__word-break-keep-all-005.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "74041b6194cae3e0ee373bff5646986405f8da9abbeadfb3310cb382a140b26c",
+      "reference_sha256": "74041b6194cae3e0ee373bff5646986405f8da9abbeadfb3310cb382a140b26c",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__overflow-wrap__overflow-wrap-cluster-001.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "e13f53999e67b129ff0236fc5d26e895e47d142f185f36077cdbfd8e1e96c072",
+      "reference_sha256": "e13f53999e67b129ff0236fc5d26e895e47d142f185f36077cdbfd8e1e96c072",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__overflow-wrap__overflow-wrap-shaping-001.html",
+      "before": "mismatch",
+      "after": "mismatch",
+      "differing_pixels": 13049,
+      "actual_sha256": "fc7dee1bd7f7d870a9e1c8504aa34b66901ab2dc45895ec24130e4202cfe9174",
+      "reference_sha256": "6cd76fb6321f3c53b8c9fd4bbfd49875a2f86bf2d6276bba07f2ce1f023c7cc3",
+      "diff_sha256": "6a3c14f8984b61ab8f05ae9fbbfc42d1777e379ee871f5e785d13a6538ea40fe"
+    },
+    {
+      "id": "css-text__line-break__line-break-shaping-001.html",
+      "before": "mismatch",
+      "after": "mismatch",
+      "differing_pixels": 13049,
+      "actual_sha256": "fc7dee1bd7f7d870a9e1c8504aa34b66901ab2dc45895ec24130e4202cfe9174",
+      "reference_sha256": "6cd76fb6321f3c53b8c9fd4bbfd49875a2f86bf2d6276bba07f2ce1f023c7cc3",
+      "diff_sha256": "6a3c14f8984b61ab8f05ae9fbbfc42d1777e379ee871f5e785d13a6538ea40fe"
+    },
+    {
+      "id": "css-text__hyphens__hyphens-manual-inline-011.html",
+      "before": "mismatch",
+      "after": "pass",
+      "differing_pixels": 0,
+      "actual_sha256": "5a1e0c0d527578846c13a781619772cd3c207453223ed3d7f4182748c6c2390a",
+      "reference_sha256": "5a1e0c0d527578846c13a781619772cd3c207453223ed3d7f4182748c6c2390a",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    }
+  ]
+}

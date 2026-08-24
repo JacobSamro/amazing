@@ -1548,6 +1548,18 @@ mod tests {
     }
 
     #[test]
+    fn whitespace_control_entities_decode_for_css_text_processing() {
+        let tokens = tokenize("a&Tab;b&NewLine;c");
+        assert_eq!(tokens, vec![Token::Characters("a\tb\nc".into())]);
+    }
+
+    #[test]
+    fn soft_hyphen_entity_decodes_to_the_discretionary_character() {
+        let tokens = tokenize("a&shy;b");
+        assert_eq!(tokens, vec![Token::Characters("a\u{00ad}b".into())]);
+    }
+
+    #[test]
     fn entities_in_attr_blocked_by_equals() {
         // "?a=&ampx" — legacy "&amp" followed by '=' must not decode.
         let toks = tokenize("<a href=\"?a=&ampx\">");

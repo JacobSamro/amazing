@@ -68,7 +68,15 @@ pub fn compute(dom: &Dom, author_sheets: &[Stylesheet]) -> StyledDom {
     }
 
     let mut out = StyledDom::default();
-    style_subtree(dom, NodeIdx(0), None, &ua_rules, &author_rules, &mut out);
+    style_subtree(
+        dom,
+        NodeIdx(0),
+        None,
+        16.0,
+        &ua_rules,
+        &author_rules,
+        &mut out,
+    );
     out
 }
 
@@ -76,22 +84,54 @@ fn style_subtree(
     dom: &Dom,
     node: NodeIdx,
     parent_style: Option<&ComputedStyle>,
+    root_font_px: f32,
     ua_rules: &[CompiledRule],
     author_rules: &[CompiledRule],
     out: &mut StyledDom,
 ) {
     if dom.name(node).is_some() {
-        let style =
-            compute_one(dom, node, parent_style, ua_rules, author_rules);
+        let style = compute_one(
+            dom,
+            node,
+            parent_style,
+            root_font_px,
+            ua_rules,
+            author_rules,
+        );
+        let descendant_root_font_px = if dom.name(node) == Some("html") {
+            style
+                .get("font-size")
+                .and_then(|value| value.strip_suffix("px"))
+                .and_then(|value| value.parse::<f32>().ok())
+                .unwrap_or(root_font_px)
+        } else {
+            root_font_px
+        };
         for child in dom.children(node) {
-            style_subtree(dom, child, Some(&style), ua_rules, author_rules, out);
+            style_subtree(
+                dom,
+                child,
+                Some(&style),
+                descendant_root_font_px,
+                ua_rules,
+                author_rules,
+                out,
+            );
         }
         out.styles.insert(node.0, style);
     } else {
         // Text/comment/document nodes carry no style; children of the
         // document node inherit from nothing.
         for child in dom.children(node) {
-            style_subtree(dom, child, parent_style, ua_rules, author_rules, out);
+            style_subtree(
+                dom,
+                child,
+                parent_style,
+                root_font_px,
+                ua_rules,
+                author_rules,
+                out,
+            );
         }
     }
 }
@@ -187,6 +227,7 @@ fn compute_one(
     dom: &Dom,
     el: NodeIdx,
     parent_style: Option<&ComputedStyle>,
+    root_font_px: f32,
     ua_rules: &[CompiledRule],
     author_rules: &[CompiledRule],
 ) -> ComputedStyle {
@@ -209,6 +250,19 @@ fn compute_one(
     // even though the computed map is flat.
     let mut pool: Vec<FlatDecl> = Vec::new();
     let mut source_order = 0u64;
+    if let Some(direction) = attr_of(dom, el, "dir")
+        .filter(|value| value.eq_ignore_ascii_case("ltr") || value.eq_ignore_ascii_case("rtl"))
+    {
+        pool.push(FlatDecl {
+            prop: "direction".into(),
+            value: direction.to_ascii_lowercase(),
+            important: false,
+            inline: false,
+            ua: false,
+            spec: Specificity::default(),
+            order: 0,
+        });
+    }
     for rule in ua_rules.iter().chain(author_rules.iter()) {
         let matched_specificity = rule
             .selectors
@@ -274,7 +328,7 @@ fn compute_one(
         .into_iter()
         .map(|(property, candidate)| (property.to_owned(), candidate.value.to_owned()))
         .collect();
-    computed::resolve(parent_style, cascaded)
+    computed::resolve_with_root(parent_style, cascaded, root_font_px)
 }
 
 fn attr_of<'d>(dom: &'d Dom, el: NodeIdx, name: &str) -> Option<&'d str> {
@@ -391,7 +445,7 @@ mod tests {
         // via display:none at layout time — here just check the rule hit.
         assert_eq!(styled.get(els[1]).unwrap().get("display"), Some("none"));
         // Heading picked up its UA font-size.
-        assert_eq!(styled.get(els[4]).unwrap().get("font-size"), Some("2em"));
+        assert_eq!(styled.get(els[4]).unwrap().get("font-size"), Some("32px"));
     }
 
     #[test]
@@ -496,6 +550,36 @@ mod tests {
         assert_eq!(styled.get(deep).unwrap().get("color"), Some("teal"));
         // Non-inherited props do NOT flow: span stays display:inline.
         assert_eq!(styled.get(inner).unwrap().get("display"), Some("inline"));
+    }
+
+    #[test]
+    fn dir_hint_inherits_but_author_direction_overrides_it() {
+        let mut dom = Dom::new();
+        let div = dom.create_element(NodeIdx(0), "div");
+        dom.set_attrs(div, vec![("dir".into(), "rtl".into())]);
+        let span = dom.create_element(div, "span");
+        dom.set_attrs(span, vec![("style".into(), "direction:ltr".into())]);
+        dom.create_text(span, "x");
+        let em = dom.create_element(div, "em");
+        dom.create_text(em, "y");
+        let styled = compute(&dom, &[]);
+
+        assert_eq!(styled.get(div).unwrap().get("direction"), Some("rtl"));
+        assert_eq!(styled.get(span).unwrap().get("direction"), Some("ltr"));
+        assert_eq!(styled.get(em).unwrap().get("direction"), Some("rtl"));
+    }
+
+    #[test]
+    fn rem_uses_the_computed_root_font_size() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        dom.set_attrs(html, vec![("style".into(), "font-size:20px".into())]);
+        let body = dom.create_element(html, "body");
+        let paragraph = dom.create_element(body, "p");
+        dom.set_attrs(paragraph, vec![("style".into(), "font-size:2rem".into())]);
+        let styled = compute(&dom, &[]);
+
+        assert_eq!(styled.get(paragraph).unwrap().get("font-size"), Some("40px"));
     }
 
     #[test]

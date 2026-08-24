@@ -133,11 +133,13 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "grid-template-columns", initial: "none", inherited: false },
     PropertyMetadata { name: "grid-template-rows", initial: "none", inherited: false },
     PropertyMetadata { name: "height", initial: "auto", inherited: false },
+    PropertyMetadata { name: "hyphens", initial: "manual", inherited: true },
     PropertyMetadata { name: "justify-content", initial: "normal", inherited: false },
     PropertyMetadata { name: "justify-items", initial: "legacy", inherited: false },
     PropertyMetadata { name: "justify-self", initial: "auto", inherited: false },
     PropertyMetadata { name: "letter-spacing", initial: "normal", inherited: true },
     PropertyMetadata { name: "left", initial: "auto", inherited: false },
+    PropertyMetadata { name: "line-break", initial: "auto", inherited: true },
     PropertyMetadata { name: "line-height", initial: "normal", inherited: true },
     PropertyMetadata { name: "list-style-image", initial: "none", inherited: true },
     PropertyMetadata { name: "list-style-position", initial: "outside", inherited: true },
@@ -154,6 +156,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "order", initial: "0", inherited: false },
     PropertyMetadata { name: "orphans", initial: "2", inherited: true },
     PropertyMetadata { name: "overflow", initial: "visible", inherited: false },
+    PropertyMetadata { name: "overflow-wrap", initial: "normal", inherited: true },
     PropertyMetadata { name: "padding-bottom", initial: "0", inherited: false },
     PropertyMetadata { name: "padding-left", initial: "0", inherited: false },
     PropertyMetadata { name: "padding-right", initial: "0", inherited: false },
@@ -173,6 +176,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "white-space", initial: "normal", inherited: true },
     PropertyMetadata { name: "widows", initial: "2", inherited: true },
     PropertyMetadata { name: "width", initial: "auto", inherited: false },
+    PropertyMetadata { name: "word-break", initial: "normal", inherited: true },
     PropertyMetadata { name: "word-spacing", initial: "normal", inherited: true },
     PropertyMetadata { name: "z-index", initial: "auto", inherited: false },
 ];
@@ -529,9 +533,18 @@ fn css_wide_keyword(value: &str) -> Option<CssWide> {
 }
 
 /// Turns one cascaded winner per property into computed values.
+#[cfg(test)]
 pub(crate) fn resolve(
     parent: Option<&ComputedStyle>,
+    cascaded: BTreeMap<String, String>,
+) -> ComputedStyle {
+    resolve_with_root(parent, cascaded, 16.0)
+}
+
+pub(crate) fn resolve_with_root(
+    parent: Option<&ComputedStyle>,
     mut cascaded: BTreeMap<String, String>,
+    root_font_px: f32,
 ) -> ComputedStyle {
     let mut inherited_custom = parent
         .map(|style| style.custom.clone())
@@ -580,7 +593,13 @@ pub(crate) fn resolve(
         let value = match cascaded.remove(property.name) {
             None => default_value(*property, parent_value),
             Some(specified) => {
-                compute_normal_value(*property, &specified, parent_value, &mut resolver)
+                compute_normal_value(
+                    *property,
+                    &specified,
+                    parent_value,
+                    root_font_px,
+                    &mut resolver,
+                )
             },
         };
         properties.insert(property.name.to_owned(), value);
@@ -614,6 +633,7 @@ fn compute_normal_value(
     property: PropertyMetadata,
     specified: &str,
     parent: Option<&str>,
+    root_font_px: f32,
     resolver: &mut CustomResolver<'_>,
 ) -> String {
     let Some(tokens) = resolver.substitute(&tokenize(specified)) else {
@@ -624,13 +644,87 @@ fn compute_normal_value(
         return default_value(property, parent);
     }
     let value = serialize_computed(&tokens);
-    match css_wide_keyword(&value) {
+    let computed = match css_wide_keyword(&value) {
         Some(CssWide::Initial) => property.initial.to_owned(),
         Some(CssWide::Inherit) => parent.unwrap_or(property.initial).to_owned(),
         Some(CssWide::Unset) => default_value(property, parent),
         // Origin/layer rollback needs retained lower cascade candidates and is
         // deliberately not fabricated at this stage.
         Some(CssWide::Revert | CssWide::RevertLayer) | None => value,
+    };
+    if property.name == "font-size" {
+        computed_font_size(&computed, parent, root_font_px).unwrap_or(computed)
+    } else {
+        computed
+    }
+}
+
+fn computed_font_size(value: &str, parent: Option<&str>, root_font_px: f32) -> Option<String> {
+    let parent_px = parent.and_then(font_size_px).unwrap_or(16.0);
+    let lower = value.trim().to_ascii_lowercase();
+    let px = match lower.as_str() {
+        "xx-small" => 9.0,
+        "x-small" => 10.0,
+        "small" => 13.0,
+        "medium" => 16.0,
+        "large" => 18.0,
+        "x-large" => 24.0,
+        "xx-large" => 32.0,
+        "xxx-large" => 48.0,
+        "larger" => relative_font_size(parent_px, true),
+        "smaller" => relative_font_size(parent_px, false),
+        _ if lower.ends_with('%') => {
+            parent_px * lower[..lower.len() - 1].parse::<f32>().ok()? / 100.0
+        },
+        _ if lower.ends_with("rem") => {
+            root_font_px * lower[..lower.len() - 3].parse::<f32>().ok()?
+        },
+        _ if lower.ends_with("em") => {
+            parent_px * lower[..lower.len() - 2].parse::<f32>().ok()?
+        },
+        _ if lower.ends_with("px") => lower[..lower.len() - 2].parse::<f32>().ok()?,
+        _ => return None,
+    };
+    if !px.is_finite() || !(0.0..=4096.0).contains(&px) {
+        return None;
+    }
+    Some(format_css_px(px))
+}
+
+fn relative_font_size(parent_px: f32, larger: bool) -> f32 {
+    const LADDER: [f32; 8] = [9.0, 10.0, 13.0, 16.0, 18.0, 24.0, 32.0, 48.0];
+    if larger {
+        LADDER
+            .into_iter()
+            .find(|candidate| *candidate > parent_px)
+            .unwrap_or(parent_px * 1.5)
+    } else {
+        LADDER
+            .into_iter()
+            .rev()
+            .find(|candidate| *candidate < parent_px)
+            .unwrap_or(parent_px / 1.5)
+    }
+}
+
+fn font_size_px(value: &str) -> Option<f32> {
+    value
+        .trim()
+        .strip_suffix("px")?
+        .parse::<f32>()
+        .ok()
+        .filter(|value| value.is_finite())
+}
+
+fn format_css_px(px: f32) -> String {
+    if px.fract().abs() < f32::EPSILON {
+        format!("{px:.0}px")
+    } else {
+        let mut value = format!("{px:.4}");
+        while value.ends_with('0') {
+            value.pop();
+        }
+        format!("{value}px")
     }
 }
 

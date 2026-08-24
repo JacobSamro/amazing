@@ -241,3 +241,34 @@ runs were pixel-hash identical. The broader sample moved from 19/48 raw and
 former unsupported equal-pixel passes. Normalized evidence is retained in
 `tests/wpt-render/text-shaping-results-ticket4a.json` and
 `tests/wpt-render/text-results-ticket4a.json`.
+
+## Ticket #4b outcome
+
+The throwaway line model established clusters—not scalars, words, or DOM text
+nodes—as the common coordinate system for CSS transformation, original-source
+mapping, legal/emergency breaks, bidi visual order, and discretionary glyphs.
+Production retained the existing `TextSystem` seam and added an explicit
+`shape_line` operation over an owned, provider-neutral paragraph contract.
+
+Layout now carries typed `white-space`, `word-break`, `line-break`,
+`overflow-wrap`, `hyphens`, `unicode-bidi`, and containing-block direction.
+ICU4X supplies CSS-tailored UAX #14 opportunities and whole-grapheme emergency
+breaks; unicode-bidi supplies paragraph levels and line visual runs. HarfRust
+reshapes each selected logical line range with full hard-boundary context and
+reports unsafe-to-break/concat flags. Transformed ranges retain original DOM
+source mappings, tabs are layout controls, and selected U+00AD opportunities
+append a separately shaped hyphen without mutating source text.
+
+The pinned 16-case CSS Text/Writing Modes family improved from 0/16 to 14/16.
+All 14 cases where exact-revision Blink and WebKit agree now pass. Two Arabic
+edge-shaping cases remain mismatches because Amazing places their absolute
+blue test box at the wrong static position around a float; the glyph output
+matches the explicit reference, and Blink/WebKit disagree on both cases. Two
+final runs are pixel-identical with normalized projection SHA-256
+`5585ae3cc21d9284ac54a6222bad5dedbac0cccc83683cc9ecd4bd3f4293d332`.
+Manifest, profile, oracle, and measured evidence live in `tests/wpt-render` as
+`text-flow-*` artifacts.
+
+Regression evidence after the final text-flow changes is Phase #4a 12/12,
+block collapse 9/9, Position 9/12, full Rust 1.89 workspace pass, and standalone
+locked GPUI check pass; exact run ids are recorded in the ticket #4b result.

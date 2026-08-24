@@ -1,0 +1,95 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "schema": 1,
+  "selection": {
+    "kind": "behavior-stratified",
+    "case_count": 16,
+    "behaviors": [
+      "bidi-normal",
+      "bidi-embed",
+      "bidi-override",
+      "bidi-isolate",
+      "bidi-plaintext",
+      "white-space-collapse-preserve",
+      "word-break",
+      "overflow-wrap-grapheme",
+      "line-edge-shaping",
+      "manual-soft-hyphen"
+    ]
+  },
+  "sparse_paths": [
+    "css/css-text/hyphens",
+    "css/css-text/line-break",
+    "css/css-text/overflow-wrap",
+    "css/css-text/white-space",
+    "css/css-text/word-break",
+    "css/css-writing-modes",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "css-writing-modes__bidi-normal-001.html",
+      "test": "css/css-writing-modes/bidi-normal-001.html"
+    },
+    {
+      "id": "css-writing-modes__bidi-embed-001.html",
+      "test": "css/css-writing-modes/bidi-embed-001.html"
+    },
+    {
+      "id": "css-writing-modes__bidi-override-001.html",
+      "test": "css/css-writing-modes/bidi-override-001.html"
+    },
+    {
+      "id": "css-writing-modes__bidi-isolate-001.html",
+      "test": "css/css-writing-modes/bidi-isolate-001.html"
+    },
+    {
+      "id": "css-writing-modes__bidi-isolate-007.html",
+      "test": "css/css-writing-modes/bidi-isolate-007.html"
+    },
+    {
+      "id": "css-writing-modes__bidi-isolate-override-001.html",
+      "test": "css/css-writing-modes/bidi-isolate-override-001.html"
+    },
+    {
+      "id": "css-writing-modes__bidi-plaintext-001.html",
+      "test": "css/css-writing-modes/bidi-plaintext-001.html"
+    },
+    {
+      "id": "css-writing-modes__bidi-plaintext-011.html",
+      "test": "css/css-writing-modes/bidi-plaintext-011.html"
+    },
+    {
+      "id": "css-text__white-space__white-space-normal-011.html",
+      "test": "css/css-text/white-space/white-space-normal-011.html"
+    },
+    {
+      "id": "css-text__white-space__white-space-pre-011.html",
+      "test": "css/css-text/white-space/white-space-pre-011.html"
+    },
+    {
+      "id": "css-text__word-break__word-break-break-all-014.html",
+      "test": "css/css-text/word-break/word-break-break-all-014.html"
+    },
+    {
+      "id": "css-text__word-break__word-break-keep-all-005.html",
+      "test": "css/css-text/word-break/word-break-keep-all-005.html"
+    },
+    {
+      "id": "css-text__overflow-wrap__overflow-wrap-cluster-001.html",
+      "test": "css/css-text/overflow-wrap/overflow-wrap-cluster-001.html"
+    },
+    {
+      "id": "css-text__overflow-wrap__overflow-wrap-shaping-001.html",
+      "test": "css/css-text/overflow-wrap/overflow-wrap-shaping-001.html"
+    },
+    {
+      "id": "css-text__line-break__line-break-shaping-001.html",
+      "test": "css/css-text/line-break/line-break-shaping-001.html"
+    },
+    {
+      "id": "css-text__hyphens__hyphens-manual-inline-011.html",
+      "test": "css/css-text/hyphens/hyphens-manual-inline-011.html"
+    }
+  ]
+}

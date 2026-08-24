@@ -153,7 +153,13 @@ pub struct LayoutBox {
 }
 
 impl LayoutBox {
-    pub fn new(node: Option<NodeIdx>, display: Display, style: ComputedStyle, font_size: f32, line_height: f32) -> Self {
+    pub fn new(
+        node: Option<NodeIdx>,
+        display: Display,
+        style: ComputedStyle,
+        font_size: f32,
+        line_height: f32,
+    ) -> Self {
         LayoutBox {
             node,
             display,
@@ -194,6 +200,14 @@ pub enum Flow {
 }
 
 /// Flattened inline-level content of an inline formatting context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextSourceMapping {
+    /// Byte range in the transformed `InlineNode::Text::text` value.
+    pub text_range: Range<usize>,
+    /// Byte range in the original DOM text node.
+    pub source_range: Range<usize>,
+}
+
 #[derive(Debug)]
 pub enum InlineNode {
     /// A whitespace-collapsed text run from one DOM text node, rendered at
@@ -201,14 +215,22 @@ pub enum InlineNode {
     Text {
         node: NodeIdx,
         text: String,
+        source_mappings: Vec<TextSourceMapping>,
         font_size: f32,
-        style: amazing_text::TextStyle,
+        style: Box<amazing_text::TextStyle>,
         color: String,
         background_color: String,
         inline_padding: values::Sides,
         boundary_before: amazing_text::ShapingBoundary,
         boundary_after: amazing_text::ShapingBoundary,
     },
+    /// Paired CSS/HTML bidi scope markers retained through nested inline
+    /// flattening, including around `<br>` and atomic content.
+    BidiStart {
+        direction: amazing_text::Direction,
+        unicode_bidi: amazing_text::UnicodeBidi,
+    },
+    BidiEnd,
     /// `<br>` — force a line break.
     Break,
     /// Replaced inline content with dimensions resolved before layout.
@@ -248,6 +270,11 @@ pub struct GlyphFrag {
     pub font: FontKey,
     pub glyph: GlyphId,
     pub cluster: Range<usize>,
+    /// Byte range in the original DOM text node represented by this cluster.
+    pub source_range: Range<usize>,
+    /// Every original DOM range participating in this cluster. A ligature or
+    /// collapsed space can map to more than one text node.
+    pub source_mappings: Vec<amazing_text::SourceMapping>,
     pub x: f32,
     /// Inline-axis offset from the line baseline for vertical runs.
     pub y: f32,
@@ -284,7 +311,12 @@ pub struct WordFrag {
 }
 
 /// Convenience entry point: HTML + CSS in, laid-out root box out.
-pub fn layout_document(html: &str, author_css: &str, viewport_width: f32, fonts: &font::FontSource) -> LayoutBox {
+pub fn layout_document(
+    html: &str,
+    author_css: &str,
+    viewport_width: f32,
+    fonts: &font::FontSource,
+) -> LayoutBox {
     let dom = amazing_html::parse(html);
     layout_dom_document(&dom, author_css, viewport_width, fonts)
 }
@@ -333,7 +365,10 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
     if let Flow::Inlines(items) = &layout.flow {
         let first_style = items.iter().find_map(|item| match item {
             InlineNode::Text { style, .. } => Some(style),
-            InlineNode::Break | InlineNode::Replaced { .. } => None,
+            InlineNode::BidiStart { .. }
+            | InlineNode::BidiEnd
+            | InlineNode::Break
+            | InlineNode::Replaced { .. } => None,
         });
         if let Some(style) = first_style
             && let Ok(metrics) = text.metrics(style)
@@ -353,12 +388,22 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 ascent: metrics.ascent,
                 descent: metrics.descent,
             };
+            let base_direction = if layout
+                .style
+                .get("direction")
+                .is_some_and(|value| value.eq_ignore_ascii_case("rtl"))
+            {
+                amazing_text::Direction::RightToLeft
+            } else {
+                amazing_text::Direction::LeftToRight
+            };
             if let Some(lines) = inline::layout_lines_shaped(
                 items,
                 layout.content_box.x,
                 layout.content_box.y,
                 layout.content_box.w,
                 &strut,
+                base_direction,
                 text,
             ) {
                 let old_height = layout.lines.iter().map(|line| line.height).sum::<f32>();
@@ -397,13 +442,13 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 layout.content_box.h = (layout.content_box.h + shift).max(0.0);
                 layout.border_box.h = (layout.border_box.h + shift).max(0.0);
             }
-        },
+        }
         Flow::Flex(children) | Flow::Grid(children) => {
             for child in children {
                 apply_shaped_text(child, text);
             }
-        },
-        Flow::Inlines(_) | Flow::Empty => {},
+        }
+        Flow::Inlines(_) | Flow::Empty => {}
     }
     for child in &mut layout.positioned {
         apply_shaped_text(child, text);
@@ -421,13 +466,7 @@ pub fn layout_dom_document(
     viewport_width: f32,
     fonts: &font::FontSource,
 ) -> LayoutBox {
-    layout_dom_document_with_replaced(
-        dom,
-        author_css,
-        viewport_width,
-        fonts,
-        &NoReplacedElements,
-    )
+    layout_dom_document_with_replaced(dom, author_css, viewport_width, fonts, &NoReplacedElements)
 }
 
 /// Lays out a live DOM with an optional definite viewport block size. Fixed
@@ -486,9 +525,8 @@ pub fn layout_dom_document_with_replaced_in_viewport(
 /// Bottom edge of scrollable layout overflow. Absolute descendants contribute;
 /// fixed descendants stay viewport-attached and do not extend document height.
 pub fn layout_overflow_bottom(layout: &LayoutBox) -> f32 {
-    let mut bottom = layout.border_box.y
-        + layout.border_box.h
-        + layout.margin.bottom.unwrap_or(0.0);
+    let mut bottom =
+        layout.border_box.y + layout.border_box.h + layout.margin.bottom.unwrap_or(0.0);
     for line in &layout.lines {
         bottom = bottom.max(line.y_top + line.height);
     }
@@ -497,8 +535,8 @@ pub fn layout_overflow_bottom(layout: &LayoutBox) -> f32 {
             for child in children {
                 bottom = bottom.max(layout_overflow_bottom(child));
             }
-        },
-        Flow::Inlines(_) | Flow::Empty => {},
+        }
+        Flow::Inlines(_) | Flow::Empty => {}
     }
     for child in &layout.positioned {
         let fixed = child
@@ -528,8 +566,14 @@ fn dump_rec(dom: &amazing_dom::Dom, b: &LayoutBox, depth: usize, out: &mut Strin
     out.push_str(&format!(
         "{} border=({:.0},{:.0} {}x{}) content=({:.0},{:.0} {}x{})",
         b.label(dom),
-        bb.x, bb.y, bb.w, bb.h,
-        cb.x, cb.y, cb.w, cb.h,
+        bb.x,
+        bb.y,
+        bb.w,
+        bb.h,
+        cb.x,
+        cb.y,
+        cb.w,
+        cb.h,
     ));
     if b.padding.top != 0.0 || b.padding.left != 0.0 {
         out.push_str(&format!(
@@ -559,7 +603,10 @@ fn dump_rec(dom: &amazing_dom::Dom, b: &LayoutBox, depth: usize, out: &mut Strin
             line.y_top, line.height, line.baseline
         ));
         for w in &line.words {
-            out.push_str(&format!(" | {:?}@x={:.1} {}px w={:.1}", w.text, w.x, w.font_size, w.width));
+            out.push_str(&format!(
+                " | {:?}@x={:.1} {}px w={:.1}",
+                w.text, w.x, w.font_size, w.width
+            ));
         }
         for image in &line.replaced {
             out.push_str(&format!(
@@ -574,8 +621,8 @@ fn dump_rec(dom: &amazing_dom::Dom, b: &LayoutBox, depth: usize, out: &mut Strin
             for c in children {
                 dump_rec(dom, c, depth + 1, out);
             }
-        },
-        Flow::Inlines(_) | Flow::Empty => {},
+        }
+        Flow::Inlines(_) | Flow::Empty => {}
     }
     for child in &b.positioned {
         dump_rec(dom, child, depth + 1, out);
@@ -590,7 +637,10 @@ mod replaced_tests {
 
     impl ReplacedElementProvider for OneImage {
         fn intrinsic_size(&self, node: NodeIdx) -> Option<IntrinsicSize> {
-            (node == self.0).then_some(IntrinsicSize { width: 40.0, height: 30.0 })
+            (node == self.0).then_some(IntrinsicSize {
+                width: 40.0,
+                height: 30.0,
+            })
         }
     }
 
@@ -601,7 +651,7 @@ mod replaced_tests {
         match &layout.flow {
             Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
                 children.iter().find_map(|child| find(child, node))
-            },
+            }
             Flow::Inlines(_) | Flow::Empty => None,
         }
     }
@@ -627,7 +677,10 @@ mod replaced_tests {
         let line = &find(&root, paragraph).expect("paragraph box").lines[0];
 
         assert_eq!(line.replaced.len(), 1);
-        assert_eq!((line.replaced[0].width, line.replaced[0].height), (40.0, 30.0));
+        assert_eq!(
+            (line.replaced[0].width, line.replaced[0].height),
+            (40.0, 30.0)
+        );
         assert!(line.words[0].x < line.replaced[0].x);
         assert!(line.replaced[0].x + 40.0 <= line.words[1].x);
         assert_eq!(line.height, 30.0);
@@ -635,9 +688,7 @@ mod replaced_tests {
 
     #[test]
     fn block_replaced_content_uses_intrinsic_box_dimensions() {
-        let dom = amazing_html::parse(
-            "<body><img src=x.ppm style=\"display:block\"></body>",
-        );
+        let dom = amazing_html::parse("<body><img src=x.ppm style=\"display:block\"></body>");
         let image = (0..dom.node_count())
             .map(|index| NodeIdx(index as u32))
             .find(|node| dom.name(*node) == Some("img"))
@@ -659,7 +710,75 @@ mod replaced_tests {
 #[cfg(test)]
 mod shaped_text_tests {
     use super::*;
-    use amazing_text::FallbackTextSystem;
+    use amazing_text::{
+        FallbackTextSystem, FontMetrics, GlyphImage, GlyphRasterRequest, LineRequest, Paragraph,
+        ShapedLine, ShapedParagraph, TextError,
+    };
+
+    struct VisualLineFake(FallbackTextSystem);
+
+    struct AtomicOrderFake(FallbackTextSystem);
+
+    impl TextSystem for AtomicOrderFake {
+        fn generation(&self) -> u64 { self.0.generation() }
+        fn metrics(&self, style: &amazing_text::TextStyle) -> Result<FontMetrics, TextError> {
+            self.0.metrics(style)
+        }
+        fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError> {
+            self.0.shape(paragraph)
+        }
+        fn shape_line(&self, request: LineRequest<'_>) -> Result<ShapedLine, TextError> {
+            let mut line = self.0.shape_line(request)?;
+            line.runs.reverse();
+            line.visual_clusters.reverse();
+            Ok(line)
+        }
+        fn rasterize(
+            &self,
+            request: GlyphRasterRequest<'_>,
+        ) -> Result<Option<GlyphImage>, TextError> {
+            self.0.rasterize(request)
+        }
+    }
+
+    struct OneAtomic(NodeIdx);
+
+    impl ReplacedElementProvider for OneAtomic {
+        fn intrinsic_size(&self, node: NodeIdx) -> Option<IntrinsicSize> {
+            (node == self.0).then_some(IntrinsicSize {
+                width: 10.0,
+                height: 8.0,
+            })
+        }
+    }
+
+    impl TextSystem for VisualLineFake {
+        fn generation(&self) -> u64 {
+            self.0.generation()
+        }
+
+        fn metrics(&self, style: &amazing_text::TextStyle) -> Result<FontMetrics, TextError> {
+            self.0.metrics(style)
+        }
+
+        fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError> {
+            self.0.shape(paragraph)
+        }
+
+        fn shape_line(&self, request: LineRequest<'_>) -> Result<ShapedLine, TextError> {
+            let mut line = self.0.shape_line(request)?;
+            line.runs.swap(2, 3);
+            line.visual_clusters.swap(2, 3);
+            Ok(line)
+        }
+
+        fn rasterize(
+            &self,
+            request: GlyphRasterRequest<'_>,
+        ) -> Result<Option<GlyphImage>, TextError> {
+            self.0.rasterize(request)
+        }
+    }
 
     fn find<'a>(layout: &'a LayoutBox, node: NodeIdx) -> Option<&'a LayoutBox> {
         if layout.node == Some(node) {
@@ -668,7 +787,7 @@ mod shaped_text_tests {
         match &layout.flow {
             Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
                 children.iter().find_map(|child| find(child, node))
-            },
+            }
             Flow::Inlines(_) | Flow::Empty => None,
         }
     }
@@ -690,6 +809,346 @@ mod shaped_text_tests {
         assert_eq!(line.glyphs[1].cluster, 1..2);
         assert_eq!(line.glyphs[0].glyph, GlyphId('A' as u32));
         assert!(line.glyphs[1].x > line.glyphs[0].x);
+    }
+
+    #[test]
+    fn preserved_newline_wraps_without_losing_dom_source_offsets() {
+        let html = "<body><p style=\"white-space:pre\">A  \n B</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[1].glyphs.last().unwrap().source_range, 5..6);
+    }
+
+    #[test]
+    fn break_all_uses_provider_cluster_opportunities_for_wrapping() {
+        let html = "<body><p style=\"word-break:break-all;width:9px\">AB</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].glyphs[0].source_range, 0..1);
+        assert_eq!(lines[1].glyphs[0].source_range, 1..2);
+    }
+
+    #[test]
+    fn shaped_layout_consumes_visual_line_runs() {
+        let html = "<body><p>abאב</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = VisualLineFake(FallbackTextSystem::new());
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+
+        assert_eq!(
+            glyphs
+                .iter()
+                .map(|glyph| glyph.cluster.clone())
+                .collect::<Vec<_>>(),
+            vec![0..1, 1..2, 4..6, 2..4]
+        );
+        assert!(glyphs.windows(2).all(|pair| pair[0].x < pair[1].x));
+    }
+
+    #[test]
+    fn inline_background_geometry_follows_visual_bidi_order() {
+        let html = "<body><p>A<span style=\"background:black;padding:1px\">B</span>C</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = AtomicOrderFake(FallbackTextSystem::new());
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let line = &find(&layout, paragraph).unwrap().lines[0];
+        let a = line.glyphs.iter().find(|glyph| glyph.glyph == GlyphId('A' as u32)).unwrap();
+        let c = line.glyphs.iter().find(|glyph| glyph.glyph == GlyphId('C' as u32)).unwrap();
+        let background = &line.decorations[0];
+
+        assert!(c.x < background.x && background.x < a.x);
+        assert!(background.width > 0.55 * 16.0 + 1.9);
+    }
+
+    #[test]
+    fn nowrap_suppresses_soft_provider_breaks() {
+        let html = "<body><p style=\"white-space:nowrap;width:9px\">A B</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+
+        assert_eq!(find(&layout, paragraph).unwrap().lines.len(), 1);
+    }
+
+    #[test]
+    fn collapsed_whitespace_retains_original_dom_offsets() {
+        let html = "<body><p>A \n\t B</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+
+        assert_eq!(glyphs.last().unwrap().source_range, 5..6);
+    }
+
+    #[test]
+    fn inherited_relative_font_size_is_not_resolved_twice() {
+        let html = "<body><p style=\"font-size:150%\"><span>A</span></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyph = &find(&layout, paragraph).unwrap().lines[0].glyphs[0];
+
+        assert_eq!(glyph.font_size, 24.0);
+    }
+
+    #[test]
+    fn collapsible_space_runs_coalesce_across_dom_text_nodes() {
+        let html = "<body><p>A <span> B</span></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+        let a = glyphs
+            .iter()
+            .find(|glyph| glyph.glyph == GlyphId('A' as u32))
+            .unwrap();
+        let b = glyphs
+            .iter()
+            .find(|glyph| glyph.glyph == GlyphId('B' as u32))
+            .unwrap();
+        let space = glyphs
+            .iter()
+            .find(|glyph| glyph.cluster == (1..2))
+            .unwrap();
+
+        assert!((b.x - (a.x + a.advance_x.abs()) - 4.8).abs() < 0.01);
+        assert_eq!(space.source_mappings.len(), 2);
+    }
+
+    #[test]
+    fn standalone_whitespace_node_separates_adjacent_inline_boxes() {
+        let html = "<body><p><span>A</span> <span>B</span></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+        let a = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('A' as u32)).unwrap();
+        let b = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('B' as u32)).unwrap();
+
+        assert!((b.x - (a.x + a.advance_x.abs()) - 4.8).abs() < 0.01);
+    }
+
+    #[test]
+    fn standalone_pre_line_newline_node_creates_a_line_break() {
+        let html = "<body><p style=\"white-space:pre-line\"><span>A</span>\n<span>B</span></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+
+        assert_eq!(find(&layout, paragraph).unwrap().lines.len(), 2);
+    }
+
+    #[test]
+    fn selected_manual_hyphen_break_inserts_a_visible_hyphen() {
+        let html = "<body><p style=\"width:20px;hyphens:manual\">A&shy;BB</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].glyphs.last().unwrap().glyph, GlyphId('-' as u32));
+    }
+
+    #[test]
+    fn unfittable_manual_hyphen_is_not_selected_as_a_wrap_point() {
+        let html = "<body><p style=\"width:9px;hyphens:manual\">A&shy;BB</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0]
+            .glyphs
+            .iter()
+            .all(|glyph| glyph.glyph != GlyphId('-' as u32)));
+    }
+
+    #[test]
+    fn rtl_manual_hyphen_is_fitted_and_painted_at_the_visual_start() {
+        let html = "<body><p dir=ltr style=\"width:21px;hyphens:manual\"><span style=\"direction:rtl;unicode-bidi:embed;background:red\">א&shy;BB</span></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let line = &find(&layout, paragraph).unwrap().lines[0];
+        let hyphen = line.glyphs.iter().find(|glyph| glyph.glyph == GlyphId('-' as u32)).unwrap();
+        let letter = line.glyphs.iter().find(|glyph| glyph.glyph == GlyphId('א' as u32)).unwrap();
+        let decoration = line.decorations.iter().find(|fragment| fragment.color == "red").unwrap();
+
+        assert!(hyphen.x < letter.x);
+        assert!(decoration.x <= letter.x);
+        assert!(decoration.x + decoration.width >= letter.x + letter.advance_x.abs());
+        assert!(line
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.x + glyph.advance_x.abs())
+            .fold(0.0, f32::max)
+            <= find(&layout, paragraph).unwrap().content_box.x + 21.0 + f32::EPSILON);
+    }
+
+    #[test]
+    fn pre_line_preserves_segment_breaks_but_collapses_spaces() {
+        let html = "<body><p style=\"white-space:pre-line\">A   \n   B</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].glyphs.len(), 1);
+        assert_eq!(lines[1].glyphs.len(), 1);
+        assert_eq!(lines[1].glyphs[0].source_range, 8..9);
+    }
+
+    #[test]
+    fn pre_keeps_trailing_spaces_in_the_cluster_and_source_stream() {
+        let html = "<body><p style=\"white-space:pre\">A  </p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+
+        assert_eq!(glyphs.len(), 3);
+        assert_eq!(glyphs[2].source_range, 2..3);
+    }
+
+    #[test]
+    fn bidi_scope_survives_a_br_paragraph_boundary() {
+        let html = "<body><p><bdi dir=rtl>A<br>B</bdi></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].glyphs.len(), 1);
+        assert_eq!(lines[1].glyphs.len(), 1);
+    }
+
+    #[test]
+    fn atomic_inline_participates_in_visual_bidi_order() {
+        let html = "<body><p><span style=\"unicode-bidi:isolate\">A<img>B</span></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let image = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("img"))
+            .unwrap();
+        let text = AtomicOrderFake(FallbackTextSystem::new());
+        let layout = layout_dom_document_with_text_and_replaced_in_viewport(
+            &dom,
+            "",
+            200.0,
+            None,
+            &text,
+            &OneAtomic(image),
+        );
+        let line = &find(&layout, paragraph).unwrap().lines[0];
+        let a = line.glyphs.iter().find(|glyph| glyph.glyph == GlyphId('A' as u32)).unwrap();
+        let b = line.glyphs.iter().find(|glyph| glyph.glyph == GlyphId('B' as u32)).unwrap();
+        let atomic = &line.replaced[0];
+
+        assert!(
+            b.x < atomic.x && atomic.x < a.x,
+            "B={}, atomic={}, A={}",
+            b.x,
+            atomic.x,
+            a.x
+        );
+    }
+
+    #[test]
+    fn consecutive_preserved_breaks_create_an_empty_line_box() {
+        let html = "<body><p style=\"white-space:pre\">A\n\nB</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+
+        assert_eq!(lines.len(), 3);
+        assert!(lines[1].glyphs.is_empty());
     }
 
     #[test]
