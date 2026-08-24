@@ -1,5 +1,25 @@
+<#
+.SYNOPSIS
+Captures the Amazing GPUI window without requiring it to be foreground or
+unobscured.
+
+.EXAMPLE
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-gpui-shell.ps1
+
+.EXAMPLE
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\capture-gpui-shell.ps1 `
+  -ProcessId 10308 -OutputPath target\diagnostics\google-current.png
+
+.NOTES
+Run this in the interactive RDP user session. From SSH, invoke it through an
+interactive-only scheduled task so MainWindowHandle refers to the RDP desktop.
+#>
 param(
-    [string]$OutputPath = "target\gpui-shell-screen.png"
+    [string]$OutputPath = "target\gpui-shell-screen.png",
+    [int]$ProcessId = 0,
+    [string]$ProcessName = "amazing-shell",
+    [switch]$Activate,
+    [int]$SettleMilliseconds = 500
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,17 +32,25 @@ public static class AmazingCaptureNative {
     public struct Rect { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr handle, out Rect rect);
+    [DllImport("user32.dll")]
+    public static extern bool PrintWindow(IntPtr handle, IntPtr targetDc, uint flags);
 }
 "@
 
-$process = Get-Process -Name "amazing-shell" -ErrorAction Stop |
-    Where-Object { $_.MainWindowHandle -ne 0 } |
-    Select-Object -First 1
+$process = if ($ProcessId -gt 0) {
+    Get-Process -Id $ProcessId -ErrorAction Stop
+} else {
+    Get-Process -Name $ProcessName -ErrorAction Stop |
+        Where-Object { $_.MainWindowHandle -ne 0 } |
+        Select-Object -First 1
+}
 if ($null -eq $process) {
     throw "Amazing GPUI shell has no visible top-level window"
 }
-(New-Object -ComObject WScript.Shell).AppActivate($process.Id) | Out-Null
-Start-Sleep -Seconds 2
+if ($Activate) {
+    (New-Object -ComObject WScript.Shell).AppActivate($process.Id) | Out-Null
+    Start-Sleep -Milliseconds $SettleMilliseconds
+}
 
 $rect = New-Object AmazingCaptureNative+Rect
 if (-not [AmazingCaptureNative]::GetWindowRect($process.MainWindowHandle, [ref]$rect)) {
@@ -40,11 +68,16 @@ $directory = [System.IO.Path]::GetDirectoryName($fullOutputPath)
 $bitmap = New-Object System.Drawing.Bitmap $width, $height
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 try {
-    $graphics.CopyFromScreen(
-        (New-Object System.Drawing.Point $rect.Left, $rect.Top),
-        [System.Drawing.Point]::Empty,
-        (New-Object System.Drawing.Size $width, $height)
-    )
+    $targetDc = $graphics.GetHdc()
+    try {
+        # PW_RENDERFULLCONTENT captures the target even when another window
+        # obscures it, which keeps remote iterations deterministic.
+        if (-not [AmazingCaptureNative]::PrintWindow($process.MainWindowHandle, $targetDc, 2)) {
+            throw "PrintWindow failed for process $($process.Id)"
+        }
+    } finally {
+        $graphics.ReleaseHdc($targetDc)
+    }
     $bitmap.Save($fullOutputPath, [System.Drawing.Imaging.ImageFormat]::Png)
 } finally {
     $graphics.Dispose()
@@ -53,4 +86,5 @@ try {
 
 Write-Output "WIDTH=$width"
 Write-Output "HEIGHT=$height"
+Write-Output "PROCESS_ID=$($process.Id)"
 Write-Output "SCREENSHOT=$fullOutputPath"
