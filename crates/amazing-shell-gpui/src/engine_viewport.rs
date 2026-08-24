@@ -356,6 +356,7 @@ impl EngineViewport {
             },
             method: method.to_string(),
             body,
+            ..FetchOptions::default()
         };
         let response = session
             .borrow_mut()

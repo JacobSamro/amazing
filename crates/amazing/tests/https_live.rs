@@ -10,6 +10,7 @@ fn google_https_returns_html() {
             request_headers: Vec::new(),
             method: "GET".into(),
             body: Vec::new(),
+            ..amazing_net::FetchOptions::default()
         },
     )
     .expect("Google HTTPS fetch");

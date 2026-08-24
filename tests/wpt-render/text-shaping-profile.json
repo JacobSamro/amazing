@@ -4,6 +4,7 @@
   "wpt_root": "target/wpt",
   "output_directory": "target/wpt-results",
   "executable_path": "target/debug/amazing.exe",
+  "font_set": "WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; Amazing deterministic fallback otherwise",
   "viewport_width": 800,
   "viewport_height": 600,
   "timeout_seconds": 20

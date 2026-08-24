@@ -1,0 +1,9 @@
+[package]
+name = "amazing-text"
+description = "Provider-neutral paragraph shaping and glyph raster contract"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

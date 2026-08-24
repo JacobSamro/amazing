@@ -31,12 +31,15 @@ use crate::NetError;
 /// Upper bound on buffered response bytes, enforced during both raw reads
 /// and dechunking.
 pub(crate) const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
+const MAX_HEADER_BYTES: usize = 64 * 1024;
 
 const USER_AGENT: &str = "Ferric/0.1";
 
 /// Performs one GET against an HTTP or HTTPS URL. HTTPS crosses the isolated
 /// vetted-rustls adapter; response parsing and safety limits remain here.
 pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetError> {
+    let body_limit = options.max_response_bytes.min(MAX_BODY_BYTES);
+    let wire_limit = body_limit.saturating_add(MAX_HEADER_BYTES);
     // ToSocketAddrs for (&str, u16) parses IP literals itself, but bracketed
     // IPv6 ("[::1]") does not parse — hand it the bare address instead.
     let connect_host = url.host.trim_start_matches('[').trim_end_matches(']');
@@ -80,7 +83,7 @@ pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetErro
             stream.set_write_timeout(Some(options.timeout))?;
             stream.write_all(&request)?;
             stream.flush()?;
-            (read_to_eof(&stream)?, false)
+            (read_to_eof(&stream, wire_limit)?, false)
         }
         "https" => {
             let response = amazing_net_tls::exchange(
@@ -88,7 +91,7 @@ pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetErro
                 url.port,
                 &request,
                 options.timeout,
-                MAX_BODY_BYTES,
+                wire_limit,
             )
             .map_err(|error| match error {
                 amazing_net_tls::TlsError::ResponseTooLarge => NetError::ResponseTooLarge,
@@ -98,18 +101,33 @@ pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetErro
         }
         other => return Err(NetError::UnsupportedScheme(other.to_string())),
     };
-    response_from_raw(url, &raw, require_explicit_body_length)
+    response_from_raw_with_limit(url, &raw, require_explicit_body_length, body_limit)
 }
 
+#[cfg(test)]
 fn response_from_raw(
     url: &Url,
     raw: &[u8],
     require_explicit_body_length: bool,
 ) -> Result<Response, NetError> {
+    response_from_raw_with_limit(url, raw, require_explicit_body_length, MAX_BODY_BYTES)
+}
+
+fn response_from_raw_with_limit(
+    url: &Url,
+    raw: &[u8],
+    require_explicit_body_length: bool,
+    body_limit: usize,
+) -> Result<Response, NetError> {
     let head_end = find_header_end(raw)
         .ok_or_else(|| NetError::MalformedResponse("no \\r\\n\\r\\n header terminator".into()))?;
     let (status, reason, headers) = parse_head(&raw[..head_end])?;
-    let body = decode_body(&raw[head_end + 4..], &headers, require_explicit_body_length)?;
+    let body = decode_body(
+        &raw[head_end + 4..],
+        &headers,
+        require_explicit_body_length,
+        body_limit,
+    )?;
 
     Ok(Response {
         url: url.to_string(),
@@ -123,7 +141,7 @@ fn response_from_raw(
 /// Reads until the peer closes (we always send `Connection: close`), with
 /// the size cap applied incrementally. A read-timeout fires here as a plain
 /// I/O error — partial data is discarded rather than served truncated.
-fn read_to_eof(mut stream: &TcpStream) -> Result<Vec<u8>, NetError> {
+fn read_to_eof(mut stream: &TcpStream, limit: usize) -> Result<Vec<u8>, NetError> {
     let mut buf = [0u8; 8192];
     let mut raw: Vec<u8> = Vec::with_capacity(8 * 1024);
     loop {
@@ -131,7 +149,7 @@ fn read_to_eof(mut stream: &TcpStream) -> Result<Vec<u8>, NetError> {
         if n == 0 {
             return Ok(raw);
         }
-        if raw.len().saturating_add(n) > MAX_BODY_BYTES {
+        if raw.len().saturating_add(n) > limit {
             return Err(NetError::ResponseTooLarge);
         }
         raw.extend_from_slice(&buf[..n]);
@@ -205,19 +223,20 @@ fn decode_body(
     body: &[u8],
     headers: &Headers,
     require_explicit_length: bool,
+    limit: usize,
 ) -> Result<Vec<u8>, NetError> {
     let chunked = headers.get_all("transfer-encoding").iter().any(|v| {
         v.split(',')
             .any(|t| t.trim().eq_ignore_ascii_case("chunked"))
     });
     if chunked {
-        Ok(dechunk(body)?.0)
+        Ok(dechunk_with_limit(body, limit)?.0)
     } else if let Some(cl) = headers.get("content-length") {
         let len: usize = cl
             .trim()
             .parse()
             .map_err(|_| NetError::MalformedResponse(format!("bad Content-Length: {cl:?}")))?;
-        if len > MAX_BODY_BYTES {
+        if len > limit {
             return Err(NetError::ResponseTooLarge);
         }
         if body.len() < len {
@@ -229,7 +248,11 @@ fn decode_body(
     } else {
         // Neither CL nor chunked: with Connection: close the body is
         // everything up to EOF (RFC 9112 §6.3 rule 7).
-        Ok(body.to_vec())
+        if body.len() > limit {
+            Err(NetError::ResponseTooLarge)
+        } else {
+            Ok(body.to_vec())
+        }
     }
 }
 
@@ -240,7 +263,12 @@ fn decode_body(
 /// contents are ignored (connection closes anyway, so there is nothing to
 /// keep alive about them). Bare-LF size lines are rejected deliberately —
 /// real-world servers that dechunk correctly always send CRLF.
+#[cfg(test)]
 fn dechunk(input: &[u8]) -> Result<(Vec<u8>, &[u8]), NetError> {
+    dechunk_with_limit(input, MAX_BODY_BYTES)
+}
+
+fn dechunk_with_limit(input: &[u8], limit: usize) -> Result<(Vec<u8>, &[u8]), NetError> {
     let malformed = |d: &str| NetError::MalformedResponse(format!("chunked: {d}"));
     let mut out = Vec::new();
     let mut pos = 0usize;
@@ -257,7 +285,7 @@ fn dechunk(input: &[u8]) -> Result<(Vec<u8>, &[u8]), NetError> {
         if size == 0 {
             break;
         }
-        if out.len().saturating_add(size) > MAX_BODY_BYTES {
+        if out.len().saturating_add(size) > limit {
             return Err(NetError::ResponseTooLarge);
         }
         let data_end = pos.saturating_add(size);
@@ -379,6 +407,7 @@ pub(crate) mod tests {
             ],
             method: "GET".into(),
             body: Vec::new(),
+            ..FetchOptions::default()
         };
         crate::fetch::fetch(&format!("http://127.0.0.1:{port}/headers"), &options).unwrap();
         let request = String::from_utf8(requests.recv_timeout(Duration::from_secs(5)).unwrap())
@@ -401,6 +430,7 @@ pub(crate) mod tests {
             )],
             method: "POST".into(),
             body: b"q=rust+browser".to_vec(),
+            ..FetchOptions::default()
         };
         let response = crate::fetch::fetch(
             &format!("http://127.0.0.1:{port}/submit"),

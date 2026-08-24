@@ -4,6 +4,7 @@ param(
     [string]$WptRoot = "",
     [string]$OutputDirectory = "",
     [string]$ExecutablePath = "",
+    [string]$FontSet = "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
     [int]$ViewportWidth = 800,
     [int]$ViewportHeight = 600,
     [int]$TimeoutSeconds = 20,
@@ -40,6 +41,10 @@ if ($ProfilePath) {
     if (-not $PSBoundParameters.ContainsKey("ExecutablePath") -and
         $profileProperties -contains "executable_path") {
         $ExecutablePath = [string]$profile.executable_path
+    }
+    if (-not $PSBoundParameters.ContainsKey("FontSet") -and
+        $profileProperties -contains "font_set") {
+        $FontSet = [string]$profile.font_set
     }
     if (-not $PSBoundParameters.ContainsKey("ViewportWidth") -and
         $profileProperties -contains "viewport_width") {
@@ -422,7 +427,7 @@ $report = [ordered]@{
     wpt_revision = $revision
     manifest = $ManifestPath
     viewport = [ordered]@{ width = $ViewportWidth; height = $ViewportHeight; device_scale = 1 }
-    font_set = "Amazing fallback metrics with RectInkProvider"
+    font_set = $FontSet
     run_directory = $runDirectory
     counts = $counts
     unexpected = $unexpected

@@ -1540,6 +1540,14 @@ mod tests {
     }
 
     #[test]
+    fn shaping_control_entities_decode_to_unicode_scalars() {
+        let tokens = tokenize("a&zwj;b&zwnj;c");
+        assert!(tokens.iter().any(|token| {
+            matches!(token, Token::Characters(data) if data.contains("a\u{200d}b\u{200c}c"))
+        }), "tokens were {tokens:?}");
+    }
+
+    #[test]
     fn entities_in_attr_blocked_by_equals() {
         // "?a=&ampx" — legacy "&amp" followed by '=' must not decode.
         let toks = tokenize("<a href=\"?a=&ampx\">");

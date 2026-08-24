@@ -4,7 +4,7 @@ Canonical sequence for moving Amazing's style → layout → paint pipeline towa
 standards conformance. Resolve one ticket, verify its exit criteria on
 `win-001`, record measured results, then stop at the phase boundary for review.
 
-Frontier: **#4a — shaped glyph-cluster provider slice**
+Frontier: **#4b — CSS-tailored breaking and bidirectional lines**
 
 ## Evidence contract (resolved)
 
@@ -31,13 +31,15 @@ Frontier: **#4a — shaped glyph-cluster provider slice**
   min/max-height, and collapse-through family: **9/9** (baseline 6/9).
 - HTML Position shard: **9/12** (baseline 5/12), including **5/5** in the
   exact-revision Blink/WebKit consensus subset.
-- Broad text diagnostic: **19/48** raw and **8/29** in the exact-revision
-  Blink/WebKit consensus subset. Focused shaping is **3/12** raw, but **0/8**
-  capability-credited consensus because its three raw passes load no web font
-  and exercise no shaped glyph cluster.
+- Broad text diagnostic: **12 pass / 36 mismatch** raw and **7/29** in the
+  exact-revision Blink/WebKit consensus subset. The lower raw count exposes
+  former inert equal-pixel results. Focused shaping is **12/12**, including
+  **8/8** exact-revision Blink/WebKit consensus (baseline 3/12 raw and 0/8
+  capability-credited).
 - Existing curated CSS2 geometry subset: **17/17**.
-- Existing feature regressions: **13 flex**, **16 grid**, **91 layout unit
-  tests**, and **52 paint unit tests**.
+- Existing feature regressions: **13 flex**, **16 grid**, **56 CSS**, **61
+  HTML**, **65 net**, **95 layout**, **54 paint**, **5 text-contract**, and **9
+  text-provider unit tests**.
 - These numbers establish regression coverage only; they do not establish
   compatibility with Blink, WebKit, or the broader web platform.
 
@@ -287,7 +289,7 @@ are in `docs/render/TEXT_PIPELINE_RESEARCH.md`.
 
 Blocked by: #4
 Type: Prototype
-Status: ⬜ Pending
+Status: ✅ Resolved
 
 ### Question
 
@@ -312,9 +314,92 @@ provider policy into CSS or provider types into engine cores?
   before/after plus Blink/WebKit-consensus counts.
 - The full workspace, block-collapse 9/9, and Position 9/12 gates do not regress.
 
+### Answer
+
+The prototype proved WOFF2 decode, HarfRust shaping, Swash rasterization, ICU
+segmentation, and bidi analysis on Rust 1.89 against WPT's Noto Naskh Arabic,
+then was deleted. Production now has two deep modules: std-only `amazing-text`
+owns the small text interface and provider-neutral paragraph spans,
+clusters, glyphs, metrics, breaks, raster images, and generation-keyed cache
+keys; isolated `amazing-text-provider` owns exact HarfRust 0.13.2, Swash
+0.2.10, ICU4X Segmenter 2.3.0, unicode-bidi 0.3.18, and wuff 0.2.8.
+
+CSS token/component-value grammars extract `@font-face` descriptors and expand
+the `font` shorthand. The driver resolves local, root-relative WPT, file, HTTP,
+and HTTPS font sources through a caller-selected 8 MiB fetch cap; custom wuff
+callbacks refuse decoded output above 32 MiB before allocation. The provider
+caps the full set at 64 MiB/256 faces and the raster cache by both bytes and
+4,096 entries. It matches ordered families using engine-owned attribute
+policy, falls back per whole-paragraph grapheme cluster, keeps
+default-ignorable controls with their surrounding face, shapes with features,
+variations, synthesis policy, and pre/post context across paint-only and
+shaping-style boundaries, and breaks context at padding/border/isolation
+edges. Decode, parse, shape, and raster calls fail closed.
+
+Layout itemizes one paragraph across DOM text nodes, retains source byte
+clusters and style boundaries, and builds wrapping, line geometry, inline
+padding/backgrounds, and positioned glyphs from provider advances. Paint
+rasterizes those exact font/glyph ids and never measures text on the new path.
+Implementing the unmodified WPT family also closed prerequisite gaps for named
+ZWJ/ZWNJ entities, NBSP whitespace classification, font shorthand, and inline
+decoration painting.
+
+The focused gate moved from 3 pass / 9 mismatch (0/8 capability-credited
+consensus) to **12/12** and **8/8** Blink/WebKit consensus. Two final runs had
+identical classifications and every pixel hash; normalized projection SHA-256
+is `4486d23609f79fecf593fafae357ac4bfb5efe8557a266a6bd1fc14a259a588b`.
+The broad diagnostic moved from 19/29 raw and 8/29 consensus to 12/36 and 7/29,
+exposing unsupported equal-pixel cases once real web/system glyphs replaced
+heuristic rectangles; those losses are not credited as capability regressions.
+The full Rust 1.89 workspace passed; block collapse
+stayed 9/9 and Position stayed 9/12. Evidence is in
+`tests/wpt-render/text-shaping-results-ticket4a.json` and
+`tests/wpt-render/text-results-ticket4a.json`.
+
+## #4b: CSS-tailored breaking and bidirectional lines
+
+Blocked by: #4a
+Type: Prototype
+Status: ⬜ Pending
+
+### Question
+
+How will paragraph bidi levels, visual runs, grapheme/word/line opportunities,
+white-space processing, `word-break`, `line-break`, `overflow-wrap`, soft
+hyphens, and line-edge reshaping replace the remaining scalar/word assumptions
+without losing source-cluster and caret mappings?
+
+### Exit criteria
+
+- Inline itemization preserves original text/source offsets through CSS white
+  space transformation and exposes ICU-tailored legal/mandatory opportunities.
+- unicode-bidi produces paragraph levels and visual runs; mixed LTR/RTL,
+  isolates, controls, mirroring, and combining marks never reorder by scalar.
+- Line selection uses legal HarfRust-safe cluster boundaries and reshapes
+  unsafe line edges; `word-break`, `line-break`, `overflow-wrap`, and manual
+  soft hyphens have focused interface tests.
+- A pinned CSS Text/Bidi/white-space WPT family improves with repeat-stable
+  hashes, exact-revision Blink/WebKit triage, and no #4a or geometry regression.
+
+## #4c: Vertical metrics, writing modes, and ruby text
+
+Blocked by: #4b
+Type: Prototype
+Status: 🌫️ Fog
+
+### Question
+
+Which vertical font metrics, glyph orientation/substitution, logical-axis line
+layout, text-combine behavior, and ruby annotation model close the first
+Writing Modes/Ruby WPT cluster on top of the shared glyph pipeline?
+
+### Answer
+
+Pending until horizontal breaking and bidi stop dominating those results.
+
 ## #5: Flexbox and Grid convergence
 
-Blocked by: #2, #3, #4
+Blocked by: #2, #3, #4c
 Type: Prototype
 Status: 🌫️ Fog
 
@@ -329,7 +414,7 @@ Pending until shared primitives stop dominating the results.
 
 ## #6: Paint order, clipping, stacking, and compositing
 
-Blocked by: #3, #4
+Blocked by: #3, #4b
 Type: Prototype
 Status: 🌫️ Fog
 

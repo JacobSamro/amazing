@@ -13,9 +13,9 @@
 //!   every style other than none/hidden paints solid (documented
 //!   deviation below); `currentcolor` resolves against the element's
 //!   computed `color`
-//! - text: each `WordFrag` drawn per character via [`crate::text`] with
-//!   advances from [`FontSource::measure`], ink sitting on the line's
-//!   baseline; fragment color is the containing block's `color`
+//! - shaped text: layout-provided font/glyph ids, offsets, colors, inline
+//!   backgrounds, and advances are rasterized through `amazing-text` without
+//!   remeasurement; the legacy word/`FontSource` painter remains available
 //! - everything clips to the viewport surface (`Surface::fill_rect`
 //!   saturating-cast clipping; glyphs clip per pixel)
 //! - non-`visible` overflow clips descendant backgrounds, borders, text, and
@@ -30,15 +30,15 @@
 //!   deliberate Phase 4 simplification.
 //! - No border-radius, no box shadows, no list markers, no opacity, no
 //!   stacking contexts/z-index reordering.
-//! - Word-level color differences inside one line are not tracked by the
-//!   layout tree (`WordFrag` carries no style), so all words of a line
-//!   use the container's color.
+//! - The legacy word painter does not retain inline color differences; the
+//!   shaped provider path does.
 //! - The canvas starts opaque white regardless of root background
 //!   propagation rules.
 
 use amazing_css::ComputedStyle;
 use amazing_layout::font::FontSource;
 use amazing_layout::{Flow, LayoutBox};
+use amazing_text::{GlyphCacheKey, GlyphContent, GlyphImage, TextSystem};
 
 use crate::color::parse_css_color;
 use crate::surface::Surface;
@@ -144,6 +144,189 @@ pub fn paint_document_with_resources(
     let clip = ClipRect::viewport(&surface);
     paint_box(&mut surface, root, fonts, glyphs, images, clip);
     surface
+}
+
+/// Provider-neutral paint entry point. Layout-established glyph ids and
+/// advances are rasterized directly; this path never measures text.
+pub fn paint_document_with_text_resources(
+    root: &LayoutBox,
+    viewport_w: u32,
+    viewport_h: u32,
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+) -> Surface {
+    let mut surface = Surface::new(viewport_w, viewport_h);
+    surface.clear(CANVAS_WHITE);
+    let clip = ClipRect::viewport(&surface);
+    paint_box_with_text(&mut surface, root, text, images, clip);
+    surface
+}
+
+fn paint_box_with_text(
+    surface: &mut Surface,
+    box_: &LayoutBox,
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+    clip: ClipRect,
+) {
+    let text_color = resolve_text_color(&box_.style);
+    paint_background(surface, box_, text_color, clip);
+    paint_borders(surface, box_, text_color, clip);
+    if box_.replaced_size.is_some() {
+        if let Some(image) = box_.node.and_then(|node| images.image(node)) {
+            paint_image(surface, &box_.content_box, image, clip);
+        }
+    }
+    let descendant_clip = overflow_clip(box_, clip);
+    paint_shaped_lines(surface, box_, text, images, descendant_clip);
+
+    let mut children: Vec<&LayoutBox> = match &box_.flow {
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
+            children.iter().collect()
+        },
+        Flow::Inlines(_) | Flow::Empty => Vec::new(),
+    };
+    children.extend(box_.positioned.iter());
+    children.sort_by_key(|child| child.node.map(|node| node.0).unwrap_or(0));
+    for child in children {
+        paint_box_with_text(surface, child, text, images, descendant_clip);
+    }
+}
+
+fn paint_shaped_lines(
+    surface: &mut Surface,
+    box_: &LayoutBox,
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+    clip: ClipRect,
+) {
+    for line in &box_.lines {
+        for replaced in &line.replaced {
+            if let Some(image) = images.image(replaced.node) {
+                paint_image(
+                    surface,
+                    &amazing_layout::Rect {
+                        x: replaced.x,
+                        y: replaced.y,
+                        w: replaced.width,
+                        h: replaced.height,
+                    },
+                    image,
+                    clip,
+                );
+            }
+        }
+        for decoration in &line.decorations {
+            if let Some(color) = parse_css_color(&decoration.color) {
+                if color[3] != 0 {
+                    fill_rect_clipped(
+                        surface,
+                        decoration.x,
+                        decoration.y,
+                        decoration.width,
+                        decoration.height,
+                        color,
+                        clip,
+                    );
+                }
+            }
+        }
+        for glyph in &line.glyphs {
+            let color = parse_css_color(&glyph.color).unwrap_or(FALLBACK_TEXT_COLOR);
+            let baseline = line.baseline + glyph.y - glyph.offset_y;
+            let subpixel = |value: f32| ((value.fract().rem_euclid(1.0) * 64.0).round() as u8).min(63);
+            let Some(key) = GlyphCacheKey::new(
+                text.generation(),
+                glyph.font,
+                glyph.glyph,
+                glyph.font_size,
+                subpixel(glyph.x),
+                subpixel(baseline),
+            ) else {
+                continue;
+            };
+            let key = key.with_style(&glyph.variations, glyph.synthesis);
+            let Ok(Some(image)) = text.rasterize(amazing_text::GlyphRasterRequest {
+                key,
+                variations: &glyph.variations,
+                synthesis: glyph.synthesis,
+            }) else {
+                continue;
+            };
+            let left = glyph.x.floor() as i64 + image.bearing_x as i64;
+            let top = baseline.floor() as i64 - image.bearing_y as i64;
+            blit_text_image(surface, left, top, &image, color, clip);
+        }
+    }
+}
+
+fn blit_text_image(
+    surface: &mut Surface,
+    left: i64,
+    top: i64,
+    image: &GlyphImage,
+    color: [u8; 4],
+    clip: ClipRect,
+) {
+    let channels = if image.content == GlyphContent::Color { 4 } else { 1 };
+    let Some(expected) = image
+        .width
+        .checked_mul(image.height)
+        .and_then(|pixels| pixels.checked_mul(channels))
+        .and_then(|bytes| usize::try_from(bytes).ok())
+    else {
+        return;
+    };
+    if image.data.len() != expected {
+        return;
+    }
+    let [clip_x0, clip_y0, clip_x1, clip_y1] = clip.pixels();
+    for row in 0..image.height as i64 {
+        let y = top + row;
+        if y < clip_y0 || y >= clip_y1 || y < 0 || y >= surface.height as i64 {
+            continue;
+        }
+        for column in 0..image.width as i64 {
+            let x = left + column;
+            if x < clip_x0 || x >= clip_x1 || x < 0 || x >= surface.width as i64 {
+                continue;
+            }
+            let pixel = (row as usize * image.width as usize) + column as usize;
+            let (source, coverage) = if image.content == GlyphContent::Color {
+                let start = pixel * 4;
+                let source = [
+                    image.data[start],
+                    image.data[start + 1],
+                    image.data[start + 2],
+                    image.data[start + 3],
+                ];
+                (source, source[3])
+            } else {
+                (color, image.data[pixel])
+            };
+            if coverage == 0 {
+                continue;
+            }
+            let destination = surface
+                .get_pixel(x as u32, y as u32)
+                .unwrap_or([0, 0, 0, 255]);
+            let alpha = coverage as u32;
+            let inverse = 255 - alpha;
+            let blend = |source: u8, destination: u8| {
+                ((source as u32 * alpha + destination as u32 * inverse + 127) / 255) as u8
+            };
+            surface.set_pixel(
+                x as u32,
+                y as u32,
+                [
+                    blend(source[0], destination[0]),
+                    blend(source[1], destination[1]),
+                    blend(source[2], destination[2]),
+                    255,
+                ],
+            );
+        }
+    }
 }
 
 fn paint_box(
@@ -476,6 +659,65 @@ mod tests {
         amazing_layout::values::Sides { top: t, right: r, bottom: btm, left: l }
     }
 
+    #[test]
+    fn shaped_painter_rasterizes_glyph_ids_without_legacy_words() {
+        let mut root = block(&[], 0.0, 0.0, 20.0, 20.0);
+        root.lines.push(amazing_layout::LineBox {
+            y_top: 0.0,
+            height: 12.0,
+            baseline: 10.0,
+            words: Vec::new(),
+            glyphs: vec![amazing_layout::GlyphFrag {
+                node: amazing_dom::NodeIdx(1),
+                font: amazing_text::FontKey(0),
+                glyph: amazing_text::GlyphId('A' as u32),
+                cluster: 0..1,
+                x: 2.0,
+                y: 0.0,
+                advance_x: 5.5,
+                advance_y: 0.0,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                font_size: 10.0,
+                writing_mode: amazing_text::WritingMode::HorizontalTb,
+                variations: Vec::new(),
+                synthesis: amazing_text::FontSynthesis::default(),
+                color: "black".into(),
+            }],
+            decorations: Vec::new(),
+            replaced: Vec::new(),
+        });
+        let text = amazing_text::FallbackTextSystem::new();
+        let surface = paint_document_with_text_resources(&root, 20, 20, &text, &NoImages);
+
+        assert_eq!(surface.get_pixel(3, 5), Some([0, 0, 0, 255]));
+    }
+
+    #[test]
+    fn shaped_painter_fills_inline_decorations_before_glyphs() {
+        let mut root = block(&[], 0.0, 0.0, 20.0, 20.0);
+        root.lines.push(amazing_layout::LineBox {
+            y_top: 0.0,
+            height: 12.0,
+            baseline: 10.0,
+            words: Vec::new(),
+            glyphs: Vec::new(),
+            decorations: vec![amazing_layout::InlineDecorationFrag {
+                node: amazing_dom::NodeIdx(1),
+                x: 2.0,
+                y: 3.0,
+                width: 4.0,
+                height: 5.0,
+                color: "black".into(),
+            }],
+            replaced: Vec::new(),
+        });
+        let text = amazing_text::FallbackTextSystem::new();
+        let surface = paint_document_with_text_resources(&root, 20, 20, &text, &NoImages);
+
+        assert_eq!(surface.get_pixel(3, 4), Some([0, 0, 0, 255]));
+    }
+
     // ------------------------------------------------------------------
     // Smoke test: a two-box LayoutTree built BY HAND.
     // ------------------------------------------------------------------
@@ -551,6 +793,8 @@ mod tests {
             height: 1.0,
             baseline: 1.0,
             words: Vec::new(),
+            glyphs: Vec::new(),
+            decorations: Vec::new(),
             replaced: vec![amazing_layout::ReplacedFrag {
                 node,
                 x: 1.0,

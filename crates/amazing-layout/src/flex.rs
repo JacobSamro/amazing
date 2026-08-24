@@ -757,6 +757,13 @@ pub(crate) fn translate(b: &mut LayoutBox, dx: f32, dy: f32) {
         for w in &mut line.words {
             w.x += dx;
         }
+        for glyph in &mut line.glyphs {
+            glyph.x += dx;
+        }
+        for decoration in &mut line.decorations {
+            decoration.x += dx;
+            decoration.y += dy;
+        }
         for image in &mut line.replaced {
             image.x += dx;
             image.y += dy;

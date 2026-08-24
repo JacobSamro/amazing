@@ -30,7 +30,7 @@ mod windows {
     use amazing_layout::{Flow, LayoutBox};
     use amazing_paint::Surface;
 
-    use crate::{BrowserDomHost, PageMedia, load_page_media};
+    use crate::{BrowserDomHost, PageMedia, load_page_media, load_page_text};
 
     type Handle = *mut c_void;
     type Hwnd = Handle;
@@ -518,28 +518,30 @@ mod windows {
                 eprintln!("amazing gui: stylesheet refresh failed: {error}");
                 return;
             }
-            let fonts = amazing_layout::font::FontSource::fallback();
             let media = load_page_media(&host_ref.dom, &page);
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
             }
-            let layout = amazing_layout::layout_dom_document_with_replaced_in_viewport(
+            let page_text = load_page_text(&css, &page);
+            for warning in &page_text.warnings {
+                eprintln!("amazing gui: {warning}");
+            }
+            let layout = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
                 &host_ref.dom,
                 &css,
                 width.max(1) as f32,
                 Some(viewport_height),
-                &fonts,
+                &page_text.provider,
                 &media,
             );
             let height = amazing_layout::layout_overflow_bottom(&layout)
                 .ceil()
                 .clamp(1.0, 8192.0) as u32;
-            let surface = amazing_paint::paint_document_with_resources(
+            let surface = amazing_paint::paint_document_with_text_resources(
                 &layout,
                 width.max(1),
                 height,
-                &fonts,
-                &amazing_paint::RectInkProvider,
+                &page_text.provider,
                 &media,
             );
             runtime.layout = layout;
@@ -954,28 +956,30 @@ mod windows {
             collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut css)?;
         }
         let host_ref = host.borrow();
-        let fonts = amazing_layout::font::FontSource::fallback();
         let media = load_page_media(&host_ref.dom, input);
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");
         }
-        let root = amazing_layout::layout_dom_document_with_replaced_in_viewport(
+        let page_text = load_page_text(&css, input);
+        for warning in &page_text.warnings {
+            eprintln!("amazing gui: {warning}");
+        }
+        let root = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
             &host_ref.dom,
             &css,
             width.max(1) as f32,
             Some(700.0),
-            &fonts,
+            &page_text.provider,
             &media,
         );
         let height = amazing_layout::layout_overflow_bottom(&root)
             .ceil()
             .clamp(1.0, 8192.0) as u32;
-        let surface = amazing_paint::paint_document_with_resources(
+        let surface = amazing_paint::paint_document_with_text_resources(
             &root,
             width.max(1),
             height,
-            &fonts,
-            &amazing_paint::RectInkProvider,
+            &page_text.provider,
             &media,
         );
         drop(host_ref);

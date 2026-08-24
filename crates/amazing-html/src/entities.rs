@@ -83,6 +83,8 @@ pub const NAMED: &[(&str, &str)] = &[
     ("&uuml;", "\u{00FC}"),
     ("&yacute;", "\u{00FD}"),
     ("&yen;", "\u{00A5}"),
+    ("&zwnj;", "\u{200C}"),
+    ("&zwj;", "\u{200D}"),
 ];
 
 /// Legacy named references (WHATWG table of legacy entities). The tokenizer's

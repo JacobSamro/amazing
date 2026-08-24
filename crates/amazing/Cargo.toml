@@ -14,6 +14,8 @@ amazing-css = { path = "../amazing-css" }
 amazing-layout = { path = "../amazing-layout" }
 amazing-media = { path = "../amazing-media" }
 amazing-paint = { path = "../amazing-paint" }
+amazing-text = { path = "../amazing-text" }
+amazing-text-provider = { path = "../amazing-text-provider" }
 amazing-net = { path = "../amazing-net" }
 amazing-js = { path = "../amazing-js" }
 amazing-webrtc = { path = "../amazing-webrtc" }

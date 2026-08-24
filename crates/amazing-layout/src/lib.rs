@@ -25,8 +25,9 @@
 //!   `border: w s c` shorthand, thin/medium/thick keywords, none/hidden
 //!   zeroing; px/pt/pc/in/cm/mm/em/rem/%/unitless-0 lengths
 //! - font sizing: absolute-size keyword ladder, em/%/px; line-height
-//!   normal/number/length/%; text measurement via [`font::FontSource`]
-//!   (real TTF metrics when a font is supplied, heuristic fallback otherwise)
+//!   normal/number/length/%; provider-neutral paragraph shaping through
+//!   `amazing-text`, with source clusters and positioned glyph ids retained for
+//!   paint. [`font::FontSource`] remains a legacy compatibility path.
 //!
 //! Deferred/deviations (documented, revisit in later phases):
 //! - floats, sticky constraints, z-index/stacking contexts, transforms as
@@ -71,6 +72,8 @@ pub mod values;
 
 use amazing_css::ComputedStyle;
 use amazing_dom::NodeIdx;
+use amazing_text::{FontKey, GlyphId, TextSystem};
+use std::ops::Range;
 
 /// Intrinsic dimensions supplied for replaced content such as `<img>`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -195,7 +198,17 @@ pub enum Flow {
 pub enum InlineNode {
     /// A whitespace-collapsed text run from one DOM text node, rendered at
     /// the effective font size of the inline chain it came from.
-    Text { node: NodeIdx, text: String, font_size: f32 },
+    Text {
+        node: NodeIdx,
+        text: String,
+        font_size: f32,
+        style: amazing_text::TextStyle,
+        color: String,
+        background_color: String,
+        inline_padding: values::Sides,
+        boundary_before: amazing_text::ShapingBoundary,
+        boundary_after: amazing_text::ShapingBoundary,
+    },
     /// `<br>` — force a line break.
     Break,
     /// Replaced inline content with dimensions resolved before layout.
@@ -212,7 +225,41 @@ pub struct LineBox {
     /// Baseline y (absolute px).
     pub baseline: f32,
     pub words: Vec<WordFrag>,
+    /// Positioned glyphs produced by the page's text adapter. Paint consumes
+    /// these ids and advances directly; it never measures `words` again.
+    pub glyphs: Vec<GlyphFrag>,
+    pub decorations: Vec<InlineDecorationFrag>,
     pub replaced: Vec<ReplacedFrag>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlineDecorationFrag {
+    pub node: NodeIdx,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub color: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlyphFrag {
+    pub node: NodeIdx,
+    pub font: FontKey,
+    pub glyph: GlyphId,
+    pub cluster: Range<usize>,
+    pub x: f32,
+    /// Inline-axis offset from the line baseline for vertical runs.
+    pub y: f32,
+    pub advance_x: f32,
+    pub advance_y: f32,
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub font_size: f32,
+    pub writing_mode: amazing_text::WritingMode,
+    pub variations: Vec<amazing_text::VariationSetting>,
+    pub synthesis: amazing_text::FontSynthesis,
+    pub color: String,
 }
 
 /// One positioned replaced element in an inline formatting context.
@@ -240,6 +287,127 @@ pub struct WordFrag {
 pub fn layout_document(html: &str, author_css: &str, viewport_width: f32, fonts: &font::FontSource) -> LayoutBox {
     let dom = amazing_html::parse(html);
     layout_dom_document(&dom, author_css, viewport_width, fonts)
+}
+
+/// Shaped-text entry point. This is the provider-neutral path used by the
+/// browser driver; the legacy `FontSource` entry points remain compatibility
+/// adapters during ticket #4a.
+pub fn layout_document_with_text(
+    html: &str,
+    author_css: &str,
+    viewport_width: f32,
+    text: &dyn TextSystem,
+) -> LayoutBox {
+    let dom = amazing_html::parse(html);
+    layout_dom_document_with_text_and_replaced_in_viewport(
+        &dom,
+        author_css,
+        viewport_width,
+        None,
+        text,
+        &NoReplacedElements,
+    )
+}
+
+pub fn layout_dom_document_with_text_and_replaced_in_viewport(
+    dom: &amazing_dom::Dom,
+    author_css: &str,
+    viewport_width: f32,
+    viewport_height: Option<f32>,
+    text: &dyn TextSystem,
+    replaced: &dyn ReplacedElementProvider,
+) -> LayoutBox {
+    let mut root = layout_dom_document_with_replaced_in_viewport(
+        dom,
+        author_css,
+        viewport_width,
+        viewport_height,
+        &font::FontSource::fallback(),
+        replaced,
+    );
+    apply_shaped_text(&mut root, text);
+    root
+}
+
+fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
+    if let Flow::Inlines(items) = &layout.flow {
+        let first_style = items.iter().find_map(|item| match item {
+            InlineNode::Text { style, .. } => Some(style),
+            InlineNode::Break | InlineNode::Replaced { .. } => None,
+        });
+        if let Some(style) = first_style
+            && let Ok(metrics) = text.metrics(style)
+        {
+            let line_height = if layout
+                .style
+                .get("line-height")
+                .is_none_or(|value| value.eq_ignore_ascii_case("normal"))
+            {
+                metrics.line_height().max(style.size * 1.2)
+            } else {
+                layout.line_height
+            };
+            let strut = inline::Strut {
+                font_size: style.size,
+                line_height,
+                ascent: metrics.ascent,
+                descent: metrics.descent,
+            };
+            if let Some(lines) = inline::layout_lines_shaped(
+                items,
+                layout.content_box.x,
+                layout.content_box.y,
+                layout.content_box.w,
+                &strut,
+                text,
+            ) {
+                let old_height = layout.lines.iter().map(|line| line.height).sum::<f32>();
+                let new_height = lines.iter().map(|line| line.height).sum::<f32>();
+                if layout
+                    .style
+                    .get("height")
+                    .is_none_or(|value| value.eq_ignore_ascii_case("auto"))
+                {
+                    let delta = new_height - old_height;
+                    layout.content_box.h = (layout.content_box.h + delta).max(0.0);
+                    layout.border_box.h = (layout.border_box.h + delta).max(0.0);
+                }
+                layout.line_height = line_height;
+                layout.lines = lines;
+            }
+        }
+    }
+    match &mut layout.flow {
+        Flow::Blocks(children) => {
+            let mut shift = 0.0;
+            for child in children {
+                if shift != 0.0 {
+                    flex::translate(child, 0.0, shift);
+                }
+                let old_height = child.border_box.h;
+                apply_shaped_text(child, text);
+                shift += child.border_box.h - old_height;
+            }
+            if shift != 0.0
+                && layout
+                    .style
+                    .get("height")
+                    .is_none_or(|value| value.eq_ignore_ascii_case("auto"))
+            {
+                layout.content_box.h = (layout.content_box.h + shift).max(0.0);
+                layout.border_box.h = (layout.border_box.h + shift).max(0.0);
+            }
+        },
+        Flow::Flex(children) | Flow::Grid(children) => {
+            for child in children {
+                apply_shaped_text(child, text);
+            }
+        },
+        Flow::Inlines(_) | Flow::Empty => {},
+    }
+    for child in &mut layout.positioned {
+        apply_shaped_text(child, text);
+    }
 }
 
 /// Lays out an already-mutated DOM without reparsing its original source.
@@ -485,5 +653,76 @@ mod replaced_tests {
 
         assert_eq!(image_box.content_box.w, 40.0);
         assert_eq!(image_box.content_box.h, 30.0);
+    }
+}
+
+#[cfg(test)]
+mod shaped_text_tests {
+    use super::*;
+    use amazing_text::FallbackTextSystem;
+
+    fn find<'a>(layout: &'a LayoutBox, node: NodeIdx) -> Option<&'a LayoutBox> {
+        if layout.node == Some(node) {
+            return Some(layout);
+        }
+        match &layout.flow {
+            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
+                children.iter().find_map(|child| find(child, node))
+            },
+            Flow::Inlines(_) | Flow::Empty => None,
+        }
+    }
+
+    #[test]
+    fn shaped_entry_point_places_provider_glyphs_with_source_clusters() {
+        let html = "<body><p>AB</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let line = &find(&layout, paragraph).unwrap().lines[0];
+
+        assert_eq!(line.glyphs.len(), 2);
+        assert_eq!(line.glyphs[0].cluster, 0..1);
+        assert_eq!(line.glyphs[1].cluster, 1..2);
+        assert_eq!(line.glyphs[0].glyph, GlyphId('A' as u32));
+        assert!(line.glyphs[1].x > line.glyphs[0].x);
+    }
+
+    #[test]
+    fn shaped_inline_background_includes_horizontal_padding() {
+        let html = "<body><p>A<span style=\"background:black;padding:2px\">B</span>C</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let line = &find(&layout, paragraph).unwrap().lines[0];
+
+        assert_eq!(line.decorations.len(), 1);
+        assert_eq!(line.decorations[0].color, "black");
+        assert!(line.decorations[0].width > 0.55 * 16.0 + 3.9);
+    }
+
+    #[test]
+    fn vertical_glyphs_keep_distinct_inline_axis_positions() {
+        let html = "<body><p style=\"writing-mode:vertical-rl\">AB</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+
+        assert_eq!(glyphs.len(), 2);
+        assert_eq!(glyphs[0].x, glyphs[1].x);
+        assert!(glyphs[1].y > glyphs[0].y);
     }
 }

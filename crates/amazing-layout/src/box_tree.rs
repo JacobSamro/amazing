@@ -12,6 +12,7 @@
 
 use amazing_css::{ComputedStyle, StyledDom};
 use amazing_dom::{Dom, NodeIdx, NodeKind};
+use amazing_text::{Direction, FontSlant, ShapingBoundary, TextStyle, WritingMode};
 
 use crate::font::FontSource;
 use crate::values;
@@ -132,7 +133,7 @@ fn collapse_whitespace(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut in_ws = false;
     for c in text.chars() {
-        if c.is_whitespace() {
+        if matches!(c, '\u{0009}' | '\u{000A}' | '\u{000C}' | '\u{000D}' | ' ') {
             in_ws = true;
         } else {
             if in_ws && !out.is_empty() {
@@ -143,6 +144,223 @@ fn collapse_whitespace(text: &str) -> String {
         }
     }
     out
+}
+
+fn attribute<'a>(dom: &'a Dom, node: NodeIdx, name: &str) -> Option<&'a str> {
+    dom.attrs_of(node)?
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case(name))
+        .map(|(_, value)| value.as_str())
+}
+
+fn inherited_attribute<'a>(dom: &'a Dom, mut node: NodeIdx, name: &str) -> Option<&'a str> {
+    loop {
+        if let Some(value) = attribute(dom, node, name) {
+            return Some(value);
+        }
+        node = dom.get(node).parent?;
+    }
+}
+
+fn split_families(value: &str) -> Vec<String> {
+    let mut families = Vec::new();
+    let mut start = 0usize;
+    let mut quote = None;
+    for (index, ch) in value.char_indices() {
+        match (quote, ch) {
+            (None, '\'' | '"') => quote = Some(ch),
+            (Some(expected), current) if expected == current => quote = None,
+            (None, ',') => {
+                let family = value[start..index].trim();
+                if !family.is_empty() {
+                    families.push(family.to_owned());
+                }
+                start = index + ch.len_utf8();
+            },
+            _ => {},
+        }
+    }
+    let family = value[start..].trim();
+    if !family.is_empty() {
+        families.push(family.to_owned());
+    }
+    if families.is_empty() {
+        families.push("serif".into());
+    }
+    families
+}
+
+fn text_style(dom: &Dom, owner: NodeIdx, style: &ComputedStyle, font_size: f32) -> TextStyle {
+    let weight = match style.get("font-weight").unwrap_or("normal") {
+        value if value.eq_ignore_ascii_case("bold") || value.eq_ignore_ascii_case("bolder") => 700,
+        value if value.eq_ignore_ascii_case("lighter") => 300,
+        value => value.parse::<u16>().ok().filter(|weight| (1..=1000).contains(weight)).unwrap_or(400),
+    };
+    let slant = match style.get("font-style").unwrap_or("normal") {
+        value if value.eq_ignore_ascii_case("italic") => FontSlant::Italic,
+        value if value.to_ascii_lowercase().starts_with("oblique") => FontSlant::Oblique,
+        _ => FontSlant::Normal,
+    };
+    let direction_value = inherited_attribute(dom, owner, "dir")
+        .or_else(|| style.get("direction"))
+        .unwrap_or("ltr");
+    let direction = if direction_value.eq_ignore_ascii_case("rtl") {
+        Direction::RightToLeft
+    } else {
+        Direction::LeftToRight
+    };
+    let writing_mode = match style.get("writing-mode").unwrap_or("horizontal-tb") {
+        value if value.eq_ignore_ascii_case("vertical-rl") => WritingMode::VerticalRl,
+        value if value.eq_ignore_ascii_case("vertical-lr") => WritingMode::VerticalLr,
+        _ => WritingMode::HorizontalTb,
+    };
+    let stretch = match style.get("font-stretch").unwrap_or("normal") {
+        value if value.eq_ignore_ascii_case("ultra-condensed") => 50,
+        value if value.eq_ignore_ascii_case("extra-condensed") => 62,
+        value if value.eq_ignore_ascii_case("condensed") => 75,
+        value if value.eq_ignore_ascii_case("semi-condensed") => 87,
+        value if value.eq_ignore_ascii_case("semi-expanded") => 112,
+        value if value.eq_ignore_ascii_case("expanded") => 125,
+        value if value.eq_ignore_ascii_case("extra-expanded") => 150,
+        value if value.eq_ignore_ascii_case("ultra-expanded") => 200,
+        value => value
+            .trim_end_matches('%')
+            .parse::<u16>()
+            .ok()
+            .filter(|stretch| (1..=1000).contains(stretch))
+            .unwrap_or(100),
+    };
+    TextStyle {
+        families: split_families(style.get("font-family").unwrap_or("serif")),
+        size: font_size,
+        weight,
+        stretch,
+        slant,
+        direction,
+        writing_mode,
+        language: inherited_attribute(dom, owner, "lang").map(str::to_owned),
+        features: Vec::new(),
+        variations: Vec::new(),
+        synthesis: amazing_text::FontSynthesis::default(),
+    }
+}
+
+fn inline_text(
+    dom: &Dom,
+    owner: NodeIdx,
+    node: NodeIdx,
+    text: String,
+    style: &ComputedStyle,
+    font_size: f32,
+    inline_box: bool,
+) -> InlineNode {
+    let padding = |property: &str| {
+        style
+            .get(property)
+            .and_then(|value| values::parse_len(value, font_size, font_size))
+            .unwrap_or(0.0)
+            .max(0.0)
+    };
+    InlineNode::Text {
+        node,
+        text,
+        font_size,
+        style: text_style(dom, owner, style, font_size),
+        color: style.get("color").unwrap_or("black").to_owned(),
+        background_color: if inline_box {
+            style.get("background-color").unwrap_or("transparent").to_owned()
+        } else {
+            "transparent".into()
+        },
+        inline_padding: if inline_box {
+            values::Sides {
+                top: padding("padding-top"),
+                right: padding("padding-right"),
+                bottom: padding("padding-bottom"),
+                left: padding("padding-left"),
+            }
+        } else {
+            values::Sides::default()
+        },
+        boundary_before: ShapingBoundary::Continue,
+        boundary_after: ShapingBoundary::Continue,
+    }
+}
+
+fn nonzero_length(value: Option<&str>) -> bool {
+    value.is_some_and(|value| {
+        let value = value.trim();
+        value != "0" && value != "0px" && value != "0em" && value != "0rem" && value != "0%"
+    })
+}
+
+fn hard_inline_edge(dom: &Dom, node: NodeIdx, style: &ComputedStyle) -> bool {
+    if dom.name(node) == Some("bdi")
+        || style
+            .get("unicode-bidi")
+            .is_some_and(|value| value.to_ascii_lowercase().contains("isolate"))
+        || ["padding-left", "padding-right", "margin-left", "margin-right"]
+            .into_iter()
+            .any(|property| nonzero_length(style.get(property)))
+    {
+        return true;
+    }
+    ["left", "right"].into_iter().any(|side| {
+        let style_name = format!("border-{side}-style");
+        let width_name = format!("border-{side}-width");
+        style
+            .get(&style_name)
+            .is_some_and(|value| !value.eq_ignore_ascii_case("none") && !value.eq_ignore_ascii_case("hidden"))
+            && nonzero_length(style.get(&width_name))
+    })
+}
+
+fn boundary_between(
+    dom: &Dom,
+    node: NodeIdx,
+    parent_style: &ComputedStyle,
+    parent_font_size: f32,
+    child_style: &ComputedStyle,
+    child_font_size: f32,
+) -> ShapingBoundary {
+    if hard_inline_edge(dom, node, child_style) {
+        ShapingBoundary::Hard
+    } else if text_style(dom, node, child_style, child_font_size)
+        != text_style(dom, dom.get(node).parent.unwrap_or(node), parent_style, parent_font_size)
+    {
+        ShapingBoundary::StyleChange
+    } else {
+        ShapingBoundary::Continue
+    }
+}
+
+fn stronger_boundary(left: ShapingBoundary, right: ShapingBoundary) -> ShapingBoundary {
+    match (left, right) {
+        (ShapingBoundary::Hard, _) | (_, ShapingBoundary::Hard) => ShapingBoundary::Hard,
+        (ShapingBoundary::StyleChange, _) | (_, ShapingBoundary::StyleChange) => {
+            ShapingBoundary::StyleChange
+        },
+        _ => ShapingBoundary::Continue,
+    }
+}
+
+fn mark_inline_edges(nodes: &mut [InlineNode], boundary: ShapingBoundary) {
+    if boundary == ShapingBoundary::Continue {
+        return;
+    }
+    if let Some(InlineNode::Text { boundary_before, .. }) = nodes
+        .iter_mut()
+        .find(|node| matches!(node, InlineNode::Text { .. }))
+    {
+        *boundary_before = stronger_boundary(*boundary_before, boundary);
+    }
+    if let Some(InlineNode::Text { boundary_after, .. }) = nodes
+        .iter_mut()
+        .rev()
+        .find(|node| matches!(node, InlineNode::Text { .. }))
+    {
+        *boundary_after = stronger_boundary(*boundary_after, boundary);
+    }
 }
 
 /// Classifies the children of a block container into its [`Flow`],
@@ -158,8 +376,8 @@ fn classify_children(
     // Flex/grid containers take every non-`none` element child as an ITEM
     // (css-flexbox-1 §3 / css-grid-1 §3 blockification); contiguous text
     // runs become one anonymous item each.
-    let own_display =
-        parse_display(&styled.get(idx).cloned().unwrap_or_default());
+    let own_style = styled.get(idx).cloned().unwrap_or_default();
+    let own_display = parse_display(&own_style);
     if matches!(own_display, Display::Flex | Display::Grid) {
         let mut items: Vec<LayoutBox> = Vec::new();
         let mut run: Vec<InlineNode> = Vec::new();
@@ -169,7 +387,15 @@ fn classify_children(
                 NodeKind::Text { data } => {
                     let collapsed = collapse_whitespace(data);
                     if !collapsed.is_empty() {
-                        run.push(InlineNode::Text { node: child, text: collapsed, font_size });
+                        run.push(inline_text(
+                            dom,
+                            idx,
+                            child,
+                            collapsed,
+                            &own_style,
+                            font_size,
+                            false,
+                        ));
                     }
                 },
                 NodeKind::Comment { .. }
@@ -211,7 +437,15 @@ fn classify_children(
                 // rendering; keep non-empty collapsed runs as separators.
                 let collapsed = collapse_whitespace(data);
                 if !collapsed.is_empty() {
-                    inlines.push(InlineNode::Text { node: child, text: collapsed, font_size });
+                    inlines.push(inline_text(
+                        dom,
+                        idx,
+                        child,
+                        collapsed,
+                        &own_style,
+                        font_size,
+                        false,
+                    ));
                 }
             },
             NodeKind::Comment { .. }
@@ -246,10 +480,33 @@ fn classify_children(
                             inlines.push(InlineNode::Replaced { node: child, size });
                         }
                     },
-                    _ => flatten_inline(
-                        dom, styled, child, child_style, font_size,
-                        &mut inlines, &mut blocks, &mut positioned, fonts, replaced,
-                    ),
+                    _ => {
+                        let child_font_size = values::resolve_font_size(
+                            child_style.get("font-size").unwrap_or("medium"),
+                            font_size,
+                        );
+                        let edge = boundary_between(
+                            dom,
+                            child,
+                            &own_style,
+                            font_size,
+                            &child_style,
+                            child_font_size,
+                        );
+                        flatten_inline(
+                            dom,
+                            styled,
+                            child,
+                            child_style,
+                            font_size,
+                            edge,
+                            &mut inlines,
+                            &mut blocks,
+                            &mut positioned,
+                            fonts,
+                            replaced,
+                        )
+                    },
                 }
             },
         }
@@ -304,6 +561,7 @@ fn flatten_inline(
     idx: NodeIdx,
     style: ComputedStyle,
     parent_font_px: f32,
+    edge_boundary: ShapingBoundary,
     inlines: &mut Vec<InlineNode>,
     blocks_out: &mut Vec<LayoutBox>,
     positioned_out: &mut Vec<LayoutBox>,
@@ -312,13 +570,22 @@ fn flatten_inline(
 ) {
     let font_size =
         values::resolve_font_size(style.get("font-size").unwrap_or("medium"), parent_font_px);
+    let inline_start = inlines.len();
 
     for child in dom.children(idx) {
         match &dom.get(child).kind {
             NodeKind::Text { data } => {
                 let collapsed = collapse_whitespace(data);
                 if !collapsed.is_empty() {
-                    inlines.push(InlineNode::Text { node: child, text: collapsed, font_size });
+                    inlines.push(inline_text(
+                        dom,
+                        idx,
+                        child,
+                        collapsed,
+                        &style,
+                        font_size,
+                        true,
+                    ));
                 }
             },
             NodeKind::Comment { .. }
@@ -362,13 +629,39 @@ fn flatten_inline(
                             inlines.push(InlineNode::Replaced { node: child, size });
                         }
                     },
-                    _ => flatten_inline(
-                        dom, styled, child, cs, font_size,
-                        inlines, blocks_out, positioned_out, fonts, replaced,
-                    ),
+                    _ => {
+                        let child_font_size = values::resolve_font_size(
+                            cs.get("font-size").unwrap_or("medium"),
+                            font_size,
+                        );
+                        let edge = boundary_between(
+                            dom,
+                            child,
+                            &style,
+                            font_size,
+                            &cs,
+                            child_font_size,
+                        );
+                        flatten_inline(
+                            dom,
+                            styled,
+                            child,
+                            cs,
+                            font_size,
+                            edge,
+                            inlines,
+                            blocks_out,
+                            positioned_out,
+                            fonts,
+                            replaced,
+                        )
+                    },
                 }
             },
         }
+    }
+    if inline_start <= inlines.len() {
+        mark_inline_edges(&mut inlines[inline_start..], edge_boundary);
     }
 }
 
@@ -442,6 +735,15 @@ mod tests {
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].text_text(), ("a", 16.0));
         assert_eq!(items[1].text_text(), ("big", 32.0));
+    }
+
+    #[test]
+    fn non_breaking_space_is_not_css_collapsible_whitespace() {
+        let (_, root) = tree("<body><p>&nbsp;x</p></body>");
+        let Flow::Blocks(children) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &children[0].flow else { panic!("want inlines") };
+
+        assert_eq!(items[0].text_text().0, "\u{00a0}x");
     }
 
     impl InlineNode {

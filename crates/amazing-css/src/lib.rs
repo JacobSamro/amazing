@@ -43,4 +43,7 @@ pub mod syntax;
 
 pub use cascade::{compute, StyledDom};
 pub use computed::ComputedStyle;
-pub use parser::{parse_declarations, parse_stylesheet, Declaration, Rule, Stylesheet};
+pub use parser::{
+    parse_declarations, parse_font_faces, parse_stylesheet, Declaration, FontFaceRule,
+    FontSource, Rule, Stylesheet,
+};

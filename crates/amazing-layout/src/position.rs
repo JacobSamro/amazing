@@ -295,6 +295,13 @@ fn shift_box(box_: &mut LayoutBox, dx: f32, dy: f32) {
         for word in &mut line.words {
             word.x += dx;
         }
+        for glyph in &mut line.glyphs {
+            glyph.x += dx;
+        }
+        for decoration in &mut line.decorations {
+            decoration.x += dx;
+            decoration.y += dy;
+        }
         for replaced in &mut line.replaced {
             replaced.x += dx;
             replaced.y += dy;

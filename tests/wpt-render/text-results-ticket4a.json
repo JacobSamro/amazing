@@ -1,0 +1,514 @@
+{
+  "schema": 1,
+  "phase": "ticket-4a-shaped-glyph-provider",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing text provider with Windows generic-family candidates and deterministic fallback",
+  "baseline": {
+    "pass": 19,
+    "mismatch": 29,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "counts": {
+    "pass": 12,
+    "mismatch": 36,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "blink_webkit_consensus": {
+    "case_count": 29,
+    "before_pass": 8,
+    "after_pass": 7
+  },
+  "note": "Real web/system glyph output exposes former unsupported equal-pixel results; lower raw/consensus counts are not credited as capability regressions.",
+  "run_directory": "run-20260824T113528915Z-1364",
+  "tests": [
+    {
+      "id": "css-fonts__system-ui-mixed.html",
+      "before": "mismatch",
+      "before_differing_pixels": 175437,
+      "after": "mismatch",
+      "after_differing_pixels": 32978,
+      "actual_sha256": "d5607eb4d0e24b986331306c8daad4871e6280a82f6c0133c235fb3757060270",
+      "reference_sha256": "19ff8a4397dff9184bbe95cf1a74315bb876101255ffde09df917b329cf53f75",
+      "diff_sha256": "4fd0bfc17232aaf0214f3c453a828d24b8be46ae4b8c1c8596ce7e5f0a7ae122"
+    },
+    {
+      "id": "css-fonts__font-size-zero-1-ref.html",
+      "before": "pass",
+      "before_differing_pixels": 1353,
+      "after": "pass",
+      "after_differing_pixels": 538,
+      "actual_sha256": "d1539e891dbe678aede227549791e95cc028e1237db6ad3c211784708a9bdeb3",
+      "reference_sha256": "1e21a2e119db5363ea6bf10d35a575d14de4e591ce60807c491cf6535bca500c",
+      "diff_sha256": "bfe33861b6780a13fa04cfb99e937863b51ac0021975625402861c462da1802f"
+    },
+    {
+      "id": "css-fonts__test-synthetic-italic.html",
+      "before": "mismatch",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 0,
+      "actual_sha256": "3d893588c8c485c2532f1a93f806603ddc935074b6888b435e4a69fed21ec9b3",
+      "reference_sha256": "3d893588c8c485c2532f1a93f806603ddc935074b6888b435e4a69fed21ec9b3",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-11.optional.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 17724,
+      "actual_sha256": "3e231b09fdab358f340ace00f4b0672dd1788f52db766bc93457da94e1ce3181",
+      "reference_sha256": "4f8f2cfa4add31f34cd3c03c9d9433b49433b0bd23f3d2563bff77f9a9e93406",
+      "diff_sha256": "b8349690b17fe07bbd039e0980ee914983bfffeeefd4fbedc82e2a609de5a37a"
+    },
+    {
+      "id": "css-fonts__matching__font-unicode-PUA-primary-font.html",
+      "before": "mismatch",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 0,
+      "actual_sha256": "9d97686be463dd64bd758326f36965e6e77070a4139a437bcb5ffe270f2b9c92",
+      "reference_sha256": "9d97686be463dd64bd758326f36965e6e77070a4139a437bcb5ffe270f2b9c92",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-fonts__standard-font-family-19.html",
+      "before": "pass",
+      "before_differing_pixels": 12483,
+      "after": "pass",
+      "after_differing_pixels": 10378,
+      "actual_sha256": "3d1bf5eb0dcfce0990dc1ec1d60f8e1166c5d02d81e16ed3dc4f927fd521da96",
+      "reference_sha256": "d636306a3568a8e72c081a1efcb13368eb34be47fd5f82729dd71bff7272be28",
+      "diff_sha256": "27cb3bb067f02b175d19fe9d8bfec38f3f1d01f7a46b9b58672fee6a24eb218f"
+    },
+    {
+      "id": "css-fonts__font-size-zero-1.html",
+      "before": "mismatch",
+      "before_differing_pixels": 1353,
+      "after": "mismatch",
+      "after_differing_pixels": 538,
+      "actual_sha256": "1e21a2e119db5363ea6bf10d35a575d14de4e591ce60807c491cf6535bca500c",
+      "reference_sha256": "d1539e891dbe678aede227549791e95cc028e1237db6ad3c211784708a9bdeb3",
+      "diff_sha256": "bfe33861b6780a13fa04cfb99e937863b51ac0021975625402861c462da1802f"
+    },
+    {
+      "id": "css-fonts__standard-font-family-5.html",
+      "before": "mismatch",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 0,
+      "actual_sha256": "3d1bf5eb0dcfce0990dc1ec1d60f8e1166c5d02d81e16ed3dc4f927fd521da96",
+      "reference_sha256": "3d1bf5eb0dcfce0990dc1ec1d60f8e1166c5d02d81e16ed3dc4f927fd521da96",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-fonts__font-kerning-01.html",
+      "before": "mismatch",
+      "before_differing_pixels": 10000,
+      "after": "mismatch",
+      "after_differing_pixels": 10000,
+      "actual_sha256": "955b77387a4e129543e7e24257fffc7fdc0ef0be70c933813528d47375d2351d",
+      "reference_sha256": "565eb6db29eeada492030534019a22027697424e1cef35a171d09f1afa18a491",
+      "diff_sha256": "34581bb76e925254a38353257366f33ee29cf237eb10c079063f0ceddc033946"
+    },
+    {
+      "id": "css-fonts__font-size-adjust-zero-2.html",
+      "before": "mismatch",
+      "before_differing_pixels": 583,
+      "after": "mismatch",
+      "after_differing_pixels": 152,
+      "actual_sha256": "1e21a2e119db5363ea6bf10d35a575d14de4e591ce60807c491cf6535bca500c",
+      "reference_sha256": "e5a517fb1ab8ea85bdb095b07b375692725dfc9bd4a0eff174322b8797427b9f",
+      "diff_sha256": "df107a8948f32a1c3ba8db6713556d5f1f7c79c84a5d999080105a4f687b42dc"
+    },
+    {
+      "id": "css-fonts__font-variant-emoji-1.html",
+      "before": "mismatch",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 0,
+      "actual_sha256": "6031119fc8f10290839add1fe570285dfa19a558ee7e792c6cb33e06145d7c92",
+      "reference_sha256": "6031119fc8f10290839add1fe570285dfa19a558ee7e792c6cb33e06145d7c92",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-fonts__font-size-xxx-large.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "pass",
+      "after_differing_pixels": 0,
+      "actual_sha256": "f142ee8a980ce65f96d095c8ff3f9786e240fe282bd80564d3e04a7b8f34ad0d",
+      "reference_sha256": "f142ee8a980ce65f96d095c8ff3f9786e240fe282bd80564d3e04a7b8f34ad0d",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__text-align__text-align-last-justify-rtl.html",
+      "before": "mismatch",
+      "before_differing_pixels": 110,
+      "after": "mismatch",
+      "after_differing_pixels": 452,
+      "actual_sha256": "47896f9cb31a13acf9e6396c8a5759aa8a2b018a4a49ec38f21bed98b2b14994",
+      "reference_sha256": "4ea642d472e58b87bf2f476184cd50c3f5e229bc82bdcda979eb07f43ea6519f",
+      "diff_sha256": "cd09cadb93abc195b4d7f33e38734496594340a5404b739fe79c4bcc408f3c32"
+    },
+    {
+      "id": "css-text__tab-size__tab-size-spacing-001.html",
+      "before": "mismatch",
+      "before_differing_pixels": 876,
+      "after": "mismatch",
+      "after_differing_pixels": 876,
+      "actual_sha256": "8a27f2d5ceab5471a578784ce5f03da163bdbb31845d64f4f6383810f2e691fd",
+      "reference_sha256": "d0f45b605266a77254190a1d60ec2ff61de3defa5381602a9b7df7b4322f5339",
+      "diff_sha256": "685386c2a633463385ae3097492a1c3bdaefa3ae045edb7ed7b7eb9744297318"
+    },
+    {
+      "id": "css-text__hyphens__i18n__hyphens-i18n-auto-005.html",
+      "before": "mismatch",
+      "before_differing_pixels": 25636,
+      "after": "mismatch",
+      "after_differing_pixels": 3201,
+      "actual_sha256": "b0c356db07a33c834d8e0950e505df1d3c71fe15301b7047a315d083ee961fe7",
+      "reference_sha256": "39f7254d768e487ae45d240a05b6b129d08ab387afb49cf09095063d46cf034e",
+      "diff_sha256": "3e574545d5c4498196bc5b455660fd48a74952aea236d69d7fe630271998b63c"
+    },
+    {
+      "id": "css-text__text-align__text-align-match-parent-01.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 2150,
+      "actual_sha256": "757fa6053b0901a339e1bd081aa49328aa251a5a39a905f4c3298eff29d80845",
+      "reference_sha256": "a52eb2a60679104c242baf0f104e5ba13c0446b0af4419ef8bd8079d8cbe2e11",
+      "diff_sha256": "dfadb0a06b0ea17a69c7cf9e87a30902479a5ca448de824c63e71c76a254996f"
+    },
+    {
+      "id": "css-text__text-align__text-align-last-justify-br.html",
+      "before": "mismatch",
+      "before_differing_pixels": 704,
+      "after": "mismatch",
+      "after_differing_pixels": 704,
+      "actual_sha256": "b33922133364b97fcaf4f2c5b2eacf414123cfa7c596071472f58cfed015d2f1",
+      "reference_sha256": "ed3c1e0871f514743526b4ae4b06369511dd7cc031afcf4a9da79e6b8a8e9a28",
+      "diff_sha256": "2ad893f55d1a4f011cafad85a9c553e5c5a81d445354aa8f6db469b2ca0e6bd7"
+    },
+    {
+      "id": "css-text__word-break__word-break-break-all-014.html",
+      "before": "mismatch",
+      "before_differing_pixels": 352,
+      "after": "mismatch",
+      "after_differing_pixels": 352,
+      "actual_sha256": "2622b495944318fe9a9eaf9de1aec54964d60b5e655e01a6d0a3e1b43135643f",
+      "reference_sha256": "5256f063529ddb5f318d3adcfcb6cd9f2a3e934dbcba245e8af179c5f19c09c0",
+      "diff_sha256": "4ff08e08a044fae15ac93a9389e78b48e82098d1bdb134883a6cacc1a944cc61"
+    },
+    {
+      "id": "css-text__hyphens__hyphens-manual-inline-011.html",
+      "before": "mismatch",
+      "before_differing_pixels": 23274,
+      "after": "mismatch",
+      "after_differing_pixels": 12160,
+      "actual_sha256": "267f87fc314f4e5d33258bdfe5fb1ff118023e689941b6c7f424490fd884b1a4",
+      "reference_sha256": "1ef21956e279387bbb53380e13a96603c8fb8c0201fab33b2daa37f5718341c3",
+      "diff_sha256": "55b6b267bb27ce8b0a84f503eddd9c90d9648da543fb5525e5474fe6cdfb111a"
+    },
+    {
+      "id": "css-text__white-space__control-chars-00E.html",
+      "before": "mismatch",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 0,
+      "actual_sha256": "1c1f74fe36ae8b72c59883711a5770ff21a3784fc0ed0801cae33d3e18bea00f",
+      "reference_sha256": "1c1f74fe36ae8b72c59883711a5770ff21a3784fc0ed0801cae33d3e18bea00f",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__text-indent__text-indent-percentage-004.html",
+      "before": "mismatch",
+      "before_differing_pixels": 219,
+      "after": "mismatch",
+      "after_differing_pixels": 219,
+      "actual_sha256": "ecf7d5eb7f3e3a070459a359da9d3df01c0947e49f40fa30796309e579112c3e",
+      "reference_sha256": "46c1c96ad814f9552c40ed6a89b807e3cb75b5ea85c56b2655878f08f6985238",
+      "diff_sha256": "a2718293ada3046dbb4dd163cf2239f09cbd3017420aea52f63934e7293e5374"
+    },
+    {
+      "id": "css-text__hyphens__i18n__hyphens-i18n-auto-004.html",
+      "before": "mismatch",
+      "before_differing_pixels": 64032,
+      "after": "mismatch",
+      "after_differing_pixels": 37377,
+      "actual_sha256": "971029e4b778be62b369a204adde29e45dbadc6afabb8c467cae497c4e2f2eb9",
+      "reference_sha256": "255e760929ba7342cc483e2c4e1bd05d9aacfc609ffbf1e64b01210ad854a09e",
+      "diff_sha256": "e7c67cb48ac5b9999bc3c67908b0cfb482c5dba2a92edd2f02a909e011c1cd78"
+    },
+    {
+      "id": "css-text__text-align__text-align-justify-last-end.html",
+      "before": "mismatch",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 0,
+      "actual_sha256": "d80aa6c6e84cc55e94a8e9db007087befef60732d2a770e4b3108b41b06abd3d",
+      "reference_sha256": "d80aa6c6e84cc55e94a8e9db007087befef60732d2a770e4b3108b41b06abd3d",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__word-break__auto-phrase__word-break-auto-phrase-005.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "pass",
+      "after_differing_pixels": 0,
+      "actual_sha256": "64cb8017d4c3e0b1aee27b7b5599be9d1fe5e4a060300e65292ff40378573590",
+      "reference_sha256": "64cb8017d4c3e0b1aee27b7b5599be9d1fe5e4a060300e65292ff40378573590",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__forms__select-multiple-appearance-none-vlr.optional.html",
+      "before": "mismatch",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 0,
+      "actual_sha256": "ec32b2a4261d6d3bf85ce494e53c6a881443fc4c7a40b3865606a6c66de733b1",
+      "reference_sha256": "ec32b2a4261d6d3bf85ce494e53c6a881443fc4c7a40b3865606a6c66de733b1",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__forms__select-appearance-native-horizontal.optional.html",
+      "before": "mismatch",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 0,
+      "actual_sha256": "26e12713f6bdc8544692c5a25f7b8b3a5541fe49c2c9803f7be55f1be17ac666",
+      "reference_sha256": "26e12713f6bdc8544692c5a25f7b8b3a5541fe49c2c9803f7be55f1be17ac666",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__table-progression-slr-001.html",
+      "before": "mismatch",
+      "before_differing_pixels": 5544,
+      "after": "mismatch",
+      "after_differing_pixels": 5544,
+      "actual_sha256": "3e9da2f18730c6400f5e4b670b9fa676dae9e33b361b3ae18eb8fd4515eaf54a",
+      "reference_sha256": "6b2981a93b5f37f87e788cf081e45657e8879dba595a02bdc45a0220fe9fa64b",
+      "diff_sha256": "ba088fffa74a2a3c09ee1113c69e700444b3794a5d87dca39c3da0a776a82f6d"
+    },
+    {
+      "id": "css-writing-modes__mongolian-span-001.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "pass",
+      "after_differing_pixels": 0,
+      "actual_sha256": "a9b92d54e0d8006eb35164d8d6ae715c2bfc4c5316c21cf1e8def88b2e811160",
+      "reference_sha256": "a9b92d54e0d8006eb35164d8d6ae715c2bfc4c5316c21cf1e8def88b2e811160",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__abs-pos-border-offset-001.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "pass",
+      "after_differing_pixels": 0,
+      "actual_sha256": "df51fda8f8760bcc993ef31ea642bb0ff2fe76a92a211ff9635304bd98f73869",
+      "reference_sha256": "df51fda8f8760bcc993ef31ea642bb0ff2fe76a92a211ff9635304bd98f73869",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__mongolian-orientation-001.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "pass",
+      "after_differing_pixels": 0,
+      "actual_sha256": "5b1aa3713f8b1b04067e504b3999de3545e3ca2926a31c9636d85944a27ec168",
+      "reference_sha256": "5b1aa3713f8b1b04067e504b3999de3545e3ca2926a31c9636d85944a27ec168",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__forms__file-input-vertical-rtl.optional.html",
+      "before": "mismatch",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 0,
+      "actual_sha256": "80b77a5cb7ca5b28e934f529872d20771637bd6348eee2a89f03386a4c797413",
+      "reference_sha256": "80b77a5cb7ca5b28e934f529872d20771637bd6348eee2a89f03386a4c797413",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-writing-modes__ch-units-vrl-006.html",
+      "before": "mismatch",
+      "before_differing_pixels": 1540,
+      "after": "mismatch",
+      "after_differing_pixels": 19626,
+      "actual_sha256": "22306c9a3eb0d22b7f203056dbe035b97e8261aa6c24116f8891375d59af995a",
+      "reference_sha256": "edee0246d9f83c073e068aee4474f035deb2e229dd37d350b946e54814226aba",
+      "diff_sha256": "7ccb89cd5ea4d9e7ee306334fdfe8cb2428cebee580fe1de04858b1f3745e34f"
+    },
+    {
+      "id": "css-writing-modes__logical-props-001.html",
+      "before": "mismatch",
+      "before_differing_pixels": 500,
+      "after": "mismatch",
+      "after_differing_pixels": 500,
+      "actual_sha256": "59239dfbc2793bc850c8d596424b86dd1516e992664bdd2a9fe392a6a5a092f5",
+      "reference_sha256": "b125c336f5f3044c9b0c5f35a34c2d570766e7be9f186c73ed1722c2c912b232",
+      "diff_sha256": "fd21f375766509d8d43d483c0ed04e91a6a575aecd0c5aebfe5d59141bb1e960"
+    },
+    {
+      "id": "css-writing-modes__ch-units-vrl-004.html",
+      "before": "mismatch",
+      "before_differing_pixels": 1540,
+      "after": "mismatch",
+      "after_differing_pixels": 19626,
+      "actual_sha256": "22306c9a3eb0d22b7f203056dbe035b97e8261aa6c24116f8891375d59af995a",
+      "reference_sha256": "edee0246d9f83c073e068aee4474f035deb2e229dd37d350b946e54814226aba",
+      "diff_sha256": "7ccb89cd5ea4d9e7ee306334fdfe8cb2428cebee580fe1de04858b1f3745e34f"
+    },
+    {
+      "id": "css-writing-modes__table-progression-htb-001.html",
+      "before": "mismatch",
+      "before_differing_pixels": 1656,
+      "after": "mismatch",
+      "after_differing_pixels": 1656,
+      "actual_sha256": "b958f457abe2d50b577ea3ec8d18e0abeddc5071940bf84989d4e7f43a1dbc5e",
+      "reference_sha256": "080b1c98a5f14694fabc08ba4d7efadc563a711e959264697d83f11fedf134f8",
+      "diff_sha256": "fd2db058296a2298f301d000621f0ad16c5edaf6d19a4e7de8c9792702f8bafc"
+    },
+    {
+      "id": "css-writing-modes__orthogonal-cell-001.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "pass",
+      "after_differing_pixels": 0,
+      "actual_sha256": "86a6168bbe9263cabcb26e551ab970c03dd87ddb4c490ac3e64db040405ffc09",
+      "reference_sha256": "86a6168bbe9263cabcb26e551ab970c03dd87ddb4c490ac3e64db040405ffc09",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-ruby__ruby-box-model-001.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "pass",
+      "after_differing_pixels": 0,
+      "actual_sha256": "84c0094bf4e8850b60d112dd5dba07932faa375664216a1645e0b92911fa3785",
+      "reference_sha256": "84c0094bf4e8850b60d112dd5dba07932faa375664216a1645e0b92911fa3785",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-ruby__break-within-bases__no-break-opportunity-at-end.html",
+      "before": "mismatch",
+      "before_differing_pixels": 3920,
+      "after": "mismatch",
+      "after_differing_pixels": 2240,
+      "actual_sha256": "2381030d2aed7284f35d938af7f2eb65948038e09d207bdc0d8f0353cd782ddb",
+      "reference_sha256": "ac838c78ac45b0d2e5d9afe9d7df6d0defd76c5ad8226ae8b912e8212d3d4893",
+      "diff_sha256": "56225d4651b06182dfab33d13d3a776ae953500c1a6c23a9d22cc506f72de43d"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-align-002.html",
+      "before": "mismatch",
+      "before_differing_pixels": 630,
+      "after": "mismatch",
+      "after_differing_pixels": 1365,
+      "actual_sha256": "ebfde5907d9188b296df5c6f709ef7e7354070ce5a468dc0f63ee0da9f135415",
+      "reference_sha256": "47646c067f6b2c3bfccf523cd7b5c6c1a97bf4a8c00e43b051856817e053b9d7",
+      "diff_sha256": "f5f3a42b9bded1f72dabf71e6f2ec95a6962f5926ba0b35efc882dcf4fb02562"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-align-005.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 1120,
+      "actual_sha256": "7ea201ebbb96e8e0c970e3598422a3662fb9e261ee2d386528ca617bef48cdb9",
+      "reference_sha256": "734b0e1ebdb7cab5f6c9e8edce37a6b3ff85d754f72af34b0c057b8da2475904",
+      "diff_sha256": "1473948663506882cdc3b456517201b2cf7ecdee33fce32cf59b83ff10ffb754"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-003.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 2100,
+      "actual_sha256": "808b400d991bb069b43f9cdf00d6396445ddd2c665155d80753d45431e458087",
+      "reference_sha256": "8144678530ff25b811de3bbf5b5e950e06cbd457de3392d4195ce2f6ff2070fc",
+      "diff_sha256": "75c086489e695632528650627656f1585b28cf83bae1d2fe43a5d891203ded1f"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-013.html",
+      "before": "mismatch",
+      "before_differing_pixels": 1260,
+      "after": "mismatch",
+      "after_differing_pixels": 1131,
+      "actual_sha256": "ec2167d2f02180d3409965da06c8e5f2610fb0d166a1f9cbbb3df79ecf5f061b",
+      "reference_sha256": "1bb03e0149ca3f7bad3695cc2d901e3872c88dcbeb55d3e78a9e5c55dcd812c9",
+      "diff_sha256": "df366304853fed486864a60338f1e5356799ef5dd2b707740ca58d94330b2be8"
+    },
+    {
+      "id": "css-ruby__empty-ruby-text-container-abs.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "pass",
+      "after_differing_pixels": 0,
+      "actual_sha256": "8b8ce59f9a55d8b5ff09aad88002b799c151624253bc6c302c97373e7c780102",
+      "reference_sha256": "8b8ce59f9a55d8b5ff09aad88002b799c151624253bc6c302c97373e7c780102",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-ruby__ruby-base-container-float.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "pass",
+      "after_differing_pixels": 0,
+      "actual_sha256": "e31859dde2ecd67518799de167be7557496143b7b5784039e6eade461c16465b",
+      "reference_sha256": "e31859dde2ecd67518799de167be7557496143b7b5784039e6eade461c16465b",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-008.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 1120,
+      "actual_sha256": "18380afdcdf09aefce9bfa9aab8f70ef3424e7bfcaf5a13e66cced558e05908c",
+      "reference_sha256": "a06ff453d08915c211f32caf837dc82f850703995784c1ea5f243cc5a33631fd",
+      "diff_sha256": "590cec1ca6695088bd3d960ea620af4b5a9a0f3f869f18a910b22e6365cce4cf"
+    },
+    {
+      "id": "css-ruby__ruby-line-break-suppression-004.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "pass",
+      "after_differing_pixels": 0,
+      "actual_sha256": "71c444988d67a6a900289dc154db55748a2d3934794bf6989b716872e7a39a88",
+      "reference_sha256": "71c444988d67a6a900289dc154db55748a2d3934794bf6989b716872e7a39a88",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-ruby__pseudo-first-letter.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 92,
+      "actual_sha256": "b5b3c9e5126d43da0a1fde6fd1adad8eaf7c128b37943f44238b9b3a5a7f315c",
+      "reference_sha256": "e15678a6fb73534024c8913a7ed3564018806b54896c969a27467bb6f8cd84c3",
+      "diff_sha256": "b8a79a23d9d0416c975c5a6765dde732cb7e19e898b81196396a90298c440e66"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-align-003.html",
+      "before": "pass",
+      "before_differing_pixels": 0,
+      "after": "mismatch",
+      "after_differing_pixels": 1680,
+      "actual_sha256": "2c20846031f8786604c995a7811bbdffacb610ad9bdfaa42b457f09b0824f8d1",
+      "reference_sha256": "19eab054045627d4cdcecc1b6551590736925d6b4304d6f153cdaf172bcdf821",
+      "diff_sha256": "a155d82d287521b57d74a09a17fe78ed2132b9e66ce7a453fdd9f28d7eb0f73e"
+    }
+  ]
+}

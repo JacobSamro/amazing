@@ -200,6 +200,7 @@ dependencies = [
  "amazing-css",
  "amazing-dom",
  "amazing-html",
+ "amazing-text",
 ]
 
 [[package]]
@@ -229,6 +230,7 @@ dependencies = [
  "amazing-dom",
  "amazing-layout",
  "amazing-media",
+ "amazing-text",
 ]
 
 [[package]]
@@ -249,6 +251,10 @@ dependencies = [
  "image",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "amazing-text"
+version = "0.0.1"
 
 [[package]]
 name = "amazing-webrtc"

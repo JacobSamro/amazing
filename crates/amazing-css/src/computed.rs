@@ -119,6 +119,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "float", initial: "none", inherited: false },
     PropertyMetadata { name: "font-family", initial: "serif", inherited: true },
     PropertyMetadata { name: "font-size", initial: "medium", inherited: true },
+    PropertyMetadata { name: "font-stretch", initial: "normal", inherited: true },
     PropertyMetadata { name: "font-style", initial: "normal", inherited: true },
     PropertyMetadata { name: "font-variant", initial: "normal", inherited: true },
     PropertyMetadata { name: "font-weight", initial: "normal", inherited: true },
@@ -252,6 +253,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 parts[0].to_owned()
             },
         )],
+        "font" => expand_font_shorthand(value).unwrap_or_else(|| vec![(property, value.to_owned())]),
         "gap" if !parts.is_empty() => {
             let row = parts[0];
             let column = parts.get(1).copied().unwrap_or(row);
@@ -297,6 +299,170 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         },
         _ => vec![(property, value.to_owned())],
     }
+}
+
+fn expand_font_shorthand(value: &str) -> Option<Vec<(String, String)>> {
+    if css_wide_keyword(value).is_some() {
+        return Some(
+            [
+                "font-family",
+                "font-size",
+                "font-stretch",
+                "font-style",
+                "font-variant",
+                "font-weight",
+                "line-height",
+            ]
+            .into_iter()
+            .map(|property| (property.to_owned(), value.to_owned()))
+            .collect(),
+        );
+    }
+    let tokens = tokenize(value);
+    let mut position = 0usize;
+    let mut style = "normal".to_owned();
+    let mut variant = "normal".to_owned();
+    let mut weight = "normal".to_owned();
+    let mut stretch = "normal".to_owned();
+    let mut style_seen = false;
+    let mut variant_seen = false;
+    let mut weight_seen = false;
+    let mut stretch_seen = false;
+    let mut optional_count = 0usize;
+    let size = loop {
+        skip_css_whitespace(&tokens, &mut position);
+        let token = tokens.get(position)?;
+        if is_font_size_token(token) {
+            let size = serialize(std::slice::from_ref(token));
+            position += 1;
+            break size;
+        }
+        optional_count += 1;
+        if optional_count > 4 {
+            return None;
+        }
+        match token {
+            Token::Ident(value) if value.eq_ignore_ascii_case("normal") => {},
+            Token::Ident(value)
+                if value.eq_ignore_ascii_case("italic")
+                    || value.eq_ignore_ascii_case("oblique") =>
+            {
+                if style_seen {
+                    return None;
+                }
+                style_seen = true;
+                style = value.clone();
+            },
+            Token::Ident(value) if value.eq_ignore_ascii_case("small-caps") => {
+                if variant_seen {
+                    return None;
+                }
+                variant_seen = true;
+                variant = value.clone();
+            },
+            Token::Ident(value)
+                if matches!(
+                    value.to_ascii_lowercase().as_str(),
+                    "bold" | "bolder" | "lighter"
+                ) =>
+            {
+                if weight_seen {
+                    return None;
+                }
+                weight_seen = true;
+                weight = value.clone();
+            },
+            Token::Number(value) if (1.0..=1000.0).contains(value) && value.fract() == 0.0 => {
+                if weight_seen {
+                    return None;
+                }
+                weight_seen = true;
+                weight = serialize(std::slice::from_ref(token));
+            },
+            Token::Ident(value)
+                if value.to_ascii_lowercase().ends_with("condensed")
+                    || value.to_ascii_lowercase().ends_with("expanded") =>
+            {
+                if stretch_seen {
+                    return None;
+                }
+                stretch_seen = true;
+                stretch = value.clone();
+            },
+            _ => return None,
+        }
+        position += 1;
+    };
+    skip_css_whitespace(&tokens, &mut position);
+    let line_height = if tokens.get(position) == Some(&Token::Delim('/')) {
+        position += 1;
+        skip_css_whitespace(&tokens, &mut position);
+        let token = tokens.get(position)?;
+        if !is_line_height_token(token) {
+            return None;
+        }
+        position += 1;
+        serialize(std::slice::from_ref(token))
+    } else {
+        "normal".to_owned()
+    };
+    skip_css_whitespace(&tokens, &mut position);
+    let family_tokens = tokens.get(position..)?;
+    if !valid_font_family_tokens(family_tokens) {
+        return None;
+    }
+    let family = serialize(family_tokens);
+    Some(vec![
+        ("font-style".into(), style),
+        ("font-variant".into(), variant),
+        ("font-weight".into(), weight),
+        ("font-stretch".into(), stretch),
+        ("font-size".into(), size),
+        ("line-height".into(), line_height),
+        ("font-family".into(), family),
+    ])
+}
+
+fn skip_css_whitespace(tokens: &[Token], position: &mut usize) {
+    while matches!(tokens.get(*position), Some(Token::Whitespace)) {
+        *position += 1;
+    }
+}
+
+fn is_font_size_token(token: &Token) -> bool {
+    matches!(token, Token::Dimension(value, _) | Token::Percentage(value) if *value >= 0.0)
+        || matches!(token, Token::Number(value) if *value == 0.0)
+        || matches!(token, Token::Ident(value) if matches!(
+            value.to_ascii_lowercase().as_str(),
+            "xx-small" | "x-small" | "small" | "medium" | "large" | "x-large" | "xx-large" | "xxx-large" | "smaller" | "larger"
+        ))
+}
+
+fn is_line_height_token(token: &Token) -> bool {
+    matches!(token, Token::Dimension(value, _) | Token::Percentage(value) | Token::Number(value) if *value >= 0.0)
+        || matches!(token, Token::Ident(value) if value.eq_ignore_ascii_case("normal"))
+}
+
+fn valid_font_family_tokens(tokens: &[Token]) -> bool {
+    #[derive(Clone, Copy)]
+    enum FamilyKind {
+        None,
+        String,
+        Ident,
+    }
+    let mut kind = FamilyKind::None;
+    for token in tokens {
+        match token {
+            Token::Whitespace => {},
+            Token::Comma if !matches!(kind, FamilyKind::None) => {
+                kind = FamilyKind::None;
+            },
+            Token::Ident(_) if !matches!(kind, FamilyKind::String) => kind = FamilyKind::Ident,
+            Token::Str(_) if matches!(kind, FamilyKind::None) => kind = FamilyKind::String,
+            _ => return false,
+        }
+    }
+    !matches!(kind, FamilyKind::None)
 }
 
 fn replicate_index(count: usize, side: usize) -> usize {
@@ -845,5 +1011,37 @@ mod tests {
         assert_eq!(style.get("grid-column-end"), Some("-1"));
         assert_eq!(style.get("gap"), None);
         assert_eq!(style.get("grid-column"), None);
+    }
+
+    #[test]
+    fn font_shorthand_expands_size_line_height_family_and_resets_optionals() {
+        let expanded = expand_declaration("font", "italic 700 120px / 2 \"Arabic Test\",sans-serif");
+        let values: BTreeMap<_, _> = expanded.into_iter().collect();
+
+        assert_eq!(values.get("font-size").map(String::as_str), Some("120px"));
+        assert_eq!(values.get("line-height").map(String::as_str), Some("2"));
+        assert_eq!(values.get("font-family").map(String::as_str), Some("\"Arabic Test\",sans-serif"));
+        assert_eq!(values.get("font-style").map(String::as_str), Some("italic"));
+        assert_eq!(values.get("font-variant").map(String::as_str), Some("normal"));
+        assert_eq!(values.get("font-weight").map(String::as_str), Some("700"));
+
+        assert_eq!(
+            expand_declaration("font", "italic oblique 16px serif"),
+            vec![("font".into(), "italic oblique 16px serif".into())]
+        );
+        assert_eq!(
+            expand_declaration("font", "16px \"Quoted\" adjacent"),
+            vec![("font".into(), "16px \"Quoted\" adjacent".into())]
+        );
+        assert_eq!(
+            expand_declaration(
+                "font",
+                "normal normal normal normal italic 16px serif"
+            ),
+            vec![(
+                "font".into(),
+                "normal normal normal normal italic 16px serif".into()
+            )]
+        );
     }
 }

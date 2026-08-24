@@ -21,8 +21,11 @@
 //!   children; flex children like block children
 //! - decoded replaced images from an [`paint::ImageProvider`], scaled with
 //!   clipped nearest-neighbor sampling and source-over RGBA compositing
-//! - [`text`]: per-character advances from the same `FontSource::measure`
-//!   numbers layout used, integer alpha compositing, and two
+//! - provider-neutral shaped text consumes layout's exact font/glyph ids,
+//!   advances, offsets, colors, and inline decoration geometry, with bounded
+//!   alpha/RGBA glyph images supplied through `amazing-text`
+//! - [`text`]: legacy per-character advances from `FontSource::measure`,
+//!   integer alpha compositing, and two compatibility
 //!   [`text::GlyphProvider`] implementations: [`text::RectInkProvider`]
 //!   (tidy ink bars on the baseline, the no-font default) and
 //!   [`text::OutlineGlyphProvider`] (real TrueType letterforms — outline
@@ -34,8 +37,8 @@
 //! - Outline text has no hinting and flattens curves at a fixed 4
 //!   subdivisions per segment; coverage is 16-level box supersampling.
 //! - all border styles render solid; no radius/shadows/markers/opacity/
-//!   stacking contexts; word-level colors inside one line use the
-//!   containing block's color (`WordFrag` carries no style)
+//!   stacking contexts; legacy word painting still uses the containing box's
+//!   color while the shaped path retains per-inline color/background
 //! - the canvas starts opaque white; transparent backgrounds skip filling
 
 pub mod color;
@@ -45,7 +48,8 @@ pub mod text;
 
 pub use color::parse_css_color;
 pub use paint::{
-    paint_document, paint_document_with, paint_document_with_resources, ImageProvider, NoImages,
+    paint_document, paint_document_with, paint_document_with_resources,
+    paint_document_with_text_resources, ImageProvider, NoImages,
 };
 pub use surface::Surface;
 pub use text::{

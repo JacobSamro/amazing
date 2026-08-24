@@ -13,3 +13,4 @@ amazing-layout = { path = "../amazing-layout" }
 amazing-css = { path = "../amazing-css" }
 amazing-dom = { path = "../amazing-dom" }
 amazing-media = { path = "../amazing-media" }
+amazing-text = { path = "../amazing-text" }

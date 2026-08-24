@@ -81,6 +81,152 @@ pub(crate) struct PageMedia {
     pub(crate) warnings: Vec<String>,
 }
 
+pub(crate) struct PageText {
+    pub(crate) provider: amazing_text_provider::TextProvider,
+    pub(crate) warnings: Vec<String>,
+}
+
+const MAX_PAGE_FONT_BYTES: usize = 8 * 1024 * 1024;
+
+pub(crate) fn load_page_text(css: &str, page: &str) -> PageText {
+    use amazing_text::FontSlant;
+    use amazing_text_provider::{FontFormat, WebFont};
+
+    let mut text = PageText {
+        provider: amazing_text_provider::TextProvider::new(),
+        warnings: Vec::new(),
+    };
+    register_system_text_faces(&mut text.provider);
+    for face in amazing_css::parse_font_faces(css) {
+        let weight = match face.weight.trim() {
+            value if value.eq_ignore_ascii_case("bold") => 700,
+            value if value.eq_ignore_ascii_case("normal") => 400,
+            value => value.parse::<u16>().ok().filter(|value| (1..=1000).contains(value)).unwrap_or(400),
+        };
+        let stretch = face
+            .stretch
+            .trim()
+            .strip_suffix('%')
+            .and_then(|value| value.parse::<u16>().ok())
+            .filter(|value| (1..=1000).contains(value))
+            .unwrap_or(100);
+        let slant = if face.style.eq_ignore_ascii_case("italic") {
+            FontSlant::Italic
+        } else if face.style.to_ascii_lowercase().starts_with("oblique") {
+            FontSlant::Oblique
+        } else {
+            FontSlant::Normal
+        };
+        let mut errors = Vec::new();
+        let mut loaded = false;
+        for source in face.sources {
+            let format_name = source
+                .format
+                .as_deref()
+                .map(str::to_ascii_lowercase)
+                .unwrap_or_else(|| {
+                    source
+                        .url
+                        .split(['?', '#'])
+                        .next()
+                        .and_then(|url| url.rsplit('.').next())
+                        .unwrap_or_default()
+                        .to_ascii_lowercase()
+                });
+            let format = match format_name.as_str() {
+                "woff2" => FontFormat::Woff2,
+                "woff" => FontFormat::Woff,
+                "opentype" | "truetype" | "ttf" | "otf" => FontFormat::OpenType,
+                _ => {
+                    errors.push(format!("unsupported format {format_name:?}"));
+                    continue;
+                },
+            };
+            let resolved = resolve_font_url(page, &source.url);
+            let fetch_options = amazing_net::FetchOptions {
+                max_response_bytes: MAX_PAGE_FONT_BYTES,
+                ..amazing_net::FetchOptions::default()
+            };
+            let bytes = match amazing_net::fetch(&resolved, &fetch_options) {
+                Ok(response) => response.body,
+                Err(error) => {
+                    errors.push(format!("{}: {error}", source.url));
+                    continue;
+                },
+            };
+            match text.provider.register_web_font(WebFont {
+                family: face.family.clone(),
+                weight,
+                stretch,
+                slant,
+                format,
+                bytes,
+            }) {
+                Ok(_) => {
+                    loaded = true;
+                    break;
+                },
+                Err(error) => errors.push(format!("{}: {error:?}", source.url)),
+            }
+        }
+        if !loaded {
+            text.warnings.push(format!(
+                "font-face {:?}: {}",
+                face.family,
+                errors.join("; ")
+            ));
+        }
+    }
+    text
+}
+
+fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider) {
+    use amazing_text::FontSlant;
+    use amazing_text_provider::{FontFormat, WebFont};
+
+    for (path, family) in [
+        (r"C:\Windows\Fonts\times.ttf", "serif"),
+        (r"C:\Windows\Fonts\arial.ttf", "sans-serif"),
+        (r"C:\Windows\Fonts\segoeui.ttf", "system-ui"),
+        (r"C:\Windows\Fonts\consola.ttf", "monospace"),
+    ] {
+        let options = amazing_net::FetchOptions {
+            max_response_bytes: MAX_PAGE_FONT_BYTES,
+            ..amazing_net::FetchOptions::default()
+        };
+        let Ok(response) = amazing_net::fetch(path, &options) else {
+            continue;
+        };
+        let _ = provider.register_web_font(WebFont {
+            family: family.into(),
+            weight: 400,
+            stretch: 100,
+            slant: FontSlant::Normal,
+            format: FontFormat::OpenType,
+            bytes: response.body,
+        });
+    }
+}
+
+fn resolve_font_url(page: &str, source: &str) -> String {
+    if source.starts_with('/')
+        && !page.starts_with("http://")
+        && !page.starts_with("https://")
+        && !page.starts_with("file:")
+    {
+        let relative = source.trim_start_matches(['/', '\\']);
+        let mut ancestor = std::path::Path::new(page).parent();
+        while let Some(directory) = ancestor {
+            let candidate = directory.join(relative);
+            if directory.join(".git").exists() && candidate.exists() {
+                return candidate.to_string_lossy().into_owned();
+            }
+            ancestor = directory.parent();
+        }
+    }
+    resolve_script_url(page, source)
+}
+
 impl amazing_layout::ReplacedElementProvider for PageMedia {
     fn intrinsic_size(&self, node: amazing_dom::NodeIdx) -> Option<amazing_layout::IntrinsicSize> {
         self.images
@@ -2600,17 +2746,20 @@ fn render_surface(
     collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut css)?;
     css.push_str(extra_css);
 
-    let fonts = amazing_layout::font::FontSource::fallback();
     let media = load_page_media(&dom.dom, html_path);
     for warning in &media.warnings {
         eprintln!("amazing render: {warning}");
     }
-    let root = amazing_layout::layout_dom_document_with_replaced_in_viewport(
+    let page_text = load_page_text(&css, html_path);
+    for warning in &page_text.warnings {
+        eprintln!("amazing render: {warning}");
+    }
+    let root = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
         &dom.dom,
         &css,
         width,
         fixed_height.map(|height| height as f32),
-        &fonts,
+        &page_text.provider,
         &media,
     );
     let page_height = fixed_height.unwrap_or_else(|| {
@@ -2620,12 +2769,11 @@ fn render_surface(
             .ceil()
             .clamp(1.0, 8192.0) as u32
     });
-    Ok(amazing_paint::paint_document_with_resources(
+    Ok(amazing_paint::paint_document_with_text_resources(
         &root,
         width.max(1.0) as u32,
         page_height,
-        &fonts,
-        &amazing_paint::RectInkProvider,
+        &page_text.provider,
         &media,
     ))
 }
@@ -3284,6 +3432,7 @@ fn format_js_error(value: &amazing_js::value::JsValue) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use amazing_text::TextSystem;
 
     #[test]
     fn document_title_ignores_svg_title_elements() {
@@ -3315,5 +3464,28 @@ mod tests {
             video.section.direction,
             amazing_webrtc::SdpDirection::RecvOnly
         );
+    }
+
+    #[test]
+    fn malformed_page_font_warns_without_advancing_font_generation() {
+        let directory = std::env::temp_dir().join(format!(
+            "amazing-text-provider-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let font_path = directory.join("broken.woff2");
+        std::fs::write(&font_path, [0u8; 64]).unwrap();
+        let page_path = directory.join("page.html");
+        let page = page_path.to_string_lossy();
+        let baseline_generation = load_page_text("", &page).provider.generation();
+        let text = load_page_text(
+            "@font-face { font-family: Broken; src: url('broken.woff2') format('woff2') }",
+            &page,
+        );
+
+        assert_eq!(text.provider.generation(), baseline_generation);
+        assert_eq!(text.warnings.len(), 1);
+        assert!(text.warnings[0].contains("broken.woff2"));
+        let _ = std::fs::remove_dir_all(directory);
     }
 }

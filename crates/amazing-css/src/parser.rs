@@ -38,10 +38,313 @@ pub struct Stylesheet {
     pub rules: Vec<Rule>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FontSource {
+    pub url: String,
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FontFaceRule {
+    pub family: String,
+    pub sources: Vec<FontSource>,
+    pub weight: String,
+    pub style: String,
+    pub stretch: String,
+}
+
 /// Parses a full stylesheet. Invalid constructs are dropped with recovery.
 pub fn parse_stylesheet(src: &str) -> Stylesheet {
     let toks = tokenize(src);
     parse_rule_list(&toks)
+}
+
+/// Extracts `@font-face` descriptors without placing provider or resource
+/// types in the CSS crate. Invalid rules are ignored with normal CSS recovery.
+pub fn parse_font_faces(src: &str) -> Vec<FontFaceRule> {
+    let tokens = tokenize(src);
+    let mut faces = Vec::new();
+    let mut position = 0usize;
+    while position < tokens.len() {
+        let is_font_face = matches!(
+            tokens.get(position),
+            Some(Token::AtKeyword(name)) if name.eq_ignore_ascii_case("font-face")
+        );
+        if !is_font_face {
+            match tokens.get(position) {
+                Some(Token::Whitespace | Token::Semicolon) => position += 1,
+                Some(Token::AtKeyword(_)) => {
+                    let mut recovery = Parser {
+                        toks: &tokens,
+                        pos: position,
+                    };
+                    recovery.skip_at_rule();
+                    position = recovery.pos;
+                },
+                Some(_) => position = skip_qualified_rule(&tokens, position),
+                None => break,
+            }
+            continue;
+        }
+        let at_rule_start = position;
+        position += 1;
+        while matches!(tokens.get(position), Some(Token::Whitespace)) {
+            position += 1;
+        }
+        if tokens.get(position) != Some(&Token::OpenCurly) {
+            let mut recovery = Parser {
+                toks: &tokens,
+                pos: at_rule_start,
+            };
+            recovery.skip_at_rule();
+            position = recovery.pos;
+            continue;
+        }
+        let body_start = position + 1;
+        position += 1;
+        let mut depth = 1usize;
+        while position < tokens.len() && depth > 0 {
+            match tokens[position] {
+                Token::OpenCurly => depth += 1,
+                Token::CloseCurly => depth -= 1,
+                _ => {},
+            }
+            position += 1;
+        }
+        if depth != 0 {
+            break;
+        }
+        let body_end = position - 1;
+        let mut declaration_parser = Parser {
+            toks: &tokens[body_start..body_end],
+            pos: 0,
+        };
+        let declarations = declaration_parser.block_declarations();
+        let descriptor = |name: &str| {
+            declarations
+                .iter()
+                .rev()
+                .find(|declaration| declaration.property.eq_ignore_ascii_case(name))
+                .map(|declaration| declaration.value.as_str())
+        };
+        let Some(family) = descriptor("font-family").and_then(parse_font_family_descriptor) else {
+            continue;
+        };
+        let sources = descriptor("src").map(parse_font_sources).unwrap_or_default();
+        if sources.is_empty() {
+            continue;
+        }
+        faces.push(FontFaceRule {
+            family,
+            sources,
+            weight: descriptor("font-weight").unwrap_or("normal").to_owned(),
+            style: descriptor("font-style").unwrap_or("normal").to_owned(),
+            stretch: descriptor("font-stretch").unwrap_or("normal").to_owned(),
+        });
+    }
+    faces
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ComponentEnd {
+    Paren,
+    Square,
+    Curly,
+}
+
+fn component_end(token: &Token) -> Option<ComponentEnd> {
+    match token {
+        Token::OpenParen => Some(ComponentEnd::Paren),
+        Token::OpenSquare => Some(ComponentEnd::Square),
+        Token::OpenCurly => Some(ComponentEnd::Curly),
+        _ => None,
+    }
+}
+
+fn closes_component(token: &Token, end: ComponentEnd) -> bool {
+    matches!(
+        (token, end),
+        (Token::CloseParen, ComponentEnd::Paren)
+            | (Token::CloseSquare, ComponentEnd::Square)
+            | (Token::CloseCurly, ComponentEnd::Curly)
+    )
+}
+
+fn skip_rule_remainder(
+    tokens: &[Token],
+    mut position: usize,
+    semicolon_ends_rule: bool,
+) -> usize {
+    let mut stack = Vec::new();
+    let mut rule_block_started = false;
+    while position < tokens.len() {
+        let token = &tokens[position];
+        if let Some(end) = component_end(token) {
+            if end == ComponentEnd::Curly && stack.is_empty() {
+                rule_block_started = true;
+            }
+            stack.push(end);
+        } else if stack
+            .last()
+            .is_some_and(|end| closes_component(token, *end))
+        {
+            stack.pop();
+            if rule_block_started && stack.is_empty() {
+                position += 1;
+                return position;
+            }
+        } else if semicolon_ends_rule
+            && !rule_block_started
+            && stack.is_empty()
+            && matches!(token, Token::Semicolon)
+        {
+            return position + 1;
+        }
+        position += 1;
+    }
+    position
+}
+
+fn skip_qualified_rule(tokens: &[Token], position: usize) -> usize {
+    skip_rule_remainder(tokens, position, false)
+}
+
+fn parse_font_family_descriptor(value: &str) -> Option<String> {
+    let tokens = tokenize(value);
+    let significant = tokens
+        .iter()
+        .filter(|token| !matches!(token, Token::Whitespace))
+        .collect::<Vec<_>>();
+    match significant.as_slice() {
+        [Token::Str(value)] => Some(value.clone()),
+        values if !values.is_empty() && values.iter().all(|token| matches!(token, Token::Ident(_))) => {
+            Some(serialize(&tokens))
+        },
+        _ => None,
+    }
+}
+
+fn parse_font_sources(value: &str) -> Vec<FontSource> {
+    let tokens = tokenize(value);
+    let mut sources = Vec::new();
+    let mut start = 0usize;
+    let mut depth = 0usize;
+    for index in 0..=tokens.len() {
+        let at_end = index == tokens.len();
+        if !at_end {
+            match tokens[index] {
+                Token::OpenParen | Token::OpenSquare => depth += 1,
+                Token::CloseParen | Token::CloseSquare => depth = depth.saturating_sub(1),
+                _ => {},
+            }
+        }
+        if (at_end || matches!(tokens[index], Token::Comma)) && depth == 0 {
+            if let Some(source) = parse_font_source_candidate(&tokens[start..index]) {
+                sources.push(source);
+            }
+            start = index + 1;
+        }
+    }
+    sources
+}
+
+fn parse_font_source_candidate(tokens: &[Token]) -> Option<FontSource> {
+    let mut position = 0usize;
+    skip_whitespace(tokens, &mut position);
+    let Token::Function(name) = tokens.get(position)? else {
+        return None;
+    };
+    if name.eq_ignore_ascii_case("local") {
+        return None;
+    }
+    if !name.eq_ignore_ascii_case("url") {
+        return None;
+    }
+    let (argument, after_url) = function_argument(tokens, position)?;
+    let url = parse_url_argument(argument)?;
+    position = after_url;
+    skip_whitespace(tokens, &mut position);
+    let mut format = None;
+    if matches!(tokens.get(position), Some(Token::Function(name)) if name.eq_ignore_ascii_case("format")) {
+        let (argument, after_format) = function_argument(tokens, position)?;
+        format = parse_one_ident_or_string(argument);
+        format.as_ref()?;
+        position = after_format;
+        skip_whitespace(tokens, &mut position);
+    }
+    (position == tokens.len()).then_some(FontSource { url, format })
+}
+
+fn parse_url_argument(tokens: &[Token]) -> Option<String> {
+    let significant = tokens
+        .iter()
+        .filter(|token| !matches!(token, Token::Whitespace))
+        .collect::<Vec<_>>();
+    if let [Token::Str(value)] = significant.as_slice() {
+        return Some(value.clone());
+    }
+    if tokens.is_empty()
+        || tokens.iter().any(|token| {
+            matches!(
+                token,
+                Token::Whitespace
+                    | Token::Str(_)
+                    | Token::Function(_)
+                    | Token::AtKeyword(_)
+                    | Token::OpenCurly
+                    | Token::CloseCurly
+                    | Token::OpenParen
+                    | Token::CloseParen
+                    | Token::OpenSquare
+                    | Token::CloseSquare
+            )
+        })
+    {
+        return None;
+    }
+    let url = serialize(tokens);
+    (!url.is_empty()).then_some(url)
+}
+
+fn parse_one_ident_or_string(tokens: &[Token]) -> Option<String> {
+    let significant = tokens
+        .iter()
+        .filter(|token| !matches!(token, Token::Whitespace))
+        .collect::<Vec<_>>();
+    match significant.as_slice() {
+        [Token::Ident(value)] | [Token::Str(value)] => Some(value.clone()),
+        _ => None,
+    }
+}
+
+fn skip_whitespace(tokens: &[Token], position: &mut usize) {
+    while matches!(tokens.get(*position), Some(Token::Whitespace)) {
+        *position += 1;
+    }
+}
+
+fn function_argument(tokens: &[Token], function: usize) -> Option<(&[Token], usize)> {
+    if !matches!(tokens.get(function), Some(Token::Function(_)))
+        || tokens.get(function + 1) != Some(&Token::OpenParen)
+    {
+        return None;
+    }
+    let mut depth = 1usize;
+    let mut position = function + 2;
+    while position < tokens.len() {
+        match tokens[position] {
+            Token::OpenParen => depth += 1,
+            Token::CloseParen => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some((&tokens[function + 2..position], position + 1));
+                }
+            },
+            _ => {},
+        }
+        position += 1;
+    }
+    None
 }
 
 fn parse_rule_list(tokens: &[Token]) -> Stylesheet {
@@ -140,28 +443,7 @@ impl Parser<'_> {
     /// Skips an at-rule: through the next ';' or its balanced {} block.
     fn skip_at_rule(&mut self) {
         debug_assert!(matches!(self.peek(), Some(Token::AtKeyword(_))));
-        self.pos += 1;
-        let mut depth = 0usize;
-        loop {
-            match self.peek() {
-                None => return,
-                Some(Token::Semicolon) if depth == 0 => {
-                    self.pos += 1;
-                    return;
-                },
-                Some(Token::OpenCurly) => depth += 1,
-                Some(Token::CloseCurly) => {
-                    self.pos += 1;
-                    depth -= 1;
-                    if depth == 0 {
-                        return;
-                    }
-                    continue;
-                },
-                _ => {},
-            }
-            self.pos += 1;
-        }
+        self.pos = skip_rule_remainder(self.toks, self.pos + 1, true);
     }
 
     /// Prelude up to '{', then declarations until the matching '}'.
@@ -549,6 +831,78 @@ mod tests {
         assert_eq!(sheet.rules.len(), 1);
         assert_eq!(sheet.rules[0].selector_srcs, vec!["div"]);
         assert_eq!(sheet.rules[0].declarations[0].value, "y");
+    }
+
+    #[test]
+    fn font_face_extracts_provider_neutral_descriptors() {
+        let faces = parse_font_faces(
+            "@font-face {\n\
+             font-family: 'csstest_noto';\n\
+             src: local('ignored'), url('/fonts/noto/NotoNaskhArabic-regular.woff2') format('woff2');\n\
+             font-weight: normal; font-style: italic;\n\
+             }",
+        );
+
+        assert_eq!(faces.len(), 1);
+        assert_eq!(faces[0].family, "csstest_noto");
+        assert_eq!(faces[0].weight, "normal");
+        assert_eq!(faces[0].style, "italic");
+        assert_eq!(faces[0].stretch, "normal");
+        assert_eq!(
+            faces[0].sources,
+            vec![FontSource {
+                url: "/fonts/noto/NotoNaskhArabic-regular.woff2".into(),
+                format: Some("woff2".into()),
+            }]
+        );
+    }
+
+    #[test]
+    fn invalid_font_face_descriptor_grammars_are_rejected() {
+        assert!(parse_font_faces(
+            "@font-face { font-family: One,Two; src: url(font.woff2) format(woff2) }"
+        )
+        .is_empty());
+        assert!(parse_font_faces(
+            "@font-face { font-family: One; src: junk url(font.woff2) }"
+        )
+        .is_empty());
+        assert!(parse_font_faces(
+            "@font-face { font-family: One; src: url(bad path.woff2) }"
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn font_face_recovery_consumes_invalid_rules_and_last_descriptor_wins() {
+        assert!(parse_font_faces(
+            "@font-face invalid @font-face { font-family: Wrong; src: url(wrong.woff2) }"
+        )
+        .is_empty());
+
+        let faces = parse_font_faces(
+            "@font-face { font-family: Wrong; font-family: Right; \
+             src: url(wrong.woff2); src: url(right.woff2) format(woff2) }",
+        );
+        assert_eq!(faces[0].family, "Right");
+        assert_eq!(faces[0].sources[0].url, "right.woff2");
+
+        let faces = parse_font_faces(
+            "@bad fn(; @font-face { font-family: Wrong; src: url(wrong.woff2) }); \
+             @font-face { font-family: Right; src: url(right.woff2) }",
+        );
+        assert_eq!(faces.len(), 1);
+        assert_eq!(faces[0].family, "Right");
+
+        assert!(parse_font_faces(
+            "@bad fn([)]; @font-face { font-family: Wrong; src: url(wrong.woff2) }"
+        )
+        .is_empty());
+
+        assert!(parse_font_faces(
+            "garbage; @font-face { font-family: Wrong; src: url(wrong.woff2) }"
+        )
+        .is_empty());
     }
 
     #[test]

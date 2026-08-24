@@ -23,7 +23,7 @@ The first provider will pin this pure-Rust stack exactly in `Cargo.lock`:
 | Font inspection and glyph rasterization | Swash 0.2.10 | Covers TrueType/CFF outlines, variations, OpenType/AAT shaping data, hinting, and color glyph rendering |
 | Bidirectional analysis | unicode-bidi 0.3.18 | Safe Rust implementation of Unicode Bidirectional Algorithm (UAX #9) |
 | Grapheme, word, and line boundaries | icu_segmenter 2.3.0 | Current Unicode segmentation with explicit CSS `line-break` and `word-break` tailoring |
-| WOFF/WOFF2 decoding | wuff 0.2.8 | Pure Rust conversion to sfnt bytes, tested by its maintainers against Google woff2 and WPT font corpora |
+| WOFF/WOFF2 decoding | wuff 0.2.8 + brotli-decompressor 5.0.3 + flate2 1.1.9 | Pure Rust conversion to sfnt bytes; direct decoder pins let Amazing reject wuff's trusted output hint before allocation |
 
 The prototype must confirm the versions compile at Amazing's declared Rust
 1.89 MSRV before the exception is accepted. Dependency-internal unsafe is
@@ -222,3 +222,22 @@ drift, mismatched font ids between layout and paint, shaping across the wrong
 inline boundary, and cached glyphs surviving a font-set generation change.
 Exact pins, owned ids, bounded caches, generation keys, focused WPT cases, and
 repeat hashes are the acceptance controls.
+
+## Ticket #4a outcome
+
+The prototype and production slice validated the selected seam unchanged.
+`amazing-text` is std-only; `amazing-text-provider` pins the researched stack
+and both first-party crates forbid unsafe. WPT web fonts now load through
+bounded page resources, shaping preserves context across DOM/style spans,
+fallback itemizes graphemes across the whole paragraph, and layout/paint share
+font/glyph ids, vertical/horizontal advances, features, variations, synthesis
+state, and inline padding/background geometry. The implementation bounds each
+fetch/decode, the aggregate face set, and both raster-cache bytes and entries.
+
+The focused gate moved from 3/12 raw and 0/8 capability-credited consensus to
+12/12 and 8/8 exact-revision Blink/WebKit consensus. Two final 800×600, scale-1
+runs were pixel-hash identical. The broader sample moved from 19/48 raw and
+8/29 consensus to 12/48 and 7/29 because real web/system glyph output exposed
+former unsupported equal-pixel passes. Normalized evidence is retained in
+`tests/wpt-render/text-shaping-results-ticket4a.json` and
+`tests/wpt-render/text-results-ticket4a.json`.

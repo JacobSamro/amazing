@@ -21,6 +21,7 @@
 //! rewriting rules beyond GET, `Refresh`-style meta redirection.
 
 use std::path::Path;
+use std::io::Read;
 use std::time::Duration;
 
 use crate::headers::Headers;
@@ -45,6 +46,9 @@ pub struct FetchOptions {
     pub method: String,
     /// Fully-buffered request body, bounded by the embedding caller.
     pub body: Vec<u8>,
+    /// Maximum response-body bytes. Defaults to the transport-wide 32 MiB
+    /// cap; resource loaders may select a smaller bound before any read.
+    pub max_response_bytes: usize,
 }
 
 impl Default for FetchOptions {
@@ -54,6 +58,7 @@ impl Default for FetchOptions {
             request_headers: Vec::new(),
             method: "GET".into(),
             body: Vec::new(),
+            max_response_bytes: crate::http::MAX_BODY_BYTES,
         }
     }
 }
@@ -63,7 +68,11 @@ impl Default for FetchOptions {
 pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> {
     let trimmed = input.trim();
     if !looks_like_url(trimmed) {
-        return read_file_response(Path::new(trimmed), trimmed.to_string());
+        return read_file_response(
+            Path::new(trimmed),
+            trimmed.to_string(),
+            options.max_response_bytes,
+        );
     }
 
     // Surface unknown-scheme errors directly (not wrapped in NetError::Url)
@@ -80,7 +89,7 @@ pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> 
             "file" => {
                 let fs_path = current.to_file_path()?;
                 let reported = current.to_string();
-                return read_file_response(&fs_path, reported);
+                return read_file_response(&fs_path, reported, options.max_response_bytes);
             }
             other => return Err(NetError::UnsupportedScheme(other.to_string())),
         };
@@ -97,7 +106,7 @@ pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> 
             .get("location")
             .ok_or(NetError::MissingLocation)?
             .to_string();
-        if matches!(response.status, 301 | 302 | 303)
+        if matches!(response.status, 301..=303)
             && request_options.method.eq_ignore_ascii_case("POST")
         {
             request_options.method = "GET".into();
@@ -125,8 +134,21 @@ fn is_redirect(status: u16) -> bool {
     matches!(status, 301 | 302 | 303 | 307 | 308)
 }
 
-fn read_file_response(fs_path: &Path, reported_url: String) -> Result<Response, NetError> {
-    let body = std::fs::read(fs_path)?;
+fn read_file_response(
+    fs_path: &Path,
+    reported_url: String,
+    max_response_bytes: usize,
+) -> Result<Response, NetError> {
+    if std::fs::metadata(fs_path)?.len() > max_response_bytes as u64 {
+        return Err(NetError::ResponseTooLarge);
+    }
+    let mut body = Vec::with_capacity(max_response_bytes.min(8192));
+    std::fs::File::open(fs_path)?
+        .take(max_response_bytes.saturating_add(1) as u64)
+        .read_to_end(&mut body)?;
+    if body.len() > max_response_bytes {
+        return Err(NetError::ResponseTooLarge);
+    }
     let mut headers = Headers::new();
     headers.insert("Content-Type", content_type_for(fs_path).to_string());
     Ok(Response {
@@ -304,6 +326,21 @@ mod tests {
         assert_eq!(resp.url, reported);
         assert_eq!(resp.content_type(), Some("text/plain"));
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn caller_response_limit_is_enforced_before_a_local_file_read() {
+        let path = temp_file("bounded", "woff2", &[7; 65]);
+        let options = FetchOptions {
+            max_response_bytes: 64,
+            ..FetchOptions::default()
+        };
+
+        assert!(matches!(
+            fetch(path.to_str().unwrap(), &options),
+            Err(NetError::ResponseTooLarge)
+        ));
+        let _ = fs::remove_file(path);
     }
 
     #[test]

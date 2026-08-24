@@ -15,6 +15,10 @@ amazing-net ──bytes──▶ amazing-html ──tree ops──▶ amazing-do
       │                                 │
       │                                 ▼ computed style tree
       │                            amazing-layout ──layout tree──▶ amazing-paint ──pixels──▶ GUI shell
+      │                                  │                              │
+      │                                  └──amazing-text contract───────┘
+      │                                           ▲
+      │                               amazing-text-provider (vetted adapter)
       └──image bytes──▶ amazing-media
 amazing-media ──intrinsic size via PageMedia──▶ amazing-layout
 amazing-media ──RGBA8 via PageMedia───────────▶ amazing-paint
@@ -118,14 +122,23 @@ and bounded glyph images. Layout consumes shaped clusters and establishes every
 advance; paint rasterizes those same glyph ids and never measures text again.
 The API deliberately has no character-at-a-time `measure` operation.
 
-The reviewed `amazing-text-provider` exception may pin pure-Rust font, Unicode,
-shaping, web-font decode, and raster dependencies. Both first-party crates
-forbid unsafe; dependency types and internal unsafe never cross the contract.
+The reviewed `amazing-text-provider` exception pins HarfRust 0.13.2, Swash
+0.2.10, ICU4X Segmenter 2.3.0, unicode-bidi 0.3.18, and wuff 0.2.8 for pure-Rust
+font, Unicode, shaping, web-font decode, and raster behavior. Wuff's bounded
+custom callbacks directly pin brotli-decompressor 5.0.3 and flate2 1.1.9 so
+declared output sizes are rejected before decoder allocation. Both first-party
+crates forbid unsafe; dependency types and internal unsafe never cross the contract.
 The driver owns one provider and lends it sequentially through layout and paint,
 preserving the single-threaded engine model. CSS and inline itemization retain
-policy: family/source order, synthesis, property tailoring, and which inline
-boundaries preserve or break shaping. The provider owns validated font bytes,
-font coverage, Unicode algorithms, OpenType shaping, and glyph rasterization.
+policy: family/source order, synthesis, property tailoring, engine-owned
+attribute-distance scoring, and which inline boundaries preserve or break
+shaping. The provider enumerates registered faces and executes that ordered
+query; it owns validated font bytes, coverage, Unicode algorithms, OpenType
+shaping, and glyph rasterization. Caller-selected fetch limits apply before
+I/O, custom decoders reject oversized output before allocation, and aggregate
+faces plus raster-cache bytes/entries have independent caps. Provider panics on
+malformed external data are caught and converted to closed errors before they
+can unwind into an engine core.
 Exact provider selection and evidence are recorded in
 `docs/render/TEXT_PIPELINE_RESEARCH.md`.
 

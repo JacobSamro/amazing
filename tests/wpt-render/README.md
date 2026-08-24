@@ -82,3 +82,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1 `
 and exact-revision Blink/WebKit results. Explicit runner parameters override
 matching profile values, so the same profile can be reused with a different
 viewport, executable, source tree, output directory, or timeout.
+
+Ticket #4a records its before/after evidence in
+`text-shaping-results-ticket4a.json`: 3/12 raw (0/8 capability-credited
+Blink/WebKit consensus) became 12/12 and 8/8 consensus, with two identical
+pixel-hash projections. `text-results-ticket4a.json` records the broad sample's
+19/48 → 12/48 raw and 8/29 → 7/29 consensus movement; those decreases are
+classified as former inert equal-pixel results becoming real mismatches after
+web/system glyphs replaced heuristic rectangles.
