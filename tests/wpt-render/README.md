@@ -24,3 +24,16 @@ validates the harness smoke outcome; it cannot change the upstream assertion.
 `baseline.json` is the normalized, committed evidence from the ticket #1
 repeatability gate. It records results and hashes only; `smoke.json` remains
 the executable selection and expected harness outcome.
+
+Ticket #2 adds a deterministic cascade/value inventory:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\inventory-render-wpt.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1 `
+  -ManifestPath target\wpt-cascade-baseline.json -SkipFetch
+```
+
+The committed `cascade-inventory.json`, `cascade-manifest.json`,
+`cascade-results.json`, and `cascade-oracles.json` preserve the exact selection,
+measured baseline, and exact-revision Blink/WebKit comparison.
+Inventory provisions the pinned sparse checkout unless `-SkipFetch` is passed.

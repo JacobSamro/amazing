@@ -1,0 +1,307 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "schema": 1,
+  "selection": {
+    "kind": "sha256-path-stratified",
+    "per_category": 12
+  },
+  "sparse_paths": [
+    "css/css-syntax",
+    "css/css-cascade",
+    "css/selectors",
+    "css/css-values",
+    "css/css-color",
+    "css/css-fonts",
+    "css/css-variables"
+  ],
+  "tests": [
+    {
+      "id": "css-cascade__scope-pseudo-element.html",
+      "test": "css/css-cascade/scope-pseudo-element.html"
+    },
+    {
+      "id": "css-cascade__all-prop-revert-visited.html",
+      "test": "css/css-cascade/all-prop-revert-visited.html"
+    },
+    {
+      "id": "css-cascade__all-prop-001.html",
+      "test": "css/css-cascade/all-prop-001.html"
+    },
+    {
+      "id": "css-cascade__scope-featureless.html",
+      "test": "css/css-cascade/scope-featureless.html"
+    },
+    {
+      "id": "css-cascade__revert-layer-002.html",
+      "test": "css/css-cascade/revert-layer-002.html"
+    },
+    {
+      "id": "css-cascade__all-prop-revert-color.html",
+      "test": "css/css-cascade/all-prop-revert-color.html"
+    },
+    {
+      "id": "css-cascade__revert-layer-011.html",
+      "test": "css/css-cascade/revert-layer-011.html"
+    },
+    {
+      "id": "css-cascade__all-prop-initial-color.html",
+      "test": "css/css-cascade/all-prop-initial-color.html"
+    },
+    {
+      "id": "css-cascade__all-prop-002.html",
+      "test": "css/css-cascade/all-prop-002.html"
+    },
+    {
+      "id": "css-cascade__revert-layer-005.html",
+      "test": "css/css-cascade/revert-layer-005.html"
+    },
+    {
+      "id": "css-cascade__initial-background-color.html",
+      "test": "css/css-cascade/initial-background-color.html"
+    },
+    {
+      "id": "css-cascade__initial-color-background-001.html",
+      "test": "css/css-cascade/initial-color-background-001.html"
+    },
+    {
+      "id": "selectors__has-style-sharing-002.html",
+      "test": "css/selectors/has-style-sharing-002.html"
+    },
+    {
+      "id": "selectors__dir-style-03a.html",
+      "test": "css/selectors/dir-style-03a.html"
+    },
+    {
+      "id": "selectors__nth-child-of-no-space-after-of.html",
+      "test": "css/selectors/nth-child-of-no-space-after-of.html"
+    },
+    {
+      "id": "selectors__selectors-4__lang-016.html",
+      "test": "css/selectors/selectors-4/lang-016.html"
+    },
+    {
+      "id": "selectors__selectors-4__lang-022.html",
+      "test": "css/selectors/selectors-4/lang-022.html"
+    },
+    {
+      "id": "selectors__nth-child-of-tagname.html",
+      "test": "css/selectors/nth-child-of-tagname.html"
+    },
+    {
+      "id": "selectors__selectors-4__lang-002.html",
+      "test": "css/selectors/selectors-4/lang-002.html"
+    },
+    {
+      "id": "selectors__nth-last-child-of-complex-selector.html",
+      "test": "css/selectors/nth-last-child-of-complex-selector.html"
+    },
+    {
+      "id": "selectors__floating-first-letter-05d0.html",
+      "test": "css/selectors/floating-first-letter-05d0.html"
+    },
+    {
+      "id": "selectors__selectors-4__lang-006.html",
+      "test": "css/selectors/selectors-4/lang-006.html"
+    },
+    {
+      "id": "selectors__selectors-4__lang-000.html",
+      "test": "css/selectors/selectors-4/lang-000.html"
+    },
+    {
+      "id": "selectors__nth-child-of-complex-selector-many-children-2.html",
+      "test": "css/selectors/nth-child-of-complex-selector-many-children-2.html"
+    },
+    {
+      "id": "css-values__calc-border-radius-1.html",
+      "test": "css/css-values/calc-border-radius-1.html"
+    },
+    {
+      "id": "css-values__calc-max-height-block-1.html",
+      "test": "css/css-values/calc-max-height-block-1.html"
+    },
+    {
+      "id": "css-values__calc-min-width-block-intrinsic-1.html",
+      "test": "css/css-values/calc-min-width-block-intrinsic-1.html"
+    },
+    {
+      "id": "css-values__ch-unit-008.html",
+      "test": "css/css-values/ch-unit-008.html"
+    },
+    {
+      "id": "css-values__vh-interpolate-px.html",
+      "test": "css/css-values/vh-interpolate-px.html"
+    },
+    {
+      "id": "css-values__calc-invalid-range-clamping.html",
+      "test": "css/css-values/calc-invalid-range-clamping.html"
+    },
+    {
+      "id": "css-values__attr-in-slotted.html",
+      "test": "css/css-values/attr-in-slotted.html"
+    },
+    {
+      "id": "css-values__calc-in-media-queries-001.html",
+      "test": "css/css-values/calc-in-media-queries-001.html"
+    },
+    {
+      "id": "css-values__viewport-units-scrollbars-scroll-vw-003.html",
+      "test": "css/css-values/viewport-units-scrollbars-scroll-vw-003.html"
+    },
+    {
+      "id": "css-values__calc-rounding-003.html",
+      "test": "css/css-values/calc-rounding-003.html"
+    },
+    {
+      "id": "css-values__max-unitless-zero-invalid.html",
+      "test": "css/css-values/max-unitless-zero-invalid.html"
+    },
+    {
+      "id": "css-values__calc-background-image-gradient-1.html",
+      "test": "css/css-values/calc-background-image-gradient-1.html"
+    },
+    {
+      "id": "css-color__oklch-l-almost-0.html",
+      "test": "css/css-color/oklch-l-almost-0.html"
+    },
+    {
+      "id": "css-color__xyz-d65-005.html",
+      "test": "css/css-color/xyz-d65-005.html"
+    },
+    {
+      "id": "css-color__deprecated-sameas-017.html",
+      "test": "css/css-color/deprecated-sameas-017.html"
+    },
+    {
+      "id": "css-color__hwb-005.html",
+      "test": "css/css-color/hwb-005.html"
+    },
+    {
+      "id": "css-color__a98rgb-001.html",
+      "test": "css/css-color/a98rgb-001.html"
+    },
+    {
+      "id": "css-color__t425-hsla-values-b.xht",
+      "test": "css/css-color/t425-hsla-values-b.xht"
+    },
+    {
+      "id": "css-color__t421-rgb-clip-outside-gamut-b.xht",
+      "test": "css/css-color/t421-rgb-clip-outside-gamut-b.xht"
+    },
+    {
+      "id": "css-color__color-mix-currentcolor-002.html",
+      "test": "css/css-color/color-mix-currentcolor-002.html"
+    },
+    {
+      "id": "css-color__deprecated-sameas-019.html",
+      "test": "css/css-color/deprecated-sameas-019.html"
+    },
+    {
+      "id": "css-color__hsl-003.html",
+      "test": "css/css-color/hsl-003.html"
+    },
+    {
+      "id": "css-color__lch-001.html",
+      "test": "css/css-color/lch-001.html"
+    },
+    {
+      "id": "css-color__relative-currentcolor-rec2020-02.html",
+      "test": "css/css-color/relative-currentcolor-rec2020-02.html"
+    },
+    {
+      "id": "css-fonts__system-ui-mixed.html",
+      "test": "css/css-fonts/system-ui-mixed.html"
+    },
+    {
+      "id": "css-fonts__font-size-zero-1-ref.html",
+      "test": "css/css-fonts/font-size-zero-1-ref.html"
+    },
+    {
+      "id": "css-fonts__font-family-name-014.xht",
+      "test": "css/css-fonts/font-family-name-014.xht"
+    },
+    {
+      "id": "css-fonts__font-family-name-000.xht",
+      "test": "css/css-fonts/font-family-name-000.xht"
+    },
+    {
+      "id": "css-fonts__font-family-name-022.xht",
+      "test": "css/css-fonts/font-family-name-022.xht"
+    },
+    {
+      "id": "css-fonts__test-synthetic-italic.html",
+      "test": "css/css-fonts/test-synthetic-italic.html"
+    },
+    {
+      "id": "css-fonts__font-family-name-018.xht",
+      "test": "css/css-fonts/font-family-name-018.xht"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-11.optional.html",
+      "test": "css/css-fonts/font-variant-ligatures-11.optional.html"
+    },
+    {
+      "id": "css-fonts__matching__font-unicode-PUA-primary-font.html",
+      "test": "css/css-fonts/matching/font-unicode-PUA-primary-font.html"
+    },
+    {
+      "id": "css-fonts__font-family-name-024.xht",
+      "test": "css/css-fonts/font-family-name-024.xht"
+    },
+    {
+      "id": "css-fonts__font-family-name-001.xht",
+      "test": "css/css-fonts/font-family-name-001.xht"
+    },
+    {
+      "id": "css-fonts__font-family-name-019.xht",
+      "test": "css/css-fonts/font-family-name-019.xht"
+    },
+    {
+      "id": "css-variables__variable-supports-11.html",
+      "test": "css/css-variables/variable-supports-11.html"
+    },
+    {
+      "id": "css-variables__variable-reference-01.html",
+      "test": "css/css-variables/variable-reference-01.html"
+    },
+    {
+      "id": "css-variables__variable-reference-09.html",
+      "test": "css/css-variables/variable-reference-09.html"
+    },
+    {
+      "id": "css-variables__variable-declaration-39.html",
+      "test": "css/css-variables/variable-declaration-39.html"
+    },
+    {
+      "id": "css-variables__variable-supports-15.html",
+      "test": "css/css-variables/variable-supports-15.html"
+    },
+    {
+      "id": "css-variables__variable-supports-37.html",
+      "test": "css/css-variables/variable-supports-37.html"
+    },
+    {
+      "id": "css-variables__variable-declaration-38.html",
+      "test": "css/css-variables/variable-declaration-38.html"
+    },
+    {
+      "id": "css-variables__variable-declaration-11.html",
+      "test": "css/css-variables/variable-declaration-11.html"
+    },
+    {
+      "id": "css-variables__variable-supports-03.html",
+      "test": "css/css-variables/variable-supports-03.html"
+    },
+    {
+      "id": "css-variables__variable-supports-01.html",
+      "test": "css/css-variables/variable-supports-01.html"
+    },
+    {
+      "id": "css-variables__variable-supports-22.html",
+      "test": "css/css-variables/variable-supports-22.html"
+    },
+    {
+      "id": "css-variables__variable-declaration-12.html",
+      "test": "css/css-variables/variable-declaration-12.html"
+    }
+  ]
+}

@@ -286,7 +286,11 @@ foreach ($test in @($manifest.tests)) {
     $id = ([string]$test.id) -replace '[^A-Za-z0-9_.-]', '_'
     $testDirectory = Join-Path $runDirectory $id
     New-Item -ItemType Directory -Force -Path $testDirectory | Out-Null
-    $expected = [string]$test.expected
+    $expected = if ($test.PSObject.Properties.Name -contains "expected") {
+        [string]$test.expected
+    } else {
+        ""
+    }
     if ($test.PSObject.Properties.Name -contains "unsupported_reason") {
         $classification = "unsupported"
         $result = [ordered]@{

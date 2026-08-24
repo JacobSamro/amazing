@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "runs": [
+    {
+      "engine": "Blink",
+      "browser": "chrome",
+      "browser_version": "154.0.8016.0",
+      "wpt_fyi_run_id": 5182906107691008
+    },
+    {
+      "engine": "WebKit",
+      "browser": "safari",
+      "browser_version": "26.6 (21624.4.5.11.5)",
+      "wpt_fyi_run_id": 5141363439173632
+    }
+  ],
+  "selected_cases": 72,
+  "status_pairs": {
+    "pass_pass": 64,
+    "fail_fail": 4,
+    "fail_pass": 1,
+    "pass_fail": 3
+  },
+  "amazing_on_pass_pass": {
+    "pass": 26,
+    "mismatch": 38,
+    "by_category": [
+      { "category": "css-cascade", "cases": 12, "pass": 4, "mismatch": 8 },
+      { "category": "selectors", "cases": 12, "pass": 4, "mismatch": 8 },
+      { "category": "css-values", "cases": 10, "pass": 9, "mismatch": 1 },
+      { "category": "css-color", "cases": 12, "pass": 5, "mismatch": 7 },
+      { "category": "css-fonts", "cases": 6, "pass": 4, "mismatch": 2 },
+      { "category": "css-variables", "cases": 12, "pass": 0, "mismatch": 12 }
+    ]
+  },
+  "non_consensus": [
+    { "test": "/css/css-values/attr-in-slotted.html", "blink": "pass", "webkit": "fail" },
+    { "test": "/css/css-values/calc-min-width-block-intrinsic-1.html", "blink": "pass", "webkit": "fail" },
+    { "test": "/css/css-fonts/font-family-name-000.xht", "blink": "fail", "webkit": "fail" },
+    { "test": "/css/css-fonts/font-family-name-001.xht", "blink": "fail", "webkit": "fail" },
+    { "test": "/css/css-fonts/font-family-name-014.xht", "blink": "fail", "webkit": "fail" },
+    { "test": "/css/css-fonts/font-family-name-024.xht", "blink": "fail", "webkit": "fail" },
+    { "test": "/css/css-fonts/font-variant-ligatures-11.optional.html", "blink": "pass", "webkit": "fail" },
+    { "test": "/css/css-fonts/system-ui-mixed.html", "blink": "fail", "webkit": "pass" }
+  ]
+}

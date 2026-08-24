@@ -4,7 +4,7 @@ Canonical sequence for moving Amazing's style → layout → paint pipeline towa
 standards conformance. Resolve one ticket, verify its exit criteria on
 `win-001`, record measured results, then stop at the phase boundary for review.
 
-Frontier: **#2 — cascade and computed-value conformance baseline**
+Frontier: **#2a — specified-to-computed-value engine**
 
 ## Evidence contract (resolved)
 
@@ -23,6 +23,8 @@ Frontier: **#2 — cascade and computed-value conformance baseline**
 
 - Automated, unmodified upstream WPT render smoke cases: **2** at revision
   `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` (**1 pass, 1 mismatch**).
+- Deterministic cascade/value baseline: **72 cases** at the same revision
+  (**30 pass, 42 mismatch; 0 timeout/unsupported/crash**), repeat-hash stable.
 - Existing curated CSS2 geometry subset: **17/17**.
 - Existing feature regressions: **13 flex**, **16 grid**, **74 layout unit
   tests**, and **51 paint unit tests**.
@@ -75,7 +77,7 @@ Clippy passed for the changed `amazing` package with dependencies excluded.
 
 Blocked by: #1
 Type: Research
-Status: ⬜ Pending
+Status: ✅ Resolved
 
 ### Question
 
@@ -85,11 +87,52 @@ failure cluster?
 
 ### Answer
 
-Pending until #1 exposes measured clusters.
+The deterministic SHA-256-ranked selection found 72 eligible static reftests
+across Cascade, Selectors, Values, Color, Fonts, and Variables; CSS Syntax has
+no eligible static shard and needs a future testharness runner. Amazing passed
+30 and mismatched 42. Exact-revision wpt.fyi data shows Blink and WebKit both
+pass 64 selected cases; Amazing is 26/64 in that consensus subset.
+
+The largest coherent cluster is the absent specified-to-computed-value stage:
+Variables is 0/12 versus Blink/WebKit 12/12, and Cascade is 4/12 with failures
+centered on CSS-wide keywords, `all`, layers, and scope. Current code lowercases
+case-sensitive custom-property names, retains raw specified strings, skips all
+at-rules, and cannot substitute `var()` or represent invalid-at-computed-value
+time. Full methodology, category tables, oracle runs, caveats, and links to
+generated evidence are in `docs/render/CASCADE_BASELINE.md`.
+
+## #2a: Specified-to-computed-value engine
+
+Blocked by: #2
+Type: Prototype
+Status: ⬜ Pending
+
+### Question
+
+What deep style interface can preserve specified declarations and produce
+validated computed values, beginning with case-sensitive inherited custom
+properties, `var()` fallback/cycles, invalid-at-computed-value-time behavior,
+CSS-wide keywords, and `all`, without leaking string substitution into layout
+or paint?
+
+### Exit criteria
+
+- Custom-property names preserve case and declarations inherit by default.
+- `var()` substitution handles nesting, fallback commas, missing variables,
+  cycles, and invalid-at-computed-value-time behavior.
+- `initial`, `inherit`, and `unset` resolve through property metadata; `all`
+  applies to every supported property except `direction` and `unicode-bidi`.
+- The full workspace stays green on `win-001`.
+- The pinned 12-case Variables shard and applicable Cascade cases are rerun;
+  measured before/after counts and pixel artifacts are recorded.
+
+### Answer
+
+Pending.
 
 ## #3: Block, inline, sizing, and positioning convergence
 
-Blocked by: #2
+Blocked by: #2a
 Type: Prototype
 Status: 🌫️ Fog
 

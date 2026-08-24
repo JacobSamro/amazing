@@ -1,0 +1,203 @@
+{
+  "categories": [
+    {
+      "category": "css-syntax",
+      "document_files": 49,
+      "eligible_static_self_contained": 0,
+      "excluded": {
+        "external-stylesheet": 1,
+        "not-reftest": 48
+      },
+      "reftests": 1,
+      "selected": 0,
+      "selected_paths": [],
+      "testharness_files": 44
+    },
+    {
+      "category": "css-cascade",
+      "document_files": 158,
+      "eligible_static_self_contained": 31,
+      "excluded": {
+        "css-resource": 2,
+        "embedded-resource": 1,
+        "missing-reference": 8,
+        "not-reftest": 108,
+        "scripted": 8
+      },
+      "reftests": 50,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-cascade/scope-pseudo-element.html",
+        "css/css-cascade/all-prop-revert-visited.html",
+        "css/css-cascade/all-prop-001.html",
+        "css/css-cascade/scope-featureless.html",
+        "css/css-cascade/revert-layer-002.html",
+        "css/css-cascade/all-prop-revert-color.html",
+        "css/css-cascade/revert-layer-011.html",
+        "css/css-cascade/all-prop-initial-color.html",
+        "css/css-cascade/all-prop-002.html",
+        "css/css-cascade/revert-layer-005.html",
+        "css/css-cascade/initial-background-color.html",
+        "css/css-cascade/initial-color-background-001.html"
+      ],
+      "testharness_files": 83
+    },
+    {
+      "category": "selectors",
+      "document_files": 684,
+      "eligible_static_self_contained": 83,
+      "excluded": {
+        "embedded-resource": 1,
+        "external-stylesheet": 8,
+        "flagged-environment": 1,
+        "missing-reference": 41,
+        "not-reftest": 458,
+        "scripted": 92
+      },
+      "reftests": 226,
+      "selected": 12,
+      "selected_paths": [
+        "css/selectors/has-style-sharing-002.html",
+        "css/selectors/dir-style-03a.html",
+        "css/selectors/nth-child-of-no-space-after-of.html",
+        "css/selectors/selectors-4/lang-016.html",
+        "css/selectors/selectors-4/lang-022.html",
+        "css/selectors/nth-child-of-tagname.html",
+        "css/selectors/selectors-4/lang-002.html",
+        "css/selectors/nth-last-child-of-complex-selector.html",
+        "css/selectors/floating-first-letter-05d0.html",
+        "css/selectors/selectors-4/lang-006.html",
+        "css/selectors/selectors-4/lang-000.html",
+        "css/selectors/nth-child-of-complex-selector-many-children-2.html"
+      ],
+      "testharness_files": 278
+    },
+    {
+      "category": "css-values",
+      "document_files": 603,
+      "eligible_static_self_contained": 88,
+      "excluded": {
+        "css-resource": 23,
+        "embedded-resource": 6,
+        "external-stylesheet": 1,
+        "flagged-environment": 1,
+        "missing-reference": 83,
+        "not-reftest": 392,
+        "scripted": 9
+      },
+      "reftests": 211,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-values/calc-border-radius-1.html",
+        "css/css-values/calc-max-height-block-1.html",
+        "css/css-values/calc-min-width-block-intrinsic-1.html",
+        "css/css-values/ch-unit-008.html",
+        "css/css-values/vh-interpolate-px.html",
+        "css/css-values/calc-invalid-range-clamping.html",
+        "css/css-values/attr-in-slotted.html",
+        "css/css-values/calc-in-media-queries-001.html",
+        "css/css-values/viewport-units-scrollbars-scroll-vw-003.html",
+        "css/css-values/calc-rounding-003.html",
+        "css/css-values/max-unitless-zero-invalid.html",
+        "css/css-values/calc-background-image-gradient-1.html"
+      ],
+      "testharness_files": 271
+    },
+    {
+      "category": "css-color",
+      "document_files": 517,
+      "eligible_static_self_contained": 278,
+      "excluded": {
+        "css-resource": 3,
+        "embedded-resource": 3,
+        "flagged-environment": 6,
+        "missing-reference": 5,
+        "not-reftest": 210,
+        "scripted": 12
+      },
+      "reftests": 307,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-color/oklch-l-almost-0.html",
+        "css/css-color/xyz-d65-005.html",
+        "css/css-color/deprecated-sameas-017.html",
+        "css/css-color/hwb-005.html",
+        "css/css-color/a98rgb-001.html",
+        "css/css-color/t425-hsla-values-b.xht",
+        "css/css-color/t421-rgb-clip-outside-gamut-b.xht",
+        "css/css-color/color-mix-currentcolor-002.html",
+        "css/css-color/deprecated-sameas-019.html",
+        "css/css-color/hsl-003.html",
+        "css/css-color/lch-001.html",
+        "css/css-color/relative-currentcolor-rec2020-02.html"
+      ],
+      "testharness_files": 62
+    },
+    {
+      "category": "css-fonts",
+      "document_files": 875,
+      "eligible_static_self_contained": 55,
+      "excluded": {
+        "css-resource": 249,
+        "embedded-resource": 1,
+        "external-stylesheet": 19,
+        "flagged-environment": 6,
+        "missing-reference": 5,
+        "not-reftest": 501,
+        "scripted": 39
+      },
+      "reftests": 374,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-fonts/system-ui-mixed.html",
+        "css/css-fonts/font-size-zero-1-ref.html",
+        "css/css-fonts/font-family-name-014.xht",
+        "css/css-fonts/font-family-name-000.xht",
+        "css/css-fonts/font-family-name-022.xht",
+        "css/css-fonts/test-synthetic-italic.html",
+        "css/css-fonts/font-family-name-018.xht",
+        "css/css-fonts/font-variant-ligatures-11.optional.html",
+        "css/css-fonts/matching/font-unicode-PUA-primary-font.html",
+        "css/css-fonts/font-family-name-024.xht",
+        "css/css-fonts/font-family-name-001.xht",
+        "css/css-fonts/font-family-name-019.xht"
+      ],
+      "testharness_files": 163
+    },
+    {
+      "category": "css-variables",
+      "document_files": 268,
+      "eligible_static_self_contained": 160,
+      "excluded": {
+        "css-resource": 6,
+        "embedded-resource": 1,
+        "external-stylesheet": 3,
+        "flagged-environment": 8,
+        "missing-reference": 3,
+        "not-reftest": 86,
+        "scripted": 1
+      },
+      "reftests": 182,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-variables/variable-supports-11.html",
+        "css/css-variables/variable-reference-01.html",
+        "css/css-variables/variable-reference-09.html",
+        "css/css-variables/variable-declaration-39.html",
+        "css/css-variables/variable-supports-15.html",
+        "css/css-variables/variable-supports-37.html",
+        "css/css-variables/variable-declaration-38.html",
+        "css/css-variables/variable-declaration-11.html",
+        "css/css-variables/variable-supports-03.html",
+        "css/css-variables/variable-supports-01.html",
+        "css/css-variables/variable-supports-22.html",
+        "css/css-variables/variable-declaration-12.html"
+      ],
+      "testharness_files": 61
+    }
+  ],
+  "per_category": 12,
+  "schema": 1,
+  "selection_policy": "For each category, SHA-256 rank the normalized path of every local-reference, script-free, flag-free, resource-free reftest; select the lowest hashes.",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+}

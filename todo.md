@@ -20,7 +20,7 @@
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
 | 9 — Media | ✅ 47-subphase stretch milestone includes live Chromium DTLS-SRTP video |
-| 10 — Render conformance | 🟨 upstream WPT harness verified (2 smoke cases: 1 pass, 1 mismatch); cascade/value baseline is next |
+| 10 — Render conformance | 🟨 72-case cascade/value baseline measured (30 pass, 42 mismatch); computed-value/custom-properties engine is next |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
