@@ -33,6 +33,49 @@ pub enum WritingMode {
     HorizontalTb,
     VerticalRl,
     VerticalLr,
+    SidewaysRl,
+    SidewaysLr,
+}
+
+impl WritingMode {
+    pub const fn is_vertical_flow(self) -> bool {
+        !matches!(self, Self::HorizontalTb)
+    }
+
+    pub const fn uses_vertical_metrics(self) -> bool {
+        matches!(self, Self::VerticalRl | Self::VerticalLr)
+    }
+
+    pub const fn default_glyph_orientation(self) -> GlyphOrientation {
+        match self {
+            Self::SidewaysRl => GlyphOrientation::SidewaysRight,
+            Self::SidewaysLr => GlyphOrientation::SidewaysLeft,
+            _ => GlyphOrientation::Upright,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum GlyphOrientation {
+    #[default]
+    Upright,
+    SidewaysRight,
+    SidewaysLeft,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum TextOrientation {
+    #[default]
+    Mixed,
+    Upright,
+    Sideways,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum TextCombine {
+    #[default]
+    None,
+    All,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -180,6 +223,8 @@ pub struct TextStyle {
     pub slant: FontSlant,
     pub direction: Direction,
     pub writing_mode: WritingMode,
+    pub text_orientation: TextOrientation,
+    pub text_combine: TextCombine,
     pub white_space: WhiteSpace,
     pub word_break: WordBreak,
     pub unicode_bidi: UnicodeBidi,
@@ -202,6 +247,8 @@ impl Default for TextStyle {
             slant: FontSlant::Normal,
             direction: Direction::LeftToRight,
             writing_mode: WritingMode::HorizontalTb,
+            text_orientation: TextOrientation::Mixed,
+            text_combine: TextCombine::None,
             white_space: WhiteSpace::Normal,
             word_break: WordBreak::Normal,
             unicode_bidi: UnicodeBidi::Normal,
@@ -260,11 +307,19 @@ pub struct FontMetrics {
     pub leading: f32,
     pub x_height: f32,
     pub cap_height: f32,
+    pub vertical_ascent: f32,
+    pub vertical_descent: f32,
+    pub vertical_leading: f32,
+    pub has_canonical_vertical_metrics: bool,
 }
 
 impl FontMetrics {
     pub fn line_height(self) -> f32 {
         self.ascent + self.descent + self.leading
+    }
+
+    pub fn vertical_line_width(self) -> f32 {
+        self.vertical_ascent + self.vertical_descent + self.vertical_leading
     }
 }
 
@@ -282,6 +337,7 @@ pub struct ShapedGlyph {
     pub advance_y: f32,
     pub offset_x: f32,
     pub offset_y: f32,
+    pub orientation: GlyphOrientation,
     pub flags: GlyphFlags,
 }
 
@@ -455,6 +511,10 @@ impl TextSystem for FallbackTextSystem {
             leading: style.size * 0.2,
             x_height: style.size * 0.5,
             cap_height: style.size * 0.7,
+            vertical_ascent: style.size * 0.5,
+            vertical_descent: style.size * 0.5,
+            vertical_leading: 0.0,
+            has_canonical_vertical_metrics: false,
         })
     }
 
@@ -472,17 +532,26 @@ impl TextSystem for FallbackTextSystem {
                     let cluster_start = span.range.start + relative_start;
                     let cluster_end = cluster_start + ch.len_utf8();
                     let advance = fallback_advance(ch, span.style.size);
-                    let (advance_x, advance_y) = match span.style.writing_mode {
-                        WritingMode::HorizontalTb => (advance, 0.0),
-                        WritingMode::VerticalRl | WritingMode::VerticalLr => (0.0, advance),
+                    let orientation = fallback_glyph_orientation(
+                        span.style.writing_mode,
+                        span.style.text_orientation,
+                        ch,
+                    );
+                    let vertical_metrics = span.style.writing_mode.uses_vertical_metrics()
+                        && orientation == GlyphOrientation::Upright;
+                    let (advance_x, advance_y) = if vertical_metrics {
+                        (0.0, advance)
+                    } else {
+                        (advance, 0.0)
                     };
                     ShapedGlyph {
                         id: GlyphId(ch as u32),
                         cluster: cluster_start..cluster_end,
                         advance_x,
                         advance_y,
-                        offset_x: 0.0,
-                        offset_y: 0.0,
+                        offset_x: if vertical_metrics { -advance * 0.5 } else { 0.0 },
+                        offset_y: if vertical_metrics { metrics.ascent } else { 0.0 },
+                        orientation,
                         flags: GlyphFlags::default(),
                     }
                 })
@@ -779,6 +848,35 @@ fn fallback_advance(ch: char, size: f32) -> f32 {
     em * size
 }
 
+fn fallback_glyph_orientation(
+    writing_mode: WritingMode,
+    text_orientation: TextOrientation,
+    ch: char,
+) -> GlyphOrientation {
+    match writing_mode {
+        WritingMode::HorizontalTb => GlyphOrientation::Upright,
+        WritingMode::SidewaysRl => GlyphOrientation::SidewaysRight,
+        WritingMode::SidewaysLr => GlyphOrientation::SidewaysLeft,
+        WritingMode::VerticalRl | WritingMode::VerticalLr => match text_orientation {
+            TextOrientation::Upright => GlyphOrientation::Upright,
+            TextOrientation::Sideways => GlyphOrientation::SidewaysRight,
+            TextOrientation::Mixed if fallback_mixed_upright(ch) => GlyphOrientation::Upright,
+            TextOrientation::Mixed => GlyphOrientation::SidewaysRight,
+        },
+    }
+}
+
+fn fallback_mixed_upright(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x1100..=0x11ff
+            | 0x2e80..=0x9fff
+            | 0xac00..=0xd7ff
+            | 0xf900..=0xfaff
+            | 0x20000..=0x3ffff
+    )
+}
+
 fn is_mandatory_break(ch: char) -> bool {
     matches!(
         ch,
@@ -860,6 +958,7 @@ mod tests {
     fn vertical_fallback_preserves_the_inline_axis_advance() {
         let style = TextStyle {
             writing_mode: WritingMode::VerticalRl,
+            text_orientation: TextOrientation::Upright,
             ..TextStyle::default()
         };
         let spans = [TextSpan {
@@ -885,6 +984,22 @@ mod tests {
     #[test]
     fn fallback_soft_hyphen_has_no_advance_until_selected() {
         assert_eq!(fallback_advance('\u{00ad}', 16.0), 0.0);
+    }
+
+    #[test]
+    fn fallback_exposes_a_centered_synthesized_vertical_baseline() {
+        let metrics = FallbackTextSystem::new()
+            .metrics(&TextStyle {
+                size: 16.0,
+                writing_mode: WritingMode::VerticalRl,
+                ..TextStyle::default()
+            })
+            .unwrap();
+
+        assert_eq!(metrics.vertical_ascent, 8.0);
+        assert_eq!(metrics.vertical_descent, 8.0);
+        assert_eq!(metrics.vertical_leading, 0.0);
+        assert!(!metrics.has_canonical_vertical_metrics);
     }
 
     #[test]

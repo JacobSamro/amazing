@@ -398,6 +398,11 @@ hr { display: block; margin: 0.5em auto;
      border-width: 1px; border-style: inset; overflow: hidden; }
 button, input, select { display: inline-block; }
 textarea { display: inline-block; font-family: monospace; }
+ruby { display: ruby; }
+rb { display: ruby-base; }
+rt { display: ruby-text; font-size: 50%; }
+rtc { display: ruby-text-container; font-size: 50%; }
+rp { display: none; }
 "#;
 
 #[cfg(test)]
@@ -567,6 +572,28 @@ mod tests {
         assert_eq!(styled.get(div).unwrap().get("direction"), Some("rtl"));
         assert_eq!(styled.get(span).unwrap().get("direction"), Some("ltr"));
         assert_eq!(styled.get(em).unwrap().get("direction"), Some("rtl"));
+    }
+
+    #[test]
+    fn vertical_text_policy_inherits_to_descendant_text_boxes() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "div");
+        dom.set_attrs(
+            root,
+            vec![(
+                "style".into(),
+                "writing-mode:vertical-rl;text-orientation:upright;text-combine-upright:all"
+                    .into(),
+            )],
+        );
+        let child = dom.create_element(root, "span");
+
+        let styled = compute(&dom, &[]);
+        let child_style = styled.get(child).unwrap();
+
+        assert_eq!(child_style.get("writing-mode"), Some("vertical-rl"));
+        assert_eq!(child_style.get("text-orientation"), Some("upright"));
+        assert_eq!(child_style.get("text-combine-upright"), Some("all"));
     }
 
     #[test]

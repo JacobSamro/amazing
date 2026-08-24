@@ -166,8 +166,10 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "right", initial: "auto", inherited: false },
     PropertyMetadata { name: "row-gap", initial: "normal", inherited: false },
     PropertyMetadata { name: "text-align", initial: "start", inherited: true },
+    PropertyMetadata { name: "text-combine-upright", initial: "none", inherited: true },
     PropertyMetadata { name: "text-decoration", initial: "none", inherited: false },
     PropertyMetadata { name: "text-indent", initial: "0", inherited: true },
+    PropertyMetadata { name: "text-orientation", initial: "mixed", inherited: true },
     PropertyMetadata { name: "text-transform", initial: "none", inherited: true },
     PropertyMetadata { name: "top", initial: "auto", inherited: false },
     PropertyMetadata { name: "unicode-bidi", initial: "normal", inherited: false },
@@ -178,6 +180,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "width", initial: "auto", inherited: false },
     PropertyMetadata { name: "word-break", initial: "normal", inherited: true },
     PropertyMetadata { name: "word-spacing", initial: "normal", inherited: true },
+    PropertyMetadata { name: "writing-mode", initial: "horizontal-tb", inherited: true },
     PropertyMetadata { name: "z-index", initial: "auto", inherited: false },
 ];
 

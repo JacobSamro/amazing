@@ -123,8 +123,11 @@ advance; paint rasterizes those same glyph ids and never measures text again.
 The API deliberately has no character-at-a-time `measure` operation.
 
 The reviewed `amazing-text-provider` exception pins HarfRust 0.13.2, Swash
-0.2.10, ICU4X Segmenter 2.3.0, unicode-bidi 0.3.18, and wuff 0.2.8 for pure-Rust
-font, Unicode, shaping, web-font decode, and raster behavior. Wuff's bounded
+0.2.10, ICU4X Segmenter 2.3.0, unicode-bidi 0.3.18, unicode-vo 0.1.0, and wuff
+0.2.8 for pure-Rust font, Unicode, shaping, vertical-orientation, web-font
+decode, and raster behavior. `unicode-vo` is a safe-Rust table lookup for
+Unicode Vertical_Orientation revision 17; its types stay inside the provider.
+Wuff's bounded
 custom callbacks directly pin brotli-decompressor 5.0.3 and flate2 1.1.9 so
 declared output sizes are rejected before decoder allocation. Both first-party
 crates forbid unsafe; dependency types and internal unsafe never cross the contract.

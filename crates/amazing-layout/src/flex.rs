@@ -43,6 +43,33 @@ enum Direction {
     ColumnReverse,
 }
 
+fn physical_direction(style: &ComputedStyle, logical: Direction) -> Direction {
+    let rtl = style
+        .get("direction")
+        .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
+    let mode = style.get("writing-mode").unwrap_or("horizontal-tb");
+    if mode.eq_ignore_ascii_case("horizontal-tb") {
+        return match (logical, rtl) {
+            (Direction::Row, true) => Direction::RowReverse,
+            (Direction::RowReverse, true) => Direction::Row,
+            _ => logical,
+        };
+    }
+    let vertical_rl = mode.eq_ignore_ascii_case("vertical-rl")
+        || mode.eq_ignore_ascii_case("sideways-rl");
+    let sideways_lr = mode.eq_ignore_ascii_case("sideways-lr");
+    match logical {
+        Direction::Row if rtl ^ sideways_lr => Direction::ColumnReverse,
+        Direction::Row => Direction::Column,
+        Direction::RowReverse if rtl ^ sideways_lr => Direction::Column,
+        Direction::RowReverse => Direction::ColumnReverse,
+        Direction::Column if vertical_rl => Direction::RowReverse,
+        Direction::Column => Direction::Row,
+        Direction::ColumnReverse if vertical_rl => Direction::Row,
+        Direction::ColumnReverse => Direction::RowReverse,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Pack {
     Start,
@@ -85,12 +112,13 @@ struct ContainerSpec {
 
 impl ContainerSpec {
     fn of(style: &ComputedStyle, font_px: f32, content_w: f32, definite_height: Option<f32>) -> Self {
-        let direction = match style.get("flex-direction").unwrap_or("row") {
+        let logical_direction = match style.get("flex-direction").unwrap_or("row") {
             v if v.eq_ignore_ascii_case("row-reverse") => Direction::RowReverse,
             v if v.eq_ignore_ascii_case("column") => Direction::Column,
             v if v.eq_ignore_ascii_case("column-reverse") => Direction::ColumnReverse,
             _ => Direction::Row,
         };
+        let direction = physical_direction(style, logical_direction);
         let wrap = style
             .get("flex-wrap")
             .map(|v| v.eq_ignore_ascii_case("wrap") || v.eq_ignore_ascii_case("wrap-reverse"))
@@ -704,14 +732,32 @@ fn layout_column(
     };
     let (lead, between) = justify_pair(spec.justify, justify_free, n);
 
-    let mut cursor = content_y + lead;
+    let reverse = spec.direction == Direction::ColumnReverse;
+    let available = spec
+        .definite_height
+        .unwrap_or_else(|| finals.iter().sum::<f32>() + gaps_total);
+    let mut cursor = if reverse {
+        content_y + available - lead
+    } else {
+        content_y + lead
+    };
     for (pos, &i) in order.iter().enumerate() {
         if pos > 0 {
-            cursor += spec.row_gap + between;
+            if reverse {
+                cursor -= spec.row_gap + between;
+            } else {
+                cursor += spec.row_gap + between;
+            }
         }
         let it = &mut items[i];
         let mt = it.margin.top.unwrap_or(0.0);
-        let by = cursor + mt;
+        let outer = finals[pos];
+        let by = if reverse {
+            cursor -= outer;
+            cursor + mt
+        } else {
+            cursor + mt
+        };
         let align = props[i].align_self.unwrap_or(spec.align_items);
         let bw = it.border_box.w;
         let hc = h_chrome(it);
@@ -725,10 +771,12 @@ fn layout_column(
                 _ => 0.0,
             };
         translate(it, bx - it.border_box.x, by - it.border_box.y);
-        cursor = by + base[pos] + v_chrome(it) + it.margin.bottom.unwrap_or(0.0);
+        if !reverse {
+            cursor = by + base[pos] + v_chrome(it) + it.margin.bottom.unwrap_or(0.0);
+        }
     }
 
-    cursor - lead - content_y
+    finals.iter().sum::<f32>() + gaps_total
 }
 
 // ---------------------------------------------------------------------------
@@ -892,6 +940,58 @@ mod tests {
         let w0 = k[0].border_box.w;
         let w1 = k[1].border_box.w;
         assert!(close(w0, 2.0 * w1), "w0={w0} w1={w1}");
+    }
+
+    #[test]
+    fn sideways_lr_row_follows_the_logical_inline_direction() {
+        let ltr = lay(
+            "<body><div style=\"display:flex;writing-mode:sideways-lr;width:20px;height:60px\"><div style=\"width:20px;height:20px\"></div><div style=\"width:20px;height:20px\"></div><div style=\"width:20px;height:20px\"></div></div></body>",
+            "",
+            100.0,
+        );
+        let rtl = lay(
+            "<body><div style=\"display:flex;writing-mode:sideways-lr;direction:rtl;width:20px;height:60px\"><div style=\"width:20px;height:20px\"></div><div style=\"width:20px;height:20px\"></div><div style=\"width:20px;height:20px\"></div></div></body>",
+            "",
+            100.0,
+        );
+        let column_reverse = lay(
+            "<body><div style=\"display:flex;writing-mode:sideways-lr;flex-direction:column-reverse;width:80px\"><div style=\"width:20px;height:20px\"></div><div style=\"width:20px;height:20px\"></div><div style=\"width:20px;height:20px\"></div></div></body>",
+            "",
+            100.0,
+        );
+        let ltr = kids(&ltr);
+        let rtl = kids(&rtl);
+        let column_reverse = kids(&column_reverse);
+
+        assert!(ltr[0].border_box.y > ltr[2].border_box.y);
+        assert!(rtl[0].border_box.y < rtl[2].border_box.y);
+        assert!(column_reverse[0].border_box.x > column_reverse[2].border_box.x);
+        assert!(column_reverse[0].border_box.x < 80.0);
+    }
+
+    #[test]
+    fn vertical_rl_column_reverse_runs_left_to_right() {
+        let root = lay(
+            "<body><div style=\"display:flex;writing-mode:vertical-rl;flex-direction:column-reverse;width:100px;height:30px\"><div style=\"width:20px;height:20px\"></div><div style=\"width:20px;height:20px\"></div></div></body>",
+            "",
+            120.0,
+        );
+        let items = kids(&root);
+
+        assert!(items[0].border_box.x < items[1].border_box.x);
+    }
+
+    #[test]
+    fn sideways_lr_row_reverse_uses_the_bottom_as_flex_start() {
+        let root = lay(
+            "<body><div style=\"display:flex;writing-mode:sideways-lr;width:20px;height:100px\"><div style=\"width:20px;height:20px\"></div><div style=\"width:20px;height:20px\"></div></div></body>",
+            "",
+            120.0,
+        );
+        let items = kids(&root);
+
+        assert!(items[0].border_box.y > items[1].border_box.y);
+        assert!(items[0].border_box.y > 60.0);
     }
 
     #[test]

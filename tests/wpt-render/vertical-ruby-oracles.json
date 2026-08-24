@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "runs": [
+    {
+      "engine": "Blink",
+      "browser": "chrome",
+      "browser_version": "154.0.8016.0",
+      "wpt_fyi_run_id": 5182906107691008
+    },
+    {
+      "engine": "WebKit",
+      "browser": "safari",
+      "browser_version": "26.6 (21624.4.5.11.5)",
+      "wpt_fyi_run_id": 5141363439173632
+    }
+  ],
+  "tests": [
+    {"id": "css-writing-modes__text-orientation-initial.html", "blink": "pass", "webkit": "fail"},
+    {"id": "css-writing-modes__text-orientation-mixed-vrl-100.html", "blink": "pass", "webkit": "fail"},
+    {"id": "css-writing-modes__text-orientation-upright-vrl-100.html", "blink": "pass", "webkit": "fail"},
+    {"id": "css-writing-modes__text-orientation-sideways-vrl-100.html", "blink": "pass", "webkit": "fail"},
+    {"id": "css-writing-modes__direction-upright-001.html", "blink": "fail", "webkit": "fail"},
+    {"id": "css-writing-modes__sideways-lr-main-axis.html", "blink": "pass", "webkit": "pass"},
+    {"id": "css-writing-modes__two-levels-of-orthogonal-flows-fixed.html", "blink": "pass", "webkit": "fail"},
+    {"id": "css-writing-modes__baseline-with-orthogonal-flow-001.html", "blink": "pass", "webkit": "pass"},
+    {"id": "css-writing-modes__tcy-white-space-processing-001.html", "blink": "pass", "webkit": "fail"},
+    {"id": "css-writing-modes__text-combine-upright-rtl-001.html", "blink": "fail", "webkit": "pass"},
+    {"id": "css-writing-modes__text-combine-upright-compression-001.html", "blink": "fail", "webkit": "fail"},
+    {"id": "css-writing-modes__text-combine-upright-line-breaking-rules-001.html", "blink": "pass", "webkit": "pass"},
+    {"id": "css-ruby__rb-display-001.html", "blink": "fail", "webkit": "fail"},
+    {"id": "css-ruby__rt-display-001.html", "blink": "fail", "webkit": "fail"},
+    {"id": "css-ruby__rbc-rtc-basic-001.html", "blink": "fail", "webkit": "fail"},
+    {"id": "css-ruby__nested-ruby-pairing-001.html", "blink": "fail", "webkit": "fail"},
+    {"id": "css-ruby__ruby-autohide-001.html", "blink": "fail", "webkit": "fail"},
+    {"id": "css-ruby__empty-ruby-base-container.html", "blink": "fail", "webkit": "pass"},
+    {"id": "css-ruby__ruby-overhang-spaces-vertical-001.html", "blink": "pass", "webkit": "fail"},
+    {"id": "css-ruby__ruby-line-break-suppression-004.html", "blink": "pass", "webkit": "pass"}
+  ],
+  "blink_pass": 11,
+  "webkit_pass": 5,
+  "consensus_pass": 4,
+  "amazing_consensus_pass_raw": 1,
+  "amazing_capability_credited_baseline": 0
+}

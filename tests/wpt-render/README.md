@@ -104,3 +104,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1 `
 0/14 → 14/14 consensus movement, two repeat-stable run ids, every final pixel
 hash, and the normalized projection SHA-256. The remaining two mismatches are
 triaged as static-position/float geometry rather than text shaping.
+
+Ticket #4c uses the parameterized `vertical-ruby-profile.json` and 20-case
+behavior-stratified Writing Modes/Ruby manifest. The corrected font-controlled
+fixed point is 9/20 raw, 1/4 Blink/WebKit consensus, and 0/20
+capability-credited; the final repeat-stable result is 11/20 raw, 2/4
+consensus, and 8/20 capability-credited. `vertical-ruby-oracles.json` pins the
+exact-revision browser runs and `vertical-ruby-results-ticket4c.json` retains
+every final pixel hash plus the regression-gate run ids.

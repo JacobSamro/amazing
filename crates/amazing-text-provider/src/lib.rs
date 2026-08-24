@@ -5,9 +5,9 @@
 use amazing_text::{
     BreakKind, BreakOpportunity, Direction, FallbackTextSystem, FontAttributes, FontKey,
     FontMetrics, FontSlant, GlyphCacheKey, GlyphContent, GlyphFlags, GlyphId, GlyphImage,
-    GlyphRasterRequest, LineRequest, Paragraph, ShapedGlyph, ShapedLine, ShapedParagraph,
-    ShapedRun, ShapingBoundary, TextError, TextStyle, TextSystem, WritingMode, font_match_score,
-    resolve_synthesis,
+    GlyphOrientation, GlyphRasterRequest, LineRequest, Paragraph, ShapedGlyph, ShapedLine,
+    ShapedParagraph, ShapedRun, ShapingBoundary, TextError, TextOrientation, TextStyle, TextSystem,
+    WritingMode, font_match_score, resolve_synthesis,
 };
 use harfrust::{
     BufferFlags, Feature, FontRef as HarfFontRef, ShapeOptions, ShaperData, ShaperInstance, Tag,
@@ -24,6 +24,7 @@ use swash::scale::image::Content;
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
 use swash::{FontRef as SwashFontRef, zeno};
 use unicode_bidi::{BidiClass, BidiInfo, Level, bidi_class};
+use unicode_vo::Orientation as VerticalOrientation;
 
 const MAX_COMPRESSED_FONT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_SFNT_FONT_BYTES: usize = 32 * 1024 * 1024;
@@ -471,11 +472,21 @@ impl TextProvider {
                 continue;
             };
             let mut end = index + 1;
+            let orientation = cluster_orientation(
+                &itemized[index].style,
+                text,
+                itemized[index].range.clone(),
+            );
             while end < itemized.len()
                 && selected[end] == Some(font_index)
                 && itemized[end].boundary_before == ShapingBoundary::Continue
                 && itemized[end].style == itemized[index].style
                 && directions[end] == directions[index]
+                && cluster_orientation(
+                    &itemized[end].style,
+                    text,
+                    itemized[end].range.clone(),
+                ) == orientation
             {
                 end += 1;
             }
@@ -491,6 +502,7 @@ impl TextProvider {
                     target,
                     hard_context,
                     directions[index],
+                    orientation,
                 )?);
             }
             index = end;
@@ -667,6 +679,10 @@ fn font_metrics(font: &FontRecord, size: f32) -> Result<FontMetrics, TextError> 
             leading: metrics.leading.max(0.0),
             x_height: metrics.x_height.max(0.0),
             cap_height: metrics.cap_height.max(0.0),
+            vertical_ascent: metrics.vertical_ascent.max(0.0),
+            vertical_descent: metrics.vertical_descent.abs(),
+            vertical_leading: metrics.vertical_leading.max(0.0),
+            has_canonical_vertical_metrics: metrics.has_vertical_metrics,
         })
     }))
     .map_err(|_| TextError::MalformedFont)?
@@ -938,21 +954,33 @@ fn bidi_analysis(
     spans: &[amazing_text::TextSpan],
     bidi_scopes: &[amazing_text::BidiScope],
 ) -> Result<BidiAnalysis, TextError> {
-    let synthesized;
-    let scopes = if bidi_scopes.is_empty() {
-        synthesized = spans
+    let mut synthesized = bidi_scopes.to_vec();
+    if bidi_scopes.is_empty() {
+        synthesized.extend(
+            spans
             .iter()
             .filter(|span| span.style.unicode_bidi != amazing_text::UnicodeBidi::Normal)
             .map(|span| amazing_text::BidiScope {
                 range: span.range.clone(),
                 direction: span.style.direction,
                 unicode_bidi: span.style.unicode_bidi,
+            }),
+        );
+    }
+    synthesized.extend(
+        spans
+            .iter()
+            .filter(|span| {
+                span.style.writing_mode.is_vertical_flow()
+                    && span.style.text_orientation == amazing_text::TextOrientation::Upright
             })
-            .collect::<Vec<_>>();
-        synthesized.as_slice()
-    } else {
-        bidi_scopes
-    };
+            .map(|span| amazing_text::BidiScope {
+                range: span.range.clone(),
+                direction: Direction::LeftToRight,
+                unicode_bidi: amazing_text::UnicodeBidi::BidiOverride,
+            }),
+    );
+    let scopes = synthesized.as_slice();
     let mut ordered = scopes.iter().collect::<Vec<_>>();
     ordered.sort_by_key(|scope| (scope.range.start, std::cmp::Reverse(scope.range.end)));
     let mut stack = Vec::new();
@@ -1128,6 +1156,7 @@ fn shape_range(
     target: std::ops::Range<usize>,
     context: std::ops::Range<usize>,
     direction: Direction,
+    orientation: GlyphOrientation,
 ) -> Result<Vec<ShapedRun>, TextError> {
     let style = &spans[0].style;
     let metrics = font_metrics(font, style.size)?;
@@ -1152,10 +1181,15 @@ fn shape_range(
         if target.end < context.end {
             buffer.set_post_context(&text[target.end..context.end]);
         }
-        buffer.set_direction(match (style.writing_mode, direction) {
-            (WritingMode::HorizontalTb, Direction::LeftToRight) => harfrust::Direction::LeftToRight,
-            (WritingMode::HorizontalTb, Direction::RightToLeft) => harfrust::Direction::RightToLeft,
-            (_, _) => harfrust::Direction::TopToBottom,
+        buffer.set_direction(if style.writing_mode.uses_vertical_metrics()
+            && orientation == GlyphOrientation::Upright
+        {
+            harfrust::Direction::TopToBottom
+        } else {
+            match direction {
+                Direction::LeftToRight => harfrust::Direction::LeftToRight,
+                Direction::RightToLeft => harfrust::Direction::RightToLeft,
+            }
         });
         if let Some(language) = style
             .language
@@ -1202,6 +1236,7 @@ fn shape_range(
                 advance_y: position.y_advance as f32 / 64.0,
                 offset_x: position.x_offset as f32 / 64.0,
                 offset_y: position.y_offset as f32 / 64.0,
+                orientation,
                 flags: GlyphFlags {
                     unsafe_to_break: info.unsafe_to_break(),
                     unsafe_to_concat: info.unsafe_to_concat(),
@@ -1243,6 +1278,33 @@ fn shape_range(
         Ok(runs)
     }))
     .map_err(|_| TextError::MalformedFont)?
+}
+
+fn cluster_orientation(
+    style: &TextStyle,
+    text: &str,
+    cluster: std::ops::Range<usize>,
+) -> GlyphOrientation {
+    match style.writing_mode {
+        WritingMode::HorizontalTb => GlyphOrientation::Upright,
+        WritingMode::SidewaysRl => GlyphOrientation::SidewaysRight,
+        WritingMode::SidewaysLr => GlyphOrientation::SidewaysLeft,
+        WritingMode::VerticalRl | WritingMode::VerticalLr => match style.text_orientation {
+            TextOrientation::Upright => GlyphOrientation::Upright,
+            TextOrientation::Sideways => GlyphOrientation::SidewaysRight,
+            TextOrientation::Mixed => {
+                let character = text[cluster].chars().next().unwrap_or('\u{fffd}');
+                match unicode_vo::char_orientation(character) {
+                    VerticalOrientation::Upright | VerticalOrientation::TransformedOrUpright => {
+                        GlyphOrientation::Upright
+                    },
+                    VerticalOrientation::Rotated | VerticalOrientation::TransformedOrRotated => {
+                        GlyphOrientation::SidewaysRight
+                    },
+                }
+            },
+        },
+    }
 }
 
 fn cluster_end_map(
@@ -2313,6 +2375,10 @@ mod tests {
                 leading: 0.0,
                 x_height: 5.0,
                 cap_height: 7.0,
+                vertical_ascent: 8.0,
+                vertical_descent: 8.0,
+                vertical_leading: 0.0,
+                has_canonical_vertical_metrics: false,
             },
             variations: Vec::new(),
             synthesis: amazing_text::FontSynthesis::default(),
@@ -2324,6 +2390,7 @@ mod tests {
                     advance_y: 0.0,
                     offset_x: 0.0,
                     offset_y: 0.0,
+                    orientation: amazing_text::GlyphOrientation::Upright,
                     flags: GlyphFlags::default(),
                 },
                 ShapedGlyph {
@@ -2333,6 +2400,7 @@ mod tests {
                     advance_y: 0.0,
                     offset_x: 0.0,
                     offset_y: 0.0,
+                    orientation: amazing_text::GlyphOrientation::Upright,
                     flags: GlyphFlags {
                         unsafe_to_break: true,
                         unsafe_to_concat: false,

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "manifest_path": "tests/wpt-render/vertical-ruby-manifest.json",
+  "wpt_root": "target/wpt",
+  "output_directory": "target/wpt-results",
+  "executable_path": "target/debug/amazing.exe",
+  "font_set": "Pinned WPT font tree including fonts/adobe-fonts/CSSHWOrientationTest.otf, plus Windows generic-family candidates through the Amazing shaped-text provider",
+  "viewport_width": 800,
+  "viewport_height": 600,
+  "timeout_seconds": 20
+}

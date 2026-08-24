@@ -13,16 +13,20 @@
 use amazing_css::{ComputedStyle, StyledDom};
 use amazing_dom::{Dom, NodeIdx, NodeKind};
 use amazing_text::{
-    Direction, FontSlant, Hyphens, LineBreak, OverflowWrap, ShapingBoundary, TextStyle,
-    UnicodeBidi, WhiteSpace, WordBreak, WritingMode,
+    Direction, FontSlant, Hyphens, LineBreak, OverflowWrap, ShapingBoundary, TextCombine,
+    TextOrientation, TextStyle, UnicodeBidi, WhiteSpace, WordBreak, WritingMode,
 };
 
 use crate::font::FontSource;
 use crate::values;
 use crate::{
     Display, Flow, InlineNode, LayoutBox, NoReplacedElements, ReplacedElementProvider,
-    TextSourceMapping,
+    RubyColumn, RubyText, TextSourceMapping,
 };
+
+const MAX_RUBY_COLUMNS: usize = 65_536;
+const MAX_RUBY_TEXT_BYTES: usize = 8 * 1024 * 1024;
+const MAX_RUBY_SOURCE_MAPPINGS: usize = 262_144;
 
 /// Builds the root box for a document: the `<body>` element (or `<html>`
 /// when body is missing; an empty box otherwise).
@@ -147,26 +151,35 @@ struct ClassifiedChildren {
 fn collapse_whitespace(
     text: &str,
     preserve_segment_breaks: bool,
+    source: NodeIdx,
+    max_mappings: usize,
 ) -> (String, Vec<TextSourceMapping>) {
     let mut out = String::with_capacity(text.len());
     let mut mappings = Vec::new();
     let mut in_ws = false;
     for (source_start, c) in text.char_indices() {
         let source_end = source_start + c.len_utf8();
+        let whitespace = matches!(c, '\u{0009}' | '\u{000A}' | '\u{000C}' | '\u{000D}' | ' ');
+        let needs_mapping = (preserve_segment_breaks && c == '\n') || !whitespace || !in_ws;
+        if needs_mapping && mappings.len() >= max_mappings {
+            break;
+        }
         if preserve_segment_breaks && c == '\n' {
             in_ws = false;
             let output_start = out.len();
             out.push(c);
             mappings.push(TextSourceMapping {
                 text_range: output_start..out.len(),
+                source,
                 source_range: source_start..source_end,
             });
-        } else if matches!(c, '\u{0009}' | '\u{000A}' | '\u{000C}' | '\u{000D}' | ' ') {
+        } else if whitespace {
             if !in_ws {
                 let output_start = out.len();
                 out.push(' ');
                 mappings.push(TextSourceMapping {
                     text_range: output_start..out.len(),
+                    source,
                     source_range: source_start..source_end,
                 });
             } else if let Some(mapping) = mappings.last_mut() {
@@ -179,6 +192,7 @@ fn collapse_whitespace(
             out.push(c);
             mappings.push(TextSourceMapping {
                 text_range: output_start..out.len(),
+                source,
                 source_range: source_start..source_end,
             });
         }
@@ -186,26 +200,37 @@ fn collapse_whitespace(
     (out, mappings)
 }
 
-fn text_for_white_space(text: &str, style: &ComputedStyle) -> (String, Vec<TextSourceMapping>) {
+fn text_for_white_space(
+    text: &str,
+    style: &ComputedStyle,
+    source: NodeIdx,
+    max_mappings: usize,
+) -> (String, Vec<TextSourceMapping>) {
     match style.get("white-space").unwrap_or("normal") {
         value
             if value.eq_ignore_ascii_case("pre")
                 || value.eq_ignore_ascii_case("pre-wrap")
                 || value.eq_ignore_ascii_case("break-spaces") =>
         {
+            if max_mappings == 0 {
+                return (String::new(), Vec::new());
+            }
             (
                 text.to_owned(),
                 (!text.is_empty())
                     .then_some(TextSourceMapping {
                         text_range: 0..text.len(),
+                        source,
                         source_range: 0..text.len(),
                     })
                     .into_iter()
                     .collect(),
             )
         }
-        value if value.eq_ignore_ascii_case("pre-line") => collapse_whitespace(text, true),
-        _ => collapse_whitespace(text, false),
+        value if value.eq_ignore_ascii_case("pre-line") => {
+            collapse_whitespace(text, true, source, max_mappings)
+        },
+        _ => collapse_whitespace(text, false, source, max_mappings),
     }
 }
 
@@ -274,16 +299,33 @@ fn text_style(
         value if value.to_ascii_lowercase().starts_with("oblique") => FontSlant::Oblique,
         _ => FontSlant::Normal,
     };
+    let writing_mode = match style.get("writing-mode").unwrap_or("horizontal-tb") {
+        value if value.eq_ignore_ascii_case("vertical-rl") => WritingMode::VerticalRl,
+        value if value.eq_ignore_ascii_case("vertical-lr") => WritingMode::VerticalLr,
+        value if value.eq_ignore_ascii_case("sideways-rl") => WritingMode::SidewaysRl,
+        value if value.eq_ignore_ascii_case("sideways-lr") => WritingMode::SidewaysLr,
+        _ => WritingMode::HorizontalTb,
+    };
+    let text_orientation = match style.get("text-orientation").unwrap_or("mixed") {
+        value if value.eq_ignore_ascii_case("upright") => TextOrientation::Upright,
+        value if value.eq_ignore_ascii_case("sideways") => TextOrientation::Sideways,
+        _ => TextOrientation::Mixed,
+    };
     let direction_value = style.get("direction").unwrap_or("ltr");
-    let direction = if direction_value.eq_ignore_ascii_case("rtl") {
+    let direction = if writing_mode.is_vertical_flow()
+        && text_orientation == TextOrientation::Upright
+    {
+        // Writing Modes §5.1: upright's used direction is ltr and every
+        // character participates in bidi as strong LTR.
+        Direction::LeftToRight
+    } else if direction_value.eq_ignore_ascii_case("rtl") {
         Direction::RightToLeft
     } else {
         Direction::LeftToRight
     };
-    let writing_mode = match style.get("writing-mode").unwrap_or("horizontal-tb") {
-        value if value.eq_ignore_ascii_case("vertical-rl") => WritingMode::VerticalRl,
-        value if value.eq_ignore_ascii_case("vertical-lr") => WritingMode::VerticalLr,
-        _ => WritingMode::HorizontalTb,
+    let text_combine = match style.get("text-combine-upright").unwrap_or("none") {
+        value if value.eq_ignore_ascii_case("all") => TextCombine::All,
+        _ => TextCombine::None,
     };
     let white_space = match style.get("white-space").unwrap_or("normal") {
         value if value.eq_ignore_ascii_case("nowrap") => WhiteSpace::NoWrap,
@@ -355,6 +397,8 @@ fn text_style(
         slant,
         direction,
         writing_mode,
+        text_orientation,
+        text_combine,
         white_space,
         word_break,
         unicode_bidi,
@@ -377,7 +421,7 @@ fn inline_text(
     font_size: f32,
     inline_box: bool,
 ) -> InlineNode {
-    let (text, source_mappings) = text_for_white_space(&source_text, style);
+    let (text, source_mappings) = text_for_white_space(&source_text, style, node, usize::MAX);
     let padding = |property: &str| {
         style
             .get(property)
@@ -413,6 +457,410 @@ fn inline_text(
         boundary_before: ShapingBoundary::Continue,
         boundary_after: ShapingBoundary::Continue,
     }
+}
+
+fn collect_ruby_text(
+    dom: &Dom,
+    styled: &StyledDom,
+    node: NodeIdx,
+    output: &mut Vec<(NodeIdx, String)>,
+    budget: &mut usize,
+    segment_budget: &mut usize,
+) {
+    if *budget == 0 || *segment_budget == 0 {
+        return;
+    }
+    if styled.get(node).is_some_and(is_display_none) {
+        return;
+    }
+    match &dom.get(node).kind {
+        NodeKind::Text { data } => {
+            *segment_budget -= 1;
+            let mut end = data.len().min(*budget);
+            while !data.is_char_boundary(end) {
+                end -= 1;
+            }
+            output.push((node, data[..end].to_owned()));
+            *budget -= end;
+        },
+        NodeKind::Element { .. } => {
+            for child in dom.children(node) {
+                collect_ruby_text(dom, styled, child, output, budget, segment_budget);
+                if *budget == 0 || *segment_budget == 0 {
+                    break;
+                }
+            }
+        },
+        NodeKind::Comment { .. }
+        | NodeKind::ProcessingInstruction { .. }
+        | NodeKind::Document => {},
+    }
+}
+
+fn ruby_text(
+    dom: &Dom,
+    styled: &StyledDom,
+    owner: NodeIdx,
+    source_node: NodeIdx,
+    parent_font_size: f32,
+    text_budget: &mut usize,
+    mapping_budget: &mut usize,
+    segment_budget: &mut usize,
+) -> RubyText {
+    let style = styled.get(owner).cloned().unwrap_or_default();
+    let font_size = values::resolve_font_size(
+        style.get("font-size").unwrap_or("medium"),
+        parent_font_size,
+    );
+    let mut segments = Vec::new();
+    collect_ruby_text(
+        dom,
+        styled,
+        source_node,
+        &mut segments,
+        text_budget,
+        segment_budget,
+    );
+    let collapses_spaces = !matches!(
+        style.get("white-space").unwrap_or("normal"),
+        value if value.eq_ignore_ascii_case("pre")
+            || value.eq_ignore_ascii_case("pre-wrap")
+            || value.eq_ignore_ascii_case("break-spaces")
+    );
+    let mut text = String::new();
+    let mut source_mappings = Vec::new();
+    for (source_node, source) in segments {
+        let (part, mappings) = text_for_white_space(
+            &source,
+            &style,
+            source_node,
+            mapping_budget.saturating_sub(source_mappings.len()),
+        );
+        let skip = usize::from(collapses_spaces && text.ends_with(' ') && part.starts_with(' '));
+        let start = text.len();
+        if skip != 0 {
+            source_mappings.extend(
+                mappings
+                    .iter()
+                    .filter(|mapping| mapping.text_range.start < skip)
+                    .map(|mapping| TextSourceMapping {
+                        text_range: start - 1..start,
+                        source: mapping.source,
+                        source_range: mapping.source_range.clone(),
+                    }),
+            );
+        }
+        text.push_str(&part[skip..]);
+        source_mappings.extend(
+            mappings
+                .into_iter()
+                .filter(|mapping| mapping.text_range.end > skip)
+                .map(|mapping| TextSourceMapping {
+                    text_range: start + mapping.text_range.start.saturating_sub(skip)
+                        ..start + mapping.text_range.end - skip,
+                    source: mapping.source,
+                    source_range: mapping.source_range,
+                }),
+        );
+        if source_mappings.len() >= *mapping_budget {
+            break;
+        }
+    }
+    *mapping_budget = mapping_budget.saturating_sub(source_mappings.len());
+    RubyText {
+        node: owner,
+        text,
+        source_mappings,
+        font_size,
+        style: Box::new(text_style(dom, owner, &style, font_size, true)),
+        color: style.get("color").unwrap_or("black").to_owned(),
+    }
+}
+
+fn empty_ruby_text(
+    dom: &Dom,
+    styled: &StyledDom,
+    owner: NodeIdx,
+    parent_font_size: f32,
+) -> RubyText {
+    let style = styled.get(owner).cloned().unwrap_or_default();
+    let font_size = values::resolve_font_size(
+        style.get("font-size").unwrap_or("medium"),
+        parent_font_size,
+    );
+    RubyText {
+        node: owner,
+        text: String::new(),
+        source_mappings: Vec::new(),
+        font_size,
+        style: Box::new(text_style(dom, owner, &style, font_size, true)),
+        color: style.get("color").unwrap_or("black").to_owned(),
+    }
+}
+
+fn ruby_text_sequence(
+    dom: &Dom,
+    styled: &StyledDom,
+    owner: NodeIdx,
+    nodes: &[NodeIdx],
+    parent_font_size: f32,
+    text_budget: &mut usize,
+    mapping_budget: &mut usize,
+    segment_budget: &mut usize,
+) -> RubyText {
+    let mut combined = empty_ruby_text(dom, styled, owner, parent_font_size);
+    for &source_node in nodes {
+        let part = ruby_text(
+            dom,
+            styled,
+            owner,
+            source_node,
+            parent_font_size,
+            text_budget,
+            mapping_budget,
+            segment_budget,
+        );
+        let skip = usize::from(combined.text.ends_with(' ') && part.text.starts_with(' '));
+        let start = combined.text.len();
+        combined.text.push_str(&part.text[skip..]);
+        combined.source_mappings.extend(
+            part.source_mappings
+                .into_iter()
+                .map(|mapping| TextSourceMapping {
+                    text_range: if skip != 0 && mapping.text_range.start < skip {
+                        start - 1..start + mapping.text_range.end.saturating_sub(skip)
+                    } else {
+                        start + mapping.text_range.start.saturating_sub(skip)
+                            ..start + mapping.text_range.end.saturating_sub(skip)
+                    },
+                    source: mapping.source,
+                    source_range: mapping.source_range,
+                }),
+        );
+    }
+    combined
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RubyRole {
+    Base,
+    Annotation,
+    BaseContainer,
+    AnnotationContainer,
+}
+
+fn ruby_role(_dom: &Dom, styled: &StyledDom, node: NodeIdx) -> Option<RubyRole> {
+    match styled.get(node).and_then(|style| style.get("display")) {
+        Some(value) if value.eq_ignore_ascii_case("ruby-base") => Some(RubyRole::Base),
+        Some(value) if value.eq_ignore_ascii_case("ruby-text") => Some(RubyRole::Annotation),
+        Some(value) if value.eq_ignore_ascii_case("ruby-base-container") => {
+            Some(RubyRole::BaseContainer)
+        },
+        Some(value) if value.eq_ignore_ascii_case("ruby-text-container") => {
+            Some(RubyRole::AnnotationContainer)
+        },
+        _ => None,
+    }
+}
+
+fn is_ruby_container(_dom: &Dom, styled: &StyledDom, node: NodeIdx) -> bool {
+    styled
+        .get(node)
+        .and_then(|style| style.get("display"))
+        .is_some_and(|value| value.eq_ignore_ascii_case("ruby"))
+}
+
+fn ruby_inline(
+    dom: &Dom,
+    styled: &StyledDom,
+    node: NodeIdx,
+    parent_font_size: f32,
+) -> InlineNode {
+    let mut text_budget = MAX_RUBY_TEXT_BYTES;
+    let mut mapping_budget = MAX_RUBY_SOURCE_MAPPINGS;
+    let mut segment_budget = MAX_RUBY_SOURCE_MAPPINGS;
+    let mut bases = Vec::new();
+    let mut annotations = Vec::new();
+    enum Entry {
+        Role(RubyRole, NodeIdx),
+        Anonymous(Vec<NodeIdx>),
+    }
+    let mut entries = Vec::new();
+    for child in dom.children(node).take(MAX_RUBY_COLUMNS) {
+        if styled.get(child).is_some_and(is_display_none) {
+            continue;
+        }
+        if let Some(role) = ruby_role(dom, styled, child) {
+            entries.push(Entry::Role(role, child));
+        } else if let Some(Entry::Anonymous(nodes)) = entries.last_mut() {
+            nodes.push(child);
+        } else {
+            entries.push(Entry::Anonymous(vec![child]));
+        }
+    }
+    for entry in entries {
+        let (role, child) = match entry {
+            Entry::Role(role, child) => (role, child),
+            Entry::Anonymous(nodes) => {
+                let candidate = ruby_text_sequence(
+                    dom,
+                    styled,
+                    node,
+                    &nodes,
+                    parent_font_size,
+                    &mut text_budget,
+                    &mut mapping_budget,
+                    &mut segment_budget,
+                );
+                if bases.len() < MAX_RUBY_COLUMNS && !candidate.text.trim().is_empty() {
+                    bases.push(candidate);
+                }
+                continue;
+            },
+        };
+        match role {
+            RubyRole::Annotation if annotations.len() < MAX_RUBY_COLUMNS => {
+                annotations.push((
+                    ruby_text(dom, styled, child, child, parent_font_size, &mut text_budget, &mut mapping_budget, &mut segment_budget),
+                    1,
+                ));
+            },
+            RubyRole::Annotation => {},
+            RubyRole::AnnotationContainer => {
+                let mut found = false;
+                for annotation in dom
+                    .children(child)
+                    .take(MAX_RUBY_COLUMNS.saturating_sub(annotations.len()))
+                {
+                    if ruby_role(dom, styled, annotation) == Some(RubyRole::Annotation) {
+                        found = true;
+                        annotations.push((
+                            ruby_text(
+                                dom,
+                                styled,
+                                annotation,
+                                annotation,
+                                parent_font_size,
+                                &mut text_budget,
+                                &mut mapping_budget,
+                                &mut segment_budget,
+                            ),
+                            1,
+                        ));
+                    }
+                }
+                if !found {
+                    if annotations.len() < MAX_RUBY_COLUMNS {
+                        annotations.push((
+                            ruby_text(dom, styled, child, child, parent_font_size, &mut text_budget, &mut mapping_budget, &mut segment_budget),
+                            usize::MAX,
+                        ));
+                    }
+                }
+            },
+            RubyRole::BaseContainer => {
+                let mut found = false;
+                for base in dom
+                    .children(child)
+                    .take(MAX_RUBY_COLUMNS.saturating_sub(bases.len()))
+                {
+                    if ruby_role(dom, styled, base) == Some(RubyRole::Base) {
+                        found = true;
+                        bases.push(ruby_text(
+                            dom,
+                            styled,
+                            base,
+                            base,
+                            parent_font_size,
+                            &mut text_budget,
+                            &mut mapping_budget,
+                            &mut segment_budget,
+                        ));
+                    }
+                }
+                if !found {
+                    if bases.len() < MAX_RUBY_COLUMNS {
+                        bases.push(ruby_text(
+                            dom,
+                            styled,
+                            child,
+                            child,
+                            parent_font_size,
+                            &mut text_budget,
+                            &mut mapping_budget,
+                            &mut segment_budget,
+                        ));
+                    }
+                }
+            },
+            RubyRole::Base if bases.len() < MAX_RUBY_COLUMNS => {
+                bases.push(ruby_text(
+                    dom,
+                    styled,
+                    child,
+                    child,
+                    parent_font_size,
+                    &mut text_budget,
+                    &mut mapping_budget,
+                    &mut segment_budget,
+                ));
+            },
+            RubyRole::Base => {},
+        }
+    }
+    // Build the fallback only once. Re-traversing the full ruby subtree for
+    // every missing base makes adversarial annotation-only markup quadratic.
+    let empty_base_template = empty_ruby_text(dom, styled, node, parent_font_size);
+    let column_count = bases.len().max(annotations.len()).min(MAX_RUBY_COLUMNS);
+    let mut columns = Vec::with_capacity(column_count);
+    for index in 0..column_count {
+        let mut base = bases
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| empty_base_template.clone());
+        if index >= bases.len() {
+            base.text.clear();
+            base.source_mappings.clear();
+        }
+        columns.push(RubyColumn {
+            base,
+            annotation: None,
+            annotation_span: 1,
+            annotation_hidden: false,
+        });
+    }
+    let mut column = 0usize;
+    for (annotation, requested_span) in annotations {
+        if column >= columns.len() {
+            if columns.len() >= MAX_RUBY_COLUMNS {
+                break;
+            }
+            let base = empty_base_template.clone();
+            columns.push(RubyColumn {
+                base,
+                annotation: None,
+                annotation_span: 1,
+                annotation_hidden: false,
+            });
+        }
+        let remaining = columns.len() - column;
+        let span = if requested_span == usize::MAX {
+            remaining
+        } else {
+            requested_span.min(remaining)
+        }
+        .max(1);
+        let hidden = annotation.text
+            == columns[column..column + span]
+                .iter()
+                .map(|column| column.base.text.as_str())
+                .collect::<String>();
+        columns[column].annotation = Some(annotation);
+        columns[column].annotation_span = span;
+        columns[column].annotation_hidden = hidden;
+        column += span;
+    }
+    InlineNode::Ruby { node, columns }
 }
 
 fn nonzero_length(value: Option<&str>) -> bool {
@@ -526,7 +974,7 @@ fn classify_children(
         for child in dom.children(idx) {
             match &dom.get(child).kind {
                 NodeKind::Text { data } => {
-                    if !text_for_white_space(data, &own_style).0.is_empty() {
+                    if !text_for_white_space(data, &own_style, child, usize::MAX).0.is_empty() {
                         run.push(inline_text(
                             dom,
                             idx,
@@ -577,7 +1025,7 @@ fn classify_children(
             NodeKind::Text { data } => {
                 // Whitespace-only runs between block-level children carry no
                 // rendering; keep non-empty collapsed runs as separators.
-                if !text_for_white_space(data, &own_style).0.is_empty() {
+                if !text_for_white_space(data, &own_style, child, usize::MAX).0.is_empty() {
                     inlines.push(inline_text(
                         dom,
                         idx,
@@ -607,6 +1055,9 @@ fn classify_children(
                     // Void line-break element: emits a marker itself (it has
                     // no children, so flatten_inline would see nothing).
                     Some("br") => inlines.push(InlineNode::Break),
+                    _ if is_ruby_container(dom, styled, child) => {
+                        inlines.push(ruby_inline(dom, styled, child, font_size));
+                    },
                     _ if matches!(
                         parse_display(&child_style),
                         Display::Block | Display::Flex | Display::Grid
@@ -709,7 +1160,7 @@ fn has_renderable_inline_content(inlines: &[InlineNode]) -> bool {
                         | amazing_text::WhiteSpace::BreakSpaces
                 )
         }
-        InlineNode::Break | InlineNode::Replaced { .. } => true,
+        InlineNode::Break | InlineNode::Replaced { .. } | InlineNode::Ruby { .. } => true,
         InlineNode::BidiStart { .. } | InlineNode::BidiEnd => false,
     })
 }
@@ -741,7 +1192,7 @@ fn flatten_inline(
     for child in dom.children(idx) {
         match &dom.get(child).kind {
             NodeKind::Text { data } => {
-                if !text_for_white_space(data, &style).0.is_empty() {
+                if !text_for_white_space(data, &style, child, usize::MAX).0.is_empty() {
                     inlines.push(inline_text(
                         dom,
                         idx,
@@ -774,6 +1225,9 @@ fn flatten_inline(
                 }
                 match dom.name(child) {
                     Some("br") => inlines.push(InlineNode::Break),
+                    _ if is_ruby_container(dom, styled, child) => {
+                        inlines.push(ruby_inline(dom, styled, child, font_size));
+                    },
                     _ if matches!(
                         parse_display(&cs),
                         Display::Block | Display::Flex | Display::Grid
@@ -964,6 +1418,7 @@ mod tests {
                 InlineNode::BidiEnd => ("<bidi-end>", 0.0),
                 InlineNode::Break => ("<br>", 0.0),
                 InlineNode::Replaced { .. } => ("<replaced>", 0.0),
+                InlineNode::Ruby { .. } => ("<ruby>", 0.0),
             }
         }
     }
@@ -1006,5 +1461,126 @@ mod tests {
             panic!("p wants inlines")
         };
         assert!(matches!(items[1], InlineNode::Break));
+    }
+
+    #[test]
+    fn ruby_keeps_paired_base_and_annotation_structure() {
+        let (_, root) = tree("<body><p><ruby><rb>漢</rb><rt>かん</rt></ruby></p></body>");
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let [InlineNode::Ruby { columns, .. }] = items.as_slice() else {
+            panic!("want one ruby inline: {items:#?}")
+        };
+
+        assert_eq!(columns.len(), 1);
+        assert_eq!(columns[0].base.text, "漢");
+        assert_eq!(columns[0].annotation.as_ref().unwrap().text, "かん");
+    }
+
+    #[test]
+    fn computed_ruby_text_display_creates_annotations() {
+        let (_, root) = tree(
+            "<body><p><ruby><rb>base</rb><span style=\"display:ruby-text\">note</span></ruby></p></body>",
+        );
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let [InlineNode::Ruby { columns, .. }] = items.as_slice() else {
+            panic!("want one ruby inline: {items:#?}")
+        };
+
+        assert_eq!(columns.len(), 1);
+        assert_eq!(columns[0].base.text, "base");
+        assert_eq!(columns[0].annotation.as_ref().unwrap().text, "note");
+    }
+
+    #[test]
+    fn computed_ruby_container_display_uses_ruby_fixup() {
+        let (_, root) = tree(
+            "<body><p><span style=\"display:ruby\"><b style=\"display:ruby-base\">base</b><i style=\"display:ruby-text\">note</i></span></p></body>",
+        );
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let [InlineNode::Ruby { columns, .. }] = items.as_slice() else {
+            panic!("want computed ruby inline: {items:#?}")
+        };
+
+        assert_eq!(columns[0].base.text, "base");
+        assert_eq!(columns[0].annotation.as_ref().unwrap().text, "note");
+    }
+
+    #[test]
+    fn computed_ruby_role_overrides_html_tag_default() {
+        let (_, root) = tree(
+            "<body><p><ruby><rb style=\"display:ruby-text\">note</rb></ruby></p></body>",
+        );
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let [InlineNode::Ruby { columns, .. }] = items.as_slice() else {
+            panic!("want ruby inline: {items:#?}")
+        };
+
+        assert!(columns[0].base.text.is_empty());
+        assert_eq!(columns[0].annotation.as_ref().unwrap().text, "note");
+    }
+
+    #[test]
+    fn ruby_fixup_groups_consecutive_anonymous_inline_content() {
+        let (_, root) = tree(
+            "<body><p><ruby>A<span>B</span><rt>x</rt></ruby></p></body>",
+        );
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let [InlineNode::Ruby { columns, .. }] = items.as_slice() else {
+            panic!("want ruby inline: {items:#?}")
+        };
+
+        assert_eq!(columns.len(), 1);
+        assert_eq!(columns[0].base.text, "AB");
+        assert_eq!(columns[0].annotation.as_ref().unwrap().text, "x");
+    }
+
+    #[test]
+    fn ruby_parentheses_are_suppressed_by_the_ua_display_rule() {
+        let (_, root) = tree(
+            "<body><p><ruby>base<rp>(</rp><rt>note</rt><rp>)</rp></ruby></p></body>",
+        );
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let [InlineNode::Ruby { columns, .. }] = items.as_slice() else {
+            panic!("want ruby inline: {items:#?}")
+        };
+
+        assert_eq!(columns.len(), 1);
+        assert_eq!(columns[0].base.text, "base");
+        assert_eq!(columns[0].annotation.as_ref().unwrap().text, "note");
+    }
+
+    #[test]
+    fn upright_vertical_text_forces_used_ltr_direction() {
+        let (_, root) = tree(
+            "<body><p style=\"writing-mode:vertical-rl;text-orientation:upright;direction:rtl\">אב</p></body>",
+        );
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let InlineNode::Text { style, .. } = &items[0] else { panic!("want text") };
+
+        assert_eq!(style.direction, Direction::LeftToRight);
+    }
+
+    #[test]
+    fn ruby_annotation_container_spans_all_base_columns() {
+        let (_, root) = tree(
+            "<body><p><ruby><rb>A</rb><rb>B</rb><rtc>shared</rtc></ruby></p></body>",
+        );
+        let Flow::Blocks(blocks) = &root.flow else { panic!("want blocks") };
+        let Flow::Inlines(items) = &blocks[0].flow else { panic!("want inlines") };
+        let [InlineNode::Ruby { columns, .. }] = items.as_slice() else {
+            panic!("want one ruby inline: {items:#?}")
+        };
+
+        assert_eq!(columns.len(), 2);
+        assert_eq!(columns[0].annotation_span, 2);
+        assert_eq!(columns[0].annotation.as_ref().unwrap().text, "shared");
+        assert!(columns[1].annotation.is_none());
     }
 }

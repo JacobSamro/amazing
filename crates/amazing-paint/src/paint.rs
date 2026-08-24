@@ -233,7 +233,11 @@ fn paint_shaped_lines(
         }
         for glyph in &line.glyphs {
             let color = parse_css_color(&glyph.color).unwrap_or(FALLBACK_TEXT_COLOR);
-            let baseline = line.baseline + glyph.y - glyph.offset_y;
+            let baseline = if glyph.writing_mode.is_vertical_flow() {
+                glyph.y
+            } else {
+                line.baseline + glyph.y - glyph.offset_y
+            };
             let subpixel = |value: f32| ((value.fract().rem_euclid(1.0) * 64.0).round() as u8).min(63);
             let Some(key) = GlyphCacheKey::new(
                 text.generation(),
@@ -253,21 +257,44 @@ fn paint_shaped_lines(
             }) else {
                 continue;
             };
-            let left = glyph.x.floor() as i64 + image.bearing_x as i64;
-            let top = baseline.floor() as i64 - image.bearing_y as i64;
-            blit_text_image(surface, left, top, &image, color, clip);
+            blit_text_image(
+                surface,
+                &image,
+                GlyphBlit {
+                    origin_x: glyph.x.floor() as i64,
+                    origin_y: baseline.floor() as i64,
+                    orientation: glyph.orientation,
+                    scale_x: glyph.scale_x,
+                    scale_y: glyph.scale_y,
+                    color,
+                },
+                clip,
+            );
         }
     }
 }
 
-fn blit_text_image(
-    surface: &mut Surface,
-    left: i64,
-    top: i64,
-    image: &GlyphImage,
+struct GlyphBlit {
+    origin_x: i64,
+    origin_y: i64,
+    orientation: amazing_text::GlyphOrientation,
+    scale_x: f32,
+    scale_y: f32,
     color: [u8; 4],
-    clip: ClipRect,
-) {
+}
+
+fn blit_text_image(surface: &mut Surface, image: &GlyphImage, blit: GlyphBlit, clip: ClipRect) {
+    let GlyphBlit {
+        origin_x,
+        origin_y,
+        orientation,
+        scale_x,
+        scale_y,
+        color,
+    } = blit;
+    if !scale_x.is_finite() || !scale_y.is_finite() || scale_x <= 0.0 || scale_y <= 0.0 {
+        return;
+    }
     let channels = if image.content == GlyphContent::Color { 4 } else { 1 };
     let Some(expected) = image
         .width
@@ -282,13 +309,34 @@ fn blit_text_image(
     }
     let [clip_x0, clip_y0, clip_x1, clip_y1] = clip.pixels();
     for row in 0..image.height as i64 {
-        let y = top + row;
-        if y < clip_y0 || y >= clip_y1 || y < 0 || y >= surface.height as i64 {
-            continue;
-        }
         for column in 0..image.width as i64 {
-            let x = left + column;
-            if x < clip_x0 || x >= clip_x1 || x < 0 || x >= surface.width as i64 {
+            let (x, y) = match orientation {
+                amazing_text::GlyphOrientation::Upright => (
+                    origin_x + ((image.bearing_x as i64 + column) as f32 * scale_x).floor() as i64,
+                    origin_y + ((-image.bearing_y as i64 + row) as f32 * scale_y).floor() as i64,
+                ),
+                amazing_text::GlyphOrientation::SidewaysRight => (
+                    origin_x
+                        + ((image.bearing_y as i64 - 1 - row) as f32 * scale_y).floor() as i64,
+                    origin_y
+                        + ((image.bearing_x as i64 + column) as f32 * scale_x).floor() as i64,
+                ),
+                amazing_text::GlyphOrientation::SidewaysLeft => (
+                    origin_x
+                        + ((-image.bearing_y as i64 + row) as f32 * scale_y).floor() as i64,
+                    origin_y
+                        + ((-image.bearing_x as i64 - 1 - column) as f32 * scale_x).floor() as i64,
+                ),
+            };
+            if x < clip_x0
+                || x >= clip_x1
+                || y < clip_y0
+                || y >= clip_y1
+                || x < 0
+                || x >= surface.width as i64
+                || y < 0
+                || y >= surface.height as i64
+            {
                 continue;
             }
             let pixel = (row as usize * image.width as usize) + column as usize;
@@ -682,6 +730,9 @@ mod tests {
                 offset_y: 0.0,
                 font_size: 10.0,
                 writing_mode: amazing_text::WritingMode::HorizontalTb,
+                orientation: amazing_text::GlyphOrientation::Upright,
+                scale_x: 1.0,
+                scale_y: 1.0,
                 variations: Vec::new(),
                 synthesis: amazing_text::FontSynthesis::default(),
                 color: "black".into(),
@@ -693,6 +744,49 @@ mod tests {
         let surface = paint_document_with_text_resources(&root, 20, 20, &text, &NoImages);
 
         assert_eq!(surface.get_pixel(3, 5), Some([0, 0, 0, 255]));
+    }
+
+    #[test]
+    fn sideways_glyph_pose_rotates_the_rasterized_ink() {
+        let text = amazing_text::FallbackTextSystem::new();
+        let layout = amazing_layout::layout_document_with_text(
+            "<body><p style=\"writing-mode:sideways-lr;font-size:20px;line-height:20px\">A</p></body>",
+            "body{margin:20px}p{margin:0}",
+            100.0,
+            &text,
+        );
+        let surface = paint_document_with_text_resources(&layout, 100, 100, &text, &NoImages);
+        let ink = (0..surface.height)
+            .flat_map(|y| (0..surface.width).map(move |x| (x, y)))
+            .filter(|(x, y)| surface.get_pixel(*x, *y) == Some([0, 0, 0, 255]))
+            .collect::<Vec<_>>();
+        let min_x = ink.iter().map(|(x, _)| *x).min().unwrap();
+        let max_x = ink.iter().map(|(x, _)| *x).max().unwrap();
+        let min_y = ink.iter().map(|(_, y)| *y).min().unwrap();
+        let max_y = ink.iter().map(|(_, y)| *y).max().unwrap();
+
+        assert!(max_x - min_x > max_y - min_y);
+    }
+
+    #[test]
+    fn vertical_rl_starts_its_column_at_the_logical_right_edge() {
+        let text = amazing_text::FallbackTextSystem::new();
+        let layout = amazing_layout::layout_document_with_text(
+            "<body><p style=\"writing-mode:vertical-rl;width:100px;height:100px;font-size:20px;line-height:20px\">漢</p></body>",
+            "body,p{margin:0}",
+            100.0,
+            &text,
+        );
+        let surface = paint_document_with_text_resources(&layout, 100, 100, &text, &NoImages);
+        let ink = (0..surface.height)
+            .flat_map(|y| (0..surface.width).map(move |x| (x, y)))
+            .filter(|(x, y)| surface.get_pixel(*x, *y) == Some([0, 0, 0, 255]))
+            .collect::<Vec<_>>();
+        let min_x = ink.iter().map(|(x, _)| *x).min().unwrap();
+        let max_x = ink.iter().map(|(x, _)| *x).max().unwrap();
+
+        assert!(min_x >= 70, "vertical-rl ink started at x={min_x}");
+        assert!(max_x < 100, "vertical-rl ink escaped at x={max_x}");
     }
 
     #[test]

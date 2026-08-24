@@ -204,8 +204,28 @@ pub enum Flow {
 pub struct TextSourceMapping {
     /// Byte range in the transformed `InlineNode::Text::text` value.
     pub text_range: Range<usize>,
+    /// Original DOM text node owning `source_range`.
+    pub source: NodeIdx,
     /// Byte range in the original DOM text node.
     pub source_range: Range<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RubyText {
+    pub node: NodeIdx,
+    pub text: String,
+    pub source_mappings: Vec<TextSourceMapping>,
+    pub font_size: f32,
+    pub style: Box<amazing_text::TextStyle>,
+    pub color: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct RubyColumn {
+    pub base: RubyText,
+    pub annotation: Option<RubyText>,
+    pub annotation_span: usize,
+    pub annotation_hidden: bool,
 }
 
 #[derive(Debug)]
@@ -231,6 +251,11 @@ pub enum InlineNode {
         unicode_bidi: amazing_text::UnicodeBidi,
     },
     BidiEnd,
+    /// Paired ruby bases and annotations retained as breakable column groups.
+    Ruby {
+        node: NodeIdx,
+        columns: Vec<RubyColumn>,
+    },
     /// `<br>` — force a line break.
     Break,
     /// Replaced inline content with dimensions resolved before layout.
@@ -284,6 +309,9 @@ pub struct GlyphFrag {
     pub offset_y: f32,
     pub font_size: f32,
     pub writing_mode: amazing_text::WritingMode,
+    pub orientation: amazing_text::GlyphOrientation,
+    pub scale_x: f32,
+    pub scale_y: f32,
     pub variations: Vec<amazing_text::VariationSetting>,
     pub synthesis: amazing_text::FontSynthesis,
     pub color: String,
@@ -365,6 +393,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
     if let Flow::Inlines(items) = &layout.flow {
         let first_style = items.iter().find_map(|item| match item {
             InlineNode::Text { style, .. } => Some(style),
+            InlineNode::Ruby { columns, .. } => columns.first().map(|column| &column.base.style),
             InlineNode::BidiStart { .. }
             | InlineNode::BidiEnd
             | InlineNode::Break
@@ -387,8 +416,14 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 line_height,
                 ascent: metrics.ascent,
                 descent: metrics.descent,
+                vertical_ascent: metrics.vertical_ascent,
+                vertical_descent: metrics.vertical_descent,
             };
-            let base_direction = if layout
+            let base_direction = if style.writing_mode.is_vertical_flow()
+                && style.text_orientation == amazing_text::TextOrientation::Upright
+            {
+                amazing_text::Direction::LeftToRight
+            } else if layout
                 .style
                 .get("direction")
                 .is_some_and(|value| value.eq_ignore_ascii_case("rtl"))
@@ -399,15 +434,22 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
             };
             if let Some(lines) = inline::layout_lines_shaped(
                 items,
-                layout.content_box.x,
-                layout.content_box.y,
-                layout.content_box.w,
+                inline::InlineContainingBlock {
+                    x: layout.content_box.x,
+                    y: layout.content_box.y,
+                    width: layout.content_box.w,
+                    height: layout.content_box.h,
+                },
                 &strut,
                 base_direction,
                 text,
             ) {
                 let old_height = layout.lines.iter().map(|line| line.height).sum::<f32>();
-                let new_height = lines.iter().map(|line| line.height).sum::<f32>();
+                let new_height = if style.writing_mode.is_vertical_flow() {
+                    lines.iter().map(|line| line.height).fold(0.0, f32::max)
+                } else {
+                    lines.iter().map(|line| line.height).sum::<f32>()
+                };
                 if layout
                     .style
                     .get("height")
@@ -854,7 +896,8 @@ mod shaped_text_tests {
             .unwrap();
         let text = VisualLineFake(FallbackTextSystem::new());
         let layout = layout_document_with_text(html, "", 200.0, &text);
-        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+        let line = &find(&layout, paragraph).unwrap().lines[0];
+        let glyphs = &line.glyphs;
 
         assert_eq!(
             glyphs
@@ -909,7 +952,8 @@ mod shaped_text_tests {
             .unwrap();
         let text = FallbackTextSystem::new();
         let layout = layout_document_with_text(html, "", 200.0, &text);
-        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+        let line = &find(&layout, paragraph).unwrap().lines[0];
+        let glyphs = &line.glyphs;
 
         assert_eq!(glyphs.last().unwrap().source_range, 5..6);
     }
@@ -1183,5 +1227,250 @@ mod shaped_text_tests {
         assert_eq!(glyphs.len(), 2);
         assert_eq!(glyphs[0].x, glyphs[1].x);
         assert!(glyphs[1].y > glyphs[0].y);
+    }
+
+    #[test]
+    fn sideways_lr_uses_horizontal_shaping_on_a_vertical_inline_axis() {
+        let html = "<body><p style=\"writing-mode:sideways-lr\">AB</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+
+        assert_eq!(glyphs.len(), 2);
+        assert_eq!(glyphs[0].writing_mode, amazing_text::WritingMode::SidewaysLr);
+        assert_eq!(glyphs[0].orientation, amazing_text::GlyphOrientation::SidewaysLeft);
+        assert!(glyphs[0].advance_x > 0.0);
+        assert_eq!(glyphs[0].advance_y, 0.0);
+        assert_eq!(glyphs[0].x, glyphs[1].x);
+        assert!(glyphs[1].y > glyphs[0].y);
+    }
+
+    #[test]
+    fn vertical_mixed_orientation_is_resolved_per_cluster() {
+        let html = "<body><p style=\"writing-mode:vertical-rl;text-orientation:mixed\">A漢</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+
+        assert_eq!(glyphs.len(), 2);
+        assert_eq!(glyphs[0].orientation, amazing_text::GlyphOrientation::SidewaysRight);
+        assert_eq!(glyphs[1].orientation, amazing_text::GlyphOrientation::Upright);
+    }
+
+    #[test]
+    fn vertical_rl_wraps_against_height_and_adds_columns_to_the_left() {
+        let html = "<body><p style=\"writing-mode:vertical-rl;width:100px;height:30px;font-size:20px;line-height:20px;word-break:break-all\">AAAA</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1].glyphs[0].x < lines[0].glyphs[0].x);
+    }
+
+    #[test]
+    fn horizontal_ruby_places_half_size_annotation_above_its_base() {
+        let html = "<body><p><ruby><rb>漢</rb><rt>かん</rt></ruby></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let line = &find(&layout, paragraph).unwrap().lines[0];
+        let glyphs = &line.glyphs;
+        let base = glyphs
+            .iter()
+            .find(|glyph| glyph.glyph == GlyphId('漢' as u32))
+            .unwrap();
+        let annotation = glyphs
+            .iter()
+            .find(|glyph| glyph.glyph == GlyphId('か' as u32))
+            .unwrap();
+
+        assert_eq!(annotation.font_size, base.font_size * 0.5);
+        assert!(annotation.y < base.y);
+        assert!(line.height > base.font_size * 1.2);
+        assert!(!base.source_mappings.is_empty());
+        assert!(!annotation.source_mappings.is_empty());
+        assert!(matches!(
+            dom.get(NodeIdx(base.source_mappings[0].source)).kind,
+            amazing_dom::NodeKind::Text { .. }
+        ));
+        assert!(matches!(
+            dom.get(NodeIdx(annotation.source_mappings[0].source)).kind,
+            amazing_dom::NodeKind::Text { .. }
+        ));
+    }
+
+    #[test]
+    fn one_ruby_pair_stays_together_between_surrounding_inline_text() {
+        let html = "<body><p>A<ruby><rb>漢</rb><rt>かん</rt></ruby>B</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+        let glyphs = &lines[0].glyphs;
+        let a = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('A' as u32)).unwrap();
+        let base = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('漢' as u32)).unwrap();
+        let b = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('B' as u32)).unwrap();
+
+        assert_eq!(lines.len(), 1);
+        assert!(a.x < base.x);
+        assert!(base.x < b.x);
+    }
+
+    #[test]
+    fn ruby_does_not_wrap_at_an_illegal_latin_base_boundary() {
+        let html = "<body><p style=\"width:8px;font-size:16px\"><ruby><rb>A</rb><rt>a</rt><rb>B</rb><rt>b</rt></ruby></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].glyphs.iter().any(|glyph| glyph.glyph == GlyphId('A' as u32)));
+        assert!(lines[0].glyphs.iter().any(|glyph| glyph.glyph == GlyphId('B' as u32)));
+    }
+
+    #[test]
+    fn ruby_can_wrap_at_a_legal_han_base_boundary() {
+        let html = "<body><p style=\"width:8px;font-size:16px\"><ruby><rb>漢</rb><rt>かん</rt><rb>字</rb><rt>じ</rt></ruby></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let lines = &find(&layout, paragraph).unwrap().lines;
+
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].glyphs.iter().any(|glyph| glyph.glyph == GlyphId('漢' as u32)));
+        assert!(lines[1].glyphs.iter().any(|glyph| glyph.glyph == GlyphId('字' as u32)));
+    }
+
+    #[test]
+    fn vertical_rl_ruby_places_annotation_on_the_line_over_side() {
+        let html = "<body><p style=\"writing-mode:vertical-rl;width:80px;height:100px\"><ruby><rb>漢</rb><rt>かん</rt></ruby></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+        let base = glyphs
+            .iter()
+            .find(|glyph| glyph.glyph == GlyphId('漢' as u32))
+            .unwrap();
+        let annotation = glyphs
+            .iter()
+            .find(|glyph| glyph.glyph == GlyphId('か' as u32))
+            .unwrap();
+
+        assert!(annotation.x > base.x);
+        assert!(
+            (annotation.y - base.y).abs() < base.font_size,
+            "base={base:?} annotation={annotation:?}"
+        );
+    }
+
+    #[test]
+    fn text_combine_upright_forms_one_horizontal_atomic_cell() {
+        let html = "<body><p style=\"writing-mode:vertical-rl;width:80px;height:100px;font-size:20px;line-height:20px\"><span style=\"text-combine-upright:all\">12</span>A</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+        let one = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('1' as u32)).unwrap();
+        let two = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('2' as u32)).unwrap();
+        let following = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('A' as u32)).unwrap();
+
+        assert!((one.y - two.y).abs() < 0.01);
+        assert!(one.x < two.x);
+        assert!(one.scale_x < 1.0);
+        assert_eq!(one.scale_y, 1.0);
+        assert!(following.y > one.y);
+    }
+
+    #[test]
+    fn short_text_combine_is_centered_in_its_em_cell() {
+        let html = "<body><p style=\"writing-mode:vertical-rl;width:80px;height:100px;font-size:20px;line-height:20px\"><span style=\"text-combine-upright:all;font-size:10px\">1</span>A</p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let paragraph_box = find(&layout, paragraph).unwrap();
+        let glyph = paragraph_box.lines[0]
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.glyph == GlyphId('1' as u32))
+            .unwrap();
+        let following = paragraph_box.lines[0]
+            .glyphs
+            .iter()
+            .find(|glyph| glyph.glyph == GlyphId('A' as u32))
+            .unwrap();
+        // TCY is rebuilt through the visual U+FFFC pass. Its internal
+        // horizontal composition is centered independently of the following
+        // upright glyph's vertical origin.
+        let column_center = following.x - following.offset_x;
+        assert!(
+            (glyph.x + glyph.advance_x * 0.5 - column_center).abs() < 0.01,
+            "{glyph:?} center={column_center} box={:?}",
+            paragraph_box.content_box
+        );
+    }
+
+    #[test]
+    fn spanning_ruby_annotation_centers_across_all_owned_bases() {
+        let html = "<body><p><ruby><rb>A</rb><rb>B</rb><rtc>x</rtc></ruby></p></body>";
+        let dom = amazing_html::parse(html);
+        let paragraph = (0..dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| dom.name(*node) == Some("p"))
+            .unwrap();
+        let text = FallbackTextSystem::new();
+        let layout = layout_document_with_text(html, "", 200.0, &text);
+        let glyphs = &find(&layout, paragraph).unwrap().lines[0].glyphs;
+        let a = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('A' as u32)).unwrap();
+        let b = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('B' as u32)).unwrap();
+        let annotation = glyphs.iter().find(|glyph| glyph.glyph == GlyphId('x' as u32)).unwrap();
+
+        assert!(a.x < annotation.x);
+        assert!(annotation.x < b.x);
     }
 }

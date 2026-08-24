@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "behavior-stratified",
+    "case_count": 20,
+    "behaviors": [
+      "vertical-writing-direction",
+      "mixed-upright-sideways-glyph-orientation",
+      "orthogonal-flow-baseline",
+      "text-combine-upright",
+      "ruby-base-text-container-pairing",
+      "ruby-autohide",
+      "vertical-ruby-overhang",
+      "ruby-line-break-suppression"
+    ]
+  },
+  "sparse_paths": [
+    "css/css-writing-modes",
+    "css/css-ruby",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "css-writing-modes__text-orientation-initial.html",
+      "test": "css/css-writing-modes/text-orientation-initial.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-mixed-vrl-100.html",
+      "test": "css/css-writing-modes/text-orientation-mixed-vrl-100.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-upright-vrl-100.html",
+      "test": "css/css-writing-modes/text-orientation-upright-vrl-100.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-sideways-vrl-100.html",
+      "test": "css/css-writing-modes/text-orientation-sideways-vrl-100.html"
+    },
+    {
+      "id": "css-writing-modes__direction-upright-001.html",
+      "test": "css/css-writing-modes/direction-upright-001.html"
+    },
+    {
+      "id": "css-writing-modes__sideways-lr-main-axis.html",
+      "test": "css/css-writing-modes/sideways-lr-main-axis.html"
+    },
+    {
+      "id": "css-writing-modes__two-levels-of-orthogonal-flows-fixed.html",
+      "test": "css/css-writing-modes/two-levels-of-orthogonal-flows-fixed.html"
+    },
+    {
+      "id": "css-writing-modes__baseline-with-orthogonal-flow-001.html",
+      "test": "css/css-writing-modes/baseline-with-orthogonal-flow-001.html"
+    },
+    {
+      "id": "css-writing-modes__tcy-white-space-processing-001.html",
+      "test": "css/css-writing-modes/tcy-white-space-processing-001.html"
+    },
+    {
+      "id": "css-writing-modes__text-combine-upright-rtl-001.html",
+      "test": "css/css-writing-modes/text-combine-upright-rtl-001.html"
+    },
+    {
+      "id": "css-writing-modes__text-combine-upright-compression-001.html",
+      "test": "css/css-writing-modes/text-combine-upright-compression-001.html"
+    },
+    {
+      "id": "css-writing-modes__text-combine-upright-line-breaking-rules-001.html",
+      "test": "css/css-writing-modes/text-combine-upright-line-breaking-rules-001.html"
+    },
+    {
+      "id": "css-ruby__rb-display-001.html",
+      "test": "css/css-ruby/rb-display-001.html"
+    },
+    {
+      "id": "css-ruby__rt-display-001.html",
+      "test": "css/css-ruby/rt-display-001.html"
+    },
+    {
+      "id": "css-ruby__rbc-rtc-basic-001.html",
+      "test": "css/css-ruby/rbc-rtc-basic-001.html"
+    },
+    {
+      "id": "css-ruby__nested-ruby-pairing-001.html",
+      "test": "css/css-ruby/nested-ruby-pairing-001.html"
+    },
+    {
+      "id": "css-ruby__ruby-autohide-001.html",
+      "test": "css/css-ruby/ruby-autohide-001.html"
+    },
+    {
+      "id": "css-ruby__empty-ruby-base-container.html",
+      "test": "css/css-ruby/empty-ruby-base-container.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-vertical-001.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-vertical-001.html"
+    },
+    {
+      "id": "css-ruby__ruby-line-break-suppression-004.html",
+      "test": "css/css-ruby/ruby-line-break-suppression-004.html"
+    }
+  ]
+}

@@ -4,7 +4,7 @@ Canonical sequence for moving Amazing's style → layout → paint pipeline towa
 standards conformance. Resolve one ticket, verify its exit criteria on
 `win-001`, record measured results, then stop at the phase boundary for review.
 
-Frontier: **#4c — Vertical metrics, writing modes, and ruby text**
+Frontier: **#5 — Flexbox and Grid convergence**
 
 ## Evidence contract (resolved)
 
@@ -415,7 +415,7 @@ and the full Rust 1.89 workspace plus locked GPUI check pass.
 
 Blocked by: #4b
 Type: Prototype
-Status: 🌫️ Fog
+Status: ✅ Resolved
 
 ### Question
 
@@ -423,9 +423,38 @@ Which vertical font metrics, glyph orientation/substitution, logical-axis line
 layout, text-combine behavior, and ruby annotation model close the first
 Writing Modes/Ruby WPT cluster on top of the shared glyph pipeline?
 
+### Exit criteria
+
+- The owned text contract carries sideways writing modes, per-cluster pose,
+  canonical/synthesized vertical metrics, and final glyph transforms without
+  provider or GPUI types.
+- Vertical inline layout wraps against logical height, advances columns on the
+  block axis, and maps Flex main axes through writing mode and direction.
+- Text-combine forms one fitted 1em atomic inline; Ruby retains base/text roles,
+  autohide, empty bases, annotation spanning, and horizontal/vertical line-over
+  placement.
+- A pinned font-controlled Writing Modes/Ruby gate improves with exact-revision
+  Blink/WebKit triage, repeat-stable hashes, and no #4a/#4b/geometry regression.
+
 ### Answer
 
-Pending until horizontal breaking and bidi stop dominating those results.
+The deleted logical-axis prototype established one inline/block vector model:
+upright vertical clusters shape top-to-bottom, sideways clusters shape
+horizontally and carry a final rotation, TCY is one fitted 1em atomic, and Ruby
+is paired base/annotation structure on the logical line-over side. HarfRust,
+Swash, and unicode-vo implement the provider adapter behind the expanded
+std-only text contract. Layout now uses logical height and column progression,
+Flex resolves its physical axes once from writing mode/direction, and paint
+applies owned rotation/scaling transforms before GPUI presents the page.
+
+The corrected 20-case fixed point is **9/20 raw, 1/4 Blink/WebKit consensus,
+and 0/20 capability-credited**. Two repeat-stable final runs are **11/20 raw,
+2/4 consensus, and 8/20 capability-credited**, with no unsupported cases or
+crashes. Phase #4a remains 12/12, #4b remains 14/16, block collapse remains
+9/9, Position remains 9/12, and the Rust 1.89 locked workspace plus standalone
+GPUI locked check pass. Evidence and remaining-cluster triage live in
+`docs/render/VERTICAL_RUBY_DESIGN.md` and
+`tests/wpt-render/vertical-ruby-results-ticket4c.json`.
 
 ## #5: Flexbox and Grid convergence
 

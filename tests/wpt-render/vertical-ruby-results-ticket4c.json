@@ -1,0 +1,279 @@
+{
+  "baseline": {
+    "crash": 0,
+    "fixed_point": "32eeebd00dcf689ada968206c98f86019e4303e9",
+    "mismatch": 11,
+    "note": "Isolated fixed-point source; Cargo.lock was regenerated only inside the disposable baseline snapshot before build.",
+    "pass": 9,
+    "run_directory": "run-20260824T205327644Z-11456",
+    "timeout": 0,
+    "unsupported": 0
+  },
+  "blink_webkit_consensus": {
+    "after_pass": 2,
+    "before_pass": 1,
+    "case_count": 4,
+    "ids": [
+      "css-writing-modes__sideways-lr-main-axis.html",
+      "css-writing-modes__baseline-with-orthogonal-flow-001.html",
+      "css-writing-modes__text-combine-upright-line-breaking-rules-001.html",
+      "css-ruby__ruby-line-break-suppression-004.html"
+    ]
+  },
+  "capability_credited": {
+    "after_pass": 8,
+    "before_pass": 0,
+    "ids": [
+      "css-writing-modes__text-orientation-upright-vrl-100.html",
+      "css-writing-modes__text-orientation-sideways-vrl-100.html",
+      "css-writing-modes__text-combine-upright-line-breaking-rules-001.html",
+      "css-ruby__rb-display-001.html",
+      "css-ruby__rt-display-001.html",
+      "css-ruby__ruby-autohide-001.html",
+      "css-ruby__empty-ruby-base-container.html",
+      "css-writing-modes__text-combine-upright-rtl-001.html"
+    ]
+  },
+  "counts": {
+    "pass": 11,
+    "mismatch": 9,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "font_set": "Pinned WPT font tree including fonts/adobe-fonts/CSSHWOrientationTest.otf, plus Windows generic-family candidates through the Amazing shaped-text provider",
+  "normalized_projection_sha256": "b8dea2a3b184ac5f0a0b327cbe9f0da4438e3de72ce43c41cb29f98f6bd4c9bd",
+  "phase": "ticket-4c-vertical-writing-ruby",
+  "regression_gates": {
+    "block_collapse": {
+      "pass": 9,
+      "mismatch": 0,
+      "run_directory": "run-20260824T215447723Z-15424"
+    },
+    "gpui_locked_check": "pass",
+    "phase4a_shaping": {
+      "pass": 12,
+      "mismatch": 0,
+      "run_directory": "run-20260824T215317340Z-1648"
+    },
+    "phase4b_text_flow": {
+      "pass": 14,
+      "mismatch": 2,
+      "run_directory": "run-20260824T215358571Z-6156"
+    },
+    "position": {
+      "pass": 9,
+      "mismatch": 3,
+      "run_directory": "run-20260824T215523155Z-8564"
+    },
+    "rust_1_89_workspace": "pass"
+  },
+  "remaining_mismatches": {
+    "count": 9,
+    "ids": [
+      "css-writing-modes__text-orientation-mixed-vrl-100.html",
+      "css-writing-modes__direction-upright-001.html",
+      "css-writing-modes__sideways-lr-main-axis.html",
+      "css-writing-modes__baseline-with-orthogonal-flow-001.html",
+      "css-writing-modes__tcy-white-space-processing-001.html",
+      "css-writing-modes__text-combine-upright-compression-001.html",
+      "css-ruby__rbc-rtc-basic-001.html",
+      "css-ruby__nested-ruby-pairing-001.html",
+      "css-ruby__ruby-overhang-spaces-vertical-001.html"
+    ],
+    "triage": "Remaining clusters require mixed-orientation fallback coverage, upright directionality, orthogonal inline-block baselines/sizing, TCY whitespace/compression, nested and anonymous ruby pairing, or vertical ruby overhang. They remain in the diagnostic and are not relabeled."
+  },
+  "repeat_runs": [
+    "run-20260824T215012613Z-7956",
+    "run-20260824T215045287Z-2216"
+  ],
+  "schema": 1,
+  "tests": [
+    {
+      "actual_sha256": "ce400107b04a0bf6ad4ac310275f0a71cb6a403f9a129bf6428e59f4abe2710b",
+      "after": "pass",
+      "before": "pass",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-writing-modes__text-orientation-initial.html",
+      "reference_sha256": "ce400107b04a0bf6ad4ac310275f0a71cb6a403f9a129bf6428e59f4abe2710b"
+    },
+    {
+      "actual_sha256": "9e9afc60f435153d6e3cdd756dc81b6993cc943522dfa73ceb896596d0870f42",
+      "after": "mismatch",
+      "before": "pass",
+      "diff_sha256": "691fab6d72b22c56b88e0afddb8fc671f7eee6ba8458cf0a978600b64456b01d",
+      "differing_pixels": 1063,
+      "id": "css-writing-modes__text-orientation-mixed-vrl-100.html",
+      "reference_sha256": "b10c02475bc2bbd092e20e8baa87c1aafaa1d8d1bd1a08ee2be18e63ba83256b"
+    },
+    {
+      "actual_sha256": "22ebf7ce9dee892af49baa315c6ce20395b9566ea18a3ac8e2b71fd36fe7cedc",
+      "after": "pass",
+      "before": "pass",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-writing-modes__text-orientation-upright-vrl-100.html",
+      "reference_sha256": "22ebf7ce9dee892af49baa315c6ce20395b9566ea18a3ac8e2b71fd36fe7cedc"
+    },
+    {
+      "actual_sha256": "2850fbd96349276bca4ca2d98569a9f64d91d537641892ff5f19a8a273634729",
+      "after": "pass",
+      "before": "pass",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-writing-modes__text-orientation-sideways-vrl-100.html",
+      "reference_sha256": "2850fbd96349276bca4ca2d98569a9f64d91d537641892ff5f19a8a273634729"
+    },
+    {
+      "actual_sha256": "f0c1fb4745654f1f05947e1387ec354dc7e0de951aeeff4a68fe2ce29e982dc1",
+      "after": "mismatch",
+      "before": "mismatch",
+      "diff_sha256": "eff540667b140c5b04c344e968dd356c90335a7260a1fb096b6a4eaa77ae2e78",
+      "differing_pixels": 18320,
+      "id": "css-writing-modes__direction-upright-001.html",
+      "reference_sha256": "324926ed01c7387fbab79da071631453bacfa8a0bb414a50c797be1f2b896140"
+    },
+    {
+      "actual_sha256": "6e4511887ff8c61aa18a82485e8ab2065d3b4eb4acca7dcb432b4c1b8614922f",
+      "after": "mismatch",
+      "before": "mismatch",
+      "diff_sha256": "36608b8d51b4e148a3d2983c8a1cecb2902cdfbe27087227027a8e312a94c825",
+      "differing_pixels": 4400,
+      "id": "css-writing-modes__sideways-lr-main-axis.html",
+      "reference_sha256": "6e88f2e9e888e1384aee8bc07320600897bd8d9dd48b059682a5ae4aa00058b9"
+    },
+    {
+      "actual_sha256": "c9690eea4e4e648792184d2567f5d60c6358e2c9208b7e3f7b93a2347f1d894d",
+      "after": "pass",
+      "before": "pass",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-writing-modes__two-levels-of-orthogonal-flows-fixed.html",
+      "reference_sha256": "c9690eea4e4e648792184d2567f5d60c6358e2c9208b7e3f7b93a2347f1d894d"
+    },
+    {
+      "actual_sha256": "899a487f1ceaef3f7848b94410d1aa4a3a0d5469c9da9965a657a4b1b2ab5f69",
+      "after": "mismatch",
+      "before": "mismatch",
+      "diff_sha256": "d94719db5937f9c868d6c41644e26e1c99f7f255c780d321ded1982755f5a80a",
+      "differing_pixels": 447,
+      "id": "css-writing-modes__baseline-with-orthogonal-flow-001.html",
+      "reference_sha256": "fd76a6624c3b5183eac659b2aea4a1d036bfb787fad69253a5e16d9264d8cef0"
+    },
+    {
+      "actual_sha256": "b2af1bbc7944acc07ca9de66d8221068c2371eea30793868939d6d2bc1bd2085",
+      "after": "mismatch",
+      "before": "mismatch",
+      "diff_sha256": "ad06381d01b8cfa12f05d4f1b607fbb385d0cd8987dd271b65ac2df8ed739d81",
+      "differing_pixels": 226,
+      "id": "css-writing-modes__tcy-white-space-processing-001.html",
+      "reference_sha256": "68462e00f8444357f221ded2908224370dbbfc5f9571f15cc8b33000684dab82"
+    },
+    {
+      "actual_sha256": "5fb7bf3b587bcbcb32a75407bab9c870cd7d77f140b8d3811851578f63812343",
+      "after": "pass",
+      "before": "pass",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-writing-modes__text-combine-upright-rtl-001.html",
+      "reference_sha256": "5fb7bf3b587bcbcb32a75407bab9c870cd7d77f140b8d3811851578f63812343"
+    },
+    {
+      "actual_sha256": "3879de0bfb3c654631d2055dd6057e0d23fe6e8273bfc81333fef34be8661681",
+      "after": "mismatch",
+      "before": "pass",
+      "diff_sha256": "5c4cfb9129f2e3d0d8576e7c64326d9a89922fca9591fa3957baeff2cf0b15e9",
+      "differing_pixels": 4000,
+      "id": "css-writing-modes__text-combine-upright-compression-001.html",
+      "reference_sha256": "866ba49002eabfcbcc31fd2bff205e078986f71ddf4a879c5eab2de3a31b07ed"
+    },
+    {
+      "actual_sha256": "9a793ae7c1d295fda3f7cc275e11cd4b50f7b5e84f1b2e2f8e41ba4b1fa3ffa3",
+      "after": "pass",
+      "before": "mismatch",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-writing-modes__text-combine-upright-line-breaking-rules-001.html",
+      "reference_sha256": "9a793ae7c1d295fda3f7cc275e11cd4b50f7b5e84f1b2e2f8e41ba4b1fa3ffa3"
+    },
+    {
+      "actual_sha256": "906460b375087100ea429a9b00675fe5b60a313d9f51e1dd6daee8143088b8c0",
+      "after": "pass",
+      "before": "mismatch",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-ruby__rb-display-001.html",
+      "reference_sha256": "906460b375087100ea429a9b00675fe5b60a313d9f51e1dd6daee8143088b8c0"
+    },
+    {
+      "actual_sha256": "906460b375087100ea429a9b00675fe5b60a313d9f51e1dd6daee8143088b8c0",
+      "after": "pass",
+      "before": "mismatch",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-ruby__rt-display-001.html",
+      "reference_sha256": "906460b375087100ea429a9b00675fe5b60a313d9f51e1dd6daee8143088b8c0"
+    },
+    {
+      "actual_sha256": "4084b4eaa4333c662c07f8a5a391c296c1374a77b6a67b4e858f92d53ddcdd20",
+      "after": "mismatch",
+      "before": "mismatch",
+      "diff_sha256": "f9912f71f2b77684e01d2cd5c55891e38489f41b087d012f964f5528d8cdb752",
+      "differing_pixels": 1260,
+      "id": "css-ruby__rbc-rtc-basic-001.html",
+      "reference_sha256": "ca3c33525aceb895dcf8e552d3f00ddc883ca9b5632c9693fdde90422ce4cce5"
+    },
+    {
+      "actual_sha256": "905d6f8173825cc459fb279aec5e62b12ebadb4ceb8fed7ed4f20707cc3d1157",
+      "after": "mismatch",
+      "before": "pass",
+      "diff_sha256": "8eab19b871a42207a7d412021211fbab563bbd2fa36e3b1ce5cf8a2e11a69503",
+      "differing_pixels": 1069,
+      "id": "css-ruby__nested-ruby-pairing-001.html",
+      "reference_sha256": "64c234e0d1ce6c90405cc63d9187ebafb07b693dec7f817997c4079ce1b412c9"
+    },
+    {
+      "actual_sha256": "1ee3b7af78df3813df7dbdfc89628f9f82189c6130d4f5a54a17e22e70868a3a",
+      "after": "pass",
+      "before": "mismatch",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-ruby__ruby-autohide-001.html",
+      "reference_sha256": "1ee3b7af78df3813df7dbdfc89628f9f82189c6130d4f5a54a17e22e70868a3a"
+    },
+    {
+      "actual_sha256": "bea5371ed569d971209a77166bcce547c25962914d6ae2d02a5ef1669d6b94f0",
+      "after": "pass",
+      "before": "mismatch",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-ruby__empty-ruby-base-container.html",
+      "reference_sha256": "bea5371ed569d971209a77166bcce547c25962914d6ae2d02a5ef1669d6b94f0"
+    },
+    {
+      "actual_sha256": "c6deacf8191fcd022949ec1b9a50e178ecba98f40619ef586ed54617629c1f47",
+      "after": "mismatch",
+      "before": "mismatch",
+      "diff_sha256": "6d1e428ec9eb7ce78691d9c6505353a635fb4df8edf7595eff083fc9f982ddd8",
+      "differing_pixels": 2520,
+      "id": "css-ruby__ruby-overhang-spaces-vertical-001.html",
+      "reference_sha256": "eb006db2b0927fb20884f964f1210883d2773c0bb2911b379037d26bb9abc5ee"
+    },
+    {
+      "actual_sha256": "4bf8f63f410b107a5a805b0e9a93c9a443d4c5480c2cd25322df259b4cc2b559",
+      "after": "pass",
+      "before": "pass",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels": 0,
+      "id": "css-ruby__ruby-line-break-suppression-004.html",
+      "reference_sha256": "4bf8f63f410b107a5a805b0e9a93c9a443d4c5480c2cd25322df259b4cc2b559"
+    }
+  ],
+  "viewport": {
+    "device_scale": 1,
+    "height": 600,
+    "width": 800
+  },
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+}

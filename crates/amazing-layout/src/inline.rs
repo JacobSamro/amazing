@@ -16,6 +16,9 @@ use std::rc::Rc;
 use crate::font::FontSource;
 use crate::{GlyphFrag, InlineNode, IntrinsicSize, LineBox, ReplacedFrag, WordFrag};
 
+const MAX_RUBY_COLUMNS: usize = 65_536;
+const MAX_RUBY_TEXT_BYTES: usize = 8 * 1024 * 1024;
+
 /// The block's typographic strut (§10.8): every line box gets this height
 /// and this baseline placement.
 pub struct Strut {
@@ -24,6 +27,8 @@ pub struct Strut {
     /// Ascent/descent of the strut font at `font_size` (positive numbers).
     pub ascent: f32,
     pub descent: f32,
+    pub vertical_ascent: f32,
+    pub vertical_descent: f32,
 }
 
 impl Strut {
@@ -34,6 +39,8 @@ impl Strut {
             line_height,
             ascent: m.ascent,
             descent: m.descent,
+            vertical_ascent: font_size * 0.5,
+            vertical_descent: font_size * 0.5,
         }
     }
 }
@@ -61,7 +68,7 @@ pub(crate) fn tokenize(items: &[InlineNode]) -> Vec<Token> {
     let mut pending_space = false;
     for item in items {
         match item {
-            InlineNode::BidiStart { .. } | InlineNode::BidiEnd => {},
+            InlineNode::BidiStart { .. } | InlineNode::BidiEnd | InlineNode::Ruby { .. } => {},
             InlineNode::Break => {
                 tokens.push(Token::Break);
                 // Whitespace following a <br> starts the new line stripped,
@@ -246,6 +253,23 @@ struct ShapedDecoration {
 }
 
 #[derive(Debug, Clone)]
+struct ShapedRuby {
+    node: NodeIdx,
+    text: String,
+    width: f32,
+    font_size: f32,
+    glyphs: Vec<GlyphFrag>,
+    line_over: f32,
+    break_after: bool,
+}
+
+#[derive(Debug, Clone)]
+enum AtomicInline {
+    Replaced(NodeIdx, IntrinsicSize),
+    Combined(ShapedRuby),
+}
+
+#[derive(Debug, Clone)]
 struct InlinePaintInfo {
     background_color: String,
     padding: crate::values::Sides,
@@ -259,7 +283,7 @@ struct ShapedContext {
     bidi_scopes: Vec<amazing_text::BidiScope>,
     colors: HashMap<u32, String>,
     paint_info: HashMap<u32, InlinePaintInfo>,
-    atomics: HashMap<usize, (NodeIdx, IntrinsicSize)>,
+    atomics: HashMap<usize, AtomicInline>,
     base_direction: amazing_text::Direction,
 }
 
@@ -281,35 +305,74 @@ enum ShapedUnit {
         range: Range<usize>,
         context: Rc<ShapedContext>,
     },
+    Ruby(ShapedRuby),
+    Combined {
+        shaped: ShapedRuby,
+        range: Range<usize>,
+        context: Rc<ShapedContext>,
+    },
 }
 
 /// Shapes paragraph chunks before wrapping, then constructs word summaries,
 /// positioned glyphs, and line boxes from the same advances.
+pub(crate) struct InlineContainingBlock {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
 pub(crate) fn layout_lines_shaped(
     items: &[InlineNode],
-    content_x: f32,
-    content_y: f32,
-    content_width: f32,
+    containing: InlineContainingBlock,
     strut: &Strut,
     base_direction: amazing_text::Direction,
     text_system: &dyn TextSystem,
 ) -> Option<Vec<LineBox>> {
+    let InlineContainingBlock {
+        x: content_x,
+        y: content_y,
+        width: content_width,
+        height: content_height,
+    } = containing;
     let item_refs = items.iter().collect::<Vec<_>>();
-    let units = shape_chunk(&item_refs, base_direction, text_system)?;
+    let units = shape_inline_items(&item_refs, base_direction, text_system)?;
+    let writing_mode = items
+        .iter()
+        .find_map(|item| match item {
+            InlineNode::Text { style, .. } => Some(style.writing_mode),
+            InlineNode::Ruby { columns, .. } => {
+                columns.first().map(|column| column.base.style.writing_mode)
+            },
+            _ => None,
+        })
+        .unwrap_or(amazing_text::WritingMode::HorizontalTb);
+    let vertical_flow = writing_mode.is_vertical_flow();
 
     let half_leading = (strut.line_height - (strut.ascent + strut.descent)) / 2.0;
     let right_edge = content_x + content_width;
+    let inline_start = if vertical_flow { content_y } else { content_x };
+    let inline_size = if vertical_flow && content_height > 0.0 {
+        content_height
+    } else {
+        content_width
+    };
+    let inline_end = inline_start + inline_size;
     let mut lines = Vec::new();
     let mut words = Vec::new();
     let mut glyphs = Vec::new();
+    let mut ruby_glyphs = Vec::new();
+    let mut ruby_line_over = 0.0f32;
     let mut decorations = Vec::new();
     let mut replaced = Vec::new();
     let mut placed_text = Vec::new();
-    let mut cursor = content_x;
+    let mut cursor = inline_start;
     let mut may_break_after = true;
     let flush = |lines: &mut Vec<LineBox>,
                  words: &mut Vec<WordFrag>,
                  glyphs: &mut Vec<GlyphFrag>,
+                 ruby_glyphs: &mut Vec<GlyphFrag>,
+                 ruby_line_over: &mut f32,
                  decorations: &mut Vec<crate::InlineDecorationFrag>,
                  replaced: &mut Vec<ReplacedFrag>,
                  placed_text: &mut Vec<PlacedText>,
@@ -323,9 +386,17 @@ pub(crate) fn layout_lines_shaped(
             .iter()
             .map(|image| image.height)
             .fold(0.0, f32::max);
-        let height = strut.line_height.max(image_height);
-        let y_top = content_y + lines.iter().map(|line| line.height).sum::<f32>();
-        let text_baseline = y_top + half_leading + strut.ascent;
+        let height = if vertical_flow {
+            (*cursor - inline_start).max(strut.line_height).max(image_height)
+        } else {
+            (strut.line_height + *ruby_line_over).max(image_height)
+        };
+        let y_top = if vertical_flow {
+            content_y
+        } else {
+            content_y + lines.iter().map(|line| line.height).sum::<f32>()
+        };
+        let text_baseline = y_top + half_leading + strut.ascent + *ruby_line_over;
         let baseline = text_baseline.max(y_top + image_height);
         for image in replaced.iter_mut() {
             image.y = baseline - image.height;
@@ -343,6 +414,39 @@ pub(crate) fn layout_lines_shaped(
             select_discretionary,
             text_system,
         );
+        glyphs.append(ruby_glyphs);
+        if vertical_flow {
+            glyphs.sort_by(|left, right| left.y.total_cmp(&right.y));
+        } else {
+            glyphs.sort_by(|left, right| left.x.total_cmp(&right.x));
+        }
+        if vertical_flow {
+            let column_offset = lines.len() as f32 * strut.line_height;
+            let desired_baseline = match writing_mode {
+                amazing_text::WritingMode::VerticalRl
+                | amazing_text::WritingMode::SidewaysRl => {
+                    right_edge - strut.vertical_ascent - column_offset
+                },
+                amazing_text::WritingMode::VerticalLr
+                | amazing_text::WritingMode::SidewaysLr => {
+                    content_x + strut.vertical_descent + column_offset
+                },
+                amazing_text::WritingMode::HorizontalTb => content_x,
+            };
+            let shift = desired_baseline - inline_start;
+            for glyph in glyphs.iter_mut() {
+                glyph.x += shift;
+            }
+            for word in words.iter_mut() {
+                word.x += shift;
+            }
+            for decoration in decorations.iter_mut() {
+                decoration.x += shift;
+            }
+            for image in replaced.iter_mut() {
+                image.x += shift;
+            }
+        }
         lines.push(LineBox {
             y_top,
             height,
@@ -352,7 +456,8 @@ pub(crate) fn layout_lines_shaped(
             decorations: std::mem::take(decorations),
             replaced: std::mem::take(replaced),
         });
-        *cursor = content_x;
+        *ruby_line_over = 0.0;
+        *cursor = inline_start;
     };
 
     for unit in units {
@@ -363,6 +468,8 @@ pub(crate) fn layout_lines_shaped(
                     &mut lines,
                     &mut words,
                     &mut glyphs,
+                    &mut ruby_glyphs,
+                    &mut ruby_line_over,
                     &mut decorations,
                     &mut replaced,
                     &mut placed_text,
@@ -385,12 +492,14 @@ pub(crate) fn layout_lines_shaped(
                 };
                 if has_content
                     && may_break_after
-                    && cursor + spacing + word.width + break_width > right_edge + f32::EPSILON
+                    && cursor + spacing + word.width + break_width > inline_end + f32::EPSILON
                 {
                     flush(
                         &mut lines,
                         &mut words,
                         &mut glyphs,
+                        &mut ruby_glyphs,
+                        &mut ruby_line_over,
                         &mut decorations,
                         &mut replaced,
                         &mut placed_text,
@@ -441,7 +550,7 @@ pub(crate) fn layout_lines_shaped(
                 });
                 cursor = x + word.width;
                 may_break_after = !word.hyphen_after
-                    || cursor + word.hyphen_advance <= right_edge + f32::EPSILON;
+                    || cursor + word.hyphen_advance <= inline_end + f32::EPSILON;
             }
             ShapedUnit::Replaced {
                 node,
@@ -451,12 +560,14 @@ pub(crate) fn layout_lines_shaped(
             } => {
                 if has_content
                     && may_break_after
-                    && cursor + size.width > right_edge + f32::EPSILON
+                    && cursor + size.width > inline_end + f32::EPSILON
                 {
                     flush(
                         &mut lines,
                         &mut words,
                         &mut glyphs,
+                        &mut ruby_glyphs,
+                        &mut ruby_line_over,
                         &mut decorations,
                         &mut replaced,
                         &mut placed_text,
@@ -482,12 +593,92 @@ pub(crate) fn layout_lines_shaped(
                 cursor += size.width;
                 may_break_after = true;
             }
+            ShapedUnit::Ruby(mut ruby) => {
+                if has_content
+                    && may_break_after
+                    && cursor + ruby.width > inline_end + f32::EPSILON
+                {
+                    flush(
+                        &mut lines,
+                        &mut words,
+                        &mut glyphs,
+                        &mut ruby_glyphs,
+                        &mut ruby_line_over,
+                        &mut decorations,
+                        &mut replaced,
+                        &mut placed_text,
+                        true,
+                        false,
+                        &mut cursor,
+                    );
+                }
+                for glyph in &mut ruby.glyphs {
+                    if glyph.writing_mode.is_vertical_flow() {
+                        glyph.y += cursor;
+                    } else {
+                        glyph.x += cursor;
+                    }
+                }
+                ruby_glyphs.extend(ruby.glyphs);
+                ruby_line_over = ruby_line_over.max(ruby.line_over);
+                words.push(WordFrag {
+                    node: ruby.node,
+                    text: ruby.text,
+                    x: cursor,
+                    width: ruby.width,
+                    font_size: ruby.font_size,
+                });
+                cursor += ruby.width;
+                may_break_after = ruby.break_after;
+            }
+            ShapedUnit::Combined {
+                shaped: combined,
+                range,
+                context,
+            } => {
+                if has_content
+                    && may_break_after
+                    && cursor + combined.width > inline_end + f32::EPSILON
+                {
+                    flush(
+                        &mut lines,
+                        &mut words,
+                        &mut glyphs,
+                        &mut ruby_glyphs,
+                        &mut ruby_line_over,
+                        &mut decorations,
+                        &mut replaced,
+                        &mut placed_text,
+                        true,
+                        false,
+                        &mut cursor,
+                    );
+                }
+                placed_text.push(PlacedText {
+                    context,
+                    range,
+                    x: cursor,
+                    hyphen_after: false,
+                    requires_reshape: false,
+                });
+                words.push(WordFrag {
+                    node: combined.node,
+                    text: combined.text,
+                    x: cursor,
+                    width: combined.width,
+                    font_size: combined.font_size,
+                });
+                cursor += combined.width;
+                may_break_after = true;
+            }
         }
     }
     flush(
         &mut lines,
         &mut words,
         &mut glyphs,
+        &mut ruby_glyphs,
+        &mut ruby_line_over,
         &mut decorations,
         &mut replaced,
         &mut placed_text,
@@ -614,10 +805,11 @@ fn reshape_visual_line(
         .filter(|advance| *advance > 0.0);
     glyphs.clear();
     let mut rebuilt_decorations = Vec::new();
-    let vertical = context.spans.first().is_some_and(|span| {
-        span.style.writing_mode != amazing_text::WritingMode::HorizontalTb
-    });
-    let mut pen = if vertical { 0.0 } else { start_x };
+    let vertical = context
+        .spans
+        .first()
+        .is_some_and(|span| span.style.writing_mode.is_vertical_flow());
+    let mut pen = start_x;
     let mut active_source = None;
     let mut decoration_start = pen;
     let replaced_by_node = replaced
@@ -645,12 +837,29 @@ fn reshape_visual_line(
         for glyph in run.glyphs {
             let character = context.text[glyph.cluster.clone()].chars().next();
             if character == Some('\u{fffc}') {
-                if let Some((node, size)) = context.atomics.get(&glyph.cluster.start)
-                    && let Some(index) = replaced_by_node.get(&node.0)
-                    && let Some(fragment) = replaced.get_mut(*index)
-                {
-                    fragment.x = if vertical { start_x } else { pen };
-                    pen += if vertical { size.height } else { size.width };
+                match context.atomics.get(&glyph.cluster.start) {
+                    Some(AtomicInline::Replaced(node, size)) => {
+                        if let Some(index) = replaced_by_node.get(&node.0)
+                            && let Some(fragment) = replaced.get_mut(*index)
+                        {
+                            fragment.x = if vertical { start_x } else { pen };
+                            pen += if vertical { size.height } else { size.width };
+                        }
+                    },
+                    Some(AtomicInline::Combined(combined)) => {
+                        for atomic_glyph in &combined.glyphs {
+                            let mut atomic_glyph = atomic_glyph.clone();
+                            if vertical {
+                                atomic_glyph.x += start_x;
+                                atomic_glyph.y += pen;
+                            } else {
+                                atomic_glyph.x += pen;
+                            }
+                            glyphs.push(atomic_glyph);
+                        }
+                        pen += combined.width;
+                    },
+                    None => {},
                 }
                 continue;
             }
@@ -690,6 +899,9 @@ fn reshape_visual_line(
                 offset_y: glyph.offset_y,
                 font_size: run.font_size,
                 writing_mode: run.writing_mode,
+                orientation: glyph.orientation,
+                scale_x: 1.0,
+                scale_y: 1.0,
                 variations: run.variations.clone(),
                 synthesis: run.synthesis,
                 color: context
@@ -698,11 +910,7 @@ fn reshape_visual_line(
                     .cloned()
                     .unwrap_or_else(|| "black".into()),
             });
-            pen += if vertical {
-                glyph.advance_y.abs()
-            } else {
-                glyph.advance_x.abs()
-            };
+            pen += inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y);
         }
     }
     finish_visual_decoration(
@@ -856,6 +1064,9 @@ fn append_discretionary_hyphen(
                 offset_y: glyph.offset_y,
                 font_size: run.font_size,
                 writing_mode: run.writing_mode,
+                orientation: glyph.orientation,
+                scale_x: 1.0,
+                scale_y: 1.0,
                 variations: run.variations.clone(),
                 synthesis: run.synthesis,
                 color: context
@@ -922,6 +1133,365 @@ fn discretionary_hyphen_advance(
                 .sum()
         })
         .unwrap_or(0.0)
+}
+
+fn shape_inline_items(
+    items: &[&InlineNode],
+    base_direction: amazing_text::Direction,
+    text_system: &dyn TextSystem,
+) -> Option<Vec<ShapedUnit>> {
+    let mut units = Vec::new();
+    let mut start = 0usize;
+    for (index, item) in items.iter().enumerate() {
+        let InlineNode::Ruby { node, columns } = item else {
+            continue;
+        };
+        if start < index {
+            units.extend(shape_chunk(&items[start..index], base_direction, text_system)?);
+        }
+        units.extend(
+            shape_ruby_units(*node, columns, text_system)?
+                .into_iter()
+                .map(ShapedUnit::Ruby),
+        );
+        start = index + 1;
+    }
+    if start < items.len() {
+        units.extend(shape_chunk(&items[start..], base_direction, text_system)?);
+    }
+    Some(units)
+}
+
+fn shape_combined_text(
+    node: NodeIdx,
+    text: &str,
+    source_mappings: &[crate::TextSourceMapping],
+    font_size: f32,
+    style: &amazing_text::TextStyle,
+    color: &str,
+    text_system: &dyn TextSystem,
+) -> Option<ShapedRuby> {
+    let outer_writing_mode = style.writing_mode;
+    let mut inner_style = style.clone();
+    inner_style.writing_mode = amazing_text::WritingMode::HorizontalTb;
+    inner_style.text_combine = amazing_text::TextCombine::None;
+    let combined = crate::RubyText {
+        node,
+        text: text.to_owned(),
+        source_mappings: source_mappings.to_vec(),
+        font_size,
+        style: Box::new(inner_style),
+        color: color.to_owned(),
+    };
+    let (mut glyphs, natural_width, metrics) = shape_ruby_text(&combined, 0.0, text_system)?;
+    let scale = if natural_width > 0.0 {
+        (font_size / natural_width).min(1.0)
+    } else {
+        1.0
+    };
+    let fitted_width = natural_width * scale;
+    let baseline = (font_size - metrics.line_height()) * 0.5 + metrics.ascent;
+    for glyph in &mut glyphs {
+        glyph.x = -fitted_width * 0.5 + glyph.x * scale;
+        glyph.y = baseline;
+        glyph.writing_mode = outer_writing_mode;
+        glyph.orientation = amazing_text::GlyphOrientation::Upright;
+        glyph.scale_x = scale;
+    }
+    Some(ShapedRuby {
+        node,
+        text: text.to_owned(),
+        width: font_size,
+        font_size,
+        glyphs,
+        line_over: 0.0,
+        break_after: true,
+    })
+}
+
+fn shape_ruby_units(
+    node: NodeIdx,
+    columns: &[crate::RubyColumn],
+    text_system: &dyn TextSystem,
+) -> Option<Vec<ShapedRuby>> {
+    let mut units = Vec::new();
+    let mut starts = Vec::new();
+    let mut start = 0usize;
+    while start < columns.len() {
+        starts.push(start);
+        let span = columns[start].annotation_span.max(1);
+        let end = start.checked_add(span)?.min(columns.len());
+        units.push(shape_ruby(node, &columns[start..end], text_system)?);
+        start = end;
+    }
+    for index in 0..units.len().saturating_sub(1) {
+        let left_group_end = starts[index + 1];
+        let left = &columns[left_group_end - 1].base;
+        let right = &columns[left_group_end].base;
+        units[index].break_after = ruby_base_break_allowed(left, right, text_system);
+    }
+    Some(units)
+}
+
+fn ruby_base_break_allowed(
+    left: &crate::RubyText,
+    right: &crate::RubyText,
+    text_system: &dyn TextSystem,
+) -> bool {
+    let mut text = left.text.clone();
+    let boundary = text.len();
+    text.push_str(&right.text);
+    if boundary == 0 || boundary == text.len() {
+        return false;
+    }
+    let spans = [
+        TextSpan {
+            range: 0..boundary,
+            source: left.node.0,
+            style: left.style.as_ref().clone(),
+            boundary_before: ShapingBoundary::Hard,
+        },
+        TextSpan {
+            range: boundary..text.len(),
+            source: right.node.0,
+            style: right.style.as_ref().clone(),
+            boundary_before: ShapingBoundary::Continue,
+        },
+    ];
+    let provider_break = text_system
+        .shape(Paragraph {
+            text: &text,
+            spans: &spans,
+            sources: &[],
+            bidi_scopes: &[],
+            base_direction: left.style.direction,
+        })
+        .ok()
+        .is_some_and(|paragraph| {
+            paragraph.breaks.iter().any(|opportunity| {
+                opportunity.offset == boundary
+                    && opportunity.kind != amazing_text::BreakKind::Mandatory
+            })
+        });
+    provider_break
+        || (left.style.word_break != amazing_text::WordBreak::KeepAll
+            && right.style.word_break != amazing_text::WordBreak::KeepAll
+            && left.text.chars().next_back().is_some_and(is_ideographic)
+            && right.text.chars().next().is_some_and(is_ideographic))
+}
+
+fn is_ideographic(character: char) -> bool {
+    matches!(
+        character as u32,
+        0x2e80..=0x2fff
+            | 0x3040..=0x30ff
+            | 0x31f0..=0x31ff
+            | 0x3400..=0x4dbf
+            | 0x4e00..=0x9fff
+            | 0xf900..=0xfaff
+            | 0x20000..=0x3ffff
+    )
+}
+
+fn shape_ruby(
+    node: NodeIdx,
+    columns: &[crate::RubyColumn],
+    text_system: &dyn TextSystem,
+) -> Option<ShapedRuby> {
+    if columns.len() > MAX_RUBY_COLUMNS {
+        return None;
+    }
+    let text_bytes = columns.iter().try_fold(0usize, |total, column| {
+        let total = total.checked_add(column.base.text.len())?;
+        total.checked_add(
+            column
+                .annotation
+                .as_ref()
+                .map_or(0, |annotation| annotation.text.len()),
+        )
+    })?;
+    if text_bytes > MAX_RUBY_TEXT_BYTES {
+        return None;
+    }
+    let font_size = columns.first()?.base.font_size;
+    let vertical_flow = columns[0].base.style.writing_mode.is_vertical_flow();
+    let mut bases = columns
+        .iter()
+        .map(|column| shape_ruby_text(&column.base, 0.0, text_system))
+        .collect::<Option<Vec<_>>>()?;
+    let mut widths = bases.iter().map(|(_, width, _)| *width).collect::<Vec<_>>();
+    let mut annotations = Vec::with_capacity(columns.len());
+    for (index, column) in columns.iter().enumerate() {
+        let shaped = if column.annotation_hidden {
+            None
+        } else if let Some(annotation) = &column.annotation {
+            let metrics = text_system.metrics(&annotation.style).ok()?;
+            let base_metrics = bases[index].2;
+            let block_offset = if vertical_flow {
+                match column.base.style.writing_mode {
+                    amazing_text::WritingMode::VerticalRl
+                    | amazing_text::WritingMode::SidewaysRl => {
+                        base_metrics.vertical_ascent + metrics.vertical_descent
+                    },
+                    amazing_text::WritingMode::VerticalLr
+                    | amazing_text::WritingMode::SidewaysLr => {
+                        -(base_metrics.vertical_descent + metrics.vertical_ascent)
+                    },
+                    amazing_text::WritingMode::HorizontalTb => 0.0,
+                }
+            } else {
+                -(base_metrics.ascent + metrics.descent)
+            };
+            Some(shape_ruby_text(annotation, block_offset, text_system)?)
+        } else {
+            None
+        };
+        if let Some((_, annotation_width, _)) = &shaped {
+            let end = (index + column.annotation_span).min(columns.len());
+            let spanned_width = widths[index..end].iter().sum::<f32>();
+            if *annotation_width > spanned_width {
+                let extra = (*annotation_width - spanned_width) / (end - index) as f32;
+                for width in &mut widths[index..end] {
+                    *width += extra;
+                }
+            }
+        }
+        annotations.push(shaped);
+    }
+    let mut positions = Vec::with_capacity(widths.len() + 1);
+    positions.push(0.0);
+    for width in &widths {
+        positions.push(positions.last().copied().unwrap_or(0.0) + width);
+    }
+    let line_over = if vertical_flow {
+        0.0
+    } else {
+        annotations
+            .iter()
+            .filter_map(|annotation| annotation.as_ref().map(|(_, _, metrics)| metrics.line_height()))
+            .fold(0.0, f32::max)
+    };
+    let mut glyphs = Vec::new();
+    let mut text = String::new();
+    for (index, column) in columns.iter().enumerate() {
+        let (base_glyphs, base_width, _) = &mut bases[index];
+        let base_offset = positions[index] + (widths[index] - *base_width) * 0.5;
+        for glyph in base_glyphs.iter_mut() {
+            if vertical_flow {
+                glyph.y += base_offset;
+            } else {
+                glyph.x += base_offset;
+            }
+        }
+        text.push_str(&column.base.text);
+        glyphs.append(base_glyphs);
+        if let Some((mut annotation_glyphs, annotation_width, _)) = annotations[index].take() {
+            let end = (index + column.annotation_span).min(columns.len());
+            let span_width = positions[end] - positions[index];
+            let annotation_offset =
+                positions[index] + (span_width - annotation_width) * 0.5;
+            for glyph in &mut annotation_glyphs {
+                if vertical_flow {
+                    glyph.y += annotation_offset;
+                } else {
+                    glyph.x += annotation_offset;
+                }
+            }
+            glyphs.extend(annotation_glyphs);
+        }
+    }
+    Some(ShapedRuby {
+        node,
+        text,
+        width: positions.last().copied().unwrap_or(0.0),
+        font_size,
+        glyphs,
+        line_over,
+        break_after: true,
+    })
+}
+
+fn shape_ruby_text(
+    text: &crate::RubyText,
+    block_offset: f32,
+    text_system: &dyn TextSystem,
+) -> Option<(Vec<GlyphFrag>, f32, amazing_text::FontMetrics)> {
+    let metrics = text_system.metrics(&text.style).ok()?;
+    if text.text.is_empty() {
+        return Some((Vec::new(), 0.0, metrics));
+    }
+    let spans = [TextSpan {
+        range: 0..text.text.len(),
+        source: text.node.0,
+        style: text.style.as_ref().clone(),
+        boundary_before: ShapingBoundary::Hard,
+    }];
+    let sources = text
+        .source_mappings
+        .iter()
+        .map(|mapping| SourceMapping {
+            text_range: mapping.text_range.clone(),
+            source: mapping.source.0,
+            source_range: mapping.source_range.clone(),
+        })
+        .collect::<Vec<_>>();
+    let line = text_system
+        .shape_line(LineRequest {
+            paragraph: Paragraph {
+                text: &text.text,
+                spans: &spans,
+                sources: &sources,
+                bidi_scopes: &[],
+                base_direction: text.style.direction,
+            },
+            range: 0..text.text.len(),
+        })
+        .ok()?;
+    let mut fragments = Vec::new();
+    let mut pen = 0.0;
+    for run in line.runs {
+        for glyph in run.glyphs {
+            fragments.push(GlyphFrag {
+                node: text.node,
+                font: run.font,
+                glyph: glyph.id,
+                cluster: glyph.cluster.clone(),
+                source_range: source_range_for_cluster(
+                    &sources,
+                    run.source,
+                    glyph.cluster.clone(),
+                ),
+                source_mappings: source_mappings_for_cluster(
+                    &sources,
+                    glyph.cluster.clone(),
+                ),
+                x: if run.writing_mode.is_vertical_flow() {
+                    block_offset + glyph.offset_x
+                } else {
+                    pen + glyph.offset_x
+                },
+                y: if run.writing_mode.is_vertical_flow() {
+                    pen + glyph.offset_y
+                } else {
+                    block_offset + glyph.offset_y
+                },
+                advance_x: glyph.advance_x,
+                advance_y: glyph.advance_y,
+                offset_x: glyph.offset_x,
+                offset_y: glyph.offset_y,
+                font_size: run.font_size,
+                writing_mode: run.writing_mode,
+                orientation: glyph.orientation,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                variations: run.variations.clone(),
+                synthesis: run.synthesis,
+                color: text.color.clone(),
+            });
+            pen += inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y);
+        }
+    }
+    Some((fragments, pen, metrics))
 }
 
 fn shape_chunk(
@@ -1006,11 +1576,53 @@ fn shape_chunk(
                     source: node.0,
                     source_range: 0..0,
                 });
-                atomics.insert(start, (*node, *size));
+                atomics.insert(start, AtomicInline::Replaced(*node, *size));
+                previous_after = ShapingBoundary::Hard;
+                continue;
+            }
+            InlineNode::Text {
+                node,
+                text,
+                source_mappings,
+                font_size,
+                style,
+                color,
+                ..
+            } if style.text_combine == amazing_text::TextCombine::All
+                && style.writing_mode.is_vertical_flow() =>
+            {
+                let start = paragraph_text.len();
+                paragraph_text.push('\u{fffc}');
+                let end = paragraph_text.len();
+                spans.push(TextSpan {
+                    range: start..end,
+                    source: node.0,
+                    style: style.as_ref().clone(),
+                    boundary_before: ShapingBoundary::Hard,
+                });
+                sources.extend(source_mappings.iter().map(|mapping| SourceMapping {
+                    text_range: start..end,
+                    source: node.0,
+                    source_range: mapping.source_range.clone(),
+                }));
+                atomics.insert(
+                    start,
+                    AtomicInline::Combined(shape_combined_text(
+                        *node,
+                        text,
+                        source_mappings,
+                        *font_size,
+                        style,
+                        color,
+                        text_system,
+                    )?),
+                );
+                previous_style = Some((node.0, style.as_ref().clone()));
                 previous_after = ShapingBoundary::Hard;
                 continue;
             }
             InlineNode::Text { .. } => {}
+            InlineNode::Ruby { .. } => return None,
         }
         let InlineNode::Text {
             node,
@@ -1048,7 +1660,7 @@ fn shape_chunk(
                     .filter(|mapping| mapping.text_range.start < skip)
                     .map(|mapping| SourceMapping {
                         text_range: start - 1..start,
-                        source: node.0,
+                        source: mapping.source.0,
                         source_range: mapping.source_range.clone(),
                     }),
             );
@@ -1062,7 +1674,7 @@ fn shape_chunk(
                 .map(|mapping| SourceMapping {
                     text_range: start + mapping.text_range.start.saturating_sub(skip)
                         ..start + mapping.text_range.end - skip,
-                    source: node.0,
+                    source: mapping.source.0,
                     source_range: mapping.source_range.clone(),
                 }),
         );
@@ -1128,14 +1740,21 @@ fn shape_chunk(
     for text_unit in text_units(&paragraph_text, &spans, &shaped.breaks, &atomics) {
         let (range, break_kind) = match text_unit {
             TextUnit::Word { range, break_kind } => (range, break_kind),
-            TextUnit::Atomic { offset, node, size } => {
+            TextUnit::Atomic { offset, atomic } => {
                 let end = offset + '\u{fffc}'.len_utf8();
-                units.push(ShapedUnit::Replaced {
-                    node,
-                    size,
-                    range: offset..end,
-                    context: Rc::clone(&context),
-                });
+                match atomic {
+                    AtomicInline::Replaced(node, size) => units.push(ShapedUnit::Replaced {
+                        node,
+                        size,
+                        range: offset..end,
+                        context: Rc::clone(&context),
+                    }),
+                    AtomicInline::Combined(combined) => units.push(ShapedUnit::Combined {
+                        shaped: combined,
+                        range: offset..end,
+                        context: Rc::clone(&context),
+                    }),
+                }
                 previous_end = end;
                 continue;
             }
@@ -1218,12 +1837,12 @@ fn shape_chunk(
                         &shaped.sources,
                         glyph.cluster.clone(),
                     ),
-                    x: if run.writing_mode == amazing_text::WritingMode::HorizontalTb {
+                    x: if !run.writing_mode.is_vertical_flow() {
                         pen + glyph.offset_x
                     } else {
                         glyph.offset_x
                     },
-                    y: if run.writing_mode == amazing_text::WritingMode::HorizontalTb {
+                    y: if !run.writing_mode.is_vertical_flow() {
                         0.0
                     } else {
                         pen
@@ -1234,6 +1853,9 @@ fn shape_chunk(
                         offset_y: glyph.offset_y,
                         font_size: run.font_size,
                         writing_mode: run.writing_mode,
+                        orientation: glyph.orientation,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
                         variations: run.variations.clone(),
                         synthesis: run.synthesis,
                         color: colors
@@ -1241,11 +1863,7 @@ fn shape_chunk(
                             .cloned()
                             .unwrap_or_else(|| "black".into()),
                 });
-                pen += match run.writing_mode {
-                    amazing_text::WritingMode::HorizontalTb => glyph.advance_x.abs(),
-                    amazing_text::WritingMode::VerticalRl
-                    | amazing_text::WritingMode::VerticalLr => glyph.advance_y.abs(),
-                };
+                pen += inline_advance(run.writing_mode, glyph.advance_x, glyph.advance_y);
             }
         }
         finish_source_decoration(
@@ -1328,8 +1946,7 @@ enum TextUnit {
     },
     Atomic {
         offset: usize,
-        node: NodeIdx,
-        size: IntrinsicSize,
+        atomic: AtomicInline,
     },
     Break(usize),
 }
@@ -1338,7 +1955,7 @@ fn text_units(
     text: &str,
     spans: &[TextSpan],
     breaks: &[amazing_text::BreakOpportunity],
-    atomics: &HashMap<usize, (NodeIdx, IntrinsicSize)>,
+    atomics: &HashMap<usize, AtomicInline>,
 ) -> Vec<TextUnit> {
     let mut units = Vec::new();
     let mut segment_start = 0usize;
@@ -1372,7 +1989,7 @@ fn text_units(
 
 fn split_atomic_units(
     units: Vec<TextUnit>,
-    atomics: &HashMap<usize, (NodeIdx, IntrinsicSize)>,
+    atomics: &HashMap<usize, AtomicInline>,
 ) -> Vec<TextUnit> {
     let mut offsets = atomics.keys().copied().collect::<Vec<_>>();
     offsets.sort_unstable();
@@ -1401,8 +2018,10 @@ fn split_atomic_units(
                     break_kind: amazing_text::BreakKind::Allowed,
                 });
             }
-            let (node, size) = atomics[&offset];
-            expanded.push(TextUnit::Atomic { offset, node, size });
+            expanded.push(TextUnit::Atomic {
+                offset,
+                atomic: atomics[&offset].clone(),
+            });
             cursor = offset + '\u{fffc}'.len_utf8();
             offset_index += 1;
         }
@@ -1489,13 +2108,22 @@ fn advance_in_range(shaped: &amazing_text::ShapedParagraph, range: Range<usize>)
         .iter()
         .flat_map(|run| run.glyphs.iter().map(move |glyph| (run.writing_mode, glyph)))
         .filter(|(_, glyph)| range.contains(&glyph.cluster.start))
-        .map(|(writing_mode, glyph)| match writing_mode {
-            amazing_text::WritingMode::HorizontalTb => glyph.advance_x.abs(),
-            amazing_text::WritingMode::VerticalRl | amazing_text::WritingMode::VerticalLr => {
-                glyph.advance_y.abs()
-            }
+        .map(|(writing_mode, glyph)| {
+            inline_advance(writing_mode, glyph.advance_x, glyph.advance_y)
         })
         .sum()
+}
+
+fn inline_advance(
+    writing_mode: amazing_text::WritingMode,
+    advance_x: f32,
+    advance_y: f32,
+) -> f32 {
+    if writing_mode.is_vertical_flow() && advance_y != 0.0 {
+        advance_y.abs()
+    } else {
+        advance_x.abs()
+    }
 }
 
 fn source_range_for_cluster(
@@ -1550,6 +2178,7 @@ mod tests {
             source_mappings: (!t.is_empty())
                 .then_some(crate::TextSourceMapping {
                     text_range: 0..len,
+                    source: NodeIdx(99),
                     source_range: 0..len,
                 })
                 .into_iter()
@@ -1570,6 +2199,8 @@ mod tests {
             line_height: 20.0,
             ascent: 14.0,
             descent: 4.0,
+            vertical_ascent: 8.0,
+            vertical_descent: 8.0,
         }
     }
 

@@ -22,12 +22,13 @@ The first provider will pin this pure-Rust stack exactly in `Cargo.lock`:
 | OpenType shaping | HarfRust 0.13.2 | Safe Rust implementation maintained in the HarfBuzz organization and aligned with HarfBuzz behavior used by Blink and WebKit |
 | Font inspection and glyph rasterization | Swash 0.2.10 | Covers TrueType/CFF outlines, variations, OpenType/AAT shaping data, hinting, and color glyph rendering |
 | Bidirectional analysis | unicode-bidi 0.3.18 | Safe Rust implementation of Unicode Bidirectional Algorithm (UAX #9) |
+| Vertical glyph orientation | unicode-vo 0.1.0 | Safe Rust table lookup for Unicode Vertical_Orientation revision 17; provider types remain behind Amazing's owned contract |
 | Grapheme, word, and line boundaries | icu_segmenter 2.3.0 | Current Unicode segmentation with explicit CSS `line-break` and `word-break` tailoring |
 | WOFF/WOFF2 decoding | wuff 0.2.8 + brotli-decompressor 5.0.3 + flate2 1.1.9 | Pure Rust conversion to sfnt bytes; direct decoder pins let Amazing reject wuff's trusted output hint before allocation |
 
-The prototype must confirm the versions compile at Amazing's declared Rust
-1.89 MSRV before the exception is accepted. Dependency-internal unsafe is
-allowed only inside the reviewed provider graph; both first-party crates will
+The versions compile at Amazing's declared Rust 1.89 MSRV. `unicode-vo` declares
+no newer Rust requirement and forbids unsafe code. Dependency-internal unsafe
+is allowed only inside the reviewed provider graph; both first-party crates
 forbid unsafe code.
 
 Cosmic Text is useful reference code but is not the engine interface: it owns
