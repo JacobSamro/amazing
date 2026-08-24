@@ -2605,12 +2605,18 @@ fn render_surface(
     for warning in &media.warnings {
         eprintln!("amazing render: {warning}");
     }
-    let root =
-        amazing_layout::layout_dom_document_with_replaced(&dom.dom, &css, width, &fonts, &media);
+    let root = amazing_layout::layout_dom_document_with_replaced_in_viewport(
+        &dom.dom,
+        &css,
+        width,
+        fixed_height.map(|height| height as f32),
+        &fonts,
+        &media,
+    );
     let page_height = fixed_height.unwrap_or_else(|| {
         // Normal document rendering follows content height; WPT rendering
         // supplies a fixed viewport instead.
-        (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
+        amazing_layout::layout_overflow_bottom(&root)
             .ceil()
             .clamp(1.0, 8192.0) as u32
     });

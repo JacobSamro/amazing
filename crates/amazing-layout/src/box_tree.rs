@@ -1,7 +1,9 @@
 //! Box tree construction (CSS2.1 §9.2): classifies elements into block /
 //! inline boxes, resolves the top-down font-size chain, groups mixed
 //! block+inline content with anonymous blocks, and flattens inline
-//! subtrees (spans) into their parent's inline flow.
+//! subtrees (spans) into their parent's inline flow. Absolute/fixed descendants
+//! are retained separately so no formatting context treats them as in-flow
+//! children or items.
 //!
 //! Percentages and `em` lengths are NOT resolved here — margins, padding,
 //! borders and widths need the containing-block width, which exists only
@@ -69,7 +71,9 @@ fn build_element(
     let display = parse_display(&style);
     let mut box_ = LayoutBox::new(Some(idx), display, style, font_size, line_height);
     box_.replaced_size = replaced.intrinsic_size(idx);
-    box_.flow = classify_children(dom, styled, idx, font_size, fonts, replaced);
+    let classified = classify_children(dom, styled, idx, font_size, fonts, replaced);
+    box_.flow = classified.flow;
+    box_.positioned = classified.positioned;
     box_
 }
 
@@ -79,7 +83,17 @@ fn parse_display(style: &ComputedStyle) -> Display {
     match style.get("display") {
         Some(v) if v.eq_ignore_ascii_case("block")
             || v.eq_ignore_ascii_case("list-item")
-            || v.eq_ignore_ascii_case("table") =>
+            || v.eq_ignore_ascii_case("table")
+            || v.eq_ignore_ascii_case("inline-block")
+            || v.eq_ignore_ascii_case("inline-table")
+            || v.eq_ignore_ascii_case("table-caption")
+            || v.eq_ignore_ascii_case("table-row-group")
+            || v.eq_ignore_ascii_case("table-header-group")
+            || v.eq_ignore_ascii_case("table-footer-group")
+            || v.eq_ignore_ascii_case("table-row")
+            || v.eq_ignore_ascii_case("table-cell")
+            || v.eq_ignore_ascii_case("table-column-group")
+            || v.eq_ignore_ascii_case("table-column") =>
         {
             Display::Block
         },
@@ -99,6 +113,17 @@ fn parse_display(style: &ComputedStyle) -> Display {
 /// True when the element should not generate any box at all.
 fn is_display_none(style: &ComputedStyle) -> bool {
     style.get("display").is_some_and(|v| v.eq_ignore_ascii_case("none"))
+}
+
+fn is_out_of_flow(style: &ComputedStyle) -> bool {
+    style.get("position").is_some_and(|value| {
+        value.eq_ignore_ascii_case("absolute") || value.eq_ignore_ascii_case("fixed")
+    })
+}
+
+struct ClassifiedChildren {
+    flow: Flow,
+    positioned: Vec<LayoutBox>,
 }
 
 /// Collapses whitespace runs to single spaces per CSS text processing.
@@ -129,7 +154,7 @@ fn classify_children(
     font_size: f32,
     fonts: &FontSource,
     replaced: &dyn ReplacedElementProvider,
-) -> Flow {
+) -> ClassifiedChildren {
     // Flex/grid containers take every non-`none` element child as an ITEM
     // (css-flexbox-1 §3 / css-grid-1 §3 blockification); contiguous text
     // runs become one anonymous item each.
@@ -138,6 +163,7 @@ fn classify_children(
     if matches!(own_display, Display::Flex | Display::Grid) {
         let mut items: Vec<LayoutBox> = Vec::new();
         let mut run: Vec<InlineNode> = Vec::new();
+        let mut positioned = Vec::new();
         for child in dom.children(idx) {
             match &dom.get(child).kind {
                 NodeKind::Text { data } => {
@@ -154,21 +180,29 @@ fn classify_children(
                     if is_display_none(&child_style) {
                         continue;
                     }
+                    if is_out_of_flow(&child_style) {
+                        positioned.push(build_element(
+                            dom, styled, child, font_size, fonts, replaced,
+                        ));
+                        continue;
+                    }
                     flush_anonymous_into(&mut items, &mut run, font_size, fonts);
                     items.push(build_element(dom, styled, child, font_size, fonts, replaced));
                 },
             }
         }
         flush_anonymous_into(&mut items, &mut run, font_size, fonts);
-        return if own_display == Display::Grid {
+        let flow = if own_display == Display::Grid {
             Flow::Grid(items)
         } else {
             Flow::Flex(items)
         };
+        return ClassifiedChildren { flow, positioned };
     }
 
     let mut blocks: Vec<LayoutBox> = Vec::new();
     let mut inlines: Vec<InlineNode> = Vec::new();
+    let mut positioned = Vec::new();
 
     for child in dom.children(idx) {
         match &dom.get(child).kind {
@@ -187,6 +221,12 @@ fn classify_children(
                 let child_style = styled.get(child).cloned().unwrap_or_default();
                 if is_display_none(&child_style) {
                     continue; // no box, no descendants
+                }
+                if is_out_of_flow(&child_style) {
+                    positioned.push(build_element(
+                        dom, styled, child, font_size, fonts, replaced,
+                    ));
+                    continue;
                 }
                 match dom.name(child) {
                     // Void line-break element: emits a marker itself (it has
@@ -208,7 +248,7 @@ fn classify_children(
                     },
                     _ => flatten_inline(
                         dom, styled, child, child_style, font_size,
-                        &mut inlines, &mut blocks, fonts, replaced,
+                        &mut inlines, &mut blocks, &mut positioned, fonts, replaced,
                     ),
                 }
             },
@@ -220,11 +260,12 @@ fn classify_children(
     if !inlines.is_empty() && !blocks.is_empty() {
         flush_anonymous_into(&mut blocks, &mut inlines, font_size, fonts);
     }
-    match (blocks.is_empty(), inlines.is_empty()) {
+    let flow = match (blocks.is_empty(), inlines.is_empty()) {
         (true, true) => Flow::Empty,
         (true, false) => Flow::Inlines(inlines),
         (false, _) => Flow::Blocks(blocks),
-    }
+    };
+    ClassifiedChildren { flow, positioned }
 }
 
 /// Moves accumulated inline content into an anonymous block box whose strut
@@ -265,6 +306,7 @@ fn flatten_inline(
     parent_font_px: f32,
     inlines: &mut Vec<InlineNode>,
     blocks_out: &mut Vec<LayoutBox>,
+    positioned_out: &mut Vec<LayoutBox>,
     fonts: &FontSource,
     replaced: &dyn ReplacedElementProvider,
 ) {
@@ -285,6 +327,17 @@ fn flatten_inline(
             NodeKind::Element { .. } => {
                 let cs = styled.get(child).cloned().unwrap_or_default();
                 if is_display_none(&cs) {
+                    continue;
+                }
+                if is_out_of_flow(&cs) {
+                    positioned_out.push(build_element(
+                        dom,
+                        styled,
+                        child,
+                        parent_font_px,
+                        fonts,
+                        replaced,
+                    ));
                     continue;
                 }
                 match dom.name(child) {
@@ -311,7 +364,7 @@ fn flatten_inline(
                     },
                     _ => flatten_inline(
                         dom, styled, child, cs, font_size,
-                        inlines, blocks_out, fonts, replaced,
+                        inlines, blocks_out, positioned_out, fonts, replaced,
                     ),
                 }
             },

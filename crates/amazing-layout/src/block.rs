@@ -19,9 +19,25 @@ use crate::{Flow, LayoutBox, Rect};
 /// Lays out the root box (`<body>`) against the viewport. Returns the total
 /// page height (bottom edge of the root's margin box).
 pub fn layout_root(root: &mut LayoutBox, viewport_width: f32, fonts: &FontSource) -> f32 {
+    layout_root_in_viewport(root, viewport_width, None, fonts)
+}
+
+pub fn layout_root_in_viewport(
+    root: &mut LayoutBox,
+    viewport_width: f32,
+    viewport_height: Option<f32>,
+    fonts: &FontSource,
+) -> f32 {
     // Margins are applied inside layout_block — no pre-offset here.
     layout_block(root, 0.0, 0.0, viewport_width, fonts);
-    root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0)
+    let page_height = root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0);
+    crate::position::layout_positioned(
+        root,
+        viewport_width,
+        viewport_height.unwrap_or(page_height),
+        fonts,
+    );
+    page_height
 }
 
 /// Parent-side context for the first/last-child margin approximation.

@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "runs": [
+    {
+      "engine": "Blink",
+      "browser": "chrome",
+      "browser_version": "154.0.8016.0",
+      "wpt_fyi_run_id": 5182906107691008
+    },
+    {
+      "engine": "WebKit",
+      "browser": "safari",
+      "browser_version": "26.6 (21624.4.5.11.5)",
+      "wpt_fyi_run_id": 5141363439173632
+    }
+  ],
+  "tests": [
+    { "id": "css-position__position-absolute-semi-replaced-stretch-button.html", "blink": "pass", "webkit": "pass" },
+    { "id": "css-position__position-relative-table-tr-top.html", "blink": "pass", "webkit": "fail" },
+    { "id": "css-position__position-relative-table-caption.html", "blink": "pass", "webkit": "pass" },
+    { "id": "css-position__position-fixed-overflow-print.html", "blink": "pass", "webkit": "no-result" },
+    { "id": "css-position__position-absolute-root-element-flex.html", "blink": "pass", "webkit": "pass" },
+    { "id": "css-position__position-fixed-root-element-grid.html", "blink": "pass", "webkit": "pass" },
+    { "id": "css-position__position-relative-table-thead-left-absolute-child.html", "blink": "pass", "webkit": "fail" },
+    { "id": "css-position__position-relative-table-tr-left.html", "blink": "pass", "webkit": "fail" },
+    { "id": "css-position__position-absolute-large-negative-inset.html", "blink": "pass", "webkit": "pass" },
+    { "id": "css-position__position-relative-table-tfoot-left-absolute-child.html", "blink": "pass", "webkit": "fail" },
+    { "id": "css-position__position-relative-table-tfoot-top.html", "blink": "pass", "webkit": "fail" },
+    { "id": "css-position__sticky__position-sticky-rtl.html", "blink": "pass", "webkit": "fail" }
+  ],
+  "consensus_pass": 5,
+  "amazing_consensus_pass_before": 3,
+  "amazing_consensus_pass_after": 5
+}

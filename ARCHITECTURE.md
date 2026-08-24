@@ -97,6 +97,18 @@ its own border/background under the inherited clip, then non-visible overflow
 clips all descendant backgrounds, borders, glyphs, and images to its padding
 box. Layout does not mutate pixels, and paint does not reconstruct flow state.
 
+### 4c. Positioning is a second layout pass
+
+Box construction stores absolute/fixed descendants outside the normal `Flow`
+collection, so block, inline, Flex, and Grid implementations never need
+position-specific item exclusions. `layout_root` first establishes normal-flow
+geometry, then a single in-process positioning module shifts relative subtrees
+and lays out absolute/fixed boxes against the nearest positioned padding box or
+the viewport. A definite viewport block size is optional in ordinary document
+layout and mandatory for fixed-view WPT rendering. Paint, hit testing, region
+collection, dumps, and overflow traversal visit both child collections; only
+normal-flow sizing ignores the positioned collection.
+
 ### 5. unsafe policy
 
 No first-party `unsafe` outside platform-boundary modules (windowing FFI,

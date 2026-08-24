@@ -1,0 +1,61 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "schema": 1,
+  "selection": {
+    "kind": "ticket-3a-html-position",
+    "source": "geometry-manifest.json"
+  },
+  "sparse_paths": [
+    "css/css-position"
+  ],
+  "tests": [
+    {
+      "id": "css-position__position-absolute-semi-replaced-stretch-button.html",
+      "test": "css/css-position/position-absolute-semi-replaced-stretch-button.html"
+    },
+    {
+      "id": "css-position__position-relative-table-tr-top.html",
+      "test": "css/css-position/position-relative-table-tr-top.html"
+    },
+    {
+      "id": "css-position__position-relative-table-caption.html",
+      "test": "css/css-position/position-relative-table-caption.html"
+    },
+    {
+      "id": "css-position__position-fixed-overflow-print.html",
+      "test": "css/css-position/position-fixed-overflow-print.html"
+    },
+    {
+      "id": "css-position__position-absolute-root-element-flex.html",
+      "test": "css/css-position/position-absolute-root-element-flex.html"
+    },
+    {
+      "id": "css-position__position-fixed-root-element-grid.html",
+      "test": "css/css-position/position-fixed-root-element-grid.html"
+    },
+    {
+      "id": "css-position__position-relative-table-thead-left-absolute-child.html",
+      "test": "css/css-position/position-relative-table-thead-left-absolute-child.html"
+    },
+    {
+      "id": "css-position__position-relative-table-tr-left.html",
+      "test": "css/css-position/position-relative-table-tr-left.html"
+    },
+    {
+      "id": "css-position__position-absolute-large-negative-inset.html",
+      "test": "css/css-position/position-absolute-large-negative-inset.html"
+    },
+    {
+      "id": "css-position__position-relative-table-tfoot-left-absolute-child.html",
+      "test": "css/css-position/position-relative-table-tfoot-left-absolute-child.html"
+    },
+    {
+      "id": "css-position__position-relative-table-tfoot-top.html",
+      "test": "css/css-position/position-relative-table-tfoot-top.html"
+    },
+    {
+      "id": "css-position__sticky__position-sticky-rtl.html",
+      "test": "css/css-position/sticky/position-sticky-rtl.html"
+    }
+  ]
+}

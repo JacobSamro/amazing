@@ -11,7 +11,7 @@
 | 0 — skeleton | ✅ done, all exit criteria met on win-001 |
 | 1 — HTML parser | ✅ milestone exit criteria met; expanded html5lib/WPT tree subset 243/243, broader conformance gaps tracked |
 | 2 — CSS | ✅ parser/cascade/computed-value core green on win-001 (52 CSS tests; Variables WPT shard 12/12) |
-| 3 — Layout | ✅ 80 tests green on win-001; upstream HTML block-collapse shard 9/9 (baseline 6/9) |
+| 3 — Layout | ✅ 91 tests green on win-001; block-collapse 9/9 and Position 9/12 (baseline 5/12) |
 | 3.5 — Flexbox | ✅ done on win-001 (13 flex tests; row/column/wrap/grow/shrink/justify/align/gaps/auto-margins/order) |
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (52 paint tests; inherited overflow clips); `render` demo writes BMP+PPM |
@@ -20,7 +20,7 @@
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
 | 9 — Media | ✅ 47-subphase stretch milestone includes live Chromium DTLS-SRTP video |
-| 10 — Render conformance | 🟨 XHTML-safe cascade 33/26/13; HTML geometry 35/26; block-collapse 9/9; positioned layout next |
+| 10 — Render conformance | 🟨 XHTML-safe cascade 33/26/13; HTML geometry 38/23; Position consensus 5/5; text pipeline next |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).

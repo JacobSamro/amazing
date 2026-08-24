@@ -641,14 +641,15 @@ fn render_dom_with_resources(
     document_url: Option<&str>,
 ) -> (Surface, Vec<LinkRegion>, Vec<ControlRegion>) {
     let fonts = load_ui_font();
-    let root = amazing_layout::layout_dom_document_with_replaced(
+    let root = amazing_layout::layout_dom_document_with_replaced_in_viewport(
         dom,
         css,
         VIEWPORT_WIDTH as f32,
+        Some(VIEWPORT_HEIGHT as f32),
         &fonts,
         resources,
     );
-    let page_height = layout_bottom(&root)
+    let page_height = amazing_layout::layout_overflow_bottom(&root)
         .ceil()
         .clamp(VIEWPORT_HEIGHT as f32, 8192.0) as u32;
     let glyphs = OutlineGlyphProvider::new(&fonts);
@@ -735,6 +736,9 @@ fn collect_link_regions(
             amazing_layout::Flow::Inlines(_) | amazing_layout::Flow::Empty => &[],
         };
         for child in children {
+            walk(dom, child, document_url, regions);
+        }
+        for child in &layout.positioned {
             walk(dom, child, document_url, regions);
         }
     }
@@ -876,6 +880,9 @@ fn collect_control_regions(
         for child in children {
             walk(dom, child, document_url, controls);
         }
+        for child in &layout.positioned {
+            walk(dom, child, document_url, controls);
+        }
     }
 
     let mut controls = Vec::new();
@@ -895,23 +902,6 @@ fn encode_form_component(value: &str) -> String {
         }
     }
     encoded
-}
-
-fn layout_bottom(layout: &amazing_layout::LayoutBox) -> f32 {
-    let mut bottom = layout.border_box.y + layout.border_box.h;
-    for line in &layout.lines {
-        bottom = bottom.max(line.y_top + line.height);
-    }
-    let children = match &layout.flow {
-        amazing_layout::Flow::Blocks(children)
-        | amazing_layout::Flow::Flex(children)
-        | amazing_layout::Flow::Grid(children) => children.as_slice(),
-        amazing_layout::Flow::Inlines(_) | amazing_layout::Flow::Empty => &[],
-    };
-    for child in children {
-        bottom = bottom.max(layout_bottom(child));
-    }
-    bottom
 }
 
 fn collect_inline_styles(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut String) {
@@ -1566,6 +1556,29 @@ mod tests {
                 )
                 .map(|(_, target)| target),
             Some("https://example.test/next.html"),
+        );
+    }
+
+    #[test]
+    fn positioned_links_remain_interactive() {
+        let dom = amazing_html::parse("<a href=/next style='position:absolute;left:20px;top:30px;width:80px;height:20px'>Next</a>");
+        let viewport = EngineViewport::from_dom_with_resources(
+            &dom,
+            "",
+            &PageResources::default(),
+            Some("https://example.test/current"),
+        );
+        let region = viewport.links.first().expect("positioned link region");
+        assert!(region.x >= 20.0, "region x={}", region.x);
+        assert!(region.y >= 30.0, "region y={}", region.y);
+        assert_eq!(
+            viewport
+                .link_hit_at(
+                    region.x + region.width / 2.0,
+                    region.y + region.height / 2.0,
+                )
+                .map(|(_, target)| target),
+            Some("https://example.test/next"),
         );
     }
 

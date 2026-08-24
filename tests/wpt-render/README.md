@@ -60,3 +60,9 @@ The committed `geometry-*` files preserve its 61-case broad diagnostic. The
 nine-case `block-collapse-manifest.json` is the ticket gate;
 `block-collapse-results.json` records 6/9 → 9/9 repeat-stable evidence and
 `block-collapse-oracles.json` records exact-revision Blink/WebKit outcomes.
+
+Ticket #3a uses `position-manifest.json`, the unchanged 12-case Position
+projection of the geometry manifest. `position-results.json` records the
+repeat-stable 5/12 → 9/12 result; `position-oracles.json` records the 3/5 → 5/5
+Blink/WebKit-consensus result, and `geometry-results-positioned.json` records
+the broad 35/61 → 38/61 movement.

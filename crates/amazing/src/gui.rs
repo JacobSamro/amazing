@@ -505,6 +505,7 @@ mod windows {
 
         fn repaint_runtime(&mut self) {
             let width = self.width;
+            let viewport_height = self.viewport_height.max(1) as f32;
             let page = self.tab().current_url().unwrap_or("").to_owned();
             let tab = self.tab_mut();
             let Some(runtime) = tab.runtime.as_mut() else {
@@ -522,17 +523,17 @@ mod windows {
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
             }
-            let layout = amazing_layout::layout_dom_document_with_replaced(
+            let layout = amazing_layout::layout_dom_document_with_replaced_in_viewport(
                 &host_ref.dom,
                 &css,
                 width.max(1) as f32,
+                Some(viewport_height),
                 &fonts,
                 &media,
             );
-            let height =
-                (layout.border_box.y + layout.border_box.h + layout.margin.bottom.unwrap_or(0.0))
-                    .ceil()
-                    .clamp(1.0, 8192.0) as u32;
+            let height = amazing_layout::layout_overflow_bottom(&layout)
+                .ceil()
+                .clamp(1.0, 8192.0) as u32;
             let surface = amazing_paint::paint_document_with_resources(
                 &layout,
                 width.max(1),
@@ -728,20 +729,23 @@ mod windows {
     }
 
     fn hit_test(layout: &LayoutBox, x: f32, y: f32) -> Option<NodeIdx> {
-        let rect = layout.border_box;
-        if x < rect.x || y < rect.y || x >= rect.x + rect.w || y >= rect.y + rect.h {
-            return None;
-        }
-        let children: &[LayoutBox] = match &layout.flow {
-            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children,
-            Flow::Inlines(_) | Flow::Empty => &[],
+        let mut children: Vec<&LayoutBox> = match &layout.flow {
+            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
+                children.iter().collect()
+            },
+            Flow::Inlines(_) | Flow::Empty => Vec::new(),
         };
+        children.extend(layout.positioned.iter());
+        children.sort_by_key(|child| child.node.map(|node| node.0).unwrap_or(0));
         for child in children.iter().rev() {
             if let Some(node) = hit_test(child, x, y) {
                 return Some(node);
             }
         }
-        layout.node
+        let rect = layout.border_box;
+        (x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h)
+            .then_some(layout.node)
+            .flatten()
     }
 
     fn wide(value: &str) -> Vec<u16> {
@@ -955,14 +959,15 @@ mod windows {
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");
         }
-        let root = amazing_layout::layout_dom_document_with_replaced(
+        let root = amazing_layout::layout_dom_document_with_replaced_in_viewport(
             &host_ref.dom,
             &css,
             width.max(1) as f32,
+            Some(700.0),
             &fonts,
             &media,
         );
-        let height = (root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0))
+        let height = amazing_layout::layout_overflow_bottom(&root)
             .ceil()
             .clamp(1.0, 8192.0) as u32;
         let surface = amazing_paint::paint_document_with_resources(
@@ -1472,6 +1477,12 @@ mod windows {
             children
                 .iter()
                 .find_map(|child| find_layout_box(child, node))
+                .or_else(|| {
+                    layout
+                        .positioned
+                        .iter()
+                        .find_map(|child| find_layout_box(child, node))
+                })
         }
 
         #[test]

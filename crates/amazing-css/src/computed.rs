@@ -101,6 +101,8 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "border-top-color", initial: "currentcolor", inherited: false },
     PropertyMetadata { name: "border-top-style", initial: "none", inherited: false },
     PropertyMetadata { name: "border-top-width", initial: "medium", inherited: false },
+    PropertyMetadata { name: "bottom", initial: "auto", inherited: false },
+    PropertyMetadata { name: "box-sizing", initial: "content-box", inherited: false },
     PropertyMetadata { name: "caption-side", initial: "top", inherited: true },
     PropertyMetadata { name: "clear", initial: "none", inherited: false },
     PropertyMetadata { name: "color", initial: "black", inherited: true },
@@ -134,6 +136,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "justify-items", initial: "legacy", inherited: false },
     PropertyMetadata { name: "justify-self", initial: "auto", inherited: false },
     PropertyMetadata { name: "letter-spacing", initial: "normal", inherited: true },
+    PropertyMetadata { name: "left", initial: "auto", inherited: false },
     PropertyMetadata { name: "line-height", initial: "normal", inherited: true },
     PropertyMetadata { name: "list-style-image", initial: "none", inherited: true },
     PropertyMetadata { name: "list-style-position", initial: "outside", inherited: true },
@@ -156,11 +159,13 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "padding-top", initial: "0", inherited: false },
     PropertyMetadata { name: "position", initial: "static", inherited: false },
     PropertyMetadata { name: "quotes", initial: "auto", inherited: true },
+    PropertyMetadata { name: "right", initial: "auto", inherited: false },
     PropertyMetadata { name: "row-gap", initial: "normal", inherited: false },
     PropertyMetadata { name: "text-align", initial: "start", inherited: true },
     PropertyMetadata { name: "text-decoration", initial: "none", inherited: false },
     PropertyMetadata { name: "text-indent", initial: "0", inherited: true },
     PropertyMetadata { name: "text-transform", initial: "none", inherited: true },
+    PropertyMetadata { name: "top", initial: "auto", inherited: false },
     PropertyMetadata { name: "unicode-bidi", initial: "normal", inherited: false },
     PropertyMetadata { name: "vertical-align", initial: "baseline", inherited: false },
     PropertyMetadata { name: "visibility", initial: "visible", inherited: true },
@@ -208,6 +213,16 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 })
                 .collect()
         },
+        "inset" if !parts.is_empty() => SIDES
+            .iter()
+            .enumerate()
+            .map(|(index, side)| {
+                (
+                    (*side).to_owned(),
+                    parts[replicate_index(parts.len(), index)].to_owned(),
+                )
+            })
+            .collect(),
         "border" if !parts.is_empty() => {
             let mut width = "medium";
             let mut style = "none";

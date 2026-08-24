@@ -4,7 +4,7 @@ Canonical sequence for moving Amazing's style → layout → paint pipeline towa
 standards conformance. Resolve one ticket, verify its exit criteria on
 `win-001`, record measured results, then stop at the phase boundary for review.
 
-Frontier: **#3a — positioned and out-of-flow layout**
+Frontier: **#4 — standards-grade text pipeline**
 
 ## Evidence contract (resolved)
 
@@ -27,10 +27,12 @@ Frontier: **#3a — positioned and out-of-flow layout**
   at the same revision (corrected baseline **23/36/13**).
 - Variables shard: **12/12 pass** (baseline 0/12), matching the exact-revision
   Blink/WebKit consensus.
-- HTML-only geometry corpus: **35 pass / 26 mismatch**; focused signed-margin,
+- HTML-only geometry corpus: **38 pass / 23 mismatch**; focused signed-margin,
   min/max-height, and collapse-through family: **9/9** (baseline 6/9).
+- HTML Position shard: **9/12** (baseline 5/12), including **5/5** in the
+  exact-revision Blink/WebKit consensus subset.
 - Existing curated CSS2 geometry subset: **17/17**.
-- Existing feature regressions: **13 flex**, **16 grid**, **80 layout unit
+- Existing feature regressions: **13 flex**, **16 grid**, **91 layout unit
   tests**, and **52 paint unit tests**.
 - These numbers establish regression coverage only; they do not establish
   compatibility with Blink, WebKit, or the broader web platform.
@@ -197,7 +199,7 @@ raising paint to 52 tests. Full methodology and evidence are in
 
 Blocked by: #3
 Type: Prototype
-Status: ⬜ Pending
+Status: ✅ Resolved
 
 ### Question
 
@@ -219,13 +221,35 @@ and place fixed descendants against the viewport?
 
 ### Answer
 
-Pending.
+The throwaway prototype validated separate normal/out-of-flow child collections
+and one post-normal-flow positioning pass, then was deleted. Box construction
+now removes absolute/fixed descendants before block, inline, Flex, or Grid
+layout. The positioning module shifts relative subtrees without moving sibling
+slots, selects the nearest positioned padding box or fixed viewport, resolves
+fixed/percentage/negative insets, stretches auto sizes under dual insets,
+honors LTR/RTL over-constraint precedence, and preserves block static anchors.
+Inline-block and table roles are blockified so positioned containers are not
+lost while full atomic-inline/table layout remains deferred.
+
+Ten positioning regressions plus a scrollable-overflow test raise layout to 91
+tests. Paint/dump traversals, Win32 hit testing, GPUI link/control regions, and
+document overflow all visit positioned children; fixed boxes do not extend
+page height. WPT, GPUI, and Win32 pass a definite viewport height for fixed
+positioning, and a 43rd GPUI test proves positioned links remain interactive.
+
+The fixed HTML Position shard moved from 5/12 to 9/12 and is repeat-hash
+stable. Four mismatches became exact passes; Amazing moved from 3/5 to 5/5 in
+the Blink/WebKit-consensus subset. The broad geometry corpus moved from 35/26
+to 38/23 while the block-collapse family stayed 9/9. One former inert
+`display:contents` pass now exposes that missing unboxing behavior. Evidence is
+in `docs/render/POSITIONING_BASELINE.md` and
+`tests/wpt-render/position-results.json`.
 
 ## #4: Standards-grade text pipeline
 
 Blocked by: #1, #3a
 Type: Research
-Status: 🌫️ Fog
+Status: ⬜ Pending
 
 ### Question
 

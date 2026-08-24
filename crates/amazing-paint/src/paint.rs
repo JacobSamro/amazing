@@ -21,6 +21,8 @@
 //! - non-`visible` overflow clips descendant backgrounds, borders, text, and
 //!   images to the ancestor padding box, with nested clip intersection
 //! - flex children paint in flow order exactly like block children
+//! - normal and positioned child boxes paint in DOM order (before full
+//!   stacking-context/z-index ordering lands)
 //!
 //! # Deferred / deviations
 //!
@@ -171,14 +173,18 @@ fn paint_box(
         descendant_clip,
     );
 
-    // Children come AFTER this box's own painting (painter's algorithm).
-    match &box_.flow {
+    // Positioned descendants and in-flow children share document-order
+    // painting while z-index/stacking contexts remain deferred.
+    let mut children: Vec<&LayoutBox> = match &box_.flow {
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
-            for child in children {
-                paint_box(surface, child, fonts, glyphs, images, descendant_clip);
-            }
+            children.iter().collect()
         },
-        Flow::Inlines(_) | Flow::Empty => {},
+        Flow::Inlines(_) | Flow::Empty => Vec::new(),
+    };
+    children.extend(box_.positioned.iter());
+    children.sort_by_key(|child| child.node.map(|node| node.0).unwrap_or(0));
+    for child in children {
+        paint_box(surface, child, fonts, glyphs, images, descendant_clip);
     }
 }
 

@@ -30,17 +30,19 @@ Box, Display, Inline, Position, and Sizing:
 |---|---:|---:|---:|---:|---:|
 | CSS2 | 11,323 | 6,268 | 120 | 12 | 9 / 3 |
 | Box | 179 | 70 | 20 | 12 | 7 / 5 |
-| Display | 390 | 213 | 34 | 12 | 6 / 6 |
+| Display | 390 | 213 | 34 | 12 | 5 / 7 |
 | Inline | 393 | 179 | 1 | 1 | 1 / 0 |
-| Position | 485 | 251 | 32 | 12 | 5 / 7 |
+| Position | 485 | 251 | 32 | 12 | 9 / 3 |
 | Sizing | 885 | 562 | 82 | 12 | 7 / 5 |
-| **Total** | **13,655** | **7,543** | **289** | **61** | **35 / 26** |
+| **Total** | **13,655** | **7,543** | **289** | **61** | **38 / 23** |
 
-The broad hash-ranked corpus was 36/25 before the change and 35/26 after. The
-single change is a former inert pass for inline-table overflow which now
-exposes unsupported table-wrapper clipping. None of the focused margin tests
-were selected by the broad hash projection, so that count is diagnostic debt,
-not the ticket exit gate.
+The broad hash-ranked corpus was 36/25 before ticket #3, 35/26 after its
+margin/clip work, and 38/23 after ticket #3a positioned layout. Ticket #3
+exposed one former inert inline-table overflow pass; ticket #3a fixed four
+Position cases and exposed one former inert `display:contents` out-of-flow
+pass. None of the focused margin tests were selected by the broad hash
+projection, so this count remains diagnostic debt rather than either focused
+ticket's exit gate. See `docs/render/POSITIONING_BASELINE.md`.
 
 ## Focused block-collapse family
 

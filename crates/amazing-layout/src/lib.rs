@@ -17,6 +17,10 @@
 //!   images whose intrinsic height can grow a line box
 //! - anonymous block boxes for block/inline mixed content (§9.2.1), with
 //!   block descendants hoisted out of inline wrappers in document order
+//! - post-normal-flow positioning: relative subtree offsets; absolute/fixed
+//!   descendants excluded from block/Flex/Grid sizing; nearest positioned
+//!   padding-box and viewport containing blocks; fixed/percentage/negative
+//!   insets, dual-inset stretching, and LTR/RTL over-constraint selection
 //! - box model: margin/padding/border shorthand + longhand resolution,
 //!   `border: w s c` shorthand, thin/medium/thick keywords, none/hidden
 //!   zeroing; px/pt/pc/in/cm/mm/em/rem/%/unitless-0 lengths
@@ -25,14 +29,16 @@
 //!   (real TTF metrics when a font is supplied, heuristic fallback otherwise)
 //!
 //! Deferred/deviations (documented, revisit in later phases):
-//! - floats, absolute/fixed positioning, z-index: not implemented
+//! - floats, sticky constraints, z-index/stacking contexts, transforms as
+//!   containing-block creators, and exact inline/Flex/Grid static-position
+//!   rectangles are not implemented
 //! - parent/child margin propagation is approximated: a first child's
 //!   margin-top shrinks against the parent's margin-top by
 //!   `max(0, child − parent)` inside the parent (the collapsed excess does
 //!   not propagate above the parent's border edge); sibling signed collapse
 //!   and direct empty-block collapse-through are modeled
-//! - inline-block/inline-table are flattened like inline elements;
-//!   `list-item` renders as block without markers
+//! - inline-block/inline-table and table-internal roles are blockified rather
+//!   than atomic-inline/table-formatted; `list-item` renders without markers
 //! - no min/max-width clamping or intrinsic width keywords, no `box-sizing`
 //!   (content-box always), no text-align beyond left
 //! - text-only line boxes use the block's strut (font + line-height);
@@ -60,6 +66,7 @@ pub mod flex;
 pub mod font;
 pub mod grid;
 pub mod inline;
+pub mod position;
 pub mod values;
 
 use amazing_css::ComputedStyle;
@@ -122,6 +129,9 @@ pub struct LayoutBox {
     pub font_size: f32,
     pub line_height: f32,
     pub flow: Flow,
+    /// Absolute/fixed descendants removed from this box's formatting context.
+    /// They are laid out by the post-normal-flow positioning pass.
+    pub positioned: Vec<LayoutBox>,
     /// Intrinsic dimensions when this box itself is replaced content.
     pub replaced_size: Option<IntrinsicSize>,
 
@@ -148,6 +158,7 @@ impl LayoutBox {
             font_size,
             line_height,
             flow: Flow::Empty,
+            positioned: Vec::new(),
             replaced_size: None,
             margin: values::SidesM::default(),
             padding: values::Sides::default(),
@@ -251,6 +262,26 @@ pub fn layout_dom_document(
     )
 }
 
+/// Lays out a live DOM with an optional definite viewport block size. Fixed
+/// positioning uses this height; ordinary document layout may leave it
+/// indefinite and fall back to the normal-flow page height.
+pub fn layout_dom_document_in_viewport(
+    dom: &amazing_dom::Dom,
+    author_css: &str,
+    viewport_width: f32,
+    viewport_height: Option<f32>,
+    fonts: &font::FontSource,
+) -> LayoutBox {
+    layout_dom_document_with_replaced_in_viewport(
+        dom,
+        author_css,
+        viewport_width,
+        viewport_height,
+        fonts,
+        &NoReplacedElements,
+    )
+}
+
 /// Lays out a live DOM while consulting an adapter for replaced content.
 pub fn layout_dom_document_with_replaced(
     dom: &amazing_dom::Dom,
@@ -259,11 +290,58 @@ pub fn layout_dom_document_with_replaced(
     fonts: &font::FontSource,
     replaced: &dyn ReplacedElementProvider,
 ) -> LayoutBox {
+    layout_dom_document_with_replaced_in_viewport(
+        dom,
+        author_css,
+        viewport_width,
+        None,
+        fonts,
+        replaced,
+    )
+}
+
+pub fn layout_dom_document_with_replaced_in_viewport(
+    dom: &amazing_dom::Dom,
+    author_css: &str,
+    viewport_width: f32,
+    viewport_height: Option<f32>,
+    fonts: &font::FontSource,
+    replaced: &dyn ReplacedElementProvider,
+) -> LayoutBox {
     let sheet = amazing_css::parse_stylesheet(author_css);
     let styled = amazing_css::compute(&dom, &[sheet]);
     let mut root = box_tree::build_layout_tree_with_replaced(&dom, &styled, fonts, replaced);
-    block::layout_root(&mut root, viewport_width, fonts);
+    block::layout_root_in_viewport(&mut root, viewport_width, viewport_height, fonts);
     root
+}
+
+/// Bottom edge of scrollable layout overflow. Absolute descendants contribute;
+/// fixed descendants stay viewport-attached and do not extend document height.
+pub fn layout_overflow_bottom(layout: &LayoutBox) -> f32 {
+    let mut bottom = layout.border_box.y
+        + layout.border_box.h
+        + layout.margin.bottom.unwrap_or(0.0);
+    for line in &layout.lines {
+        bottom = bottom.max(line.y_top + line.height);
+    }
+    match &layout.flow {
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
+            for child in children {
+                bottom = bottom.max(layout_overflow_bottom(child));
+            }
+        },
+        Flow::Inlines(_) | Flow::Empty => {},
+    }
+    for child in &layout.positioned {
+        let fixed = child
+            .style
+            .get("position")
+            .is_some_and(|value| value.eq_ignore_ascii_case("fixed"));
+        if !fixed {
+            bottom = bottom.max(layout_overflow_bottom(child));
+        }
+    }
+    bottom
 }
 
 /// Recursively prints the layout tree (demo output for `amazing layout`).
@@ -330,6 +408,9 @@ fn dump_rec(dom: &amazing_dom::Dom, b: &LayoutBox, depth: usize, out: &mut Strin
             }
         },
         Flow::Inlines(_) | Flow::Empty => {},
+    }
+    for child in &b.positioned {
+        dump_rec(dom, child, depth + 1, out);
     }
 }
 
