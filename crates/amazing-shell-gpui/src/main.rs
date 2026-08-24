@@ -5,11 +5,12 @@ mod engine_viewport;
 mod playback_clock;
 mod secure_video;
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui::{
     App, Bounds, ClipboardItem, Context, CursorStyle, FocusHandle, IntoElement, KeyBinding,
-    KeyDownEvent, ParentElement, Render, SharedString, Styled, Window, WindowBounds,
+    KeyDownEvent, ParentElement, Render, RenderImage, SharedString, Styled, Window, WindowBounds,
     WindowControlArea, WindowOptions, actions, div, img, prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
@@ -73,6 +74,7 @@ struct Tab {
     group: TabGroup,
     open: bool,
     bookmarked: bool,
+    favicon: Option<Arc<RenderImage>>,
     viewport: Option<EngineViewport>,
     history: Vec<String>,
     history_index: usize,
@@ -102,6 +104,7 @@ impl Tab {
             group: spec.group,
             open: true,
             bookmarked: false,
+            favicon: None,
             viewport,
             history: vec![spec.url.into()],
             history_index: 0,
@@ -479,9 +482,19 @@ impl BrowserShell {
     }
 
     fn load_navigation(&mut self, address: &str) {
-        let (viewport, final_address) = match EngineViewport::load_address(address) {
-            Ok((viewport, final_address)) => (viewport, final_address),
-            Err(error) => (EngineViewport::error(address, &error), address.to_string()),
+        let (viewport, final_address, title, favicon) = match EngineViewport::load_address(address) {
+            Ok(page) => (
+                page.viewport,
+                page.final_address,
+                page.title,
+                page.favicon,
+            ),
+            Err(error) => (
+                EngineViewport::error(address, &error),
+                address.to_string(),
+                None,
+                None,
+            ),
         };
         self.address = final_address.clone();
         self.committed_address = final_address.clone();
@@ -489,8 +502,9 @@ impl BrowserShell {
         tab.url = final_address.clone();
         tab.kind = TabKind::Engine;
         tab.viewport = Some(viewport);
-        tab.title = navigation_title(&final_address);
+        tab.title = title.unwrap_or_else(|| navigation_title(&final_address));
         tab.mono = site_initial(&final_address).to_string();
+        tab.favicon = favicon;
         self.address_selected = false;
     }
 
@@ -719,6 +733,27 @@ impl BrowserShell {
     fn tab(&self, index: usize, cx: &mut Context<Self>) -> gpui::AnyElement {
         let tab = self.tabs[index].clone();
         let active = self.active == index;
+        let favicon = if let Some(image) = tab.favicon.clone() {
+            div()
+                .size(px(16.0))
+                .overflow_hidden()
+                .rounded_sm()
+                .child(img(image).size_full())
+                .into_any_element()
+        } else {
+            div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .size(px(16.0))
+                .rounded_sm()
+                .bg(rgb(tab.hue))
+                .text_color(rgb(0xffffff))
+                .text_size(px(9.0))
+                .font_weight(gpui::FontWeight::BOLD)
+                .child(tab.mono.clone())
+                .into_any_element()
+        };
         div()
             .id(SharedString::from(format!("tab-{index}")))
             .flex()
@@ -737,19 +772,7 @@ impl BrowserShell {
                 this.select_tab(index);
                 cx.notify();
             }))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .size(px(16.0))
-                    .rounded_sm()
-                    .bg(rgb(tab.hue))
-                    .text_color(rgb(0xffffff))
-                    .text_size(px(9.0))
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .child(tab.mono),
-            )
+            .child(favicon)
             .child(
                 div()
                     .flex_1()
@@ -1000,6 +1023,26 @@ impl BrowserShell {
     fn sidebar_tab(&self, index: usize, cx: &mut Context<Self>) -> gpui::AnyElement {
         let active = self.active == index;
         let tab = self.tabs[index].clone();
+        let favicon = if let Some(image) = tab.favicon.clone() {
+            div()
+                .size(px(15.0))
+                .overflow_hidden()
+                .rounded_sm()
+                .child(img(image).size_full())
+                .into_any_element()
+        } else {
+            div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .size(px(15.0))
+                .rounded_sm()
+                .bg(rgb(tab.hue))
+                .text_color(rgb(0xffffff))
+                .text_size(px(8.0))
+                .child(tab.mono.clone())
+                .into_any_element()
+        };
         div()
             .id(SharedString::from(format!("side-tab-{index}")))
             .flex()
@@ -1014,18 +1057,7 @@ impl BrowserShell {
                 this.select_tab(index);
                 cx.notify();
             }))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .size(px(15.0))
-                    .rounded_sm()
-                    .bg(rgb(tab.hue))
-                    .text_color(rgb(0xffffff))
-                    .text_size(px(8.0))
-                    .child(tab.mono),
-            )
+            .child(favicon)
             .child(
                 div()
                     .min_w_0()
@@ -1716,6 +1748,26 @@ impl Render for BrowserShell {
         let active_title = active.title.clone();
         let active_mono = active.mono.clone();
         let active_hue = active.hue;
+        let active_icon = if let Some(image) = active.favicon.clone() {
+            div()
+                .size(px(17.0))
+                .overflow_hidden()
+                .rounded_sm()
+                .child(img(image).size_full())
+                .into_any_element()
+        } else {
+            div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .size(px(17.0))
+                .rounded_sm()
+                .bg(rgb(active_hue))
+                .text_color(rgb(0xffffff))
+                .text_size(px(9.0))
+                .child(active_mono)
+                .into_any_element()
+        };
         let sidebar = self.sidebar;
         div()
             .id("browser-shell")
@@ -1892,18 +1944,7 @@ impl Render for BrowserShell {
                                 .px_2()
                                 .rounded_t_lg()
                                 .bg(rgb(SURFACE))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .size(px(17.0))
-                                        .rounded_sm()
-                                        .bg(rgb(active_hue))
-                                        .text_color(rgb(0xffffff))
-                                        .text_size(px(9.0))
-                                        .child(active_mono),
-                                )
+                                .child(active_icon)
                                 .child(
                                     div()
                                         .min_w_0()

@@ -126,6 +126,13 @@ pub struct EngineViewport {
     pub height: u32,
 }
 
+pub struct LoadedPage {
+    pub viewport: EngineViewport,
+    pub final_address: String,
+    pub title: Option<String>,
+    pub favicon: Option<Arc<RenderImage>>,
+}
+
 impl EngineViewport {
     pub fn demo() -> Self {
         Self::from_document(DEMO_HTML, DEMO_CSS)
@@ -135,12 +142,22 @@ impl EngineViewport {
         Self::from_document(NEW_TAB_HTML, NEW_TAB_CSS)
     }
 
-    pub fn load_address(address: &str) -> Result<(Self, String), String> {
+    pub fn load_address(address: &str) -> Result<LoadedPage, String> {
         if address == "amazing://status" {
-            return Ok((Self::demo(), address.to_string()));
+            return Ok(LoadedPage {
+                viewport: Self::demo(),
+                final_address: address.to_string(),
+                title: Some("Amazing — Phase 9 status".into()),
+                favicon: None,
+            });
         }
         if address == "amazing://newtab" {
-            return Ok((Self::new_tab(), address.to_string()));
+            return Ok(LoadedPage {
+                viewport: Self::new_tab(),
+                final_address: address.to_string(),
+                title: Some("New tab".into()),
+                favicon: None,
+            });
         }
         let options = FetchOptions {
             timeout: std::time::Duration::from_secs(3),
@@ -159,10 +176,14 @@ impl EngineViewport {
         let dom = amazing_html::parse(&html);
         let css = load_document_styles(&dom, &final_address, &options);
         let resources = load_page_resources(&dom, &final_address, &options);
-        Ok((
-            Self::from_dom_with_resources(&dom, &css, &resources),
+        let title = document_title(&dom);
+        let favicon = load_favicon(&dom, &final_address, &options);
+        Ok(LoadedPage {
+            viewport: Self::from_dom_with_resources(&dom, &css, &resources),
             final_address,
-        ))
+            title,
+            favicon,
+        })
     }
 
     pub fn error(address: &str, error: &str) -> Self {
@@ -555,6 +576,72 @@ fn decode_web_image(bytes: &[u8]) -> Option<amazing_media::Image> {
     })
 }
 
+fn document_title(dom: &amazing_dom::Dom) -> Option<String> {
+    fn find(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx) -> Option<String> {
+        if dom.name(node) == Some("title") {
+            let mut title = String::new();
+            for child in dom.children(node) {
+                if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
+                    title.push_str(data);
+                }
+            }
+            let normalized = title.split_whitespace().collect::<Vec<_>>().join(" ");
+            return (!normalized.is_empty()).then_some(normalized);
+        }
+        dom.children(node).find_map(|child| find(dom, child))
+    }
+    find(dom, amazing_dom::NodeIdx(0))
+}
+
+fn load_favicon(
+    dom: &amazing_dom::Dom,
+    document_url: &str,
+    options: &FetchOptions,
+) -> Option<Arc<RenderImage>> {
+    fn explicit_icon_href(
+        dom: &amazing_dom::Dom,
+        node: amazing_dom::NodeIdx,
+    ) -> Option<String> {
+        if dom.name(node) == Some("link")
+            && let Some(attrs) = dom.attrs_of(node)
+        {
+            let is_icon = attrs
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("rel"))
+                .is_some_and(|(_, value)| {
+                    value
+                        .split_ascii_whitespace()
+                        .any(|token| token.eq_ignore_ascii_case("icon"))
+                });
+            if is_icon
+                && let Some((_, href)) = attrs
+                    .iter()
+                    .find(|(name, _)| name.eq_ignore_ascii_case("href"))
+            {
+                return Some(href.clone());
+            }
+        }
+        dom.children(node)
+            .find_map(|child| explicit_icon_href(dom, child))
+    }
+
+    let explicit = explicit_icon_href(dom, amazing_dom::NodeIdx(0));
+    let address = explicit
+        .as_deref()
+        .and_then(|href| resolve_resource_address(document_url, href))
+        .or_else(|| resolve_resource_address(document_url, "/favicon.ico"))?;
+    let response = fetch(&address, options).ok()?;
+    if response.status != 200 {
+        return None;
+    }
+    let image = decode_web_image(&response.body)?;
+    Some(Arc::new(rgba_to_render_image(
+        image.width,
+        image.height,
+        image.pixels,
+    )))
+}
+
 fn escape_html(value: &str) -> String {
     value
         .replace('&', "&amp;")
@@ -734,6 +821,51 @@ mod tests {
         assert_eq!(resources.images[0].used_size.width, 8.0);
         assert_eq!(resources.images[0].used_size.height, 4.0);
         assert_eq!(resources.images[0].image.pixels[0..4], [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn document_metadata_loads_title_and_resolved_favicon() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
+            let mut stream = (0..100)
+                .find_map(|_| match listener.accept() {
+                    Ok((stream, _)) => Some(stream),
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(10));
+                        None
+                    },
+                    Err(error) => panic!("favicon fixture accept: {error}"),
+                })
+                .expect("favicon request timed out");
+            let mut request = [0u8; 2048];
+            let count = stream.read(&mut request).unwrap();
+            assert!(
+                String::from_utf8_lossy(&request[..count])
+                    .starts_with("GET /assets/site.ppm HTTP/1.1\r\n")
+            );
+            let body = b"P6\n1 1\n255\n\x12\x34\x56";
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: image/x-portable-pixmap\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(body).unwrap();
+        });
+
+        let dom = amazing_html::parse(
+            "<title>  Example   Page </title><link rel=icon href=../assets/site.ppm>",
+        );
+        assert_eq!(document_title(&dom).as_deref(), Some("Example Page"));
+        let icon = load_favicon(
+            &dom,
+            &format!("http://127.0.0.1:{port}/pages/index.html"),
+            &FetchOptions::default(),
+        );
+        server.join().unwrap();
+        assert!(icon.is_some());
     }
 
     #[test]

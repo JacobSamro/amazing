@@ -4,7 +4,7 @@ Canonical sequence for turning the GPUI shell from a document viewer into a
 usable browser. Resolve one ticket, verify its exit criteria on `win-001`, then
 update this map before starting the next ticket.
 
-Frontier: **#4 — document identity**
+Frontier: **#5 — page hit testing and navigation**
 
 ## #1: Verified HTTPS navigation
 
@@ -72,7 +72,7 @@ the live Google logo is visible in the GPUI viewport.
 
 Blocked by: #2, #3
 Type: Prototype
-Status: ⏳ Next
+Status: ✅ Resolved
 
 ### Question
 
@@ -81,13 +81,17 @@ redirects and failures?
 
 ### Answer
 
-Pending.
+The navigation result carries the normalized first HTML `<title>` and a
+resolved/decoded `rel=icon` resource (with `/favicon.ico` fallback) alongside
+the final address and viewport. Tabs render the favicon in horizontal/sidebar
+modes and fall back to the site initial only when metadata is absent. The live
+Google tab displays “Google” and its fetched icon after redirect.
 
 ## #5: Page hit testing and navigation
 
 Blocked by: #2, #3
 Type: Prototype
-Status: ⬜ Pending
+Status: ⏳ Next
 
 ### Question
 
