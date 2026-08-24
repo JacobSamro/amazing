@@ -4,7 +4,7 @@ Canonical sequence for turning the GPUI shell from a document viewer into a
 usable browser. Resolve one ticket, verify its exit criteria on `win-001`, then
 update this map before starting the next ticket.
 
-Frontier: **#5a — form controls**
+Frontier: **#6 — external scripts and live DOM repaint**
 
 ## #1: Verified HTTPS navigation
 
@@ -111,7 +111,7 @@ address, and page content.
 
 Blocked by: #5
 Type: Prototype
-Status: ⏳ Next
+Status: ✅ Resolved
 
 ### Question
 
@@ -120,13 +120,18 @@ should GET/POST form submission construct the next navigation request?
 
 ### Answer
 
-Pending.
+Layout-derived control regions distinguish editable text-like inputs from
+submit controls. Clicking a text input creates a visible GPUI edit overlay;
+typing, selection, paste, deletion, Escape, and Enter are handled by shell
+focus. GET submission resolves the form action and URL-encodes named values.
+The dynamic probe verified `q=rust+browser` navigation. POST is rejected rather
+than rewritten because the network core does not yet expose request bodies.
 
 ## #6: External scripts and live DOM repaint
 
 Blocked by: #5a
 Type: Prototype
-Status: ⬜ Pending
+Status: ⏳ Next
 
 ### Question
 

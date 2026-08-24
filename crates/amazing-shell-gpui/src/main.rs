@@ -92,6 +92,15 @@ struct TabSpec<'a> {
     group: TabGroup,
 }
 
+#[derive(Clone)]
+struct PageInputState {
+    tab: usize,
+    control: usize,
+    value: String,
+    rect: (f32, f32, f32, f32),
+    selected: bool,
+}
+
 impl Tab {
     fn from_spec(spec: TabSpec<'_>, viewport: Option<EngineViewport>) -> Self {
         Self {
@@ -140,6 +149,7 @@ struct BrowserShell {
     menu_open: bool,
     site_info_open: bool,
     profile_open: bool,
+    page_input: Option<PageInputState>,
 }
 
 impl BrowserShell {
@@ -251,6 +261,7 @@ impl BrowserShell {
             menu_open: false,
             site_info_open: false,
             profile_open: false,
+            page_input: None,
         }
     }
 
@@ -264,6 +275,7 @@ impl BrowserShell {
             self.menu_open = false;
             self.site_info_open = false;
             self.profile_open = false;
+            self.page_input = None;
         }
     }
 
@@ -468,6 +480,66 @@ impl BrowserShell {
         cx.notify();
     }
 
+    fn on_shell_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(input) = self.page_input.as_mut() else {
+            return;
+        };
+        cx.stop_propagation();
+        match event.keystroke.key.as_str() {
+            "escape" => self.page_input = None,
+            "a" if event.keystroke.modifiers.control => input.selected = true,
+            "v" if event.keystroke.modifiers.control => {
+                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                    let text = text.replace(['\r', '\n'], " ");
+                    if input.selected {
+                        input.value = text;
+                    } else {
+                        input.value.push_str(&text);
+                    }
+                    input.selected = false;
+                }
+            },
+            "backspace" | "delete" => {
+                if input.selected {
+                    input.value.clear();
+                    input.selected = false;
+                } else {
+                    input.value.pop();
+                }
+            },
+            "enter" => {
+                let input = input.clone();
+                let target = self.tabs[input.tab]
+                    .viewport
+                    .as_ref()
+                    .and_then(|viewport| viewport.form_target(input.control, Some(&input.value)));
+                self.page_input = None;
+                if let Some(target) = target {
+                    self.address = target;
+                    self.commit_navigation();
+                }
+            },
+            _ => {
+                if let Some(text) = event.keystroke.key_char.as_ref()
+                    && !event.keystroke.modifiers.control
+                    && !event.keystroke.modifiers.platform
+                {
+                    if input.selected {
+                        input.value.clear();
+                    }
+                    input.value.push_str(text);
+                    input.selected = false;
+                }
+            },
+        }
+        cx.notify();
+    }
+
     fn commit_navigation(&mut self) {
         let Some(address) = normalize_address(&self.address) else {
             self.address = self.committed_address.clone();
@@ -483,6 +555,7 @@ impl BrowserShell {
     }
 
     fn load_navigation(&mut self, address: &str) {
+        self.page_input = None;
         let (viewport, final_address, title, favicon) = match EngineViewport::load_address(address) {
             Ok(page) => (
                 page.viewport,
@@ -1582,6 +1655,10 @@ impl BrowserShell {
     fn page(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let tab = &self.tabs[self.active];
         let entity = cx.entity();
+        let page_input = self
+            .page_input
+            .clone()
+            .filter(|input| input.tab == self.active);
         let video_viewport = &self.video_frames[self.video_frame_index];
         let video_badge = if self.secure_video_requested {
             self.secure_video_status.clone()
@@ -1644,11 +1721,32 @@ impl BrowserShell {
                                                                 / bounds.size.width.as_f32();
                                                             let x = (event.position.x - bounds.origin.x).as_f32() * scale;
                                                             let y = (event.position.y - bounds.origin.y).as_f32() * scale;
-                                                            let Some(target) = viewport.link_at(x, y).map(str::to_string) else {
-                                                                return;
-                                                            };
-                                                            this.address = target;
-                                                            this.commit_navigation();
+                                                            let link = viewport.link_at(x, y).map(str::to_string);
+                                                            let control = viewport.control_at(x, y);
+                                                            let text_control = control.and_then(|index| {
+                                                                viewport.text_control(index).map(|(value, rect)| {
+                                                                    (index, value.to_string(), rect)
+                                                                })
+                                                            });
+                                                            let submit_target = control
+                                                                .filter(|index| {
+                                                                    viewport.text_control(*index).is_none()
+                                                                })
+                                                                .and_then(|index| {
+                                                                    viewport.form_target(index, None)
+                                                                });
+                                                            if let Some(target) = link.or(submit_target) {
+                                                                this.address = target;
+                                                                this.commit_navigation();
+                                                            } else if let Some((control, value, rect)) = text_control {
+                                                                this.page_input = Some(PageInputState {
+                                                                    tab: this.active,
+                                                                    control,
+                                                                    value,
+                                                                    rect,
+                                                                    selected: true,
+                                                                });
+                                                            }
                                                             cx.notify();
                                                         });
                                                     });
@@ -1656,7 +1754,31 @@ impl BrowserShell {
                                             )
                                             .absolute()
                                             .inset_0(),
-                                        ),
+                                        )
+                                        .when_some(page_input.clone(), |surface, input| {
+                                            let (x, y, width, height) = input.rect;
+                                            surface.child(
+                                                div()
+                                                    .absolute()
+                                                    .left(gpui::relative(x / viewport.width as f32))
+                                                    .top(gpui::relative(y / viewport.height as f32))
+                                                    .w(gpui::relative(width / viewport.width as f32))
+                                                    .h(gpui::relative(height / viewport.height as f32))
+                                                    .flex()
+                                                    .items_center()
+                                                    .px_2()
+                                                    .border_2()
+                                                    .border_color(rgb(0x1a73e8))
+                                                    .bg(rgb(SURFACE))
+                                                    .text_color(rgb(TEXT))
+                                                    .text_size(px(13.0))
+                                                    .child(if input.selected {
+                                                        input.value
+                                                    } else {
+                                                        format!("{}│", input.value)
+                                                    }),
+                                            )
+                                        }),
                                 ),
                         )
                         .child(
@@ -1824,6 +1946,7 @@ impl Render for BrowserShell {
             .on_action(cx.listener(Self::toggle_bookmark_action))
             .on_action(cx.listener(Self::show_downloads))
             .on_action(cx.listener(Self::dismiss_chrome))
+            .on_key_down(cx.listener(Self::on_shell_key_down))
             .flex()
             .flex_col()
             .size_full()

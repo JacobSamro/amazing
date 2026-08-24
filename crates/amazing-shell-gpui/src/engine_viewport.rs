@@ -125,6 +125,7 @@ pub struct EngineViewport {
     pub width: u32,
     pub height: u32,
     links: Arc<Vec<LinkRegion>>,
+    controls: Arc<Vec<ControlRegion>>,
 }
 
 #[derive(Debug, Clone)]
@@ -135,6 +136,34 @@ struct LinkRegion {
     height: f32,
     target: String,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ControlKind {
+    Text,
+    Submit,
+}
+
+#[derive(Debug, Clone)]
+struct FormField {
+    name: String,
+    value: String,
+}
+
+#[derive(Debug, Clone)]
+struct ControlRegion {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    kind: ControlKind,
+    name: String,
+    value: String,
+    action: String,
+    method: String,
+    fields: Vec<FormField>,
+}
+
+pub type ControlRect = (f32, f32, f32, f32);
 
 pub struct LoadedPage {
     pub viewport: EngineViewport,
@@ -257,6 +286,7 @@ impl EngineViewport {
                 width: decoded.width,
                 height: decoded.height,
                 links: Arc::new(Vec::new()),
+                controls: Arc::new(Vec::new()),
             });
         }
         Ok(frames)
@@ -275,6 +305,7 @@ impl EngineViewport {
             width,
             height,
             links: Arc::new(Vec::new()),
+            controls: Arc::new(Vec::new()),
         })
     }
 
@@ -293,7 +324,8 @@ impl EngineViewport {
         resources: &PageResources,
         document_url: Option<&str>,
     ) -> Self {
-        let (surface, links) = render_dom_with_resources(dom, css, resources, document_url);
+        let (surface, links, controls) =
+            render_dom_with_resources(dom, css, resources, document_url);
         let width = surface.width;
         let height = surface.height;
         let image = Arc::new(surface_to_render_image(surface));
@@ -302,6 +334,7 @@ impl EngineViewport {
             width,
             height,
             links: Arc::new(links),
+            controls: Arc::new(controls),
         }
     }
 
@@ -316,6 +349,65 @@ impl EngineViewport {
                     && y <= region.y + region.height
             })
             .map(|region| region.target.as_str())
+    }
+
+    pub fn control_at(&self, x: f32, y: f32) -> Option<usize> {
+        self.controls.iter().rposition(|control| {
+            x >= control.x
+                && x <= control.x + control.width
+                && y >= control.y
+                && y <= control.y + control.height
+        })
+    }
+
+    pub fn text_control(&self, index: usize) -> Option<(&str, ControlRect)> {
+        let control = self.controls.get(index)?;
+        (control.kind == ControlKind::Text).then_some((
+            control.value.as_str(),
+            (control.x, control.y, control.width, control.height),
+        ))
+    }
+
+    pub fn form_target(&self, index: usize, edited_value: Option<&str>) -> Option<String> {
+        let control = self.controls.get(index)?;
+        if !control.method.eq_ignore_ascii_case("get") {
+            return None;
+        }
+        let mut fields = control.fields.clone();
+        if control.kind == ControlKind::Text
+            && !control.name.is_empty()
+            && let Some(field) = fields.iter_mut().find(|field| field.name == control.name)
+        {
+            field.value = edited_value.unwrap_or(&control.value).to_string();
+        }
+        if control.kind == ControlKind::Submit && !control.name.is_empty() {
+            fields.push(FormField {
+                name: control.name.clone(),
+                value: control.value.clone(),
+            });
+        }
+        let query = fields
+            .iter()
+            .filter(|field| !field.name.is_empty())
+            .map(|field| {
+                format!(
+                    "{}={}",
+                    encode_form_component(&field.name),
+                    encode_form_component(&field.value)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("&");
+        if query.is_empty() {
+            Some(control.action.clone())
+        } else {
+            Some(format!(
+                "{}{}{}",
+                control.action,
+                if control.action.contains('?') { "&" } else { "?" },
+                query
+            ))
+        }
     }
 }
 
@@ -335,7 +427,7 @@ fn render_dom_with_resources(
     css: &str,
     resources: &PageResources,
     document_url: Option<&str>,
-) -> (Surface, Vec<LinkRegion>) {
+) -> (Surface, Vec<LinkRegion>, Vec<ControlRegion>) {
     let fonts = load_ui_font();
     let root = amazing_layout::layout_dom_document_with_replaced(
         dom,
@@ -351,6 +443,9 @@ fn render_dom_with_resources(
     let links = document_url
         .map(|url| collect_link_regions(dom, &root, url))
         .unwrap_or_default();
+    let controls = document_url
+        .map(|url| collect_control_regions(dom, &root, url))
+        .unwrap_or_default();
     let surface = amazing_paint::paint_document_with_resources(
         &root,
         VIEWPORT_WIDTH,
@@ -359,7 +454,7 @@ fn render_dom_with_resources(
         &glyphs,
         resources,
     );
-    (surface, links)
+    (surface, links, controls)
 }
 
 fn collect_link_regions(
@@ -432,6 +527,159 @@ fn collect_link_regions(
     let mut regions = Vec::new();
     walk(dom, layout, document_url, &mut regions);
     regions
+}
+
+fn collect_control_regions(
+    dom: &amazing_dom::Dom,
+    layout: &amazing_layout::LayoutBox,
+    document_url: &str,
+) -> Vec<ControlRegion> {
+    fn attribute<'a>(
+        dom: &'a amazing_dom::Dom,
+        node: amazing_dom::NodeIdx,
+        name: &str,
+    ) -> Option<&'a str> {
+        dom.attrs_of(node)?
+            .iter()
+            .find(|(attribute, _)| attribute.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+
+    fn form_node(dom: &amazing_dom::Dom, mut node: amazing_dom::NodeIdx) -> Option<amazing_dom::NodeIdx> {
+        loop {
+            if dom.name(node) == Some("form") {
+                return Some(node);
+            }
+            node = dom.get(node).parent?;
+        }
+    }
+
+    fn collect_fields(
+        dom: &amazing_dom::Dom,
+        node: amazing_dom::NodeIdx,
+        fields: &mut Vec<FormField>,
+    ) {
+        if dom.name(node) == Some("input")
+            && attribute(dom, node, "disabled").is_none()
+        {
+            let kind = attribute(dom, node, "type")
+                .unwrap_or("text")
+                .to_ascii_lowercase();
+            if !matches!(kind.as_str(), "submit" | "button" | "reset" | "image")
+                && let Some(name) = attribute(dom, node, "name")
+            {
+                fields.push(FormField {
+                    name: name.to_string(),
+                    value: attribute(dom, node, "value").unwrap_or("").to_string(),
+                });
+            }
+        }
+        for child in dom.children(node) {
+            collect_fields(dom, child, fields);
+        }
+    }
+
+    fn descriptor(
+        dom: &amazing_dom::Dom,
+        node: amazing_dom::NodeIdx,
+        document_url: &str,
+    ) -> Option<(ControlKind, String, String, String, String, Vec<FormField>)> {
+        let tag = dom.name(node)?;
+        let kind = match tag {
+            "textarea" => ControlKind::Text,
+            "button" => ControlKind::Submit,
+            "input" => match attribute(dom, node, "type")
+                .unwrap_or("text")
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "submit" | "image" => ControlKind::Submit,
+                "text" | "search" | "url" | "email" | "password" | "tel" => {
+                    ControlKind::Text
+                },
+                _ => return None,
+            },
+            _ => return None,
+        };
+        if attribute(dom, node, "disabled").is_some() {
+            return None;
+        }
+        let form = form_node(dom, node);
+        let action = form
+            .and_then(|form| attribute(dom, form, "action"))
+            .and_then(|action| resolve_resource_address(document_url, action))
+            .unwrap_or_else(|| document_url.to_string());
+        let method = form
+            .and_then(|form| attribute(dom, form, "method"))
+            .unwrap_or("get")
+            .to_ascii_lowercase();
+        let mut fields = Vec::new();
+        if let Some(form) = form {
+            collect_fields(dom, form, &mut fields);
+        }
+        Some((
+            kind,
+            attribute(dom, node, "name").unwrap_or("").to_string(),
+            attribute(dom, node, "value").unwrap_or("").to_string(),
+            action,
+            method,
+            fields,
+        ))
+    }
+
+    fn walk(
+        dom: &amazing_dom::Dom,
+        layout: &amazing_layout::LayoutBox,
+        document_url: &str,
+        controls: &mut Vec<ControlRegion>,
+    ) {
+        if let Some(node) = layout.node
+            && let Some((kind, name, value, action, method, fields)) =
+                descriptor(dom, node, document_url)
+            && layout.border_box.w > 0.0
+            && layout.border_box.h > 0.0
+        {
+            controls.push(ControlRegion {
+                x: layout.border_box.x,
+                y: layout.border_box.y,
+                width: layout.border_box.w,
+                height: layout.border_box.h,
+                kind,
+                name,
+                value,
+                action,
+                method,
+                fields,
+            });
+        }
+        let children = match &layout.flow {
+            amazing_layout::Flow::Blocks(children)
+            | amazing_layout::Flow::Flex(children)
+            | amazing_layout::Flow::Grid(children) => children.as_slice(),
+            amazing_layout::Flow::Inlines(_) | amazing_layout::Flow::Empty => &[],
+        };
+        for child in children {
+            walk(dom, child, document_url, controls);
+        }
+    }
+
+    let mut controls = Vec::new();
+    walk(dom, layout, document_url, &mut controls);
+    controls
+}
+
+fn encode_form_component(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char);
+            },
+            b' ' => encoded.push('+'),
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
 }
 
 fn layout_bottom(layout: &amazing_layout::LayoutBox) -> f32 {
@@ -854,6 +1102,7 @@ mod tests {
                     Err(error) => panic!("stylesheet fixture accept: {error}"),
                 })
                 .expect("stylesheet request timed out");
+            stream.set_nonblocking(false).unwrap();
             let mut request = [0u8; 2048];
             let count = stream.read(&mut request).unwrap();
             assert!(String::from_utf8_lossy(&request[..count]).starts_with(
@@ -903,6 +1152,7 @@ mod tests {
                     Err(error) => panic!("image fixture accept: {error}"),
                 })
                 .expect("image request timed out");
+            stream.set_nonblocking(false).unwrap();
             let mut request = [0u8; 2048];
             let count = stream.read(&mut request).unwrap();
             assert!(
@@ -948,6 +1198,7 @@ mod tests {
                     Err(error) => panic!("favicon fixture accept: {error}"),
                 })
                 .expect("favicon request timed out");
+            stream.set_nonblocking(false).unwrap();
             let mut request = [0u8; 2048];
             let count = stream.read(&mut request).unwrap();
             assert!(
@@ -994,6 +1245,40 @@ mod tests {
                 region.y + region.height / 2.0
             ),
             Some("https://example.test/next.html")
+        );
+    }
+
+    #[test]
+    fn get_form_controls_build_encoded_navigation_target() {
+        let dom = amazing_html::parse(
+            "<form action=../search method=get>\
+               <input name=q value=old>\
+               <input type=submit name=source value=amazing>\
+             </form>",
+        );
+        let viewport = EngineViewport::from_dom_with_resources(
+            &dom,
+            "input { display: block; width: 300px; height: 40px; }",
+            &PageResources::default(),
+            Some("https://example.test/docs/form.html"),
+        );
+        let text = viewport
+            .controls
+            .iter()
+            .position(|control| control.kind == ControlKind::Text)
+            .expect("text control");
+        let submit = viewport
+            .controls
+            .iter()
+            .position(|control| control.kind == ControlKind::Submit)
+            .expect("submit control");
+        assert_eq!(
+            viewport.form_target(text, Some("rust browser")),
+            Some("https://example.test/search?q=rust+browser".into())
+        );
+        assert_eq!(
+            viewport.form_target(submit, None),
+            Some("https://example.test/search?q=old&source=amazing".into())
         );
     }
 

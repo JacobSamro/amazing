@@ -7,7 +7,9 @@ param(
     [switch]$KeepWidgets,
     [int]$ClickX = -1,
     [int]$ClickY = -1,
-    [int]$PostClickWaitSeconds = 4
+    [int]$PostClickWaitSeconds = 4,
+    [string]$TypeText = "",
+    [switch]$SubmitAfterType
 )
 
 $ErrorActionPreference = "Stop"
@@ -58,6 +60,15 @@ public static class AmazingProbePointer {
     [AmazingProbePointer]::SetCursorPos($rect.Left + $ClickX, $rect.Top + $ClickY) | Out-Null
     [AmazingProbePointer]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
     [AmazingProbePointer]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+    if ($TypeText.Length -gt 0) {
+        Start-Sleep -Milliseconds 500
+        Set-Clipboard -Value $TypeText
+        $shell.SendKeys("^v")
+    }
+    if ($SubmitAfterType) {
+        Start-Sleep -Milliseconds 500
+        $shell.SendKeys("{ENTER}")
+    }
     Start-Sleep -Seconds $PostClickWaitSeconds
 }
 $shell.SendKeys("{ESC}")
@@ -74,5 +85,6 @@ Start-Sleep -Seconds 1
 & (Join-Path $PSScriptRoot "capture-gpui-shell.ps1") -OutputPath $output
 Write-Output "ADDRESS=$Address"
 Write-Output "CLICK=$ClickX,$ClickY"
+Write-Output "TYPED_CHARS=$($TypeText.Length)"
 Write-Output "PROCESS_ID=$($process.Id)"
 Write-Output "SCREENSHOT=$output"
