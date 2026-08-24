@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "phase": "ticket-4-text-research",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "font_set": "Amazing fallback metrics with RectInkProvider",
+  "repeat_runs": 2,
+  "repeat_hashes_identical": true,
+  "stable_projection_sha256": "edf9d0e9538b0bdce705ef6d710dd22189693a4e29565c1bdb039183804ca9de",
+  "counts": {
+    "pass": 3,
+    "mismatch": 9,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "blink_webkit_consensus": {
+    "case_count": 8,
+    "raw_amazing_pass": 3,
+    "capability_credited_pass": 0
+  },
+  "false_positive_ids": [
+    "css-text__shaping__shaping-000.html",
+    "css-text__shaping__shaping-arabic-diacritics-001.html",
+    "css-text__shaping__shaping_lig-000.html"
+  ],
+  "tests": [
+    {
+      "id": "css-text__shaping__shaping-000.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "reference/shaping-000-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "4cc55438765fda9c54bba45e4dcebc9383e6f4fd7993f93223bd2a3caa245fe9",
+      "reference_sha256": "4cc55438765fda9c54bba45e4dcebc9383e6f4fd7993f93223bd2a3caa245fe9",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__shaping__shaping-001.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/shaping-001-ref.html",
+      "differing_pixels": 114611,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "454beb494821fc5d5d92780ef9260f9cb18c7a9adf2547782378a9816e36bdeb",
+      "reference_sha256": "d79c4db8dc21046e4c01bdbd5b956aafe15af0066f7819f725264998a1ab4158",
+      "diff_sha256": "3c155e6199f863480769c4a2f1a5e48658461beab99cb4f738f930065322e15f"
+    },
+    {
+      "id": "css-text__shaping__shaping-002.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/shaping-002-ref.html",
+      "differing_pixels": 114611,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "454beb494821fc5d5d92780ef9260f9cb18c7a9adf2547782378a9816e36bdeb",
+      "reference_sha256": "d79c4db8dc21046e4c01bdbd5b956aafe15af0066f7819f725264998a1ab4158",
+      "diff_sha256": "3c155e6199f863480769c4a2f1a5e48658461beab99cb4f738f930065322e15f"
+    },
+    {
+      "id": "css-text__shaping__shaping-008.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/shaping-008-ref.html",
+      "differing_pixels": 130937,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "95349419395c6439e050650669af74abf25c935f5c7d58864791b1e65997f690",
+      "reference_sha256": "9f4c711d424de540988c91dece853a41d61280f64830f7385531abb2ff2e27c3",
+      "diff_sha256": "6ab4b1a686f0704061766a5dcbaffe00778773f06989ab1579cc03dce5cb16c0"
+    },
+    {
+      "id": "css-text__shaping__shaping-010.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/shaping-010-ref.html",
+      "differing_pixels": 137123,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "441f5898e0fb0882286db1014ab36dec3ba98bd21f5a523415806e8110926d7d",
+      "reference_sha256": "549a61ee62c415c7a7664de8b2899289aa25f3a3ad13e2024d2bc4813a9cb2d1",
+      "diff_sha256": "9407ac21982455f2d0d01f5a41ff58dde509baed6046b38c13abfd9aac2db3cc"
+    },
+    {
+      "id": "css-text__shaping__shaping-012.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/shaping-012-ref.html",
+      "differing_pixels": 123872,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "441f5898e0fb0882286db1014ab36dec3ba98bd21f5a523415806e8110926d7d",
+      "reference_sha256": "4ce35759fb9d783ec42fbfa41ebe7961a5b332a069d4fadcdc9d58456e4d54c1",
+      "diff_sha256": "7b3d0be8c84ea1fc9fe66e221cb3bd94662527ba9a177e61fdddb19029434159"
+    },
+    {
+      "id": "css-text__shaping__shaping-014.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/shaping-014-ref.html",
+      "differing_pixels": 114611,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "454beb494821fc5d5d92780ef9260f9cb18c7a9adf2547782378a9816e36bdeb",
+      "reference_sha256": "d79c4db8dc21046e4c01bdbd5b956aafe15af0066f7819f725264998a1ab4158",
+      "diff_sha256": "3c155e6199f863480769c4a2f1a5e48658461beab99cb4f738f930065322e15f"
+    },
+    {
+      "id": "css-text__shaping__shaping-022.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/shaping-022-ref.html",
+      "differing_pixels": 114611,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "6086c30ee7d4efce044b10e11f1fea94470cdc426aeb00bc4fe13fa3efeb41fb",
+      "reference_sha256": "08bf458609906df48b6d7d8501b5fbc54cb33e7a13f40d56c16b797a2b670a2c",
+      "diff_sha256": "3c155e6199f863480769c4a2f1a5e48658461beab99cb4f738f930065322e15f"
+    },
+    {
+      "id": "css-text__shaping__shaping-023.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/shaping-023-ref.html",
+      "differing_pixels": 114611,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "4598bedd5f989fd9ec5cce3b4519ca71a1223dc269bc16533bf5e12cb967ca1d",
+      "reference_sha256": "f97f45f55b5534c5e3194d8f005b2fc8923df00eb3a85458b1a48c2aa0fd4557",
+      "diff_sha256": "3c155e6199f863480769c4a2f1a5e48658461beab99cb4f738f930065322e15f"
+    },
+    {
+      "id": "css-text__shaping__shaping-arabic-diacritics-001.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "reference/shaping-arabic-diacritics-001-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 1,
+      "allowed_differing_pixels": 2,
+      "actual_sha256": "6d16dcfc8357aa2cbcec5edb9e6cf1250289fb30d979490550935ebb7432c33e",
+      "reference_sha256": "6d16dcfc8357aa2cbcec5edb9e6cf1250289fb30d979490550935ebb7432c33e",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-text__shaping__shaping-arabic-diacritics-002.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "reference_href": "reference/shaping-arabic-diacritics-002-ref.html",
+      "differing_pixels": 704,
+      "max_difference": 255,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "9bfabc03b90c044afb78ad66b3eae80fc030efdb4187086223342f9e66c0afd7",
+      "reference_sha256": "052875ecd2ceb12aa149b52098cfcd50d372296eb0bc4819f568f4ebe06453de",
+      "diff_sha256": "94259fc0952945cba110fdc6070453020d76b3d051c1a6ef64ffb229e9d3b0bb"
+    },
+    {
+      "id": "css-text__shaping__shaping_lig-000.html",
+      "classification": "pass",
+      "relation": "match",
+      "reference_href": "reference/shaping_lig-000-ref.html",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "allowed_max_difference": 0,
+      "allowed_differing_pixels": 0,
+      "actual_sha256": "b1c9a83152b7fead1e0ad5f02a1c61980809cdc3ba7ec370d93f50a80049376e",
+      "reference_sha256": "b1c9a83152b7fead1e0ad5f02a1c61980809cdc3ba7ec370d93f50a80049376e",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 param(
+    [string]$ProfilePath = "",
     [string]$ManifestPath = "",
     [string]$WptRoot = "",
     [string]$OutputDirectory = "",
@@ -14,6 +15,45 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+if ($ProfilePath) {
+    if (-not [IO.Path]::IsPathRooted($ProfilePath)) {
+        $ProfilePath = Join-Path $repositoryRoot $ProfilePath
+    }
+    $ProfilePath = [IO.Path]::GetFullPath($ProfilePath)
+    $profile = Get-Content -LiteralPath $ProfilePath -Raw | ConvertFrom-Json
+    if ([int]$profile.schema -ne 1) {
+        throw "Unsupported render WPT profile schema: $($profile.schema)"
+    }
+    $profileProperties = @($profile.PSObject.Properties.Name)
+    if (-not $PSBoundParameters.ContainsKey("ManifestPath") -and
+        $profileProperties -contains "manifest_path") {
+        $ManifestPath = [string]$profile.manifest_path
+    }
+    if (-not $PSBoundParameters.ContainsKey("WptRoot") -and
+        $profileProperties -contains "wpt_root") {
+        $WptRoot = [string]$profile.wpt_root
+    }
+    if (-not $PSBoundParameters.ContainsKey("OutputDirectory") -and
+        $profileProperties -contains "output_directory") {
+        $OutputDirectory = [string]$profile.output_directory
+    }
+    if (-not $PSBoundParameters.ContainsKey("ExecutablePath") -and
+        $profileProperties -contains "executable_path") {
+        $ExecutablePath = [string]$profile.executable_path
+    }
+    if (-not $PSBoundParameters.ContainsKey("ViewportWidth") -and
+        $profileProperties -contains "viewport_width") {
+        $ViewportWidth = [int]$profile.viewport_width
+    }
+    if (-not $PSBoundParameters.ContainsKey("ViewportHeight") -and
+        $profileProperties -contains "viewport_height") {
+        $ViewportHeight = [int]$profile.viewport_height
+    }
+    if (-not $PSBoundParameters.ContainsKey("TimeoutSeconds") -and
+        $profileProperties -contains "timeout_seconds") {
+        $TimeoutSeconds = [int]$profile.timeout_seconds
+    }
+}
 if (-not $ManifestPath) {
     $ManifestPath = Join-Path $repositoryRoot "tests\wpt-render\smoke.json"
 }
@@ -34,6 +74,10 @@ if ($TimeoutSeconds -lt 1 -or $TimeoutSeconds -gt 600) {
     throw "TimeoutSeconds must be between 1 and 600."
 }
 
+if (-not [IO.Path]::IsPathRooted($ManifestPath)) { $ManifestPath = Join-Path $repositoryRoot $ManifestPath }
+if (-not [IO.Path]::IsPathRooted($WptRoot)) { $WptRoot = Join-Path $repositoryRoot $WptRoot }
+if (-not [IO.Path]::IsPathRooted($OutputDirectory)) { $OutputDirectory = Join-Path $repositoryRoot $OutputDirectory }
+if (-not [IO.Path]::IsPathRooted($ExecutablePath)) { $ExecutablePath = Join-Path $repositoryRoot $ExecutablePath }
 $ManifestPath = [IO.Path]::GetFullPath($ManifestPath)
 $WptRoot = [IO.Path]::GetFullPath($WptRoot)
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)

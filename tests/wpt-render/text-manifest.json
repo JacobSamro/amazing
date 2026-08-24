@@ -1,0 +1,208 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "schema": 1,
+  "selection": {
+    "kind": "sha256-path-stratified",
+    "per_category": 12
+  },
+  "sparse_paths": [
+    "css/css-fonts",
+    "css/css-text",
+    "css/css-writing-modes",
+    "css/css-ruby"
+  ],
+  "tests": [
+    {
+      "id": "css-fonts__system-ui-mixed.html",
+      "test": "css/css-fonts/system-ui-mixed.html"
+    },
+    {
+      "id": "css-fonts__font-size-zero-1-ref.html",
+      "test": "css/css-fonts/font-size-zero-1-ref.html"
+    },
+    {
+      "id": "css-fonts__test-synthetic-italic.html",
+      "test": "css/css-fonts/test-synthetic-italic.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-11.optional.html",
+      "test": "css/css-fonts/font-variant-ligatures-11.optional.html"
+    },
+    {
+      "id": "css-fonts__matching__font-unicode-PUA-primary-font.html",
+      "test": "css/css-fonts/matching/font-unicode-PUA-primary-font.html"
+    },
+    {
+      "id": "css-fonts__standard-font-family-19.html",
+      "test": "css/css-fonts/standard-font-family-19.html"
+    },
+    {
+      "id": "css-fonts__font-size-zero-1.html",
+      "test": "css/css-fonts/font-size-zero-1.html"
+    },
+    {
+      "id": "css-fonts__standard-font-family-5.html",
+      "test": "css/css-fonts/standard-font-family-5.html"
+    },
+    {
+      "id": "css-fonts__font-kerning-01.html",
+      "test": "css/css-fonts/font-kerning-01.html"
+    },
+    {
+      "id": "css-fonts__font-size-adjust-zero-2.html",
+      "test": "css/css-fonts/font-size-adjust-zero-2.html"
+    },
+    {
+      "id": "css-fonts__font-variant-emoji-1.html",
+      "test": "css/css-fonts/font-variant-emoji-1.html"
+    },
+    {
+      "id": "css-fonts__font-size-xxx-large.html",
+      "test": "css/css-fonts/font-size-xxx-large.html"
+    },
+    {
+      "id": "css-text__text-align__text-align-last-justify-rtl.html",
+      "test": "css/css-text/text-align/text-align-last-justify-rtl.html"
+    },
+    {
+      "id": "css-text__tab-size__tab-size-spacing-001.html",
+      "test": "css/css-text/tab-size/tab-size-spacing-001.html"
+    },
+    {
+      "id": "css-text__hyphens__i18n__hyphens-i18n-auto-005.html",
+      "test": "css/css-text/hyphens/i18n/hyphens-i18n-auto-005.html"
+    },
+    {
+      "id": "css-text__text-align__text-align-match-parent-01.html",
+      "test": "css/css-text/text-align/text-align-match-parent-01.html"
+    },
+    {
+      "id": "css-text__text-align__text-align-last-justify-br.html",
+      "test": "css/css-text/text-align/text-align-last-justify-br.html"
+    },
+    {
+      "id": "css-text__word-break__word-break-break-all-014.html",
+      "test": "css/css-text/word-break/word-break-break-all-014.html"
+    },
+    {
+      "id": "css-text__hyphens__hyphens-manual-inline-011.html",
+      "test": "css/css-text/hyphens/hyphens-manual-inline-011.html"
+    },
+    {
+      "id": "css-text__white-space__control-chars-00E.html",
+      "test": "css/css-text/white-space/control-chars-00E.html"
+    },
+    {
+      "id": "css-text__text-indent__text-indent-percentage-004.html",
+      "test": "css/css-text/text-indent/text-indent-percentage-004.html"
+    },
+    {
+      "id": "css-text__hyphens__i18n__hyphens-i18n-auto-004.html",
+      "test": "css/css-text/hyphens/i18n/hyphens-i18n-auto-004.html"
+    },
+    {
+      "id": "css-text__text-align__text-align-justify-last-end.html",
+      "test": "css/css-text/text-align/text-align-justify-last-end.html"
+    },
+    {
+      "id": "css-text__word-break__auto-phrase__word-break-auto-phrase-005.html",
+      "test": "css/css-text/word-break/auto-phrase/word-break-auto-phrase-005.html"
+    },
+    {
+      "id": "css-writing-modes__forms__select-multiple-appearance-none-vlr.optional.html",
+      "test": "css/css-writing-modes/forms/select-multiple-appearance-none-vlr.optional.html"
+    },
+    {
+      "id": "css-writing-modes__forms__select-appearance-native-horizontal.optional.html",
+      "test": "css/css-writing-modes/forms/select-appearance-native-horizontal.optional.html"
+    },
+    {
+      "id": "css-writing-modes__table-progression-slr-001.html",
+      "test": "css/css-writing-modes/table-progression-slr-001.html"
+    },
+    {
+      "id": "css-writing-modes__mongolian-span-001.html",
+      "test": "css/css-writing-modes/mongolian-span-001.html"
+    },
+    {
+      "id": "css-writing-modes__abs-pos-border-offset-001.html",
+      "test": "css/css-writing-modes/abs-pos-border-offset-001.html"
+    },
+    {
+      "id": "css-writing-modes__mongolian-orientation-001.html",
+      "test": "css/css-writing-modes/mongolian-orientation-001.html"
+    },
+    {
+      "id": "css-writing-modes__forms__file-input-vertical-rtl.optional.html",
+      "test": "css/css-writing-modes/forms/file-input-vertical-rtl.optional.html"
+    },
+    {
+      "id": "css-writing-modes__ch-units-vrl-006.html",
+      "test": "css/css-writing-modes/ch-units-vrl-006.html"
+    },
+    {
+      "id": "css-writing-modes__logical-props-001.html",
+      "test": "css/css-writing-modes/logical-props-001.html"
+    },
+    {
+      "id": "css-writing-modes__ch-units-vrl-004.html",
+      "test": "css/css-writing-modes/ch-units-vrl-004.html"
+    },
+    {
+      "id": "css-writing-modes__table-progression-htb-001.html",
+      "test": "css/css-writing-modes/table-progression-htb-001.html"
+    },
+    {
+      "id": "css-writing-modes__orthogonal-cell-001.html",
+      "test": "css/css-writing-modes/orthogonal-cell-001.html"
+    },
+    {
+      "id": "css-ruby__ruby-box-model-001.html",
+      "test": "css/css-ruby/ruby-box-model-001.html"
+    },
+    {
+      "id": "css-ruby__break-within-bases__no-break-opportunity-at-end.html",
+      "test": "css/css-ruby/break-within-bases/no-break-opportunity-at-end.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-align-002.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-align-002.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-align-005.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-align-005.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-003.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-003.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-013.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-013.html"
+    },
+    {
+      "id": "css-ruby__empty-ruby-text-container-abs.html",
+      "test": "css/css-ruby/empty-ruby-text-container-abs.html"
+    },
+    {
+      "id": "css-ruby__ruby-base-container-float.html",
+      "test": "css/css-ruby/ruby-base-container-float.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-008.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-008.html"
+    },
+    {
+      "id": "css-ruby__ruby-line-break-suppression-004.html",
+      "test": "css/css-ruby/ruby-line-break-suppression-004.html"
+    },
+    {
+      "id": "css-ruby__pseudo-first-letter.html",
+      "test": "css/css-ruby/pseudo-first-letter.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-align-003.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-align-003.html"
+    }
+  ]
+}

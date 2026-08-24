@@ -109,6 +109,26 @@ layout and mandatory for fixed-view WPT rendering. Paint, hit testing, region
 collection, dumps, and overflow traversal visit both child collections; only
 normal-flow sizing ignores the positioned collection.
 
+### 4d. Text providers stay behind an owned glyph-cluster contract
+
+`amazing-text` is a std-only contract shared by layout and paint. It owns
+provider-neutral font queries, opaque font/glyph ids, paragraph/style ranges,
+Unicode analysis, shaped runs, source clusters, metrics, positioned glyphs,
+and bounded glyph images. Layout consumes shaped clusters and establishes every
+advance; paint rasterizes those same glyph ids and never measures text again.
+The API deliberately has no character-at-a-time `measure` operation.
+
+The reviewed `amazing-text-provider` exception may pin pure-Rust font, Unicode,
+shaping, web-font decode, and raster dependencies. Both first-party crates
+forbid unsafe; dependency types and internal unsafe never cross the contract.
+The driver owns one provider and lends it sequentially through layout and paint,
+preserving the single-threaded engine model. CSS and inline itemization retain
+policy: family/source order, synthesis, property tailoring, and which inline
+boundaries preserve or break shaping. The provider owns validated font bytes,
+font coverage, Unicode algorithms, OpenType shaping, and glyph rasterization.
+Exact provider selection and evidence are recorded in
+`docs/render/TEXT_PIPELINE_RESEARCH.md`.
+
 ### 5. unsafe policy
 
 No first-party `unsafe` outside platform-boundary modules (windowing FFI,

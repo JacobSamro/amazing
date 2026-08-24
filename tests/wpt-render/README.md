@@ -66,3 +66,19 @@ projection of the geometry manifest. `position-results.json` records the
 repeat-stable 5/12 → 9/12 result; `position-oracles.json` records the 3/5 → 5/5
 Blink/WebKit-consensus result, and `geometry-results-positioned.json` records
 the broad 35/61 → 38/61 movement.
+
+Ticket #4 adds a broad text diagnostic plus a font-controlled shaping gate.
+The reusable JSON profile keeps run parameters explicit while command-line
+arguments remain authoritative:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1 `
+  -ProfilePath tests\wpt-render\text-shaping-profile.json
+```
+
+`text-inventory.json`, `text-manifest.json`, `text-results.json`, and
+`text-oracles.json` retain the 48-case Fonts/Text/Writing Modes/Ruby diagnostic.
+`text-shaping-*` retains the 12-case behavior-stratified gate, raw pixel hashes,
+and exact-revision Blink/WebKit results. Explicit runner parameters override
+matching profile values, so the same profile can be reused with a different
+viewport, executable, source tree, output directory, or timeout.

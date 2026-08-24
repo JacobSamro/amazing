@@ -4,7 +4,7 @@ Canonical sequence for moving Amazing's style → layout → paint pipeline towa
 standards conformance. Resolve one ticket, verify its exit criteria on
 `win-001`, record measured results, then stop at the phase boundary for review.
 
-Frontier: **#4 — standards-grade text pipeline**
+Frontier: **#4a — shaped glyph-cluster provider slice**
 
 ## Evidence contract (resolved)
 
@@ -31,6 +31,10 @@ Frontier: **#4 — standards-grade text pipeline**
   min/max-height, and collapse-through family: **9/9** (baseline 6/9).
 - HTML Position shard: **9/12** (baseline 5/12), including **5/5** in the
   exact-revision Blink/WebKit consensus subset.
+- Broad text diagnostic: **19/48** raw and **8/29** in the exact-revision
+  Blink/WebKit consensus subset. Focused shaping is **3/12** raw, but **0/8**
+  capability-credited consensus because its three raw passes load no web font
+  and exercise no shaped glyph cluster.
 - Existing curated CSS2 geometry subset: **17/17**.
 - Existing feature regressions: **13 flex**, **16 grid**, **91 layout unit
   tests**, and **52 paint unit tests**.
@@ -249,7 +253,7 @@ in `docs/render/POSITIONING_BASELINE.md` and
 
 Blocked by: #1, #3a
 Type: Research
-Status: ⬜ Pending
+Status: ✅ Resolved
 
 ### Question
 
@@ -258,8 +262,55 @@ metrics, and deterministic test fonts cross the std-only engine boundary?
 
 ### Answer
 
-Pending. This may require a reviewed provider exception and therefore an
-architecture decision; ASCII advance-per-character is not a parity path.
+Amazing will use a std-only `amazing-text` contract and an isolated, pinned
+pure-Rust provider. Paragraph itemization preserves shaping context across
+eligible inline style boundaries; provider-neutral results retain bidi/script
+runs, source clusters, selected faces, glyph ids, advances, offsets, metrics,
+and legal/safe breaks. Layout establishes geometry from those glyphs and paint
+rasterizes the same ids, eliminating independent per-character measurement.
+
+The proposed provider pins HarfRust, Swash, unicode-bidi, ICU4X Segmenter, and
+wuff behind first-party safe adapters. CSS retains font matching/source order,
+property tailoring, and shaping-boundary policy. The provider owns validated
+font bytes, Unicode algorithms, OpenType shaping, fallback coverage, and
+rasterization. Architecture decision 4d locks the boundary; provider versions
+and the declared Rust 1.89 MSRV remain prototype acceptance gates.
+
+The broad 48-case diagnostic is 19 pass / 29 mismatch and 8/29 against
+exact-revision Blink/WebKit consensus. A font-controlled,
+behavior-stratified 12-case shaping gate is 3 pass / 9 mismatch; all three
+passes are inert, so the honest consensus capability baseline is 0/8. Full
+evidence, reference-engine findings, interface design, risks, and sequencing
+are in `docs/render/TEXT_PIPELINE_RESEARCH.md`.
+
+## #4a: Shaped glyph-cluster provider slice
+
+Blocked by: #4
+Type: Prototype
+Status: ⬜ Pending
+
+### Question
+
+Can the owned contract, isolated provider, WOFF2-backed `@font-face` loading,
+paragraph-context shaping, fallback, shared layout/paint glyph stream, and
+bounded caches close the first focused shaping WPT cluster without leaking
+provider policy into CSS or provider types into engine cores?
+
+### Exit criteria
+
+- First-party text contract/provider adapters forbid unsafe and provider types
+  do not cross the contract; exact dependencies compile at declared Rust 1.89.
+- One paragraph is itemized across DOM inline boundaries, preserves source
+  cluster mappings, and distinguishes paint-only, shaping-style, and hard
+  boundaries.
+- Layout and paint consume one shaped glyph stream with font metrics, glyph ids,
+  advances, offsets, and deterministic raster-cache keys.
+- WOFF/WOFF2 web fonts load through bounded page resources; invalid fonts fail
+  closed without crash or unbounded allocation.
+- Contract, shaping, fallback, font-load, and malformed-input tests pass on
+  `win-001`; the focused gate is rerun twice with stable hashes and measured
+  before/after plus Blink/WebKit-consensus counts.
+- The full workspace, block-collapse 9/9, and Position 9/12 gates do not regress.
 
 ## #5: Flexbox and Grid convergence
 

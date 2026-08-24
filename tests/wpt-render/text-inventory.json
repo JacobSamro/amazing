@@ -1,0 +1,137 @@
+{
+  "categories": [
+    {
+      "category": "css-fonts",
+      "document_files": 875,
+      "eligible_static_self_contained": 31,
+      "excluded": {
+        "css-resource": 249,
+        "embedded-resource": 1,
+        "external-stylesheet": 19,
+        "flagged-environment": 2,
+        "missing-reference": 1,
+        "not-reftest": 501,
+        "scripted": 39,
+        "xml-parser-mode": 32
+      },
+      "reftests": 374,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-fonts/system-ui-mixed.html",
+        "css/css-fonts/font-size-zero-1-ref.html",
+        "css/css-fonts/test-synthetic-italic.html",
+        "css/css-fonts/font-variant-ligatures-11.optional.html",
+        "css/css-fonts/matching/font-unicode-PUA-primary-font.html",
+        "css/css-fonts/standard-font-family-19.html",
+        "css/css-fonts/font-size-zero-1.html",
+        "css/css-fonts/standard-font-family-5.html",
+        "css/css-fonts/font-kerning-01.html",
+        "css/css-fonts/font-size-adjust-zero-2.html",
+        "css/css-fonts/font-variant-emoji-1.html",
+        "css/css-fonts/font-size-xxx-large.html"
+      ],
+      "testharness_files": 163
+    },
+    {
+      "category": "css-text",
+      "document_files": 2920,
+      "eligible_static_self_contained": 446,
+      "excluded": {
+        "css-resource": 140,
+        "embedded-resource": 15,
+        "external-stylesheet": 321,
+        "flagged-environment": 359,
+        "missing-reference": 63,
+        "not-reftest": 1419,
+        "scripted": 103,
+        "xml-parser-mode": 53,
+        "xml-reference-mode": 1
+      },
+      "reftests": 1501,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-text/text-align/text-align-last-justify-rtl.html",
+        "css/css-text/tab-size/tab-size-spacing-001.html",
+        "css/css-text/hyphens/i18n/hyphens-i18n-auto-005.html",
+        "css/css-text/text-align/text-align-match-parent-01.html",
+        "css/css-text/text-align/text-align-last-justify-br.html",
+        "css/css-text/word-break/word-break-break-all-014.html",
+        "css/css-text/hyphens/hyphens-manual-inline-011.html",
+        "css/css-text/white-space/control-chars-00E.html",
+        "css/css-text/text-indent/text-indent-percentage-004.html",
+        "css/css-text/hyphens/i18n/hyphens-i18n-auto-004.html",
+        "css/css-text/text-align/text-align-justify-last-end.html",
+        "css/css-text/word-break/auto-phrase/word-break-auto-phrase-005.html"
+      ],
+      "testharness_files": 360
+    },
+    {
+      "category": "css-writing-modes",
+      "document_files": 1862,
+      "eligible_static_self_contained": 152,
+      "excluded": {
+        "css-resource": 104,
+        "embedded-resource": 23,
+        "external-stylesheet": 28,
+        "flagged-environment": 34,
+        "missing-reference": 17,
+        "not-reftest": 721,
+        "scripted": 13,
+        "xml-parser-mode": 757,
+        "xml-reference-mode": 13
+      },
+      "reftests": 1141,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-writing-modes/forms/select-multiple-appearance-none-vlr.optional.html",
+        "css/css-writing-modes/forms/select-appearance-native-horizontal.optional.html",
+        "css/css-writing-modes/table-progression-slr-001.html",
+        "css/css-writing-modes/mongolian-span-001.html",
+        "css/css-writing-modes/abs-pos-border-offset-001.html",
+        "css/css-writing-modes/mongolian-orientation-001.html",
+        "css/css-writing-modes/forms/file-input-vertical-rtl.optional.html",
+        "css/css-writing-modes/ch-units-vrl-006.html",
+        "css/css-writing-modes/logical-props-001.html",
+        "css/css-writing-modes/ch-units-vrl-004.html",
+        "css/css-writing-modes/table-progression-htb-001.html",
+        "css/css-writing-modes/orthogonal-cell-001.html"
+      ],
+      "testharness_files": 84
+    },
+    {
+      "category": "css-ruby",
+      "document_files": 301,
+      "eligible_static_self_contained": 67,
+      "excluded": {
+        "css-resource": 4,
+        "external-stylesheet": 44,
+        "flagged-environment": 2,
+        "missing-reference": 1,
+        "not-reftest": 158,
+        "scripted": 23,
+        "xml-parser-mode": 2
+      },
+      "reftests": 143,
+      "selected": 12,
+      "selected_paths": [
+        "css/css-ruby/ruby-box-model-001.html",
+        "css/css-ruby/break-within-bases/no-break-opportunity-at-end.html",
+        "css/css-ruby/ruby-overhang-spaces-align-002.html",
+        "css/css-ruby/ruby-overhang-spaces-align-005.html",
+        "css/css-ruby/ruby-overhang-spaces-003.html",
+        "css/css-ruby/ruby-overhang-spaces-013.html",
+        "css/css-ruby/empty-ruby-text-container-abs.html",
+        "css/css-ruby/ruby-base-container-float.html",
+        "css/css-ruby/ruby-overhang-spaces-008.html",
+        "css/css-ruby/ruby-line-break-suppression-004.html",
+        "css/css-ruby/pseudo-first-letter.html",
+        "css/css-ruby/ruby-overhang-spaces-align-003.html"
+      ],
+      "testharness_files": 20
+    }
+  ],
+  "per_category": 12,
+  "schema": 1,
+  "selection_policy": "For each category, SHA-256 rank the normalized path of every HTML-parser-compatible, local-reference, script-free, flag-free, resource-free reftest; select the lowest hashes.",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+}

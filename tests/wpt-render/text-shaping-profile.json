@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "manifest_path": "tests/wpt-render/text-shaping-manifest.json",
+  "wpt_root": "target/wpt",
+  "output_directory": "target/wpt-results",
+  "executable_path": "target/debug/amazing.exe",
+  "viewport_width": 800,
+  "viewport_height": 600,
+  "timeout_seconds": 20
+}
