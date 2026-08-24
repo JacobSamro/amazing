@@ -187,6 +187,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "amazing-js"
+version = "0.0.1"
+dependencies = [
+ "amazing-common",
+]
+
+[[package]]
 name = "amazing-layout"
 version = "0.0.1"
 dependencies = [
@@ -228,8 +235,10 @@ dependencies = [
 name = "amazing-shell-gpui"
 version = "0.0.1"
 dependencies = [
+ "amazing-css",
  "amazing-dom",
  "amazing-html",
+ "amazing-js",
  "amazing-layout",
  "amazing-media",
  "amazing-net",

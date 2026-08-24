@@ -35,6 +35,8 @@ first real engine viewport:
 - layout-derived painted-link hit regions with real relative navigation from
   the GPUI viewport;
 - native text-input focus/edit overlays and encoded GET form submission;
+- bounded inline/external classic-script execution against the arena DOM before
+  relayout and repaint;
 - content-height painting up to the engine safety cap and native GPUI wheel
   scrolling while browser chrome stays fixed;
 - a native media tab that encodes H.264, decodes I420, converts to RGBA, and
@@ -67,6 +69,8 @@ first real engine viewport:
 ![Amazing GPUI painted link navigation](../../docs/screenshots/gpui-link-navigation-win001.png)
 
 ![Amazing GPUI GET form submission](../../docs/screenshots/gpui-form-submit-win001.png)
+
+![Amazing GPUI external script execution](../../docs/screenshots/gpui-script-execution-win001.png)
 
 ![Amazing GPUI grouped sidebar on win-001](../../docs/screenshots/gpui-shell-sidebar-win001.png)
 

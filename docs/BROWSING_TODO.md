@@ -4,7 +4,7 @@ Canonical sequence for turning the GPUI shell from a document viewer into a
 usable browser. Resolve one ticket, verify its exit criteria on `win-001`, then
 update this map before starting the next ticket.
 
-Frontier: **#6 — external scripts and live DOM repaint**
+Frontier: **#6a — post-paint events and timers**
 
 ## #1: Verified HTTPS navigation
 
@@ -131,7 +131,7 @@ than rewritten because the network core does not yet expose request bodies.
 
 Blocked by: #5a
 Type: Prototype
-Status: ⏳ Next
+Status: ✅ Resolved
 
 ### Question
 
@@ -140,11 +140,30 @@ reuse the Phase 7 runtime inside each GPUI tab without blocking browser input?
 
 ### Answer
 
+The GPUI loader collects bounded inline and external classic scripts in DOM
+order, resolves/fetches external sources, installs a shell DOM host, executes
+them against the arena, and pumps bounded initial timers before stylesheet,
+resource, layout, and paint passes. Failures remain page-local. The live fixture
+proves external text/title mutation is visible after relayout.
+
+## #6a: Post-paint events and timers
+
+Blocked by: #6
+Type: Prototype
+Status: ⏳ Next
+
+### Question
+
+How should each tab retain its interpreter/DOM after first paint so pointer
+events and future timer turns mutate and repaint the current page?
+
+### Answer
+
 Pending.
 
 ## #7: Browser session state
 
-Blocked by: #5a, #6
+Blocked by: #5a, #6a
 Type: Discuss
 Status: ⬜ Pending
 

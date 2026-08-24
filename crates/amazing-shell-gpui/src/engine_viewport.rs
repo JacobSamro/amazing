@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc};
 
 use amazing_layout::font::{FontSource, ParsedFont};
 use amazing_net::{FetchOptions, Url, fetch, resolve};
@@ -6,12 +7,16 @@ use amazing_paint::{OutlineGlyphProvider, Surface};
 use gpui::RenderImage;
 use image::{Frame, RgbaImage};
 
+use crate::dom_runtime::ShellDomHost;
+
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 570;
 const WINDOWS_UI_FONT: &str = r"C:\Windows\Fonts\segoeui.ttf";
 const MAX_STYLESHEETS: usize = 32;
 const MAX_STYLESHEET_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PAGE_IMAGES: usize = 32;
+const MAX_DOCUMENT_SCRIPTS: usize = 32;
+const MAX_SCRIPT_BYTES: usize = 4 * 1024 * 1024;
 
 struct PageImage {
     node: amazing_dom::NodeIdx,
@@ -212,7 +217,11 @@ impl EngineViewport {
         let html = response
             .text()
             .ok_or_else(|| "response body was not decodable text".to_string())?;
-        let dom = amazing_html::parse(&html);
+        let dom = execute_document_scripts(
+            amazing_html::parse(&html),
+            &final_address,
+            &options,
+        );
         let css = load_document_styles(&dom, &final_address, &options);
         let resources = load_page_resources(&dom, &final_address, &options);
         let title = document_title(&dom);
@@ -730,6 +739,105 @@ fn load_document_styles(
         &mut css,
     );
     css
+}
+
+fn execute_document_scripts(
+    dom: amazing_dom::Dom,
+    document_url: &str,
+    options: &FetchOptions,
+) -> amazing_dom::Dom {
+    fn collect(
+        dom: &amazing_dom::Dom,
+        node: amazing_dom::NodeIdx,
+        document_url: &str,
+        options: &FetchOptions,
+        scripts: &mut Vec<String>,
+        total_bytes: &mut usize,
+    ) {
+        if scripts.len() >= MAX_DOCUMENT_SCRIPTS || *total_bytes >= MAX_SCRIPT_BYTES {
+            return;
+        }
+        if dom.name(node) == Some("script") {
+            let attrs = dom.attrs_of(node).unwrap_or(&[]);
+            let script_type = attrs
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("type"))
+                .map(|(_, value)| value.trim())
+                .unwrap_or("");
+            let classic = script_type.is_empty()
+                || script_type.eq_ignore_ascii_case("text/javascript")
+                || script_type.eq_ignore_ascii_case("application/javascript");
+            if classic {
+                let source = attrs
+                    .iter()
+                    .find(|(name, _)| name.eq_ignore_ascii_case("src"))
+                    .and_then(|(_, source)| resolve_resource_address(document_url, source))
+                    .and_then(|address| fetch(&address, options).ok())
+                    .filter(|response| response.status == 200)
+                    .and_then(|response| response.text())
+                    .or_else(|| {
+                        let mut inline = String::new();
+                        for child in dom.children(node) {
+                            if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
+                                inline.push_str(data);
+                            }
+                        }
+                        (!inline.trim().is_empty()).then_some(inline)
+                    });
+                if let Some(source) = source {
+                    let remaining = MAX_SCRIPT_BYTES.saturating_sub(*total_bytes);
+                    if source.len() <= remaining {
+                        *total_bytes += source.len();
+                        scripts.push(source);
+                    }
+                }
+            }
+            return;
+        }
+        for child in dom.children(node) {
+            collect(
+                dom,
+                child,
+                document_url,
+                options,
+                scripts,
+                total_bytes,
+            );
+        }
+    }
+
+    let mut scripts = Vec::new();
+    let mut total_bytes = 0usize;
+    collect(
+        &dom,
+        amazing_dom::NodeIdx(0),
+        document_url,
+        options,
+        &mut scripts,
+        &mut total_bytes,
+    );
+    if scripts.is_empty() {
+        return dom;
+    }
+
+    let host = Rc::new(RefCell::new(ShellDomHost::new(dom)));
+    let mut interpreter = amazing_js::Interpreter::new();
+    interpreter.set_dom_host(host.clone());
+    interpreter.set_location_url(document_url.to_string());
+    for source in scripts {
+        let _ = interpreter.run_script(&source);
+    }
+    for _ in 0..32 {
+        match interpreter.pump_timers() {
+            Ok(true) => {},
+            Ok(false) | Err(_) => break,
+        }
+    }
+    drop(interpreter);
+    Rc::try_unwrap(host)
+        .expect("interpreter released DOM host")
+        .into_inner()
+        .dom
 }
 
 fn collect_style_sources(
@@ -1280,6 +1388,61 @@ mod tests {
             viewport.form_target(submit, None),
             Some("https://example.test/search?q=old&source=amazing".into())
         );
+    }
+
+    #[test]
+    fn inline_and_external_scripts_mutate_dom_before_paint() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0u8; 2048];
+            let count = stream.read(&mut request).unwrap();
+            assert!(
+                String::from_utf8_lossy(&request[..count])
+                    .starts_with("GET /assets/page.js HTTP/1.1\r\n")
+            );
+            let body = b"document.querySelector('#message').textContent = 'External ran'; document.title = 'Scripted page';";
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/javascript\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(body).unwrap();
+        });
+
+        let dom = amazing_html::parse(
+            "<title>Initial</title><p id=message>Before</p>\
+             <script>document.title = 'Inline ran';</script>\
+             <script src=../assets/page.js></script>",
+        );
+        let dom = execute_document_scripts(
+            dom,
+            &format!("http://127.0.0.1:{port}/pages/index.html"),
+            &FetchOptions::default(),
+        );
+        server.join().unwrap();
+        assert_eq!(document_title(&dom).as_deref(), Some("Scripted page"));
+
+        fn find_id(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx) -> Option<amazing_dom::NodeIdx> {
+            if dom.attrs_of(node).is_some_and(|attrs| {
+                attrs
+                    .iter()
+                    .any(|(name, value)| name == "id" && value == "message")
+            }) {
+                return Some(node);
+            }
+            dom.children(node).find_map(|child| find_id(dom, child))
+        }
+        let message = find_id(&dom, amazing_dom::NodeIdx(0)).unwrap();
+        let text = dom
+            .children(message)
+            .find_map(|child| match &dom.get(child).kind {
+                amazing_dom::NodeKind::Text { data } => Some(data.as_str()),
+                _ => None,
+            });
+        assert_eq!(text, Some("External ran"));
     }
 
 

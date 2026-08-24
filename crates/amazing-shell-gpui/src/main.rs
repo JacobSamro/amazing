@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 
 mod audio_output;
+mod dom_runtime;
 mod engine_viewport;
 mod playback_clock;
 mod secure_video;
