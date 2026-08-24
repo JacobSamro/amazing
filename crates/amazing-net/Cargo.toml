@@ -1,10 +1,10 @@
 [package]
 name = "amazing-net"
-description = "Hand-written HTTP/1.1 client over std::net::TcpStream, plus URL parsing and file:// fetching"
+description = "Hand-written HTTP/1.1 client with isolated vetted TLS, URL parsing, and file:// fetching"
 edition = "2021"
 version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-# Zero dependencies by project constraint: engine cores are `std` only.
 [dependencies]
+amazing-net-tls = { path = "../amazing-net-tls" }

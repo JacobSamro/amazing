@@ -44,6 +44,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-layout` | block/inline FC → flexbox/grid | ✅ Phase 3/3.5 |
 | `amazing-paint` | software rasterizer | ✅ Phase 4 |
 | `amazing-net` | HTTP/1.1 client | ✅ Phase 5 |
+| `amazing-net-tls` | isolated rustls HTTPS transport | ✅ Phase 5.1 |
 | `amazing-js` | ECMA-262 lexer/parser/interpreter | ✅ Phase 6 milestone |
 | `amazing-media` | BMP/P6 PPM images + RIFF/WAVE PCM audio | Phase 9.1/9.2 |
 | `amazing-webrtc` | ICE/TURN + live Chromium DTLS-SRTP media | Phase 9.3–9.47 |

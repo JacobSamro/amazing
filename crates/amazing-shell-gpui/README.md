@@ -115,7 +115,8 @@ target\release\amazing-shell.exe --secure-video
 ```
 
 The shell now proves the full local presentation path from address input through
-Amazing's file/HTTP response layer, DOM and inline CSS collection, layout, and
-software paint into a GPUI image. HTTPS/TLS, external stylesheets and media,
-full text editing/IME behavior, history persistence, and a production tab
-lifecycle remain the next UI integration steps.
+Amazing's file/HTTP/HTTPS response layer, DOM and inline CSS collection, layout,
+and software paint into a GPUI image. External stylesheets and media, full text
+editing/IME behavior, history persistence, and a production tab lifecycle
+remain the next UI integration steps. The ordered plan lives in
+[`docs/BROWSING_TODO.md`](../../docs/BROWSING_TODO.md).

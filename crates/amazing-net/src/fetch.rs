@@ -3,8 +3,7 @@
 //!
 //! Routing:
 //! - `http://…`      → HTTP/1.1 GET ([`crate::http`]) with redirect following
-//! - `https://…`     → [`NetError::UnsupportedScheme`] (TLS decision in
-//!   [`crate`] docs; parsing still works, connecting refuses fast)
+//! - `https://…`     → HTTP/1.1 through the isolated vetted-rustls adapter
 //! - `file://…`      → filesystem read of the decoded URL path
 //! - anything else without an `http`/`https`/`file` scheme → treated as a
 //!   bare filesystem path, because earlier phases load local pages that way
@@ -66,17 +65,12 @@ pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> 
     let mut redirects = 0usize;
     loop {
         let response = match current.scheme.as_str() {
-            "http" => http::get(&current, options)?,
-            "https" => {
-                return Err(NetError::UnsupportedScheme(
-                    "https — TLS is the documented Phase 5 exception (see lib.rs)".into(),
-                ))
-            },
+            "http" | "https" => http::get(&current, options)?,
             "file" => {
                 let fs_path = current.to_file_path()?;
                 let reported = current.to_string();
                 return read_file_response(&fs_path, reported);
-            },
+            }
             other => return Err(NetError::UnsupportedScheme(other.to_string())),
         };
 
@@ -197,9 +191,8 @@ mod tests {
         // Three sequential connections (Connection: close), three served
         // request heads seen by the harness.
         for expected_path in ["/start", "/b", "/final"] {
-            let req =
-                String::from_utf8(rx.recv_timeout(Duration::from_secs(5)).expect("request"))
-                    .expect("utf-8");
+            let req = String::from_utf8(rx.recv_timeout(Duration::from_secs(5)).expect("request"))
+                .expect("utf-8");
             assert!(req.starts_with(&format!("GET {expected_path} HTTP/1.1\r\n")));
         }
     }
@@ -208,10 +201,8 @@ mod tests {
     fn exceeding_five_redirect_hops_is_an_error() {
         let script: Vec<Vec<u8>> = (0..7)
             .map(|i| {
-                format!(
-                    "HTTP/1.1 302 Found\r\nLocation: /hop-{i}\r\nContent-Length: 0\r\n\r\n"
-                )
-                .into_bytes()
+                format!("HTTP/1.1 302 Found\r\nLocation: /hop-{i}\r\nContent-Length: 0\r\n\r\n")
+                    .into_bytes()
             })
             .collect();
         let (port, _rx) = serve(script);
@@ -219,22 +210,20 @@ mod tests {
             &format!("http://127.0.0.1:{port}/start"),
             &FetchOptions::default(),
         ) {
-            Err(NetError::TooManyRedirects) => {},
+            Err(NetError::TooManyRedirects) => {}
             other => panic!("expected TooManyRedirects, got {other:?}"),
         }
     }
 
     #[test]
     fn redirect_without_location_header_is_an_error() {
-        let script = vec![
-            b"HTTP/1.1 302 Found\r\nContent-Length: 0\r\n\r\n".to_vec(),
-        ];
+        let script = vec![b"HTTP/1.1 302 Found\r\nContent-Length: 0\r\n\r\n".to_vec()];
         let (port, _rx) = serve(script);
         match fetch(
             &format!("http://127.0.0.1:{port}/nowhere"),
             &FetchOptions::default(),
         ) {
-            Err(NetError::MissingLocation) => {},
+            Err(NetError::MissingLocation) => {}
             other => panic!("expected MissingLocation, got {other:?}"),
         }
     }
@@ -260,12 +249,7 @@ mod tests {
     }
 
     #[test]
-    fn https_is_parsed_but_connections_refuse_fast() {
-        match fetch("https://example.com/", &FetchOptions::default()) {
-            Err(NetError::UnsupportedScheme(s)) => assert!(s.starts_with("https")),
-            other => panic!("expected UnsupportedScheme, got {other:?}"),
-        }
-        // The URL itself still parses fine when used directly.
+    fn https_urls_use_the_tls_default_port() {
         let url = Url::parse("https://example.com/x?q#f").expect("https parses");
         assert_eq!(url.port, 443);
     }
@@ -305,7 +289,10 @@ mod tests {
     fn missing_bare_path_surfaces_io_error_not_url_error() {
         let mut path = env::temp_dir();
         path.push(format!("ferric-net-missing-{}", process::id()));
-        match fetch(path.to_str().expect("temp path utf-8"), &FetchOptions::default()) {
+        match fetch(
+            path.to_str().expect("temp path utf-8"),
+            &FetchOptions::default(),
+        ) {
             Err(NetError::Io(e)) => assert_eq!(e.kind(), std::io::ErrorKind::NotFound),
             other => panic!("expected Io error, got {other:?}"),
         }
@@ -316,7 +303,10 @@ mod tests {
         if !cfg!(windows) {
             return; // meaningful only on win-001; harmless elsewhere
         }
-        match fetch(r"C:\ferric-net-definitely-missing.txt", &FetchOptions::default()) {
+        match fetch(
+            r"C:\ferric-net-definitely-missing.txt",
+            &FetchOptions::default(),
+        ) {
             Err(NetError::Io(e)) => assert_eq!(e.kind(), std::io::ErrorKind::NotFound),
             other => panic!("expected Io error (not UnsupportedScheme), got {other:?}"),
         }

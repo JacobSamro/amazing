@@ -85,7 +85,13 @@ the engine cores.
 ### 6. TLS exception (decided at Phase 5)
 
 Amazing uses vetted TLS implementations rather than hand-rolled TLS. Rationale
-for HTTPS lives in `crates/amazing-net/src/lib.rs`; HTTPS remains unimplemented.
+for HTTPS lives in `crates/amazing-net/src/lib.rs`. Phase 5.1 implements the
+exception in `amazing-net-tls`: rustls 0.23.43 with its ring provider and
+Mozilla roots, certificate and server-name verification always enabled, ALPN
+restricted to HTTP/1.1, and bounded owned bytes returned to `amazing-net`.
+Provider types never cross the adapter boundary. An unclean TLS EOF is accepted
+only when HTTP `Content-Length` or chunked framing independently proves that the
+body is complete.
 
 Phase 9 applies the exception in the isolated `amazing-webrtc-crypto` adapter.
 It pins WebRTC.rs DTLS 0.12.0 and SRTP 0.17.2, plus their RustCrypto/rustls/ring

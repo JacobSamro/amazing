@@ -9,6 +9,7 @@ members = [
     "crates/amazing-js",
     "crates/amazing-media",
     "crates/amazing-net",
+    "crates/amazing-net-tls",
     "crates/amazing-paint",
     "crates/amazing-webrtc",
     "crates/amazing-webrtc-codecs",

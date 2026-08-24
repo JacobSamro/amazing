@@ -21,10 +21,10 @@
 //! and a mistake there is silently exploitable in a way a rendering bug never
 //! is. The working assumption stands: Amazing will adopt a *vetted* TLS
 //! implementation as infrastructure — the same call every serious
-//! from-scratch engine makes — rather than hand-roll one. Until that
-//! exception lands, `https://` URLs parse correctly but every connection
-//! attempt fails fast with [`NetError::UnsupportedScheme`]. This keeps the
-//! parser/fetch surface honest while making the gap explicit at runtime.
+//! from-scratch engine makes — rather than hand-roll one. HTTPS crosses the
+//! safe `amazing-net-tls` adapter, which pins rustls, verifies certificates
+//! against Mozilla roots, and advertises only HTTP/1.1 over ALPN. Provider
+//! types never cross into this crate's public API.
 //!
 //! # Implemented vs. deferred (deliberate, documented)
 //!
@@ -44,7 +44,6 @@
 //!   paths included); bare paths treated as files for earlier phases
 //!
 //! Deferred (each is its own later work item, not an oversight):
-//! - **TLS/https connections** — see the decision above
 //! - keep-alive / connection pooling (v1 sends `Connection: close`)
 //! - non-GET methods and request bodies
 //! - Content-Encoding decompression (gzip/br) — servers that ignore
@@ -76,9 +75,10 @@ pub enum NetError {
     Io(std::io::Error),
     /// The input was not a usable URL (wraps [`url::UrlError`] detail).
     Url(UrlError),
-    /// Scheme known to the parser but unconnectable (currently `https`, plus
-    /// schemes outside `http`/`https`/`file` entirely).
+    /// Scheme known to the parser but outside `http`/`https`/`file`.
     UnsupportedScheme(String),
+    /// Certificate validation, handshake, or encrypted transport failure.
+    Tls(String),
     /// More than [`fetch::MAX_REDIRECTS`] hops, or a bad hop along the way.
     TooManyRedirects,
     /// Redirect target had no resolvable `Location` header.
@@ -97,6 +97,7 @@ impl std::fmt::Display for NetError {
             NetError::Io(e) => write!(f, "i/o error: {e}"),
             NetError::Url(e) => write!(f, "invalid url: {e}"),
             NetError::UnsupportedScheme(s) => write!(f, "unsupported scheme: {s}"),
+            NetError::Tls(error) => write!(f, "{error}"),
             NetError::TooManyRedirects => write!(f, "too many redirects"),
             NetError::MissingLocation => write!(f, "redirect without Location header"),
             NetError::MalformedResponse(d) => write!(f, "malformed response: {d}"),

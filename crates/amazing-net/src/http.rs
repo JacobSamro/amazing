@@ -34,30 +34,55 @@ pub(crate) const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
 
 const USER_AGENT: &str = "Ferric/0.1";
 
-/// Performs one GET against `url` (scheme must be http). The socket gets
-/// `options.timeout` as both read and write timeout.
+/// Performs one GET against an HTTP or HTTPS URL. HTTPS crosses the isolated
+/// vetted-rustls adapter; response parsing and safety limits remain here.
 pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetError> {
     // ToSocketAddrs for (&str, u16) parses IP literals itself, but bracketed
     // IPv6 ("[::1]") does not parse — hand it the bare address instead.
     let connect_host = url.host.trim_start_matches('[').trim_end_matches(']');
-    let mut stream = TcpStream::connect((connect_host, url.port))?;
-    stream.set_read_timeout(Some(options.timeout))?;
-    stream.set_write_timeout(Some(options.timeout))?;
-
     let request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nConnection: close\r\n\r\n",
+        "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",
         url.request_target(),
         url.host_header(),
         USER_AGENT,
     );
-    stream.write_all(request.as_bytes())?;
-    stream.flush()?;
+    let (raw, require_explicit_body_length) = match url.scheme.as_str() {
+        "http" => {
+            let mut stream = TcpStream::connect((connect_host, url.port))?;
+            stream.set_read_timeout(Some(options.timeout))?;
+            stream.set_write_timeout(Some(options.timeout))?;
+            stream.write_all(request.as_bytes())?;
+            stream.flush()?;
+            (read_to_eof(&stream)?, false)
+        }
+        "https" => {
+            let response = amazing_net_tls::exchange(
+                connect_host,
+                url.port,
+                request.as_bytes(),
+                options.timeout,
+                MAX_BODY_BYTES,
+            )
+            .map_err(|error| match error {
+                amazing_net_tls::TlsError::ResponseTooLarge => NetError::ResponseTooLarge,
+                other => NetError::Tls(other.to_string()),
+            })?;
+            (response.bytes, !response.peer_closed_cleanly)
+        }
+        other => return Err(NetError::UnsupportedScheme(other.to_string())),
+    };
+    response_from_raw(url, &raw, require_explicit_body_length)
+}
 
-    let raw = read_to_eof(&stream)?;
-    let head_end = find_header_end(&raw)
+fn response_from_raw(
+    url: &Url,
+    raw: &[u8],
+    require_explicit_body_length: bool,
+) -> Result<Response, NetError> {
+    let head_end = find_header_end(raw)
         .ok_or_else(|| NetError::MalformedResponse("no \\r\\n\\r\\n header terminator".into()))?;
     let (status, reason, headers) = parse_head(&raw[..head_end])?;
-    let body = decode_body(&raw[head_end + 4..], &headers)?;
+    let body = decode_body(&raw[head_end + 4..], &headers, require_explicit_body_length)?;
 
     Ok(Response {
         url: url.to_string(),
@@ -115,14 +140,17 @@ fn parse_head(head: &[u8]) -> Result<(u16, String, Headers), NetError> {
                 return Err(NetError::MalformedResponse(format!(
                     "header line without ':': {line:?}"
                 )))
-            },
+            }
         };
         if name.is_empty() || name.contains(char::is_whitespace) {
             return Err(NetError::MalformedResponse(format!(
                 "invalid header name: {name:?}"
             )));
         }
-        headers.insert(name, value.trim_matches(|c| c == ' ' || c == '\t').to_string());
+        headers.insert(
+            name,
+            value.trim_matches(|c| c == ' ' || c == '\t').to_string(),
+        );
     }
     Ok((status, reason, headers))
 }
@@ -146,7 +174,11 @@ fn parse_status_line(line: &str) -> Result<(u16, String), NetError> {
 }
 
 /// Applies the framing rules to the bytes received after the head.
-fn decode_body(body: &[u8], headers: &Headers) -> Result<Vec<u8>, NetError> {
+fn decode_body(
+    body: &[u8],
+    headers: &Headers,
+    require_explicit_length: bool,
+) -> Result<Vec<u8>, NetError> {
     let chunked = headers.get_all("transfer-encoding").iter().any(|v| {
         v.split(',')
             .any(|t| t.trim().eq_ignore_ascii_case("chunked"))
@@ -165,6 +197,8 @@ fn decode_body(body: &[u8], headers: &Headers) -> Result<Vec<u8>, NetError> {
             return Err(NetError::IncompleteBody);
         }
         Ok(body[..len].to_vec())
+    } else if require_explicit_length {
+        Err(NetError::IncompleteBody)
     } else {
         // Neither CL nor chunked: with Connection: close the body is
         // everything up to EOF (RFC 9112 §6.3 rule 7).
@@ -184,8 +218,8 @@ fn dechunk(input: &[u8]) -> Result<(Vec<u8>, &[u8]), NetError> {
     let mut out = Vec::new();
     let mut pos = 0usize;
     loop {
-        let line_end = find_crlf(input, pos)
-            .ok_or_else(|| malformed("unterminated chunk-size line"))?;
+        let line_end =
+            find_crlf(input, pos).ok_or_else(|| malformed("unterminated chunk-size line"))?;
         let size_field = std::str::from_utf8(&input[pos..line_end])
             .map_err(|_| malformed("non-UTF-8 chunk-size line"))?;
         // Everything after ';' is a chunk extension; ignore it.
@@ -256,7 +290,7 @@ pub(crate) mod tests {
                                 if seen.windows(4).any(|w| w == b"\r\n\r\n") {
                                     break;
                                 }
-                            },
+                            }
                             Err(_) => break,
                         }
                     }
@@ -297,7 +331,7 @@ pub(crate) mod tests {
 
         let request = String::from_utf8(rx.recv_timeout(Duration::from_secs(5)).expect("request"))
             .expect("utf-8 request");
-        assert!(request.starts_with(&format!("GET /a HTTP/1.1\r\n")));
+        assert!(request.starts_with("GET /a HTTP/1.1\r\n"));
         assert!(request.contains(&format!("Host: 127.0.0.1:{port}\r\n")));
         assert!(request.contains("User-Agent: Ferric/0.1\r\n"));
         assert!(request.contains("Accept: */*\r\n"));
@@ -307,8 +341,9 @@ pub(crate) mod tests {
     #[test]
     fn header_lookup_is_case_insensitive_across_the_wire() {
         let resp = fetch_loopback(
-            vec![b"HTTP/1.1 204 No Content\r\nX-WeIrD-NaMe: v\r\nContent-Length: 0\r\n\r\n"
-                .to_vec()],
+            vec![
+                b"HTTP/1.1 204 No Content\r\nX-WeIrD-NaMe: v\r\nContent-Length: 0\r\n\r\n".to_vec(),
+            ],
             "/",
         )
         .expect("fetch");
@@ -362,7 +397,7 @@ pub(crate) mod tests {
     fn short_content_length_body_is_an_error_not_a_truncation() {
         let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc";
         match fetch_loopback(vec![raw.to_vec()], "/") {
-            Err(NetError::IncompleteBody) => {},
+            Err(NetError::IncompleteBody) => {}
             other => panic!("expected IncompleteBody, got {other:?}"),
         }
     }
@@ -375,10 +410,30 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn unclean_tls_eof_requires_http_body_framing() {
+        let url = Url::parse("https://example.test/").unwrap();
+        let unframed = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\npossibly truncated";
+        assert!(matches!(
+            response_from_raw(&url, unframed, true),
+            Err(NetError::IncompleteBody)
+        ));
+
+        let framed =
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\ncomplete";
+        assert_eq!(
+            response_from_raw(&url, framed, true)
+                .unwrap()
+                .text()
+                .as_deref(),
+            Some("complete")
+        );
+    }
+
+    #[test]
     fn malformed_status_line_is_rejected() {
         let raw = b"NOT-HTTP AT ALL\r\n\r\n";
         match fetch_loopback(vec![raw.to_vec()], "/") {
-            Err(NetError::MalformedResponse(_)) => {},
+            Err(NetError::MalformedResponse(_)) => {}
             other => panic!("expected MalformedResponse, got {other:?}"),
         }
     }
@@ -387,7 +442,7 @@ pub(crate) mod tests {
     fn missing_header_terminator_is_rejected() {
         let raw = b"HTTP/1.1 200 OK\r\nnever-terminated";
         match fetch_loopback(vec![raw.to_vec()], "/") {
-            Err(NetError::MalformedResponse(_)) => {},
+            Err(NetError::MalformedResponse(_)) => {}
             other => panic!("expected MalformedResponse, got {other:?}"),
         }
     }
@@ -396,16 +451,18 @@ pub(crate) mod tests {
     fn header_line_without_colon_is_rejected() {
         let raw = b"HTTP/1.1 200 OK\r\nBadHeaderLine\r\nContent-Length: 0\r\n\r\n";
         match fetch_loopback(vec![raw.to_vec()], "/") {
-            Err(NetError::MalformedResponse(_)) => {},
+            Err(NetError::MalformedResponse(_)) => {}
             other => panic!("expected MalformedResponse, got {other:?}"),
         }
     }
 
     #[test]
     fn status_line_without_reason_phrase_is_accepted() {
-        let resp =
-            fetch_loopback(vec![b"HTTP/1.1 404\r\nContent-Length: 0\r\n\r\n".to_vec()], "/")
-                .expect("fetch");
+        let resp = fetch_loopback(
+            vec![b"HTTP/1.1 404\r\nContent-Length: 0\r\n\r\n".to_vec()],
+            "/",
+        )
+        .expect("fetch");
         assert_eq!(resp.status, 404);
         assert_eq!(resp.reason, "");
     }
@@ -442,7 +499,7 @@ pub(crate) mod tests {
         // A 4 GiB chunk claim must hit the cap long before any allocation.
         let input = b"FFFFFFFF\r\nx".to_vec();
         match dechunk(&input) {
-            Err(NetError::ResponseTooLarge) => {},
+            Err(NetError::ResponseTooLarge) => {}
             other => panic!("expected ResponseTooLarge, got {other:?}"),
         }
     }
