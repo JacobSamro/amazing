@@ -52,6 +52,33 @@ Windows build server, and run every build/test there.
 - Env vars set at user level (left over from other projects): `LIBCLANG_PATH`,
   `PYTHON3`.
 
+### Screenshot-based UI proof
+
+For GPUI/browser-shell visual checks, capture the actual Amazing window on
+`win-001`, copy the PNG to the Mac, and inspect that file. Do not infer UI
+state from build success or a full-desktop screenshot.
+
+1. Keep the RDP user session active and identify the `amazing-shell.exe`
+   process, executable path, PID, session id, and build timestamp.
+2. Run `scripts\capture-gpui-shell.ps1` in that interactive RDP session. An
+   ordinary SSH process cannot see the RDP window station, so invoke the script
+   through a temporary interactive-only scheduled task running as `server`.
+   Always unregister the temporary task in `finally`.
+3. Write captures below `target\diagnostics\` (ignored), then copy them back:
+   ```
+   scp -q -i ~/.ssh/win001-build-key \
+     server@win-001:C:/Users/server/src/amazing/target/diagnostics/<capture>.png \
+     /private/tmp/<capture>.png
+   ```
+4. Inspect the copied PNG with the image-viewing tool. `PrintWindow` is the
+   preferred capture path because it records the target window even when
+   Terminal or another app obscures it.
+
+Treat a screenshot as visual regression evidence only when its executable,
+page/fixture, viewport, and capture path are recorded. It complements but does
+not replace pinned WPT measurements. Remove temporary scheduled tasks and
+throwaway capture helpers after the proof is collected.
+
 ## Project notes
 
 - Amazing: from-scratch std-only browser engine. Zero external crates in engine
