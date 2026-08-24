@@ -18,7 +18,7 @@ use gpui::{
 use gpui_platform::application;
 
 use audio_output::AudioDeviceClock;
-use engine_viewport::EngineViewport;
+use engine_viewport::{EngineViewport, PageRuntime, RuntimeUpdate};
 use playback_clock::{PlaybackUpdate, VideoPlaybackClock};
 use secure_video::{FRAME_EVENT_CAPACITY, SecureVideoEvent, spawn_secure_video_source};
 
@@ -125,6 +125,7 @@ impl Tab {
 
 struct BrowserShell {
     tabs: Vec<Tab>,
+    page_runtimes: Vec<Option<PageRuntime>>,
     video_frames: Vec<EngineViewport>,
     video_clock: VideoPlaybackClock,
     video_frame_index: usize,
@@ -236,6 +237,7 @@ impl BrowserShell {
                     None,
                 ),
             ],
+            page_runtimes: Vec::from([None, None, None, None, None, None]),
             video_frames: EngineViewport::video_demo_frames().expect("decode GPUI video demo"),
             video_clock: VideoPlaybackClock::new((0..6).map(|index| index * 500).collect(), 0)
                 .expect("valid demo video timeline"),
@@ -296,6 +298,7 @@ impl BrowserShell {
             },
             Some(EngineViewport::new_tab()),
         ));
+        self.page_runtimes.push(None);
         self.select_tab(self.tabs.len() - 1);
         self.address.clear();
         self.address_selected = true;
@@ -557,16 +560,18 @@ impl BrowserShell {
 
     fn load_navigation(&mut self, address: &str) {
         self.page_input = None;
-        let (viewport, final_address, title, favicon) = match EngineViewport::load_address(address) {
+        let (viewport, final_address, title, favicon, runtime) = match EngineViewport::load_address(address) {
             Ok(page) => (
                 page.viewport,
                 page.final_address,
                 page.title,
                 page.favicon,
+                page.runtime,
             ),
             Err(error) => (
                 EngineViewport::error(address, &error),
                 address.to_string(),
+                None,
                 None,
                 None,
             ),
@@ -580,6 +585,7 @@ impl BrowserShell {
         tab.title = title.unwrap_or_else(|| navigation_title(&final_address));
         tab.mono = site_initial(&final_address).to_string();
         tab.favicon = favicon;
+        self.page_runtimes[self.active] = runtime;
         self.address_selected = false;
     }
 
@@ -615,6 +621,42 @@ impl BrowserShell {
     fn reload(&mut self) {
         let address = self.committed_address.clone();
         self.load_navigation(&address);
+    }
+
+    fn apply_runtime_update(&mut self, index: usize, update: RuntimeUpdate) -> (bool, Option<String>) {
+        let prevented = update.default_prevented;
+        let navigation = update.navigation;
+        let tab = &mut self.tabs[index];
+        tab.viewport = Some(update.viewport);
+        if let Some(title) = update.title {
+            tab.title = title;
+        }
+        tab.favicon = update.favicon;
+        (prevented, navigation)
+    }
+
+    fn dispatch_runtime_click(&mut self, node: u32) -> (bool, Option<String>) {
+        let index = self.active;
+        let update = self.page_runtimes[index]
+            .as_mut()
+            .map(|runtime| runtime.dispatch_click(node));
+        update.map_or((false, None), |update| {
+            self.apply_runtime_update(index, update)
+        })
+    }
+
+    fn pump_active_runtime(&mut self) {
+        let index = self.active;
+        let update = self.page_runtimes[index]
+            .as_mut()
+            .and_then(PageRuntime::pump);
+        if let Some(update) = update {
+            let (_, navigation) = self.apply_runtime_update(index, update);
+            if let Some(navigation) = navigation {
+                self.address = navigation;
+                self.commit_navigation();
+            }
+        }
     }
 
     fn update_video_clock(&mut self, now_ms: u64) -> PlaybackUpdate {
@@ -1722,7 +1764,11 @@ impl BrowserShell {
                                                                 / bounds.size.width.as_f32();
                                                             let x = (event.position.x - bounds.origin.x).as_f32() * scale;
                                                             let y = (event.position.y - bounds.origin.y).as_f32() * scale;
-                                                            let link = viewport.link_at(x, y).map(str::to_string);
+                                                            let link = viewport
+                                                                .link_hit_at(x, y)
+                                                                .map(|(node, target)| {
+                                                                    (node, target.to_string())
+                                                                });
                                                             let control = viewport.control_at(x, y);
                                                             let text_control = control.and_then(|index| {
                                                                 viewport.text_control(index).map(|(value, rect)| {
@@ -1736,7 +1782,17 @@ impl BrowserShell {
                                                                 .and_then(|index| {
                                                                     viewport.form_target(index, None)
                                                                 });
-                                                            if let Some(target) = link.or(submit_target) {
+                                                            if let Some((node, target)) = link {
+                                                                let (prevented, script_navigation) =
+                                                                    this.dispatch_runtime_click(node);
+                                                                if let Some(target) = script_navigation {
+                                                                    this.address = target;
+                                                                    this.commit_navigation();
+                                                                } else if !prevented {
+                                                                    this.address = target;
+                                                                    this.commit_navigation();
+                                                                }
+                                                            } else if let Some(target) = submit_target {
                                                                 this.address = target;
                                                                 this.commit_navigation();
                                                             } else if let Some((control, value, rect)) = text_control {
@@ -2284,6 +2340,7 @@ fn main() {
                             match this.update(cx, |shell: &mut BrowserShell, cx| {
                                 let fallback_now_ms =
                                     started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+                                shell.pump_active_runtime();
                                 shell.poll_secure_video(fallback_now_ms);
                                 let clock_now_ms = shell
                                     .audio_device_clock

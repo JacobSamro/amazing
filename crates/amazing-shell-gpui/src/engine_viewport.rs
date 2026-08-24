@@ -135,6 +135,7 @@ pub struct EngineViewport {
 
 #[derive(Debug, Clone)]
 struct LinkRegion {
+    node: u32,
     x: f32,
     y: f32,
     width: f32,
@@ -175,6 +176,92 @@ pub struct LoadedPage {
     pub final_address: String,
     pub title: Option<String>,
     pub favicon: Option<Arc<RenderImage>>,
+    pub runtime: Option<PageRuntime>,
+}
+
+pub struct RuntimeUpdate {
+    pub viewport: EngineViewport,
+    pub title: Option<String>,
+    pub favicon: Option<Arc<RenderImage>>,
+    pub navigation: Option<String>,
+    pub default_prevented: bool,
+}
+
+pub struct PageRuntime {
+    host: Rc<RefCell<ShellDomHost>>,
+    interpreter: amazing_js::Interpreter,
+    document_url: String,
+    options: FetchOptions,
+}
+
+impl PageRuntime {
+    fn new(
+        dom: amazing_dom::Dom,
+        document_url: String,
+        options: FetchOptions,
+        scripts: Vec<String>,
+    ) -> Self {
+        let host = Rc::new(RefCell::new(ShellDomHost::new(dom)));
+        let mut interpreter = amazing_js::Interpreter::new();
+        interpreter.set_dom_host(host.clone());
+        interpreter.set_location_url(document_url.clone());
+        for source in scripts {
+            let _ = interpreter.run_script(&source);
+        }
+        for _ in 0..32 {
+            match interpreter.pump_timers() {
+                Ok(true) => {},
+                Ok(false) | Err(_) => break,
+            }
+        }
+        Self {
+            host,
+            interpreter,
+            document_url,
+            options,
+        }
+    }
+
+    fn snapshot(&mut self, default_prevented: bool) -> RuntimeUpdate {
+        let navigation = self.interpreter.take_navigation();
+        let host = self.host.borrow();
+        let dom = &host.dom;
+        let css = load_document_styles(dom, &self.document_url, &self.options);
+        let resources = load_page_resources(dom, &self.document_url, &self.options);
+        RuntimeUpdate {
+            viewport: EngineViewport::from_dom_with_resources(
+                dom,
+                &css,
+                &resources,
+                Some(&self.document_url),
+            ),
+            title: document_title(dom),
+            favicon: load_favicon(dom, &self.document_url, &self.options),
+            navigation,
+            default_prevented,
+        }
+    }
+
+    pub fn dispatch_click(&mut self, node: u32) -> RuntimeUpdate {
+        let _ = self.interpreter.dispatch_dom_event(node, "click");
+        let prevented = self.interpreter.last_event_default_prevented();
+        self.snapshot(prevented)
+    }
+
+    pub fn pump(&mut self) -> Option<RuntimeUpdate> {
+        let mut ran = false;
+        for _ in 0..32 {
+            match self.interpreter.pump_timers() {
+                Ok(true) => ran = true,
+                Ok(false) | Err(_) => break,
+            }
+        }
+        if ran {
+            Some(self.snapshot(false))
+        } else {
+            None
+        }
+    }
 }
 
 impl EngineViewport {
@@ -193,6 +280,7 @@ impl EngineViewport {
                 final_address: address.to_string(),
                 title: Some("Amazing — Phase 9 status".into()),
                 favicon: None,
+                runtime: None,
             });
         }
         if address == "amazing://newtab" {
@@ -201,6 +289,7 @@ impl EngineViewport {
                 final_address: address.to_string(),
                 title: Some("New tab".into()),
                 favicon: None,
+                runtime: None,
             });
         }
         let options = FetchOptions {
@@ -217,11 +306,24 @@ impl EngineViewport {
         let html = response
             .text()
             .ok_or_else(|| "response body was not decodable text".to_string())?;
-        let dom = execute_document_scripts(
-            amazing_html::parse(&html),
-            &final_address,
-            &options,
-        );
+        let dom = amazing_html::parse(&html);
+        let scripts = collect_document_scripts(&dom, &final_address, &options);
+        if !scripts.is_empty() {
+            let mut runtime = PageRuntime::new(
+                dom,
+                final_address.clone(),
+                options,
+                scripts,
+            );
+            let update = runtime.snapshot(false);
+            return Ok(LoadedPage {
+                viewport: update.viewport,
+                final_address,
+                title: update.title,
+                favicon: update.favicon,
+                runtime: Some(runtime),
+            });
+        }
         let css = load_document_styles(&dom, &final_address, &options);
         let resources = load_page_resources(&dom, &final_address, &options);
         let title = document_title(&dom);
@@ -236,6 +338,7 @@ impl EngineViewport {
             final_address,
             title,
             favicon,
+            runtime: None,
         })
     }
 
@@ -347,7 +450,7 @@ impl EngineViewport {
         }
     }
 
-    pub fn link_at(&self, x: f32, y: f32) -> Option<&str> {
+    pub fn link_hit_at(&self, x: f32, y: f32) -> Option<(u32, &str)> {
         self.links
             .iter()
             .rev()
@@ -357,7 +460,7 @@ impl EngineViewport {
                     && y >= region.y
                     && y <= region.y + region.height
             })
-            .map(|region| region.target.as_str())
+            .map(|region| (region.node, region.target.as_str()))
     }
 
     pub fn control_at(&self, x: f32, y: f32) -> Option<usize> {
@@ -475,7 +578,7 @@ fn collect_link_regions(
         dom: &amazing_dom::Dom,
         mut node: amazing_dom::NodeIdx,
         document_url: &str,
-    ) -> Option<String> {
+    ) -> Option<(u32, String)> {
         loop {
             if dom.name(node) == Some("a")
                 && let Some(href) = dom.attrs_of(node).and_then(|attrs| {
@@ -485,7 +588,8 @@ fn collect_link_regions(
                         .map(|(_, value)| value.as_str())
                 })
             {
-                return resolve_resource_address(document_url, href);
+                return resolve_resource_address(document_url, href)
+                    .map(|target| (node.0, target));
             }
             node = dom.get(node).parent?;
         }
@@ -499,8 +603,9 @@ fn collect_link_regions(
     ) {
         for line in &layout.lines {
             for word in &line.words {
-                if let Some(target) = target_for_node(dom, word.node, document_url) {
+                if let Some((node, target)) = target_for_node(dom, word.node, document_url) {
                     regions.push(LinkRegion {
+                        node,
                         x: word.x,
                         y: line.y_top,
                         width: word.width.max(1.0),
@@ -510,8 +615,9 @@ fn collect_link_regions(
                 }
             }
             for replaced in &line.replaced {
-                if let Some(target) = target_for_node(dom, replaced.node, document_url) {
+                if let Some((node, target)) = target_for_node(dom, replaced.node, document_url) {
                     regions.push(LinkRegion {
+                        node,
                         x: replaced.x,
                         y: replaced.y,
                         width: replaced.width.max(1.0),
@@ -741,11 +847,11 @@ fn load_document_styles(
     css
 }
 
-fn execute_document_scripts(
-    dom: amazing_dom::Dom,
+fn collect_document_scripts(
+    dom: &amazing_dom::Dom,
     document_url: &str,
     options: &FetchOptions,
-) -> amazing_dom::Dom {
+) -> Vec<String> {
     fn collect(
         dom: &amazing_dom::Dom,
         node: amazing_dom::NodeIdx,
@@ -809,35 +915,14 @@ fn execute_document_scripts(
     let mut scripts = Vec::new();
     let mut total_bytes = 0usize;
     collect(
-        &dom,
+        dom,
         amazing_dom::NodeIdx(0),
         document_url,
         options,
         &mut scripts,
         &mut total_bytes,
     );
-    if scripts.is_empty() {
-        return dom;
-    }
-
-    let host = Rc::new(RefCell::new(ShellDomHost::new(dom)));
-    let mut interpreter = amazing_js::Interpreter::new();
-    interpreter.set_dom_host(host.clone());
-    interpreter.set_location_url(document_url.to_string());
-    for source in scripts {
-        let _ = interpreter.run_script(&source);
-    }
-    for _ in 0..32 {
-        match interpreter.pump_timers() {
-            Ok(true) => {},
-            Ok(false) | Err(_) => break,
-        }
-    }
-    drop(interpreter);
-    Rc::try_unwrap(host)
-        .expect("interpreter released DOM host")
-        .into_inner()
-        .dom
+    scripts
 }
 
 fn collect_style_sources(
@@ -1348,11 +1433,13 @@ mod tests {
         let region = viewport.links.first().expect("link region");
         assert_eq!(region.target, "https://example.test/next.html");
         assert_eq!(
-            viewport.link_at(
-                region.x + region.width / 2.0,
-                region.y + region.height / 2.0
-            ),
-            Some("https://example.test/next.html")
+            viewport
+                .link_hit_at(
+                    region.x + region.width / 2.0,
+                    region.y + region.height / 2.0
+                )
+                .map(|(_, target)| target),
+            Some("https://example.test/next.html"),
         );
     }
 
@@ -1417,13 +1504,14 @@ mod tests {
              <script>document.title = 'Inline ran';</script>\
              <script src=../assets/page.js></script>",
         );
-        let dom = execute_document_scripts(
-            dom,
-            &format!("http://127.0.0.1:{port}/pages/index.html"),
-            &FetchOptions::default(),
-        );
+        let document_url = format!("http://127.0.0.1:{port}/pages/index.html");
+        let options = FetchOptions::default();
+        let scripts = collect_document_scripts(&dom, &document_url, &options);
+        let runtime = PageRuntime::new(dom, document_url, options, scripts);
         server.join().unwrap();
-        assert_eq!(document_title(&dom).as_deref(), Some("Scripted page"));
+        let host = runtime.host.borrow();
+        let dom = &host.dom;
+        assert_eq!(document_title(dom).as_deref(), Some("Scripted page"));
 
         fn find_id(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx) -> Option<amazing_dom::NodeIdx> {
             if dom.attrs_of(node).is_some_and(|attrs| {
@@ -1435,7 +1523,7 @@ mod tests {
             }
             dom.children(node).find_map(|child| find_id(dom, child))
         }
-        let message = find_id(&dom, amazing_dom::NodeIdx(0)).unwrap();
+        let message = find_id(dom, amazing_dom::NodeIdx(0)).unwrap();
         let text = dom
             .children(message)
             .find_map(|child| match &dom.get(child).kind {
@@ -1443,6 +1531,57 @@ mod tests {
                 _ => None,
             });
         assert_eq!(text, Some("External ran"));
+    }
+
+    #[test]
+    fn retained_runtime_dispatches_clicks_and_future_timers() {
+        let dom = amazing_html::parse(
+            "<title>Initial</title>\
+             <a id=action href=next.html>Before click</a>\
+             <p id=timer>Waiting</p>\
+             <script>\
+               document.querySelector('#action').addEventListener('click', function(event) {\
+                 event.preventDefault();\
+                 document.querySelector('#action').textContent = 'JS click handled';\
+                 document.title = 'Event handled';\
+               });\
+               setTimeout(function() {\
+                 document.querySelector('#timer').textContent = 'Timer fired';\
+               }, 20);\
+             </script>",
+        );
+        let document_url = "https://example.test/page.html".to_string();
+        let options = FetchOptions::default();
+        let scripts = collect_document_scripts(&dom, &document_url, &options);
+        let mut runtime = PageRuntime::new(dom, document_url, options, scripts);
+        let initial = runtime.snapshot(false);
+        let node = initial.viewport.links.first().unwrap().node;
+        let clicked = runtime.dispatch_click(node);
+        assert!(clicked.default_prevented);
+        assert_eq!(clicked.title.as_deref(), Some("Event handled"));
+        assert!(clicked.navigation.is_none());
+
+        std::thread::sleep(Duration::from_millis(30));
+        assert!(runtime.pump().is_some());
+        let host = runtime.host.borrow();
+        fn text_by_id(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, id: &str) -> Option<String> {
+            if dom.attrs_of(node).is_some_and(|attrs| {
+                attrs
+                    .iter()
+                    .any(|(name, value)| name == "id" && value == id)
+            }) {
+                return dom.children(node).find_map(|child| match &dom.get(child).kind {
+                    amazing_dom::NodeKind::Text { data } => Some(data.clone()),
+                    _ => None,
+                });
+            }
+            dom.children(node)
+                .find_map(|child| text_by_id(dom, child, id))
+        }
+        assert_eq!(
+            text_by_id(&host.dom, amazing_dom::NodeIdx(0), "timer").as_deref(),
+            Some("Timer fired")
+        );
     }
 
 

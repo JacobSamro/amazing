@@ -4,7 +4,7 @@ Canonical sequence for turning the GPUI shell from a document viewer into a
 usable browser. Resolve one ticket, verify its exit criteria on `win-001`, then
 update this map before starting the next ticket.
 
-Frontier: **#6a — post-paint events and timers**
+Frontier: **#7 — browser session state**
 
 ## #1: Verified HTTPS navigation
 
@@ -150,7 +150,7 @@ proves external text/title mutation is visible after relayout.
 
 Blocked by: #6
 Type: Prototype
-Status: ⏳ Next
+Status: ✅ Resolved
 
 ### Question
 
@@ -159,7 +159,12 @@ events and future timer turns mutate and repaint the current page?
 
 ### Answer
 
-Pending.
+Each script-bearing tab retains its DOM host and interpreter. The shell clock
+pumps future timer turns and regenerates metadata/resources/layout/paint after
+mutations. Painted anchor clicks dispatch DOM `click` first; script navigation
+is honored and `preventDefault` suppresses native link navigation. The live
+fixture proves both delayed timer repaint and click-driven title/content repaint
+without leaving the source URL.
 
 ## #7: Browser session state
 
