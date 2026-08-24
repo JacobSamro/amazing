@@ -52,6 +52,39 @@ h1 { display: block; margin: 0px 0px 20px 0px; color: #1b1e23; font-size: 44px; 
 .note { display: block; width: 720px; margin: 26px 0px 0px 0px; color: #737b88; font-size: 13px; }
 "#;
 
+const NEW_TAB_HTML: &str = r#"
+<!doctype html>
+<html>
+  <body>
+    <main class="new-tab">
+      <div class="mark">A</div>
+      <h1>Search the web</h1>
+      <p class="intro">Type a URL or search query in the address bar.</p>
+      <section class="shortcuts">
+        <article><strong>Engine status</strong><p>amazing://status</p></article>
+        <article><strong>HTML Standard</strong><p>html.spec.whatwg.org</p></article>
+        <article><strong>Local test server</strong><p>localhost:8080</p></article>
+      </section>
+      <p class="proof">AMAZING · FROM-SCRATCH BROWSER ENGINE</p>
+    </main>
+  </body>
+</html>
+"#;
+
+const NEW_TAB_CSS: &str = r#"
+html, body { display: block; margin: 0px; padding: 0px; background: #f8f9fa; color: #202124; }
+.new-tab { display: block; padding: 108px 110px 70px 110px; }
+.mark { display: block; width: 58px; height: 58px; padding: 13px 0px 0px 0px; background: #b1552b; color: #ffffff; font-size: 29px; text-align: center; }
+h1 { display: block; margin: 24px 0px 10px 0px; font-size: 35px; color: #202124; }
+.intro { display: block; margin: 0px 0px 38px 0px; color: #5f6368; font-size: 16px; }
+.shortcuts { display: flex; gap: 14px; }
+article { display: block; width: 220px; min-height: 92px; padding: 16px; background: #ffffff; border: 1px solid #dadce0; }
+article strong { color: #202124; font-size: 13px; }
+article p { display: block; margin: 10px 0px 0px 0px; color: #5f6368; font-size: 12px; }
+.proof { display: block; margin: 46px 0px 0px 0px; color: #80868b; font-size: 11px; }
+"#;
+
+#[derive(Clone)]
 pub struct EngineViewport {
     pub image: Arc<RenderImage>,
     pub width: u32,
@@ -63,9 +96,16 @@ impl EngineViewport {
         Self::from_document(DEMO_HTML, DEMO_CSS)
     }
 
+    pub fn new_tab() -> Self {
+        Self::from_document(NEW_TAB_HTML, NEW_TAB_CSS)
+    }
+
     pub fn load_address(address: &str) -> Result<(Self, String), String> {
         if address == "amazing://status" {
             return Ok((Self::demo(), address.to_string()));
+        }
+        if address == "amazing://newtab" {
+            return Ok((Self::new_tab(), address.to_string()));
         }
         let options = FetchOptions {
             timeout: std::time::Duration::from_secs(3),

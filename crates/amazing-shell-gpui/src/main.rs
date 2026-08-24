@@ -32,19 +32,70 @@ const ACCENT: u32 = 0xb1552b;
 const RULE: u32 = 0xe7e9ee;
 const SECURE_VIDEO_POLL_MS: u64 = 50;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TabKind {
+    Engine,
+    Video,
+    Document,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TabGroup {
+    Engine,
+    Specs,
+    Other,
+}
+
 #[derive(Clone)]
 struct Tab {
-    mono: &'static str,
-    title: &'static str,
-    url: &'static str,
-    kicker: &'static str,
-    lede: &'static str,
+    mono: String,
+    title: String,
+    url: String,
+    kicker: String,
+    lede: String,
     hue: u32,
+    kind: TabKind,
+    group: TabGroup,
+    open: bool,
+    bookmarked: bool,
+    viewport: Option<EngineViewport>,
+    history: Vec<String>,
+    history_index: usize,
+}
+
+struct TabSpec<'a> {
+    mono: &'a str,
+    title: &'a str,
+    url: &'a str,
+    kicker: &'a str,
+    lede: &'a str,
+    hue: u32,
+    kind: TabKind,
+    group: TabGroup,
+}
+
+impl Tab {
+    fn from_spec(spec: TabSpec<'_>, viewport: Option<EngineViewport>) -> Self {
+        Self {
+            mono: spec.mono.into(),
+            title: spec.title.into(),
+            url: spec.url.into(),
+            kicker: spec.kicker.into(),
+            lede: spec.lede.into(),
+            hue: spec.hue,
+            kind: spec.kind,
+            group: spec.group,
+            open: true,
+            bookmarked: false,
+            viewport,
+            history: vec![spec.url.into()],
+            history_index: 0,
+        }
+    }
 }
 
 struct BrowserShell {
     tabs: Vec<Tab>,
-    viewport: EngineViewport,
     video_frames: Vec<EngineViewport>,
     video_clock: VideoPlaybackClock,
     video_frame_index: usize,
@@ -60,68 +111,98 @@ struct BrowserShell {
     address: String,
     committed_address: String,
     address_selected: bool,
-    history: Vec<String>,
-    history_index: usize,
     active: usize,
+    next_tab_id: usize,
     engine_collapsed: bool,
     specs_collapsed: bool,
     sidebar: bool,
+    downloads_open: bool,
+    menu_open: bool,
 }
 
 impl BrowserShell {
     fn new(address_focus: Option<FocusHandle>) -> Self {
         Self {
             tabs: vec![
-                Tab {
-                    mono: "A",
-                    title: "Amazing — Phase 9 status",
-                    url: "amazing://status",
-                    kicker: "AMAZING://STATUS",
-                    lede: "A browser engine written against the specs in pure Rust — std only in every engine core, with a hand-written tokenizer, cascade, layout, rasterizer, HTTP stack and interpreter.",
-                    hue: ACCENT,
-                },
-                Tab {
-                    mono: "V",
-                    title: "Secure video · H.264 decoded frame",
-                    url: "amazing://media/video",
-                    kicker: "AMAZING://MEDIA/VIDEO",
-                    lede: "A real H.264 access unit decoded through the isolated codec adapter and presented as RGBA by GPUI.",
-                    hue: 0x3f7d4e,
-                },
-                Tab {
-                    mono: "H",
-                    title: "html5lib tree-construction",
-                    url: "localhost:8080/html5lib",
-                    kicker: "LOCALHOST:8080",
-                    lede: "Tree-construction fixtures for the tokenizer and the namespace-aware tree builder.",
-                    hue: 0x2f7f8c,
-                },
-                Tab {
-                    mono: "S",
-                    title: "HTML Standard § 13.2.5",
-                    url: "html.spec.whatwg.org/multipage/parsing.html",
-                    kicker: "HTML.SPEC.WHATWG.ORG",
-                    lede: "Tokenization states, in the same order the Amazing tokenizer implements them.",
-                    hue: 0x3a6ea8,
-                },
-                Tab {
-                    mono: "C",
-                    title: "CSS Syntax Module Level 3",
-                    url: "drafts.csswg.org/css-syntax-3",
-                    kicker: "DRAFTS.CSSWG.ORG",
-                    lede: "The token stream and parser entry points behind amazing-css.",
-                    hue: 0x3a6ea8,
-                },
-                Tab {
-                    mono: "E",
-                    title: "ECMA-262",
-                    url: "tc39.es/ecma262",
-                    kicker: "TC39.ES",
-                    lede: "Runtime semantics for the tree-walking JavaScript interpreter.",
-                    hue: 0x7a5aa8,
-                },
+                Tab::from_spec(
+                    TabSpec {
+                        mono: "A",
+                        title: "Amazing — Phase 9 status",
+                        url: "amazing://status",
+                        kicker: "AMAZING://STATUS",
+                        lede: "A browser engine written against the specs in pure Rust — std only in every engine core, with a hand-written tokenizer, cascade, layout, rasterizer, HTTP stack and interpreter.",
+                        hue: ACCENT,
+                        kind: TabKind::Engine,
+                        group: TabGroup::Engine,
+                    },
+                    Some(EngineViewport::demo()),
+                ),
+                Tab::from_spec(
+                    TabSpec {
+                        mono: "V",
+                        title: "Secure video · H.264 decoded frame",
+                        url: "amazing://media/video",
+                        kicker: "AMAZING://MEDIA/VIDEO",
+                        lede: "A real H.264 access unit decoded through the isolated codec adapter and presented as RGBA by GPUI.",
+                        hue: 0x3f7d4e,
+                        kind: TabKind::Video,
+                        group: TabGroup::Engine,
+                    },
+                    None,
+                ),
+                Tab::from_spec(
+                    TabSpec {
+                        mono: "H",
+                        title: "html5lib tree-construction",
+                        url: "localhost:8080/html5lib",
+                        kicker: "LOCALHOST:8080",
+                        lede: "Tree-construction fixtures for the tokenizer and the namespace-aware tree builder.",
+                        hue: 0x2f7f8c,
+                        kind: TabKind::Document,
+                        group: TabGroup::Engine,
+                    },
+                    None,
+                ),
+                Tab::from_spec(
+                    TabSpec {
+                        mono: "S",
+                        title: "HTML Standard § 13.2.5",
+                        url: "html.spec.whatwg.org/multipage/parsing.html",
+                        kicker: "HTML.SPEC.WHATWG.ORG",
+                        lede: "Tokenization states, in the same order the Amazing tokenizer implements them.",
+                        hue: 0x3a6ea8,
+                        kind: TabKind::Document,
+                        group: TabGroup::Specs,
+                    },
+                    None,
+                ),
+                Tab::from_spec(
+                    TabSpec {
+                        mono: "C",
+                        title: "CSS Syntax Module Level 3",
+                        url: "drafts.csswg.org/css-syntax-3",
+                        kicker: "DRAFTS.CSSWG.ORG",
+                        lede: "The token stream and parser entry points behind amazing-css.",
+                        hue: 0x3a6ea8,
+                        kind: TabKind::Document,
+                        group: TabGroup::Specs,
+                    },
+                    None,
+                ),
+                Tab::from_spec(
+                    TabSpec {
+                        mono: "E",
+                        title: "ECMA-262",
+                        url: "tc39.es/ecma262",
+                        kicker: "TC39.ES",
+                        lede: "Runtime semantics for the tree-walking JavaScript interpreter.",
+                        hue: 0x7a5aa8,
+                        kind: TabKind::Document,
+                        group: TabGroup::Specs,
+                    },
+                    None,
+                ),
             ],
-            viewport: EngineViewport::demo(),
             video_frames: EngineViewport::video_demo_frames().expect("decode GPUI video demo"),
             video_clock: VideoPlaybackClock::new((0..6).map(|index| index * 500).collect(), 0)
                 .expect("valid demo video timeline"),
@@ -138,22 +219,80 @@ impl BrowserShell {
             address: "amazing://status".to_string(),
             committed_address: "amazing://status".to_string(),
             address_selected: false,
-            history: vec!["amazing://status".to_string()],
-            history_index: 0,
             active: 0,
+            next_tab_id: 1,
             engine_collapsed: false,
             specs_collapsed: true,
             sidebar: false,
+            downloads_open: false,
+            menu_open: false,
         }
     }
 
     fn select_tab(&mut self, index: usize) {
-        if index < self.tabs.len() {
+        if self.tabs.get(index).is_some_and(|tab| tab.open) {
             self.active = index;
-            self.address = self.tabs[index].url.to_string();
+            self.address = self.tabs[index].url.clone();
             self.committed_address = self.address.clone();
             self.address_selected = false;
+            self.downloads_open = false;
+            self.menu_open = false;
         }
+    }
+
+    fn add_tab(&mut self) {
+        let id = self.next_tab_id;
+        self.next_tab_id += 1;
+        self.tabs.push(Tab::from_spec(
+            TabSpec {
+                mono: "+",
+                title: &format!("New tab {id}"),
+                url: "amazing://newtab",
+                kicker: "AMAZING://NEWTAB",
+                lede: "Type an address or search query to get started.",
+                hue: 0x6b7280,
+                kind: TabKind::Engine,
+                group: TabGroup::Other,
+            },
+            Some(EngineViewport::new_tab()),
+        ));
+        self.select_tab(self.tabs.len() - 1);
+        self.address.clear();
+        self.address_selected = true;
+    }
+
+    fn close_tab(&mut self, index: usize) {
+        if !self.tabs.get(index).is_some_and(|tab| tab.open) {
+            return;
+        }
+        self.tabs[index].open = false;
+        if index != self.active {
+            return;
+        }
+        let next = ((index + 1)..self.tabs.len())
+            .find(|candidate| self.tabs[*candidate].open)
+            .or_else(|| {
+                (0..index)
+                    .rev()
+                    .find(|candidate| self.tabs[*candidate].open)
+            });
+        if let Some(next) = next {
+            self.select_tab(next);
+        } else {
+            self.add_tab();
+        }
+    }
+
+    fn open_bookmark(&mut self, index: usize) {
+        if index >= self.tabs.len() {
+            return;
+        }
+        self.tabs[index].open = true;
+        self.select_tab(index);
+    }
+
+    fn toggle_bookmark(&mut self) {
+        self.tabs[self.active].bookmarked = !self.tabs[self.active].bookmarked;
     }
 
     fn on_address_key_down(
@@ -203,46 +342,59 @@ impl BrowserShell {
             return;
         };
         self.load_navigation(&address);
-        if self.history[self.history_index] != self.committed_address {
-            self.history.truncate(self.history_index + 1);
-            self.history.push(self.committed_address.clone());
-            self.history_index = self.history.len() - 1;
+        let tab = &mut self.tabs[self.active];
+        if tab.history[tab.history_index] != self.committed_address {
+            tab.history.truncate(tab.history_index + 1);
+            tab.history.push(self.committed_address.clone());
+            tab.history_index = tab.history.len() - 1;
         }
     }
 
     fn load_navigation(&mut self, address: &str) {
-        match EngineViewport::load_address(address) {
-            Ok((viewport, final_address)) => {
-                self.viewport = viewport;
-                self.address = final_address.clone();
-                self.committed_address = final_address;
-            }
-            Err(error) => {
-                self.viewport = EngineViewport::error(address, &error);
-                self.address = address.to_string();
-                self.committed_address = address.to_string();
-            }
+        let (viewport, final_address) = match EngineViewport::load_address(address) {
+            Ok((viewport, final_address)) => (viewport, final_address),
+            Err(error) => (EngineViewport::error(address, &error), address.to_string()),
+        };
+        self.address = final_address.clone();
+        self.committed_address = final_address.clone();
+        let tab = &mut self.tabs[self.active];
+        tab.url = final_address.clone();
+        tab.kind = TabKind::Engine;
+        tab.viewport = Some(viewport);
+        if tab.title.starts_with("New tab") {
+            tab.title = address_title(&final_address);
+            tab.mono = site_initial(&final_address).to_string();
         }
-        self.active = 0;
         self.address_selected = false;
     }
 
     fn go_back(&mut self) {
-        if self.history_index == 0 {
+        let tab = &mut self.tabs[self.active];
+        if tab.history_index == 0 {
             return;
         }
-        self.history_index -= 1;
-        let address = self.history[self.history_index].clone();
+        tab.history_index -= 1;
+        let address = tab.history[tab.history_index].clone();
         self.load_navigation(&address);
     }
 
     fn go_forward(&mut self) {
-        if self.history_index + 1 >= self.history.len() {
+        let tab = &mut self.tabs[self.active];
+        if tab.history_index + 1 >= tab.history.len() {
             return;
         }
-        self.history_index += 1;
-        let address = self.history[self.history_index].clone();
+        tab.history_index += 1;
+        let address = tab.history[tab.history_index].clone();
         self.load_navigation(&address);
+    }
+
+    fn can_go_back(&self) -> bool {
+        self.tabs[self.active].history_index > 0
+    }
+
+    fn can_go_forward(&self) -> bool {
+        let tab = &self.tabs[self.active];
+        tab.history_index + 1 < tab.history.len()
     }
 
     fn reload(&mut self) {
@@ -389,21 +541,34 @@ impl BrowserShell {
         self.sidebar = !self.sidebar;
     }
 
-    fn icon_button(label: &'static str) -> impl IntoElement {
+    fn toggle_downloads(&mut self) {
+        self.downloads_open = !self.downloads_open;
+        self.menu_open = false;
+    }
+
+    fn toggle_menu(&mut self) {
+        self.menu_open = !self.menu_open;
+        self.downloads_open = false;
+    }
+
+    fn icon_button(label: &'static str, enabled: bool) -> impl IntoElement {
         div()
             .flex()
             .items_center()
             .justify_center()
             .size(px(30.0))
             .rounded_md()
-            .text_color(rgb(ICON))
+            .text_color(rgb(if enabled { ICON } else { DIM }))
             .text_size(px(16.0))
-            .cursor_pointer()
-            .hover(|style| style.bg(rgb(SURFACE_2_HOVER)))
+            .when(enabled, |button| {
+                button
+                    .cursor_pointer()
+                    .hover(|style| style.bg(rgb(SURFACE_2_HOVER)))
+            })
             .child(label)
     }
 
-    fn tab(&self, index: usize, cx: &mut Context<Self>) -> impl IntoElement {
+    fn tab(&self, index: usize, cx: &mut Context<Self>) -> gpui::AnyElement {
         let tab = self.tabs[index].clone();
         let active = self.active == index;
         div()
@@ -454,14 +619,23 @@ impl BrowserShell {
             )
             .child(
                 div()
+                    .id(SharedString::from(format!("close-tab-{index}")))
                     .flex()
                     .items_center()
                     .justify_center()
                     .size(px(18.0))
                     .rounded_full()
                     .text_size(px(12.0))
+                    .cursor_pointer()
+                    .hover(|style| style.bg(rgb(SURFACE_2_HOVER)))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.close_tab(index);
+                        cx.notify();
+                    }))
                     .child("×"),
             )
+            .into_any_element()
     }
 
     fn group_chip(
@@ -490,6 +664,7 @@ impl BrowserShell {
             .child(title)
             .child(
                 div()
+                    .id("sidebar-search")
                     .flex()
                     .items_center()
                     .justify_center()
@@ -504,6 +679,9 @@ impl BrowserShell {
     }
 
     fn navigation_toolbar(&self, cx: &mut Context<Self>, visible: bool) -> gpui::AnyElement {
+        let bookmarked = self.tabs[self.active].bookmarked;
+        let back_enabled = self.can_go_back();
+        let forward_enabled = self.can_go_forward();
         div()
             .flex()
             .items_center()
@@ -518,7 +696,7 @@ impl BrowserShell {
                         this.go_back();
                         cx.notify();
                     }))
-                    .child(Self::icon_button("←"))
+                    .child(Self::icon_button("←", back_enabled))
                     .into_any_element(),
                 div()
                     .id("history-forward")
@@ -526,7 +704,7 @@ impl BrowserShell {
                         this.go_forward();
                         cx.notify();
                     }))
-                    .child(Self::icon_button("→"))
+                    .child(Self::icon_button("→", forward_enabled))
                     .into_any_element(),
                 div()
                     .id("history-reload")
@@ -534,7 +712,7 @@ impl BrowserShell {
                         this.reload();
                         cx.notify();
                     }))
-                    .child(Self::icon_button("↻"))
+                    .child(Self::icon_button("↻", true))
                     .into_any_element(),
             ])
             .child(
@@ -577,8 +755,35 @@ impl BrowserShell {
                             })
                             .child(self.address.clone()),
                     )
-                    .child("☆")
-                    .child("⌘"),
+                    .child(
+                        div()
+                            .id("bookmark-current")
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(24.0))
+                            .rounded_full()
+                            .cursor_pointer()
+                            .hover(|style| style.bg(rgb(SURFACE_2_HOVER)))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.toggle_bookmark();
+                                cx.notify();
+                            }))
+                            .child(if bookmarked { "★" } else { "☆" }),
+                    )
+                    .child(
+                        div()
+                            .id("site-controls")
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(24.0))
+                            .rounded_full()
+                            .cursor_pointer()
+                            .hover(|style| style.bg(rgb(SURFACE_2_HOVER)))
+                            .child("◈"),
+                    ),
             )
             .child(
                 div()
@@ -587,9 +792,17 @@ impl BrowserShell {
                         this.toggle_sidebar();
                         cx.notify();
                     }))
-                    .child(Self::icon_button("◫")),
+                    .child(Self::icon_button("◫", true)),
             )
-            .child(Self::icon_button("⇩"))
+            .child(
+                div()
+                    .id("downloads-toggle")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.toggle_downloads();
+                        cx.notify();
+                    }))
+                    .child(Self::icon_button("⇩", true)),
+            )
             .child(
                 div()
                     .flex()
@@ -604,7 +817,15 @@ impl BrowserShell {
                     .font_weight(gpui::FontWeight::BOLD)
                     .child("J"),
             )
-            .child(Self::icon_button("⋮"))
+            .child(
+                div()
+                    .id("browser-menu-toggle")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.toggle_menu();
+                        cx.notify();
+                    }))
+                    .child(Self::icon_button("⋮", true)),
+            )
             .when(!visible, |toolbar| toolbar.hidden())
             .into_any_element()
     }
@@ -664,6 +885,7 @@ impl BrowserShell {
             .border_color(rgb(BORDER))
             .child(
                 div()
+                    .id("sidebar-search")
                     .flex()
                     .items_center()
                     .h(px(30.0))
@@ -672,10 +894,19 @@ impl BrowserShell {
                     .bg(rgb(SURFACE_2))
                     .text_size(px(11.0))
                     .text_color(rgb(DIM))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        if let Some(focus) = this.address_focus.as_ref() {
+                            focus.focus(window, cx);
+                        }
+                        this.address_selected = true;
+                        cx.notify();
+                    }))
                     .child("⌕  Search tabs"),
             )
             .child(
                 div()
+                    .id("sidebar-new-tab")
                     .flex()
                     .items_center()
                     .h(px(28.0))
@@ -683,7 +914,15 @@ impl BrowserShell {
                     .rounded_md()
                     .text_size(px(11.0))
                     .text_color(rgb(TEXT))
+                    .cursor_pointer()
                     .hover(|style| style.bg(rgb(STRIP_HOVER)))
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_tab();
+                        if let Some(focus) = this.address_focus.as_ref() {
+                            focus.focus(window, cx);
+                        }
+                        cx.notify();
+                    }))
                     .child("＋  New tab"),
             )
             .child(
@@ -707,7 +946,7 @@ impl BrowserShell {
                     .bg(rgb(SURFACE))
                     .cursor_pointer()
                     .on_click(cx.listener(|this, _, _, cx| {
-                        this.select_tab(0);
+                        this.open_bookmark(0);
                         cx.notify();
                     }))
                     .child(
@@ -745,7 +984,13 @@ impl BrowserShell {
                     .child("3"),
             )
             .when(!self.engine_collapsed, |sidebar| {
-                sidebar.children((0..3).map(|index| self.sidebar_tab(index, cx)))
+                sidebar.children(
+                    (0..self.tabs.len())
+                        .filter(|index| {
+                            self.tabs[*index].open && self.tabs[*index].group == TabGroup::Engine
+                        })
+                        .map(|index| self.sidebar_tab(index, cx)),
+                )
             })
             .child(
                 div()
@@ -768,8 +1013,162 @@ impl BrowserShell {
                     .child("3"),
             )
             .when(!self.specs_collapsed, |sidebar| {
-                sidebar.children((3..6).map(|index| self.sidebar_tab(index, cx)))
+                sidebar.children(
+                    (0..self.tabs.len())
+                        .filter(|index| {
+                            self.tabs[*index].open && self.tabs[*index].group == TabGroup::Specs
+                        })
+                        .map(|index| self.sidebar_tab(index, cx)),
+                )
             })
+            .children(
+                (0..self.tabs.len())
+                    .filter(|index| {
+                        self.tabs[*index].open && self.tabs[*index].group == TabGroup::Other
+                    })
+                    .map(|index| self.sidebar_tab(index, cx)),
+            )
+    }
+
+    fn downloads_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .absolute()
+            .top(px(82.0))
+            .right(px(18.0))
+            .w(px(340.0))
+            .p_3()
+            .rounded_lg()
+            .border_1()
+            .border_color(rgb(BORDER))
+            .bg(rgb(SURFACE))
+            .shadow_lg()
+            .text_color(rgb(TEXT))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_size(px(15.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("Downloads"),
+                    )
+                    .child(
+                        div()
+                            .id("downloads-close")
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(28.0))
+                            .rounded_full()
+                            .cursor_pointer()
+                            .hover(|style| style.bg(rgb(SURFACE_2)))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.downloads_open = false;
+                                cx.notify();
+                            }))
+                            .child("×"),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .h(px(150.0))
+                    .gap_2()
+                    .text_color(rgb(DIM))
+                    .child(div().text_size(px(28.0)).child("⇩"))
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(rgb(TEXT))
+                            .child("No downloads yet"),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.0))
+                            .child("Downloaded files will appear here."),
+                    ),
+            )
+            .when(!self.downloads_open, |panel| panel.hidden())
+    }
+
+    fn browser_menu(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let item = |label: &'static str, shortcut: &'static str| {
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .h(px(32.0))
+                .px_3()
+                .rounded_md()
+                .text_size(px(12.5))
+                .text_color(rgb(TEXT))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(SURFACE_2)))
+                .child(label)
+                .child(
+                    div()
+                        .text_size(px(11.0))
+                        .text_color(rgb(DIM))
+                        .child(shortcut),
+                )
+        };
+        div()
+            .absolute()
+            .top(px(80.0))
+            .right(px(10.0))
+            .w(px(270.0))
+            .p_2()
+            .rounded_lg()
+            .border_1()
+            .border_color(rgb(BORDER))
+            .bg(rgb(SURFACE))
+            .shadow_lg()
+            .child(
+                div()
+                    .id("menu-new-tab")
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.add_tab();
+                        this.menu_open = false;
+                        if let Some(focus) = this.address_focus.as_ref() {
+                            focus.focus(window, cx);
+                        }
+                        cx.notify();
+                    }))
+                    .child(item("New tab", "Ctrl+T")),
+            )
+            .child(
+                div()
+                    .id("menu-history-back")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.go_back();
+                        this.menu_open = false;
+                        cx.notify();
+                    }))
+                    .child(item("Back", "Alt+Left")),
+            )
+            .child(
+                div()
+                    .id("menu-downloads")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.menu_open = false;
+                        this.downloads_open = true;
+                        cx.notify();
+                    }))
+                    .child(item("Downloads", "Ctrl+J")),
+            )
+            .child(div().h(px(1.0)).my_1().bg(rgb(RULE)))
+            .child(item("Zoom", "100%"))
+            .child(item("Print…", "Ctrl+P"))
+            .child(div().h(px(1.0)).my_1().bg(rgb(RULE)))
+            .child(item("Settings", ""))
+            .child(item("About Amazing", ""))
+            .when(!self.menu_open, |menu| menu.hidden())
     }
 
     fn page(&self) -> impl IntoElement {
@@ -783,18 +1182,14 @@ impl BrowserShell {
                 video_viewport.width, video_viewport.height
             )
         };
-        let page_url = if self.active == 0 {
-            self.committed_address.clone()
-        } else {
-            tab.url.to_string()
-        };
+        let page_url = tab.url.clone();
         div()
             .relative()
             .flex_1()
             .h_full()
             .overflow_hidden()
             .bg(rgb(SURFACE))
-            .when(self.active == 0, |page| {
+            .when_some(tab.viewport.as_ref(), |page, viewport| {
                 page.child(
                     div()
                         .relative()
@@ -815,7 +1210,7 @@ impl BrowserShell {
                                 .border_color(rgb(BORDER))
                                 .bg(rgb(SURFACE))
                                 .shadow_md()
-                                .child(img(self.viewport.image.clone()).w_full()),
+                                .child(img(viewport.image.clone()).w_full()),
                         )
                         .child(
                             div()
@@ -830,12 +1225,12 @@ impl BrowserShell {
                                 .text_size(px(10.5))
                                 .child(format!(
                                     "AMAZING ENGINE  ·  {} × {}",
-                                    self.viewport.width, self.viewport.height
+                                    viewport.width, viewport.height
                                 )),
                         ),
                 )
             })
-            .when(self.active == 1, |page| {
+            .when(tab.kind == TabKind::Video, |page| {
                 page.child(
                     div()
                         .relative()
@@ -872,7 +1267,7 @@ impl BrowserShell {
                         ),
                 )
             })
-            .when(self.active > 1, |page| {
+            .when(tab.kind == TabKind::Document, |page| {
                 page.child(
                     div()
                         .w(px(760.0))
@@ -886,7 +1281,7 @@ impl BrowserShell {
                                 .text_size(px(12.0))
                                 .text_color(rgb(DIM))
                                 .child(div().w(px(18.0)).h(px(1.0)).bg(rgb(ACCENT)))
-                                .child(tab.kicker),
+                                .child(tab.kicker.clone()),
                         )
                         .child(
                             div()
@@ -896,7 +1291,7 @@ impl BrowserShell {
                                 .text_size(px(46.0))
                                 .line_height(gpui::relative(1.1))
                                 .text_color(rgb(TEXT))
-                                .child(tab.title),
+                                .child(tab.title.clone()),
                         )
                         .child(
                             div()
@@ -905,7 +1300,7 @@ impl BrowserShell {
                                 .text_size(px(16.0))
                                 .line_height(gpui::relative(1.6))
                                 .text_color(rgb(DIM))
-                                .child(tab.lede),
+                                .child(tab.lede.clone()),
                         ),
                 )
             })
@@ -943,11 +1338,12 @@ impl BrowserShell {
 impl Render for BrowserShell {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let active = &self.tabs[self.active];
-        let active_title = active.title;
-        let active_mono = active.mono;
+        let active_title = active.title.clone();
+        let active_mono = active.mono.clone();
         let active_hue = active.hue;
         let sidebar = self.sidebar;
         div()
+            .relative()
             .flex()
             .flex_col()
             .size_full()
@@ -990,7 +1386,7 @@ impl Render for BrowserShell {
                                     .bg(rgb(SURFACE))
                                     .cursor_pointer()
                                     .on_click(cx.listener(|this, _, _, cx| {
-                                        this.select_tab(0);
+                                        this.open_bookmark(0);
                                         cx.notify();
                                     }))
                                     .child(
@@ -1036,10 +1432,15 @@ impl Render for BrowserShell {
                                             .child("Engine  3"),
                                     )
                                     .when(!self.engine_collapsed, |group| {
-                                        group
-                                            .child(self.tab(0, cx))
-                                            .child(self.tab(1, cx))
-                                            .child(self.tab(2, cx))
+                                        group.children(
+                                            (0..self.tabs.len())
+                                                .filter(|index| {
+                                                    self.tabs[*index].open
+                                                        && self.tabs[*index].group
+                                                            == TabGroup::Engine
+                                                })
+                                                .map(|index| self.tab(index, cx)),
+                                        )
                                     }),
                             )
                             .child(
@@ -1052,13 +1453,37 @@ impl Render for BrowserShell {
                                     .bg(gpui::rgba(0x3a6ea829))
                                     .child(Self::group_chip("Specs", 3, 0x3a6ea8, cx))
                                     .when(!self.specs_collapsed, |group| {
-                                        group
-                                            .child(self.tab(3, cx))
-                                            .child(self.tab(4, cx))
-                                            .child(self.tab(5, cx))
+                                        group.children(
+                                            (0..self.tabs.len())
+                                                .filter(|index| {
+                                                    self.tabs[*index].open
+                                                        && self.tabs[*index].group
+                                                            == TabGroup::Specs
+                                                })
+                                                .map(|index| self.tab(index, cx)),
+                                        )
                                     }),
                             )
-                            .child(Self::icon_button("+"))
+                            .children(
+                                (0..self.tabs.len())
+                                    .filter(|index| {
+                                        self.tabs[*index].open
+                                            && self.tabs[*index].group == TabGroup::Other
+                                    })
+                                    .map(|index| self.tab(index, cx)),
+                            )
+                            .child(
+                                div()
+                                    .id("new-tab")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.add_tab();
+                                        if let Some(focus) = this.address_focus.as_ref() {
+                                            focus.focus(window, cx);
+                                        }
+                                        cx.notify();
+                                    }))
+                                    .child(Self::icon_button("+", true)),
+                            )
                             .when(sidebar, |row| row.hidden()),
                     )
                     .when(sidebar, |bar| {
@@ -1147,15 +1572,16 @@ impl Render for BrowserShell {
                     .border_color(rgb(RULE))
                     .children(
                         [
-                            ("■", "Phase 9 board", ACCENT),
-                            ("■", "WHATWG HTML", 0x3a6ea8),
-                            ("■", "CSS Syntax L3", 0x3f7d4e),
-                            ("■", "ECMA-262", 0x7a5aa8),
-                            ("▤", "win-001 CI", 0x6b7280),
+                            ("■", "Phase 9 board", ACCENT, Some(0)),
+                            ("■", "WHATWG HTML", 0x3a6ea8, Some(3)),
+                            ("■", "CSS Syntax L3", 0x3f7d4e, Some(4)),
+                            ("■", "ECMA-262", 0x7a5aa8, Some(5)),
+                            ("▤", "Downloads", 0x6b7280, None),
                         ]
                         .into_iter()
-                        .map(|(icon, label, color)| {
+                        .map(|(icon, label, color, target)| {
                             div()
+                                .id(SharedString::from(format!("bookmark-{label}")))
                                 .flex()
                                 .items_center()
                                 .gap_1()
@@ -1164,7 +1590,16 @@ impl Render for BrowserShell {
                                 .rounded_md()
                                 .text_size(px(12.0))
                                 .text_color(rgb(TEXT))
+                                .cursor_pointer()
                                 .hover(|style| style.bg(rgb(SURFACE_2)))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if let Some(index) = target {
+                                        this.open_bookmark(index);
+                                    } else {
+                                        this.toggle_downloads();
+                                    }
+                                    cx.notify();
+                                }))
                                 .child(div().text_color(rgb(color)).child(icon))
                                 .child(label)
                         }),
@@ -1189,6 +1624,8 @@ impl Render for BrowserShell {
                     })
                     .when(!sidebar, |body| body.child(self.page())),
             )
+            .child(self.downloads_panel(cx))
+            .child(self.browser_menu(cx))
     }
 }
 
@@ -1277,9 +1714,62 @@ fn normalize_address(value: &str) -> Option<String> {
         None
     } else if value.contains("://") {
         Some(value.to_string())
+    } else if !value.chars().any(char::is_whitespace)
+        && (value.contains('.')
+            || value.starts_with("localhost")
+            || value.starts_with("127.0.0.1")
+            || value.starts_with("[::1]"))
+    {
+        let scheme = if value.starts_with("localhost")
+            || value.starts_with("127.0.0.1")
+            || value.starts_with("[::1]")
+        {
+            "http"
+        } else {
+            "https"
+        };
+        Some(format!("{scheme}://{value}"))
     } else {
-        Some(format!("https://{value}"))
+        Some(format!(
+            "https://www.google.com/search?q={}",
+            encode_search_query(value)
+        ))
     }
+}
+
+fn encode_search_query(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char);
+            }
+            b' ' => encoded.push('+'),
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
+}
+
+fn address_title(address: &str) -> String {
+    if address == "amazing://newtab" {
+        return "New tab".into();
+    }
+    address
+        .split_once("://")
+        .map_or(address, |(_, rest)| rest)
+        .split('/')
+        .next()
+        .filter(|title| !title.is_empty())
+        .unwrap_or("New tab")
+        .to_string()
+}
+
+fn site_initial(address: &str) -> char {
+    address_title(address)
+        .chars()
+        .find(|character| character.is_alphanumeric())
+        .map_or('+', |character| character.to_ascii_uppercase())
 }
 
 fn presentation_gap_exceeds_cadence(presentation_ms: &[u64], next_ms: u64) -> bool {
@@ -1315,14 +1805,14 @@ mod tests {
         assert_eq!(
             &shell.tabs[0..3]
                 .iter()
-                .map(|tab| tab.mono)
+                .map(|tab| tab.mono.as_str())
                 .collect::<Vec<_>>(),
             &["A", "V", "H"]
         );
         assert_eq!(
             &shell.tabs[3..6]
                 .iter()
-                .map(|tab| tab.mono)
+                .map(|tab| tab.mono.as_str())
                 .collect::<Vec<_>>(),
             &["S", "C", "E"]
         );
@@ -1350,6 +1840,14 @@ mod tests {
             Some("https://example.test/docs".to_string())
         );
         assert_eq!(normalize_address("   "), None);
+        assert_eq!(
+            normalize_address("amazing browser"),
+            Some("https://www.google.com/search?q=amazing+browser".to_string())
+        );
+        assert_eq!(
+            normalize_address("localhost:8080/status"),
+            Some("http://localhost:8080/status".to_string())
+        );
 
         let mut shell = BrowserShell::new(None);
         shell.address = "example.test/docs".to_string();
@@ -1385,8 +1883,8 @@ mod tests {
         shell.commit_navigation();
         shell.address = "second.test".to_string();
         shell.commit_navigation();
-        assert_eq!(shell.history.len(), 3);
-        assert_eq!(shell.history_index, 2);
+        assert_eq!(shell.tabs[0].history.len(), 3);
+        assert_eq!(shell.tabs[0].history_index, 2);
 
         shell.go_back();
         assert_eq!(shell.committed_address, "https://first.test");
@@ -1397,15 +1895,35 @@ mod tests {
         shell.address = "branch.test".to_string();
         shell.commit_navigation();
         assert_eq!(
-            shell.history,
+            shell.tabs[0].history,
             [
                 "amazing://status",
                 "https://first.test",
                 "https://branch.test"
             ]
         );
-        assert_eq!(shell.history_index, 2);
+        assert_eq!(shell.tabs[0].history_index, 2);
         shell.go_forward();
         assert_eq!(shell.committed_address, "https://branch.test");
+    }
+
+    #[test]
+    fn new_and_closed_tabs_keep_independent_browser_state() {
+        let mut shell = BrowserShell::new(None);
+        shell.add_tab();
+        let new_tab = shell.active;
+        assert_eq!(shell.tabs[new_tab].url, "amazing://newtab");
+        assert_eq!(shell.tabs[new_tab].history, ["amazing://newtab"]);
+        shell.address = "localhost:8080/example".into();
+        shell.commit_navigation();
+        assert_eq!(shell.tabs[new_tab].history.len(), 2);
+        assert_eq!(shell.tabs[0].history, ["amazing://status"]);
+
+        shell.close_tab(new_tab);
+        assert!(!shell.tabs[new_tab].open);
+        assert_eq!(shell.active, 5);
+        shell.open_bookmark(0);
+        assert_eq!(shell.active, 0);
+        assert!(shell.tabs[0].open);
     }
 }

@@ -9,10 +9,14 @@ first real engine viewport:
 
 - custom Windows titlebar controls;
 - pinned and color-grouped tabs, with a collapsible Specs group;
+- real per-tab state: New Tab and Close work, each tab retains its own rendered
+  page and branch-aware navigation history, and bookmark shortcuts reopen
+  closed tabs;
 - back/forward/reload controls and an address surface;
 - focused address-bar editing with select-on-click, Backspace, Escape, and
-  Enter-to-navigate behavior;
-- Back, Forward, and Reload controls backed by branch-aware in-memory history;
+  Enter-to-navigate behavior, plus Chrome-style URL detection and search-query
+  fallback;
+- interactive bookmark, Downloads, and main-menu surfaces;
 - sidebar-tab mode, bookmarks row, profile and utility controls;
 - a live `amazing-layout` → `amazing-paint` RGBA8 page surface, converted to
   GPUI's native BGRA image without crossing the engine-core boundary;
@@ -40,6 +44,8 @@ first real engine viewport:
 - responsive 1080×760 startup bounds for the win-001 RDP desktop.
 
 ![Amazing GPUI shell on win-001](../../docs/screenshots/gpui-shell-win001.png)
+
+![Amazing GPUI functional new tab on win-001](../../docs/screenshots/gpui-new-tab-win001.png)
 
 ![Amazing GPUI grouped sidebar on win-001](../../docs/screenshots/gpui-shell-sidebar-win001.png)
 
