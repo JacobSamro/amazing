@@ -14,12 +14,13 @@
 | 3 — Layout | ✅ done on win-001 (workspace green; curated css/CSS2 subset 17/17) |
 | 3.5 — Flexbox | ✅ done on win-001 (13 flex tests; row/column/wrap/grow/shrink/justify/align/gaps/auto-margins/order) |
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
-| 4 — Paint | ✅ crate integrated, workspace green (43 paint tests); `render` demo writes BMP+PPM |
+| 4 — Paint | ✅ crate integrated, workspace green (51 paint tests); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ GET/POST HTTP + verified HTTPS integrated (64 core tests + 2 TLS-adapter tests); `fetch` demo |
 | 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
 | 9 — Media | ✅ 47-subphase stretch milestone includes live Chromium DTLS-SRTP video |
+| 10 — Render conformance | 🟨 mapped; upstream WPT harness is the first gated frontier |
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
