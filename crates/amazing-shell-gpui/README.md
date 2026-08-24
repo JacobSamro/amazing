@@ -99,6 +99,11 @@ and [cursor B](../../docs/screenshots/gpui-audio-clock-b-win001.png).
 Build and launch on win-001:
 
 ```powershell
+# From the workspace root, this launches a prebuilt GPUI shell or builds the
+# isolated locked shell crate when needed.
+cargo run
+
+# Direct shell build/run commands remain available.
 cargo build --manifest-path crates\amazing-shell-gpui\Cargo.toml --target-dir target --release --locked
 target\release\amazing-shell.exe
 # Start directly in the grouped sidebar layout

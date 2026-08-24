@@ -110,6 +110,11 @@ may use GPUI's third-party dependency graph; `amazing-html`, `amazing-css`,
 `amazing-paint`, and `amazing-webrtc` retain their std-only boundary. The
 first-party shell crate forbids unsafe code. The hand-written Win32 shell stays
 available as a fallback until the GPUI viewport owns the complete engine loop.
+The root driver is only a process-level launcher for this boundary: a
+no-argument Windows run starts a colocated GPUI binary when present, or invokes
+the shell's separate locked manifest during development. `amazing gui` remains
+the explicit Win32 fallback. GPUI types and dependencies never enter the engine
+workspace graph.
 
 Phase 9.10 keeps that DTLS association live while media flows. A single
 RFC 7983-style reader routes DTLS and SRTP/SRTCP into separate channels on the

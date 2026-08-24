@@ -49,7 +49,7 @@ instead of optimizing an existing engine, it rebuilds one from first principles.
 | `amazing-webrtc` | ICE/TURN + live Chromium DTLS-SRTP media | Phase 9.3–9.47 |
 | `amazing-webrtc-codecs` | Opus, VP8 decode, H.264 encode/decode | Phase 9.20–9.23 |
 | `amazing-webrtc-crypto` | vetted DTLS-SRTP + secure UDP endpoint | Phase 9.9–9.13 |
-| `amazing` | DOM/JS tracer + Windows shell (`domrun`, `gui`) | ✅ Phase 7/8 |
+| `amazing` | DOM/JS tracer + GPUI launcher + Win32 fallback (`domrun`, `gui`) | ✅ Phase 7/8 |
 
 The Windows GUI shell includes tabs, address/history navigation, live DOM
 events and mutation, classic scripts/external resources, and software-paint
@@ -109,6 +109,9 @@ Reproduction details and measured RMSE: [Phase 4 visual audit](docs/phase4-visua
 ## Usage
 
 ```sh
+# launch the end-user GPUI browser shell on Windows
+cargo run
+
 # pipeline status
 amazing version
 
@@ -124,7 +127,7 @@ cat script.js | amazing run
 # execute a script against a live parsed DOM and dump the mutation result
 amazing domrun page.html script.js
 
-# open the native Windows shell (on Windows, double-clicking amazing.exe does this)
+# open the legacy native Win32 fallback explicitly
 amazing gui [url]
 
 # Phase 9 image-media artifact
