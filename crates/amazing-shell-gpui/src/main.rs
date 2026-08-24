@@ -8,9 +8,9 @@ mod secure_video;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    App, Bounds, Context, CursorStyle, FocusHandle, IntoElement, KeyDownEvent, ParentElement,
-    Render, SharedString, Styled, Window, WindowBounds, WindowControlArea, WindowOptions, div, img,
-    prelude::*, px, rgb, size,
+    App, Bounds, Context, CursorStyle, FocusHandle, IntoElement, KeyBinding, KeyDownEvent,
+    ParentElement, Render, SharedString, Styled, Window, WindowBounds, WindowControlArea,
+    WindowOptions, actions, div, img, prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
 
@@ -31,6 +31,20 @@ const ICON: u32 = 0x4a5160;
 const ACCENT: u32 = 0xb1552b;
 const RULE: u32 = 0xe7e9ee;
 const SECURE_VIDEO_POLL_MS: u64 = 50;
+
+actions!(
+    amazing_shell,
+    [
+        FocusAddress,
+        NewBrowserTab,
+        CloseBrowserTab,
+        ReloadPage,
+        NavigateBack,
+        NavigateForward,
+        ShowDownloads,
+        DismissChrome
+    ]
+);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TabKind {
@@ -107,6 +121,7 @@ struct BrowserShell {
     secure_video_recoveries: u64,
     audio_device_clock: Option<AudioDeviceClock>,
     secure_video_status: String,
+    shell_focus: Option<FocusHandle>,
     address_focus: Option<FocusHandle>,
     address: String,
     committed_address: String,
@@ -215,6 +230,7 @@ impl BrowserShell {
             secure_video_recoveries: 0,
             audio_device_clock: None,
             secure_video_status: "H.264 → I420 → RGBA".into(),
+            shell_focus: None,
             address_focus,
             address: "amazing://status".to_string(),
             committed_address: "amazing://status".to_string(),
@@ -295,6 +311,70 @@ impl BrowserShell {
         self.tabs[self.active].bookmarked = !self.tabs[self.active].bookmarked;
     }
 
+    fn focus_shell(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(focus) = self.shell_focus.as_ref() {
+            focus.focus(window, cx);
+        }
+        self.address_selected = false;
+    }
+
+    fn focus_address(&mut self, _: &FocusAddress, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(focus) = self.address_focus.as_ref() {
+            focus.focus(window, cx);
+        }
+        self.address_selected = true;
+        self.downloads_open = false;
+        self.menu_open = false;
+        cx.notify();
+    }
+
+    fn new_browser_tab(&mut self, _: &NewBrowserTab, window: &mut Window, cx: &mut Context<Self>) {
+        self.add_tab();
+        if let Some(focus) = self.address_focus.as_ref() {
+            focus.focus(window, cx);
+        }
+        cx.notify();
+    }
+
+    fn close_browser_tab(
+        &mut self,
+        _: &CloseBrowserTab,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.close_tab(self.active);
+        self.focus_shell(window, cx);
+        cx.notify();
+    }
+
+    fn reload_page(&mut self, _: &ReloadPage, _: &mut Window, cx: &mut Context<Self>) {
+        self.reload();
+        cx.notify();
+    }
+
+    fn navigate_back(&mut self, _: &NavigateBack, _: &mut Window, cx: &mut Context<Self>) {
+        self.go_back();
+        cx.notify();
+    }
+
+    fn navigate_forward(&mut self, _: &NavigateForward, _: &mut Window, cx: &mut Context<Self>) {
+        self.go_forward();
+        cx.notify();
+    }
+
+    fn show_downloads(&mut self, _: &ShowDownloads, _: &mut Window, cx: &mut Context<Self>) {
+        self.downloads_open = true;
+        self.menu_open = false;
+        cx.notify();
+    }
+
+    fn dismiss_chrome(&mut self, _: &DismissChrome, window: &mut Window, cx: &mut Context<Self>) {
+        self.downloads_open = false;
+        self.menu_open = false;
+        self.focus_shell(window, cx);
+        cx.notify();
+    }
+
     fn on_address_key_down(
         &mut self,
         event: &KeyDownEvent,
@@ -305,12 +385,11 @@ impl BrowserShell {
         match event.keystroke.key.as_str() {
             "enter" => {
                 self.commit_navigation();
-                window.blur();
+                self.focus_shell(window, cx);
             }
             "escape" => {
                 self.address = self.committed_address.clone();
-                self.address_selected = false;
-                window.blur();
+                self.focus_shell(window, cx);
             }
             "backspace" => {
                 if self.address_selected {
@@ -1343,7 +1422,19 @@ impl Render for BrowserShell {
         let active_hue = active.hue;
         let sidebar = self.sidebar;
         div()
+            .id("browser-shell")
             .relative()
+            .when_some(self.shell_focus.as_ref(), |shell, focus| {
+                shell.track_focus(focus)
+            })
+            .on_action(cx.listener(Self::focus_address))
+            .on_action(cx.listener(Self::new_browser_tab))
+            .on_action(cx.listener(Self::close_browser_tab))
+            .on_action(cx.listener(Self::reload_page))
+            .on_action(cx.listener(Self::navigate_back))
+            .on_action(cx.listener(Self::navigate_forward))
+            .on_action(cx.listener(Self::show_downloads))
+            .on_action(cx.listener(Self::dismiss_chrome))
             .flex()
             .flex_col()
             .size_full()
@@ -1642,6 +1733,18 @@ fn main() {
         (None, String::new())
     };
     application().run(move |cx: &mut App| {
+        cx.bind_keys([
+            KeyBinding::new("ctrl-l", FocusAddress, None),
+            KeyBinding::new("f6", FocusAddress, None),
+            KeyBinding::new("ctrl-t", NewBrowserTab, None),
+            KeyBinding::new("ctrl-w", CloseBrowserTab, None),
+            KeyBinding::new("ctrl-r", ReloadPage, None),
+            KeyBinding::new("f5", ReloadPage, None),
+            KeyBinding::new("alt-left", NavigateBack, None),
+            KeyBinding::new("alt-right", NavigateForward, None),
+            KeyBinding::new("ctrl-j", ShowDownloads, None),
+            KeyBinding::new("escape", DismissChrome, None),
+        ]);
         let bounds = Bounds::centered(None, size(px(1080.0), px(760.0)), cx);
         cx.open_window(
             WindowOptions {
@@ -1649,9 +1752,12 @@ fn main() {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
-            move |_, cx| {
+            move |window, cx| {
                 cx.new(move |cx| {
+                    let shell_focus = cx.focus_handle();
+                    shell_focus.focus(window, cx);
                     let mut shell = BrowserShell::new(Some(cx.focus_handle().tab_stop(true)));
+                    shell.shell_focus = Some(shell_focus);
                     cx.spawn(async move |this, cx| {
                         let started = Instant::now();
                         let mut delay_ms = if start_with_secure_video {

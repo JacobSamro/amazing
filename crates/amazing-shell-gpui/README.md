@@ -17,6 +17,10 @@ first real engine viewport:
   Enter-to-navigate behavior, plus Chrome-style URL detection and search-query
   fallback;
 - interactive bookmark, Downloads, and main-menu surfaces;
+- Chrome keyboard behavior across the shell: Ctrl+L/F6 focuses the address
+  bar, Ctrl+T/W creates and closes tabs, Ctrl+R/F5 reloads, Alt+Left/Right
+  traverses per-tab history, Ctrl+J opens Downloads, and Escape dismisses
+  transient chrome;
 - sidebar-tab mode, bookmarks row, profile and utility controls;
 - a live `amazing-layout` → `amazing-paint` RGBA8 page surface, converted to
   GPUI's native BGRA image without crossing the engine-core boundary;
