@@ -112,3 +112,12 @@ capability-credited; the final repeat-stable result is 11/20 raw, 2/4
 consensus, and 8/20 capability-credited. `vertical-ruby-oracles.json` pins the
 exact-revision browser runs and `vertical-ruby-results-ticket4c.json` retains
 every final pixel hash plus the regression-gate run ids.
+
+Ticket #5 uses the dynamic `flex-grid-profile.json` and a 24-case clean
+Level-1 Flex/Grid gate. Inventory path/content filters exclude references that
+depend on deferred float, table, inline-block, gradient, canvas, subgrid, or
+Grid-Lanes behavior. The isolated `c8c371d` fixed point is 10/24; the final
+repeat-stable result is 24/24, and every case passes both exact-revision Blink
+and WebKit. `flex-grid-results-ticket5.json` records every final pixel hash,
+the normalized projection, the 35/200 → 47/200 broad diagnostic, and prior
+phase regression gates.

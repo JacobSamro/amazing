@@ -4,7 +4,7 @@ Canonical sequence for moving Amazing's style → layout → paint pipeline towa
 standards conformance. Resolve one ticket, verify its exit criteria on
 `win-001`, record measured results, then stop at the phase boundary for review.
 
-Frontier: **#5 — Flexbox and Grid convergence**
+Frontier: **#6 — Paint order, clipping, stacking, and compositing**
 
 ## Evidence contract (resolved)
 
@@ -36,10 +36,14 @@ Frontier: **#5 — Flexbox and Grid convergence**
   former inert equal-pixel results. Focused shaping is **12/12**, including
   **8/8** exact-revision Blink/WebKit consensus (baseline 3/12 raw and 0/8
   capability-credited).
+- Focused Flex/Grid Level-1 gate: **24/24** exact-revision Blink/WebKit
+  consensus (fixed-point baseline **10/24**). The deterministic broad
+  diagnostic moves **35/200 → 47/200** while retaining later-feature and
+  cross-dependency failures.
 - Existing curated CSS2 geometry subset: **17/17**.
-- Existing feature regressions: **13 flex**, **16 grid**, **56 CSS**, **61
-  HTML**, **65 net**, **95 layout**, **54 paint**, **5 text-contract**, and **9
-  text-provider unit tests**.
+- Existing feature regressions: **16 flex-module**, **17 grid-module**, **41
+  Phase #5 full-pipeline**, **61 CSS**, **63 HTML**, **65 net**, **137 layout**,
+  **56 paint**, **7 text-contract**, and **26 text-provider tests**.
 - These numbers establish regression coverage only; they do not establish
   compatibility with Blink, WebKit, or the broader web platform.
 
@@ -460,16 +464,52 @@ GPUI locked check pass. Evidence and remaining-cluster triage live in
 
 Blocked by: #2, #3, #4c
 Type: Prototype
-Status: 🌫️ Fog
+Status: ✅ Resolved
 
 ### Question
 
 Which flex/grid WPT clusters fail after shared sizing and text primitives are
 correct, and what spec algorithms replace the current documented subsets?
 
+### Exit criteria
+
+- A pinned, behavior-stratified upstream WPT gate contains only supported,
+  self-contained Level-1 cases whose references avoid deferred float, table,
+  inline-block, gradient, canvas, and later Grid features.
+- Flex resolves flexible lengths with the §9.7 iterative freeze loop,
+  automatic/intrinsic minimums, logical margins, wrapping, gaps, and cross-line
+  stretch through public full-pipeline tests.
+- Grid retains min/max track functions and named lines, distinguishes definite
+  and indefinite auto-repeat axes, sizes implicit/repeated tracks, absorbs item
+  auto margins, and uses a restart-based `fr` solver.
+- The gate improves against exact-revision Blink/WebKit consensus with stable
+  hashes and no #3/#3a/#4a/#4b/#4c, workspace, or GPUI regression.
+
 ### Answer
 
-Pending until shared primitives stop dominating the results.
+The deleted terminal prototype proved that Flex and Grid require separate pure
+solver interfaces. Flex now freezes and redistributes items after min/max
+violations; Grid retains two-sided track functions and restarts flexible-track
+sizing when a base exceeds its provisional `fr` share. Computed values expand
+validated token/component-value grammars for `flex-flow` and the supported
+`grid-template` Level-1 subset—including fixed-size auto-repeat constraints,
+reserved line-name rejection, and cascade-preserving post-`var()`
+expansion—plus legacy gap aliases; layout adds content-based
+automatic minimums, intrinsic size keywords, logical margins, correct
+cross-line stretch, row/column §9.7 resolution, implicit/auto-repeat sizing,
+named-line occurrences, finite growth-limit maximization, bounded placement
+work, nested-`repeat()` rejection, case-preserved repeated line names, RTL grid
+alignment, and Grid item auto-margin alignment.
+
+At WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, the
+24-case clean Level-1 gate moves **10/24 → 24/24**, all in exact-revision
+Blink/WebKit consensus, with two repeat-stable final projections. The
+deterministic 200-case diagnostic moves **35/200 → 47/200**; its remaining
+153 mismatches intentionally include baseline alignment, aspect-ratio transfer,
+outer inline Flex/Grid, floats/tables used by references, template areas,
+auto-fit collapse, full intrinsic spanning distribution, subgrid, and Grid
+Lanes. Evidence lives in `docs/render/FLEX_GRID_DESIGN.md` and
+`tests/wpt-render/flex-grid-results-ticket5.json`.
 
 ## #6: Paint order, clipping, stacking, and compositing
 

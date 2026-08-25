@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "runs": {
+    "blink": {
+      "id": 5182906107691008,
+      "browser": "Chrome 154.0.8016.0",
+      "os": "Linux 22.04"
+    },
+    "webkit": {
+      "id": 5141363439173632,
+      "browser": "Safari 26.6 (21624.4.5.11.5)",
+      "os": "macOS 26.6"
+    }
+  },
+  "tests": [
+    {"id":"flex__min-width-auto-overflow","blink":"pass","webkit":"pass"},
+    {"id":"flex__min-height-min-content","blink":"pass","webkit":"pass"},
+    {"id":"flex__min-width-min-content","blink":"pass","webkit":"pass"},
+    {"id":"flex__max-width-min-content","blink":"pass","webkit":"pass"},
+    {"id":"flex__grow-resolution","blink":"pass","webkit":"pass"},
+    {"id":"flex__flow-wrap","blink":"pass","webkit":"pass"},
+    {"id":"flex__gap-rtl","blink":"pass","webkit":"pass"},
+    {"id":"flex__align-items-center","blink":"pass","webkit":"pass"},
+    {"id":"flex__cross-line-sizing","blink":"pass","webkit":"pass"},
+    {"id":"flex__justify-content-stretch","blink":"pass","webkit":"pass"},
+    {"id":"flex__negative-margins","blink":"pass","webkit":"pass"},
+    {"id":"flex__anonymous-item","blink":"pass","webkit":"pass"},
+    {"id":"grid__item-border-padding-1","blink":"pass","webkit":"pass"},
+    {"id":"grid__item-border-padding-2","blink":"pass","webkit":"pass"},
+    {"id":"grid__item-border-padding-3","blink":"pass","webkit":"pass"},
+    {"id":"grid__item-border-padding-4","blink":"pass","webkit":"pass"},
+    {"id":"grid__implicit-tracks-1","blink":"pass","webkit":"pass"},
+    {"id":"grid__implicit-tracks-2","blink":"pass","webkit":"pass"},
+    {"id":"grid__auto-repeat-multiple-1","blink":"pass","webkit":"pass"},
+    {"id":"grid__auto-repeat-named-lines-4","blink":"pass","webkit":"pass"},
+    {"id":"grid__item-direction-rtl","blink":"pass","webkit":"pass"},
+    {"id":"grid__auto-repeat-minmax","blink":"pass","webkit":"pass"},
+    {"id":"grid__auto-margin-track-sizing","blink":"pass","webkit":"pass"},
+    {"id":"grid__nested-grid","blink":"pass","webkit":"pass"}
+  ]
+}

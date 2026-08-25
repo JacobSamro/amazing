@@ -177,6 +177,7 @@ fn compile_sheet(sheet: &Stylesheet, ua: bool) -> Vec<CompiledRule> {
 }
 
 /// One declaration competing for a property during the cascade.
+#[derive(Clone, Copy)]
 struct Candidate<'a> {
     value: &'a str,
     important: bool,
@@ -324,11 +325,58 @@ fn compute_one(
         consider(&mut champs, &d.prop, cand);
     }
 
+    // Logical properties map with the element's COMPUTED axes, not the raw
+    // winning tokens: `direction: inherit` and `var()` must see the inherited
+    // or substituted value before their physical side is chosen.
+    let provisional = computed::resolve_with_root(
+        parent_style,
+        champs
+            .iter()
+            .map(|(property, candidate)| ((*property).to_owned(), candidate.value.to_owned()))
+            .collect(),
+        root_font_px,
+    );
+    let rtl = provisional
+        .get("direction")
+        .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
+    let writing_mode = provisional.get("writing-mode").unwrap_or("horizontal-tb");
+    for logical in [
+        "margin-inline-start",
+        "margin-inline-end",
+        "margin-block-start",
+        "margin-block-end",
+    ] {
+        if let Some(candidate) = champs.get(logical).copied() {
+            let physical = physical_margin_for(logical, rtl, writing_mode);
+            consider(&mut champs, physical, candidate);
+        }
+    }
+
     let cascaded = champs
         .into_iter()
         .map(|(property, candidate)| (property.to_owned(), candidate.value.to_owned()))
         .collect();
     computed::resolve_with_root(parent_style, cascaded, root_font_px)
+}
+
+fn physical_margin_for(logical: &str, rtl: bool, writing_mode: &str) -> &'static str {
+    if writing_mode.eq_ignore_ascii_case("horizontal-tb") {
+        match (logical, rtl) {
+            ("margin-inline-start", false) | ("margin-inline-end", true) => "margin-left",
+            ("margin-inline-start", true) | ("margin-inline-end", false) => "margin-right",
+            ("margin-block-start", _) => "margin-top",
+            _ => "margin-bottom",
+        }
+    } else {
+        let rl = writing_mode.eq_ignore_ascii_case("vertical-rl")
+            || writing_mode.eq_ignore_ascii_case("sideways-rl");
+        match (logical, rtl, rl) {
+            ("margin-inline-start", false, _) | ("margin-inline-end", true, _) => "margin-top",
+            ("margin-inline-start", true, _) | ("margin-inline-end", false, _) => "margin-bottom",
+            ("margin-block-start", _, true) | ("margin-block-end", _, false) => "margin-right",
+            _ => "margin-left",
+        }
+    }
 }
 
 fn attr_of<'d>(dom: &'d Dom, el: NodeIdx, name: &str) -> Option<&'d str> {

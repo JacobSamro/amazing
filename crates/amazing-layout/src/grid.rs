@@ -3,10 +3,9 @@
 //!
 //! Implemented:
 //! - `grid-template-columns` / `grid-template-rows` track lists: lengths,
-//!   percentages (of the container's content width for BOTH axes — see
-//!   deviations), `auto`, `min-content` / `max-content` (both approximated
-//!   as max-content), `<number>fr`, `repeat(<integer> | auto-fill, …)` with
-//!   nested track lists; `[line-names]` are consumed and dropped
+//!   percentages, `auto`, `min-content` / `max-content`, two-sided
+//!   `minmax()`, `<number>fr`, and `repeat(<integer> | auto-fill, …)`;
+//!   named-line occurrences are retained through repeated fragments
 //! - `grid-auto-columns` / `grid-auto-rows` (a list is cycled through the
 //!   implicit tracks), `gap` / `row-gap` / `column-gap`
 //! - `grid-auto-flow`: `row` (default) | `column` | `dense` (dense
@@ -18,9 +17,9 @@
 //!   mode; implicit tracks created wherever items land outside the
 //!   explicit grid
 //! - track sizing: definite px/% bases; intrinsic (`auto`/`min/max-content`)
-//!   tracks sized from item measurements; `fr` tracks split the space left
-//!   AFTER non-fr tracks (weighted equal-share); row heights measured by
-//!   actually laying each item out at its final column width
+//!   tracks sized from item measurements; `fr` tracks use a restart loop when
+//!   a base exceeds its provisional share; row heights are measured by laying
+//!   each item out at its final column width
 //! - alignment: `justify-content` / `align-content`
 //!   (start/end/center/stretch/space-between/around/evenly),
 //!   `justify-items` / `align-items` + per-item `-self` longhands
@@ -29,18 +28,17 @@
 //!
 //! Deviations / deferrals (documented):
 //! - named areas / `grid-area` / `grid-template-areas` are not implemented
-//! - `span <line-name>` → `span 1`; a bare line-name position → `auto`
+//! - `span <line-name>` → `span 1`; implicit tracks before the explicit grid
+//!   do not yet participate in out-of-range negative named occurrences
 //! - percentages in `grid-template-rows` resolve against the content WIDTH
 //!   (the height is indefinite at parse time in this engine)
-//! - `auto-fill` only repeats beyond 1 when the repeated track size is
-//!   definite (px); otherwise it behaves like `repeat(1, …)`
+//! - `auto-fill` only repeats beyond 1 when the repeated track size has a
+//!   definite repeat contribution; auto-fit empty-track collapse is deferred
 //! - items spanning several intrinsic tracks contribute an EQUAL share of
 //!   their measurement to each spanned intrinsic track
-//! - `fr` rows without a definite container height behave like `auto`;
-//!   `fr` tracks get nothing when the leftover space is negative (no
-//!   minimum floors, no fr shrink of non-fr tracks)
-//! - auto margins on items count as zero (no free-space absorption);
-//!   stretch is skipped when the relevant margins are auto
+//! - `fr` rows without a definite container height behave like `auto`
+//! - stretch is skipped when the relevant margins are auto; Grid item auto
+//!   margins otherwise absorb area free space after track sizing
 //! - dense placement rescans from the grid start but does not implement
 //!   the spec's exact cursor-monotonicity bookkeeping
 
@@ -49,7 +47,12 @@ use std::collections::HashMap;
 
 use crate::LayoutBox;
 use crate::font::FontSource;
+use crate::grid_algorithm::{maximize_tracks, resolve_flexible_tracks};
 use crate::values::{self, MaybeLen};
+
+const MAX_GRID_TRACKS: usize = 1000;
+const MAX_OCCUPIED_CELLS: usize = MAX_GRID_TRACKS * MAX_GRID_TRACKS;
+const MAX_GRID_PLACEMENT_WORK: usize = MAX_OCCUPIED_CELLS * 4;
 
 // ---------------------------------------------------------------------------
 // Track model
@@ -68,14 +71,81 @@ enum TrackSize {
     Content,
     /// `<number>fr` flexible track (weight).
     Fr(f32),
+    /// Independent minimum and maximum track sizing functions.
+    MinMax {
+        min: TrackBreadth,
+        max: TrackBreadth,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TrackBreadth {
+    Px(f32),
+    Auto,
+    Content,
+    Fr(f32),
 }
 
 impl TrackSize {
     fn is_intrinsic(self) -> bool {
         matches!(self, TrackSize::Auto | TrackSize::Content)
+            || matches!(
+                self,
+                TrackSize::MinMax {
+                    min: TrackBreadth::Auto | TrackBreadth::Content,
+                    ..
+                } | TrackSize::MinMax {
+                    max: TrackBreadth::Auto | TrackBreadth::Content,
+                    ..
+                }
+            )
     }
     fn is_fr(self) -> bool {
-        matches!(self, TrackSize::Fr(_))
+        self.fr_factor() > 0.0
+    }
+    fn fr_factor(self) -> f32 {
+        match self {
+            TrackSize::Fr(factor)
+            | TrackSize::MinMax {
+                max: TrackBreadth::Fr(factor),
+                ..
+            } => factor,
+            _ => 0.0,
+        }
+    }
+    fn base_floor(self) -> f32 {
+        match self {
+            TrackSize::Px(value)
+            | TrackSize::MinMax {
+                min: TrackBreadth::Px(value),
+                ..
+            } => value,
+            _ => 0.0,
+        }
+    }
+    fn growth_limit(self) -> Option<f32> {
+        match self {
+            TrackSize::Px(value)
+            | TrackSize::MinMax {
+                max: TrackBreadth::Px(value),
+                ..
+            } => Some(value),
+            _ => None,
+        }
+    }
+    fn repeat_size(self) -> Option<f32> {
+        match self {
+            TrackSize::Px(value) => Some(value),
+            TrackSize::MinMax {
+                min: TrackBreadth::Px(min),
+                max: TrackBreadth::Px(max),
+            } => Some(max.max(min)),
+            TrackSize::MinMax {
+                min: TrackBreadth::Px(min),
+                ..
+            } => Some(min),
+            _ => None,
+        }
     }
 }
 
@@ -84,6 +154,23 @@ fn parse_track_size(s: &str, font_px: f32, content_w: f32) -> TrackSize {
     let s = s.trim();
     // Lowercase first so `FR`/`Auto` spellings parse identically.
     let lower = s.to_ascii_lowercase();
+    if let Some(inner) = lower
+        .strip_prefix("minmax(")
+        .and_then(|value| value.strip_suffix(')'))
+        && let Some((minimum, maximum)) = inner.split_once(',')
+    {
+        let min = parse_track_breadth(minimum, font_px, content_w);
+        let mut max = parse_track_breadth(maximum, font_px, content_w);
+        if matches!(min, TrackBreadth::Fr(_)) {
+            return TrackSize::Auto;
+        }
+        if let (TrackBreadth::Px(minimum), TrackBreadth::Px(maximum)) = (min, max)
+            && maximum < minimum
+        {
+            max = TrackBreadth::Px(minimum);
+        }
+        return TrackSize::MinMax { min, max };
+    }
     if let Some(stripped) = lower.strip_suffix("fr") {
         if let Ok(n) = stripped.trim().parse::<f32>() {
             return TrackSize::Fr(n.max(0.0));
@@ -101,23 +188,52 @@ fn parse_track_size(s: &str, font_px: f32, content_w: f32) -> TrackSize {
     }
 }
 
+fn parse_track_breadth(s: &str, font_px: f32, content_w: f32) -> TrackBreadth {
+    let s = s.trim();
+    let lower = s.to_ascii_lowercase();
+    if let Some(factor) = lower.strip_suffix("fr")
+        && let Ok(factor) = factor.trim().parse::<f32>()
+    {
+        return TrackBreadth::Fr(factor.max(0.0));
+    }
+    match lower.as_str() {
+        "auto" => TrackBreadth::Auto,
+        "min-content" | "max-content" => TrackBreadth::Content,
+        _ => MaybeLen::parse(s, font_px, content_w).map_or(TrackBreadth::Auto, |value| {
+            match value {
+                MaybeLen::Px(value) => TrackBreadth::Px(value.max(0.0)),
+                MaybeLen::Auto => TrackBreadth::Auto,
+            }
+        }),
+    }
+}
+
 /// Splits a declaration value into top-level whitespace-separated tokens,
 /// keeping parenthesized groups (`repeat(2, 100px)`) as single tokens.
 fn top_tokens(value: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
-    let mut depth = 0i32;
+    let mut paren_depth = 0i32;
+    let mut bracket_depth = 0i32;
     for ch in value.chars() {
         match ch {
             '(' => {
-                depth += 1;
+                paren_depth += 1;
                 cur.push(ch);
             }
             ')' => {
-                depth -= 1;
+                paren_depth -= 1;
                 cur.push(ch);
             }
-            c if c.is_whitespace() && depth <= 0 => {
+            '[' => {
+                bracket_depth += 1;
+                cur.push(ch);
+            },
+            ']' => {
+                bracket_depth -= 1;
+                cur.push(ch);
+            },
+            c if c.is_whitespace() && paren_depth <= 0 && bracket_depth <= 0 => {
                 if !cur.is_empty() {
                     out.push(std::mem::take(&mut cur));
                 }
@@ -131,10 +247,34 @@ fn top_tokens(value: &str) -> Vec<String> {
     out
 }
 
+fn repeat_parts(token: &str) -> Option<(&str, &str)> {
+    let open = token.find('(')?;
+    if !token[..open].eq_ignore_ascii_case("repeat") || !token.ends_with(')') {
+        return None;
+    }
+    let inner = &token[open + 1..token.len() - 1];
+    let comma = inner.find(',')?;
+    Some((&inner[..comma], &inner[comma + 1..]))
+}
+
+/// Nested repeat() is invalid Grid grammar. Reject it before either track or
+/// named-line expansion recurses, so hostile nesting cannot consume the Rust
+/// call stack even when a ComputedStyle is synthesized outside the CSS parser.
+fn contains_nested_repeat(value: &str) -> bool {
+    top_tokens(value).iter().any(|token| {
+        repeat_parts(token).is_some_and(|(_, list)| {
+            top_tokens(list)
+                .iter()
+                .any(|inner| repeat_parts(inner).is_some())
+        })
+    })
+}
+
 /// Context needed to expand `repeat(auto-fill, …)`.
 struct RepeatCtx {
     font_px: f32,
     content_w: f32,
+    repeat_available: Option<f32>,
     gap: f32,
     /// Definite px already consumed by tracks emitted before this repeat.
     fixed_before: f32,
@@ -143,30 +283,41 @@ struct RepeatCtx {
 /// Parses a full track list: components, `[line names]` (dropped), and
 /// `repeat()` groups. Total track count is capped defensively.
 fn parse_track_list(value: &str, ctx: &RepeatCtx, allow_auto_fill: bool) -> Vec<TrackSize> {
-    const MAX_TRACKS: usize = 1000;
+    if value.trim().eq_ignore_ascii_case("none") || contains_nested_repeat(value) {
+        return Vec::new();
+    }
+    let tokens = top_tokens(value);
+    let mut outside_fixed_sum = 0.0;
+    let mut outside_fixed_count = 0usize;
+    for token in &tokens {
+        let lower = token.to_ascii_lowercase();
+        if (token.starts_with('[') && token.ends_with(']')) || lower.starts_with("repeat(") {
+            continue;
+        }
+        let fixed = [parse_track_size(token, ctx.font_px, ctx.content_w)];
+        if let Some(sizes) = fixed
+            .iter()
+            .map(|size| size.repeat_size())
+            .collect::<Option<Vec<_>>>()
+        {
+            outside_fixed_sum += sizes.iter().sum::<f32>();
+            outside_fixed_count += sizes.len();
+        }
+    }
     let mut out = Vec::new();
-    for tok in top_tokens(value) {
-        if out.len() >= MAX_TRACKS {
+    for tok in tokens {
+        if out.len() >= MAX_GRID_TRACKS {
             break;
         }
         // Line names `[a b]` may split into several tokens; drop them all.
-        if tok.contains('[') || tok.contains(']') {
+        if tok.starts_with('[') && tok.ends_with(']') {
             continue;
         }
-        let lower = tok.to_ascii_lowercase();
-        if let Some(inner) = lower
-            .strip_prefix("repeat(")
-            .and_then(|s| s.strip_suffix(')'))
-        {
+        if let Some((count_part, list_part)) = repeat_parts(&tok) {
             // repeat(<count>, <track-list>) — count is an integer or
-            // auto-fill; the inner list re-enters this parser (nesting
-            // comes free, inner auto-fill degrades to 1).
-            let (count_part, list_part) = match inner.find(',') {
-                Some(i) => (&inner[..i], &inner[i + 1..]),
-                None => (inner, ""),
-            };
+            // auto-fill. Nested repeat() was rejected before this loop.
             let n = match count_part.trim().parse::<usize>() {
-                Ok(n) => n.min(MAX_TRACKS),
+                Ok(n) => n.min(MAX_GRID_TRACKS),
                 Err(_) => {
                     // auto-fill: expandable ONLY when every repeated track
                     // is definite; otherwise one repetition (documented).
@@ -178,31 +329,42 @@ fn parse_track_list(value: &str, ctx: &RepeatCtx, allow_auto_fill: bool) -> Vec<
                             &RepeatCtx {
                                 font_px: ctx.font_px,
                                 content_w: ctx.content_w,
+                                repeat_available: ctx.repeat_available,
                                 gap: ctx.gap,
                                 fixed_before: ctx.fixed_before,
                             },
                             false,
                         );
-                        let all_definite = sizes.iter().all(|s| matches!(*s, TrackSize::Px(_)));
-                        let unit: f32 = sizes
+                        let repeat_sizes = sizes
                             .iter()
-                            .map(|s| match *s {
-                                TrackSize::Px(v) => v,
-                                _ => 0.0,
-                            })
-                            .sum::<f32>()
-                            + ctx.gap * sizes.len().saturating_sub(1) as f32;
-                        let avail = (ctx.content_w - ctx.fixed_before).max(0.0);
-                        if all_definite && unit > 0.0 {
-                            (((avail + ctx.gap) / unit).floor() as usize).clamp(1, MAX_TRACKS)
-                        } else {
-                            1
-                        }
+                            .map(|size| size.repeat_size())
+                            .collect::<Option<Vec<_>>>();
+                        let unit: f32 = repeat_sizes
+                            .as_ref()
+                            .map(|sizes| sizes.iter().sum())
+                            .unwrap_or(0.0)
+                            // Include the gap after this repetition. The
+                            // numerator adds one trailing gap back, yielding
+                            // `tracks + (track_count - 1) gaps` overall.
+                            + ctx.gap * sizes.len() as f32;
+                        ctx.repeat_available.map_or(1, |available| {
+                            let avail = (available + ctx.gap
+                                - ctx.fixed_before
+                                - outside_fixed_sum
+                                - ctx.gap * outside_fixed_count as f32)
+                                .max(0.0);
+                            if repeat_sizes.is_some() && unit > 0.0 {
+                                (((avail + ctx.gap) / unit).floor() as usize)
+                                    .clamp(1, MAX_GRID_TRACKS)
+                            } else {
+                                1
+                            }
+                        })
                     }
                 }
             };
             for _ in 0..n {
-                if out.len() >= MAX_TRACKS {
+                if out.len() >= MAX_GRID_TRACKS {
                     break;
                 }
                 let parsed = parse_track_list(
@@ -210,18 +372,77 @@ fn parse_track_list(value: &str, ctx: &RepeatCtx, allow_auto_fill: bool) -> Vec<
                     &RepeatCtx {
                         font_px: ctx.font_px,
                         content_w: ctx.content_w,
+                        repeat_available: ctx.repeat_available,
                         gap: ctx.gap,
                         fixed_before: ctx.fixed_before,
                     },
                     false,
                 );
-                out.extend(parsed);
+                out.extend(parsed.into_iter().take(MAX_GRID_TRACKS - out.len()));
             }
             continue;
         }
         out.push(parse_track_size(&tok, ctx.font_px, ctx.content_w));
     }
     out
+}
+
+fn collect_line_names(
+    value: &str,
+    ctx: &RepeatCtx,
+    allow_auto_fill: bool,
+) -> HashMap<String, Vec<i32>> {
+    if contains_nested_repeat(value) {
+        return HashMap::new();
+    }
+    let tokens = top_tokens(value);
+    let total_tracks = parse_track_list(value, ctx, allow_auto_fill).len();
+    let simple_tracks = tokens
+        .iter()
+        .filter(|token| !token.contains('[') && !token.to_ascii_lowercase().starts_with("repeat("))
+        .count();
+    let mut names = HashMap::<String, Vec<i32>>::new();
+    let mut line = 1i32;
+    for token in tokens {
+        if token.starts_with('[') && token.ends_with(']') {
+            // Adjacent blocks (`[a][b]`) arrive as one token; `][` separates
+            // their name lists just like whitespace.
+            for name in token[1..token.len() - 1]
+                .split("][")
+                .flat_map(|part| part.split_ascii_whitespace())
+            {
+                names.entry(name.to_owned()).or_default().push(line);
+            }
+            continue;
+        }
+        if let Some((_, list)) = repeat_parts(&token) {
+            let inner_tracks = parse_track_list(list, ctx, false);
+            if inner_tracks.is_empty() {
+                continue;
+            }
+            let repetitions = total_tracks
+                .saturating_sub(simple_tracks)
+                .checked_div(inner_tracks.len())
+                .unwrap_or(0)
+                .max(1);
+            let inner_names = collect_line_names(list, ctx, false);
+            for repetition in 0..repetitions {
+                let offset = line - 1 + (repetition * inner_tracks.len()) as i32;
+                for (name, occurrences) in &inner_names {
+                    for occurrence in occurrences {
+                        names
+                            .entry(name.clone())
+                            .or_default()
+                            .push(offset + occurrence);
+                    }
+                }
+            }
+            line += (repetitions * inner_tracks.len()) as i32;
+            continue;
+        }
+        line += 1;
+    }
+    names
 }
 
 // ---------------------------------------------------------------------------
@@ -319,12 +540,15 @@ fn parse_gaps(style: &ComputedStyle, font_px: f32, content_w: f32) -> (f32, f32)
 struct GridSpec {
     cols: Vec<TrackSize>,
     rows: Vec<TrackSize>,
+    col_line_names: HashMap<String, Vec<i32>>,
+    row_line_names: HashMap<String, Vec<i32>>,
     auto_cols: Vec<TrackSize>,
     auto_rows: Vec<TrackSize>,
     row_gap: f32,
     col_gap: f32,
     flow_column: bool,
     flow_dense: bool,
+    rtl: bool,
     justify_content: Pack,
     align_content: Pack,
     justify_items: ItemAlign,
@@ -332,17 +556,24 @@ struct GridSpec {
 }
 
 impl GridSpec {
-    fn of(style: &ComputedStyle, font_px: f32, content_w: f32) -> Self {
+    fn of(
+        style: &ComputedStyle,
+        font_px: f32,
+        content_w: f32,
+        definite_height: Option<f32>,
+    ) -> Self {
         let (row_gap, col_gap) = parse_gaps(style, font_px, content_w);
         let ctx_cols = RepeatCtx {
             font_px,
             content_w,
+            repeat_available: Some(content_w),
             gap: col_gap,
             fixed_before: 0.0,
         };
         let ctx_rows = RepeatCtx {
             font_px,
-            content_w,
+            content_w: definite_height.unwrap_or(content_w),
+            repeat_available: definite_height,
             gap: row_gap,
             fixed_before: 0.0,
         };
@@ -352,15 +583,13 @@ impl GridSpec {
             .unwrap_or("row")
             .to_ascii_lowercase();
         let words: Vec<&str> = flow.split_ascii_whitespace().collect();
+        let col_value = style.get("grid-template-columns").unwrap_or("none");
+        let row_value = style.get("grid-template-rows").unwrap_or("none");
         GridSpec {
-            cols: style
-                .get("grid-template-columns")
-                .map(|v| parse_track_list(v, &ctx_cols, true))
-                .unwrap_or_default(),
-            rows: style
-                .get("grid-template-rows")
-                .map(|v| parse_track_list(v, &ctx_rows, true))
-                .unwrap_or_default(),
+            cols: parse_track_list(col_value, &ctx_cols, true),
+            rows: parse_track_list(row_value, &ctx_rows, true),
+            col_line_names: collect_line_names(col_value, &ctx_cols, true),
+            row_line_names: collect_line_names(row_value, &ctx_rows, true),
             auto_cols: style
                 .get("grid-auto-columns")
                 .map(|v| parse_track_list(v, &ctx_cols, false))
@@ -375,6 +604,9 @@ impl GridSpec {
             col_gap,
             flow_column: words.iter().any(|w| *w == "column"),
             flow_dense: words.iter().any(|w| *w == "dense"),
+            rtl: style
+                .get("direction")
+                .is_some_and(|value| value.eq_ignore_ascii_case("rtl")),
             justify_content: parse_pack(style.get("justify-content")),
             align_content: parse_pack(style.get("align-content")),
             justify_items: parse_item_align(style.get("justify-items")),
@@ -402,10 +634,13 @@ impl LineSpec {
     };
 }
 
-/// Parses one slot value: `auto`, `<integer>`, `span N`, or a bare /
-/// spanned line NAME (names are unsupported → `auto` / `span 1`,
-/// documented).
-fn parse_line_slot(s: &str) -> LineSpec {
+/// Parses one slot value: `auto`, `<integer>`, `span N`, or a named-line
+/// occurrence such as `middle`, `middle 2`, or `-1 middle`.
+fn parse_line_slot(
+    s: &str,
+    names: &HashMap<String, Vec<i32>>,
+    explicit_count: usize,
+) -> LineSpec {
     let s = s.trim();
     if s.is_empty() || s.eq_ignore_ascii_case("auto") {
         return LineSpec::AUTO;
@@ -425,11 +660,59 @@ fn parse_line_slot(s: &str) -> LineSpec {
         };
     }
     match s.parse::<i32>() {
-        Ok(0) | Err(_) => LineSpec::AUTO, // line 0 is invalid → auto
+        Ok(0) => LineSpec::AUTO,
         Ok(n) => LineSpec {
             line: Some(n),
             span: 1,
         },
+        Err(_) => resolve_named_line(s, names, explicit_count).map_or(LineSpec::AUTO, |line| {
+            LineSpec {
+                line: Some(line),
+                span: 1,
+            }
+        }),
+    }
+}
+
+fn resolve_named_line(
+    value: &str,
+    names: &HashMap<String, Vec<i32>>,
+    explicit_count: usize,
+) -> Option<i32> {
+    let parts = value.split_ascii_whitespace().collect::<Vec<_>>();
+    let (name, occurrence) = match parts.as_slice() {
+        [name] => (*name, 1),
+        [first, second] => {
+            if let Ok(occurrence) = first.parse::<i32>() {
+                (*second, occurrence)
+            } else if let Ok(occurrence) = second.parse::<i32>() {
+                (*first, occurrence)
+            } else {
+                return None;
+            }
+        },
+        _ => return None,
+    };
+    if occurrence == 0 {
+        return None;
+    }
+    let occurrences = names.get(name).map(Vec::as_slice).unwrap_or(&[]);
+    if occurrence > 0 {
+        let index = usize::try_from(occurrence).ok()?.checked_sub(1)?;
+        occurrences.get(index).copied().or_else(|| {
+            i32::try_from(explicit_count)
+                .ok()?
+                .checked_add(1)?
+                .checked_add(occurrence)?
+                .checked_sub(i32::try_from(occurrences.len()).ok()?)
+                .filter(|line| *line <= MAX_GRID_TRACKS as i32 + 1)
+        })
+    } else {
+        let from_end = occurrence.unsigned_abs() as usize;
+        occurrences
+            .len()
+            .checked_sub(from_end)
+            .and_then(|index| occurrences.get(index).copied())
     }
 }
 
@@ -459,7 +742,9 @@ fn combine_slots(start: LineSpec, end: LineSpec, explicit_count: usize) -> (Opti
         } else if l == 0 {
             None
         } else {
-            Some(l as u32)
+            u32::try_from(l)
+                .ok()
+                .filter(|line| *line <= MAX_GRID_TRACKS as u32 + 1)
         }
     };
     match (start.line.and_then(resolve), end.line.and_then(resolve)) {
@@ -478,23 +763,33 @@ fn combine_slots(start: LineSpec, end: LineSpec, explicit_count: usize) -> (Opti
 
 /// Reads an item's `grid-row` / `grid-column` (shorthand first, then the
 /// four longhands override their slots).
-fn parse_placement(style: &ComputedStyle, explicit_cols: usize, explicit_rows: usize) -> Placement {
-    let side = |shorthand: &str, s_prop: &str, e_prop: &str, expl: usize| {
+fn parse_placement(
+    style: &ComputedStyle,
+    explicit_cols: usize,
+    explicit_rows: usize,
+    col_names: &HashMap<String, Vec<i32>>,
+    row_names: &HashMap<String, Vec<i32>>,
+) -> Placement {
+    let side = |shorthand: &str,
+                s_prop: &str,
+                e_prop: &str,
+                expl: usize,
+                names: &HashMap<String, Vec<i32>>| {
         let mut start = LineSpec::AUTO;
         let mut end = LineSpec::AUTO;
         if let Some(v) = style.get(shorthand) {
             let parts: Vec<&str> = v.split('/').collect();
-            start = parse_line_slot(parts.first().copied().unwrap_or("auto"));
+            start = parse_line_slot(parts.first().copied().unwrap_or("auto"), names, expl);
             end = match parts.get(1) {
-                Some(e) => parse_line_slot(e),
+                Some(e) => parse_line_slot(e, names, expl),
                 None => LineSpec::AUTO,
             };
         }
         if let Some(v) = style.get(s_prop) {
-            start = parse_line_slot(v);
+            start = parse_line_slot(v, names, expl);
         }
         if let Some(v) = style.get(e_prop) {
-            end = parse_line_slot(v);
+            end = parse_line_slot(v, names, expl);
         }
         combine_slots(start, end, expl)
     };
@@ -503,8 +798,15 @@ fn parse_placement(style: &ComputedStyle, explicit_cols: usize, explicit_rows: u
         "grid-column-start",
         "grid-column-end",
         explicit_cols,
+        col_names,
     );
-    let (row, row_span) = side("grid-row", "grid-row-start", "grid-row-end", explicit_rows);
+    let (row, row_span) = side(
+        "grid-row",
+        "grid-row-start",
+        "grid-row-end",
+        explicit_rows,
+        row_names,
+    );
     Placement {
         row,
         row_span,
@@ -517,29 +819,82 @@ fn parse_placement(style: &ComputedStyle, explicit_cols: usize, explicit_rows: u
 // Auto-placement (css-grid-1 §8.5, simplified sparse/dense model)
 // ---------------------------------------------------------------------------
 
-/// Occupied-cell set over 1-based (row, col) pairs; grows without bound.
+/// Occupied-cell set over bounded 1-based (row, col) pairs.
 #[derive(Default)]
 struct Occupancy {
     cells: HashMap<(u32, u32), ()>,
 }
 
 impl Occupancy {
-    fn fits(&self, r: u32, c: u32, rs: u32, cs: u32) -> bool {
+    fn region_is_bounded(r: u32, c: u32, rs: u32, cs: u32) -> bool {
+        r >= 1
+            && c >= 1
+            && rs >= 1
+            && cs >= 1
+            && r.checked_add(rs - 1)
+                .is_some_and(|end| end <= MAX_GRID_TRACKS as u32)
+            && c.checked_add(cs - 1)
+                .is_some_and(|end| end <= MAX_GRID_TRACKS as u32)
+    }
+
+    fn charge(work: &mut usize, rs: u32, cs: u32) -> bool {
+        let Some(area) = (rs as usize).checked_mul(cs as usize) else {
+            return false;
+        };
+        let Some(next) = work.checked_add(area) else {
+            return false;
+        };
+        if next > MAX_GRID_PLACEMENT_WORK {
+            return false;
+        }
+        *work = next;
+        true
+    }
+
+    fn fits(&self, r: u32, c: u32, rs: u32, cs: u32, work: &mut usize) -> Option<bool> {
+        if r < 1
+            || c < 1
+            || rs < 1
+            || cs < 1
+            || r > MAX_GRID_TRACKS as u32
+            || c > MAX_GRID_TRACKS as u32
+            || rs > MAX_GRID_TRACKS as u32
+            || cs > MAX_GRID_TRACKS as u32
+        {
+            return None;
+        }
+        if !Self::region_is_bounded(r, c, rs, cs) {
+            return Some(false);
+        }
+        if !Self::charge(work, rs, cs) {
+            return None;
+        }
         for i in 0..rs {
             for j in 0..cs {
                 if self.cells.contains_key(&(r + i, c + j)) {
-                    return false;
+                    return Some(false);
                 }
             }
         }
-        true
+        Some(true)
     }
-    fn put(&mut self, r: u32, c: u32, rs: u32, cs: u32) {
+
+    fn put(&mut self, r: u32, c: u32, rs: u32, cs: u32, work: &mut usize) -> bool {
+        let Some(area) = (rs as usize).checked_mul(cs as usize) else {
+            return false;
+        };
+        if !Self::region_is_bounded(r, c, rs, cs)
+            || self.cells.len().saturating_add(area) > MAX_OCCUPIED_CELLS
+            || !Self::charge(work, rs, cs)
+        {
+            return false;
+        }
         for i in 0..rs {
             for j in 0..cs {
                 self.cells.insert((r + i, c + j), ());
             }
         }
+        true
     }
 }
 
@@ -554,7 +909,10 @@ fn place_row_flow(
     specs: &[Placement],
     dense: bool,
     expl_minor: usize,
-) -> Vec<(u32, u32, u32, u32)> {
+) -> Option<Vec<(u32, u32, u32, u32)>> {
+    if specs.len() > MAX_OCCUPIED_CELLS || expl_minor > MAX_GRID_TRACKS {
+        return None;
+    }
     // Wrap width for both-auto items: explicit minors, at least the widest
     // auto-placed span (so wide items always get columns to fit into).
     let mut limit = expl_minor.max(1);
@@ -563,17 +921,23 @@ fn place_row_flow(
             limit = limit.max(p.col_span as usize);
         }
     }
+    if limit > MAX_GRID_TRACKS {
+        return None;
+    }
 
     let mut occ = Occupancy::default();
     let mut out = Vec::with_capacity(specs.len());
     let (mut cur_r, mut cur_c) = (1u32, 1u32);
+    let mut work = 0usize;
 
     for p in specs {
         let rs = p.row_span.max(1);
         let cs = p.col_span.max(1);
         match (p.row, p.col) {
             (Some(r), Some(c)) => {
-                occ.put(r, c, rs, cs);
+                if !occ.put(r, c, rs, cs, &mut work) {
+                    return None;
+                }
                 out.push((r, rs, c, cs));
             }
             // Definite row, auto column: slide right within the locked row.
@@ -582,33 +946,43 @@ fn place_row_flow(
                     1
                 } else {
                     if 1 < cur_c {
-                        cur_r += 1; // sparse monotonicity bookkeeping
+                        cur_r = cur_r.checked_add(1)?; // sparse monotonicity bookkeeping
                     }
                     1
                 };
-                while !occ.fits(r, c, rs, cs) {
-                    c += 1;
+                loop {
+                    match occ.fits(r, c, rs, cs, &mut work)? {
+                        true => break,
+                        false => c = c.checked_add(1)?,
+                    }
                 }
-                occ.put(r, c, rs, cs);
+                if !occ.put(r, c, rs, cs, &mut work) {
+                    return None;
+                }
                 out.push((r, rs, c, cs));
                 if !dense {
-                    cur_c = c + cs;
+                    cur_c = c.checked_add(cs)?;
                 }
             }
             // Definite column, auto row: slide down within the locked col.
             (None, Some(c)) => {
                 if !dense && c < cur_c {
-                    cur_r += 1;
+                    cur_r = cur_r.checked_add(1)?;
                 }
                 let mut r = if dense { 1 } else { cur_r };
-                while !occ.fits(r, c, rs, cs) {
-                    r += 1;
+                loop {
+                    match occ.fits(r, c, rs, cs, &mut work)? {
+                        true => break,
+                        false => r = r.checked_add(1)?,
+                    }
                 }
-                occ.put(r, c, rs, cs);
+                if !occ.put(r, c, rs, cs, &mut work) {
+                    return None;
+                }
                 out.push((r, rs, c, cs));
                 if !dense {
                     cur_r = r; // cursor resumes at the item's row start
-                    cur_c = c + cs;
+                    cur_c = c.checked_add(cs)?;
                 }
             }
             // Fully automatic.
@@ -617,41 +991,43 @@ fn place_row_flow(
                     // Reading-order rescan from the grid start; the wrap
                     // limit always accommodates the widest auto span, so a
                     // fitting cell exists — the cap is purely defensive.
-                    let mut found = (1u32, 1u32);
-                    'scan: for r in 1..=1_000_000u32 {
+                    let mut found = None;
+                    'scan: for r in 1..=MAX_GRID_TRACKS as u32 {
                         for c in 1..=limit as u32 {
-                            if occ.fits(r, c, rs, cs) {
-                                found = (r, c);
+                            if occ.fits(r, c, rs, cs, &mut work)? {
+                                found = Some((r, c));
                                 break 'scan;
                             }
                         }
                     }
-                    found
+                    found?
                 } else {
                     let (mut r, mut c) = (cur_r, cur_c);
                     loop {
                         if c > limit as u32 {
                             c = 1;
-                            r += 1;
+                            r = r.checked_add(1)?;
                             continue;
                         }
-                        if occ.fits(r, c, rs, cs) {
+                        if occ.fits(r, c, rs, cs, &mut work)? {
                             break;
                         }
-                        c += 1;
+                        c = c.checked_add(1)?;
                     }
                     (r, c)
                 };
-                occ.put(r, c, rs, cs);
+                if !occ.put(r, c, rs, cs, &mut work) {
+                    return None;
+                }
                 out.push((r, rs, c, cs));
                 if !dense {
                     cur_r = r;
-                    cur_c = c + cs;
+                    cur_c = c.checked_add(cs)?;
                 }
             }
         }
     }
-    out
+    Some(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -695,10 +1071,7 @@ fn size_axis(
     let fr_is_intrinsic = available.is_none();
     let mut base: Vec<f32> = kinds
         .iter()
-        .map(|k| match *k {
-            TrackSize::Px(v) => v.max(0.0),
-            _ => 0.0,
-        })
+        .map(|kind| kind.base_floor().max(0.0))
         .collect();
 
     // Intrinsic contributions.
@@ -706,47 +1079,46 @@ fn size_axis(
         let end = (c.start + c.span).min(n);
         let intr: Vec<usize> = (c.start..end)
             .filter(|&t| {
-                kinds[t].is_intrinsic() || (fr_is_intrinsic && matches!(kinds[t], TrackSize::Fr(_)))
+                kinds[t].is_intrinsic() || (fr_is_intrinsic && kinds[t].is_fr())
             })
             .collect();
         match intr.len() {
             0 => {}
-            1 => base[intr[0]] = base[intr[0]].max(c.outer),
+            1 => {
+                let track = intr[0];
+                base[track] = base[track]
+                    .max(c.outer)
+                    .min(kinds[track].growth_limit().unwrap_or(f32::INFINITY));
+            },
             _ => {
                 let share = c.outer / intr.len() as f32;
                 for t in intr {
-                    base[t] = base[t].max(share);
+                    base[t] = base[t]
+                        .max(share)
+                        .min(kinds[t].growth_limit().unwrap_or(f32::INFINITY));
                 }
             }
         }
     }
 
-    // fr distribution over the space remaining after non-fr tracks.
+    if let Some(available) = available {
+        let limits = kinds
+            .iter()
+            .map(|kind| kind.growth_limit())
+            .collect::<Vec<_>>();
+        let gaps = gap * n.saturating_sub(1) as f32;
+        base = maximize_tracks(available, gaps, &base, &limits);
+    }
+
+    // Flexible tracks use the spec restart loop: a track whose base exceeds
+    // its provisional flex share becomes inflexible before recomputation.
     if let (Some(avail), true) = (available, kinds.iter().any(|k| k.is_fr())) {
         let gaps = gap * n.saturating_sub(1) as f32;
-        let non_fr: f32 = base
+        let factors = kinds
             .iter()
-            .zip(kinds)
-            .filter(|(_, k)| !k.is_fr())
-            .map(|(v, _)| *v)
-            .sum();
-        let leftover = avail - gaps - non_fr;
-        if leftover > 0.0 {
-            let sum_w: f32 = kinds
-                .iter()
-                .map(|k| match *k {
-                    TrackSize::Fr(w) => w,
-                    _ => 0.0,
-                })
-                .sum();
-            if sum_w > 0.0 {
-                for (t, k) in kinds.iter().enumerate() {
-                    if let TrackSize::Fr(w) = *k {
-                        base[t] += leftover * w / sum_w;
-                    }
-                }
-            }
-        }
+            .map(|kind| kind.fr_factor())
+            .collect::<Vec<_>>();
+        base = resolve_flexible_tracks(avail, gaps, &base, &factors);
     }
     base
 }
@@ -833,12 +1205,20 @@ pub fn layout_grid(
     definite_height: Option<f32>,
     fonts: &FontSource,
 ) -> f32 {
-    let spec = GridSpec::of(container, font_px, content_w);
+    let spec = GridSpec::of(container, font_px, content_w, definite_height);
 
     // --- 1. placement ---------------------------------------------------
     let raw: Vec<Placement> = items
         .iter()
-        .map(|it| parse_placement(&it.style, spec.cols.len(), spec.rows.len()))
+        .map(|it| {
+            parse_placement(
+                &it.style,
+                spec.cols.len(),
+                spec.rows.len(),
+                &spec.col_line_names,
+                &spec.row_line_names,
+            )
+        })
         .collect();
     let placed: Vec<Placement> = if spec.flow_column {
         // Run the row algorithm on transposed specs, transpose back.
@@ -852,7 +1232,10 @@ pub fn layout_grid(
             })
             .collect();
         // Transposed: the minor axis of the swapped space is the ROW axis.
-        place_row_flow(&swapped, spec.flow_dense, spec.rows.len())
+        let Some(transposed) = place_row_flow(&swapped, spec.flow_dense, spec.rows.len()) else {
+            return 0.0;
+        };
+        transposed
             .into_iter()
             .map(|(maj, msp, min, xsp)| Placement {
                 row: Some(min),
@@ -863,7 +1246,10 @@ pub fn layout_grid(
             .collect()
     } else {
         // Row flow wraps auto items across the COLUMN axis.
-        place_row_flow(&raw, spec.flow_dense, spec.cols.len())
+        let Some(row_flow) = place_row_flow(&raw, spec.flow_dense, spec.cols.len()) else {
+            return 0.0;
+        };
+        row_flow
             .into_iter()
             .map(|(maj, msp, min, xsp)| Placement {
                 row: Some(maj),
@@ -883,7 +1269,12 @@ pub fn layout_grid(
         .iter()
         .map(|p| (p.row.unwrap_or(1) + p.row_span - 1) as usize)
         .fold(spec.rows.len(), usize::max);
-    if n_cols == 0 || n_rows == 0 {
+    if n_cols == 0
+        || n_rows == 0
+        || n_cols > MAX_GRID_TRACKS
+        || n_rows > MAX_GRID_TRACKS
+        || n_cols.checked_mul(n_rows).is_none_or(|cells| cells > MAX_OCCUPIED_CELLS)
+    {
         // No explicit tracks and nothing placed: degenerate grid.
         return 0.0;
     }
@@ -927,10 +1318,19 @@ pub fn layout_grid(
         n_cols,
     );
     let mut col_pos = Vec::with_capacity(n_cols);
-    let mut cursor = content_x + jc_lead;
-    for sz in &col_sizes {
-        col_pos.push(cursor);
-        cursor += sz + spec.col_gap + jc_between;
+    if spec.rtl {
+        let mut cursor = content_x + content_w - jc_lead;
+        for size in &col_sizes {
+            cursor -= size;
+            col_pos.push(cursor);
+            cursor -= spec.col_gap + jc_between;
+        }
+    } else {
+        let mut cursor = content_x + jc_lead;
+        for size in &col_sizes {
+            col_pos.push(cursor);
+            cursor += size + spec.col_gap + jc_between;
+        }
     }
 
     // Area width spanned by an item's columns (incl. internal gaps).
@@ -941,6 +1341,7 @@ pub fn layout_grid(
     };
 
     // --- 4. lay out every item at its final width, measure heights ------
+    let mut width_auto_flags = Vec::with_capacity(items.len());
     for (i, it) in items.iter_mut().enumerate() {
         let p = &placed[i];
         let area_w = area_w_of(p).max(0.0);
@@ -948,6 +1349,7 @@ pub fn layout_grid(
             values::resolve_extent(&it.style, "width", it.font_size, area_w),
             MaybeLen::Auto
         );
+        width_auto_flags.push(width_auto);
         it.margin = values::resolve_margins(&it.style, it.font_size, area_w);
         it.padding = values::resolve_padding(&it.style, it.font_size, area_w);
         it.border = values::resolve_borders(&it.style, it.font_size);
@@ -1022,9 +1424,15 @@ pub fn layout_grid(
         let ri = (p.row.unwrap_or(1) - 1) as usize;
         let ce = (ci + cs).min(n_cols);
         let re = (ri + rs).min(n_rows);
-        let ax = col_pos[ci];
+        let ax = col_pos[ci..ce]
+            .iter()
+            .copied()
+            .fold(f32::INFINITY, f32::min);
         let ay = row_pos[ri];
-        let aw = col_pos[ce - 1] + col_sizes[ce - 1] - ax;
+        let right = (ci..ce)
+            .map(|column| col_pos[column] + col_sizes[column])
+            .fold(f32::NEG_INFINITY, f32::max);
+        let aw = right - ax;
         let ah = row_pos[re - 1] + row_sizes[re - 1] - ay;
 
         // Vertical stretch: grow the item to fill the area (materialize the
@@ -1049,28 +1457,70 @@ pub fn layout_grid(
         // Position within the area using OUTER sizes. Margins are
         // re-resolved from the style because layout_block's §10.3.3
         // pass may have overwritten left/right with constraint fillers.
-        let justify = container_self_align(it, "justify-self").unwrap_or(spec.justify_items);
+        let mut justify = container_self_align(it, "justify-self").unwrap_or(spec.justify_items);
+        if justify == ItemAlign::Stretch && !width_auto_flags[i] {
+            // A non-auto inline size cannot stretch; Box Alignment falls
+            // back to the logical start edge of the grid area.
+            justify = ItemAlign::Start;
+        }
+        if spec.rtl {
+            justify = match justify {
+                ItemAlign::Start => ItemAlign::End,
+                ItemAlign::End => ItemAlign::Start,
+                other => other,
+            };
+        }
         let m = values::resolve_margins(&it.style, it.font_size, aw.max(0.0));
-        let ml = m.left.unwrap_or(0.0);
-        let mr = m.right.unwrap_or(0.0);
         let bw = it.border_box.w;
+        let auto_left = margin_is_auto(&it.style, "left");
+        let auto_right = margin_is_auto(&it.style, "right");
+        let mut ml = m.left.unwrap_or(0.0);
+        let mr = m.right.unwrap_or(0.0);
+        let horizontal_free = (aw - bw - ml - mr).max(0.0);
+        match (auto_left, auto_right) {
+            (true, true) => {
+                ml = horizontal_free * 0.5;
+            },
+            (true, false) => ml = horizontal_free,
+            (false, true) => {},
+            (false, false) => {},
+        }
         // border_box already contains padding+border, so OUTER size here is
         // margins + border_box — no extra chrome term.
-        let bx = ax
+        let bx = if auto_left || auto_right {
+            ax + ml
+        } else {
+            ax
             + match justify {
                 ItemAlign::End => (aw - mr - bw).max(0.0),
                 ItemAlign::Center => (ml + (aw - ml - mr - bw) / 2.0).max(0.0),
                 _ => ml, // Start; Stretch already fills via materialized width
-            };
-        let mt = m.top.unwrap_or(0.0);
+            }
+        };
+        let auto_top = margin_is_auto(&it.style, "top");
+        let auto_bottom = margin_is_auto(&it.style, "bottom");
+        let mut mt = m.top.unwrap_or(0.0);
         let mb = m.bottom.unwrap_or(0.0);
         let bh = it.border_box.h;
-        let by = ay
+        let vertical_free = (ah - bh - mt - mb).max(0.0);
+        match (auto_top, auto_bottom) {
+            (true, true) => {
+                mt = vertical_free * 0.5;
+            },
+            (true, false) => mt = vertical_free,
+            (false, true) => {},
+            (false, false) => {},
+        }
+        let by = if auto_top || auto_bottom {
+            ay + mt
+        } else {
+            ay
             + match align {
                 ItemAlign::End => (ah - mb - bh).max(0.0),
                 ItemAlign::Center => (mt + (ah - mt - mb - bh) / 2.0).max(0.0),
                 _ => mt,
-            };
+            }
+        };
         crate::flex::translate(it, bx - it.border_box.x, by - it.border_box.y);
     }
 
@@ -1500,6 +1950,19 @@ mod tests {
     }
 
     #[test]
+    fn nested_repeat_is_rejected_before_recursive_track_expansion() {
+        let ctx = RepeatCtx {
+            font_px: 16.0,
+            content_w: 400.0,
+            repeat_available: Some(400.0),
+            gap: 0.0,
+            fixed_before: 0.0,
+        };
+        assert!(parse_track_list("repeat(2,repeat(2,10px))", &ctx, true).is_empty());
+        assert!(collect_line_names("repeat(2,repeat(2,[x] 10px))", &ctx, true).is_empty());
+    }
+
+    #[test]
     fn top_level_tokens_keep_repeat_groups_together() {
         assert_eq!(
             top_tokens("repeat(2, 100px) 50px"),
@@ -1507,7 +1970,7 @@ mod tests {
         );
         assert_eq!(
             top_tokens("[a b] 1fr"),
-            vec!["[a".to_string(), "b]".to_string(), "1fr".to_string()]
+            vec!["[a b]".to_string(), "1fr".to_string()]
         );
     }
 

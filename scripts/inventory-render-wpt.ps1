@@ -14,6 +14,9 @@ param(
     [int]$PerCategory = 12,
     [string]$InventoryPath = "",
     [string]$ManifestPath = "",
+    [string]$IncludePathRegex = "",
+    [string]$ExcludePathRegex = "",
+    [string]$BlockedContentRegex = "",
     [switch]$SkipFetch
 )
 
@@ -27,8 +30,8 @@ if ($CategoryCsv) {
 if (-not $WptRoot) { $WptRoot = Join-Path $repositoryRoot "target\wpt" }
 if (-not $InventoryPath) { $InventoryPath = Join-Path $repositoryRoot "target\wpt-cascade-inventory.json" }
 if (-not $ManifestPath) { $ManifestPath = Join-Path $repositoryRoot "target\wpt-cascade-baseline.json" }
-if ($PerCategory -lt 1 -or $PerCategory -gt 100) {
-    throw "PerCategory must be between 1 and 100."
+if ($PerCategory -lt 1 -or $PerCategory -gt 1000) {
+    throw "PerCategory must be between 1 and 1000."
 }
 
 $WptRoot = [IO.Path]::GetFullPath($WptRoot)
@@ -139,6 +142,15 @@ foreach ($category in $Categories) {
     $reasons = [ordered]@{}
 
     foreach ($file in $files) {
+        $relative = $file.FullName.Substring($WptRoot.TrimEnd('\').Length + 1).Replace('\', '/')
+        if ($IncludePathRegex -and $relative -notmatch $IncludePathRegex) {
+            Add-Reason $reasons "outside-included-path"
+            continue
+        }
+        if ($ExcludePathRegex -and $relative -match $ExcludePathRegex) {
+            Add-Reason $reasons "excluded-path"
+            continue
+        }
         $source = Get-Content -LiteralPath $file.FullName -Raw
         if ($source -match '(?is)testharness\.js') { $testharnessCount++ }
         $link = Get-ReftestLink $file.FullName $source
@@ -161,7 +173,9 @@ foreach ($category in $Categories) {
         }
         $referenceSource = Get-Content -LiteralPath $link.reference_path -Raw
         $combined = $source + "`n" + $referenceSource
-        $blockedReason = if ($combined -match '(?is)<script\b') {
+        $blockedReason = if ($BlockedContentRegex -and $combined -match $BlockedContentRegex) {
+            "excluded-content"
+        } elseif ($combined -match '(?is)<script\b') {
             "scripted"
         } elseif ($combined -match '(?is)<meta\b[^>]*\bname\s*=\s*["'']flags["'']') {
             "flagged-environment"
@@ -178,7 +192,6 @@ foreach ($category in $Categories) {
             Add-Reason $reasons $blockedReason
             continue
         }
-        $relative = $file.FullName.Substring($WptRoot.TrimEnd('\').Length + 1).Replace('\', '/')
         $eligible.Add([pscustomobject]@{
             path = $relative
             hash = Get-StableHash $relative
@@ -206,7 +219,10 @@ $inventory = [ordered]@{
     schema = 1
     wpt_revision = $Revision
     selection_policy = "For each category, SHA-256 rank the normalized path of every HTML-parser-compatible, local-reference, script-free, flag-free, resource-free reftest; select the lowest hashes."
+    exclude_path_regex = $ExcludePathRegex
+    blocked_content_regex = $BlockedContentRegex
     per_category = $PerCategory
+    include_path_regex = $IncludePathRegex
     categories = $categoryRows
 }
 $manifest = [ordered]@{

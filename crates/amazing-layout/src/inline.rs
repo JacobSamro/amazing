@@ -16,6 +16,7 @@ use std::rc::Rc;
 use crate::font::FontSource;
 use crate::{GlyphFrag, InlineNode, IntrinsicSize, LineBox, ReplacedFrag, WordFrag};
 
+const FIT_TOLERANCE_PX: f32 = 0.01;
 const MAX_RUBY_COLUMNS: usize = 65_536;
 const MAX_RUBY_TEXT_BYTES: usize = 8 * 1024 * 1024;
 
@@ -182,7 +183,7 @@ pub fn layout_lines(
                 } else {
                     0.0
                 };
-                if has_content && cx + space_w + word_w > right_edge + f32::EPSILON {
+                if has_content && cx + space_w + word_w > right_edge + FIT_TOLERANCE_PX {
                     flush(&mut lines, &mut words, &mut replaced, &mut cx);
                 }
                 let wx = cx + if cx > content_x { space_w } else { 0.0 };
@@ -205,7 +206,7 @@ pub fn layout_lines(
                 } else {
                     0.0
                 };
-                if has_content && cx + space_w + size.width > right_edge + f32::EPSILON {
+                if has_content && cx + space_w + size.width > right_edge + FIT_TOLERANCE_PX {
                     flush(&mut lines, &mut words, &mut replaced, &mut cx);
                 }
                 let x = cx + if cx > content_x { space_w } else { 0.0 };
@@ -492,7 +493,7 @@ pub(crate) fn layout_lines_shaped(
                 };
                 if has_content
                     && may_break_after
-                    && cursor + spacing + word.width + break_width > inline_end + f32::EPSILON
+                    && cursor + spacing + word.width + break_width > inline_end + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -550,7 +551,7 @@ pub(crate) fn layout_lines_shaped(
                 });
                 cursor = x + word.width;
                 may_break_after = !word.hyphen_after
-                    || cursor + word.hyphen_advance <= inline_end + f32::EPSILON;
+                    || cursor + word.hyphen_advance <= inline_end + FIT_TOLERANCE_PX;
             }
             ShapedUnit::Replaced {
                 node,
@@ -560,7 +561,7 @@ pub(crate) fn layout_lines_shaped(
             } => {
                 if has_content
                     && may_break_after
-                    && cursor + size.width > inline_end + f32::EPSILON
+                    && cursor + size.width > inline_end + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -596,7 +597,7 @@ pub(crate) fn layout_lines_shaped(
             ShapedUnit::Ruby(mut ruby) => {
                 if has_content
                     && may_break_after
-                    && cursor + ruby.width > inline_end + f32::EPSILON
+                    && cursor + ruby.width > inline_end + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -638,7 +639,7 @@ pub(crate) fn layout_lines_shaped(
             } => {
                 if has_content
                     && may_break_after
-                    && cursor + combined.width > inline_end + f32::EPSILON
+                    && cursor + combined.width > inline_end + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,

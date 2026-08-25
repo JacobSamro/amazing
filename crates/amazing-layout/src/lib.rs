@@ -51,21 +51,24 @@
 //!   flex-grow/shrink/basis + `flex` shorthand, order
 //! - justify-content (5 values), align-items/align-self, align-content,
 //!   gap/row-gap/column-gap, auto-margin absorption on both axes
-//! Deviations: baseline alignment ≈ flex-start; min-content floors during
-//! shrink are not applied; column-mode non-stretch items keep their
-//! hypothetical-measure height; definite-height align-content only.
+//!
+//! Deviations: baseline alignment ≈ flex-start; column wrapping,
+//! wrap-reverse cross-start, transferred aspect ratios, and inline outer
+//! display remain deferred.
 //!
 //! Phase 3.5 additions — grid ([`grid`], css-grid-1 subset): track lists
-//! (px/%/auto/min-max-content/fr/repeat incl. auto-fill), auto-flow row |
-//! column | dense, line-number + span placement with implicit tracks,
-//! content/item alignment; see the module docs for deviations (percent
-//! rows resolve against width, no subgrids/named areas).
+//! (px/%/auto/min-max-content/minmax/fr/repeat incl. auto-fill), auto-flow row
+//! | column | dense, numeric/named-line placement with implicit tracks, and
+//! content/item alignment; see the module docs for remaining template-area,
+//! auto-fit, intrinsic-spanning, subgrid, and Grid-Lanes deviations.
 
 pub mod block;
 pub mod box_tree;
 pub mod flex;
+mod flex_algorithm;
 pub mod font;
 pub mod grid;
+mod grid_algorithm;
 pub mod inline;
 pub mod position;
 pub mod values;

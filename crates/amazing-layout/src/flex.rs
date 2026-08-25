@@ -6,27 +6,28 @@
 //! - `display: flex` / `inline-flex` (identical at layout time — inline
 //!   level outer display is a later-phase concern)
 //! - flex-direction: row / row-reverse / column / column-reverse
-//! - flex-wrap: nowrap / wrap (row mode); align-content against a definite
-//!   container height
+//! - flex-wrap: nowrap / wrap (row mode); align-content distribution and
+//!   multi-line stretch against a definite container height
 //! - flex-grow / flex-shrink / flex-basis + `flex` shorthand forms
+//! - iterative §9.7 flexible-length resolution with min/max freezing,
+//!   scaled shrink factors, automatic minimums, and intrinsic keywords
 //! - order (stable sort), gap / row-gap / column-gap
 //! - justify-content: flex-start/end, center, space-between/around/evenly
 //! - align-items / align-self: stretch, flex-start/end, center
-//! - auto margins absorb main-axis free space before justify-content
-//!   (materialized into the style so the box-model resolver agrees)
+//! - physical/logical margins and negative outer sizes; main-axis auto
+//!   margins absorb free space before justify-content
 //!
 //! Deviations (documented):
 //! - baseline alignment behaves like flex-start
-//! - shrink has no min-content floor
-//! - column mode is single-line; column-reverse degrades to normal
-//!   stacking order (top-down)
+//! - column mode is single-line; wrap-reverse does not reverse cross-start
 //! - cross-axis auto margins count as zero
-//! - a flexed item with a specified width has that width materialized to
-//!   the flexed size (the used size wins, per spec)
+//! - transferred aspect-ratio suggestions and inline outer display are
+//!   deferred
 
 use amazing_css::ComputedStyle;
 
 use crate::font::FontSource;
+use crate::flex_algorithm::{FlexConstraint, resolve_flexible_lengths};
 use crate::inline;
 use crate::values::{self, MaybeLen};
 use crate::{Flow, LayoutBox, Rect};
@@ -226,7 +227,7 @@ impl ItemProps {
                 grow = 1.0;
                 shrink = 1.0;
             } else if parts.len() == 1 {
-                if let Ok(n) = parts[0].parse::<f32>() {
+                if let Some(n) = parse_flex_number(parts[0]) {
                     // `flex: <number>` → grow n, basis 0% (§7.1.1).
                     grow = n;
                     basis = Some(MaybeLen::Px(0.0));
@@ -237,22 +238,25 @@ impl ItemProps {
                     basis = MaybeLen::parse(parts[0], font_px, main_extent);
                 }
             } else {
-                let nums: Vec<f32> = parts.iter().filter_map(|p| p.parse().ok()).collect();
+                let nums: Vec<f32> = parts
+                    .iter()
+                    .filter_map(|part| parse_flex_number(part))
+                    .collect();
                 grow = nums.first().copied().unwrap_or(0.0);
                 shrink = nums.get(1).copied().unwrap_or(1.0);
                 // First non-number token is the basis (`auto` parses to Auto).
                 basis = parts
                     .iter()
-                    .find(|p| p.parse::<f32>().is_err())
+                    .find(|part| parse_flex_number(part).is_none())
                     .and_then(|p| MaybeLen::parse(p, font_px, main_extent))
                     .or_else(|| nums.get(2).map(|n| MaybeLen::Px(*n)));
             }
         }
         if let Some(v) = style.get("flex-grow") {
-            grow = v.trim().parse().unwrap_or(grow);
+            grow = parse_flex_number(v).unwrap_or(grow);
         }
         if let Some(v) = style.get("flex-shrink") {
-            shrink = v.trim().parse().unwrap_or(shrink);
+            shrink = parse_flex_number(v).unwrap_or(shrink);
         }
         if let Some(v) = style.get("flex-basis") {
             basis = MaybeLen::parse(v, font_px, main_extent).or(basis);
@@ -276,6 +280,19 @@ impl ItemProps {
                 }
             }),
         }
+    }
+}
+
+fn parse_flex_number(value: &str) -> Option<f32> {
+    let value = value.trim();
+    if value.eq_ignore_ascii_case("calc(infinity)") {
+        Some(f32::INFINITY)
+    } else if value.eq_ignore_ascii_case("calc(-infinity)") {
+        Some(f32::NEG_INFINITY)
+    } else if value.eq_ignore_ascii_case("calc(nan)") {
+        Some(f32::NAN)
+    } else {
+        value.parse().ok()
     }
 }
 
@@ -330,15 +347,19 @@ pub fn layout_flex(
     definite_height: Option<f32>,
     fonts: &FontSource,
 ) -> f32 {
+    let spec = ContainerSpec::of(container, font_px, content_w, definite_height);
+    let main_extent = match spec.direction {
+        Direction::Row | Direction::RowReverse => content_w,
+        Direction::Column | Direction::ColumnReverse => definite_height.unwrap_or(0.0),
+    };
     let props: Vec<ItemProps> = items
         .iter()
-        .map(|it| ItemProps::of(&it.style, it.font_size, content_w))
+        .map(|it| ItemProps::of(&it.style, it.font_size, main_extent))
         .collect();
     // Stable sort by `order` (css-flexbox-1 §4.4).
     let mut order: Vec<usize> = (0..items.len()).collect();
     order.sort_by_key(|&i| props[i].order);
 
-    let spec = ContainerSpec::of(container, font_px, content_w, definite_height);
     match spec.direction {
         Direction::Row | Direction::RowReverse => {
             layout_row(items, &props, &order, &spec, content_x, content_y, content_w, fonts)
@@ -364,25 +385,93 @@ fn outer_main(items: &[LayoutBox], i: usize, base: f32) -> f32 {
         + items[i].margin.left.unwrap_or(0.0)
         + items[i].margin.right.unwrap_or(0.0)
 }
-/// Outer cross size of a LAID OUT item (border box + vertical chrome +
-/// top/bottom margins).
+/// Outer cross size of a laid-out item. The border box already contains
+/// padding and border, so only margins are added here.
 fn outer_cross(items: &[LayoutBox], i: usize) -> f32 {
-    items[i].border_box.h + v_chrome(&items[i])
+    items[i].border_box.h
         + items[i].margin.top.unwrap_or(0.0)
         + items[i].margin.bottom.unwrap_or(0.0)
-}
-
-/// Column-mode outer main (vertical) size for an adjusted base height.
-fn item_outer_h(base_h: f32, it: &LayoutBox) -> f32 {
-    base_h + v_chrome(it)
-        + it.margin.top.unwrap_or(0.0)
-        + it.margin.bottom.unwrap_or(0.0)
 }
 
 fn resolve_model(it: &mut LayoutBox, cbw: f32) {
     it.margin = values::resolve_margins(&it.style, it.font_size, cbw);
     it.padding = values::resolve_padding(&it.style, it.font_size, cbw);
     it.border = values::resolve_borders(&it.style, it.font_size);
+}
+
+fn main_limits(it: &LayoutBox, containing: f32, fonts: &FontSource) -> (f32, f32) {
+    let min_content = min_content_inner_width(it, fonts);
+    let max_content = max_content_inner_width(it, fonts).max(min_content);
+    let maximum = match it.style.get("max-width") {
+        Some(value) if value.eq_ignore_ascii_case("min-content") => min_content,
+        Some(value) if value.eq_ignore_ascii_case("max-content") => max_content,
+        Some(value) => values::parse_len(value, it.font_size, containing)
+            .unwrap_or(f32::INFINITY),
+        None => f32::INFINITY,
+    }
+    .max(0.0);
+    let minimum = match it.style.get("min-width") {
+        Some(value) if value.eq_ignore_ascii_case("min-content") => min_content,
+        Some(value) if value.eq_ignore_ascii_case("max-content") => max_content,
+        Some(value) if !value.eq_ignore_ascii_case("auto") => {
+            values::parse_len(value, it.font_size, containing).unwrap_or(0.0)
+        },
+        _ if automatic_minimum_applies(&it.style) => {
+            match values::resolve_extent(&it.style, "width", it.font_size, containing) {
+                MaybeLen::Px(specified) => min_content.min(specified),
+                MaybeLen::Auto => min_content,
+            }
+        },
+        _ => 0.0,
+    }
+    .max(0.0)
+    .min(maximum);
+    (minimum, maximum)
+}
+
+fn automatic_minimum_applies(style: &ComputedStyle) -> bool {
+    ["overflow", "overflow-x", "overflow-y"]
+        .into_iter()
+        .filter_map(|property| style.get(property))
+        .all(|overflow| {
+            overflow.eq_ignore_ascii_case("visible") || overflow.eq_ignore_ascii_case("clip")
+        })
+}
+
+fn column_limits(it: &LayoutBox, measured_content: f32, containing: f32) -> (f32, f32) {
+    let maximum = match it.style.get("max-height") {
+        Some(value)
+            if value.eq_ignore_ascii_case("min-content")
+                || value.eq_ignore_ascii_case("max-content") =>
+        {
+            measured_content
+        },
+        Some(value) => values::parse_len(value, it.font_size, containing)
+            .unwrap_or(f32::INFINITY),
+        None => f32::INFINITY,
+    }
+    .max(0.0);
+    let minimum = match it.style.get("min-height") {
+        Some(value)
+            if value.eq_ignore_ascii_case("min-content")
+                || value.eq_ignore_ascii_case("max-content") =>
+        {
+            measured_content
+        },
+        Some(value) if !value.eq_ignore_ascii_case("auto") => {
+            values::parse_len(value, it.font_size, containing).unwrap_or(0.0)
+        },
+        _ if automatic_minimum_applies(&it.style) => {
+            match values::resolve_extent(&it.style, "height", it.font_size, containing) {
+                MaybeLen::Px(specified) => measured_content.min(specified),
+                MaybeLen::Auto => measured_content,
+            }
+        },
+        _ => 0.0,
+    }
+    .max(0.0)
+    .min(maximum);
+    (minimum, maximum)
 }
 
 // ---------------------------------------------------------------------------
@@ -411,11 +500,22 @@ fn layout_row(
                 Some(b) => b.max(0.0),
                 None => match values::resolve_extent(&it.style, "width", it.font_size, content_w) {
                     MaybeLen::Px(w) => w.max(0.0),
-                    MaybeLen::Auto => max_content_width(it, fonts).min(content_w),
+                    MaybeLen::Auto => {
+                        (max_content_width(it, fonts) - h_chrome(it)).max(0.0).min(content_w)
+                    },
                 },
             }
         })
         .collect();
+    let limits = items
+        .iter()
+        .map(|item| main_limits(item, content_w, fonts))
+        .collect::<Vec<_>>();
+    let hypothetical = base
+        .iter()
+        .enumerate()
+        .map(|(index, size)| size.clamp(limits[index].0, limits[index].1))
+        .collect::<Vec<_>>();
 
     // Wrap into lines (greedy by outer base + column gaps).
     let mut lines: Vec<Vec<usize>> = Vec::new();
@@ -423,12 +523,15 @@ fn layout_row(
     let mut used = 0.0f32;
     for &i in order {
         let gap = if cur.is_empty() { 0.0 } else { spec.col_gap };
-        if spec.wrap && !cur.is_empty() && used + gap + outer_main(items, i, base[i]) > content_w {
+        if spec.wrap
+            && !cur.is_empty()
+            && used + gap + outer_main(items, i, hypothetical[i]) > content_w
+        {
             lines.push(std::mem::take(&mut cur));
             used = 0.0;
         }
         let gap = if cur.is_empty() { 0.0 } else { spec.col_gap };
-        used += gap + outer_main(items, i, base[i]);
+        used += gap + outer_main(items, i, hypothetical[i]);
         cur.push(i);
     }
     if !cur.is_empty() {
@@ -443,46 +546,34 @@ fn layout_row(
     for line in &lines {
         let n = line.len();
         let gaps_total = spec.col_gap * (n.saturating_sub(1)) as f32;
-        let used: f32 =
-            line.iter().map(|&i| outer_main(items, i, base[i])).sum::<f32>() + gaps_total;
-        let mut free = content_w - used;
-
-        // Grow / shrink adjust content sizes (the used size wins over a
-        // specified width — materialized below).
-        if free > 0.0 {
-            let sum_grow: f32 = line.iter().map(|&i| props[i].grow).sum();
-            if sum_grow > 0.0 {
-                for &i in line {
-                    base[i] += free * props[i].grow / sum_grow;
-                }
-                free = 0.0;
-            }
-        } else if free < 0.0 {
-            let sum_w: f32 = line
-                .iter()
-                .map(|&i| props[i].shrink * outer_main(items, i, base[i]))
-                .sum();
-            if sum_w > 0.0 {
-                let over = -free;
-                for &i in line {
-                    let take = over * (props[i].shrink * outer_main(items, i, base[i])) / sum_w;
-                    base[i] = (base[i] - take).max(0.0);
-                }
-                free = 0.0;
-            }
+        let constraints = line
+            .iter()
+            .map(|&i| FlexConstraint {
+                base: base[i],
+                hypothetical: hypothetical[i],
+                min: limits[i].0,
+                max: limits[i].1,
+                grow: props[i].grow,
+                shrink: props[i].shrink,
+                scaled_shrink: props[i].shrink * base[i],
+                outer: outer_main(items, i, 0.0),
+            })
+            .collect::<Vec<_>>();
+        let resolved = resolve_flexible_lengths(content_w - gaps_total, &constraints);
+        for (&i, size) in line.iter().zip(resolved) {
+            base[i] = size;
         }
+        let used = line.iter().map(|&i| outer_main(items, i, base[i])).sum::<f32>()
+            + gaps_total;
+        let free = content_w - used;
 
-        // Materialize flexed widths for items with a specified width so
-        // the box-model resolver lays out at the used size.
+        // Materialize every flexed content-box width. `layout_block` accepts
+        // a containing width, not a used item width; leaving an auto width in
+        // place would subtract the item's own border/padding a second time.
         for &i in line {
-            if matches!(
-                values::resolve_extent(&items[i].style, "width", items[i].font_size, content_w),
-                MaybeLen::Px(_)
-            ) {
-                items[i]
-                    .style
-                    .set("width", &format!("{}px", base[i].max(0.0)));
-            }
+            items[i]
+                .style
+                .set("width", &format!("{}px", base[i].max(0.0)));
         }
 
         // Auto main margins absorb remaining free space before
@@ -539,7 +630,9 @@ fn layout_row(
                 && !margin_is_auto(&items[i].style, "top")
                 && !margin_is_auto(&items[i].style, "bottom")
             {
-                let target = line_cross - v_chrome(&items[i]);
+                let target = line_cross
+                    - items[i].margin.top.unwrap_or(0.0)
+                    - items[i].margin.bottom.unwrap_or(0.0);
                 if target > items[i].border_box.h {
                     stretch_height(&mut items[i], target);
                 }
@@ -551,7 +644,22 @@ fn layout_row(
             .fold(line_cross, f32::max);
 
         // Main-axis placement: leading offset + extra between-item space.
-        let finals: Vec<f32> = line.iter().map(|&i| outer_main(items, i, base[i])).collect();
+        // Margins are resolved fresh from the style after auto-margin
+        // absorption so the cursor advances by the margins items actually
+        // carry; the solver's constraints above intentionally still saw auto
+        // margins as zero, and `layout_block` re-solves the model's margins,
+        // so the struct field is not authoritative here.
+        let finals: Vec<f32> = line
+            .iter()
+            .map(|&i| {
+                let margin =
+                    values::resolve_margins(&items[i].style, items[i].font_size, content_w);
+                base[i]
+                    + h_chrome(&items[i])
+                    + margin.left.unwrap_or(0.0)
+                    + margin.right.unwrap_or(0.0)
+            })
+            .collect();
         let (lead, between) = justify_pair(spec.justify, justify_free, n);
         let mut cursor = if reverse {
             content_x + content_w - lead
@@ -568,9 +676,14 @@ fn layout_row(
                 }
             }
             let it = &mut items[i];
-            let ml = it.margin.left.unwrap_or(0.0);
+            // Block layout solves CSS2 horizontal constraints and may fill
+            // an auto opposite margin. Flex placement uses the item's
+            // authored/resolved margins instead.
+            let margin = values::resolve_margins(&it.style, it.font_size, content_w);
+            let ml = margin.left.unwrap_or(0.0);
+            let mr = margin.right.unwrap_or(0.0);
             let bx = if reverse {
-                cursor - ml - h_chrome(it) - base[i]
+                cursor - mr - h_chrome(it) - base[i]
             } else {
                 cursor + ml
             };
@@ -604,21 +717,50 @@ fn layout_row(
             + spec.row_gap * (lines.len().saturating_sub(1)) as f32;
         let spare = def_h - lines_h;
         if spare > 0.0 && !line_crosses.is_empty() {
-            // Default `stretch` behaves like start here (per-line stretch
-            // into spare space is deferred).
-            let ac = if spec.align_content == Pack::Stretch {
-                Pack::Start
+            if spec.align_content == Pack::Stretch {
+                let extra = spare / lines.len() as f32;
+                let mut shift = 0.0;
+                for (line_index, line) in lines.iter().enumerate() {
+                    for &item_index in line {
+                        if shift > 0.0 {
+                            translate(&mut items[item_index], 0.0, shift);
+                        }
+                        let align = props[item_index].align_self.unwrap_or(spec.align_items);
+                        let height_auto = matches!(
+                            values::resolve_extent(
+                                &items[item_index].style,
+                                "height",
+                                items[item_index].font_size,
+                                0.0,
+                            ),
+                            MaybeLen::Auto
+                        );
+                        if align == Pack::Stretch
+                            && height_auto
+                            && !margin_is_auto(&items[item_index].style, "top")
+                            && !margin_is_auto(&items[item_index].style, "bottom")
+                        {
+                            let target = line_crosses[line_index]
+                                + extra
+                                - items[item_index].margin.top.unwrap_or(0.0)
+                                - items[item_index].margin.bottom.unwrap_or(0.0);
+                            stretch_height(&mut items[item_index], target.max(0.0));
+                        }
+                    }
+                    line_crosses[line_index] += extra;
+                    shift += extra;
+                }
+                content_height = def_h;
             } else {
-                spec.align_content
-            };
-            let (mut shift, between) = justify_pair(ac, spare, lines.len());
-            for (li, line) in lines.iter().enumerate() {
-                if shift > 0.0 {
+                let (lead, between) = justify_pair(spec.align_content, spare, lines.len());
+                for (line_index, line) in lines.iter().enumerate() {
+                    let shift = lead + between * line_index as f32;
                     for &i in line {
-                        translate(&mut items[i], 0.0, shift);
+                        if shift > 0.0 {
+                            translate(&mut items[i], 0.0, shift);
+                        }
                     }
                 }
-                shift += line_crosses[li] + spec.row_gap + between;
             }
         }
     }
@@ -646,6 +788,7 @@ fn layout_column(
 
     // Cross (horizontal) sizes: stretch fills the line; otherwise
     // specified width or max-content, clamped to the container.
+    let mut layout_widths = vec![0.0; items.len()];
     for &i in order {
         let align = props[i].align_self.unwrap_or(spec.align_items);
         let width_auto = matches!(
@@ -671,65 +814,130 @@ fn layout_column(
                 },
             }
         };
+        layout_widths[i] = w;
         crate::block::layout_block(&mut items[i], 0.0, 0.0, w, fonts);
     }
 
-    // Main (vertical) sizes: measured outer heights. With a definite
-    // container height, grow/shrink engage; otherwise natural stacking.
+    // Main (vertical) sizes use the same §9.7 solver as rows. Measurement
+    // supplies content suggestions; explicit flex-basis/height supplies the
+    // base when definite.
     let n = order.len();
-    let mut base: Vec<f32> = order.iter().map(|&i| items[i].border_box.h).collect();
     let gaps_total = spec.row_gap * n.saturating_sub(1) as f32;
-    let used: f32 = order
+    let measured = order
+        .iter()
+        .map(|&i| (items[i].border_box.h - v_chrome(&items[i])).max(0.0))
+        .collect::<Vec<_>>();
+    let bases = order
         .iter()
         .enumerate()
-        .map(|(p, &i)| item_outer_h(base[p], &items[i]))
-        .sum::<f32>()
-        + gaps_total;
-
-    if let Some(def_h) = spec.definite_height {
-        let free = def_h - used;
-        if free > 0.0 {
-            let sum_grow: f32 = order.iter().map(|&i| props[i].grow).sum();
-            if sum_grow > 0.0 {
-                for (p, &i) in order.iter().enumerate() {
-                    base[p] += free * props[i].grow / sum_grow;
+        .map(|(position, &i)| {
+            props[i].basis_px.unwrap_or_else(|| {
+                match values::resolve_extent(
+                    &items[i].style,
+                    "height",
+                    items[i].font_size,
+                    spec.definite_height.unwrap_or(0.0),
+                ) {
+                    MaybeLen::Px(height) => height.max(0.0),
+                    MaybeLen::Auto => measured[position],
                 }
+            })
+        })
+        .collect::<Vec<_>>();
+    let limits = order
+        .iter()
+        .enumerate()
+        .map(|(position, &i)| {
+            column_limits(
+                &items[i],
+                measured[position],
+                spec.definite_height.unwrap_or(0.0),
+            )
+        })
+        .collect::<Vec<_>>();
+    let constraints = order
+        .iter()
+        .enumerate()
+        .map(|(position, &i)| {
+            let margin = values::resolve_margins(&items[i].style, items[i].font_size, content_w);
+            FlexConstraint {
+                base: bases[position],
+                hypothetical: bases[position].clamp(limits[position].0, limits[position].1),
+                min: limits[position].0,
+                max: limits[position].1,
+                grow: props[i].grow,
+                shrink: props[i].shrink,
+                scaled_shrink: props[i].shrink * bases[position],
+                outer: v_chrome(&items[i])
+                    + margin.top.unwrap_or(0.0)
+                    + margin.bottom.unwrap_or(0.0),
             }
-        } else if free < 0.0 {
-            let sum_w: f32 = order
-                .iter()
-                .enumerate()
-                .map(|(p, &i)| props[i].shrink * item_outer_h(base[p], &items[i]))
-                .sum();
-            if sum_w > 0.0 {
-                let over = -free;
-                for (p, &i) in order.iter().enumerate() {
-                    let take = over * props[i].shrink * item_outer_h(base[p], &items[i]) / sum_w;
-                    base[p] = (base[p] - take).max(0.0);
-                }
-            }
-        }
-        // Apply adjusted heights (top-anchored content, documented).
-        for (p, &i) in order.iter().enumerate() {
-            let target = base[p] + v_chrome(&items[i]);
-            stretch_height(&mut items[i], target);
-        }
+        })
+        .collect::<Vec<_>>();
+    let base = spec.definite_height.map_or_else(
+        || constraints.iter().map(|item| item.hypothetical).collect(),
+        |height| resolve_flexible_lengths(height - gaps_total, &constraints),
+    );
+    for (position, &i) in order.iter().enumerate() {
+        items[i]
+            .style
+            .set("height", &format!("{}px", base[position].max(0.0)));
+        crate::block::layout_block(&mut items[i], 0.0, 0.0, layout_widths[i], fonts);
     }
 
     // Main-axis placement (justify-content along the vertical axis).
-    let finals: Vec<f32> = order
+    let used: f32 = base
         .iter()
         .enumerate()
-        .map(|(p, &i)| item_outer_h(base[p], &items[i]))
-        .collect();
-    let justify_free = if n > 0 {
-        let avail = spec.definite_height.unwrap_or_else(|| {
-            finals.iter().sum::<f32>()
-        });
-        (avail - finals.iter().sum::<f32>()).max(0.0)
+        .map(|(position, size)| size + constraints[position].outer)
+        .sum();
+    let mut justify_free = if n > 0 {
+        let avail = spec.definite_height.unwrap_or(used + gaps_total);
+        (avail - used - gaps_total).max(0.0)
     } else {
         0.0
     };
+    // Auto main margins absorb remaining free space before justify-content
+    // (§8.1), mirroring the row path. Only a definite container height
+    // leaves free space to absorb.
+    if justify_free > 0.0 {
+        let mut auto_sides = 0usize;
+        for &i in order {
+            if margin_is_auto(&items[i].style, "top") {
+                auto_sides += 1;
+            }
+            if margin_is_auto(&items[i].style, "bottom") {
+                auto_sides += 1;
+            }
+        }
+        if auto_sides > 0 {
+            let share = justify_free / auto_sides as f32;
+            for &i in order {
+                for side in ["top", "bottom"] {
+                    if margin_is_auto(&items[i].style, side) {
+                        items[i]
+                            .style
+                            .set(&format!("margin-{side}"), &format!("{share}px"));
+                    }
+                }
+                resolve_model(&mut items[i], content_w);
+            }
+            justify_free = 0.0;
+        }
+    }
+    // Placement steps by post-absorption outer sizes, resolved fresh from
+    // the style for the same reason as the row path.
+    let finals: Vec<f32> = order
+        .iter()
+        .enumerate()
+        .map(|(position, &i)| {
+            let margin = values::resolve_margins(&items[i].style, items[i].font_size, content_w);
+            base[position]
+                + v_chrome(&items[i])
+                + margin.top.unwrap_or(0.0)
+                + margin.bottom.unwrap_or(0.0)
+        })
+        .collect();
     let (lead, between) = justify_pair(spec.justify, justify_free, n);
 
     let reverse = spec.direction == Direction::ColumnReverse;
@@ -750,7 +958,8 @@ fn layout_column(
             }
         }
         let it = &mut items[i];
-        let mt = it.margin.top.unwrap_or(0.0);
+        let margin = values::resolve_margins(&it.style, it.font_size, content_w);
+        let mt = margin.top.unwrap_or(0.0);
         let outer = finals[pos];
         let by = if reverse {
             cursor -= outer;
@@ -760,19 +969,18 @@ fn layout_column(
         };
         let align = props[i].align_self.unwrap_or(spec.align_items);
         let bw = it.border_box.w;
-        let hc = h_chrome(it);
-        let ml = it.margin.left.unwrap_or(0.0);
-        let mr = it.margin.right.unwrap_or(0.0);
+        let ml = margin.left.unwrap_or(0.0);
+        let mr = margin.right.unwrap_or(0.0);
         let bx = content_x
             + ml
             + match align {
-                Pack::End => content_w - bw - hc - ml - mr,
-                Pack::Center => (content_w - bw - hc - ml - mr) / 2.0,
+                Pack::End => content_w - bw - ml - mr,
+                Pack::Center => (content_w - bw - ml - mr) / 2.0,
                 _ => 0.0,
             };
         translate(it, bx - it.border_box.x, by - it.border_box.y);
         if !reverse {
-            cursor = by + base[pos] + v_chrome(it) + it.margin.bottom.unwrap_or(0.0);
+            cursor += outer;
         }
     }
 
@@ -839,18 +1047,68 @@ pub(crate) fn max_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     let pad = values::resolve_padding(&b.style, em, 0.0);
     let bor = values::resolve_borders(&b.style, em);
     let chrome = pad.left + pad.right + bor.left + bor.right;
-    let inner = match &b.flow {
+    let inner = match values::resolve_extent(&b.style, "width", b.font_size, 0.0) {
+        MaybeLen::Px(width) => width.max(0.0),
+        MaybeLen::Auto => max_content_inner_width(b, fonts),
+    };
+    chrome + inner
+}
+
+/// Approximate min-content width: the widest unbreakable inline token or
+/// descendant min-content contribution, plus this box's horizontal chrome.
+pub(crate) fn min_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
+    let em = b.font_size;
+    let pad = values::resolve_padding(&b.style, em, 0.0);
+    let bor = values::resolve_borders(&b.style, em);
+    let chrome = pad.left + pad.right + bor.left + bor.right;
+    let inner = match values::resolve_extent(&b.style, "width", b.font_size, 0.0) {
+        MaybeLen::Px(width) => width.max(0.0),
+        MaybeLen::Auto => min_content_inner_width(b, fonts),
+    };
+    chrome + inner
+}
+
+fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
+    match &b.flow {
         Flow::Inlines(items) => inline_run_width(items, fonts),
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children
             .iter()
-            .map(|c| {
-                let m = values::resolve_margins(&c.style, c.font_size, 0.0);
-                max_content_width(c, fonts) + m.left.unwrap_or(0.0) + m.right.unwrap_or(0.0)
+            .map(|child| {
+                let margin = values::resolve_margins(&child.style, child.font_size, 0.0);
+                max_content_width(child, fonts)
+                    + margin.left.unwrap_or(0.0)
+                    + margin.right.unwrap_or(0.0)
             })
             .fold(0.0f32, f32::max),
         Flow::Empty => 0.0,
-    };
-    chrome + inner
+    }
+}
+
+fn min_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
+    match &b.flow {
+        Flow::Inlines(items) => inline_min_content_width(items, fonts),
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children
+            .iter()
+            .map(|child| {
+                let margin = values::resolve_margins(&child.style, child.font_size, 0.0);
+                min_content_width(child, fonts)
+                    + margin.left.unwrap_or(0.0)
+                    + margin.right.unwrap_or(0.0)
+            })
+            .fold(0.0f32, f32::max),
+        Flow::Empty => 0.0,
+    }
+}
+
+fn inline_min_content_width(items: &[crate::InlineNode], fonts: &FontSource) -> f32 {
+    inline::tokenize(items)
+        .into_iter()
+        .map(|token| match token {
+            inline::Token::Word { text, font_size, .. } => fonts.measure(&text, font_size),
+            inline::Token::Replaced { size, .. } => size.width,
+            inline::Token::Break => 0.0,
+        })
+        .fold(0.0f32, f32::max)
 }
 
 /// Unwrapped width of an inline run: every word plus the collapsible

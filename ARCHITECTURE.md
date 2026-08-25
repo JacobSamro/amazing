@@ -176,6 +176,18 @@ paired bidi scopes. Visual reordering therefore moves replaced fragments and
 rebuilds inline decoration geometry together with glyphs rather than painting
 logical-order boxes behind a visual-order glyph stream.
 
+### 4f. Flex and Grid use separate pure constraint solvers
+
+Flex and Grid share provider-neutral axis, size, and placement values, but not
+one generic distribution interface. `flex_algorithm` owns the Flexbox §9.7
+freeze/distribute/clamp loop and receives only resolved flex bases,
+hypothetical/min/max sizes, factors, and outer chrome. `grid_algorithm` owns
+the Grid flexible-track restart loop and receives only track bases, flex
+factors, gaps, and available space. CSS shorthand parsing, intrinsic
+measurement, box materialization, and physical-axis placement remain in their
+own modules. This keeps both solvers pure and testable without leaking DOM,
+computed-style, text-provider, paint, or GPUI types across the seam.
+
 ### 5. unsafe policy
 
 No first-party `unsafe` outside platform-boundary modules (windowing FFI,

@@ -145,17 +145,23 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "list-style-position", initial: "outside", inherited: true },
     PropertyMetadata { name: "list-style-type", initial: "disc", inherited: true },
     PropertyMetadata { name: "margin-bottom", initial: "0", inherited: false },
+    PropertyMetadata { name: "margin-block-end", initial: "0", inherited: false },
+    PropertyMetadata { name: "margin-block-start", initial: "0", inherited: false },
+    PropertyMetadata { name: "margin-inline-end", initial: "0", inherited: false },
+    PropertyMetadata { name: "margin-inline-start", initial: "0", inherited: false },
     PropertyMetadata { name: "margin-left", initial: "0", inherited: false },
     PropertyMetadata { name: "margin-right", initial: "0", inherited: false },
     PropertyMetadata { name: "margin-top", initial: "0", inherited: false },
     PropertyMetadata { name: "max-height", initial: "none", inherited: false },
     PropertyMetadata { name: "max-width", initial: "none", inherited: false },
-    PropertyMetadata { name: "min-height", initial: "0", inherited: false },
-    PropertyMetadata { name: "min-width", initial: "0", inherited: false },
+    PropertyMetadata { name: "min-height", initial: "auto", inherited: false },
+    PropertyMetadata { name: "min-width", initial: "auto", inherited: false },
     PropertyMetadata { name: "opacity", initial: "1", inherited: false },
     PropertyMetadata { name: "order", initial: "0", inherited: false },
     PropertyMetadata { name: "orphans", initial: "2", inherited: true },
     PropertyMetadata { name: "overflow", initial: "visible", inherited: false },
+    PropertyMetadata { name: "overflow-x", initial: "visible", inherited: false },
+    PropertyMetadata { name: "overflow-y", initial: "visible", inherited: false },
     PropertyMetadata { name: "overflow-wrap", initial: "normal", inherited: true },
     PropertyMetadata { name: "padding-bottom", initial: "0", inherited: false },
     PropertyMetadata { name: "padding-left", initial: "0", inherited: false },
@@ -261,7 +267,33 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             },
         )],
         "font" => expand_font_shorthand(value).unwrap_or_else(|| vec![(property, value.to_owned())]),
-        "gap" if !parts.is_empty() => {
+        "grid-column-gap"
+            if css_wide_keyword(value).is_some() || valid_gap_value(value) =>
+        {
+            vec![("column-gap".to_owned(), value.to_owned())]
+        },
+        "grid-row-gap" if css_wide_keyword(value).is_some() || valid_gap_value(value) => {
+            vec![("row-gap".to_owned(), value.to_owned())]
+        },
+        "grid-gap"
+            if !parts.is_empty()
+                && parts.len() <= 2
+                && (css_wide_keyword(value).is_some()
+                    || parts.iter().all(|part| valid_gap_value(part))) =>
+        {
+            let row = parts[0];
+            let column = parts.get(1).copied().unwrap_or(row);
+            vec![
+                ("row-gap".to_owned(), row.to_owned()),
+                ("column-gap".to_owned(), column.to_owned()),
+            ]
+        },
+        "gap"
+            if !parts.is_empty()
+                && parts.len() <= 2
+                && (css_wide_keyword(value).is_some()
+                    || parts.iter().all(|part| valid_gap_value(part))) =>
+        {
             let row = parts[0];
             let column = parts.get(1).copied().unwrap_or(row);
             vec![
@@ -280,32 +312,515 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 (format!("{prefix}-end"), end.to_owned()),
             ]
         },
-        "flex" if !parts.is_empty() => {
-            let (grow, shrink, basis) = if css_wide_keyword(value).is_some() {
-                (value, value, value)
-            } else if parts.len() == 1 && parts[0].eq_ignore_ascii_case("none") {
-                ("0", "0", "auto")
-            } else if parts.len() == 1 && parts[0].eq_ignore_ascii_case("auto") {
-                ("1", "1", "auto")
-            } else if parts.len() == 1 && parts[0].parse::<f32>().is_ok() {
-                (parts[0], "1", "0%")
-            } else if parts.len() == 1 {
-                ("1", "1", parts[0])
-            } else if parts.len() == 2 && parts[1].parse::<f32>().is_ok() {
-                (parts[0], parts[1], "0%")
-            } else if parts.len() == 2 {
-                (parts[0], "1", parts[1])
+        "grid-template" if contains_var_function(value) => deferred_grid_template(value),
+        "grid-template" => expand_grid_template(value).unwrap_or_default(),
+        "flex-flow" if !parts.is_empty() => {
+            if css_wide_keyword(value).is_some() {
+                vec![
+                    ("flex-direction".to_owned(), value.to_owned()),
+                    ("flex-wrap".to_owned(), value.to_owned()),
+                ]
+            } else if contains_var_function(value) {
+                deferred_flex_flow(value)
             } else {
-                (parts[0], parts[1], parts[2])
-            };
-            vec![
-                ("flex-grow".to_owned(), grow.to_owned()),
-                ("flex-shrink".to_owned(), shrink.to_owned()),
-                ("flex-basis".to_owned(), basis.to_owned()),
-            ]
+                expand_flex_flow(value).unwrap_or_default()
+            }
+        },
+        "flex" if !parts.is_empty() => {
+            if css_wide_keyword(value).is_some() {
+                vec![
+                    ("flex-grow".to_owned(), value.to_owned()),
+                    ("flex-shrink".to_owned(), value.to_owned()),
+                    ("flex-basis".to_owned(), value.to_owned()),
+                ]
+            } else {
+                match expand_flex_shorthand(&parts) {
+                    Some((grow, shrink, basis)) => vec![
+                        ("flex-grow".to_owned(), grow),
+                        ("flex-shrink".to_owned(), shrink),
+                        ("flex-basis".to_owned(), basis),
+                    ],
+                    // An invalid `flex` shorthand emits no cascade candidates,
+                    // so it cannot override earlier valid longhands (same rule
+                    // as flex-flow/grid-template).
+                    None => Vec::new(),
+                }
+            }
         },
         _ => vec![(property, value.to_owned())],
     }
+}
+
+const DEFERRED_FLEX_DIRECTION: &str = "amazing-internal-flex-flow-direction";
+const DEFERRED_FLEX_WRAP: &str = "amazing-internal-flex-flow-wrap";
+const DEFERRED_GRID_ROWS: &str = "amazing-internal-grid-template-rows";
+const DEFERRED_GRID_COLUMNS: &str = "amazing-internal-grid-template-columns";
+
+fn contains_var_function(value: &str) -> bool {
+    tokenize(value)
+        .iter()
+        .any(|token| matches!(token, Token::Function(name) if name.eq_ignore_ascii_case("var")))
+}
+
+fn deferred(function: &str, value: &str) -> String {
+    format!("{function}({value})")
+}
+
+fn deferred_flex_flow(value: &str) -> Vec<(String, String)> {
+    vec![
+        (
+            "flex-direction".to_owned(),
+            deferred(DEFERRED_FLEX_DIRECTION, value),
+        ),
+        (
+            "flex-wrap".to_owned(),
+            deferred(DEFERRED_FLEX_WRAP, value),
+        ),
+    ]
+}
+
+fn deferred_grid_template(value: &str) -> Vec<(String, String)> {
+    vec![
+        (
+            "grid-template-rows".to_owned(),
+            deferred(DEFERRED_GRID_ROWS, value),
+        ),
+        (
+            "grid-template-columns".to_owned(),
+            deferred(DEFERRED_GRID_COLUMNS, value),
+        ),
+    ]
+}
+
+fn expand_flex_flow(value: &str) -> Option<Vec<(String, String)>> {
+    if css_wide_keyword(value).is_some() {
+        return Some(vec![
+            ("flex-direction".to_owned(), value.trim().to_owned()),
+            ("flex-wrap".to_owned(), value.trim().to_owned()),
+        ]);
+    }
+    let tokens = tokenize(value);
+    let words: Vec<&str> = tokens
+        .iter()
+        .filter_map(|token| match token {
+            Token::Whitespace => None,
+            Token::Ident(word) => Some(word.as_str()),
+            _ => Some(""),
+        })
+        .collect();
+    if words.is_empty() || words.len() > 2 || words.iter().any(|word| word.is_empty()) {
+        return None;
+    }
+
+    let mut direction = None;
+    let mut wrap = None;
+    for word in words {
+        let lower = word.to_ascii_lowercase();
+        if matches!(lower.as_str(), "row" | "row-reverse" | "column" | "column-reverse") {
+            if direction.replace(lower).is_some() {
+                return None;
+            }
+        } else if matches!(lower.as_str(), "nowrap" | "wrap" | "wrap-reverse") {
+            if wrap.replace(lower).is_some() {
+                return None;
+            }
+        } else {
+            return None;
+        }
+    }
+
+    Some(vec![
+        ("flex-direction".to_owned(), direction.unwrap_or_else(|| "row".into())),
+        ("flex-wrap".to_owned(), wrap.unwrap_or_else(|| "nowrap".into())),
+    ])
+}
+
+fn expand_grid_template(value: &str) -> Option<Vec<(String, String)>> {
+    if css_wide_keyword(value).is_some() || value.trim().eq_ignore_ascii_case("none") {
+        return Some(vec![
+            ("grid-template-rows".to_owned(), value.trim().to_owned()),
+            ("grid-template-columns".to_owned(), value.trim().to_owned()),
+        ]);
+    }
+
+    let tokens = tokenize(value);
+    let mut stack = Vec::new();
+    let mut slash = None;
+    for (index, token) in tokens.iter().enumerate() {
+        match token {
+            Token::OpenParen => stack.push(')'),
+            Token::OpenSquare => stack.push(']'),
+            Token::OpenCurly => stack.push('}'),
+            Token::CloseParen if stack.pop() != Some(')') => return None,
+            Token::CloseSquare if stack.pop() != Some(']') => return None,
+            Token::CloseCurly if stack.pop() != Some('}') => return None,
+            Token::Delim('/') if stack.is_empty() => {
+                if slash.replace(index).is_some() {
+                    return None;
+                }
+            },
+            _ => {},
+        }
+    }
+    if !stack.is_empty() {
+        return None;
+    }
+    let slash = slash?;
+    let rows = serialize(&tokens[..slash]).trim().to_owned();
+    let columns = serialize(&tokens[slash + 1..]).trim().to_owned();
+    if !valid_grid_track_list(&rows) || !valid_grid_track_list(&columns) {
+        return None;
+    }
+    Some(vec![
+        ("grid-template-rows".to_owned(), rows),
+        ("grid-template-columns".to_owned(), columns),
+    ])
+}
+
+fn top_level_components(tokens: &[Token]) -> Option<Vec<&[Token]>> {
+    let mut components = Vec::new();
+    let mut stack = Vec::new();
+    let mut start = 0usize;
+    for (index, token) in tokens.iter().enumerate() {
+        match token {
+            Token::OpenParen => stack.push(')'),
+            Token::OpenSquare => stack.push(']'),
+            Token::OpenCurly => stack.push('}'),
+            Token::CloseParen if stack.pop() != Some(')') => return None,
+            Token::CloseSquare if stack.pop() != Some(']') => return None,
+            Token::CloseCurly if stack.pop() != Some('}') => return None,
+            Token::Whitespace if stack.is_empty() => {
+                let component = trim_tokens(&tokens[start..index]);
+                if !component.is_empty() {
+                    components.push(component);
+                }
+                start = index + 1;
+            },
+            _ => {},
+        }
+    }
+    if !stack.is_empty() {
+        return None;
+    }
+    let component = trim_tokens(&tokens[start..]);
+    if !component.is_empty() {
+        components.push(component);
+    }
+    Some(components)
+}
+
+fn split_top_level_comma(tokens: &[Token]) -> Option<(&[Token], &[Token])> {
+    let mut stack = Vec::new();
+    let mut comma = None;
+    for (index, token) in tokens.iter().enumerate() {
+        match token {
+            Token::OpenParen => stack.push(')'),
+            Token::OpenSquare => stack.push(']'),
+            Token::OpenCurly => stack.push('}'),
+            Token::CloseParen if stack.pop() != Some(')') => return None,
+            Token::CloseSquare if stack.pop() != Some(']') => return None,
+            Token::CloseCurly if stack.pop() != Some('}') => return None,
+            Token::Comma if stack.is_empty() => {
+                if comma.replace(index).is_some() {
+                    return None;
+                }
+            },
+            _ => {},
+        }
+    }
+    if !stack.is_empty() {
+        return None;
+    }
+    let comma = comma?;
+    Some((trim_tokens(&tokens[..comma]), trim_tokens(&tokens[comma + 1..])))
+}
+
+fn function_inner<'a>(tokens: &'a [Token], expected: &str) -> Option<&'a [Token]> {
+    let tokens = trim_tokens(tokens);
+    match (tokens.first(), tokens.get(1), tokens.last()) {
+        (Some(Token::Function(name)), Some(Token::OpenParen), Some(Token::CloseParen))
+            if name.eq_ignore_ascii_case(expected) =>
+        {
+            Some(&tokens[2..tokens.len() - 1])
+        },
+        _ => None,
+    }
+}
+
+fn valid_grid_track_list(value: &str) -> bool {
+    let tokens = tokenize(value);
+    let tokens = trim_tokens(&tokens);
+    if matches!(tokens, [Token::Ident(value)] if value.eq_ignore_ascii_case("none")) {
+        return true;
+    }
+    valid_grid_track_tokens(tokens, true)
+}
+
+fn valid_grid_track_tokens(tokens: &[Token], allow_repeat: bool) -> bool {
+    let Some(components) = top_level_components(tokens) else {
+        return false;
+    };
+    if components.is_empty() {
+        return false;
+    }
+    let mut auto_repeat_seen = false;
+    for component in components {
+        if function_inner(component, "repeat").is_some() {
+            if !allow_repeat {
+                return false;
+            }
+            let Some((auto_repeat, tracks)) = valid_repeat(component) else {
+                return false;
+            };
+            if auto_repeat {
+                if auto_repeat_seen || !valid_fixed_track_tokens(tracks) {
+                    return false;
+                }
+                auto_repeat_seen = true;
+            } else if !valid_grid_track_tokens(tracks, false) {
+                return false;
+            }
+        } else if !valid_grid_track_component(component) {
+            return false;
+        }
+    }
+    true
+}
+
+fn valid_grid_track_component(tokens: &[Token]) -> bool {
+    let tokens = trim_tokens(tokens);
+    if valid_grid_breadth(tokens, true) {
+        return true;
+    }
+    if matches!((tokens.first(), tokens.last()), (Some(Token::OpenSquare), Some(Token::CloseSquare))) {
+        // One or more adjacent `[name]` blocks (`[a][b]` is valid without
+        // intervening whitespace); each block validates independently.
+        let mut rest: &[Token] = tokens;
+        loop {
+            let Some((first, tail)) = rest.split_first() else {
+                return false;
+            };
+            if !matches!(first, Token::OpenSquare) {
+                return false;
+            }
+            let mut depth = 1usize;
+            let mut close = None;
+            for (index, token) in tail.iter().enumerate() {
+                match token {
+                    Token::OpenSquare => depth += 1,
+                    Token::CloseSquare => {
+                        depth -= 1;
+                        if depth == 0 {
+                            close = Some(index);
+                            break;
+                        }
+                    },
+                    _ => {},
+                }
+            }
+            let Some(close) = close else {
+                return false;
+            };
+            let inner = trim_tokens(&tail[..close]);
+            if inner.is_empty() {
+                return false;
+            }
+            if !inner.iter().all(|token| match token {
+                Token::Ident(name) => valid_grid_line_name(name),
+                Token::Whitespace => true,
+                _ => false,
+            }) {
+                return false;
+            }
+            rest = trim_tokens(&tail[close + 1..]);
+            if rest.is_empty() {
+                return true;
+            }
+        }
+    }
+    if let Some(inner) = function_inner(tokens, "minmax") {
+        return split_top_level_comma(inner).is_some_and(|(minimum, maximum)| {
+            valid_grid_breadth(minimum, false) && valid_grid_breadth(maximum, true)
+        });
+    }
+    false
+}
+
+fn valid_grid_line_name(name: &str) -> bool {
+    !matches!(
+        name.to_ascii_lowercase().as_str(),
+        "auto"
+            | "span"
+            | "default"
+            | "initial"
+            | "inherit"
+            | "unset"
+            | "revert"
+            | "revert-layer"
+    )
+}
+
+/// Returns whether this is an auto-repeat plus its track-list body.
+fn valid_repeat(tokens: &[Token]) -> Option<(bool, &[Token])> {
+    let inner = function_inner(tokens, "repeat")?;
+    let (count, tracks) = split_top_level_comma(inner)?;
+    let auto_repeat = match count {
+        [Token::Number(value)] if value.is_finite() && *value >= 1.0 && value.fract() == 0.0 => {
+            false
+        },
+        [Token::Ident(value)]
+            if value.eq_ignore_ascii_case("auto-fill")
+                || value.eq_ignore_ascii_case("auto-fit") =>
+        {
+            true
+        },
+        _ => return None,
+    };
+    Some((auto_repeat, tracks))
+}
+
+fn valid_fixed_track_tokens(tokens: &[Token]) -> bool {
+    let Some(components) = top_level_components(tokens) else {
+        return false;
+    };
+    let mut saw_track = false;
+    for component in components {
+        let component = trim_tokens(component);
+        if matches!((component.first(), component.last()), (Some(Token::OpenSquare), Some(Token::CloseSquare))) {
+            if !valid_grid_track_component(component) {
+                return false;
+            }
+            continue;
+        }
+        saw_track = true;
+        if !valid_fixed_size(component) {
+            return false;
+        }
+    }
+    saw_track
+}
+
+fn valid_fixed_size(tokens: &[Token]) -> bool {
+    if valid_fixed_breadth(tokens) {
+        return true;
+    }
+    function_inner(tokens, "minmax")
+        .and_then(split_top_level_comma)
+        .is_some_and(|(minimum, maximum)| {
+            (valid_fixed_breadth(minimum) && valid_grid_breadth(maximum, true))
+                || (valid_grid_breadth(minimum, false) && valid_fixed_breadth(maximum))
+        })
+}
+
+fn valid_fixed_breadth(tokens: &[Token]) -> bool {
+    match trim_tokens(tokens) {
+        [Token::Number(value)] => value.is_finite() && *value == 0.0,
+        [Token::Percentage(value)] => value.is_finite() && *value >= 0.0,
+        [Token::Dimension(value, unit)] => {
+            value.is_finite()
+                && *value >= 0.0
+                && matches!(
+                    unit.to_ascii_lowercase().as_str(),
+                    "px" | "em" | "rem" | "ex" | "ch" | "vw" | "vh" | "vmin" | "vmax"
+                        | "cm" | "mm" | "q" | "in" | "pc" | "pt"
+                )
+        },
+        _ => false,
+    }
+}
+
+fn valid_grid_breadth(tokens: &[Token], allow_fr: bool) -> bool {
+    match trim_tokens(tokens) {
+        [Token::Ident(value)] => matches!(
+            value.to_ascii_lowercase().as_str(),
+            "auto" | "min-content" | "max-content"
+        ),
+        [Token::Number(value)] => value.is_finite() && *value == 0.0,
+        [Token::Percentage(value)] => value.is_finite() && *value >= 0.0,
+        [Token::Dimension(value, unit)] => {
+            value.is_finite()
+                && *value >= 0.0
+                && match unit.to_ascii_lowercase().as_str() {
+                    "fr" => allow_fr,
+                    "px" | "em" | "rem" | "ex" | "ch" | "vw" | "vh" | "vmin" | "vmax"
+                    | "cm" | "mm" | "q" | "in" | "pc" | "pt" => true,
+                    _ => false,
+                }
+        },
+        _ => false,
+    }
+}
+
+/// Non-negative `<number>` (the `flex-grow`/`flex-shrink` grammar),
+/// including the special calc() forms the layout solver evaluates.
+fn valid_flex_number(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.eq_ignore_ascii_case("calc(infinity)")
+        || trimmed.eq_ignore_ascii_case("calc(-infinity)")
+        || trimmed.eq_ignore_ascii_case("calc(nan)")
+    {
+        return true;
+    }
+    matches!(tokenize(trimmed).as_slice(), [Token::Number(n)] if n.is_finite() && *n >= 0.0)
+}
+
+/// `<'flex-basis'>` within the supported subset: `auto` or a fixed breadth.
+fn valid_flex_basis(value: &str) -> bool {
+    let owned = tokenize(value);
+    let tokens = trim_tokens(&owned);
+    matches!(tokens, [Token::Ident(name)] if name.eq_ignore_ascii_case("auto"))
+        || valid_fixed_breadth(tokens)
+}
+
+/// Legacy gap aliases accept one non-negative length-percentage per side
+/// (`row-gap`/`column-gap` also allow the `normal` keyword).
+fn valid_gap_value(value: &str) -> bool {
+    let owned = tokenize(value);
+    let tokens = trim_tokens(&owned);
+    matches!(tokens, [Token::Ident(name)] if name.eq_ignore_ascii_case("normal"))
+        || valid_fixed_breadth(tokens)
+}
+
+/// `flex` shorthand per §7.1.10: `none`, `auto`, or up to three components
+/// `<'flex-grow'> <'flex-shrink'>? <'flex-basis'>?`, where an omitted basis is
+/// `0%` after a second number and `auto` otherwise. Invalid combinations
+/// return `None` so the declaration emits no cascade candidates.
+fn expand_flex_shorthand(parts: &[&str]) -> Option<(String, String, String)> {
+    let text = |component: &str| component.to_owned();
+    let (grow, shrink, basis) = match parts {
+        ["none"] => ("0".to_owned(), "0".to_owned(), "auto".to_owned()),
+        ["auto"] => ("1".to_owned(), "1".to_owned(), "auto".to_owned()),
+        [grow] if valid_flex_number(grow) => (text(grow), "1".to_owned(), "0%".to_owned()),
+        [basis] if valid_flex_basis(basis) => {
+            ("1".to_owned(), "1".to_owned(), text(basis))
+        },
+        [grow, shrink] if valid_flex_number(grow) && valid_flex_number(shrink) => {
+            (text(grow), text(shrink), "0%".to_owned())
+        },
+        [grow, basis] if valid_flex_number(grow) && valid_flex_basis(basis) => {
+            (text(grow), "1".to_owned(), text(basis))
+        },
+        [grow, shrink, basis]
+            if valid_flex_number(grow)
+                && valid_flex_number(shrink)
+                && valid_flex_basis(basis) =>
+        {
+            (text(grow), text(shrink), text(basis))
+        },
+        // §7.1.10's || combinator also permits the basis first.
+        [basis, grow] if valid_flex_basis(basis) && valid_flex_number(grow) => {
+            (text(grow), "1".to_owned(), text(basis))
+        },
+        [basis, grow, shrink]
+            if valid_flex_basis(basis)
+                && valid_flex_number(grow)
+                && valid_flex_number(shrink) =>
+        {
+            (text(grow), text(shrink), text(basis))
+        },
+        _ => return None,
+    };
+    Some((grow, shrink, basis))
 }
 
 fn expand_font_shorthand(value: &str) -> Option<Vec<(String, String)>> {
@@ -647,6 +1162,22 @@ fn compute_normal_value(
         return default_value(property, parent);
     }
     let value = serialize_computed(&tokens);
+    let Ok(value) = resolve_deferred_shorthand(property.name, &value) else {
+        // A shorthand containing var() is parsed only after substitution. If
+        // its substituted grammar is invalid, the winning declaration is
+        // invalid at computed-value time and behaves as unset; lower cascade
+        // candidates do not revive.
+        return default_value(property, parent);
+    };
+    if matches!(property.name, "grid-template-rows" | "grid-template-columns")
+        && css_wide_keyword(&value).is_none()
+        && !valid_grid_track_list(&value)
+    {
+        // Longhand track lists enforce the same grammar as the
+        // `grid-template` shorthand; an invalid winner behaves as unset and
+        // lower cascade candidates do not revive.
+        return default_value(property, parent);
+    }
     let computed = match css_wide_keyword(&value) {
         Some(CssWide::Initial) => property.initial.to_owned(),
         Some(CssWide::Inherit) => parent.unwrap_or(property.initial).to_owned(),
@@ -660,6 +1191,41 @@ fn compute_normal_value(
     } else {
         computed
     }
+}
+
+fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
+    value
+        .strip_prefix(function)?
+        .strip_prefix('(')?
+        .strip_suffix(')')
+}
+
+fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    let deferred = match property {
+        "flex-direction" => deferred_inner(value, DEFERRED_FLEX_DIRECTION)
+            .map(|inner| (inner, "flex-direction", true)),
+        "flex-wrap" => {
+            deferred_inner(value, DEFERRED_FLEX_WRAP).map(|inner| (inner, "flex-wrap", true))
+        },
+        "grid-template-rows" => deferred_inner(value, DEFERRED_GRID_ROWS)
+            .map(|inner| (inner, "grid-template-rows", false)),
+        "grid-template-columns" => deferred_inner(value, DEFERRED_GRID_COLUMNS)
+            .map(|inner| (inner, "grid-template-columns", false)),
+        _ => None,
+    };
+    let Some((inner, wanted, flex)) = deferred else {
+        return Ok(value.to_owned());
+    };
+    let expanded = if flex {
+        expand_flex_flow(inner)
+    } else {
+        expand_grid_template(inner)
+    }
+    .ok_or(())?;
+    expanded
+        .into_iter()
+        .find_map(|(property, value)| (property == wanted).then_some(value))
+        .ok_or(())
 }
 
 fn computed_font_size(value: &str, parent: Option<&str>, root_font_px: f32) -> Option<String> {
@@ -1108,6 +1674,51 @@ mod tests {
         assert_eq!(style.get("grid-column-end"), Some("-1"));
         assert_eq!(style.get("gap"), None);
         assert_eq!(style.get("grid-column"), None);
+    }
+
+    #[test]
+    fn flex_flow_rejects_unknown_and_duplicate_components() {
+        assert_eq!(
+            expand_declaration("flex-flow", "wrap column"),
+            vec![
+                ("flex-direction".into(), "column".into()),
+                ("flex-wrap".into(), "wrap".into()),
+            ]
+        );
+        assert_eq!(
+            expand_declaration("flex-flow", "row column"),
+            Vec::<(String, String)>::new()
+        );
+        assert_eq!(
+            expand_declaration("flex-flow", "row banana"),
+            Vec::<(String, String)>::new()
+        );
+    }
+
+    #[test]
+    fn grid_template_only_splits_on_a_top_level_solidus() {
+        assert!(expand_declaration(
+            "grid-template",
+            "minmax(10px,calc(20px / 2)) / repeat(2,1fr)"
+        )
+        .is_empty());
+        assert_eq!(
+            expand_declaration("grid-template", "10px / 20px / 30px"),
+            Vec::<(String, String)>::new()
+        );
+        assert!(expand_declaration("grid-template", "banana / banana").is_empty());
+        assert!(expand_declaration("grid-template", "fit-content(auto) / 1fr").is_empty());
+        assert!(expand_declaration("grid-template", "[span] 10px / 1fr").is_empty());
+        assert!(expand_declaration(
+            "grid-template",
+            "repeat(auto-fill,1fr) / 30px"
+        )
+        .is_empty());
+        assert!(expand_declaration(
+            "grid-template",
+            "repeat(auto-fill,10px) repeat(auto-fit,20px) / 30px"
+        )
+        .is_empty());
     }
 
     #[test]
