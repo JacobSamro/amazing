@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Phase 6 paint proof</title>
+<style>
+  body { margin: 0; background: #eef2f7; color: #172033; font: 16px serif; }
+  main { margin: 34px; padding: 28px; width: 650px; background: white;
+         border-radius: 22px; box-shadow: 12px 14px #b9c3d2; }
+  h1 { margin: 0 0 10px; }
+  .stage { position: relative; height: 220px; overflow: hidden;
+           border-radius: 18px; background: #dbeafe; }
+  .back { position: absolute; left: 72px; top: 45px; width: 210px; height: 120px;
+          background: #ef4444; z-index: 1; transform: rotate(-5deg); }
+  .front { position: absolute; left: 205px; top: 62px; width: 250px; height: 112px;
+           padding: 18px; background: #15803d; color: white; z-index: 2;
+           border-radius: 16px; box-shadow: 9px 10px #166534; opacity: .92;
+           transform: translate(18px, 4px); }
+</style>
+<main>
+  <h1>Paint &amp; compositing pipeline</h1>
+  <p>Stacking, rounded clips, opacity groups, shadows, and 2D transforms.</p>
+  <section class="stage">
+    <div class="back"></div>
+    <div class="front">Amazing renders this browsing frame through the bounded display list.</div>
+  </section>
+</main>

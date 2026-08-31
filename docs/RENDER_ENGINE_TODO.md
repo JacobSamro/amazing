@@ -40,10 +40,16 @@ Frontier: **#6 — Paint order, clipping, stacking, and compositing**
   consensus (fixed-point baseline **10/24**). The deterministic broad
   diagnostic moves **35/200 → 47/200** while retaining later-feature and
   cross-dependency failures.
+- Focused paint/compositing gate: **12/24 → 24/24**, including **11/23 →
+  23/23** exact-revision Blink/WebKit consensus. The bounded broad diagnostic
+  moves **20/60 → 23/60** while retaining advanced cross-feature failures.
 - Existing curated CSS2 geometry subset: **17/17**.
+- Focused Test262 classic-script slice: **196/196 supported**, 0 failed, 445
+  explicitly skipped out of 641 discovered.
 - Existing feature regressions: **16 flex-module**, **17 grid-module**, **41
-  Phase #5 full-pipeline**, **61 CSS**, **63 HTML**, **65 net**, **137 layout**,
-  **56 paint**, **7 text-contract**, and **26 text-provider tests**.
+  Phase #5 full-pipeline**, **62 CSS**, **63 HTML**, **65 net**, **137 layout**,
+  **56 paint**, **20 Phase #6 full-pipeline**, **7 text-contract**, and **26
+  text-provider tests**.
 - These numbers establish regression coverage only; they do not establish
   compatibility with Blink, WebKit, or the broader web platform.
 
@@ -515,7 +521,7 @@ Lanes. Evidence lives in `docs/render/FLEX_GRID_DESIGN.md` and
 
 Blocked by: #3, #4b
 Type: Prototype
-Status: 🌫️ Fog
+Status: ✅ Resolved
 
 ### Question
 
@@ -525,7 +531,28 @@ without coupling rasterization back into layout?
 
 ### Answer
 
-Pending until geometry and glyph output are deterministic.
+The deleted terminal prototype established one flat command stream with
+per-context negative/in-flow/positioned-auto/positive phases, atomic nested
+contexts, and scoped clip/transform/opacity commands. The production
+`display_list` module is now the only paint stage that walks `LayoutBox`;
+rasterization consumes commands and never reconstructs layout relationships.
+
+Transparent bounded layers implement group opacity and 2D affine transforms.
+Paint adds source-over RGBA, rounded backgrounds/borders/overflow masks,
+background-clip geometry, and WPT-credited zero-blur outer shadows/currentcolor.
+Basic inset/spread shadows and double-border thirds remain unit-only behavior,
+not upstream conformance claims. Command count, layout depth, all raster-group
+depth, and simultaneously allocated layer pixels have independent fail-closed
+caps.
+
+At WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, the focused
+gate moves **12/24 → 24/24** with repeat-stable hashes; the 23-case
+Blink/WebKit consensus subset moves **11/23 → 23/23**. A bounded six-category
+diagnostic moves **20/60 → 23/60** while retaining advanced cross-feature
+failures. Evidence and the
+explicit 3D/blend/filter/blur/inline-stacking frontier live in
+`docs/render/PAINT_COMPOSITING_DESIGN.md` and
+`tests/wpt-render/paint-compositing-results-ticket6.json`.
 
 ## #7: Replaced content and additional rendering surfaces
 

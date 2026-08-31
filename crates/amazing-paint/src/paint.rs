@@ -1,9 +1,8 @@
-//! Painter's-algorithm rendering of a Phase 3 [`LayoutBox`] tree onto a
-//! [`Surface`].
+//! Display-list rendering of a [`LayoutBox`] tree onto a [`Surface`].
 //!
-//! Traversal is top-down: for each box, its own background and borders are
-//! painted first, then its line-box text fragments, then its children —
-//! so descendants correctly overpaint ancestors.
+//! `display_list` owns layout-tree traversal and stacking phases. This module
+//! consumes its flat commands, rasterizes box/content primitives, and scopes
+//! clips and effect groups without reconstructing layout relationships.
 //!
 //! # Implemented
 //!
@@ -20,16 +19,17 @@
 //!   saturating-cast clipping; glyphs clip per pixel)
 //! - non-`visible` overflow clips descendant backgrounds, borders, text, and
 //!   images to the ancestor padding box, with nested clip intersection
-//! - flex children paint in flow order exactly like block children
-//! - normal and positioned child boxes paint in DOM order (before full
-//!   stacking-context/z-index ordering lands)
+//! - descendants paint in negative, in-flow, positioned-auto/zero, and
+//!   positive phases; nested contexts remain atomic
+//! - opacity and 2D transforms composite bounded transparent layers
+//! - rounded backgrounds, border rings, overflow clips, background-clip,
+//!   zero-blur shadows, and double-border thirds
 //!
 //! # Deferred / deviations
 //!
-//! - ALL border styles (dashed/dotted/double/groove/…) render as SOLID —
-//!   deliberate Phase 4 simplification.
-//! - No border-radius, no box shadows, no list markers, no opacity, no
-//!   stacking contexts/z-index reordering.
+//! - Border styles other than `double` render as solid.
+//! - Blurred/multiple shadows, transform-origin grammar, 3D transforms,
+//!   blend modes, filters, outlines, and list markers remain deferred.
 //! - The legacy word painter does not retain inline color differences; the
 //!   shaped provider path does.
 //! - The canvas starts opaque white regardless of root background
@@ -37,14 +37,17 @@
 
 use amazing_css::ComputedStyle;
 use amazing_layout::font::FontSource;
-use amazing_layout::{Flow, LayoutBox};
+use amazing_layout::LayoutBox;
 use amazing_text::{GlyphCacheKey, GlyphContent, GlyphImage, TextSystem};
 
 use crate::color::parse_css_color;
+use crate::display_list::{build_display_list, GroupEffect, PaintCommand};
 use crate::surface::Surface;
 use crate::text::{draw_fragment_clipped, GlyphProvider, RectInkProvider};
 
 const CANVAS_WHITE: [u8; 4] = [255, 255, 255, 255];
+const MAX_LAYER_PIXELS: usize = 16 * 1024 * 1024;
+const MAX_RASTER_GROUP_DEPTH: usize = 16;
 /// Used when the `color` property exists but does not parse: the CSS
 /// initial value of `color` is black.
 const FALLBACK_TEXT_COLOR: [u8; 4] = [0, 0, 0, 255];
@@ -84,6 +87,189 @@ impl ClipRect {
             self.y1.round() as i64,
         ]
     }
+}
+
+struct RasterGroup {
+    parent: Surface,
+    clips: Vec<ClipRect>,
+    effect: GroupEffect,
+    mask: Option<RoundedRect>,
+}
+
+struct RasterState {
+    surface: Surface,
+    clips: Vec<ClipRect>,
+    groups: Vec<RasterGroup>,
+    rounded_clip_stack: Vec<bool>,
+    layer_pixels: usize,
+    failed: bool,
+}
+
+impl RasterState {
+    fn new(width: u32, height: u32) -> Self {
+        let mut surface = Surface::new(width, height);
+        surface.clear(CANVAS_WHITE);
+        let viewport = ClipRect::viewport(&surface);
+        Self {
+            surface,
+            clips: vec![viewport],
+            groups: Vec::new(),
+            rounded_clip_stack: Vec::new(),
+            layer_pixels: 0,
+            failed: false,
+        }
+    }
+
+    fn clip(&self) -> ClipRect {
+        *self.clips.last().expect("raster clip stack is never empty")
+    }
+
+    fn begin_group(&mut self, effect: GroupEffect) {
+        self.begin_group_with_mask(effect, None);
+    }
+
+    fn begin_group_with_mask(&mut self, effect: GroupEffect, mask: Option<RoundedRect>) {
+        if self.groups.len() >= MAX_RASTER_GROUP_DEPTH {
+            self.failed = true;
+            return;
+        }
+        let pixels = self.surface.width as usize * self.surface.height as usize;
+        let Some(total) = self.layer_pixels.checked_add(pixels) else {
+            self.failed = true;
+            return;
+        };
+        if total > MAX_LAYER_PIXELS {
+            self.failed = true;
+            return;
+        }
+        self.layer_pixels = total;
+        let transparent = Surface::new(self.surface.width, self.surface.height);
+        let parent = std::mem::replace(&mut self.surface, transparent);
+        let clips = std::mem::replace(&mut self.clips, vec![ClipRect::viewport(&self.surface)]);
+        self.groups.push(RasterGroup {
+            parent,
+            clips,
+            effect,
+            mask,
+        });
+    }
+
+    fn end_group(&mut self) {
+        let Some(group) = self.groups.pop() else {
+            return;
+        };
+        let child = std::mem::replace(&mut self.surface, group.parent);
+        self.layer_pixels = self
+            .layer_pixels
+            .saturating_sub(child.width as usize * child.height as usize);
+        self.clips = group.clips;
+        let clip = self.clip();
+        composite_group(&mut self.surface, &child, group.effect, group.mask, clip);
+    }
+
+    fn push_overflow_clip(&mut self, box_: &LayoutBox) {
+        let rounded = overflow_rounded_clip(box_);
+        let has_rounded = rounded.is_some();
+        if let Some(mask) = rounded {
+            self.begin_group_with_mask(
+                GroupEffect {
+                    opacity: 1.0,
+                    transform: crate::display_list::Affine::IDENTITY,
+                    origin_x: 0.0,
+                    origin_y: 0.0,
+                },
+                Some(mask),
+            );
+        }
+        self.clips.push(overflow_clip(box_, self.clip()));
+        self.rounded_clip_stack.push(has_rounded);
+    }
+
+    fn pop_clip(&mut self) {
+        if self.clips.len() > 1 {
+            self.clips.pop();
+        }
+        if self.rounded_clip_stack.pop().unwrap_or(false) {
+            self.end_group();
+        }
+    }
+
+    fn finish(self) -> Surface {
+        if self.failed || !self.groups.is_empty() {
+            let mut surface = Surface::new(self.surface.width, self.surface.height);
+            surface.clear(CANVAS_WHITE);
+            surface
+        } else {
+            self.surface
+        }
+    }
+}
+
+fn composite_group(
+    destination: &mut Surface,
+    source: &Surface,
+    effect: GroupEffect,
+    mask: Option<RoundedRect>,
+    clip: ClipRect,
+) {
+    let matrix = effect.matrix_about_origin();
+    let Some(inverse) = matrix.inverse() else {
+        return;
+    };
+    let [clip_x0, clip_y0, clip_x1, clip_y1] = clip.pixels();
+    let x0 = clip_x0.max(0).min(destination.width as i64);
+    let y0 = clip_y0.max(0).min(destination.height as i64);
+    let x1 = clip_x1.max(0).min(destination.width as i64);
+    let y1 = clip_y1.max(0).min(destination.height as i64);
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let (source_x, source_y) = inverse.map(x as f32 + 0.5, y as f32 + 0.5);
+            let sx = source_x.floor() as i64;
+            let sy = source_y.floor() as i64;
+            if sx < 0 || sy < 0 || sx >= source.width as i64 || sy >= source.height as i64 {
+                continue;
+            }
+            if mask.is_some_and(|mask| !mask.contains(source_x, source_y)) {
+                continue;
+            }
+            let Some(source_pixel) = source.get_pixel(sx as u32, sy as u32) else {
+                continue;
+            };
+            if source_pixel[3] == 0 {
+                continue;
+            }
+            let destination_pixel = destination
+                .get_pixel(x as u32, y as u32)
+                .unwrap_or([0, 0, 0, 0]);
+            destination.set_pixel(
+                x as u32,
+                y as u32,
+                source_over(source_pixel, destination_pixel, effect.opacity),
+            );
+        }
+    }
+}
+
+fn source_over(source: [u8; 4], destination: [u8; 4], opacity: f32) -> [u8; 4] {
+    let source_alpha = source[3] as f32 / 255.0 * opacity.clamp(0.0, 1.0);
+    let destination_alpha = destination[3] as f32 / 255.0;
+    let output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
+    if output_alpha <= 0.0 {
+        return [0, 0, 0, 0];
+    }
+    let channel = |index: usize| {
+        ((source[index] as f32 * source_alpha
+            + destination[index] as f32 * destination_alpha * (1.0 - source_alpha))
+            / output_alpha)
+            .round()
+            .clamp(0.0, 255.0) as u8
+    };
+    [
+        channel(0),
+        channel(1),
+        channel(2),
+        (output_alpha * 255.0).round().clamp(0.0, 255.0) as u8,
+    ]
 }
 
 /// Seam through which the painter obtains decoded pixels for replaced nodes.
@@ -139,11 +325,30 @@ pub fn paint_document_with_resources(
     glyphs: &dyn GlyphProvider,
     images: &dyn ImageProvider,
 ) -> Surface {
-    let mut surface = Surface::new(viewport_w, viewport_h);
-    surface.clear(CANVAS_WHITE);
-    let clip = ClipRect::viewport(&surface);
-    paint_box(&mut surface, root, fonts, glyphs, images, clip);
-    surface
+    let commands = build_display_list(root);
+    let mut state = RasterState::new(viewport_w, viewport_h);
+    for command in commands {
+        if state.failed {
+            break;
+        }
+        match command {
+            PaintCommand::BeginGroup(effect) => state.begin_group(effect),
+            PaintCommand::PaintDecorations(box_) => {
+                let color = resolve_text_color(&box_.style);
+                let clip = state.clip();
+                paint_decorations(&mut state.surface, box_, color, images, clip);
+            }
+            PaintCommand::PaintContent(box_) => {
+                let color = resolve_text_color(&box_.style);
+                let clip = state.clip();
+                paint_lines(&mut state.surface, box_, color, fonts, glyphs, images, clip);
+            }
+            PaintCommand::PushOverflowClip(box_) => state.push_overflow_clip(box_),
+            PaintCommand::PopClip => state.pop_clip(),
+            PaintCommand::EndGroup => state.end_group(),
+        }
+    }
+    state.finish()
 }
 
 /// Provider-neutral paint entry point. Layout-established glyph ids and
@@ -155,41 +360,416 @@ pub fn paint_document_with_text_resources(
     text: &dyn TextSystem,
     images: &dyn ImageProvider,
 ) -> Surface {
-    let mut surface = Surface::new(viewport_w, viewport_h);
-    surface.clear(CANVAS_WHITE);
-    let clip = ClipRect::viewport(&surface);
-    paint_box_with_text(&mut surface, root, text, images, clip);
-    surface
+    let commands = build_display_list(root);
+    let mut state = RasterState::new(viewport_w, viewport_h);
+    for command in commands {
+        if state.failed {
+            break;
+        }
+        match command {
+            PaintCommand::BeginGroup(effect) => state.begin_group(effect),
+            PaintCommand::PaintDecorations(box_) => {
+                let color = resolve_text_color(&box_.style);
+                let clip = state.clip();
+                paint_decorations(&mut state.surface, box_, color, images, clip);
+            }
+            PaintCommand::PaintContent(box_) => {
+                let clip = state.clip();
+                paint_shaped_lines(&mut state.surface, box_, text, images, clip);
+            }
+            PaintCommand::PushOverflowClip(box_) => state.push_overflow_clip(box_),
+            PaintCommand::PopClip => state.pop_clip(),
+            PaintCommand::EndGroup => state.end_group(),
+        }
+    }
+    state.finish()
 }
 
-fn paint_box_with_text(
+fn paint_decorations(
     surface: &mut Surface,
     box_: &LayoutBox,
-    text: &dyn TextSystem,
+    text_color: [u8; 4],
     images: &dyn ImageProvider,
     clip: ClipRect,
 ) {
-    let text_color = resolve_text_color(&box_.style);
+    paint_box_shadow(surface, box_, text_color, clip);
     paint_background(surface, box_, text_color, clip);
+    paint_inset_box_shadow(surface, box_, text_color, clip);
     paint_borders(surface, box_, text_color, clip);
     if box_.replaced_size.is_some() {
         if let Some(image) = box_.node.and_then(|node| images.image(node)) {
             paint_image(surface, &box_.content_box, image, clip);
         }
     }
-    let descendant_clip = overflow_clip(box_, clip);
-    paint_shaped_lines(surface, box_, text, images, descendant_clip);
+}
 
-    let mut children: Vec<&LayoutBox> = match &box_.flow {
-        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
-            children.iter().collect()
-        },
-        Flow::Inlines(_) | Flow::Empty => Vec::new(),
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct CornerRadii {
+    top_left: (f32, f32),
+    top_right: (f32, f32),
+    bottom_right: (f32, f32),
+    bottom_left: (f32, f32),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RoundedRect {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    radii: CornerRadii,
+}
+
+impl RoundedRect {
+    fn contains(self, x: f32, y: f32) -> bool {
+        if x < self.x || y < self.y || x >= self.x + self.width || y >= self.y + self.height {
+            return false;
+        }
+        let corners = [
+            (
+                self.x,
+                self.y,
+                self.radii.top_left,
+                x < self.x + self.radii.top_left.0 && y < self.y + self.radii.top_left.1,
+            ),
+            (
+                self.x + self.width,
+                self.y,
+                self.radii.top_right,
+                x >= self.x + self.width - self.radii.top_right.0
+                    && y < self.y + self.radii.top_right.1,
+            ),
+            (
+                self.x + self.width,
+                self.y + self.height,
+                self.radii.bottom_right,
+                x >= self.x + self.width - self.radii.bottom_right.0
+                    && y >= self.y + self.height - self.radii.bottom_right.1,
+            ),
+            (
+                self.x,
+                self.y + self.height,
+                self.radii.bottom_left,
+                x < self.x + self.radii.bottom_left.0
+                    && y >= self.y + self.height - self.radii.bottom_left.1,
+            ),
+        ];
+        for (corner_x, corner_y, (radius_x, radius_y), applies) in corners {
+            if !applies || radius_x <= 0.0 || radius_y <= 0.0 {
+                continue;
+            }
+            let center_x = if corner_x == self.x {
+                corner_x + radius_x
+            } else {
+                corner_x - radius_x
+            };
+            let center_y = if corner_y == self.y {
+                corner_y + radius_y
+            } else {
+                corner_y - radius_y
+            };
+            let dx = (x - center_x) / radius_x;
+            let dy = (y - center_y) / radius_y;
+            return dx * dx + dy * dy <= 1.0;
+        }
+        true
+    }
+}
+
+fn fill_rounded_rect_clipped(
+    surface: &mut Surface,
+    rounded: RoundedRect,
+    color: [u8; 4],
+    clip: ClipRect,
+) {
+    let clipped = clip.intersect(rounded.x, rounded.y, rounded.width, rounded.height);
+    let [x0, y0, x1, y1] = clipped.pixels();
+    for y in y0.max(0)..y1.min(surface.height as i64) {
+        for x in x0.max(0)..x1.min(surface.width as i64) {
+            if !rounded.contains(x as f32 + 0.5, y as f32 + 0.5) {
+                continue;
+            }
+            let destination = surface
+                .get_pixel(x as u32, y as u32)
+                .unwrap_or([0, 0, 0, 0]);
+            surface.set_pixel(x as u32, y as u32, source_over(color, destination, 1.0));
+        }
+    }
+}
+
+fn resolve_corner_radii(style: &ComputedStyle, rect: &amazing_layout::Rect) -> CornerRadii {
+    if let (Some(top_left), Some(top_right), Some(bottom_right), Some(bottom_left)) = (
+        style.get("border-top-left-radius"),
+        style.get("border-top-right-radius"),
+        style.get("border-bottom-right-radius"),
+        style.get("border-bottom-left-radius"),
+    ) {
+        return normalize_radii(
+            CornerRadii {
+                top_left: resolve_radius_pair(top_left, rect.w, rect.h),
+                top_right: resolve_radius_pair(top_right, rect.w, rect.h),
+                bottom_right: resolve_radius_pair(bottom_right, rect.w, rect.h),
+                bottom_left: resolve_radius_pair(bottom_left, rect.w, rect.h),
+            },
+            rect.w,
+            rect.h,
+        );
+    }
+    let Some(value) = style.get("border-radius") else {
+        return CornerRadii::default();
     };
-    children.extend(box_.positioned.iter());
-    children.sort_by_key(|child| child.node.map(|node| node.0).unwrap_or(0));
-    for child in children {
-        paint_box_with_text(surface, child, text, images, descendant_clip);
+    let (horizontal, vertical) = value
+        .split_once('/')
+        .map(|(horizontal, vertical)| (horizontal, Some(vertical)))
+        .unwrap_or((value, None));
+    let horizontal = expand_radius_values(horizontal, rect.w);
+    let vertical = vertical
+        .map(|vertical| expand_radius_values(vertical, rect.h))
+        .unwrap_or(horizontal);
+    normalize_radii(
+        CornerRadii {
+            top_left: (horizontal[0], vertical[0]),
+            top_right: (horizontal[1], vertical[1]),
+            bottom_right: (horizontal[2], vertical[2]),
+            bottom_left: (horizontal[3], vertical[3]),
+        },
+        rect.w,
+        rect.h,
+    )
+}
+
+fn resolve_radius_pair(value: &str, width: f32, height: f32) -> (f32, f32) {
+    let values = value.split_ascii_whitespace().collect::<Vec<_>>();
+    match values.as_slice() {
+        [both] => (resolve_radius(both, width), resolve_radius(both, height)),
+        [horizontal, vertical] => (
+            resolve_radius(horizontal, width),
+            resolve_radius(vertical, height),
+        ),
+        _ => (0.0, 0.0),
+    }
+}
+
+fn expand_radius_values(value: &str, basis: f32) -> [f32; 4] {
+    let values = value
+        .split_ascii_whitespace()
+        .map(|value| resolve_radius(value, basis))
+        .collect::<Vec<_>>();
+    match values.as_slice() {
+        [one] => [*one; 4],
+        [top_left, top_right] => [*top_left, *top_right, *top_left, *top_right],
+        [top_left, other, bottom_right] => [*top_left, *other, *bottom_right, *other],
+        [top_left, top_right, bottom_right, bottom_left] => {
+            [*top_left, *top_right, *bottom_right, *bottom_left]
+        }
+        _ => [0.0; 4],
+    }
+}
+
+fn resolve_radius(value: &str, basis: f32) -> f32 {
+    let value = value.trim().to_ascii_lowercase();
+    if let Some(percent) = value.strip_suffix('%') {
+        percent
+            .parse::<f32>()
+            .ok()
+            .map_or(0.0, |value| basis * value / 100.0)
+            .max(0.0)
+    } else if let Some(px) = value.strip_suffix("px") {
+        px.parse::<f32>().unwrap_or(0.0).max(0.0)
+    } else {
+        0.0
+    }
+}
+
+fn normalize_radii(mut radii: CornerRadii, width: f32, height: f32) -> CornerRadii {
+    let ratios = [
+        width / (radii.top_left.0 + radii.top_right.0).max(width),
+        width / (radii.bottom_left.0 + radii.bottom_right.0).max(width),
+        height / (radii.top_left.1 + radii.bottom_left.1).max(height),
+        height / (radii.top_right.1 + radii.bottom_right.1).max(height),
+    ];
+    let scale = ratios.into_iter().fold(1.0f32, f32::min).clamp(0.0, 1.0);
+    for radius in [
+        &mut radii.top_left,
+        &mut radii.top_right,
+        &mut radii.bottom_right,
+        &mut radii.bottom_left,
+    ] {
+        radius.0 *= scale;
+        radius.1 *= scale;
+    }
+    radii
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BoxShadow {
+    inset: bool,
+    offset_x: f32,
+    offset_y: f32,
+    blur: f32,
+    spread: f32,
+    color: [u8; 4],
+}
+
+fn paint_box_shadow(surface: &mut Surface, box_: &LayoutBox, text_color: [u8; 4], clip: ClipRect) {
+    let Some(value) = box_.style.get("box-shadow") else {
+        return;
+    };
+    let Some(shadow) = parse_box_shadow(value, text_color) else {
+        return;
+    };
+    if shadow.inset || shadow.blur > 0.0 {
+        return;
+    }
+    let border = box_.border_box;
+    let spread = shadow.spread;
+    let mut radii = resolve_corner_radii(&box_.style, &border);
+    for radius in [
+        &mut radii.top_left,
+        &mut radii.top_right,
+        &mut radii.bottom_right,
+        &mut radii.bottom_left,
+    ] {
+        radius.0 = (radius.0 + spread).max(0.0);
+        radius.1 = (radius.1 + spread).max(0.0);
+    }
+    fill_rounded_rect_clipped(
+        surface,
+        RoundedRect {
+            x: border.x + shadow.offset_x - spread,
+            y: border.y + shadow.offset_y - spread,
+            width: border.w + spread * 2.0,
+            height: border.h + spread * 2.0,
+            radii,
+        },
+        shadow.color,
+        clip,
+    );
+}
+
+fn paint_inset_box_shadow(
+    surface: &mut Surface,
+    box_: &LayoutBox,
+    text_color: [u8; 4],
+    clip: ClipRect,
+) {
+    let Some(value) = box_.style.get("box-shadow") else {
+        return;
+    };
+    let Some(shadow) = parse_box_shadow(value, text_color) else {
+        return;
+    };
+    if !shadow.inset || shadow.blur > 0.0 {
+        return;
+    }
+    let content = box_.content_box;
+    let padding = amazing_layout::Rect {
+        x: content.x - box_.padding.left,
+        y: content.y - box_.padding.top,
+        w: content.w + box_.padding.left + box_.padding.right,
+        h: content.h + box_.padding.top + box_.padding.bottom,
+    };
+    let all_sides = shadow.spread.max(0.0);
+    let left = (shadow.offset_x + shadow.spread).max(0.0);
+    let right = (-shadow.offset_x + shadow.spread).max(0.0);
+    let top = (shadow.offset_y + shadow.spread).max(0.0);
+    let bottom = (-shadow.offset_y + shadow.spread).max(0.0);
+    for (x, y, width, height) in [
+        (padding.x, padding.y, left, padding.h),
+        (padding.x + padding.w - right, padding.y, right, padding.h),
+        (padding.x, padding.y, padding.w, top),
+        (padding.x, padding.y + padding.h - bottom, padding.w, bottom),
+        (padding.x, padding.y, padding.w, all_sides),
+    ] {
+        fill_rect_clipped(surface, x, y, width, height, shadow.color, clip);
+    }
+}
+
+fn parse_box_shadow(value: &str, current_color: [u8; 4]) -> Option<BoxShadow> {
+    if value.trim().eq_ignore_ascii_case("none") {
+        return None;
+    }
+    let components = top_level_space_components(value)?;
+    let mut inset = false;
+    let mut color = None;
+    let mut lengths = Vec::new();
+    for component in components {
+        if component.eq_ignore_ascii_case("inset") {
+            if inset {
+                return None;
+            }
+            inset = true;
+        } else if component.eq_ignore_ascii_case("currentcolor") {
+            if color.is_some() {
+                return None;
+            }
+            color = Some(current_color);
+        } else if let Some(parsed) = parse_css_color(component) {
+            if color.is_some() {
+                return None;
+            }
+            color = Some(parsed);
+        } else {
+            lengths.push(resolve_shadow_length(component)?);
+        }
+    }
+    if !(2..=4).contains(&lengths.len()) {
+        return None;
+    }
+    Some(BoxShadow {
+        inset,
+        offset_x: lengths[0],
+        offset_y: lengths[1],
+        blur: lengths.get(2).copied().unwrap_or(0.0).max(0.0),
+        spread: lengths.get(3).copied().unwrap_or(0.0),
+        color: color.unwrap_or(current_color),
+    })
+}
+
+fn top_level_space_components(value: &str) -> Option<Vec<&str>> {
+    let mut output = Vec::new();
+    let mut start = 0usize;
+    let mut depth = 0i32;
+    for (index, character) in value.char_indices() {
+        match character {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth < 0 {
+                    return None;
+                }
+            }
+            ',' if depth == 0 => return None,
+            character if character.is_whitespace() && depth == 0 => {
+                if start < index {
+                    output.push(value[start..index].trim());
+                }
+                start = index + character.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return None;
+    }
+    if start < value.len() {
+        output.push(value[start..].trim());
+    }
+    let output = output
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    (!output.is_empty()).then_some(output)
+}
+
+fn resolve_shadow_length(value: &str) -> Option<f32> {
+    let value = value.trim().to_ascii_lowercase();
+    if let Some(px) = value.strip_suffix("px") {
+        px.parse::<f32>().ok().filter(|value| value.is_finite())
+    } else if value == "0" || value == "0.0" {
+        Some(0.0)
+    } else {
+        None
     }
 }
 
@@ -238,7 +818,8 @@ fn paint_shaped_lines(
             } else {
                 line.baseline + glyph.y - glyph.offset_y
             };
-            let subpixel = |value: f32| ((value.fract().rem_euclid(1.0) * 64.0).round() as u8).min(63);
+            let subpixel =
+                |value: f32| ((value.fract().rem_euclid(1.0) * 64.0).round() as u8).min(63);
             let Some(key) = GlyphCacheKey::new(
                 text.generation(),
                 glyph.font,
@@ -295,7 +876,11 @@ fn blit_text_image(surface: &mut Surface, image: &GlyphImage, blit: GlyphBlit, c
     if !scale_x.is_finite() || !scale_y.is_finite() || scale_x <= 0.0 || scale_y <= 0.0 {
         return;
     }
-    let channels = if image.content == GlyphContent::Color { 4 } else { 1 };
+    let channels = if image.content == GlyphContent::Color {
+        4
+    } else {
+        1
+    };
     let Some(expected) = image
         .width
         .checked_mul(image.height)
@@ -316,14 +901,11 @@ fn blit_text_image(surface: &mut Surface, image: &GlyphImage, blit: GlyphBlit, c
                     origin_y + ((-image.bearing_y as i64 + row) as f32 * scale_y).floor() as i64,
                 ),
                 amazing_text::GlyphOrientation::SidewaysRight => (
-                    origin_x
-                        + ((image.bearing_y as i64 - 1 - row) as f32 * scale_y).floor() as i64,
-                    origin_y
-                        + ((image.bearing_x as i64 + column) as f32 * scale_x).floor() as i64,
+                    origin_x + ((image.bearing_y as i64 - 1 - row) as f32 * scale_y).floor() as i64,
+                    origin_y + ((image.bearing_x as i64 + column) as f32 * scale_x).floor() as i64,
                 ),
                 amazing_text::GlyphOrientation::SidewaysLeft => (
-                    origin_x
-                        + ((-image.bearing_y as i64 + row) as f32 * scale_y).floor() as i64,
+                    origin_x + ((-image.bearing_y as i64 + row) as f32 * scale_y).floor() as i64,
                     origin_y
                         + ((-image.bearing_x as i64 - 1 - column) as f32 * scale_x).floor() as i64,
                 ),
@@ -357,83 +939,117 @@ fn blit_text_image(surface: &mut Surface, image: &GlyphImage, blit: GlyphBlit, c
             }
             let destination = surface
                 .get_pixel(x as u32, y as u32)
-                .unwrap_or([0, 0, 0, 255]);
-            let alpha = coverage as u32;
-            let inverse = 255 - alpha;
-            let blend = |source: u8, destination: u8| {
-                ((source as u32 * alpha + destination as u32 * inverse + 127) / 255) as u8
+                .unwrap_or([0, 0, 0, 0]);
+            let effective_alpha = if image.content == GlyphContent::Color {
+                coverage
+            } else {
+                ((source[3] as u16 * coverage as u16 + 127) / 255) as u8
             };
             surface.set_pixel(
                 x as u32,
                 y as u32,
-                [
-                    blend(source[0], destination[0]),
-                    blend(source[1], destination[1]),
-                    blend(source[2], destination[2]),
-                    255,
-                ],
+                source_over(
+                    [source[0], source[1], source[2], effective_alpha],
+                    destination,
+                    1.0,
+                ),
             );
         }
     }
 }
 
-fn paint_box(
-    surface: &mut Surface,
-    box_: &LayoutBox,
-    fonts: &FontSource,
-    glyphs: &dyn GlyphProvider,
-    images: &dyn ImageProvider,
-    clip: ClipRect,
-) {
-    let text_color = resolve_text_color(&box_.style);
-    paint_background(surface, box_, text_color, clip);
-    paint_borders(surface, box_, text_color, clip);
-    if box_.replaced_size.is_some() {
-        if let Some(image) = box_.node.and_then(|node| images.image(node)) {
-            paint_image(surface, &box_.content_box, image, clip);
-        }
-    }
-    let descendant_clip = overflow_clip(box_, clip);
-    paint_lines(
-        surface,
-        box_,
-        text_color,
-        fonts,
-        glyphs,
-        images,
-        descendant_clip,
-    );
-
-    // Positioned descendants and in-flow children share document-order
-    // painting while z-index/stacking contexts remain deferred.
-    let mut children: Vec<&LayoutBox> = match &box_.flow {
-        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
-            children.iter().collect()
-        },
-        Flow::Inlines(_) | Flow::Empty => Vec::new(),
-    };
-    children.extend(box_.positioned.iter());
-    children.sort_by_key(|child| child.node.map(|node| node.0).unwrap_or(0));
-    for child in children {
-        paint_box(surface, child, fonts, glyphs, images, descendant_clip);
-    }
-}
-
 fn overflow_clip(box_: &LayoutBox, inherited: ClipRect) -> ClipRect {
-    let clips = box_
-        .style
-        .get("overflow")
-        .is_some_and(|value| !value.eq_ignore_ascii_case("visible"));
-    if !clips {
+    let (clip_x, clip_y) = overflow_axes(box_);
+    if !clip_x && !clip_y {
         return inherited;
     }
     let content = box_.content_box;
-    inherited.intersect(
-        content.x - box_.padding.left,
-        content.y - box_.padding.top,
-        content.w + box_.padding.left + box_.padding.right,
-        content.h + box_.padding.top + box_.padding.bottom,
-    )
+    let x0 = content.x - box_.padding.left;
+    let y0 = content.y - box_.padding.top;
+    let x1 = x0 + content.w + box_.padding.left + box_.padding.right;
+    let y1 = y0 + content.h + box_.padding.top + box_.padding.bottom;
+    ClipRect {
+        x0: if clip_x {
+            inherited.x0.max(x0)
+        } else {
+            inherited.x0
+        },
+        y0: if clip_y {
+            inherited.y0.max(y0)
+        } else {
+            inherited.y0
+        },
+        x1: if clip_x {
+            inherited.x1.min(x1)
+        } else {
+            inherited.x1
+        },
+        y1: if clip_y {
+            inherited.y1.min(y1)
+        } else {
+            inherited.y1
+        },
+    }
+}
+
+fn overflow_axes(box_: &LayoutBox) -> (bool, bool) {
+    let shorthand = box_
+        .style
+        .get("overflow")
+        .is_some_and(|value| !value.eq_ignore_ascii_case("visible"));
+    let clip_x = shorthand
+        || box_
+            .style
+            .get("overflow-x")
+            .is_some_and(|value| !value.eq_ignore_ascii_case("visible"));
+    let clip_y = shorthand
+        || box_
+            .style
+            .get("overflow-y")
+            .is_some_and(|value| !value.eq_ignore_ascii_case("visible"));
+    (clip_x, clip_y)
+}
+
+fn overflow_rounded_clip(box_: &LayoutBox) -> Option<RoundedRect> {
+    let (clip_x, clip_y) = overflow_axes(box_);
+    if !clip_x || !clip_y {
+        return None;
+    }
+    let outer = resolve_corner_radii(&box_.style, &box_.border_box);
+    if outer == CornerRadii::default() {
+        return None;
+    }
+    let content = box_.content_box;
+    let rect = amazing_layout::Rect {
+        x: content.x - box_.padding.left,
+        y: content.y - box_.padding.top,
+        w: content.w + box_.padding.left + box_.padding.right,
+        h: content.h + box_.padding.top + box_.padding.bottom,
+    };
+    Some(RoundedRect {
+        x: rect.x,
+        y: rect.y,
+        width: rect.w,
+        height: rect.h,
+        radii: CornerRadii {
+            top_left: (
+                (outer.top_left.0 - box_.border.left).max(0.0),
+                (outer.top_left.1 - box_.border.top).max(0.0),
+            ),
+            top_right: (
+                (outer.top_right.0 - box_.border.right).max(0.0),
+                (outer.top_right.1 - box_.border.top).max(0.0),
+            ),
+            bottom_right: (
+                (outer.bottom_right.0 - box_.border.right).max(0.0),
+                (outer.bottom_right.1 - box_.border.bottom).max(0.0),
+            ),
+            bottom_left: (
+                (outer.bottom_left.0 - box_.border.left).max(0.0),
+                (outer.bottom_left.1 - box_.border.bottom).max(0.0),
+            ),
+        },
+    })
 }
 
 fn fill_rect_clipped(
@@ -446,13 +1062,23 @@ fn fill_rect_clipped(
     clip: ClipRect,
 ) {
     let clipped = clip.intersect(x, y, width, height);
-    surface.fill_rect(
-        clipped.x0,
-        clipped.y0,
-        (clipped.x1 - clipped.x0).max(0.0),
-        (clipped.y1 - clipped.y0).max(0.0),
-        color,
-    );
+    let [x0, y0, x1, y1] = clipped.pixels();
+    let x0 = x0.max(0).min(surface.width as i64);
+    let y0 = y0.max(0).min(surface.height as i64);
+    let x1 = x1.max(0).min(surface.width as i64);
+    let y1 = y1.max(0).min(surface.height as i64);
+    for py in y0..y1 {
+        for px in x0..x1 {
+            if color[3] == 255 {
+                surface.set_pixel(px as u32, py as u32, color);
+            } else if color[3] != 0 {
+                let destination = surface
+                    .get_pixel(px as u32, py as u32)
+                    .unwrap_or([0, 0, 0, 0]);
+                surface.set_pixel(px as u32, py as u32, source_over(color, destination, 1.0));
+            }
+        }
+    }
 }
 
 /// The element's computed `color`, used both for ink and as the meaning of
@@ -480,39 +1106,98 @@ fn resolve_color(style: &ComputedStyle, prop: &str, text_color: [u8; 4]) -> Opti
 
 /// Fills the padding box (content box grown by the resolved paddings).
 /// A transparent or unparseable background paints nothing.
-fn paint_background(
-    surface: &mut Surface,
-    b: &LayoutBox,
-    text_color: [u8; 4],
-    clip: ClipRect,
-) {
+fn paint_background(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip: ClipRect) {
     let bg = match resolve_color(&b.style, "background-color", text_color) {
         Some(c) => c,
         None => return,
     };
-    let cb = &b.content_box;
-    let p = &b.padding;
-    fill_rect_clipped(
+    let cb = b.content_box;
+    let padding = amazing_layout::Rect {
+        x: cb.x - b.padding.left,
+        y: cb.y - b.padding.top,
+        w: cb.w + b.padding.left + b.padding.right,
+        h: cb.h + b.padding.top + b.padding.bottom,
+    };
+    let outer_radii = resolve_corner_radii(&b.style, &b.border_box);
+    let (rect, radii) = match b.style.get("background-clip").map(str::trim) {
+        Some(value) if value.eq_ignore_ascii_case("content-box") => (
+            cb,
+            inset_radii(
+                outer_radii,
+                b.border.top + b.padding.top,
+                b.border.right + b.padding.right,
+                b.border.bottom + b.padding.bottom,
+                b.border.left + b.padding.left,
+                cb.w,
+                cb.h,
+            ),
+        ),
+        Some(value) if value.eq_ignore_ascii_case("padding-box") => (
+            padding,
+            inset_radii(
+                outer_radii,
+                b.border.top,
+                b.border.right,
+                b.border.bottom,
+                b.border.left,
+                padding.w,
+                padding.h,
+            ),
+        ),
+        _ => (b.border_box, outer_radii),
+    };
+    fill_rounded_rect_clipped(
         surface,
-        cb.x - p.left,
-        cb.y - p.top,
-        cb.w + p.left + p.right,
-        cb.h + p.top + p.bottom,
+        RoundedRect {
+            x: rect.x,
+            y: rect.y,
+            width: rect.w,
+            height: rect.h,
+            radii,
+        },
         bg,
         clip,
     );
+}
+
+fn inset_radii(
+    outer: CornerRadii,
+    top: f32,
+    right: f32,
+    bottom: f32,
+    left: f32,
+    width: f32,
+    height: f32,
+) -> CornerRadii {
+    normalize_radii(
+        CornerRadii {
+            top_left: (
+                (outer.top_left.0 - left).max(0.0),
+                (outer.top_left.1 - top).max(0.0),
+            ),
+            top_right: (
+                (outer.top_right.0 - right).max(0.0),
+                (outer.top_right.1 - top).max(0.0),
+            ),
+            bottom_right: (
+                (outer.bottom_right.0 - right).max(0.0),
+                (outer.bottom_right.1 - bottom).max(0.0),
+            ),
+            bottom_left: (
+                (outer.bottom_left.0 - left).max(0.0),
+                (outer.bottom_left.1 - bottom).max(0.0),
+            ),
+        },
+        width,
+        height,
+    )
 }
 
 /// Four solid strips inside the border edges. Top/bottom span the full
 /// width; left/right sit between them so corners are painted once.
 /// Sides whose style is none/hidden or whose resolved width is <= 0 are
 /// skipped defensively (layout already zeroes them).
-fn paint_borders(
-    surface: &mut Surface,
-    b: &LayoutBox,
-    text_color: [u8; 4],
-    clip: ClipRect,
-) {
+fn paint_borders(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip: ClipRect) {
     let bb = &b.border_box;
 
     let width_of = |side: &str| -> f32 {
@@ -530,8 +1215,16 @@ fn paint_borders(
     };
     // A missing border-color declaration falls back to currentcolor.
     let color_of = |side: &str| -> [u8; 4] {
-        resolve_color(&b.style, &format!("border-{side}-color"), text_color)
-            .unwrap_or(text_color)
+        match b.style.get(&format!("border-{side}-color")) {
+            None => text_color,
+            Some(value) if value.eq_ignore_ascii_case("currentcolor") => text_color,
+            Some(value) => parse_css_color(value).unwrap_or(text_color),
+        }
+    };
+    let double = |side: &str| {
+        b.style
+            .get(&format!("border-{side}-style"))
+            .is_some_and(|value| value.eq_ignore_ascii_case("double"))
     };
 
     let bt = width_of("top");
@@ -539,41 +1232,160 @@ fn paint_borders(
     let bbw = width_of("bottom");
     let bl = width_of("left");
 
+    let radii = resolve_corner_radii(&b.style, bb);
+    if radii != CornerRadii::default() {
+        paint_rounded_border(
+            surface,
+            RoundedRect {
+                x: bb.x,
+                y: bb.y,
+                width: bb.w,
+                height: bb.h,
+                radii,
+            },
+            [bt, br, bbw, bl],
+            [
+                color_of("top"),
+                color_of("right"),
+                color_of("bottom"),
+                color_of("left"),
+            ],
+            clip,
+        );
+        return;
+    }
+
     if bt > 0.0 {
-        fill_rect_clipped(surface, bb.x, bb.y, bb.w, bt, color_of("top"), clip);
+        paint_border_strip(
+            surface,
+            [bb.x, bb.y, bb.w, bt],
+            color_of("top"),
+            double("top"),
+            true,
+            clip,
+        );
     }
     if bbw > 0.0 {
-        fill_rect_clipped(
+        paint_border_strip(
             surface,
-            bb.x,
-            bb.y + bb.h - bbw,
-            bb.w,
-            bbw,
+            [bb.x, bb.y + bb.h - bbw, bb.w, bbw],
             color_of("bottom"),
+            double("bottom"),
+            true,
             clip,
         );
     }
     if bl > 0.0 {
-        fill_rect_clipped(
+        paint_border_strip(
             surface,
-            bb.x,
-            bb.y + bt,
-            bl,
-            bb.h - bt - bbw,
+            [bb.x, bb.y + bt, bl, bb.h - bt - bbw],
             color_of("left"),
+            double("left"),
+            false,
             clip,
         );
     }
     if br > 0.0 {
-        fill_rect_clipped(
+        paint_border_strip(
             surface,
-            bb.x + bb.w - br,
-            bb.y + bt,
-            br,
-            bb.h - bt - bbw,
+            [bb.x + bb.w - br, bb.y + bt, br, bb.h - bt - bbw],
             color_of("right"),
+            double("right"),
+            false,
             clip,
         );
+    }
+}
+
+fn paint_border_strip(
+    surface: &mut Surface,
+    rect: [f32; 4],
+    color: [u8; 4],
+    double: bool,
+    horizontal: bool,
+    clip: ClipRect,
+) {
+    let [x, y, width, height] = rect;
+    if !double {
+        fill_rect_clipped(surface, x, y, width, height, color, clip);
+        return;
+    }
+    let thickness = if horizontal { height } else { width };
+    let third = (thickness / 3.0).max(1.0);
+    if horizontal {
+        fill_rect_clipped(surface, x, y, width, third, color, clip);
+        fill_rect_clipped(surface, x, y + height - third, width, third, color, clip);
+    } else {
+        fill_rect_clipped(surface, x, y, third, height, color, clip);
+        fill_rect_clipped(surface, x + width - third, y, third, height, color, clip);
+    }
+}
+
+fn paint_rounded_border(
+    surface: &mut Surface,
+    outer: RoundedRect,
+    widths: [f32; 4],
+    colors: [[u8; 4]; 4],
+    clip: ClipRect,
+) {
+    let [top, right, bottom, left] = widths;
+    let inner = RoundedRect {
+        x: outer.x + left,
+        y: outer.y + top,
+        width: (outer.width - left - right).max(0.0),
+        height: (outer.height - top - bottom).max(0.0),
+        radii: CornerRadii {
+            top_left: (
+                (outer.radii.top_left.0 - left).max(0.0),
+                (outer.radii.top_left.1 - top).max(0.0),
+            ),
+            top_right: (
+                (outer.radii.top_right.0 - right).max(0.0),
+                (outer.radii.top_right.1 - top).max(0.0),
+            ),
+            bottom_right: (
+                (outer.radii.bottom_right.0 - right).max(0.0),
+                (outer.radii.bottom_right.1 - bottom).max(0.0),
+            ),
+            bottom_left: (
+                (outer.radii.bottom_left.0 - left).max(0.0),
+                (outer.radii.bottom_left.1 - bottom).max(0.0),
+            ),
+        },
+    };
+    let clipped = clip.intersect(outer.x, outer.y, outer.width, outer.height);
+    let [x0, y0, x1, y1] = clipped.pixels();
+    for y in y0.max(0)..y1.min(surface.height as i64) {
+        for x in x0.max(0)..x1.min(surface.width as i64) {
+            let px = x as f32 + 0.5;
+            let py = y as f32 + 0.5;
+            if !outer.contains(px, py) || inner.contains(px, py) {
+                continue;
+            }
+            let distances = [
+                py - outer.y,
+                outer.x + outer.width - px,
+                outer.y + outer.height - py,
+                px - outer.x,
+            ];
+            let side = distances
+                .iter()
+                .enumerate()
+                .min_by(|left, right| left.1.total_cmp(right.1))
+                .map(|(index, _)| index)
+                .unwrap_or(0);
+            if colors[side][3] == 0 {
+                continue;
+            }
+            let destination = surface
+                .get_pixel(x as u32, y as u32)
+                .unwrap_or([0, 0, 0, 0]);
+            surface.set_pixel(
+                x as u32,
+                y as u32,
+                source_over(colors[side], destination, 1.0),
+            );
+        }
     }
 }
 
@@ -663,9 +1475,12 @@ fn paint_image(
             let alpha = source_color[3] as u16;
             let inverse = 255 - alpha;
             let blended = [
-                ((source_color[0] as u16 * alpha + destination[0] as u16 * inverse + 127) / 255) as u8,
-                ((source_color[1] as u16 * alpha + destination[1] as u16 * inverse + 127) / 255) as u8,
-                ((source_color[2] as u16 * alpha + destination[2] as u16 * inverse + 127) / 255) as u8,
+                ((source_color[0] as u16 * alpha + destination[0] as u16 * inverse + 127) / 255)
+                    as u8,
+                ((source_color[1] as u16 * alpha + destination[1] as u16 * inverse + 127) / 255)
+                    as u8,
+                ((source_color[2] as u16 * alpha + destination[2] as u16 * inverse + 127) / 255)
+                    as u8,
                 255,
             ];
             surface.set_pixel(x as u32, y as u32, blended);
@@ -682,7 +1497,7 @@ fn paint_image(
 mod tests {
     use super::*;
     use crate::text::{draw_fragment, RectInkProvider};
-    use amazing_layout::Rect;
+    use amazing_layout::{Flow, Rect};
 
     const WHITE: [u8; 4] = [255, 255, 255, 255];
 
@@ -696,7 +1511,13 @@ mod tests {
     /// A leaf block box placed manually (layout already ran, conceptually):
     /// zero margin/padding/border unless the caller adds them.
     fn block(style_pairs: &[(&str, &str)], x: f32, y: f32, w: f32, h: f32) -> LayoutBox {
-        let mut b = LayoutBox::new(None, amazing_layout::Display::Block, style(style_pairs), 16.0, 19.2);
+        let mut b = LayoutBox::new(
+            None,
+            amazing_layout::Display::Block,
+            style(style_pairs),
+            16.0,
+            19.2,
+        );
         b.border_box = Rect { x, y, w, h };
         b.content_box = b.border_box;
         b.flow = Flow::Empty;
@@ -704,7 +1525,12 @@ mod tests {
     }
 
     fn sides(t: f32, r: f32, btm: f32, l: f32) -> amazing_layout::values::Sides {
-        amazing_layout::values::Sides { top: t, right: r, bottom: btm, left: l }
+        amazing_layout::values::Sides {
+            top: t,
+            right: r,
+            bottom: btm,
+            left: l,
+        }
     }
 
     #[test]
@@ -835,7 +1661,7 @@ mod tests {
         assert_eq!(surf.get_pixel(7, 7), Some([0, 0, 255, 255])); // both: child wins
         assert_eq!(surf.get_pixel(12, 8), Some([0, 0, 255, 255])); // child, clipped
         assert_eq!(surf.get_pixel(14, 9), Some([0, 0, 255, 255])); // child's last col
-        // ...and ABSENT outside them.
+                                                                   // ...and ABSENT outside them.
         assert_eq!(surf.get_pixel(18, 1), Some(WHITE)); // right of parent
         assert_eq!(surf.get_pixel(11, 2), Some(WHITE)); // right of parent
         assert_eq!(surf.get_pixel(15, 9), Some(WHITE)); // past child's right edge
@@ -844,8 +1670,14 @@ mod tests {
         // paint_lines uses (hand-building a LineBox would require DOM node
         // ids, which carry no meaning to the painter).
         draw_fragment(
-            &mut surf, 2.0, 9.0, "W", 10.0, [0, 0, 0, 255],
-            &fonts, &RectInkProvider,
+            &mut surf,
+            2.0,
+            9.0,
+            "W",
+            10.0,
+            [0, 0, 0, 255],
+            &fonts,
+            &RectInkProvider,
         );
         // Ink height at 10px = 7 -> rows 2..=8 sit on baseline 9. Column 3
         // is inside the parent box, so the surrounding background is red:
@@ -931,7 +1763,13 @@ mod tests {
 
     #[test]
     fn garbage_background_value_paints_nothing() {
-        let b = block(&[("background-color", "definitely-not-a-color")], 0.0, 0.0, 10.0, 10.0);
+        let b = block(
+            &[("background-color", "definitely-not-a-color")],
+            0.0,
+            0.0,
+            10.0,
+            10.0,
+        );
         let surf = paint_document(&b, 12, 12, &FontSource::fallback());
         assert_eq!(surf.get_pixel(5, 5), Some(WHITE));
     }
@@ -943,7 +1781,12 @@ mod tests {
         // box: cols 4..=13, rows 4..=9.
         let mut b = block(&[("background-color", "green")], 4.0, 4.0, 10.0, 6.0);
         b.padding = sides(2.0, 1.0, 2.0, 1.0);
-        b.content_box = Rect { x: 5.0, y: 6.0, w: 8.0, h: 2.0 };
+        b.content_box = Rect {
+            x: 5.0,
+            y: 6.0,
+            w: 8.0,
+            h: 2.0,
+        };
         let surf = paint_document(&b, 30, 30, &FontSource::fallback());
         assert_eq!(surf.get_pixel(4, 4), Some([0, 128, 0, 255])); // first px
         assert_eq!(surf.get_pixel(13, 9), Some([0, 128, 0, 255])); // last px
@@ -972,7 +1815,7 @@ mod tests {
         assert_eq!(surf.get_pixel(5, 9), Some([0, 0, 0, 255])); // bottom strip
         assert_eq!(surf.get_pixel(2, 5), Some([0, 0, 0, 255])); // left strip
         assert_eq!(surf.get_pixel(11, 5), Some([0, 0, 0, 255])); // right strip
-        // Interior untouched; outside untouched.
+                                                                 // Interior untouched; outside untouched.
         assert_eq!(surf.get_pixel(5, 5), Some(WHITE));
         assert_eq!(surf.get_pixel(1, 5), Some(WHITE));
         assert_eq!(surf.get_pixel(13, 5), Some(WHITE));

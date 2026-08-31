@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "runs": {
+    "blink": {
+      "id": 5182906107691008,
+      "browser": "Chrome 154.0.8016.0",
+      "os": "Linux 22.04"
+    },
+    "webkit": {
+      "id": 5141363439173632,
+      "browser": "Safari 26.6 (21624.4.5.11.5)",
+      "os": "macOS 26.6"
+    }
+  },
+  "tests": [
+    {"id":"background__body-propagation-008","blink":"pass","webkit":"pass"},
+    {"id":"background__paint-order","blink":"pass","webkit":"pass"},
+    {"id":"border__small-width","blink":"pass","webkit":"pass"},
+    {"id":"border__small-width-e","blink":"pass","webkit":"pass"},
+    {"id":"overflow__clip-margin","blink":"pass","webkit":"pass"},
+    {"id":"shadow__simple-offset","blink":"pass","webkit":"pass"},
+    {"id":"shadow__currentcolor","blink":"pass","webkit":"pass"},
+    {"id":"background__body-propagation","blink":"pass","webkit":"pass"},
+    {"id":"radius__zero-horizontal","blink":"pass","webkit":"pass"},
+    {"id":"radius__content-clip","blink":"pass","webkit":"pass"},
+    {"id":"radius__rounded-clip","blink":"pass","webkit":"pass"},
+    {"id":"transform__matrix-scale","blink":"pass","webkit":"pass"},
+    {"id":"transform__translate-x-relative","blink":"pass","webkit":"pass"},
+    {"id":"transform__translate-list","blink":"pass","webkit":"pass"},
+    {"id":"transform__overflow","blink":"pass","webkit":"pass"},
+    {"id":"transform__scale-half","blink":"pass","webkit":"pass"},
+    {"id":"transform__translate-x","blink":"pass","webkit":"pass"},
+    {"id":"transform__translate-y-list","blink":"pass","webkit":"pass"},
+    {"id":"transform__translate-reference","blink":"pass","webkit":"pass"},
+    {"id":"transform__translate-y","blink":"pass","webkit":"pass"},
+    {"id":"transform__scale-double","blink":"pass","webkit":"pass"},
+    {"id":"stacking__transform-context","blink":"pass","webkit":"pass"},
+    {"id":"opacity__root","blink":"pass","webkit":"fail"},
+    {"id":"background__clip-text-transform","blink":"pass","webkit":"pass"}
+  ]
+}

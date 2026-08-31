@@ -188,6 +188,22 @@ measurement, box materialization, and physical-axis placement remain in their
 own modules. This keeps both solvers pure and testable without leaking DOM,
 computed-style, text-provider, paint, or GPUI types across the seam.
 
+### 4g. Paint policy builds a bounded display list before rasterization
+
+`amazing-paint::display_list` is the only paint stage that traverses the layout
+tree. It flattens box decorations/content, stacking phases, overflow clips,
+and effect-group boundaries into a provider-neutral command stream. Nested
+stacking contexts are atomic; rasterization never reconstructs z-order from
+DOM/layout state.
+
+Opacity and 2D transforms render into transparent software layers and
+source-over composite at group end. Rounded overflow clips are masks scoped to
+their command range. Command count, layout depth, all raster-group depth
+(including rounded masks), and simultaneously allocated layer pixels have
+independent hard limits; limit failure produces a closed white frame rather
+than partial unbounded work. GPUI receives only the final pixel surface and
+remains outside every engine core.
+
 ### 5. unsafe policy
 
 No first-party `unsafe` outside platform-boundary modules (windowing FFI,

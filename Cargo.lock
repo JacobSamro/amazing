@@ -123,9 +123,6 @@ dependencies = [
 [[package]]
 name = "amazing-js"
 version = "0.0.1"
-dependencies = [
- "amazing-common",
-]
 
 [[package]]
 name = "amazing-layout"

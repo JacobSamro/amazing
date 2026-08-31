@@ -2,10 +2,8 @@
 //! [`amazing_layout::LayoutBox`] tree in, an RGBA8 [`surface::Surface`]
 //! (or `.ppm`/`.bmp` file bytes) out.
 //!
-//! Pipeline: layout tree → painter's-algorithm traversal
-//! ([`paint::paint_document`]) → background fills, solid border strips and
-//! text (rect-ink bars or real outline rasters, see [`text`]) onto one
-//! opaque canvas, everything clipped to the viewport.
+//! Pipeline: layout tree → bounded provider-neutral display list → software
+//! layer rasterization/compositing ([`paint::paint_document`]) → RGBA surface.
 //!
 //! # Implemented
 //!
@@ -21,6 +19,10 @@
 //!   children; flex children like block children
 //! - decoded replaced images from an [`paint::ImageProvider`], scaled with
 //!   clipped nearest-neighbor sampling and source-over RGBA compositing
+//! - stacking-phase ordering, atomic nested contexts, full-subtree opacity,
+//!   2D affine transforms, rectangular/rounded overflow clips, rounded
+//!   backgrounds/borders, background-clip geometry, zero-blur shadows, and
+//!   bounded transparent effect layers
 //! - provider-neutral shaped text consumes layout's exact font/glyph ids,
 //!   advances, offsets, colors, and inline decoration geometry, with bounded
 //!   alpha/RGBA glyph images supplied through `amazing-text`
@@ -36,12 +38,14 @@
 //!
 //! - Outline text has no hinting and flattens curves at a fixed 4
 //!   subdivisions per segment; coverage is 16-level box supersampling.
-//! - all border styles render solid; no radius/shadows/markers/opacity/
-//!   stacking contexts; legacy word painting still uses the containing box's
-//!   color while the shaped path retains per-inline color/background
+//! - border styles other than `double` render solid; blurred/multiple shadows,
+//!   3D transforms, blend modes, filters, outlines, and list markers remain
+//!   deferred; legacy word painting still uses the containing box's color
+//!   while the shaped path retains per-inline color/background
 //! - the canvas starts opaque white; transparent backgrounds skip filling
 
 pub mod color;
+mod display_list;
 pub mod paint;
 pub mod surface;
 pub mod text;
@@ -52,6 +56,4 @@ pub use paint::{
     paint_document_with_text_resources, ImageProvider, NoImages,
 };
 pub use surface::Surface;
-pub use text::{
-    draw_fragment, GlyphBitmap, GlyphProvider, OutlineGlyphProvider, RectInkProvider,
-};
+pub use text::{draw_fragment, GlyphBitmap, GlyphProvider, OutlineGlyphProvider, RectInkProvider};
