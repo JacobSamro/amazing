@@ -37,13 +37,23 @@ sparse 641-file checkout. The full pinned checkout has **53,872** discovered
 |-----------:|-----:|-----:|--------:|-----:|
 | 53,872 | 5,438 | 23,165 | 7 | 25,262 |
 
-Worse, `scripts/test262.py` is **not a conformant Test262 runner**: it skips
-25,262 files, omits `includes` for 9,296 eligible files, ignores 274
-`onlyStrict` flags, omits strict variants, and weakens `SameValue`/`throws`.
-So even 5,438 is not an ECMA-262 compliance figure — it is a process-exit count
-from a lenient harness. Making the runner conformant is a prerequisite before
-any Test262 percentage may be quoted. Evidence:
-`docs/lanes/js-lang_TODO.md`.
+**Resolved.** The runner was not conformant — it skipped 25,262 files, omitted
+`includes` for 9,296, ignored 274 `onlyStrict` flags, dropped strict variants
+and weakened `SameValue`/`throws`. JS-3 fixed it: full frontmatter, harness
+includes, strict and non-strict variants run separately, `negative` checked for
+phase and error type, and a recorded reason for every skip.
+
+The honest baseline, over all 53,872 files and **102,918 variants**, measured
+twice with zero classification differences:
+
+| Pass | Fail | Timeout | Unsupported | Fixtures |
+|-----:|-----:|--------:|------------:|---------:|
+| **10,314** | 33,292 | 16 | 9,956 | 294 |
+
+Note the direction: the honest figure is roughly **double** the lenient
+runner's 5,438, because that runner was skipping tests that actually pass. The
+prediction here — that a stricter ruler would lower the number — was wrong.
+Evidence: `docs/lanes/js-lang_TODO.md`.
 
 **HTML geometry "38 pass / 23 mismatch" — does not reproduce.** An unchanged
 renderer measured **32 pass / 29 mismatch** twice at WPT revision
