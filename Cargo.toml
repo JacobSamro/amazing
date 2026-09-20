@@ -8,6 +8,7 @@ members = [
     "crates/amazing-layout",
     "crates/amazing-js",
     "crates/amazing-media",
+    "crates/amazing-fetch",
     "crates/amazing-net",
     "crates/amazing-net-tls",
     "crates/amazing-paint",

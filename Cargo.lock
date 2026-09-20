@@ -113,6 +113,13 @@ name = "amazing-dom"
 version = "0.0.1"
 
 [[package]]
+name = "amazing-fetch"
+version = "0.0.1"
+dependencies = [
+ "amazing-net",
+]
+
+[[package]]
 name = "amazing-html"
 version = "0.0.1"
 dependencies = [

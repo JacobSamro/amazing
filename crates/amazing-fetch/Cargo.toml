@@ -1,0 +1,10 @@
+[package]
+name = "amazing-fetch"
+description = "Fetch standard request/response model, redirects, and CORS over the std-only HTTP core"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+amazing-net = { path = "../amazing-net" }
