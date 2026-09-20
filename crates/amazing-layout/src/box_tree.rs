@@ -995,7 +995,7 @@ fn classify_children(
                 | NodeKind::Document => {}
                 NodeKind::Element { .. } => {
                     let child_style = styled.get(child).cloned().unwrap_or_default();
-                    if is_display_none(&child_style) {
+                    if is_display_none(&child_style) || crate::replaced::hidden(dom, child) {
                         continue;
                     }
                     if is_out_of_flow(&child_style) {
@@ -1047,7 +1047,7 @@ fn classify_children(
             | NodeKind::Document => {}
             NodeKind::Element { .. } => {
                 let child_style = styled.get(child).cloned().unwrap_or_default();
-                if is_display_none(&child_style) {
+                if is_display_none(&child_style) || crate::replaced::hidden(dom, child) {
                     continue; // no box, no descendants
                 }
                 if is_out_of_flow(&child_style) {
@@ -1063,6 +1063,13 @@ fn classify_children(
                     _ if is_ruby_container(dom, styled, child) => {
                         inlines.push(ruby_inline(dom, styled, child, font_size));
                     },
+                    _ if crate::replaced::inline_atomic(dom, child, &child_style) => {
+                        if let Some(item) =
+                            crate::replaced::construct(dom, child, &child_style, font_size, replaced)
+                        {
+                            inlines.push(item);
+                        }
+                    }
                     _ if matches!(
                         parse_display(&child_style),
                         Display::Block | Display::Flex | Display::Grid
@@ -1073,11 +1080,6 @@ fn classify_children(
                         blocks.push(build_element(
                             dom, styled, child, font_size, fonts, replaced,
                         ));
-                    }
-                    Some("img") => {
-                        if let Some(size) = replaced.intrinsic_size(child) {
-                            inlines.push(InlineNode::Replaced { node: child, size });
-                        }
                     }
                     _ => {
                         let child_font_size = values::resolve_font_size(
@@ -1215,7 +1217,7 @@ fn flatten_inline(
             | NodeKind::Document => {}
             NodeKind::Element { .. } => {
                 let cs = styled.get(child).cloned().unwrap_or_default();
-                if is_display_none(&cs) {
+                if is_display_none(&cs) || crate::replaced::hidden(dom, child) {
                     continue;
                 }
                 if is_out_of_flow(&cs) {
@@ -1234,6 +1236,13 @@ fn flatten_inline(
                     _ if is_ruby_container(dom, styled, child) => {
                         inlines.push(ruby_inline(dom, styled, child, font_size));
                     },
+                    _ if crate::replaced::inline_atomic(dom, child, &cs) => {
+                        if let Some(item) =
+                            crate::replaced::construct(dom, child, &cs, font_size, replaced)
+                        {
+                            inlines.push(item);
+                        }
+                    }
                     _ if matches!(
                         parse_display(&cs),
                         Display::Block | Display::Flex | Display::Grid
@@ -1249,11 +1258,6 @@ fn flatten_inline(
                             fonts,
                             replaced,
                         ));
-                    }
-                    Some("img") => {
-                        if let Some(size) = replaced.intrinsic_size(child) {
-                            inlines.push(InlineNode::Replaced { node: child, size });
-                        }
                     }
                     _ => {
                         let child_font_size = values::resolve_font_size(

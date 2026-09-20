@@ -74,6 +74,10 @@ pub mod flex;
 mod flex_algorithm;
 #[cfg(test)]
 mod float_tests;
+#[cfg(test)]
+mod inline_replaced_tests;
+
+pub mod replaced;
 mod floats;
 pub mod font;
 pub mod grid;
@@ -94,8 +98,10 @@ pub struct IntrinsicSize {
     pub height: f32,
 }
 
-/// Seam through which layout learns replaced-element dimensions without
-/// depending on fetchers, decoders, or platform code.
+/// Seam through which layout learns NATURAL content dimensions without
+/// depending on fetchers, decoders, or platform code. Never return dimensions
+/// adjusted by HTML width/height attributes, CSS sizes, padding or borders;
+/// layout owns used-size resolution and needs the original image aspect ratio.
 pub trait ReplacedElementProvider {
     fn intrinsic_size(&self, node: NodeIdx) -> Option<IntrinsicSize>;
 }
@@ -149,6 +155,8 @@ pub struct LayoutBox {
     pub positioned: Vec<LayoutBox>,
     /// Intrinsic dimensions when this box itself is replaced content.
     pub replaced_size: Option<IntrinsicSize>,
+    /// Definite containing-block height, distinct from content-derived height.
+    pub(crate) containing_block_height: Option<f32>,
 
     // --- box model, resolved at layout time ---
     pub margin: values::SidesM,
@@ -182,6 +190,7 @@ impl LayoutBox {
             flow: Flow::Empty,
             positioned: Vec::new(),
             replaced_size: None,
+            containing_block_height: None,
             margin: values::SidesM::default(),
             padding: values::Sides::default(),
             border: values::Sides::default(),
@@ -272,8 +281,12 @@ pub enum InlineNode {
     },
     /// `<br>` — force a line break.
     Break,
-    /// Replaced inline content with dimensions resolved before layout.
-    Replaced { node: NodeIdx, size: IntrinsicSize },
+    /// Atomic inline content. `size` is the resolved outer size for fitting.
+    Replaced {
+        node: NodeIdx,
+        size: IntrinsicSize,
+        replaced: Box<replaced::InlineReplaced>,
+    },
 }
 
 /// One laid-out line of an inline formatting context.
@@ -331,7 +344,8 @@ pub struct GlyphFrag {
     pub color: String,
 }
 
-/// One positioned replaced element in an inline formatting context.
+/// Content rectangle of one positioned replaced inline. Decoration geometry
+/// and computed style are available through `LayoutBox::styled_replaced_fragments`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ReplacedFrag {
     pub node: NodeIdx,

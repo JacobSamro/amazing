@@ -30,6 +30,7 @@ pub fn layout_root_in_viewport(
     viewport_height: Option<f32>,
     fonts: &FontSource,
 ) -> f32 {
+    root.containing_block_height = viewport_height;
     // Margins are applied inside layout_block — no pre-offset here.
     layout_block(root, 0.0, 0.0, viewport_width, fonts);
     let page_height = root.border_box.y + root.border_box.h + root.margin.bottom.unwrap_or(0.0);
@@ -50,6 +51,7 @@ pub(crate) fn layout_root_with_text(
     height: Option<f32>,
     text: &dyn amazing_text::TextSystem,
 ) {
+    root.containing_block_height = height;
     let fonts = FontSource::fallback();
     layout_block_in_context(
         root,
@@ -241,11 +243,20 @@ fn layout_block_in_context(
     let content_x = border_x + bl + pl;
     let content_y = border_y + bt + pt(b);
 
+    let def_h = specified_height(b, font_px);
+    let inline_basis = def_h.map(|h| {
+        constrain_height(
+            h,
+            size_constraint(b, "min-height", font_px).unwrap_or(0.0),
+            size_constraint(b, "max-height", font_px),
+        )
+    });
     // Anonymous blocks inherit the host strut, including an explicit zero
     // line-height. They must not revert to normal after a float splits text.
     match &mut b.flow {
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for c in children.iter_mut() {
+                c.containing_block_height = inline_basis;
                 if c.node.is_none() {
                     c.line_height = b.line_height;
                     if let Some(value) = b.style.get("line-height") {
@@ -261,7 +272,6 @@ fn layout_block_in_context(
     }
 
     // --- children ------------------------------------------------------
-    let def_h = specified_height(b, font_px);
     let mut content = match &mut b.flow {
         Flow::Flex(children) => StackResult {
             content_end: crate::flex::layout_flex(
@@ -281,6 +291,15 @@ fn layout_block_in_context(
             children, content_x, content_y, content_w, ctx, fonts, floats, text,
         ),
         Flow::Inlines(items) => {
+            crate::replaced::resolve(
+                items,
+                content_w,
+                if b.node.is_none() {
+                    b.containing_block_height
+                } else {
+                    inline_basis
+                },
+            );
             let lh = b.line_height;
             let strut = crate::inline::Strut::new(fonts, b.font_size, lh);
             let lines = crate::inline::layout_lines_with_floats(
@@ -390,13 +409,13 @@ fn pb(b: &LayoutBox) -> f32 {
 }
 
 /// Specified `height` in px, or None (auto). Percentages need the
-/// containing block's height — unavailable in this pass — so they stay auto.
+/// containing block's definite height; content-derived heights stay auto.
 fn specified_height(b: &LayoutBox, font_px: f32) -> Option<f32> {
     let v = b.style.get("height")?;
-    if v.trim_end().ends_with('%') {
+    if v.trim_end().ends_with('%') && b.containing_block_height.is_none() {
         return None;
     }
-    match MaybeLen::parse(v, font_px, 0.0) {
+    match MaybeLen::parse(v, font_px, b.containing_block_height.unwrap_or(0.0)) {
         Some(MaybeLen::Px(h)) => Some(h),
         _ => None,
     }
@@ -404,10 +423,12 @@ fn specified_height(b: &LayoutBox, font_px: f32) -> Option<f32> {
 
 fn size_constraint(b: &LayoutBox, property: &str, font_px: f32) -> Option<f32> {
     let value = b.style.get(property)?.trim();
-    if value.eq_ignore_ascii_case("none") || value.ends_with('%') {
+    if value.eq_ignore_ascii_case("none")
+        || (value.ends_with('%') && b.containing_block_height.is_none())
+    {
         return None;
     }
-    match MaybeLen::parse(value, font_px, 0.0) {
+    match MaybeLen::parse(value, font_px, b.containing_block_height.unwrap_or(0.0)) {
         Some(MaybeLen::Px(size)) => Some(size.max(0.0)),
         _ => None,
     }

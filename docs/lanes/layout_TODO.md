@@ -198,14 +198,62 @@ predate LAYOUT-1. Their causes have not been bisected in this ticket.
   remain outside this prototype's supported slice.
 - Do not equate the raw reftest pass count with complete CSS float conformance.
 
-## LAYOUT-2 — Atomic inline form controls (queued; do not start)
+## LAYOUT-2 — Atomic inline replaced boxes (in progress)
 
-Integrator queued this after the replaced-content lane found that both inline
-replaced-element branches in `box_tree.rs` recognize only `img`, discarding
-form controls before paint.
+### Contract and ownership decisions
 
-Construct atomic inline boxes for text inputs, checkboxes, radio buttons,
-buttons and selects. Provide intrinsic sizing and styled replaced-fragment
-metadata through the existing
-`ReplacedElementProvider::intrinsic_size(NodeIdx) -> Option<IntrinsicSize>`
-seam. Begin only after LAYOUT-1 finishes and the integrator assigns LAYOUT-2.
+`ReplacedElementProvider::intrinsic_size(NodeIdx)` returns **natural content
+width and height only**. Neither HTML width/height attributes nor CSS used
+sizes, borders or padding may be applied by the provider. Layout needs the
+original image ratio when resolving an auto axis. The integrator explicitly
+approved this contract during LAYOUT-2 and owns driver/shell migration.
+`PageMedia` at the `26c64de` baseline violates it by returning
+HTML-attribute-adjusted `used_size`; RC/shell providers can also return
+CSS-adjusted `ImageSize`. These are integration violations, not alternate
+contracts or a reason to infer natural dimensions from already-sized values.
+
+The integrator approved the additive `LayoutBox::styled_replaced_fragments()`
+view: control identity, computed style, content and border rectangles, resolved
+padding/border/margin edges and computed font size. Existing `ReplacedFrag`
+rectangles remain **content rectangles**. Consumers recurse through normal and
+positioned children. Paint/control-adapter adoption is routed by the integrator
+to replaced-content after merge. Layout does not copy checked/value/selected/
+disabled state and does not import a platform control implementation.
+
+### Implementation
+
+Both direct and nested inline construction retain inputs (including text-like
+variants, checkbox and radio), buttons, selects and textareas as atomic boxes.
+Their descendants do not leak into surrounding text. Hidden and display:none
+controls are omitted. Explicit inline-block replaced elements stay in inline
+flow. Blockified/floating boxes retain the existing block path.
+
+`replaced.rs` owns natural-size fallback, CSS used-size resolution, and the
+paint-facing view. Control defaults are deterministic engine policy, not claims
+of platform-native sizing: text input 20 × 0.6em by 1.2em, checkbox/radio 13px
+square, button/select 5em by 1.5em, textarea 20 × 0.6em by 2 × 1.2em.
+Positive size/cols/rows attributes override the default character/row counts
+(capped at 10,000); an existing provider overrides natural defaults. Control
+preferred dimensions do not create an image aspect ratio.
+
+Width percentages and all padding/margin percentages use the full containing
+block content width, not an inline wrapper or a float-shortened line. Height
+percentages require a definite containing-block height; auto content heights
+and min-height alone are not a basis. Natural image ratios, one-auto-axis
+sizes, min/max constraints, explicit zero, and border-box sizing are resolved
+before fitting. The CSS2.2 both-auto min/max rules preserve ratio except where
+opposing constraints force distortion.
+
+Both text paths fit and reorder the outer atomic extent, including its edges,
+then convert final fragments to content rectangles. The additive view exposes
+already-resolved decoration geometry, so paint does not redo layout. Repeated
+layout resolves from the retained natural dimensions and style each time.
+
+Sizing reference: [CSS2.2 used dimensions and min/max rules](https://www.w3.org/TR/CSS22/visudet.html).
+
+### Validation
+
+Pending Windows unit and pinned WPT before/after runs. Results preceding the
+integrator's all-tree refresh were explicitly invalidated and are excluded.
+The refreshed baseline is `origin/dev` `26c64de`; changed lane files are
+re-synced after the refresh. No local build/test execution.

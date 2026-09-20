@@ -103,7 +103,7 @@ pub(crate) fn tokenize(items: &[InlineNode]) -> Vec<Token> {
                     pending_space = false;
                 }
             }
-            InlineNode::Replaced { node, size } => {
+            InlineNode::Replaced { node, size, .. } => {
                 tokens.push(Token::Replaced {
                     node: *node,
                     size: *size,
@@ -259,6 +259,7 @@ pub(crate) fn layout_lines_with_floats(
     }
     flush(&mut lines, &mut words, &mut replaced, &mut cx);
 
+    crate::replaced::finish_lines(&mut lines, items);
     lines
 }
 
@@ -754,6 +755,7 @@ pub(crate) fn layout_lines_shaped(
         false,
         &mut cursor,
     );
+    crate::replaced::finish_lines(&mut lines, items);
     Some(lines)
 }
 
@@ -1625,7 +1627,7 @@ fn shape_chunk(
                 previous_after = ShapingBoundary::Hard;
                 continue;
             }
-            InlineNode::Replaced { node, size } => {
+            InlineNode::Replaced { node, size, .. } => {
                 let (_, style) = previous_style
                     .clone()
                     .or_else(|| following_styles[item_index].clone())
