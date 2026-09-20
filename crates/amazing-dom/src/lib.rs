@@ -14,9 +14,10 @@
 #![forbid(unsafe_code)]
 
 pub mod events;
+pub mod event_loop;
 pub mod mutation;
 mod namespace;
-pub use namespace::NamespaceId;
+pub use namespace::{AttributeRef, NamespaceId};
 pub mod range;
 pub mod traversal;
 mod tree;
@@ -71,7 +72,7 @@ pub enum NodeKind {
 #[derive(Debug)]
 pub struct Node {
     owner_document: NodeIdx,
-    namespaced_attributes: Vec<(String, String, String)>,
+    namespaced_attributes: Vec<namespace::NamespacedAttribute>,
     character_data_units: Option<Vec<u16>>,
     prefix: Option<String>,
     pub kind: NodeKind,

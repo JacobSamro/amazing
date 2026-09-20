@@ -1,4 +1,4 @@
-# DOM bindings decision map — DOM-1
+# DOM bindings decision map
 
 ## Scope and decisions
 
@@ -540,3 +540,235 @@ HTML follow-ups for qualified attribute prefixes and a parser-only expanded-name
 constructor (e.g. valid XML element `xmlns`) are recorded by that owning lane
 for a later assigned scope; create_element_ns retains DOM API validation.
 DOM-3 is complete and stopped at its review boundary.
+
+## DOM-4 — driver-stepped event loop (in progress)
+
+Ticket branch: `lane/dom-bindings-dom4` only. Based on current dev after corrected
+DOM-3 namespace merge c8c8264. DOM-3 sibling branches are not part of DOM-4.
+
+Implementation is `amazing_dom::event_loop`, std-only and independent of JS:
+
+- `EventLoop` owns task queues by `TaskSource`, a separate FIFO microtask queue,
+  timer state and animation callback maps. Source selection is deterministic
+  round-robin; each queue selects its oldest runnable task, bypassing inactive
+  globals rather than allowing them to block active documents.
+- The driver supplies monotonic `Duration` with `advance_to`, registers globals,
+  and updates activity/renderability at the corresponding clock transition.
+  Timer-active time excludes inactive document/suspended worker intervals.
+- All callback payloads remain rooted in the host behind `CallbackId(u64)`.
+  `step()` yields owned `Step { id, action }`; the host may enqueue/cancel work
+  while executing it and must `complete(id)` once, including after reporting a
+  callback exception. Reentrant stepping and stale completions are rejected.
+- Task callbacks and each rAF callback lead into a guarded microtask checkpoint.
+  It drains newly queued microtasks, then yields `CheckpointCleanup` for rejected
+  promises, transaction cleanup and ClearKeptObjects. Nested checkpoint requests
+  are no-ops. Mutation-observer notification is a microtask: enqueue its opaque
+  token at the original queueing point, not after all Promise jobs have drained.
+- `set_timer(global, callback, i32 delay_ms, repeat)` returns an opaque `TimerId`.
+  Bindings own WebIDL conversion, callback this/arguments, string compilation and
+  security checks. Negative delay becomes zero; nesting beyond five clamps to
+  4ms. Interval initialization runs after the callback checkpoint, honors
+  cancellation from its microtasks, and does not replay missed ticks. Timer IDs
+  never reuse; clearing a timer invalidates an already queued task too.
+- `request_animation_frame` is separate from timers. Driver rendering
+  opportunities enqueue/coalesce a Rendering-source task. Renderability is
+  rechecked at execution. Pre/post-animation render actions are embedding hooks;
+  layout, resize/scroll delivery, observer phases, painting and document ordering
+  are driver responsibilities. The core snapshots callbacks after pre-render
+  cleanup, removes each before invocation, checkpoints between callbacks, honors
+  in-frame cancellation, and defers callbacks registered by an rAF callback.
+  The driver supplies the frame timestamp relative to the target global's origin.
+
+Reference algorithms reviewed 2026-09-21:
+[HTML event loops](https://html.spec.whatwg.org/multipage/webappapis.html#event-loops),
+[timers](https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#timers),
+[animation callbacks](https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html#animation-frames).
+Current HTML uses a rendering task source; rAF is not a 16ms timer shim.
+Nested event-loop spinning, worker lifetime/idle callbacks, and the rendering
+subsystems themselves are not implemented by this core.
+
+Fresh Windows iteration on base 3d0c2b0: 133 DOM tests passed / 0 failed
+(114 existing plus 19 focused event-loop tests). Formatted only on win-001.
+The core is not wired to JS yet. JS/driver integration is routed via questions.md:
+Interpreter currently owns Instant-based timer/rAF and private Promise jobs, and
+WPT driver calls pump_timers/drain_microtasks. A native scheduler alone cannot
+move the pinned baseline. Current before-measurement is running with that
+unchanged driver; upstream known-pass/known-fail proof verified twice so far.
+No DOM-4 WPT result or completion claim yet.
+
+### JS scheduler integration contract (routed after JS-3)
+
+The driver owns EventLoop and payload roots. The JS crate must expose a host mode
+with these semantics (names are suggestions; behavior is the contract):
+
+1. Enable external scheduling before any page code. `run_script` and
+   `dispatch_dom_event` in this mode execute their requested script/event only;
+   they must not call `drain_jobs`/`drain_microtasks`/`pump_timers` implicitly.
+2. Emit ordered host scheduling requests at enqueue time: ScheduleTimer with a
+   stable host registration ID, owned handler/arguments, converted delay and
+   repeat flag; CancelTimer; Request/CancelAnimationFrame; and QueueMicrotask.
+   Promise jobs and queueMicrotask callbacks must share this same emission order.
+   Do not expose an "all pending promises" batch drain as the only operation.
+3. Each microtask request carries a unique rooted owned job/token. Expose
+   `invoke_one_job(token)` to run exactly that job, and
+   `invoke_one_callback(callback, this_value, arguments)` to run exactly that
+   callback. **Neither may auto-drain another private queue**, on success or
+   throw. Newly generated jobs/requests remain observable in enqueue order for
+   the driver to append to the shared FIFO before completing the current step.
+4. Synchronous native DOM hooks must notify the adapter at the original mutation
+   observer enqueue point, interleaved with Promise and queueMicrotask requests.
+   Polling mutation_pending only after returning from script loses this order.
+   Existing native DOM checkpoint/delivery seams remain the notification payload.
+5. The adapter maps JS-visible timer/rAF IDs to opaque core TimerId/AnimationFrameId,
+   retains callback/argument roots through cancellation/execution, supplies Window
+   receiver and rAF timestamp, catches/reports callback errors, then completes the
+   scheduler StepId. A thrown callback must not abandon the checkpoint or prevent
+   later callbacks. Expired/cancelled registrations release host roots safely.
+6. A CheckpointCleanup action invokes rejected-promise reporting, transaction
+   cleanup and ClearKeptObjects hooks without recursively draining jobs. Driver
+   clock updates and rendering opportunities remain embedding responsibilities.
+
+Contract tests for JS/driver owners: timer A queues Promise P and microtask Q,
+then timer B observes P/Q already run; P queues R behind Q; callback A cancels B
+that was already due; rAF A queues P which cancels rAF B; invoking one job with
+another already pending leaves that other job untouched; throwing A still permits
+B after the mandatory checkpoint. Native core already tests the scheduling side.
+Legacy standalone Interpreter behavior may remain behind its default mode; host
+mode must opt out of implicit drains explicitly, without changing Test262's
+intentional standalone execution convention.
+
+For host-triggered multi-listener dispatch and rendering hooks, the driver may
+call `checkpoint_after_callback(enclosing_step_id)` when the JS stack becomes
+empty between callbacks. Retain the enclosing task continuation, drain yielded
+microtasks and cleanup until `pending_step()` equals that original ID, then
+resume it. The scheduler restores the original task/frame continuation and timer
+nesting without selecting another task. Recursive checkpoint requests are no-ops.
+This is callback cleanup within a task, not nested event-loop spinning.
+
+### DOM-4 scope amendment — XML parser seams
+
+Integrator routed two additional html-lane requests to DOM-4:
+
+- `create_element_expanded(parent, namespace_uri, prefix, local_name)` and
+  detached `create_element_expanded_in(document, ...)` accept parser-validated
+  expanded names. Caller enforces XML QName grammar, namespace resolution and
+  reserved-name constraints. The DOM still checks tree insertion/document
+  ownership. This admits an unprefixed XML element named xmlns without weakening
+  `create_element_ns`, which retains DOM API validation.
+- `set_attribute_qualified_ns(node, namespace_uri, qualified_name, value)` does
+  DOM attribute-context validation. Parser primitive `set_attribute_expanded`
+  accepts already-validated URI/prefix/local name. `attribute_ns(node, uri, local)`
+  returns AttributeRef { namespace_uri, prefix, local_name, value }, with
+  qualified_name(). Existing get_attribute_ns remains URI/local-name lookup.
+  Null namespace attributes do not inherit their element's default namespace.
+- Existing expanded-identity updates change the value and retain the original
+  prefix, following DOM's set-an-attribute-value algorithm. Remove then create
+  selects a new prefix. Mutation records still carry local name/namespace and
+  old value; clone/range clone/adoption preserve the prefix metadata.
+
+Five focused XML tests cover parser xmlns construction, ownership, qualified
+attribute identity/update/removal, validation, namespace declarations, mutation
+records and clone/adoption. Along with two additional callback-continuation
+checks, Windows native suite is now 140 passed / 0 failed (21 scheduler tests,
+5 new XML tests, 114 previously merged). Initial XML iteration had one test
+fixture failure: root construction had already queued a mutation checkpoint;
+the test now drains that setup checkpoint and observes invalid attribute edits
+independently. No implementation failure was hidden or credited as a pass.
+
+### DOM-4 before measurement (legacy driver queues)
+
+On base `3d0c2b0`, after artifact-invalidating own-tree refresh and 181 matching
+source/manifest hashes, the unchanged WPT driver measured pinned revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` twice. Known-pass/known-fail upstream
+proof passed twice first. This executable contains the native core but does not
+invoke it; it is **before integration**, not evidence of scheduler effectiveness.
+
+Both runs, 627 source files: 2 pass / 241 fail / 30 timeout / 221 error /
+133 unsupported; registered subtests 83 PASS / 2584 FAIL. Raw results are
+byte-identical both to each other and to DOM-1. Before-baseline shift is zero.
+No after result exists until the routed JS/driver adapter runs the scheduler.
+
+- Raw DOM JSONL SHA256: `3601e251023d0f34e0668c7e9b8d1b24df1fbca43391e0cff123ab51ee719f4c`.
+- Outcome SHA256: `327f8456d54edf7b306759439ffda04763a1f6c0ffc705ebdb7d8bc2cf0aa4d4`.
+- Executable SHA256: `907482bcd7e6abd85e4fb63e533d0641c7b55c9b3be999bf1a6358ff29e86be3`.
+- Proof SHA256: `fda888792ad20e12b69ab4909e69896b98916b170c7ecf259cd79854ebe404bd`.
+- Durable summary: `crates/amazing-dom/tests/wpt-dom4-before.json`; unchanged
+  raw baseline/proof/selection bytes are already committed with DOM-1 under
+  the driver's wpt_harness_results directory. Both new raw runs and the preserved
+  executable are in `.agents/dom-bindings/dom-4-before/` and Windows target's
+  `dom-4-before/`. Source parity and measurement logs are in lane scratch.
+
+
+### DOM-4 native-core/XML checkpoint gate
+
+Branch: **lane/dom-bindings-dom4 only**. Core/XML implementation `e6f8396`,
+rebased on `784dc59`. Own-tree refresh invalidated first-party artifacts and
+matched lock 23CEF873; source re-sync followed. All 183 source/manifest hashes
+matched Mac. Windows-only gates ran twice with stable canonical results:
+
+| Gate, each run | Passed | Failed | Ignored | Targets |
+|---|---:|---:|---:|---:|
+| amazing-dom | 140 | 0 | 0 | 2 |
+| Workspace | 1160 | 0 | 3 | 58 |
+
+- DOM SHA256: `076bd659b67d5d33647e4f3e32ff746107b3435a602132fecfa2e0ccce4d1657`.
+- Workspace SHA256: `da66d34339190626c91c089edb0e24a8d879b7d0313910dd2e42f25cc730b354`.
+
+Canonicalization is sorted test-name/status lines, UTF-8 with LF and a trailing
+LF; timing excluded. Native delta is 114 → 140 (+21 scheduler, +5 XML).
+Evidence: lane scratch `dom-4-checkpoint-results.json`,
+`dom-4-checkpoint-source-manifest.json`, `dom-4-checkpoint-gate.log`, and
+`dom-4-checkpoint/` raw logs, mirrored under the Windows lane target.
+
+This is a validated implementation checkpoint, **not DOM-4 completion**. The
+integrator routed JS external scheduling after JS-3 and driver adoption to
+integrator-assist. Their contract is above. Once those seams are ready, integrate
+through their owners, rebase/refresh/re-sync, repeat gates and measure the pinned
+WPT after baseline twice. Report its actual delta, including zero/regressions.
+
+
+## Authorized DOM-4 core/XML delivery
+
+The integrator explicitly split delivery from the remaining integration gate.
+Merge **lane/dom-bindings-dom4-core only** for this delivery. It packages the
+existing core and both XML seams as one reviewable commit, superseding the
+equivalent multi-commit lane/dom-bindings-dom4 history. Do not merge both branches.
+The original ab79ebc checkpoint is preserved in history.
+
+Native core/XML delivery is ready for review independently of JS scheduling.
+JavaScript queue adoption, driver wiring and the pinned WPT after measurement are
+explicitly deferred; neither the before baseline nor native tests claim them.
+The external scheduling contract (one owned job/callback, no hidden drains)
+remains above for the routed runtime/driver owners.
+
+HTML sink usage for the two independently requested seams:
+
+```rust
+// Parser has already checked XML names and namespace bindings.
+let node = dom.create_element_expanded(document, None, None, "xmlns")?;
+dom.set_attribute_expanded(node, Some("urn:p"), Some("p"), "a", "value")?;
+assert_eq!(dom.get_attribute_ns(node, Some("urn:p"), "a"), Some("value"));
+assert_eq!(dom.attribute_ns(node, Some("urn:p"), "a").unwrap().qualified_name(), "p:a");
+```
+
+`create_element_expanded_in` is the detached counterpart. The DOM API entry
+points `create_element_ns` and `set_attribute_qualified_ns` keep their validation;
+the parser primitives deliberately accept already-validated expanded names.
+The example's unprefixed element xmlns is valid XML and is not treated as a DOM
+API namespace error. Five focused XML tests cover these behaviors.
+
+Fresh native-delivery gate on base `bb79669`, measured code `2f2328d`: own-tree
+refresh with artifact invalidation, lock E4D68B10 matched, source re-sync and
+190 matching source/manifest hashes. Windows DOM **140 passed / 0 failed**,
+twice; workspace **1210 passed / 0 failed / 3 ignored** across 59 targets, twice.
+Repeat hashes match:
+
+- DOM: `076bd659b67d5d33647e4f3e32ff746107b3435a602132fecfa2e0ccce4d1657`.
+- Workspace: `08d1e52cb0a2ea7664a5e71fcbb566d1ddc5bf67bb7f0acb36d8681e730ef7c4`.
+
+Logs/manifest/results: lane scratch `dom-4-core/`, `dom-4-core-gate.log`,
+`dom-4-core-source-manifest.json`, `dom-4-core-results.json`, mirrored under
+Windows lane target. Native implementation is unchanged from the checkpoint;
+the higher workspace count reflects newer sibling code in the integration base.
+The authorized core/XML delivery is complete and ready for integrator merge.
+The broader DOM-4 JS/WPT integration gate remains deferred and unclaimed.

@@ -12,6 +12,31 @@ const MATHML: &str = "http://www.w3.org/1998/Math/MathML";
 const XML: &str = "http://www.w3.org/XML/1998/namespace";
 const XMLNS: &str = "http://www.w3.org/2000/xmlns/";
 
+#[derive(Clone, Debug)]
+pub(crate) struct NamespacedAttribute {
+    pub(crate) namespace: String,
+    pub(crate) local_name: String,
+    pub(crate) prefix: Option<String>,
+    pub(crate) value: String,
+}
+
+/// Borrowed expanded attribute identity. No Attr node or separate arena handle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AttributeRef<'a> {
+    pub namespace_uri: Option<&'a str>,
+    pub prefix: Option<&'a str>,
+    pub local_name: &'a str,
+    pub value: &'a str,
+}
+impl AttributeRef<'_> {
+    pub fn qualified_name(&self) -> String {
+        match self.prefix {
+            Some(prefix) => format!("{prefix}:{}", self.local_name),
+            None => self.local_name.to_owned(),
+        }
+    }
+}
+
 impl Dom {
     /// Creates and appends an element with an explicit namespace URI.
     /// Empty URI means null; name case and prefix are preserved. Name/namespace
@@ -43,7 +68,42 @@ impl Dom {
             return Err(DomError::NotSupportedError);
         }
         let uri = namespace_uri.filter(|uri| !uri.is_empty());
-        let (prefix, local_name) = validate_and_extract(uri, qualified_name)?;
+        let (prefix, local_name) = validate_and_extract(uri, qualified_name, false)?;
+        self.create_element_expanded_in(document, uri, prefix, local_name)
+    }
+
+    /// Parser primitive: append an element from already-validated expanded names.
+    /// The caller owns XML QName grammar, prefix binding/reserved-name checks and
+    /// namespace resolution. Deliberately does not impose DOM createElementNS
+    /// validation: an unprefixed XML element named xmlns is valid here.
+    /// Checked tree insertion and document ownership still apply.
+    pub fn create_element_expanded(
+        &mut self,
+        parent: NodeIdx,
+        namespace_uri: Option<&str>,
+        prefix: Option<&str>,
+        local_name: &str,
+    ) -> Result<NodeIdx, DomError> {
+        self.check_node(parent)?;
+        let document = self.owner_document(parent).unwrap_or(parent);
+        let node = self.create_element_expanded_in(document, namespace_uri, prefix, local_name)?;
+        self.pre_insert(node, parent, None)?;
+        Ok(node)
+    }
+
+    /// Detached parser counterpart. The same expanded-name preconditions apply.
+    pub fn create_element_expanded_in(
+        &mut self,
+        document: NodeIdx,
+        namespace_uri: Option<&str>,
+        prefix: Option<&str>,
+        local_name: &str,
+    ) -> Result<NodeIdx, DomError> {
+        self.check_node(document)?;
+        if !matches!(self.get(document).kind, NodeKind::Document) {
+            return Err(DomError::NotSupportedError);
+        }
+        let uri = namespace_uri.filter(|uri| !uri.is_empty());
         let namespace = match uri {
             None => Namespace::Null,
             Some(HTML) => Namespace::Html,
@@ -71,6 +131,89 @@ impl Dom {
         )?;
         self.nodes[node.0 as usize].prefix = prefix.map(str::to_owned);
         Ok(node)
+    }
+
+    /// DOM API qualified-name seam; keeps get_attribute_ns keyed by URI/local name.
+    /// Updating an existing expanded attribute changes its value, preserving its
+    /// existing prefix, as required by DOM's set-an-attribute-value algorithm.
+    pub fn set_attribute_qualified_ns(
+        &mut self,
+        node: NodeIdx,
+        namespace_uri: Option<&str>,
+        qualified_name: &str,
+        value: &str,
+    ) -> Result<(), DomError> {
+        let uri = namespace_uri.filter(|uri| !uri.is_empty());
+        let (prefix, local_name) = validate_and_extract(uri, qualified_name, true)?;
+        self.set_attribute_expanded(node, uri, prefix, local_name, value)
+    }
+
+    /// Parser/value-setting primitive for already-validated expanded attributes.
+    /// Parser owns QName, reserved namespace, and duplicate-expanded-name checks.
+    /// Existing attribute identity/prefix is retained when replacing its value.
+    pub fn set_attribute_expanded(
+        &mut self,
+        node: NodeIdx,
+        namespace_uri: Option<&str>,
+        prefix: Option<&str>,
+        local_name: &str,
+        value: &str,
+    ) -> Result<(), DomError> {
+        self.check_node(node)?;
+        if !matches!(self.get(node).kind, NodeKind::Element { .. }) {
+            return Err(DomError::NotSupportedError);
+        }
+        let uri = namespace_uri.filter(|uri| !uri.is_empty());
+        // The parser must not pass a prefix with a null namespace.
+        if prefix.is_some() && uri.is_none() {
+            return Err(DomError::NamespaceError);
+        }
+        let exists = self.get_attribute_ns(node, uri, local_name).is_some();
+        self.set_attribute_ns(node, uri, local_name, value)?;
+        if !exists {
+            if let Some(uri) = uri {
+                let attr = self.nodes[node.0 as usize]
+                    .namespaced_attributes
+                    .iter_mut()
+                    .find(|attr| attr.namespace == uri && attr.local_name == local_name)
+                    .unwrap();
+                attr.prefix = prefix.map(str::to_owned);
+            }
+        }
+        Ok(())
+    }
+
+    /// Lookup by expanded identity; null namespace never inherits from its element.
+    pub fn attribute_ns(
+        &self,
+        node: NodeIdx,
+        namespace_uri: Option<&str>,
+        local_name: &str,
+    ) -> Option<AttributeRef<'_>> {
+        if let Some(uri) = namespace_uri.filter(|uri| !uri.is_empty()) {
+            let attr = self
+                .get(node)
+                .namespaced_attributes
+                .iter()
+                .find(|attr| attr.namespace == uri && attr.local_name == local_name)?;
+            Some(AttributeRef {
+                namespace_uri: Some(&attr.namespace),
+                prefix: attr.prefix.as_deref(),
+                local_name: &attr.local_name,
+                value: &attr.value,
+            })
+        } else {
+            let (local_name, value) = self
+                .attrs_of(node)?
+                .iter()
+                .find(|(local, _)| local == local_name)?;
+            Some(AttributeRef {
+                namespace_uri: None,
+                prefix: None,
+                local_name,
+                value,
+            })
+        }
     }
 
     /// URI of an element namespace. Null namespaces and non-elements return None;
@@ -125,6 +268,7 @@ fn valid_element_local_name(name: &str) -> bool {
 fn validate_and_extract<'a>(
     uri: Option<&str>,
     qualified_name: &'a str,
+    attribute: bool,
 ) -> Result<(Option<&'a str>, &'a str), DomError> {
     let (prefix, local) = match qualified_name.split_once(':') {
         Some((prefix, local)) => {
@@ -135,7 +279,12 @@ fn validate_and_extract<'a>(
         }
         None => (None, qualified_name),
     };
-    if !valid_element_local_name(local) {
+    let valid = if attribute {
+        !local.is_empty() && !local.chars().any(|c| forbidden(c) || c == '=')
+    } else {
+        valid_element_local_name(local)
+    };
+    if !valid {
         return Err(DomError::InvalidCharacterError);
     }
     if (prefix.is_some() && uri.is_none())

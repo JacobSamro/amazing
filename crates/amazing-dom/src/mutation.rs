@@ -305,13 +305,18 @@ impl Dom {
             .map(str::to_owned);
         if let Some(ns) = namespace {
             let attrs = &mut self.nodes[node.0 as usize].namespaced_attributes;
-            if let Some((_, _, current)) = attrs
+            if let Some(current) = attrs
                 .iter_mut()
-                .find(|(n, local, _)| n == ns && local == name)
+                .find(|attr| attr.namespace == ns && attr.local_name == name)
             {
-                *current = value.into();
+                current.value = value.into();
             } else {
-                attrs.push((ns.into(), name.into(), value.into()));
+                attrs.push(crate::namespace::NamespacedAttribute {
+                    namespace: ns.into(),
+                    local_name: name.into(),
+                    prefix: None,
+                    value: value.into(),
+                });
             }
         } else if let NodeKind::Element { attrs, .. } = &mut self.nodes[node.0 as usize].kind {
             if let Some((_, current)) = attrs.iter_mut().find(|(local, _)| local == name) {
@@ -341,8 +346,8 @@ impl Dom {
             self.get(node)
                 .namespaced_attributes
                 .iter()
-                .find(|(n, local, _)| n == ns && local == name)
-                .map(|(_, _, value)| value.as_str())
+                .find(|attr| attr.namespace == ns && attr.local_name == name)
+                .map(|attr| attr.value.as_str())
         } else {
             self.attrs_of(node)?
                 .iter()
@@ -373,7 +378,7 @@ impl Dom {
         if let Some(ns) = namespace {
             self.nodes[node.0 as usize]
                 .namespaced_attributes
-                .retain(|(n, local, _)| n != ns || local != name);
+                .retain(|attr| attr.namespace != ns || attr.local_name != name);
         } else if let NodeKind::Element { attrs, .. } = &mut self.nodes[node.0 as usize].kind {
             attrs.retain(|(local, _)| local != name);
         }
