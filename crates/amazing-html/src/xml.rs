@@ -285,15 +285,17 @@ pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclar
                 }
                 resolved.push(XmlAttribute { name, value });
             }
-            let node = p.dom_result(dom.create_element_ns(
+            let node = p.dom_result(dom.create_element_expanded(
                 parent,
                 name.namespace_uri.as_deref(),
-                &name.qualified,
+                split_name(&name.qualified).0,
+                &name.local,
             ))?;
             for attr in resolved {
-                p.dom_result(dom.set_attribute_ns(
+                p.dom_result(dom.set_attribute_expanded(
                     node,
                     attr.name.namespace_uri.as_deref(),
+                    split_name(&attr.name.qualified).0,
                     &attr.name.local,
                     &attr.value,
                 ))?;

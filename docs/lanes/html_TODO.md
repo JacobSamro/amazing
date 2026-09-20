@@ -16,8 +16,10 @@
   Default namespaces never apply to unprefixed attributes. Duplicate expanded
   attribute names, reserved namespace bindings, and undeclared prefixes fail.
   HTML/SVG/MathML and null/arbitrary URIs use the DOM-owned namespace identity
-  through `create_element_ns`; local names and element prefixes are preserved.
-  Qualified attribute-prefix preservation remains a routed DOM follow-up.
+  through `create_element_expanded`; local names and element prefixes are
+  preserved. `set_attribute_expanded` also retains qualified attribute prefixes.
+  Parser validation precedes both DOM primitives, so unprefixed xmlns elements
+  are supported without imposing DOM API QName restrictions.
 - The temporary `XmlTreeSink` contract is retired. Parsing owns one real `Dom`
   and returns it only on success; no partial document escapes a fatal error.
   `parse_xml_with_declaration` additionally returns declaration metadata.
@@ -65,7 +67,7 @@ pending driver dispatch and harness routing; no measured improvement claimed.
 
 - [x] Fatal well-formedness/entity/CDATA/namespace tests on Windows.
 - [x] DOM-owned arbitrary/null element namespaces and prefix/local identity.
-- [ ] Qualified attribute-prefix preservation follow-up (URI/local lookup works).
+- [x] Qualified attribute-prefix preservation and parser-safe xmlns elements.
 - [ ] Driver XML dispatch and removal of WPT XML exclusions (owner changes).
 - [ ] Two stable cascade runs, before/after counts and hashes.
 - [ ] Fresh full workspace gate, no regressions.
@@ -101,3 +103,11 @@ Remaining routed work: qualified attribute-prefix preservation, parser-safe
 creation of a valid unprefixed XML element named xmlns, driver XML dispatch,
 and owner-operated render harness changes. **HTML-1 is incomplete** until
 these and final render/workspace gates land. No push/PR.
+
+## Expanded-name adoption
+
+Verified create_element_expanded, set_attribute_expanded and attribute_ns in
+origin/dev `74e3c50`, then rebased and adopted the actual APIs. No shim remains.
+Initial Windows gate: **84 unit / 0 failed / 0 ignored + 1 doctest**, including
+21 XML tests. Final repeat and workspace evidence are in progress. DOM requests
+are now resolved; driver dispatch / Git-free runner remain integration-owned.

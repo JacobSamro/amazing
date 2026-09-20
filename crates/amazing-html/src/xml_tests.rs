@@ -392,3 +392,57 @@ fn dom_retains_null_custom_and_prefixed_element_identity() {
     assert_eq!(dom.namespace_uri(children[1]), Some("urn:inner"));
     assert_eq!(dom.namespace(children[2]), Some(Namespace::Null));
 }
+
+#[test]
+fn qualified_attributes_retain_prefix_and_expanded_identity() {
+    let dom =
+        parse_xml("<r xmlns='urn:element' xmlns:p='urn:attr' p:a='one' a='two' xml:lang='en'/>")
+            .unwrap();
+    let root = elements(&dom)[0];
+    let prefixed = dom.attribute_ns(root, Some("urn:attr"), "a").unwrap();
+    assert_eq!(prefixed.namespace_uri, Some("urn:attr"));
+    assert_eq!(prefixed.prefix, Some("p"));
+    assert_eq!(prefixed.local_name, "a");
+    assert_eq!(prefixed.qualified_name(), "p:a");
+    assert_eq!(prefixed.value, "one");
+    let plain = dom.attribute_ns(root, None, "a").unwrap();
+    assert_eq!(plain.namespace_uri, None);
+    assert_eq!(plain.prefix, None);
+    assert_eq!(plain.qualified_name(), "a");
+    assert_eq!(plain.value, "two");
+    let binding = dom.attribute_ns(root, Some(XMLNS_NAMESPACE), "p").unwrap();
+    assert_eq!(binding.prefix, Some("xmlns"));
+    assert_eq!(binding.qualified_name(), "xmlns:p");
+    let default = dom
+        .attribute_ns(root, Some(XMLNS_NAMESPACE), "xmlns")
+        .unwrap();
+    assert_eq!(default.prefix, None);
+    assert_eq!(default.qualified_name(), "xmlns");
+    let lang = dom.attribute_ns(root, Some(XML_NAMESPACE), "lang").unwrap();
+    assert_eq!(lang.prefix, Some("xml"));
+    assert_eq!(lang.qualified_name(), "xml:lang");
+    assert_eq!(lang.value, "en");
+}
+
+#[test]
+fn xmlns_is_valid_as_an_element_local_name() {
+    for (source, uri, prefix, qualified) in [
+        ("<xmlns/>", None, None, "xmlns"),
+        ("<xmlns xmlns='urn:x'/>", Some("urn:x"), None, "xmlns"),
+        (
+            "<p:xmlns xmlns:p='urn:y'/>",
+            Some("urn:y"),
+            Some("p"),
+            "p:xmlns",
+        ),
+    ] {
+        let dom = parse_xml(source).unwrap();
+        let root = elements(&dom)[0];
+        assert_eq!(dom.local_name(root), Some("xmlns"));
+        assert_eq!(dom.namespace_uri(root), uri);
+        assert_eq!(dom.prefix(root), prefix);
+        assert_eq!(dom.qualified_name(root).as_deref(), Some(qualified));
+    }
+    malformed("<xmlns:r/>");
+    malformed("<r xmlns:xmlns='urn:bad'/>");
+}
