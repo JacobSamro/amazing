@@ -71,8 +71,9 @@ lane, base, branch = sys.argv[1], sys.argv[2], sys.argv[3]
 owned = tmuxctl.owned_paths(lane)
 core = tmuxctl.LANE_PATHS.get(lane, [])
 changed = subprocess.run(
-    ["git", "diff", "--name-only", f"{base}...{branch}"],
-    capture_output=True, text=True).stdout.split()
+    ["git", "diff", "--name-only", "-z", f"{base}...{branch}"],
+    capture_output=True, text=True).stdout.split("\0")
+changed = [path for path in changed if path]
 
 stray, grant_edits = [], []
 for p in changed:
