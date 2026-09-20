@@ -99,6 +99,7 @@ fn parse_display(style: &ComputedStyle) -> Display {
     match style.get("display") {
         Some(v)
             if v.eq_ignore_ascii_case("block")
+            || v.eq_ignore_ascii_case("flow-root")
             || v.eq_ignore_ascii_case("list-item")
             || v.eq_ignore_ascii_case("table")
             || v.eq_ignore_ascii_case("inline-block")
@@ -124,6 +125,7 @@ fn parse_display(style: &ComputedStyle) -> Display {
         Some(v) if v.eq_ignore_ascii_case("grid") || v.eq_ignore_ascii_case("inline-grid") => {
             Display::Grid
         }
+        _ if crate::floats::side(style).is_some() => Display::Block,
         _ => Display::Inline,
     }
 }

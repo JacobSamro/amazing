@@ -1,0 +1,155 @@
+{
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "baseline_executable_sha256": "c4c378513791e2d46071ac27e806a63da1eb4fe4c466b2675501a6f3b2096fc9",
+  "final_executable_sha256": "4f18246d7fade784742391e576de16eeafaee4be89a6108daf67649c21a577e7",
+  "retained_before_run": "C:\\Users\\server\\target\\layout\\evidence\\baseline-geometry\\run-20260920T163435252Z-11080",
+  "retained_after_run": "C:\\Users\\server\\target\\layout\\evidence\\release-1-geometry\\run-20260920T164653890Z-12060",
+  "classifications": [
+    {
+      "test": "css/CSS2/floats/float-nowrap-3.html",
+      "reference": "css/CSS2/floats/float-nowrap-3-ref.html",
+      "classification": "previously_inert_pass_exposure",
+      "current_raw_result": "mismatch",
+      "finding": "Baseline test/reference omit the float (zero blue pixels). Final test/reference both paint 2304 blue pixels; 781 differing pixels isolate the displaced trailing text. Baseline equality was inert; same-line inline continuation remains unsupported.",
+      "images": [
+        {
+          "stage": "before",
+          "kind": "actual",
+          "png": "float-nowrap-3-before-actual.png",
+          "retained_ppm_sha256": "bb6f926f8ccd93fbd426fb2ba026f1f4dd8a22fae2cefc5f68a45ede91fce25c",
+          "png_sha256": "aa8c163fc94f7f646c709238300f80e24c508ef502244eba06147f2be9864ebe"
+        },
+        {
+          "stage": "before",
+          "kind": "reference",
+          "png": "float-nowrap-3-before-reference.png",
+          "retained_ppm_sha256": "bb6f926f8ccd93fbd426fb2ba026f1f4dd8a22fae2cefc5f68a45ede91fce25c",
+          "png_sha256": "aa8c163fc94f7f646c709238300f80e24c508ef502244eba06147f2be9864ebe"
+        },
+        {
+          "stage": "before",
+          "kind": "diff",
+          "png": "float-nowrap-3-before-diff.png",
+          "retained_ppm_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+          "png_sha256": "f34bd453947b77be02bdbbb1033426aa7b8ac9655516df8b91a4eb9cdf76abdc"
+        },
+        {
+          "stage": "after",
+          "kind": "actual",
+          "png": "float-nowrap-3-after-actual.png",
+          "retained_ppm_sha256": "c2783bac09d30599c057a1c5f0a4b0b316782ff679c264527ad36b7d5d4aa78c",
+          "png_sha256": "38906e32773b6761b9235de61fb7bde3225e3861b89143528439cc7d9aba71be"
+        },
+        {
+          "stage": "after",
+          "kind": "reference",
+          "png": "float-nowrap-3-after-reference.png",
+          "retained_ppm_sha256": "1804f4cbb25b839391ee39be8c05a98b0a0c958f92c332e1e55e367b89f1d6db",
+          "png_sha256": "63ed311ee4d9f6ad03f769bf159700f9c366be9e851c31c75f6c754cd1583dcb"
+        },
+        {
+          "stage": "after",
+          "kind": "diff",
+          "png": "float-nowrap-3-after-diff.png",
+          "retained_ppm_sha256": "63ad4e24ddeab87828eb0f7b36ee43ea2b739eb492d9b527fd02ffb2479af546",
+          "png_sha256": "a4b745c42d39ebed9b9f935db198c4f2ce784ac0f8882bd6c2492105057edbdf"
+        }
+      ]
+    },
+    {
+      "test": "css/CSS2/floats/float-table-align-left-quirk.html",
+      "reference": "css/CSS2/floats/float-table-align-left-quirk-ref.html",
+      "classification": "previously_inert_pass_exposure",
+      "current_raw_result": "mismatch",
+      "finding": "Baseline ignores both CSS float and legacy align float semantics. Widening containers or disabling CSS float leaves its image unchanged. Replacing only align=\"left\" with style=\"float:left\" in a diagnostic copy makes the final renderer match the retained reference exactly, isolating the exposed missing presentational hint.",
+      "images": [
+        {
+          "stage": "before",
+          "kind": "actual",
+          "png": "float-table-align-left-quirk-before-actual.png",
+          "retained_ppm_sha256": "c7ba3123aba39ee1dec40df17c8b0e6240e5b3390d5695b15b407e7d92da7d0a",
+          "png_sha256": "e46c6a49fb1643eb1e79aa913bac03a71650d9a54ef258da951723ba3d0db981"
+        },
+        {
+          "stage": "before",
+          "kind": "reference",
+          "png": "float-table-align-left-quirk-before-reference.png",
+          "retained_ppm_sha256": "c7ba3123aba39ee1dec40df17c8b0e6240e5b3390d5695b15b407e7d92da7d0a",
+          "png_sha256": "e46c6a49fb1643eb1e79aa913bac03a71650d9a54ef258da951723ba3d0db981"
+        },
+        {
+          "stage": "before",
+          "kind": "diff",
+          "png": "float-table-align-left-quirk-before-diff.png",
+          "retained_ppm_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+          "png_sha256": "f34bd453947b77be02bdbbb1033426aa7b8ac9655516df8b91a4eb9cdf76abdc"
+        },
+        {
+          "stage": "after",
+          "kind": "actual",
+          "png": "float-table-align-left-quirk-after-actual.png",
+          "retained_ppm_sha256": "86db472a7e505d1e1ee4266a0e32c7bc04266d1ca2a321bfca464f14561bdb11",
+          "png_sha256": "1b410f185d779f8781f4ebb95aa157ecfe653b0fbf1823389545f572f99d1f9f"
+        },
+        {
+          "stage": "after",
+          "kind": "reference",
+          "png": "float-table-align-left-quirk-after-reference.png",
+          "retained_ppm_sha256": "c7ba3123aba39ee1dec40df17c8b0e6240e5b3390d5695b15b407e7d92da7d0a",
+          "png_sha256": "e46c6a49fb1643eb1e79aa913bac03a71650d9a54ef258da951723ba3d0db981"
+        },
+        {
+          "stage": "after",
+          "kind": "diff",
+          "png": "float-table-align-left-quirk-after-diff.png",
+          "retained_ppm_sha256": "31861c70bbabbea121c6247e65ba33bcd159c1c216ad2e342254fc613dd7f0cc",
+          "png_sha256": "8d854f64c78f47b5c54ca2fcd2250901b3ef92433dd2b6cf1b427a5b3bd6c76d"
+        }
+      ]
+    }
+  ],
+  "diagnostic_probes": [
+    {
+      "renderer": "baseline",
+      "probe": "table-wide-probe",
+      "ppm_sha256": "c7ba3123aba39ee1dec40df17c8b0e6240e5b3390d5695b15b407e7d92da7d0a"
+    },
+    {
+      "renderer": "baseline",
+      "probe": "table-no-css-float-probe",
+      "ppm_sha256": "c7ba3123aba39ee1dec40df17c8b0e6240e5b3390d5695b15b407e7d92da7d0a"
+    },
+    {
+      "renderer": "baseline",
+      "probe": "table-align-as-css-probe",
+      "ppm_sha256": "c7ba3123aba39ee1dec40df17c8b0e6240e5b3390d5695b15b407e7d92da7d0a"
+    },
+    {
+      "renderer": "layout1-final",
+      "probe": "table-wide-probe",
+      "ppm_sha256": "37727e10fd1cd17016affc81f03ba629b955050e064ad6560cc3c77a7e0149ca"
+    },
+    {
+      "renderer": "layout1-final",
+      "probe": "table-no-css-float-probe",
+      "ppm_sha256": "c7ba3123aba39ee1dec40df17c8b0e6240e5b3390d5695b15b407e7d92da7d0a"
+    },
+    {
+      "renderer": "layout1-final",
+      "probe": "table-align-as-css-probe",
+      "ppm_sha256": "c7ba3123aba39ee1dec40df17c8b0e6240e5b3390d5695b15b407e7d92da7d0a"
+    }
+  ],
+  "probe_assertions": {
+    "baseline_all_three_equal_original": true,
+    "final_no_css_float_equals_retained_reference": true,
+    "final_align_as_css_equals_retained_reference": true,
+    "reference_ppm_sha256": "c7ba3123aba39ee1dec40df17c8b0e6240e5b3390d5695b15b407e7d92da7d0a",
+    "upstream_results_reclassified": false,
+    "note": "Probe inputs are modified diagnostic copies, not upstream WPT results. All rendering ran on win-001; PNG conversion and viewing used retained PPM files."
+  }
+}

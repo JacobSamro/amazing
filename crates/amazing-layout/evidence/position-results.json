@@ -1,0 +1,278 @@
+{
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "manifest": "C:\\Users\\server\\src\\wt\\layout\\tests\\wpt-render\\position-manifest.json",
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "before": {
+    "pass": 9,
+    "mismatch": 3,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after": {
+    "pass": 9,
+    "mismatch": 3,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "before_runs": [
+    "C:\\Users\\server\\target\\layout\\evidence\\baseline-position\\run-20260920T163625275Z-11080"
+  ],
+  "after_runs": [
+    "C:\\Users\\server\\target\\layout\\evidence\\release-position\\run-20260920T164720374Z-16492"
+  ],
+  "before_projection_sha256": "4fe678b080d9f157b5fb1692c37331048a556478bc9785b2ddc1a0082bfb407a",
+  "after_projection_sha256": "4fe678b080d9f157b5fb1692c37331048a556478bc9785b2ddc1a0082bfb407a",
+  "repeat_stable": null,
+  "classification_changes": [],
+  "before_tests": [
+    {
+      "id": "css-position__position-absolute-large-negative-inset.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "89ee82b96756fd06ed26807d92d132d927b5c459650fd986be13d74ed36fffb5",
+      "reference_sha256": "89ee82b96756fd06ed26807d92d132d927b5c459650fd986be13d74ed36fffb5",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-absolute-root-element-flex.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "abd8fb1ab5ce3510f24a030001fd7d0a0265ae7ace79fef7c0e73916acc6d21b",
+      "reference_sha256": "abd8fb1ab5ce3510f24a030001fd7d0a0265ae7ace79fef7c0e73916acc6d21b",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-absolute-semi-replaced-stretch-button.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "4a451d8762db01819e1fdf52580f2021cda4c2079c244761081ac5938b114c59",
+      "reference_sha256": "4a451d8762db01819e1fdf52580f2021cda4c2079c244761081ac5938b114c59",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-fixed-overflow-print.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "reference_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-fixed-root-element-grid.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "abd8fb1ab5ce3510f24a030001fd7d0a0265ae7ace79fef7c0e73916acc6d21b",
+      "reference_sha256": "abd8fb1ab5ce3510f24a030001fd7d0a0265ae7ace79fef7c0e73916acc6d21b",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-relative-table-caption.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "52b5ea2bb9214535c70eeddd6ab8198c57086238abd0d9355b767d7ca4526ec6",
+      "reference_sha256": "52b5ea2bb9214535c70eeddd6ab8198c57086238abd0d9355b767d7ca4526ec6",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-relative-table-tfoot-left-absolute-child.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "faae7cd4e7648d422a84d2f9401f76aeb6af62ff81e6e2c65abd5ceca556df54",
+      "reference_sha256": "faae7cd4e7648d422a84d2f9401f76aeb6af62ff81e6e2c65abd5ceca556df54",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-relative-table-tfoot-top.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "differing_pixels": 5000,
+      "max_difference": 255,
+      "actual_sha256": "349b10fa8064157fdc9e7020c16de2a0310648941435a18160dc0009af2ff1af",
+      "reference_sha256": "a22b4d66d4f2203493c1dbf1fb33ea94924e104288beaf26aac8aa3dbbd24fb8",
+      "diff_sha256": "fe35717b1708d94869467066fdc855e8c87b83893b0b9246c98112c51af91c28"
+    },
+    {
+      "id": "css-position__position-relative-table-thead-left-absolute-child.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "faae7cd4e7648d422a84d2f9401f76aeb6af62ff81e6e2c65abd5ceca556df54",
+      "reference_sha256": "faae7cd4e7648d422a84d2f9401f76aeb6af62ff81e6e2c65abd5ceca556df54",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-relative-table-tr-left.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "differing_pixels": 5000,
+      "max_difference": 255,
+      "actual_sha256": "f50f65ca60b8fd4e3d78b0b20ba813431ff3b08791893c9629ca82fe707de2e1",
+      "reference_sha256": "faae7cd4e7648d422a84d2f9401f76aeb6af62ff81e6e2c65abd5ceca556df54",
+      "diff_sha256": "3e33854e9e5de4df91377dbc5792718e69dc3dbab667bdb4eec509df694d6c2c"
+    },
+    {
+      "id": "css-position__position-relative-table-tr-top.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "differing_pixels": 5000,
+      "max_difference": 255,
+      "actual_sha256": "3d4c732980d59357205e8c2409aff390c4486101c963d042723d480429cffb3e",
+      "reference_sha256": "52b5ea2bb9214535c70eeddd6ab8198c57086238abd0d9355b767d7ca4526ec6",
+      "diff_sha256": "9e2b764e8d830d0f325fe1ad6b9e66af4cd558445e1f683d600ed8332a23c1b9"
+    },
+    {
+      "id": "css-position__sticky__position-sticky-rtl.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "reference_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    }
+  ],
+  "after_tests": [
+    {
+      "id": "css-position__position-absolute-large-negative-inset.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "89ee82b96756fd06ed26807d92d132d927b5c459650fd986be13d74ed36fffb5",
+      "reference_sha256": "89ee82b96756fd06ed26807d92d132d927b5c459650fd986be13d74ed36fffb5",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-absolute-root-element-flex.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "abd8fb1ab5ce3510f24a030001fd7d0a0265ae7ace79fef7c0e73916acc6d21b",
+      "reference_sha256": "abd8fb1ab5ce3510f24a030001fd7d0a0265ae7ace79fef7c0e73916acc6d21b",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-absolute-semi-replaced-stretch-button.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "4a451d8762db01819e1fdf52580f2021cda4c2079c244761081ac5938b114c59",
+      "reference_sha256": "4a451d8762db01819e1fdf52580f2021cda4c2079c244761081ac5938b114c59",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-fixed-overflow-print.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "reference_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-fixed-root-element-grid.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "abd8fb1ab5ce3510f24a030001fd7d0a0265ae7ace79fef7c0e73916acc6d21b",
+      "reference_sha256": "abd8fb1ab5ce3510f24a030001fd7d0a0265ae7ace79fef7c0e73916acc6d21b",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-relative-table-caption.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "52b5ea2bb9214535c70eeddd6ab8198c57086238abd0d9355b767d7ca4526ec6",
+      "reference_sha256": "52b5ea2bb9214535c70eeddd6ab8198c57086238abd0d9355b767d7ca4526ec6",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-relative-table-tfoot-left-absolute-child.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "faae7cd4e7648d422a84d2f9401f76aeb6af62ff81e6e2c65abd5ceca556df54",
+      "reference_sha256": "faae7cd4e7648d422a84d2f9401f76aeb6af62ff81e6e2c65abd5ceca556df54",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-relative-table-tfoot-top.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "differing_pixels": 5000,
+      "max_difference": 255,
+      "actual_sha256": "349b10fa8064157fdc9e7020c16de2a0310648941435a18160dc0009af2ff1af",
+      "reference_sha256": "a22b4d66d4f2203493c1dbf1fb33ea94924e104288beaf26aac8aa3dbbd24fb8",
+      "diff_sha256": "fe35717b1708d94869467066fdc855e8c87b83893b0b9246c98112c51af91c28"
+    },
+    {
+      "id": "css-position__position-relative-table-thead-left-absolute-child.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "faae7cd4e7648d422a84d2f9401f76aeb6af62ff81e6e2c65abd5ceca556df54",
+      "reference_sha256": "faae7cd4e7648d422a84d2f9401f76aeb6af62ff81e6e2c65abd5ceca556df54",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "css-position__position-relative-table-tr-left.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "differing_pixels": 5000,
+      "max_difference": 255,
+      "actual_sha256": "f50f65ca60b8fd4e3d78b0b20ba813431ff3b08791893c9629ca82fe707de2e1",
+      "reference_sha256": "faae7cd4e7648d422a84d2f9401f76aeb6af62ff81e6e2c65abd5ceca556df54",
+      "diff_sha256": "3e33854e9e5de4df91377dbc5792718e69dc3dbab667bdb4eec509df694d6c2c"
+    },
+    {
+      "id": "css-position__position-relative-table-tr-top.html",
+      "classification": "mismatch",
+      "relation": "match",
+      "differing_pixels": 5000,
+      "max_difference": 255,
+      "actual_sha256": "3d4c732980d59357205e8c2409aff390c4486101c963d042723d480429cffb3e",
+      "reference_sha256": "52b5ea2bb9214535c70eeddd6ab8198c57086238abd0d9355b767d7ca4526ec6",
+      "diff_sha256": "9e2b764e8d830d0f325fe1ad6b9e66af4cd558445e1f683d600ed8332a23c1b9"
+    },
+    {
+      "id": "css-position__sticky__position-sticky-rtl.html",
+      "classification": "pass",
+      "relation": "match",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "reference_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    }
+  ]
+}

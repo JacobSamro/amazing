@@ -127,10 +127,27 @@ pub fn layout_lines(
     strut: &Strut,
     fonts: &FontSource,
 ) -> Vec<LineBox> {
+    layout_lines_with_floats(
+        items, content_x, content_y, content_width, strut, fonts,
+        &crate::floats::FloatContext::default(),
+    )
+}
+
+pub(crate) fn layout_lines_with_floats(
+    items: &[InlineNode],
+    content_x: f32,
+    content_y: f32,
+    content_width: f32,
+    strut: &Strut,
+    fonts: &FontSource,
+    floats: &crate::floats::FloatContext,
+) -> Vec<LineBox> {
     let tokens = tokenize(items);
 
     let half_leading = (strut.line_height - (strut.ascent + strut.descent)) / 2.0;
-    let right_edge = content_x + content_width;
+    let line_y = std::cell::Cell::new(content_y);
+    let line_left = std::cell::Cell::new(content_x);
+    let right_edge = std::cell::Cell::new(content_x + content_width);
 
     let mut lines: Vec<LineBox> = Vec::new();
     let mut words: Vec<WordFrag> = Vec::new();
@@ -149,7 +166,7 @@ pub fn layout_lines(
             .map(|image| image.height)
             .fold(0.0, f32::max);
         let height = strut.line_height.max(image_height);
-        let y_top = content_y + lines.iter().map(|line| line.height).sum::<f32>();
+        let y_top = line_y.get();
         let text_baseline = y_top + half_leading + strut.ascent;
         let baseline = text_baseline.max(y_top + image_height);
         for image in replaced.iter_mut() {
@@ -164,9 +181,20 @@ pub fn layout_lines(
             decorations: Vec::new(),
             replaced: std::mem::take(replaced),
         });
-        *cx = content_x;
+        line_y.set(y_top + height);
+        let (left, right) = floats.band(content_x, content_width, line_y.get(), strut.line_height);
+        line_left.set(left);
+        right_edge.set(right);
+        *cx = left;
     };
 
+    let prepare = |cx: &mut f32, needed: f32, height: f32| {
+        let (left, right, y) = floats.fit(content_x, content_width, line_y.get(), height, needed);
+        line_y.set(y);
+        line_left.set(left);
+        right_edge.set(right);
+        *cx = left;
+    };
     for token in tokens {
         let has_content = !words.is_empty() || !replaced.is_empty();
         match token {
@@ -178,15 +206,19 @@ pub fn layout_lines(
                 space_before,
             } => {
                 let word_w = fonts.measure(&text, font_size);
+                if !has_content {
+                    prepare(&mut cx, word_w, strut.line_height);
+                }
                 let space_w = if has_content && space_before {
                     fonts.measure(" ", font_size)
                 } else {
                     0.0
                 };
-                if has_content && cx + space_w + word_w > right_edge + FIT_TOLERANCE_PX {
+                if has_content && cx + space_w + word_w > right_edge.get() + FIT_TOLERANCE_PX {
                     flush(&mut lines, &mut words, &mut replaced, &mut cx);
+                    prepare(&mut cx, word_w, strut.line_height);
                 }
-                let wx = cx + if cx > content_x { space_w } else { 0.0 };
+                let wx = cx + if cx > line_left.get() { space_w } else { 0.0 };
                 words.push(WordFrag {
                     node,
                     text,
@@ -201,15 +233,19 @@ pub fn layout_lines(
                 size,
                 space_before,
             } => {
+                if !has_content {
+                    prepare(&mut cx, size.width, strut.line_height.max(size.height));
+                }
                 let space_w = if has_content && space_before {
                     fonts.measure(" ", strut.font_size)
                 } else {
                     0.0
                 };
-                if has_content && cx + space_w + size.width > right_edge + FIT_TOLERANCE_PX {
+                if has_content && cx + space_w + size.width > right_edge.get() + FIT_TOLERANCE_PX {
                     flush(&mut lines, &mut words, &mut replaced, &mut cx);
+                    prepare(&mut cx, size.width, strut.line_height.max(size.height));
                 }
-                let x = cx + if cx > content_x { space_w } else { 0.0 };
+                let x = cx + if cx > line_left.get() { space_w } else { 0.0 };
                 replaced.push(ReplacedFrag {
                     node,
                     x,
@@ -329,6 +365,7 @@ pub(crate) fn layout_lines_shaped(
     strut: &Strut,
     base_direction: amazing_text::Direction,
     text_system: &dyn TextSystem,
+    floats: &crate::floats::FloatContext,
 ) -> Option<Vec<LineBox>> {
     let InlineContainingBlock {
         x: content_x,
@@ -358,7 +395,8 @@ pub(crate) fn layout_lines_shaped(
     } else {
         content_width
     };
-    let inline_end = inline_start + inline_size;
+    let inline_end = std::cell::Cell::new(inline_start + inline_size);
+    let line_y = std::cell::Cell::new(content_y);
     let mut lines = Vec::new();
     let mut words = Vec::new();
     let mut glyphs = Vec::new();
@@ -395,7 +433,7 @@ pub(crate) fn layout_lines_shaped(
         let y_top = if vertical_flow {
             content_y
         } else {
-            content_y + lines.iter().map(|line| line.height).sum::<f32>()
+            line_y.get()
         };
         let text_baseline = y_top + half_leading + strut.ascent + *ruby_line_over;
         let baseline = text_baseline.max(y_top + image_height);
@@ -458,9 +496,22 @@ pub(crate) fn layout_lines_shaped(
             replaced: std::mem::take(replaced),
         });
         *ruby_line_over = 0.0;
-        *cursor = inline_start;
+        line_y.set(y_top + height);
+        *cursor = if vertical_flow { inline_start } else {
+            let (left, right) = floats.band(content_x, content_width, line_y.get(), strut.line_height);
+            inline_end.set(right);
+            left
+        };
     };
 
+    let prepare = |cursor: &mut f32, needed: f32, height: f32| {
+        if !vertical_flow {
+            let (left, right, y) = floats.fit(content_x, content_width, line_y.get(), height, needed);
+            *cursor = left;
+            inline_end.set(right);
+            line_y.set(y);
+        }
+    };
     for unit in units {
         let has_content = !words.is_empty() || !replaced.is_empty();
         match unit {
@@ -481,6 +532,9 @@ pub(crate) fn layout_lines_shaped(
                 may_break_after = true;
             }
             ShapedUnit::Word(mut word) => {
+                if !has_content {
+                    prepare(&mut cursor, word.width, strut.line_height);
+                }
                 let mut spacing = if has_content || word.preserve_space_before {
                     word.space_before
                 } else {
@@ -493,7 +547,7 @@ pub(crate) fn layout_lines_shaped(
                 };
                 if has_content
                     && may_break_after
-                    && cursor + spacing + word.width + break_width > inline_end + FIT_TOLERANCE_PX
+                    && cursor + spacing + word.width + break_width > inline_end.get() + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -508,6 +562,7 @@ pub(crate) fn layout_lines_shaped(
                         false,
                         &mut cursor,
                     );
+                    prepare(&mut cursor, word.width, strut.line_height);
                     if !word.preserve_space_before {
                         spacing = 0.0;
                     }
@@ -551,7 +606,7 @@ pub(crate) fn layout_lines_shaped(
                 });
                 cursor = x + word.width;
                 may_break_after = !word.hyphen_after
-                    || cursor + word.hyphen_advance <= inline_end + FIT_TOLERANCE_PX;
+                    || cursor + word.hyphen_advance <= inline_end.get() + FIT_TOLERANCE_PX;
             }
             ShapedUnit::Replaced {
                 node,
@@ -559,9 +614,12 @@ pub(crate) fn layout_lines_shaped(
                 range,
                 context,
             } => {
+                if !has_content {
+                    prepare(&mut cursor, size.width, strut.line_height.max(size.height));
+                }
                 if has_content
                     && may_break_after
-                    && cursor + size.width > inline_end + FIT_TOLERANCE_PX
+                    && cursor + size.width > inline_end.get() + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -576,6 +634,7 @@ pub(crate) fn layout_lines_shaped(
                         false,
                         &mut cursor,
                     );
+                    prepare(&mut cursor, size.width, strut.line_height.max(size.height));
                 }
                 replaced.push(ReplacedFrag {
                     node,
@@ -595,9 +654,12 @@ pub(crate) fn layout_lines_shaped(
                 may_break_after = true;
             }
             ShapedUnit::Ruby(mut ruby) => {
+                if !has_content {
+                    prepare(&mut cursor, ruby.width, strut.line_height + ruby.line_over);
+                }
                 if has_content
                     && may_break_after
-                    && cursor + ruby.width > inline_end + FIT_TOLERANCE_PX
+                    && cursor + ruby.width > inline_end.get() + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -612,6 +674,7 @@ pub(crate) fn layout_lines_shaped(
                         false,
                         &mut cursor,
                     );
+                    prepare(&mut cursor, ruby.width, strut.line_height + ruby.line_over);
                 }
                 for glyph in &mut ruby.glyphs {
                     if glyph.writing_mode.is_vertical_flow() {
@@ -637,9 +700,12 @@ pub(crate) fn layout_lines_shaped(
                 range,
                 context,
             } => {
+                if !has_content {
+                    prepare(&mut cursor, combined.width, strut.line_height);
+                }
                 if has_content
                     && may_break_after
-                    && cursor + combined.width > inline_end + FIT_TOLERANCE_PX
+                    && cursor + combined.width > inline_end.get() + FIT_TOLERANCE_PX
                 {
                     flush(
                         &mut lines,
@@ -654,6 +720,7 @@ pub(crate) fn layout_lines_shaped(
                         false,
                         &mut cursor,
                     );
+                    prepare(&mut cursor, combined.width, strut.line_height);
                 }
                 placed_text.push(PlacedText {
                     context,
