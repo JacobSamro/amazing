@@ -4,7 +4,8 @@ Run builds and tests only on win-001, in the HTML lane tree with
 `CARGO_TARGET_DIR=C:\Users\server\target\html`.
 
 ```powershell
-cargo test -p amazing-html --locked
+cargo nextest run -p amazing-html --locked
+cargo test -p amazing-html --locked --doc
 cargo build -p amazing-html --example xml_parse --locked
 C:\Users\server\target\html\debug\examples\xml_parse.exe tests\wpt-html\xhtml-smoke.xhtml
 C:\Users\server\target\html\debug\examples\xml_parse.exe tests\wpt-html\xhtml-fatal.xhtml
@@ -35,3 +36,10 @@ with no spaces, over the original report (before repeat/provenance metadata is a
 2 unsupported** out of 14 distinct XML documents. Two color tests require
 external-DTD entities, which this ticket deliberately does not load. This
 parser-only selection is separate from the 72-case cascade render gate.
+
+Latest source gate: `868d296`, based on `11dd8a8`. HTML nextest results
+repeated identically: 84 passed / 0 failed / 0 skipped; the separately run
+HTML doctest passed twice. Full workspace nextest: 1229 passed / 0 failed /
+3 skipped; separate workspace doctests: 2 passed / 0 failed / 0 ignored
+(HTML and JS). See unit-results.json and workspace-results.json. None of these
+counts establishes a cascade render improvement.
