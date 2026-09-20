@@ -18,10 +18,17 @@ pub(super) fn paint(
         .get("appearance")
         .or_else(|| b.style.get("-webkit-appearance"));
     let native = !appearance.is_some_and(|v| v.eq_ignore_ascii_case("none"));
-    let author_background = resolve_color(&b.style, "background-color", color)
-        .is_some_and(|c| c[3] != 0)
+    let author_background = ["background-color", "background-image"]
+        .iter()
+        .any(|p| b.style.is_author_specified(p))
+        || resolve_color(&b.style, "background-color", color).is_some_and(|c| c[3] != 0)
         || control.background.layers.iter().any(|l| l.url.is_some());
-    let author_border = [b.border.top, b.border.right, b.border.bottom, b.border.left]
+    let author_border = ["top", "right", "bottom", "left"].iter().any(|side| {
+        ["width", "style", "color"].iter().any(|part| {
+            b.style
+                .is_author_specified(&format!("border-{side}-{part}"))
+        })
+    }) || [b.border.top, b.border.right, b.border.bottom, b.border.left]
         .iter()
         .any(|v| *v > 0.0);
     paint_box_shadow(surface, b, color, clip);

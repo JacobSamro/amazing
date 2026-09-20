@@ -1,9 +1,14 @@
 //! Explicit static SVG image subset, not a general SVG/DOM implementation.
 //! Strict XML subset; rectangles, circles and ellipses with presentation fills.
-//! No scripts, CSS, references, paths, text, transforms, strokes or animation.
+//! No scripts, CSS, references, paths, text, strokes or animation.
+//! Bounded attribute transforms on groups and shapes are supported.
 use crate::{DecodeError, DecodeLimits};
 use amazing_media::Image;
 use std::collections::BTreeMap;
+
+#[path = "svg_transform.rs"]
+mod transform;
+use transform::Matrix;
 
 type Attrs = BTreeMap<String, String>;
 const MAX_SHAPES: usize = 1024;
@@ -31,6 +36,7 @@ enum Shape {
     Ellipse(f64, f64, f64, f64),
 }
 struct Item {
+    inverse: Option<Matrix>,
     shape: Shape,
     color: [u8; 4],
 }
@@ -110,10 +116,14 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> 
         return Err(DecodeError::GeometryLimit);
     }
     for item in scene.items {
+        let Some(inverse) = item.inverse else {
+            continue;
+        };
         for y in 0..scene.height {
             for x in 0..scene.width {
                 let px = (x as f64 + 0.5 - ox) / sx + vx;
                 let py = (y as f64 + 0.5 - oy) / sy + vy;
+                let (px, py) = inverse.point(px, py);
                 let inside = match item.shape {
                     Shape::Rect(rx, ry, w, h) => px >= rx && px < rx + w && py >= ry && py < ry + h,
                     Shape::Ellipse(cx, cy, rx, ry) => {
@@ -148,7 +158,7 @@ fn blend(dest: &mut [u8], source: [u8; 4]) {
 }
 fn parse(mut text: &str) -> Result<Scene, DecodeError> {
     let mut scene = None;
-    let mut stack: Vec<(String, Style)> = Vec::new();
+    let mut stack: Vec<(String, Style, Matrix)> = Vec::new();
     let mut elements = 0;
     while !text.trim().is_empty() {
         text = text.trim_start();
@@ -169,7 +179,7 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
         let tag = &text[1..end];
         text = &text[end + 1..];
         if let Some(close) = tag.strip_prefix('/') {
-            if stack.pop().is_none_or(|(name, _)| name != close.trim()) {
+            if stack.pop().is_none_or(|(name, _, _)| name != close.trim()) {
                 return Err(DecodeError::InvalidImage);
             }
             continue;
@@ -181,9 +191,17 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
         if elements > MAX_SHAPES || stack.len() >= 32 {
             return Err(DecodeError::AllocationLimit);
         }
-        let inherited = stack.last().map(|(_, s)| *s).unwrap_or_default();
+        let inherited = stack.last().map(|(_, s, _)| *s).unwrap_or_default();
         let style = style(&attrs, inherited)?;
+        let parent_matrix = stack.last().map(|(_, _, m)| *m).unwrap_or(Matrix::IDENTITY);
+        let local_matrix = attrs
+            .get("transform")
+            .map_or(Ok(Matrix::IDENTITY), |v| transform::parse(v))?;
+        let matrix = parent_matrix.then(local_matrix)?;
         if scene.is_none() {
+            if attrs.contains_key("transform") {
+                return Err(DecodeError::UnsupportedSvg);
+            }
             if name != "svg"
                 || attrs.get("xmlns").map(String::as_str) != Some("http://www.w3.org/2000/svg")
             {
@@ -241,7 +259,7 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
         } else {
             if !stack
                 .last()
-                .is_some_and(|(name, _)| matches!(name.as_str(), "svg" | "g"))
+                .is_some_and(|(name, _, _)| matches!(name.as_str(), "svg" | "g"))
             {
                 return Err(DecodeError::InvalidImage);
             }
@@ -298,11 +316,15 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
                 };
                 let opacity = scalar_value(&attrs, "opacity", 1.0)?.clamp(0.0, 1.0);
                 color[3] = (color[3] as f64 * style.fill_opacity * opacity).round() as u8;
-                scene.as_mut().unwrap().items.push(Item { shape, color });
+                scene.as_mut().unwrap().items.push(Item {
+                    shape,
+                    color,
+                    inverse: matrix.inverse()?,
+                });
             }
         }
         if !self_closed {
-            stack.push((name, style));
+            stack.push((name, style, matrix));
         }
     }
     if !stack.is_empty() {
@@ -365,7 +387,15 @@ fn style(a: &Attrs, mut parent: Style) -> Result<Style, DecodeError> {
 }
 fn check_attrs(a: &Attrs, extra: &[&str]) -> Result<(), DecodeError> {
     for key in a.keys() {
-        if !["id", "fill", "color", "fill-opacity", "opacity"].contains(&key.as_str())
+        if ![
+            "id",
+            "fill",
+            "color",
+            "fill-opacity",
+            "opacity",
+            "transform",
+        ]
+        .contains(&key.as_str())
             && !extra.contains(&key.as_str())
         {
             return Err(DecodeError::UnsupportedSvg);
