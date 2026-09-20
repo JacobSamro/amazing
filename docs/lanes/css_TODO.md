@@ -442,7 +442,8 @@ winner defaults as unset without reviving earlier candidates. Token boundaries
 remain intact: var(--n)px cannot manufacture a dimension. CSS-wide values work
 before and after substitution, including origin/layer rollback. Expanded
 longhands retain source order, importance, specificity and layer metadata.
-Existing border shorthand behavior is unchanged by this ticket.
+Ordinary non-variable border grammar is unchanged; the CSS-4 follow-up below
+corrects whole-border CSS-wide and deferred-var expansion.
 
 ### Additive consumer surface
 
@@ -562,6 +563,44 @@ folder per selection. All authored files remain below 4,000 lines; largest
 changed source is computed.rs at 3,170. CSS-4 is complete; stop here.
 
 
+### CSS-4 follow-up — whole-border rollback provenance
+
+Downstream replaced-content reproduced `button{background:revert;border:revert}`
+with background and border colors unmarked, but border widths/styles incorrectly
+author-specified. The legacy whole-border parser treated the CSS-wide token as
+color and emitted literal medium/none values for the other components. Those
+were genuine author candidates from the API's perspective; provenance storage
+and layout propagation were not the cause.
+
+An eight-line guard now expands whole-border CSS-wide and var-bearing values
+through the existing side-border helper for all twelve longhands. This covers
+initial/inherit/unset/revert/revert-layer before and after substitution, and
+keeps ordinary non-variable border parsing unchanged. Four public-compute
+regressions compare a button's shorthand against explicit longhands, exercise
+all CSS-wide defaults/inheritance, restore every component from a lower author
+layer, and test valid/invalid deferred whole-border values. This extends the
+original side-border coverage to the legacy whole-border path that had been
+left out of CSS-4's initial scope.
+
+Measured after rebase/self-refresh to **784dc59**, lock **23CEF873**, on win-001:
+
+- Red command: `cargo test -p amazing-css --test author_provenance whole_border_rollback_matches_explicit_longhands_for_control_chrome --locked`.
+  **1 failed**: `revert: border-top-width incorrectly suppresses control chrome`.
+- Corrected CSS suite: **156 passed / 0 failed**, including the four additions.
+- Full locked workspace: **1,138 passed / 0 failed / 3 ignored**, 58 targets.
+- All **180** Rust/manifest/lock input hashes matched the Mac after the tests.
+- Runnable regression artifact: `C:/Users/server/target/css/css4-rollback-author-tests.exe`,
+  SHA256 `1407ca6664f9026f4355845f337b4a5d48387fc1b54c59d1c3c874a2ea65cf07`. Run with
+  `whole_border_rollback_matches_explicit_longhands_for_control_chrome --exact`.
+- Logs and proofs: `.agents/css/css4-rollback-{red,green,workspace}.log`,
+  `css4-rollback-source.json`, `css4-rollback-source-proof.txt`, and
+  `css4-rollback-artifact-proof.txt`; server copies in the CSS target directory.
+
+No layout/paint/driver files changed and no debug instrumentation was added.
+The original 32 rendering runs above precede this follow-up; they were not rerun
+and are not claimed as post-fix evidence. This focused follow-up proves the
+canonical CSS API regression and the refreshed full workspace.
+
 ## CSS-5 — background shorthand and stylesheet URL provenance (queued)
 
 User originally queued this during CSS-2; **do not start without a new brief**. Replaced-content has implemented background longhands in paint.
@@ -579,3 +618,20 @@ preserves sheet identity and scope roots, not URL bases. Font discovery still
 uses joined source text and the page URL; the render command's extra CSS string
 also retains its existing combined ownerless input. Coordinate those caller
 seams with the integrator before claiming relative-resource conformance.
+
+
+## Queued CSS ticket — HTML width/height presentational hints
+
+Routed by integrator-assist after correcting the intrinsic_size contract.
+Width/height attributes were accidentally applied as intrinsic dimensions by
+the old driver adapter; that behavior has correctly been removed. CSS currently
+omits the corresponding presentational hints. Implement low-priority HTML
+width/height hints in CSS, with applicable-element/value parsing rules and
+ordinary author CSS overriding them. Keep author-declaration provenance distinct
+from these hints, as it already is for dir. The existing StyledDom and
+ReplacedElementProvider boundaries suffice; do not restore the driver workaround.
+
+This needs a separate integrator brief/ticket number and focused sizing/cascade
+coverage. It is recorded only: no width/height implementation is part of the
+CSS-4 border rollback follow-up. CSS-5 background shorthand remains separately
+queued pending shell stylesheet provenance.
