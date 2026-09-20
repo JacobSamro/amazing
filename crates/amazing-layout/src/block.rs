@@ -12,6 +12,7 @@
 //! parent's border edge. Separation by padding/border/BFC disables the adjustment,
 //! matching §8.3.1.
 
+use crate::floats::{self, FloatContext};
 use crate::font::FontSource;
 use crate::values::{self, MaybeLen};
 use crate::{Flow, LayoutBox, Rect};
@@ -39,6 +40,36 @@ pub fn layout_root_in_viewport(
         fonts,
     );
     page_height
+}
+
+/// Float-bearing documents shape lines during block placement so downstream
+/// clearance and auto heights observe the actual provider metrics.
+pub(crate) fn layout_root_with_text(
+    root: &mut LayoutBox,
+    width: f32,
+    height: Option<f32>,
+    text: &dyn amazing_text::TextSystem,
+) {
+    let fonts = FontSource::fallback();
+    layout_block_in_context(
+        root,
+        0.0,
+        0.0,
+        width,
+        &fonts,
+        &mut FloatContext::default(),
+        Some(text),
+        true,
+    );
+    crate::position::layout_positioned(
+        root,
+        width,
+        height.unwrap_or(root.border_box.y + root.border_box.h),
+        &fonts,
+    );
+    for child in &mut root.positioned {
+        crate::apply_shaped_text(child, text);
+    }
 }
 
 /// Parent-side context for the first/last-child margin approximation.
@@ -85,6 +116,7 @@ impl CollapsedMargin {
 struct StackResult {
     content_end: f32,
     trailing: CollapsedMargin,
+    trailing_clearance: bool,
 }
 
 /// Lays out one block-level box whose *margin* edge starts at (`x`, `y`)
@@ -92,6 +124,28 @@ struct StackResult {
 /// (absolute px), lays out children, and returns the outer height
 /// (border-box height + margin-top + margin-bottom).
 pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSource) -> f32 {
+    layout_block_in_context(
+        b,
+        x,
+        y,
+        cbw,
+        fonts,
+        &mut FloatContext::default(),
+        None,
+        true,
+    )
+}
+
+fn layout_block_in_context(
+    b: &mut LayoutBox,
+    x: f32,
+    y: f32,
+    cbw: f32,
+    fonts: &FontSource,
+    inherited: &mut FloatContext,
+    text: Option<&dyn amazing_text::TextSystem>,
+    root: bool,
+) -> f32 {
     let font_px = b.font_size;
     b.margin = values::resolve_margins(&b.style, font_px, cbw);
     b.padding = values::resolve_padding(&b.style, font_px, cbw);
@@ -99,12 +153,21 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
 
     // The collapse context describes THIS box as a parent; it can only be
     // built after the model above is resolved.
-    let establishes_bfc = overflow_establishes_bfc(&b.style);
+    let establishes_bfc = root || establishes_bfc(&b.style);
+    let mut local_floats = FloatContext::default();
+    let floats = if establishes_bfc {
+        &mut local_floats
+    } else {
+        inherited
+    };
+    let floating = floats::side(&b.style).is_some();
     let ctx = CollapseCtx {
         parent_top: b.margin.top.unwrap_or(0.0),
         parent_bottom: b.margin.bottom.unwrap_or(0.0),
-        top_separated: establishes_bfc || b.padding.top > 0.0 || b.border.top > 0.0,
-        bottom_separated: establishes_bfc || b.padding.bottom > 0.0 || b.border.bottom > 0.0,
+        top_separated: (!root && establishes_bfc) || b.padding.top > 0.0 || b.border.top > 0.0,
+        bottom_separated: (!root && establishes_bfc)
+            || b.padding.bottom > 0.0
+            || b.border.bottom > 0.0,
     };
 
     let bl = b.border.left;
@@ -119,27 +182,32 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
     match values::resolve_extent(&b.style, "width", font_px, cbw) {
         MaybeLen::Px(w) => {
             let fixed = bl + pl + w + pr + br_;
-            match (b.margin.left.is_none(), b.margin.right.is_none()) {
-                // Both auto → equal split centers the box (negatives allowed).
-                (true, true) => {
-                    let each = (cbw - fixed) / 2.0;
-                    b.margin.left = Some(each);
-                    b.margin.right = Some(each);
-                }
-                // Only left auto → left absorbs the remainder.
-                (true, false) => {
-                    let l = cbw - (b.margin.right.unwrap_or(0.0) + fixed);
-                    b.margin.left = Some(l);
-                }
-                // Only right auto → right absorbs the remainder.
-                (false, true) => {
-                    let r = cbw - (b.margin.left.unwrap_or(0.0) + fixed);
-                    b.margin.right = Some(r);
-                }
-                // Over-constrained → ignore margin-right in LTR flow.
-                (false, false) => {
-                    let r = cbw - (b.margin.left.unwrap_or(0.0) + fixed);
-                    b.margin.right = Some(r);
+            if floating {
+                b.margin.left = Some(b.margin.left.unwrap_or(0.0));
+                b.margin.right = Some(b.margin.right.unwrap_or(0.0));
+            } else {
+                match (b.margin.left.is_none(), b.margin.right.is_none()) {
+                    // Both auto → equal split centers the box (negatives allowed).
+                    (true, true) => {
+                        let each = (cbw - fixed) / 2.0;
+                        b.margin.left = Some(each);
+                        b.margin.right = Some(each);
+                    }
+                    // Only left auto → left absorbs the remainder.
+                    (true, false) => {
+                        let l = cbw - (b.margin.right.unwrap_or(0.0) + fixed);
+                        b.margin.left = Some(l);
+                    }
+                    // Only right auto → right absorbs the remainder.
+                    (false, true) => {
+                        let r = cbw - (b.margin.left.unwrap_or(0.0) + fixed);
+                        b.margin.right = Some(r);
+                    }
+                    // Over-constrained → ignore margin-right in LTR flow.
+                    (false, false) => {
+                        let r = cbw - (b.margin.left.unwrap_or(0.0) + fixed);
+                        b.margin.right = Some(r);
+                    }
                 }
             }
             content_w = w;
@@ -147,6 +215,15 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
         MaybeLen::Auto => {
             if let Some(size) = b.replaced_size {
                 content_w = size.width;
+            } else if floating {
+                let chrome = bl + pl + pr + br_;
+                let available =
+                    (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
+                content_w = (crate::flex::min_content_width(b, fonts)
+                    .max(available)
+                    .min(crate::flex::max_content_width(b, fonts))
+                    - chrome)
+                    .max(0.0);
             } else {
                 // Width fills what remains after the side margins; auto side
                 // margins count as zero here (they never absorb vertically).
@@ -164,14 +241,19 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
     let content_x = border_x + bl + pl;
     let content_y = border_y + bt + pt(b);
 
-    // Anonymous blocks were built with an unresolved strut (line_height 0)
-    // whenever their host's metrics weren't in scope during tree building;
-    // they inherit the host's line-height now.
+    // Anonymous blocks inherit the host strut, including an explicit zero
+    // line-height. They must not revert to normal after a float splits text.
     match &mut b.flow {
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
             for c in children.iter_mut() {
-                if c.node.is_none() && c.line_height == 0.0 {
+                if c.node.is_none() {
                     c.line_height = b.line_height;
+                    if let Some(value) = b.style.get("line-height") {
+                        c.style.set("line-height", value);
+                    }
+                    if let Some(value) = b.style.get("direction") {
+                        c.style.set("direction", value);
+                    }
                 }
             }
         }
@@ -180,39 +262,65 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
 
     // --- children ------------------------------------------------------
     let def_h = specified_height(b, font_px);
-    let content = match &mut b.flow {
+    let mut content = match &mut b.flow {
         Flow::Flex(children) => StackResult {
             content_end: crate::flex::layout_flex(
                 children, &b.style, font_px, content_x, content_y, content_w, def_h, fonts,
             ),
             trailing: CollapsedMargin::default(),
+            trailing_clearance: false,
         },
         Flow::Grid(children) => StackResult {
             content_end: crate::grid::layout_grid(
                 children, &b.style, font_px, content_x, content_y, content_w, def_h, fonts,
             ),
             trailing: CollapsedMargin::default(),
+            trailing_clearance: false,
         },
-        Flow::Blocks(children) if !children.is_empty() => {
-            stack_blocks(children, content_x, content_y, content_w, ctx, fonts)
-        }
+        Flow::Blocks(children) if !children.is_empty() => stack_blocks(
+            children, content_x, content_y, content_w, ctx, fonts, floats, text,
+        ),
         Flow::Inlines(items) => {
-            let lh = if b.line_height > 0.0 {
-                b.line_height
-            } else {
-                fonts.scaled_metrics(b.font_size).line_height
-            };
+            let lh = b.line_height;
             let strut = crate::inline::Strut::new(fonts, b.font_size, lh);
-            let lines =
-                crate::inline::layout_lines(items, content_x, content_y, content_w, &strut, fonts);
-            let height = lines.iter().map(|line| line.height).sum();
+            let lines = crate::inline::layout_lines_with_floats(
+                items, content_x, content_y, content_w, &strut, fonts, floats,
+            );
+            let height = lines
+                .last()
+                .map_or(0.0, |line| line.y_top + line.height - content_y);
             b.lines = lines;
             StackResult {
                 content_end: height,
                 trailing: CollapsedMargin::default(),
+                trailing_clearance: false,
             }
         }
         _ => StackResult::default(),
+    };
+
+    b.float_context = floats.clone();
+    if let Some(text) = text {
+        b.content_box = Rect {
+            x: content_x,
+            y: content_y,
+            w: content_w,
+            h: def_h.unwrap_or(content.content_end),
+        };
+        if matches!(b.flow, Flow::Inlines(_) | Flow::Flex(_) | Flow::Grid(_)) {
+            crate::apply_shaped_text(b, text);
+            if matches!(b.flow, Flow::Inlines(_)) {
+                content.content_end = b
+                    .lines
+                    .last()
+                    .map_or(0.0, |line| line.y_top + line.height - content_y);
+            }
+        }
+    }
+    let float_extent = if establishes_bfc {
+        (floats.bottom() - content_y).max(0.0)
+    } else {
+        0.0
     };
 
     // --- height (§10.6–10.7): specified size wins, then min/max constrain.
@@ -230,16 +338,22 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
     let max_height = size_constraint(b, "max-height", font_px);
     let final_h = if let Some(height) = fixed_height {
         constrain_height(height, min_height, max_height)
-    } else if ctx.bottom_separated {
+    } else if ctx.bottom_separated || content.trailing_clearance {
         // A BFC or bottom border/padding traps the last child's margin inside
         // auto height. Negative trailing margins can therefore shrink it.
         constrain_height(
-            (content.content_end + content.trailing.value()).max(0.0),
+            (content.content_end + content.trailing.value())
+                .max(float_extent)
+                .max(0.0),
             min_height,
             max_height,
         )
     } else {
-        let constrained = constrain_height(content.content_end, min_height, max_height);
+        let constrained = constrain_height(
+            content.content_end.max(float_extent),
+            min_height,
+            max_height,
+        );
         if (constrained - content.content_end).abs() <= 0.001 {
             // Auto height was not changed by min/max: the child's trailing
             // margin escapes and adjoins this box's own bottom margin.
@@ -321,15 +435,30 @@ fn stack_blocks(
     content_w: f32,
     parent_ctx: CollapseCtx,
     fonts: &FontSource,
+    floats: &mut FloatContext,
+    text: Option<&dyn amazing_text::TextSystem>,
 ) -> StackResult {
     let mut cursor = content_y;
     let mut pending = CollapsedMargin::default();
 
-    for (i, child) in children.iter_mut().enumerate() {
+    let mut trailing_clearance = false;
+    let mut first_in_flow = true;
+    for child in children.iter_mut() {
         // Child margins resolve against THIS containing block's width.
         let cm = values::resolve_margins(&child.style, child.font_size, content_w);
         let cmt = cm.top.unwrap_or(0.0);
-        let top_component = if i == 0 && !parent_ctx.top_separated {
+        if let Some(side) = floats::side(&child.style) {
+            let y = (cursor + pending.value())
+                .max(content_y)
+                .max(floats.clear(child.style.get("clear").unwrap_or("none")));
+            layout_block_in_context(child, content_x, y, content_w, fonts, floats, text, false);
+            let w = child.border_box.w + cm.left.unwrap_or(0.0) + cm.right.unwrap_or(0.0);
+            let h = child.border_box.h + cmt + child.margin.bottom.unwrap_or(0.0);
+            let placed = floats.place(side, content_x, content_w, y, w, h);
+            crate::flex::translate(child, placed.x - content_x, placed.y - y);
+            continue;
+        }
+        let top_component = if first_in_flow && !parent_ctx.top_separated {
             // Parent/first-child propagation remains represented as an
             // inside offset because the parent's border position was fixed by
             // its own caller. Unlike the old `max(0, child-parent)` shortcut,
@@ -341,14 +470,79 @@ fn stack_blocks(
             cmt
         };
         pending.add(top_component);
-        let border_top = cursor + pending.value();
+        let hypothetical_top = cursor + pending.value();
+        let cleared = floats.clear(child.style.get("clear").unwrap_or("none"));
+        let has_clearance = cleared > hypothetical_top;
+        let border_top = if has_clearance {
+            cleared.max(cursor + cmt)
+        } else {
+            hypothetical_top
+        };
+        first_in_flow = false;
         let collapses_through = can_collapse_through(child, content_w);
 
         // Horizontal margins are applied inside layout_block itself.
-        layout_block(child, content_x, border_top - cmt, content_w, fonts);
+        if establishes_bfc(&child.style) {
+            let needed =
+                match values::resolve_extent(&child.style, "width", child.font_size, content_w) {
+                    MaybeLen::Px(w) => {
+                        let p = values::resolve_padding(&child.style, child.font_size, content_w);
+                        let b = values::resolve_borders(&child.style, child.font_size);
+                        w + p.left + p.right + b.left + b.right
+                    }
+                    MaybeLen::Auto => 0.0,
+                };
+            let (mut left, mut right, mut top) =
+                floats.fit(content_x, content_w, border_top, 0.0, needed);
+            loop {
+                layout_block_in_context(
+                    child,
+                    left,
+                    top - cmt,
+                    right - left,
+                    fonts,
+                    floats,
+                    text,
+                    false,
+                );
+                let (next_left, next_right, next_top) =
+                    floats.fit(content_x, content_w, top, child.border_box.h, needed);
+                let (next_left, next_right) = if next_top == top {
+                    (next_left.max(left), next_right.min(right))
+                } else {
+                    (next_left, next_right)
+                };
+                if (next_left, next_right, next_top) == (left, right, top) {
+                    break;
+                }
+                left = next_left;
+                right = next_right;
+                top = next_top;
+            }
+        } else {
+            layout_block_in_context(
+                child,
+                content_x,
+                border_top - cmt,
+                content_w,
+                fonts,
+                floats,
+                text,
+                false,
+            );
+        }
         if collapses_through {
+            if has_clearance {
+                // Clearance separates the previous margin group. The empty
+                // box's own adjoining margins still collapse with following
+                // siblings, but that group cannot escape the parent (§8.3.1).
+                cursor = border_top - cmt;
+                pending = CollapsedMargin::from_margin(cmt);
+                trailing_clearance = true;
+            }
             pending.add(child.margin.bottom.unwrap_or(0.0));
         } else {
+            trailing_clearance = false;
             cursor = child.border_box.y + child.border_box.h;
             pending = CollapsedMargin::from_margin(child.margin.bottom.unwrap_or(0.0));
         }
@@ -357,6 +551,7 @@ fn stack_blocks(
     StackResult {
         content_end: (cursor - content_y).max(0.0),
         trailing: pending,
+        trailing_clearance,
     }
 }
 
@@ -364,7 +559,7 @@ fn can_collapse_through(block: &LayoutBox, containing_width: f32) -> bool {
     if !matches!(&block.flow, Flow::Empty) {
         return false;
     }
-    if overflow_establishes_bfc(&block.style) {
+    if establishes_bfc(&block.style) {
         return false;
     }
     let padding = values::resolve_padding(&block.style, block.font_size, containing_width);
@@ -377,7 +572,25 @@ fn can_collapse_through(block: &LayoutBox, containing_width: f32) -> bool {
     min_height == 0.0 && height.is_none_or(|height| height == 0.0)
 }
 
-fn overflow_establishes_bfc(style: &ComputedStyle) -> bool {
+pub(crate) fn establishes_bfc(style: &ComputedStyle) -> bool {
+    if floats::side(style).is_some()
+        || matches!(
+            style.get("display"),
+            Some(
+                "flow-root"
+                    | "inline-block"
+                    | "table-cell"
+                    | "table-caption"
+                    | "flex"
+                    | "grid"
+                    | "inline-flex"
+                    | "inline-grid"
+            )
+        )
+        || matches!(style.get("position"), Some("absolute" | "fixed"))
+    {
+        return true;
+    }
     ["overflow-x", "overflow-y"].into_iter().any(|property| {
         style.get(property).is_some_and(|value| {
             !value.eq_ignore_ascii_case("visible") && !value.eq_ignore_ascii_case("clip")

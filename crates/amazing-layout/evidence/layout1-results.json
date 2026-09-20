@@ -1,0 +1,277 @@
+{
+  "ticket": "LAYOUT-1",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "source_base": "e9c1e21",
+  "baseline_source_base": "c50ee3f",
+  "baseline_executable_sha256": "c4c378513791e2d46071ac27e806a63da1eb4fe4c466b2675501a6f3b2096fc9",
+  "final_executable_sha256": "4f18246d7fade784742391e576de16eeafaee4be89a6108daf67649c21a577e7",
+  "lockfile_sha256": "aa0a0d8fd69000e161ad26ac31d2ea3a988152cce75fdcb4e1277ff8480b2d25",
+  "source_sha256": {
+    "flex.rs": "86953c3d6d98fc7a64783bc3ccab184ad7797a0c87dff77884c33ccfed973a1c",
+    "values.rs": "8fb77609c489de4c8e2882a60684dd52a9422440e6c9ddac49e60944d979b208",
+    "position.rs": "d458fe72f5a4de528625792fdbb3992055e3cbfe360fc72740ee8b156aef61c0",
+    "grid_algorithm.rs": "6a9d0bf7cd348b1c512a31b80da5a6f2318b497764b9fcb91f557de37802c589",
+    "grid.rs": "b758361075a22287d10dfbc42071383cd3c49346f51ae6f9c321213eb80e0bda",
+    "block.rs": "d6f76aea089250e500b2ddb723dc10bedc4bb1ac43bcfe4ad1b326f54688a5cc",
+    "font.rs": "dd124fa71bf291808b4d4de5c10cc69b1bf0941e243af34f356506b85f1ffb01",
+    "lib.rs": "20db63ce9ce814696970f431a0c3850ac61391c013e910d9ddf9ae42eab9b25c",
+    "inline.rs": "e3bb028e27df0cf08d03343d2114e2f14e53a8d33662ccaab56e3cf6f24cc024",
+    "flex_algorithm.rs": "a8a9c40f342c5a3758015ffd980f91ad9453469789cd7a0471ea8a043e606130",
+    "float_tests.rs": "7ab463058c107198bf0110a2783676552db0cb981e90779dbece88a64f07725e",
+    "box_tree.rs": "91beadd4ecc44ca23a96695d9227ea103b78023b063fb7f37862d2d19c7a5af4",
+    "floats.rs": "1c7cd53cea0ca54dba0f72e3b8aa6e9b4d85df0cfbeb915c9dda0844a37dec44"
+  },
+  "suites": {
+    "geometry": {
+      "before": {
+        "pass": 32,
+        "mismatch": 29,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 31,
+        "mismatch": 30,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\baseline-geometry\\run-20260920T163435252Z-11080",
+        "C:\\Users\\server\\target\\layout\\evidence\\baseline-repeat-geometry\\run-20260920T164122852Z-19128"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\release-1-geometry\\run-20260920T164653890Z-12060",
+        "C:\\Users\\server\\target\\layout\\evidence\\release-2-geometry\\run-20260920T164941410Z-12060"
+      ],
+      "before_projection_sha256": "e8c9dd377767cd3d657f951178a1291d8db742efe3760eadd2b019386bea94b7",
+      "after_projection_sha256": "7a49c63751bce57179dabe1db6876b2bf073ebece205448e2167e0c4aa2e3d63",
+      "repeat_stable": true,
+      "classification_changes": [
+        {
+          "id": "CSS2__floats__float-nowrap-3-ref.html",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "CSS2__floats__float-nowrap-3.html",
+          "before": "pass",
+          "after": "mismatch"
+        },
+        {
+          "id": "CSS2__floats__float-table-align-left-quirk.html",
+          "before": "pass",
+          "after": "mismatch"
+        }
+      ]
+    },
+    "floats": {
+      "before": {
+        "pass": 2,
+        "mismatch": 6,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 6,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\baseline-floats\\run-20260920T164031987Z-11080",
+        "C:\\Users\\server\\target\\layout\\evidence\\baseline-repeat-floats\\run-20260920T164341077Z-19128"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\release-1-floats\\run-20260920T164922791Z-12060",
+        "C:\\Users\\server\\target\\layout\\evidence\\release-2-floats\\run-20260920T165206849Z-12060"
+      ],
+      "before_projection_sha256": "d49a31ae9aaedd0d3daa3a66bb2ea9419eaac47f84a4f70a92c467487f861b74",
+      "after_projection_sha256": "8baed893f52ba2926d905fe15e1c94e6666c20cd5a575bd0669f87a344410a88",
+      "repeat_stable": true,
+      "classification_changes": [
+        {
+          "id": "float-in-inline-001",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "float-in-inline-002",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "float-no-content-beside-001",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "float-nowrap-3",
+          "before": "pass",
+          "after": "mismatch"
+        },
+        {
+          "id": "negative-margin-float-positioning",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "zero-width-floats",
+          "before": "mismatch",
+          "after": "pass"
+        }
+      ]
+    },
+    "block-collapse": {
+      "before": {
+        "pass": 9,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 9,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\baseline-repeat-block-collapse\\run-20260920T164355569Z-19128"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\release-block-collapse\\run-20260920T164655079Z-16492"
+      ],
+      "before_projection_sha256": "86e7829838e559e7ad23e5556610044630d928f6e143b86476c28f95bbfa035e",
+      "after_projection_sha256": "86e7829838e559e7ad23e5556610044630d928f6e143b86476c28f95bbfa035e",
+      "repeat_stable": null,
+      "classification_changes": []
+    },
+    "position": {
+      "before": {
+        "pass": 9,
+        "mismatch": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 9,
+        "mismatch": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\baseline-position\\run-20260920T163625275Z-11080"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\release-position\\run-20260920T164720374Z-16492"
+      ],
+      "before_projection_sha256": "4fe678b080d9f157b5fb1692c37331048a556478bc9785b2ddc1a0082bfb407a",
+      "after_projection_sha256": "4fe678b080d9f157b5fb1692c37331048a556478bc9785b2ddc1a0082bfb407a",
+      "repeat_stable": null,
+      "classification_changes": []
+    },
+    "text-flow": {
+      "before": {
+        "pass": 14,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 14,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\baseline-text-flow\\run-20260920T163646911Z-11080"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\release-text-flow\\run-20260920T164750460Z-16492"
+      ],
+      "before_projection_sha256": "a53d6365a823ec22ca2f6822e6d13cc48502d6119534c3492cb23b456a07f2a5",
+      "after_projection_sha256": "c5a0a7d3d4d164921b00d80168db276be7e8c286335c6c4c3a7d46113885bda3",
+      "repeat_stable": null,
+      "classification_changes": []
+    },
+    "flex-grid": {
+      "before": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\baseline-flex-grid\\run-20260920T163753635Z-11080"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\release-flex-grid\\run-20260920T164836129Z-16492"
+      ],
+      "before_projection_sha256": "f78bb076cea4dba71dd0cfc600c97b9503d92eadb37db55467fdc077237974b6",
+      "after_projection_sha256": "36ab53bedb24655ca108bc25d6d06105400f10ad48f99a36414a673ed46d04c5",
+      "repeat_stable": null,
+      "classification_changes": []
+    },
+    "paint-compositing": {
+      "before": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\baseline-paint-compositing\\run-20260920T163939826Z-11080"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\evidence\\release-paint-compositing\\run-20260920T164934563Z-16492"
+      ],
+      "before_projection_sha256": "56a70b2097c2ce5e22a0ff05f70551f71b0d4d84022b8596edf1a66855bb2e2d",
+      "after_projection_sha256": "56a70b2097c2ce5e22a0ff05f70551f71b0d4d84022b8596edf1a66855bb2e2d",
+      "repeat_stable": null,
+      "classification_changes": []
+    }
+  },
+  "workspace": {
+    "command": "cargo test --workspace --locked",
+    "exit_code": 0,
+    "passed": 737,
+    "failed": 0,
+    "ignored": 3,
+    "summary_count": 46,
+    "log_sha256": "9e7824e11d8ec363d043ad54fc692684623651d69c6390858dcce83ff9a51699"
+  },
+  "layout_unit_tests": {
+    "before": 138,
+    "after": 150,
+    "failed": 0
+  }
+}

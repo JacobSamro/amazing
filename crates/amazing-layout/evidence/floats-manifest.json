@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "explicit HTML float diagnostic",
+    "rationale": "line exclusion, nested inline floats, negative margins, zero-width floats, source-order line wrapping and nowrap"
+  },
+  "sparse_paths": [
+    "css/CSS2",
+    "css/reference",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "float-no-content-beside-001",
+      "test": "css/CSS2/floats/float-no-content-beside-001.html"
+    },
+    {
+      "id": "float-in-inline-001",
+      "test": "css/CSS2/floats/float-in-inline-001.html"
+    },
+    {
+      "id": "float-in-inline-002",
+      "test": "css/CSS2/floats/float-in-inline-002.html"
+    },
+    {
+      "id": "negative-margin-float-positioning",
+      "test": "css/CSS2/floats/negative-margin-float-positioning.html"
+    },
+    {
+      "id": "zero-width-floats",
+      "test": "css/CSS2/floats/zero-width-floats.html"
+    },
+    {
+      "id": "floats-line-wrap-shifted-001",
+      "test": "css/CSS2/floats/floats-line-wrap-shifted-001.html"
+    },
+    {
+      "id": "float-nowrap-3",
+      "test": "css/CSS2/floats/float-nowrap-3.html"
+    },
+    {
+      "id": "float-nowrap-4",
+      "test": "css/CSS2/floats/float-nowrap-4.html"
+    }
+  ]
+}

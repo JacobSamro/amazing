@@ -11,6 +11,8 @@
 //!   containing block), §10.3.3 constraint with `auto`-margin centering,
 //!   specified/auto/min/max heights; signed adjoining-margin collapse,
 //!   collapse-through empty blocks, and BFC trailing-margin containment
+//! - left/right floats, BFC exclusion bands, side-specific clearance and
+//!   float containment in auto heights
 //! - inline formatting context: greedy word wrapping, `<br>` breaks,
 //!   half-leading line boxes, per-word effective font sizes (nested spans
 //!   flattened into the parent's line boxes), and baseline-aligned replaced
@@ -30,7 +32,11 @@
 //!   paint. [`font::FontSource`] remains a legacy compatibility path.
 //!
 //! Deferred/deviations (documented, revisit in later phases):
-//! - floats, sticky constraints, z-index/stacking contexts, transforms as
+//! - floats interrupt inline runs at anonymous-block boundaries; resuming
+//!   the same source line around a mid-inline float remains deferred. Float
+//!   shrink-to-fit uses the existing legacy intrinsic-width approximation,
+//!   and vertical writing-mode exclusion is not yet implemented.
+//! - sticky constraints, z-index/stacking contexts, transforms as
 //!   containing-block creators, and exact inline/Flex/Grid static-position
 //!   rectangles are not implemented
 //! - parent/child margin propagation is approximated: a first child's
@@ -66,6 +72,9 @@ pub mod block;
 pub mod box_tree;
 pub mod flex;
 mod flex_algorithm;
+#[cfg(test)]
+mod float_tests;
+mod floats;
 pub mod font;
 pub mod grid;
 mod grid_algorithm;
@@ -153,6 +162,7 @@ pub struct LayoutBox {
     pub content_box: Rect,
     /// Line boxes for inline containers (empty for block containers).
     pub lines: Vec<LineBox>,
+    pub(crate) float_context: floats::FloatContext,
 }
 
 impl LayoutBox {
@@ -178,6 +188,7 @@ impl LayoutBox {
             border_box: Rect::default(),
             content_box: Rect::default(),
             lines: Vec::new(),
+            float_context: floats::FloatContext::default(),
         }
     }
 
@@ -388,8 +399,23 @@ pub fn layout_dom_document_with_text_and_replaced_in_viewport(
         &font::FontSource::fallback(),
         replaced,
     );
-    apply_shaped_text(&mut root, text);
+    if has_floats(&root) {
+        block::layout_root_with_text(&mut root, viewport_width, viewport_height, text);
+    } else {
+        apply_shaped_text(&mut root, text);
+    }
     root
+}
+
+fn has_floats(layout: &LayoutBox) -> bool {
+    floats::side(&layout.style).is_some()
+        || match &layout.flow {
+            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
+                children.iter().any(has_floats)
+            }
+            _ => false,
+        }
+        || layout.positioned.iter().any(has_floats)
 }
 
 fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
@@ -446,6 +472,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 &strut,
                 base_direction,
                 text,
+                &layout.float_context,
             ) {
                 let old_height = layout.lines.iter().map(|line| line.height).sum::<f32>();
                 let new_height = if style.writing_mode.is_vertical_flow() {
