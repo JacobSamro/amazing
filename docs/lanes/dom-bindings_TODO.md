@@ -342,5 +342,11 @@ replace-data, split-text, and normalize algorithms (reviewed 2026-09-20).
 - No JS binding, custom-element/shadow-tree extension, WPT result, or broad
   browser conformance is claimed. DOM-1 remains parked pending JS-2.
 
-Windows iteration: 107 DOM tests passed, zero failed (65 preexisting plus 42
-new focused tests). Final refreshed-tree crate/workspace repeat gates pending.
+Fresh-artifact Windows gate on base 57f0e69: 107 DOM tests passed twice (65
+preexisting plus 42 new), zero failed/ignored; canonical result hash
+`f9f87bb833ccdf30425e279abc5372671a5190526bb97eaeec3739b63c63a8e9`.
+Full workspace: 957 passed, zero failed, three existing ignored, twice;
+canonical result hash `05385f87dfb95722b7af7ef06b03da37ba8662eadac4e066bd513ee656b267dd`.
+144 Rust source/manifests matched Mac; logs confirm first-party recompilation
+following the integrator's artifact-invalidation refresh. These gates completed
+as the integrator redirected the lane to DOM-1; DOM-3 is checkpointed for return.
