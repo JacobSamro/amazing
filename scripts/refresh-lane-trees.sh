@@ -23,9 +23,27 @@ REMOTE_ROOT='C:\Users\server\src\wt'
 ARCHIVE_LOCAL="/tmp/dev-refresh.tar"
 ARCHIVE_REMOTE='C:\Users\server\dev-refresh.tar'
 
-LANES=("$@")
-if [ ${#LANES[@]} -eq 0 ]; then
-  LANES=(js-lang dom-bindings layout css net replaced-content)
+ALL_LANES=(js-lang dom-bindings layout css net replaced-content html integrator-assist)
+
+# Lanes run this for THEMSELVES, so a bare invocation must not touch anyone
+# else's tree. Refreshing every lane is an integrator action and has to be
+# asked for explicitly.
+if [ $# -eq 0 ]; then
+  echo "usage: $0 <lane> [lane ...]    # refresh specific lanes (what a lane runs)" >&2
+  echo "       $0 --all                # refresh every lane (integrator only)" >&2
+  exit 2
+fi
+
+if [ "$1" = "--all" ]; then
+  LANES=("${ALL_LANES[@]}")
+else
+  LANES=("$@")
+  for l in "${LANES[@]}"; do
+    case " ${ALL_LANES[*]} " in
+      *" $l "*) ;;
+      *) echo "$0: unknown lane '$l'" >&2; exit 2 ;;
+    esac
+  done
 fi
 
 cd "$REPO"

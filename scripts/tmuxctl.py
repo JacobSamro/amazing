@@ -108,6 +108,22 @@ LANE_GRANTS["dom-bindings"] += [
 ]
 
 
+# Grants come in two shapes and they are not interchangeable. Most are
+# ADDITIVE -- an added match arm, an added dispatch line, an added entry point --
+# where any deletion means the grant was exceeded. A few are REWRITE grants,
+# where replacing existing code IS the ticket: CSS-3 replaces the driver's
+# stylesheet concatenation with per-sheet collection, so deletions are expected
+# and the diff needs reading rather than rejecting.
+LANE_GRANTS_REWRITE = {
+    "css": ["crates/amazing/src/main.rs"],
+    "js-lang": ["scripts/test262.py", "Cargo.lock"],
+}
+
+
+def grant_is_rewrite(lane: str, path: str) -> bool:
+    return any(path.startswith(p) for p in LANE_GRANTS_REWRITE.get(lane, []))
+
+
 def owned_paths(lane: str) -> list[str]:
     """Paths this lane may write: its crates, its scratch, its docs, its evidence."""
     return (
