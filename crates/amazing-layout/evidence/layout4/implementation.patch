@@ -1,0 +1,785 @@
+diff --git a/crates/amazing-layout/src/box_tree.rs b/crates/amazing-layout/src/box_tree.rs
+index 55bc373..7ce4beb 100644
+--- a/crates/amazing-layout/src/box_tree.rs
++++ b/crates/amazing-layout/src/box_tree.rs
+@@ -48,6 +48,23 @@ pub fn build_layout_tree_with_replaced(
+     match start {
+         Some(idx) => {
+             let mut root = build_element(dom, styled, idx, values::ROOT_FONT_SIZE, fonts, replaced);
++            if is_contents(&root.style) {
++                let original = std::mem::take(&mut root.style);
++                root.node = None;
++                root.display = Display::Block;
++                // The engine starts at body. Keep an anonymous viewport host,
++                // but no body box, decoration, positioning or sizing.
++                for property in [
++                    "direction", "text-align", "writing-mode", "white-space", "line-height",
++                ] {
++                    if let Some(value) = original.get(property) {
++                        root.style.set(property, value);
++                    }
++                }
++                for property in ["margin-top", "margin-right", "margin-bottom", "margin-left"] {
++                    root.style.set(property, "0");
++                }
++            }
+             crate::table_tree::normalize(&mut root);
+             root
+         },
+@@ -152,6 +169,91 @@ fn is_display_none(style: &ComputedStyle) -> bool {
+         .is_some_and(|v| v.eq_ignore_ascii_case("none"))
+ }
+ 
++/// Box-tree children after removing `display: contents` ancestors. The DOM
++/// remains intact: text style and relative font metrics still follow its
++/// original parent chain, even when formatting parents differ.
++struct FormattingChild {
++    node: NodeIdx,
++    owner: NodeIdx,
++    parent_font: f32,
++}
++
++fn is_contents(style: &ComputedStyle) -> bool {
++    style
++        .get("display")
++        .is_some_and(|value| value.eq_ignore_ascii_case("contents"))
++}
++
++fn contents_suppresses_subtree(dom: &Dom, node: NodeIdx) -> bool {
++    matches!(
++        dom.name(node),
++        Some(
++            "br" | "wbr"
++                | "meter"
++                | "progress"
++                | "canvas"
++                | "embed"
++                | "object"
++                | "audio"
++                | "iframe"
++                | "img"
++                | "video"
++                | "frame"
++                | "frameset"
++                | "input"
++                | "textarea"
++                | "select"
++        )
++    )
++}
++
++fn formatting_children(
++    dom: &Dom,
++    styled: &StyledDom,
++    owner: NodeIdx,
++    font_size: f32,
++) -> Vec<FormattingChild> {
++    let mut pending: Vec<_> = dom
++        .children(owner)
++        .map(|node| FormattingChild {
++            node,
++            owner,
++            parent_font: font_size,
++        })
++        .collect();
++    pending.reverse();
++    let mut children = Vec::new();
++    while let Some(child) = pending.pop() {
++        if matches!(dom.get(child.node).kind, NodeKind::Element { .. }) {
++            let style = styled.get(child.node).cloned().unwrap_or_default();
++            if is_display_none(&style) || crate::replaced::hidden(dom, child.node) {
++                continue;
++            }
++            if is_contents(&style) {
++                // Do this before positioning, float blockification, controls,
++                // or flex/grid item construction: there is no principal box.
++                if contents_suppresses_subtree(dom, child.node) {
++                    continue;
++                }
++                let font_size = values::resolve_font_size(
++                    style.get("font-size").unwrap_or("medium"),
++                    child.parent_font,
++                );
++                let start = pending.len();
++                pending.extend(dom.children(child.node).map(|node| FormattingChild {
++                    node,
++                    owner: child.node,
++                    parent_font: font_size,
++                }));
++                pending[start..].reverse();
++                continue;
++            }
++        }
++        children.push(child);
++    }
++    children
++}
++
+ fn is_out_of_flow(style: &ComputedStyle) -> bool {
+     style.get("position").is_some_and(|value| {
+         value.eq_ignore_ascii_case("absolute") || value.eq_ignore_ascii_case("fixed")
+@@ -989,17 +1091,19 @@ fn classify_children(
+         let mut items: Vec<LayoutBox> = Vec::new();
+         let mut run: Vec<InlineNode> = Vec::new();
+         let mut positioned = Vec::new();
+-        for child in dom.children(idx) {
++        for entry in formatting_children(dom, styled, idx, font_size) {
++            let child = entry.node;
++            let text_parent = styled.get(entry.owner).cloned().unwrap_or_default();
+             match &dom.get(child).kind {
+                 NodeKind::Text { data } => {
+-                    if !text_for_white_space(data, &own_style, child, usize::MAX).0.is_empty() {
++                    if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
+                         run.push(inline_text(
+                             dom,
+-                            idx,
++                            entry.owner,
+                             child,
+                             data.clone(),
+-                            &own_style,
+-                            font_size,
++                            &text_parent,
++                            entry.parent_font,
+                             false,
+                         ));
+                     }
+@@ -1015,13 +1119,13 @@ fn classify_children(
+                     }
+                     if is_out_of_flow(&child_style) {
+                         positioned.push(build_element(
+-                            dom, styled, child, font_size, fonts, replaced,
++                            dom, styled, child, entry.parent_font, fonts, replaced,
+                         ));
+                         continue;
+                     }
+                     flush_anonymous_into(&mut items, &mut run, font_size, fonts);
+                     items.push(build_element(
+-                        dom, styled, child, font_size, fonts, replaced,
++                        dom, styled, child, entry.parent_font, fonts, replaced,
+                     ));
+                 }
+             }
+@@ -1039,19 +1143,21 @@ fn classify_children(
+     let mut inlines: Vec<InlineNode> = Vec::new();
+     let mut positioned = Vec::new();
+ 
+-    for child in dom.children(idx) {
++    for entry in formatting_children(dom, styled, idx, font_size) {
++        let child = entry.node;
++        let text_parent = styled.get(entry.owner).cloned().unwrap_or_default();
+         match &dom.get(child).kind {
+             NodeKind::Text { data } => {
+                 // Whitespace-only runs between block-level children carry no
+                 // rendering; keep non-empty collapsed runs as separators.
+-                if !text_for_white_space(data, &own_style, child, usize::MAX).0.is_empty() {
++                if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
+                     inlines.push(inline_text(
+                         dom,
+-                        idx,
++                        entry.owner,
+                         child,
+                         data.clone(),
+-                        &own_style,
+-                        font_size,
++                        &text_parent,
++                        entry.parent_font,
+                         false,
+                     ));
+                 }
+@@ -1067,7 +1173,7 @@ fn classify_children(
+                 }
+                 if is_out_of_flow(&child_style) {
+                     positioned.push(build_element(
+-                        dom, styled, child, font_size, fonts, replaced,
++                        dom, styled, child, entry.parent_font, fonts, replaced,
+                     ));
+                     continue;
+                 }
+@@ -1076,11 +1182,11 @@ fn classify_children(
+                     // no children, so flatten_inline would see nothing).
+                     Some("br") => inlines.push(InlineNode::Break),
+                     _ if is_ruby_container(dom, styled, child) => {
+-                        inlines.push(ruby_inline(dom, styled, child, font_size));
++                        inlines.push(ruby_inline(dom, styled, child, entry.parent_font));
+                     },
+                     _ if crate::replaced::inline_atomic(dom, child, &child_style) => {
+                         if let Some(item) =
+-                            crate::replaced::construct(dom, child, &child_style, font_size, replaced)
++                            crate::replaced::construct(dom, child, &child_style, entry.parent_font, replaced)
+                         {
+                             inlines.push(item);
+                         }
+@@ -1093,19 +1199,19 @@ fn classify_children(
+                         // Flush pending inline content into an anonymous block.
+                         flush_anonymous_into(&mut blocks, &mut inlines, font_size, fonts);
+                         blocks.push(build_element(
+-                            dom, styled, child, font_size, fonts, replaced,
++                            dom, styled, child, entry.parent_font, fonts, replaced,
+                         ));
+                     }
+                     _ => {
+                         let child_font_size = values::resolve_font_size(
+                             child_style.get("font-size").unwrap_or("medium"),
+-                            font_size,
++                            entry.parent_font,
+                         );
+                         let edge = boundary_between(
+                             dom,
+                             child,
+-                            &own_style,
+-                            font_size,
++                            &text_parent,
++                            entry.parent_font,
+                             &child_style,
+                             child_font_size,
+                         );
+@@ -1114,7 +1220,7 @@ fn classify_children(
+                             styled,
+                             child,
+                             child_style,
+-                            font_size,
++                            entry.parent_font,
+                             edge,
+                             &mut inlines,
+                             &mut blocks,
+@@ -1211,18 +1317,20 @@ fn flatten_inline(
+     let bidi_style = text_style(dom, idx, &style, font_size, true);
+     let inline_start = inlines.len();
+ 
+-    for child in dom.children(idx) {
++    for entry in formatting_children(dom, styled, idx, font_size) {
++        let child = entry.node;
++        let text_parent = styled.get(entry.owner).cloned().unwrap_or_default();
+         match &dom.get(child).kind {
+             NodeKind::Text { data } => {
+-                if !text_for_white_space(data, &style, child, usize::MAX).0.is_empty() {
++                if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
+                     inlines.push(inline_text(
+                         dom,
+-                        idx,
++                        entry.owner,
+                         child,
+                         data.clone(),
+-                        &style,
+-                        font_size,
+-                        true,
++                        &text_parent,
++                        entry.parent_font,
++                        entry.owner == idx,
+                     ));
+                 }
+             }
+@@ -1240,7 +1348,7 @@ fn flatten_inline(
+                         dom,
+                         styled,
+                         child,
+-                        parent_font_px,
++                        entry.parent_font,
+                         fonts,
+                         replaced,
+                     ));
+@@ -1249,11 +1357,11 @@ fn flatten_inline(
+                 match dom.name(child) {
+                     Some("br") => inlines.push(InlineNode::Break),
+                     _ if is_ruby_container(dom, styled, child) => {
+-                        inlines.push(ruby_inline(dom, styled, child, font_size));
++                        inlines.push(ruby_inline(dom, styled, child, entry.parent_font));
+                     },
+                     _ if crate::replaced::inline_atomic(dom, child, &cs) => {
+                         if let Some(item) =
+-                            crate::replaced::construct(dom, child, &cs, font_size, replaced)
++                            crate::replaced::construct(dom, child, &cs, entry.parent_font, replaced)
+                         {
+                             inlines.push(item);
+                         }
+@@ -1269,7 +1377,7 @@ fn flatten_inline(
+                             dom,
+                             styled,
+                             child,
+-                            parent_font_px,
++                            entry.parent_font,
+                             fonts,
+                             replaced,
+                         ));
+@@ -1277,16 +1385,16 @@ fn flatten_inline(
+                     _ => {
+                         let child_font_size = values::resolve_font_size(
+                             cs.get("font-size").unwrap_or("medium"),
+-                            font_size,
++                            entry.parent_font,
+                         );
+                         let edge =
+-                            boundary_between(dom, child, &style, font_size, &cs, child_font_size);
++                            boundary_between(dom, child, &text_parent, entry.parent_font, &cs, child_font_size);
+                         flatten_inline(
+                             dom,
+                             styled,
+                             child,
+                             cs,
+-                            font_size,
++                            entry.parent_font,
+                             edge,
+                             inlines,
+                             blocks_out,
+diff --git a/crates/amazing-layout/src/contents_tests.rs b/crates/amazing-layout/src/contents_tests.rs
+new file mode 100644
+index 0000000..88a3284
+--- /dev/null
++++ b/crates/amazing-layout/src/contents_tests.rs
+@@ -0,0 +1,337 @@
++//! Contents changes formatting ancestry, not the DOM or style ancestry.
++use crate::*;
++use amazing_dom::{Dom, NodeKind};
++
++fn page(html: &str, css: &str, shaped: bool) -> (Dom, LayoutBox) {
++    let dom = amazing_html::parse(html);
++    let css = format!("body{{margin:0;font-size:10px;line-height:10px}}{css}");
++    let root = if shaped {
++        layout_dom_document_with_text_and_replaced_in_viewport(
++            &dom,
++            &css,
++            200.0,
++            Some(300.0),
++            &amazing_text::FallbackTextSystem::new(),
++            &NoReplacedElements,
++        )
++    } else {
++        layout_dom_document_with_replaced_in_viewport(
++            &dom,
++            &css,
++            200.0,
++            Some(300.0),
++            &font::FontSource::fallback(),
++            &NoReplacedElements,
++        )
++    };
++    (dom, root)
++}
++fn id(dom: &Dom, value: &str) -> NodeIdx {
++    let mut pending = vec![NodeIdx(0)];
++    while let Some(node) = pending.pop() {
++        if let NodeKind::Element { attrs, .. } = &dom.get(node).kind {
++            if attrs.iter().any(|(name, v)| name == "id" && v == value) {
++                return node;
++            }
++        }
++        pending.extend(dom.children(node));
++    }
++    panic!("missing id {value}")
++}
++fn boxes(b: &LayoutBox) -> Vec<&LayoutBox> {
++    let mut out = vec![b];
++    if let Flow::Blocks(c) | Flow::Flex(c) | Flow::Grid(c) = &b.flow {
++        for child in c {
++            out.extend(boxes(child));
++        }
++    }
++    for child in &b.positioned {
++        out.extend(boxes(child));
++    }
++    out
++}
++fn get<'a>(root: &'a LayoutBox, node: NodeIdx) -> &'a LayoutBox {
++    boxes(root)
++        .into_iter()
++        .find(|b| b.node == Some(node))
++        .unwrap()
++}
++fn near(a: f32, b: f32) {
++    assert!((a - b).abs() < 0.02, "got {a}, expected {b}");
++}
++
++#[test]
++fn contents_blocks_ignore_wrapper_size_margin_float_and_position() {
++    for shaped in [false, true] {
++        for position in ["static", "relative", "absolute", "fixed"] {
++            let (dom, b) = page(
++                "<body><article id=w><div id=a></div><section><div id=b></div></section></article>",
++                &format!("article,section{{display:contents;width:9px;height:99px;margin:40px;padding:30px;border:5px solid red;float:right;position:{position};left:80px}}div{{width:20px;height:12px}}"), shaped,
++            );
++            assert!(boxes(&b).iter().all(|b| b.node != Some(id(&dom, "w"))));
++            near(get(&b, id(&dom, "a")).border_box.x, 0.0);
++            near(get(&b, id(&dom, "a")).border_box.y, 0.0);
++            near(get(&b, id(&dom, "b")).border_box.y, 12.0);
++            near(b.content_box.h, 24.0);
++            assert!(b.positioned.is_empty());
++        }
++    }
++}
++
++#[test]
++fn contents_promotes_flex_and_grid_items_in_source_order() {
++    for shaped in [false, true] {
++        for display in ["flex", "grid"] {
++            let (dom,b)=page("<body><main id=host><section id=w><div id=a></div><article><div id=b></div></article></section></main>",
++                &format!("main{{display:{display};width:100px;grid-template-columns:20px 20px;align-items:start}}section,article{{display:contents;border:20px solid red}}div{{width:20px;height:10px}}"),shaped);
++            let host = get(&b, id(&dom, "host"));
++            let children = match &host.flow {
++                Flow::Flex(c) | Flow::Grid(c) => c,
++                _ => panic!("item context"),
++            };
++            assert_eq!(children.len(), 2);
++            assert_eq!(children[0].node, Some(id(&dom, "a")));
++            assert_eq!(children[1].node, Some(id(&dom, "b")));
++            near(children[0].border_box.x, 0.0);
++            near(children[1].border_box.x, 20.0);
++        }
++    }
++}
++
++#[test]
++fn contents_text_stays_one_anonymous_flex_item_across_wrappers() {
++    for shaped in [false, true] {
++        let (dom,b)=page("<body><main id=host>A<section>B<article>C</article></section>D<div id=box></div></main>",
++            "main{display:flex}section,article{display:contents}div{width:10px;height:10px}",shaped);
++        let Flow::Flex(c) = &get(&b, id(&dom, "host")).flow else {
++            panic!("flex")
++        };
++        assert_eq!(c.len(), 2);
++        assert!(c[0].node.is_none());
++        let Flow::Inlines(items) = &c[0].flow else {
++            panic!("text item")
++        };
++        let text: String = items
++            .iter()
++            .filter_map(|n| match n {
++                InlineNode::Text { text, .. } => Some(text.as_str()),
++                _ => None,
++            })
++            .collect();
++        assert_eq!(text, "ABCD");
++        assert_eq!(c[1].node, Some(id(&dom, "box")));
++    }
++}
++
++#[test]
++fn contents_keeps_text_inheritance_but_not_its_decoration_or_bidi_box() {
++    for shaped in [false, true] {
++        let (_,b)=page("<body><section>A<span>B</span></section>",
++            "section{display:contents;font-size:20px;color:green;background:red;padding:30px;unicode-bidi:isolate}span{font-size:50%}",shaped);
++        let Flow::Inlines(items) = &b.flow else {
++            panic!("inline")
++        };
++        let texts: Vec<_> = items
++            .iter()
++            .filter_map(|n| match n {
++                InlineNode::Text {
++                    font_size,
++                    color,
++                    background_color,
++                    inline_padding,
++                    source_mappings,
++                    ..
++                } => Some((
++                    *font_size,
++                    color,
++                    background_color,
++                    inline_padding,
++                    source_mappings,
++                )),
++                _ => None,
++            })
++            .collect();
++        assert_eq!(texts.len(), 2);
++        near(texts[0].0, 20.0);
++        near(texts[1].0, 10.0);
++        for (_, color, bg, padding, mappings) in texts {
++            assert_eq!(color, "green");
++            assert_eq!(bg, "transparent");
++            near(padding.left, 0.0);
++            near(padding.right, 0.0);
++            assert!(!mappings.is_empty());
++        }
++        assert!(!items
++            .iter()
++            .any(|n| matches!(n, InlineNode::BidiStart { .. } | InlineNode::BidiEnd)));
++    }
++}
++
++#[test]
++fn contents_absolute_descendants_use_nearest_real_positioned_box() {
++    for shaped in [false, true] {
++        let css="main{position:relative;margin:20px;padding:5px;border:2px solid blue;width:100px;height:50px}section{display:contents;position:relative;left:80px;padding:70px}div{position:absolute;left:7px;top:9px;width:10px;height:10px}";
++        let (dom, b) = page(
++            "<body><main><section id=w><div id=abs></div></section></main>",
++            css,
++            shaped,
++        );
++        let (control_dom, control) = page("<body><main><div id=abs></div></main>", css, shaped);
++        let actual = get(&b, id(&dom, "abs"));
++        let expected = get(&control, id(&control_dom, "abs"));
++        near(actual.border_box.x, expected.border_box.x);
++        near(actual.border_box.y, expected.border_box.y);
++        assert!(boxes(&b).iter().all(|b| b.node != Some(id(&dom, "w"))));
++    }
++}
++
++#[test]
++fn contents_cells_join_before_anonymous_table_repair() {
++    for shaped in [false, true] {
++        let (_, b) = page(
++            "<body><table><tr><td>P</td><td>A</td><td>S</td><td>S</td></tr></table>",
++            "table{border-spacing:0}td{display:contents;padding:30px;border:10px solid red}",
++            shaped,
++        );
++        let cells: Vec<_> = boxes(&b)
++            .into_iter()
++            .filter(|b| crate::table_tree::role(b) == crate::table_tree::Role::Cell)
++            .collect();
++        assert_eq!(cells.len(), 1);
++        assert!(cells[0].node.is_none());
++        near(cells[0].padding.left, 0.0);
++        near(cells[0].border.left, 0.0);
++        let words: Vec<_> = boxes(cells[0])
++            .into_iter()
++            .flat_map(|b| &b.lines)
++            .flat_map(|l| &l.words)
++            .collect();
++        assert_eq!(
++            words.iter().map(|w| w.text.as_str()).collect::<String>(),
++            "PASS"
++        );
++    }
++}
++
++#[test]
++fn contents_unusual_elements_suppress_subtrees_but_buttons_unbox() {
++    for shaped in [false, true] {
++        let (_,b)=page("<body>P<br><object>FAIL</object><input><textarea>FAIL</textarea><select><option>FAIL</option></select><button>A<span>S</span></button>S",
++            "br,object,input,textarea,select,button{display:contents;border:10px solid red;padding:20px}",shaped);
++        assert!(b.styled_replaced_fragments().next().is_none());
++        assert_eq!(b.lines.len(), 1);
++        assert_eq!(
++            b.lines
++                .iter()
++                .flat_map(|l| &l.words)
++                .map(|w| w.text.as_str())
++                .collect::<String>(),
++            "PASS"
++        );
++    }
++}
++
++#[test]
++fn contents_body_has_only_anonymous_viewport_host() {
++    for shaped in [false, true] {
++        let (_,b)=page("<body>PASS", "body{display:contents;width:30px;margin:40px;padding:20px;border:10px solid red;background:red;position:relative;left:90px;color:green}",shaped);
++        assert!(b.node.is_none());
++        near(b.content_box.x, 0.0);
++        near(b.content_box.w, 200.0);
++        near(b.padding.left, 0.0);
++        near(b.border.left, 0.0);
++        let Flow::Inlines(items) = &b.flow else {
++            panic!("text")
++        };
++        assert!(matches!(&items[0],InlineNode::Text{color,..} if color=="green"));
++    }
++}
++
++#[test]
++fn contents_does_not_resurrect_display_none_descendants() {
++    for shaped in [false, true] {
++        let (_, b) = page(
++            "<body>P<section><article>FAIL</article>A</section>SS",
++            "section{display:contents}article{display:none}",
++            shaped,
++        );
++        assert_eq!(
++            b.lines
++                .iter()
++                .flat_map(|l| &l.words)
++                .map(|w| w.text.as_str())
++                .collect::<String>(),
++            "PASS"
++        );
++    }
++}
++
++#[test]
++fn contents_pre_text_does_not_preserve_a_collapsible_space_from_its_sibling() {
++    let (_, b) = page(
++        "<body><p>heading</p>\n<section>Two\nlines</section>",
++        "p{margin:0}section{display:contents;white-space:pre}",
++        true,
++    );
++    let lines: Vec<_> = boxes(&b).into_iter().flat_map(|b| &b.lines).collect();
++    let two = lines
++        .iter()
++        .flat_map(|l| &l.words)
++        .find(|w| w.text == "Two")
++        .unwrap();
++    near(two.x, 0.0);
++    let tail = lines
++        .iter()
++        .find(|l| l.words.iter().any(|w| w.text == "lines"))
++        .unwrap();
++    let first = lines
++        .iter()
++        .find(|l| l.words.iter().any(|w| w.text == "Two"))
++        .unwrap();
++    assert!(tail.y_top >= first.y_top + first.height);
++}
++
++#[test]
++fn contents_empty_boxes_and_style_edges_do_not_add_inline_space() {
++    for shaped in [false, true] {
++        let (_, b) = page(
++            "<body>A<span><section></section>B</span>C",
++            "section{display:contents;margin:80px;padding:60px;border:20px solid red}",
++            shaped,
++        );
++        let (_, reference) = page("<body>A<span>B</span>C", "", shaped);
++        near(
++            b.lines[0].words.last().unwrap().x + b.lines[0].words.last().unwrap().width,
++            reference.lines[0].words.last().unwrap().x
++                + reference.lines[0].words.last().unwrap().width,
++        );
++        assert_eq!(b.lines.len(), reference.lines.len());
++    }
++}
++
++#[test]
++fn contents_pre_spaces_keep_their_own_style_at_line_start() {
++    for (prefix, pre, expected) in [("", "  Two", 6.0), (" ", "  Two", 6.0), (" ", "Two", 0.0)] {
++        let (_, b) = page(
++            &format!("<body><p>heading</p>{prefix}<section>{pre}</section>"),
++            "p{margin:0}section{display:contents;white-space:pre}",
++            true,
++        );
++        let line = boxes(&b)
++            .into_iter()
++            .flat_map(|b| &b.lines)
++            .find(|line| line.words.iter().any(|word| word.text.ends_with("Two")))
++            .unwrap();
++        let word = line
++            .words
++            .iter()
++            .find(|word| word.text.ends_with("Two"))
++            .unwrap();
++        let first_letter = line
++            .glyphs
++            .iter()
++            .find(|glyph| glyph.node == word.node && glyph.source_range.start == pre.len() - 3)
++            .unwrap();
++        near(first_letter.x, expected);
++    }
++}
+diff --git a/crates/amazing-layout/src/inline.rs b/crates/amazing-layout/src/inline.rs
+index 5eb5e92..aa356fa 100644
+--- a/crates/amazing-layout/src/inline.rs
++++ b/crates/amazing-layout/src/inline.rs
+@@ -274,7 +274,7 @@ struct ShapedWord {
+     decorations: Vec<ShapedDecoration>,
+     range: Range<usize>,
+     context: Rc<ShapedContext>,
+-    preserve_space_before: bool,
++    preserved_space_before: f32,
+     hyphen_after: bool,
+     hyphen_advance: f32,
+     requires_reshape: bool,
+@@ -536,10 +536,10 @@ pub(crate) fn layout_lines_shaped(
+                 if !has_content {
+                     prepare(&mut cursor, word.width, strut.line_height);
+                 }
+-                let mut spacing = if has_content || word.preserve_space_before {
++                let mut spacing = if has_content {
+                     word.space_before
+                 } else {
+-                    0.0
++                    word.preserved_space_before
+                 };
+                 let break_width = if word.hyphen_after {
+                     word.hyphen_advance
+@@ -564,20 +564,13 @@ pub(crate) fn layout_lines_shaped(
+                         &mut cursor,
+                     );
+                     prepare(&mut cursor, word.width, strut.line_height);
+-                    if !word.preserve_space_before {
+-                        spacing = 0.0;
+-                    }
++                    spacing = word.preserved_space_before;
+                 }
+-                let line_range_x = cursor;
+                 let x = cursor + spacing;
+                 placed_text.push(PlacedText {
+                     context: Rc::clone(&word.context),
+                     range: word.range.clone(),
+-                    x: if word.preserve_space_before {
+-                        line_range_x
+-                    } else {
+-                        x
+-                    },
++                    x: x - word.preserved_space_before,
+                     hyphen_after: word.hyphen_after,
+                     requires_reshape: word.requires_reshape,
+                 });
+@@ -1841,17 +1834,23 @@ fn shape_chunk(
+         let mut font_size = spans[0].style.size;
+         let mut active_source = None;
+         let mut decoration_start = 0.0;
+-        let preserve_space_before = spans
++        // Whitespace belongs to the span that supplied it, not the next word.
++        // Drop a collapsible prefix at line start, retaining preformatted gaps.
++        let preserved_start = spans
+             .iter()
+-            .find(|span| span.range.contains(&range.start))
+-            .is_some_and(|span| {
+-                matches!(
+-                    span.style.white_space,
+-                    amazing_text::WhiteSpace::Pre
+-                        | amazing_text::WhiteSpace::PreWrap
+-                        | amazing_text::WhiteSpace::BreakSpaces
+-                )
+-            });
++            .find(|span| {
++                span.range.end > previous_end
++                    && span.range.start < range.start
++                    && matches!(
++                        span.style.white_space,
++                        amazing_text::WhiteSpace::Pre
++                            | amazing_text::WhiteSpace::PreWrap
++                            | amazing_text::WhiteSpace::BreakSpaces
++                    )
++            })
++            .map(|span| span.range.start.max(previous_end))
++            .unwrap_or(range.start);
++        let preserved_space_before = advance_in_range(&shaped, preserved_start..range.start);
+         let local_line;
+         let visual_runs = if let Some(visual_line) = &visual_line {
+             &visual_line.runs
+@@ -1957,13 +1956,9 @@ fn shape_chunk(
+             space_before: advance_in_range(&shaped, previous_end..range.start),
+             glyphs,
+             decorations,
+-            range: if preserve_space_before {
+-                previous_end..range.end
+-            } else {
+-                range.clone()
+-            },
++            range: preserved_start..range.end,
+             context: Rc::clone(&context),
+-            preserve_space_before,
++            preserved_space_before,
+             hyphen_after,
+             hyphen_advance,
+             requires_reshape: shaped.unsafe_breaks.binary_search(&range.end).is_ok(),
+@@ -2381,7 +2376,7 @@ pub(crate) fn intrinsic_widths_shaped(
+             ShapedUnit::Break => { maximum = maximum.max(line); line = 0.0; ruby_run = 0.0; }
+             ShapedUnit::Word(word) => {
+                 minimum = minimum.max(word.width + word.hyphen_advance);
+-                line += word.width + if line > 0.0 || word.preserve_space_before {word.space_before} else {0.0};
++                line += word.width + if line > 0.0 {word.space_before} else {word.preserved_space_before};
+                 ruby_run = 0.0;
+             }
+             ShapedUnit::Replaced { size, .. } => {minimum = minimum.max(size.width); line += size.width; ruby_run = 0.0;}
+diff --git a/crates/amazing-layout/src/lib.rs b/crates/amazing-layout/src/lib.rs
+index d0bd1cb..9f4b201 100644
+--- a/crates/amazing-layout/src/lib.rs
++++ b/crates/amazing-layout/src/lib.rs
+@@ -1562,3 +1562,6 @@ mod shaped_text_tests {
+ 
+ #[cfg(test)]
+ mod table_tests;
++
++#[cfg(test)]
++mod contents_tests;
