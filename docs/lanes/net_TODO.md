@@ -1,5 +1,34 @@
 # Net lane decision map
 
+## External-dependency decisions — user approval required
+
+**Public Suffix List: approve a pinned data snapshot, or defer site/cookie
+correctness.** A provider must return public-suffix and registrable-domain
+(eTLD+1) results for normalized hosts, implement exact/wildcard/exception rules,
+and distinguish IPs and nonregistrable hosts; proposed coverage includes both
+ICANN and PRIVATE rules to separate tenants on shared hosting. Vendor the
+[upstream list](https://publicsuffix.org/list/) at an exact commit and SHA-256,
+retain its license, and pin rule-normalization/generator inputs and fixtures;
+propose monthly reviewed update PRs with boundary-change tests and persisted-key
+migration review, never silent runtime updates. Without it, correct SameSite,
+site-based partitioning and public-suffix Domain-cookie rejection remain blocked:
+the current full-host fallback separates sibling subdomains that should share
+a site; guessing the last two labels can instead merge unrelated sites.
+[Rule format](https://github.com/publicsuffix/list/wiki/Format).
+
+**Brotli: approve a vetted network adapter, or retain gzip/deflate without br.**
+Pin `brotli-decompressor =5.0.3`, `alloc-no-stdlib =2.0.4`,
+`alloc-stdlib =0.2.4`, lockfile checksums and safe features (no unsafe/seccomp/FFI),
+with strict-window decoding, separate output/scratch budgets and malformed-stream
+fixtures. The decoder is already transitively present through the text provider,
+whose WOFF2 adapter directly pins 5.0.3; that font approval does not authorize
+network use. Deferral still permits servers to negotiate gzip/deflate or an
+uncompressed response under [HTTP negotiation rules](https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.3),
+so lack of br does not inherently break Brotli-capable pages. The cost is
+potentially more transferred bytes and failure for br-only resources or servers
+that send br despite negotiation. No real-page failure rate or bandwidth penalty
+has been measured here; the larger evaluation below identifies adapter work.
+
 ## NET-1 — Fetch policy prototype
 
 Pure request/response policy: no socket dispatcher or JS API yet. The registered
