@@ -310,7 +310,7 @@ so no raw match there receives new SVG conformance credit. The next SVG boundary
 is canonical CSS computation/presentation metadata and a non-inert upstream
 selection; general inline SVG geometry remains a separate architectural slice.
 
-Final fresh Windows workspace at dev `3d0c2b0` plus owned implementation:
+Original Windows workspace at dev `3d0c2b0` plus owned implementation:
 **1,135 passed / 0 failed / 3 ignored across 56 targets**. Paint **87 passed**;
 isolated image adapter **17 passed** (4 unit, 3 presentation, 10 SVG), with --locked
 example build green. Before artifacts are from `cc3761e`; intervening dev includes
@@ -318,9 +318,31 @@ DOM/HTML namespace integration and is not credited to RC-4. The lane-only refres
 re-sync and isolated-target artifact invalidation precede the final gates.
 Evidence and reproduction are in `tests/wpt-replaced-content/rc4/`.
 
-Final RC-4 repeats: scope **26/4/1/17**, controls **21/2/1**, CSS Images **12/12**,
+Original RC-4 repeats: scope **26/4/1/17**, controls **21/2/1**, CSS Images **12/12**,
 SVG **12/12 raw with zero credit**, focused **24/24**, unchanged before/after.
 All ten WPT repeated pairs are stable; actual/reference hashes are unchanged
 across phases. Owned proof **0/9 → 9/9** has stable repeated hashes, changed
 actuals and unchanged references. Source equality was checked across 180 tracked
 Rust/Cargo inputs with zero mismatches. Stop for review; no next ticket started.
+
+
+RC-4 merge gate refreshed on dev `11dd8a8aefd81318fcfe858334e865ed66694cd8`,
+compiled lane HEAD `51ba19fbb4c55386e0822715d27062d4b14b9271`:
+root **nextest 1,209 passed / 0 failed / 3 skipped across 41 binaries**;
+separate **doctests 2 passed / 0 failed** (HTML 1, JS 1; 18 targets).
+Paint contributes 87 passing tests. Isolated image adapter **nextest 17 passed**,
+with **0 doctests present** in its separate doc run. Both renderer builds and
+root/standalone metadata checks pass with `--locked`. No shell source grant or
+lane lockfile edit is needed. The primary's artifact-invalidating fleet refresh,
+owned-file re-sync, and separate image-target invalidation precede these gates;
+191 Rust/Cargo inputs match the Mac. Original before reports and saved executable
+hashes remain unchanged. The partial acb57e5 gate was superseded by the fleet
+refresh and is preserved separately, without a final repeatability claim.
+
+Fresh required gate pairs are complete: scope **26/4/1/17**, controls **21/2/1**,
+PNG **12/12**, SVG **12/12 raw with zero credit**, focused paint **24/24**.
+All five pairs have stable classifications, pixel differences and image hashes,
+also unchanged from original before/after. Owned proof remains **9/9 twice**,
+unchanged from original after; original **0/9** before is preserved. Evidence:
+`tests/wpt-replaced-content/rc4/rebase-11dd8a8/`. RC-4 is ready for co-integrator
+review; no push, shell grant, or next-ticket work.
