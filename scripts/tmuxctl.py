@@ -88,6 +88,9 @@ LANE_GRANTS = {
 # JS-2 adds the amazing-js -> amazing-regex dependency edge, which only cargo
 # can record. Granted for that single edge, verified by diff at merge.
 LANE_GRANTS["js-lang"] = ["Cargo.lock"]
+# CSS-3 rewires the driver's stylesheet collection to preserve per-sheet
+# provenance. Granted for the collection and compute call sites only.
+LANE_GRANTS["css"] = ["crates/amazing/src/main.rs"]
 LANE_GRANTS["dom-bindings"] += [
     "crates/amazing-html/src/tree.rs",
     "crates/amazing-layout/src/box_tree.rs",
