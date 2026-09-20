@@ -1,6 +1,19 @@
 # JS language conformance decision map
 
-Frontier: **JS-2 — RegExp literals and a std-only regex engine**, explicitly prioritized by the integrator because upstream WPT testharness.js cannot parse.
+Frontier: **JS-3 complete — conformant runner and stable full-tree baseline**. JS-2 is merged;
+unmodified upstream WPT testharness.js parses and completes.
+
+Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
+`amazing-regex`. `ast.rs` is the front-end-owned contract consumed by js-runtime;
+AST change requests come back to this lane. Execution, builtins, values,
+environments, VM and GC belong to js-runtime. JS-3 finishes its explicitly
+granted runner and host work before the next language ticket.
+
+**Measurement correction:** every JS-1/JS-2 Test262 count below is a historical
+process-exit measurement under a weakened harness, withdrawn as conformance
+evidence. JS-3 replaces that ruler with real upstream helpers, strict variants,
+phase/type matching and explicit unsupported capabilities. Its results appear
+at the end of this decision map.
 
 ## JS-1: Full-tree Test262 baseline
 
@@ -482,3 +495,329 @@ harness. No DOM conformance percentage is claimed here. Do not silently broaden
 JS-2 into full UTF-16 strings, Symbol protocols or harness repair: choose those
 as separate measured tickets. The largest JS-1 helper-loading cluster remains
 a candidate for an integrator-owned scripts/test262.py follow-up. Stop here.
+
+## JS-3 — Test262 runner contract (implemented)
+
+The integrator explicitly granted `scripts/test262.py` for this ticket. All
+historical JS-1/JS-2 Test262 totals above are withdrawn as conformance evidence:
+they measured exit codes under a weakened harness. They remain historical
+measurements only and must not be compared as a before/after conformance rate.
+
+The replacement follows the pinned suite's [INTERPRETING.md](https://github.com/tc39/test262/blob/3655e7464de3d52643ecddd4b5f9f4f3e7f62398/INTERPRETING.md).
+Python runner tooling uses pinned PyYAML 6.0.3 to parse full YAML, including
+block/flow collections, multiline values and anchors/merges. Engine crates
+remain std-only. Metadata records include includes, flags, features, negative
+phase/type, esid and locale. Invalid input and missing helpers are failures
+with explicit reasons, never implicit exclusions.
+
+Each variant executes in a fresh `amazing-js` example `test262_host` process.
+The driver passes length-prefixed UTF-8 fields; the host parses the test
+separately, loads each helper as a separate script and reports parse,
+harness-parse, harness-runtime, runtime or complete. Non-raw tests receive
+unchanged `assert.js`, then `sta.js`, then ordered includes. No helper is
+replaced or weakened. Raw test bytes receive no prefix or helpers, including
+explicit includes. Default tests have non-strict and strict variants; onlyStrict
+and noStrict have one; modules have a single module variant. The strict prefix
+is exactly `"use strict";\n`, applied only to the test body. Engine strict-mode
+and early-error gaps therefore appear as failures, not runner exclusions.
+
+Negative tests require both the specified phase and thrown constructor name.
+Runtime `SyntaxError` cannot satisfy a parse negative, and a harness failure
+cannot satisfy any negative. The engine's currently missing Error prototype
+constructor wiring produces `<unknown constructor>`, which fails type matching;
+`error.name` is never accepted as evidence of type. The real `assert.throws`
+independently tests constructor identity and exposes the same engine limitation.
+
+The host supplies `$262.global`, `$262.evalScript`, `print`, and reports
+`agent.canBlock=false`. Modules (including resolution), async completion,
+blocking agents, additional realms, ArrayBuffer detachment, GC, concurrent
+agents, AbstractModuleSource and IsHTMLDDA remain unsupported. Module, async,
+CanBlockIsTrue and IsHTMLDDA metadata receive explicit unsupported reasons;
+CanBlockIsFalse runs. Absent ECMA-402 support excludes intl402/staging/intl402
+with `host.intl402`. Unknown flags are unsupported. Generated and
+non-deterministic are informational flags and do not suppress execution.
+Unavailable host calls set an out-of-band unsupported marker, even if test
+code catches the exception. Missing ordinary language features or builtins
+are engine failures; no source-text heuristics skip them. Locale/features
+metadata is retained without inventing support or silently filtering tests.
+
+The report covers every discovered file. `_FIXTURE` names are skipped with
+`fixture`; user filters/limits use `selection.excluded`. All other exclusions
+are explicit unsupported capabilities. Each test records every variant and
+reason. File aggregation prioritizes fail, then timeout, unsupported, pass;
+a file passes only when all of its variants pass. Both file and variant
+denominators, per-mode totals, two-level directories, reason counts and exact
+failure diagnostic clusters are retained. Timing/diagnostic text is excluded
+from the classification hash; paths, variant names, statuses and reasons are
+included. `--compare` checks this hash plus source/host/runner hashes and run
+configuration. Timeouts and abnormal process exits never count as passes.
+
+Windows checkout uses `core.autocrlf=false` and restores pinned Git blob bytes;
+Python reads sources as bytes before UTF-8 decoding, preserving CRLF/BOM/raw
+input. The report records a sorted test/harness content manifest hash. Sources are
+snapshotted once; that hash covers the exact bytes subsequently executed. The
+full-tree run must use the complete lane-local checkout, not the older
+641-file sparse shared checkout.
+
+```powershell
+$env:CARGO_TARGET_DIR='C:/Users/server/target/js-lang'
+python -m venv .agents/js-lang/js3-venv
+& ./.agents/js-lang/js3-venv/Scripts/python.exe -m pip install PyYAML==6.0.3
+cargo build -p amazing-js --example test262_host --locked
+& ./.agents/js-lang/js3-venv/Scripts/python.exe scripts/test262.py .agents/js-lang/test262-full --binary C:/Users/server/target/js-lang/debug/examples/test262_host.exe --self-test
+& ./.agents/js-lang/js3-venv/Scripts/python.exe scripts/test262.py .agents/js-lang/test262-full --binary C:/Users/server/target/js-lang/debug/examples/test262_host.exe --jobs 8 --timeout 60 --output .agents/js-lang/js3-run1.json
+& ./.agents/js-lang/js3-venv/Scripts/python.exe scripts/test262.py .agents/js-lang/test262-full --binary C:/Users/server/target/js-lang/debug/examples/test262_host.exe --jobs 8 --timeout 60 --output .agents/js-lang/js3-run2.json --compare .agents/js-lang/js3-run1.json
+```
+
+Closing integration gates use the project-standard runner and explicitly retain
+doctests, which nextest does not execute:
+
+```powershell
+cargo nextest run --workspace --locked
+cargo test -p amazing-js --locked --doc
+cargo test -p amazing-html --locked --doc
+```
+
+Contract probes exercise YAML forms, flag/variant expansion, exact source
+framing, helper order, phase/type mismatch rejection, real SameValue and throws,
+realm isolation, unsupported calls caught by test code, host eval/global and
+process deadlines. The positive Error-constructor probe explicitly wires its
+own constructor inside that disposable probe; production test sources and
+harness files receive no such repair.
+
+Full-tree validation found a protocol bug that small probes missed: Python's
+`splitlines()` treats U+0085/U+2028/U+2029 inside valid JSON strings as line
+boundaries. The driver now splits only the wire LF delimiter. Regression probes
+cover all three characters, and the five affected pinned files (ten variants)
+now yield valid engine-failure records. The provisional sweep is retained as
+`js3-shakedown1.json`; both final full-tree runs are restarted after this fix.
+
+
+The first corrected full sweep at a 10-second wall deadline measured **10,294
+pass / 33,259 fail / 69 timeout / 9,956 unsupported**, plus 294 fixture files,
+out of 53,872 discovered files. This is nearly twice the old lenient runner's
+5,438 passing files. We expected the honest count to be worse; it is better.
+The old runner excluded 25,262 files, including many that actually pass. This
+is a corrected measurement, not an engine improvement or a comparable old/new
+conformance rate. No production engine code changes in JS-3.
+
+The 10-second repeat exposed three files switching between failure and timeout;
+six focused variants finished in 5.6–7.5 seconds and exposed the engine's
+iterator limit or constructor-identity failure. Final full measurements use
+60 seconds per variant and eight workers for both runs. The rejected 10-second
+pair is retained as diagnostic evidence and does not satisfy the stable gate.
+
+## JS-3 — Stable full-tree baseline
+
+Test262 `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`; Python 3.12.10 / PyYAML 6.0.3; Windows, 8 process workers, 60-second wall deadline per variant, no selection filters or limits. Both runs use unchanged pinned source bytes and the same frozen host/runner.
+
+Discovered **53,872 files**, yielding **102,918 variants**. Every file and variant has an identical status and reason in both runs. Run durations: 886.672 and 1852.109 seconds.
+
+| Measurement | Pass | Fail | Timeout | Unsupported | Skipped |
+|---|---:|---:|---:|---:|---:|
+| Files, run 1 | 10314 | 33292 | 16 | 9956 | 294 |
+| Files, run 2 | 10314 | 33292 | 16 | 9956 | 294 |
+| Variants, both runs | 19820 | 64238 | 32 | 18828 | 0 |
+| module | 0 | 0 | 0 | 843 | 0 |
+| non-strict | 10086 | 32833 | 16 | 9092 | 0 |
+| raw | 17 | 13 | 0 | 0 | 0 |
+| strict | 9717 | 31392 | 16 | 8893 | 0 |
+
+The corrected passing-file count is **10,314**, versus the historical lenient runner's **5,438**. We expected the honest number to be worse; it is better, nearly twice as high. The old runner skipped 25,262 files, including many that actually pass. No production engine code changed in JS-3. These counts describe different runner contracts, so the difference is not an engine improvement or a like-for-like conformance-rate gain.
+
+The 294 skipped files are upstream `_FIXTURE` files. Unsupported variants are accounted for below; a file is unsupported only if no variant fails or times out. Mixed fail/timeout files count as failed, so file and variant timeout totals differ.
+
+| Unsupported reason | Variants |
+|---|---:|
+| `host.async` | 10815 |
+| `host.intl402` | 6714 |
+| `host.module` | 843 |
+| `host.createRealm` | 352 |
+| `host.IsHTMLDDA` | 82 |
+| `host.CanBlockIsTrue` | 14 |
+| `host.gc` | 8 |
+
+### First observed failure clusters
+
+Counts below are failing variants, not unique files. They are diagnostic clusters: the first observable blocker can mask later defects. The broad non-callable bucket includes missing Object/Array/String APIs and computed-method lookup failures; it is not attributed to one defect. Missing constructor wiring is exposed both by real `assert.throws` and negative-type checks. Private fields, early errors and regex diagnostics belong to the front end; runtime APIs and constructor wiring belong to js-runtime.
+
+| First diagnostic | Failing variants |
+|---|---:|
+| runtime:&lt;unknown constructor&gt; \| TypeError: value is not callable | 14236 |
+| runtime:&lt;unknown constructor&gt; \| ReferenceError: Temporal is not defined | 7724 |
+| parse:SyntaxError \| unexpected character \`#\` | 4523 |
+| harness-runtime:&lt;unknown constructor&gt; \| testTypedArray.js: ReferenceError: Float64Array is not defined | 4108 |
+| runtime:&lt;unknown constructor&gt; \| Expected a TypeError but got a undefined | 2595 |
+| negative.phase:parse!=runtime \| Test262: This statement should not be evaluated. | 1771 |
+| runtime:&lt;unknown constructor&gt; \| Expected a Test262Error but got a undefined | 1453 |
+| runtime:&lt;unknown constructor&gt; \| ReferenceError: ArrayBuffer is not defined | 1198 |
+| runtime:&lt;unknown constructor&gt; \| Expected a ReferenceError but got a undefined | 1117 |
+| runtime:&lt;unknown constructor&gt; \| ReferenceError: Proxy is not defined | 1023 |
+| runtime:&lt;unknown constructor&gt; \| Expected a TypeError to be thrown but no exception was thrown at all | 1008 |
+| runtime:&lt;unknown constructor&gt; \| ReferenceError: Iterator is not defined | 950 |
+| parse:SyntaxError \| Unicode properties/named references are unsupported at pattern offset 3 | 886 |
+| parse:SyntaxError \| unexpected character \`\\` | 828 |
+| runtime:&lt;unknown constructor&gt; \| TypeError: generators are not implemented | 803 |
+| runtime:&lt;unknown constructor&gt; \| TypeError: BigInt is not implemented | 553 |
+| runtime:&lt;unknown constructor&gt; \| Expected a Test262Error to be thrown but no exception was thrown at all | 542 |
+| parse:SyntaxError \| unexpected \`)\` | 494 |
+| runtime:&lt;unknown constructor&gt; \| isConstructor invoked with a non-function value | 462 |
+| runtime:&lt;unknown constructor&gt; \| Expected SameValue(«"undefined"», «"function"») to be true | 411 |
+| harness-runtime:&lt;unknown constructor&gt; \| resizableArrayBufferUtils.js: ReferenceError: Uint8Array is not defined | 376 |
+| runtime:&lt;unknown constructor&gt; \| ReferenceError: DataView is not defined | 352 |
+| runtime:&lt;unknown constructor&gt; \| ReferenceError: Reflect is not defined | 313 |
+| parse:SyntaxError \| unexpected keyword \`with\` | 310 |
+| runtime:&lt;unknown constructor&gt; | 302 |
+
+Next-ticket evidence: constructor/prototype wiring and absent builtin APIs affect large runtime clusters; private-field syntax and missing early errors are front-end candidates. The counts above identify observed blockers, not the number that would pass after one fix. No next ticket is started here.
+
+### Reproducibility and validation
+
+- `input_sha256`: `a2ef5e43ff95da279324b6df9a37740a505b9f8b6c7a11406408af70f453b075`.
+- `host_sha256`: `0418bac1becb790052c82b163359e1164a843c8a07cc1435d4c9de8ec1606e15`.
+- `runner_sha256`: `bdb36351facc0475e661bea7ef928ebcc63e06e77d0a2740d897d77b3476d595`.
+- `classification_sha256`: `c0b747c840bc51e5977b4355a5e6d4715ad8dd39c8b21b85904810e5a375a04f`.
+- Pinned provenance: 53,915 test/helper JavaScript blobs, zero Git-blob mismatches and zero extra JavaScript files.
+- Runner protocol/input failures: **0**. Real-helper and host contract probes passed on Windows.
+- Fresh Windows workspace at dev `b5d1b99` (lane base `622012d95d8228b932250a6b3a362f7991800912` plus JS-3 changes): nextest **1229 pass / 0 fail / 3 skipped**. Separate doctests: amazing-js **1 pass / 0 fail**; amazing-html **1 pass / 0 fail**.
+- Frozen measurement host was rebuilt after the 79464ca artifact-invalidating refresh; JS/regex source is unchanged through the closing dev head. Closing self-refresh also invalidated first-party artifacts. Source parity: 374 inputs identical before and after the gate.
+- Root lock SHA-256: `f4ff57271aa44d67cd1a9d2eee65074b7fb885d8d181cf71b8f738e4a4159fb3`. **Cargo.lock diff for JS-3: empty**; the JS → regex edge was already merged in JS-2.
+- Artifacts: `.agents/js-lang/js3-run1.json`, `js3-run2.json`, `js3-analysis.json`, `js3-test262-provenance.json`, `js3-source-manifest.json`, and Windows workspace logs in the lane reporting directory. Per-file reports retain complete classifications and metadata; this table is the durable summary.
+
+### Per-directory file counts
+
+Directories are grouped by the first two directory components (never by filename). The JSON reports also retain variant totals for each directory. P/F/T/U/S mean pass/fail/timeout/unsupported/skipped; all rows together partition the full discovery set.
+
+| Directory | Files | Pass | Fail | Timeout | Unsupported | Skipped |
+|---|---:|---:|---:|---:|---:|---:|
+| annexB/built-ins | 241 | 4 | 221 | 0 | 16 | 0 |
+| annexB/language | 845 | 193 | 626 | 0 | 26 | 0 |
+| built-ins/AbstractModuleSource | 8 | 0 | 0 | 0 | 8 | 0 |
+| built-ins/AggregateError | 25 | 0 | 24 | 0 | 1 | 0 |
+| built-ins/Array | 3082 | 829 | 2137 | 10 | 106 | 0 |
+| built-ins/ArrayBuffer | 221 | 0 | 220 | 0 | 1 | 0 |
+| built-ins/ArrayIteratorPrototype | 27 | 0 | 27 | 0 | 0 | 0 |
+| built-ins/AsyncDisposableStack | 104 | 0 | 74 | 0 | 30 | 0 |
+| built-ins/AsyncFromSyncIteratorPrototype | 38 | 0 | 1 | 0 | 37 | 0 |
+| built-ins/AsyncFunction | 18 | 0 | 17 | 0 | 1 | 0 |
+| built-ins/AsyncGeneratorFunction | 23 | 0 | 15 | 0 | 8 | 0 |
+| built-ins/AsyncGeneratorPrototype | 48 | 0 | 13 | 0 | 35 | 0 |
+| built-ins/AsyncIteratorPrototype | 13 | 0 | 9 | 0 | 4 | 0 |
+| built-ins/Atomics | 389 | 0 | 317 | 0 | 72 | 0 |
+| built-ins/BigInt | 77 | 0 | 76 | 0 | 1 | 0 |
+| built-ins/Boolean | 51 | 16 | 34 | 0 | 1 | 0 |
+| built-ins/DataView | 561 | 0 | 559 | 0 | 2 | 0 |
+| built-ins/Date | 594 | 12 | 579 | 0 | 3 | 0 |
+| built-ins/DisposableStack | 93 | 0 | 92 | 0 | 1 | 0 |
+| built-ins/Error | 93 | 1 | 89 | 0 | 3 | 0 |
+| built-ins/FinalizationRegistry | 47 | 0 | 46 | 0 | 1 | 0 |
+| built-ins/Function | 509 | 130 | 366 | 0 | 13 | 0 |
+| built-ins/GeneratorFunction | 23 | 0 | 21 | 0 | 2 | 0 |
+| built-ins/GeneratorPrototype | 61 | 0 | 61 | 0 | 0 | 0 |
+| built-ins/Infinity | 6 | 2 | 4 | 0 | 0 | 0 |
+| built-ins/Iterator | 654 | 0 | 653 | 0 | 1 | 0 |
+| built-ins/JSON | 165 | 31 | 132 | 0 | 2 | 0 |
+| built-ins/Map | 204 | 24 | 179 | 0 | 1 | 0 |
+| built-ins/MapIteratorPrototype | 11 | 0 | 11 | 0 | 0 | 0 |
+| built-ins/Math | 327 | 59 | 268 | 0 | 0 | 0 |
+| built-ins/NaN | 6 | 2 | 4 | 0 | 0 | 0 |
+| built-ins/NativeErrors | 94 | 8 | 80 | 0 | 6 | 0 |
+| built-ins/Number | 340 | 100 | 239 | 0 | 1 | 0 |
+| built-ins/Object | 3411 | 666 | 2744 | 0 | 1 | 0 |
+| built-ins/Promise | 732 | 23 | 293 | 0 | 416 | 0 |
+| built-ins/Proxy | 311 | 0 | 273 | 0 | 38 | 0 |
+| built-ins/Reflect | 153 | 0 | 153 | 0 | 0 | 0 |
+| built-ins/RegExp | 1879 | 683 | 1193 | 0 | 3 | 0 |
+| built-ins/RegExpStringIteratorPrototype | 17 | 0 | 17 | 0 | 0 | 0 |
+| built-ins/Set | 383 | 39 | 343 | 0 | 1 | 0 |
+| built-ins/SetIteratorPrototype | 11 | 0 | 11 | 0 | 0 | 0 |
+| built-ins/ShadowRealm | 67 | 0 | 60 | 0 | 4 | 3 |
+| built-ins/SharedArrayBuffer | 104 | 0 | 103 | 0 | 1 | 0 |
+| built-ins/String | 1223 | 252 | 968 | 0 | 3 | 0 |
+| built-ins/StringIteratorPrototype | 7 | 0 | 7 | 0 | 0 | 0 |
+| built-ins/SuppressedError | 22 | 0 | 21 | 0 | 1 | 0 |
+| built-ins/Symbol | 98 | 0 | 81 | 0 | 17 | 0 |
+| built-ins/Temporal | 4603 | 0 | 4603 | 0 | 0 | 0 |
+| built-ins/ThrowTypeError | 14 | 0 | 13 | 0 | 1 | 0 |
+| built-ins/TypedArray | 1446 | 0 | 1446 | 0 | 0 | 0 |
+| built-ins/TypedArrayConstructors | 738 | 0 | 738 | 0 | 0 | 0 |
+| built-ins/Uint8Array | 70 | 0 | 70 | 0 | 0 | 0 |
+| built-ins/WeakMap | 141 | 0 | 140 | 0 | 1 | 0 |
+| built-ins/WeakRef | 29 | 0 | 28 | 0 | 1 | 0 |
+| built-ins/WeakSet | 85 | 0 | 84 | 0 | 1 | 0 |
+| built-ins/decodeURI | 55 | 0 | 55 | 0 | 0 | 0 |
+| built-ins/decodeURIComponent | 56 | 0 | 56 | 0 | 0 | 0 |
+| built-ins/encodeURI | 31 | 0 | 31 | 0 | 0 | 0 |
+| built-ins/encodeURIComponent | 31 | 0 | 31 | 0 | 0 | 0 |
+| built-ins/eval | 10 | 1 | 9 | 0 | 0 | 0 |
+| built-ins/global | 29 | 16 | 13 | 0 | 0 | 0 |
+| built-ins/isFinite | 15 | 2 | 13 | 0 | 0 | 0 |
+| built-ins/isNaN | 15 | 2 | 13 | 0 | 0 | 0 |
+| built-ins/parseFloat | 54 | 45 | 9 | 0 | 0 | 0 |
+| built-ins/parseInt | 55 | 47 | 8 | 0 | 0 | 0 |
+| built-ins/undefined | 8 | 3 | 5 | 0 | 0 | 0 |
+| harness | 116 | 15 | 82 | 1 | 18 | 0 |
+| intl402 | 22 | 0 | 0 | 0 | 22 | 0 |
+| intl402/Array | 2 | 0 | 0 | 0 | 2 | 0 |
+| intl402/BigInt | 11 | 0 | 0 | 0 | 11 | 0 |
+| intl402/Collator | 65 | 0 | 0 | 0 | 65 | 0 |
+| intl402/Date | 12 | 0 | 0 | 0 | 12 | 0 |
+| intl402/DateTimeFormat | 244 | 0 | 0 | 0 | 244 | 0 |
+| intl402/DisplayNames | 57 | 0 | 0 | 0 | 57 | 0 |
+| intl402/DurationFormat | 110 | 0 | 0 | 0 | 110 | 0 |
+| intl402/FallbackSymbol | 2 | 0 | 0 | 0 | 2 | 0 |
+| intl402/Intl | 66 | 0 | 0 | 0 | 66 | 0 |
+| intl402/ListFormat | 81 | 0 | 0 | 0 | 81 | 0 |
+| intl402/Locale | 168 | 0 | 0 | 0 | 168 | 0 |
+| intl402/Number | 7 | 0 | 0 | 0 | 7 | 0 |
+| intl402/NumberFormat | 249 | 0 | 0 | 0 | 249 | 0 |
+| intl402/PluralRules | 53 | 0 | 0 | 0 | 53 | 0 |
+| intl402/RelativeTimeFormat | 80 | 0 | 0 | 0 | 80 | 0 |
+| intl402/Segmenter | 79 | 0 | 0 | 0 | 79 | 0 |
+| intl402/String | 19 | 0 | 0 | 0 | 19 | 0 |
+| intl402/Temporal | 2029 | 0 | 0 | 0 | 2029 | 0 |
+| intl402/TypedArray | 1 | 0 | 0 | 0 | 1 | 0 |
+| language/arguments-object | 263 | 23 | 180 | 0 | 60 | 0 |
+| language/asi | 102 | 100 | 2 | 0 | 0 | 0 |
+| language/block-scope | 145 | 45 | 100 | 0 | 0 | 0 |
+| language/comments | 52 | 38 | 13 | 0 | 1 | 0 |
+| language/computed-property-names | 48 | 15 | 33 | 0 | 0 | 0 |
+| language/destructuring | 19 | 13 | 6 | 0 | 0 | 0 |
+| language/directive-prologue | 62 | 28 | 34 | 0 | 0 | 0 |
+| language/eval-code | 347 | 53 | 241 | 0 | 53 | 0 |
+| language/export | 3 | 0 | 0 | 0 | 3 | 0 |
+| language/expressions | 11164 | 3441 | 5400 | 1 | 2260 | 62 |
+| language/function-code | 217 | 165 | 52 | 0 | 0 | 0 |
+| language/future-reserved-words | 55 | 39 | 16 | 0 | 0 | 0 |
+| language/global-code | 42 | 15 | 27 | 0 | 0 | 0 |
+| language/identifier-resolution | 14 | 6 | 8 | 0 | 0 | 0 |
+| language/identifiers | 268 | 139 | 129 | 0 | 0 | 0 |
+| language/import | 191 | 6 | 0 | 0 | 123 | 62 |
+| language/keywords | 25 | 24 | 1 | 0 | 0 | 0 |
+| language/line-terminators | 41 | 32 | 9 | 0 | 0 | 0 |
+| language/literals | 534 | 417 | 117 | 0 | 0 | 0 |
+| language/module-code | 755 | 1 | 0 | 0 | 598 | 156 |
+| language/punctuators | 11 | 10 | 1 | 0 | 0 | 0 |
+| language/reserved-words | 27 | 20 | 6 | 0 | 1 | 0 |
+| language/rest-parameters | 11 | 8 | 3 | 0 | 0 | 0 |
+| language/source-text | 1 | 0 | 1 | 0 | 0 | 0 |
+| language/statementList | 80 | 79 | 1 | 0 | 0 | 0 |
+| language/statements | 9350 | 2101 | 4723 | 3 | 2520 | 3 |
+| language/types | 113 | 75 | 36 | 0 | 2 | 0 |
+| language/white-space | 67 | 51 | 16 | 0 | 0 | 0 |
+| staging | 4 | 0 | 4 | 0 | 0 | 0 |
+| staging/Temporal | 2 | 0 | 2 | 0 | 0 | 0 |
+| staging/Uint8Array | 1 | 0 | 1 | 0 | 0 | 0 |
+| staging/built-ins | 8 | 0 | 8 | 0 | 0 | 0 |
+| staging/decorators | 3 | 0 | 3 | 0 | 0 | 0 |
+| staging/explicit-resource-management | 53 | 0 | 15 | 0 | 38 | 0 |
+| staging/set-methods | 3 | 0 | 3 | 0 | 0 | 0 |
+| staging/sm | 1409 | 165 | 1193 | 1 | 47 | 3 |
+| staging/source-phase-imports | 4 | 0 | 0 | 0 | 2 | 2 |
+| staging/top-level-await | 4 | 0 | 0 | 0 | 1 | 3 |
+
+### Runtime crash evidence
+
+35 failing variants across 19 files terminate abnormally. They remain failures in the tables above. Counts by observed cause: RefCell borrow panic: 22, stack overflow: 13. Full stderr and exit codes remain in the per-variant JSON.
+
+JS-3 stops here. The next front-end or runtime ticket is selected from this baseline; none is started by this lane.
