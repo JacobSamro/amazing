@@ -500,3 +500,43 @@ matched Mac; 114 passed / 0 failed / 0 ignored twice. Canonical result hash
 Workspace exited 101 during compilation: missing Null/Other arms in
 `amazing-html/src/tree.rs:568`. Second workspace gate not run. DOM-3 is
 not complete; sibling compatibility is routed through questions.md.
+
+
+### DOM-3 final integrated gate — complete
+
+Base `79464ca` (NET-5 and RC-3 included), measured lane head `d39904f`.
+HTML owner commits `7ddf65e` and `a1f03f5` are included as `44aea24`/`d39904f`;
+their combined delta is exactly +1/-0 in `amazing-html/src/tree.rs`, handling
+Null/Other namespaces as non-boundaries. The DOM lane authored no HTML logic.
+The earlier E0004 blocker is resolved.
+
+After rebase, own-tree refresh used current mtimes and first-party artifact
+invalidation (lock 3FEAF813), followed by source re-sync. All 177 Rust source
+and manifest hashes matched Mac; fresh first-party compilation appears in logs.
+All builds/tests ran on win-001, isolated dom-bindings tree and target.
+
+| Gate (each run, twice) | Passed | Failed | Ignored | Targets |
+|---|---:|---:|---:|---:|
+| amazing-dom | 114 | 0 | 0 | 2 |
+| Workspace | 1119 | 0 | 3 | 54 |
+
+Native DOM coverage went from 65 existing tests to 114: 42 range/traversal
+tests and seven namespace tests. Canonical test-name/status lines (sorted,
+UTF-8 with LF endings, timing excluded) match between repeats:
+
+- DOM: `0aa71774e90e39694ffc25b8b0e5e7a4aa78003f7a42cc998ed648222286ccc6`.
+- Workspace: `cca4d3fb50e1f27e894278ff7fcacff01c7c6e257c1c49e3ddecf203592259f2`.
+
+The initial PowerShell Start-Process wrapper stalled after Cargo exited; only
+that wrapper was stopped and the gate restarted with direct Cargo invocation.
+The final four direct-invocation gates all exited zero.
+Evidence: `.agents/dom-bindings/dom-3-integration-results.json`,
+`dom-3-final-source-manifest.json`, `dom-3-final-gate-direct.log`, and
+`dom-3-final/` raw logs; corresponding Windows artifacts are under
+`C:/Users/server/target/dom-bindings/`. No DOM-3 WPT improvement is claimed: these
+range/traversal APIs still need JS bindings. DOM-1's measured baseline stands.
+
+HTML follow-ups for qualified attribute prefixes and a parser-only expanded-name
+constructor (e.g. valid XML element `xmlns`) are recorded by that owning lane
+for a later assigned scope; create_element_ns retains DOM API validation.
+DOM-3 is complete and stopped at its review boundary.
