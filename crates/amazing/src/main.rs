@@ -957,6 +957,7 @@ fn main() -> ExitCode {
         Some("fetch-parse") => cmd_fetch_parse(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd_domrun(&args[2..]),
+        Some("wpt-harness" | "wpt-harness-worker") => { mod wpt_harness { include!("cmd/wpt_harness.rs"); } wpt_harness::run(&args[1..]) },
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");
