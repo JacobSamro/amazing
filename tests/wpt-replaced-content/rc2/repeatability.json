@@ -1,0 +1,233 @@
+{
+  "projection": "Ordered cases; listed fields; sorted-key compact UTF-8 JSON",
+  "fields": [
+    "id",
+    "classification",
+    "differing_pixels",
+    "max_difference",
+    "actual_sha256",
+    "reference_sha256",
+    "diff_sha256"
+  ],
+  "pairs": [
+    {
+      "runs": [
+        "images-before-1.json",
+        "images-before-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "526925d5b3491fdf1a395618458ac1596912449cbdb98c160fd682af363abf65"
+    },
+    {
+      "runs": [
+        "images-after-1.json",
+        "images-after-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "c700e2d5e6432127acc7222cbe33658ca29f2e60c671710d5c0dfb5eee30990f"
+    },
+    {
+      "runs": [
+        "svg-before-1.json",
+        "svg-before-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "21310a30039fd932d0886b9d349656e70aee98175be92673e4afe0388c8ec3ec"
+    },
+    {
+      "runs": [
+        "svg-after-1.json",
+        "svg-after-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "21310a30039fd932d0886b9d349656e70aee98175be92673e4afe0388c8ec3ec"
+    },
+    {
+      "runs": [
+        "scope-before-1.json",
+        "scope-before-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "3067e4fddb272b3bd8e607c3d53b6e798b194d6d757fe0d53643e4a198a6b1e7"
+    },
+    {
+      "runs": [
+        "scope-after-1.json",
+        "scope-after-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "3067e4fddb272b3bd8e607c3d53b6e798b194d6d757fe0d53643e4a198a6b1e7"
+    },
+    {
+      "runs": [
+        "focused-before-1.json",
+        "focused-before-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "68e51665fb0ba96e3e3c5392a4686a5a30228fd758cafcf38ad702d560e540fd"
+    },
+    {
+      "runs": [
+        "focused-after-1.json",
+        "focused-after-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "68e51665fb0ba96e3e3c5392a4686a5a30228fd758cafcf38ad702d560e540fd"
+    }
+  ],
+  "counts": {
+    "images": {
+      "before": {
+        "pass": 0,
+        "mismatch": 12,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      }
+    },
+    "svg": {
+      "before": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      }
+    },
+    "scope": {
+      "before": {
+        "pass": 25,
+        "mismatch": 5,
+        "timeout": 0,
+        "unsupported": 1,
+        "crash": 17
+      },
+      "after": {
+        "pass": 25,
+        "mismatch": 5,
+        "timeout": 0,
+        "unsupported": 1,
+        "crash": 17
+      }
+    },
+    "focused": {
+      "before": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      }
+    }
+  },
+  "svg_actual_and_reference_hashes_unchanged": true,
+  "svg_conformance_credit": 0,
+  "svg_reason": "Selected SVG resources require inline CSS; images are rejected on both sides.",
+  "png_changes": [
+    {
+      "id": "object-fit-fill-png-001i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": false,
+      "reference_changed": true
+    },
+    {
+      "id": "object-fit-fill-png-002i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": false,
+      "reference_changed": true
+    },
+    {
+      "id": "object-fit-contain-png-001i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": false,
+      "reference_changed": true
+    },
+    {
+      "id": "object-fit-contain-png-002i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": false,
+      "reference_changed": true
+    },
+    {
+      "id": "object-fit-cover-png-001i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": false,
+      "reference_changed": true
+    },
+    {
+      "id": "object-fit-cover-png-002i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": false,
+      "reference_changed": true
+    },
+    {
+      "id": "object-fit-none-png-001i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": false,
+      "reference_changed": true
+    },
+    {
+      "id": "object-fit-none-png-002i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": false,
+      "reference_changed": true
+    },
+    {
+      "id": "object-fit-scale-down-png-001i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": false,
+      "reference_changed": true
+    },
+    {
+      "id": "object-fit-scale-down-png-002i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": false,
+      "reference_changed": true
+    },
+    {
+      "id": "object-position-png-001i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": true,
+      "reference_changed": true
+    },
+    {
+      "id": "object-position-png-002i",
+      "before": "mismatch",
+      "after": "pass",
+      "actual_changed": true,
+      "reference_changed": true
+    }
+  ]
+}

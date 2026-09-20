@@ -1,0 +1,47 @@
+{
+  "base_commit": "80c66360c75281eb293c21e17688ddd993fb8de8",
+  "build_host": "win-001",
+  "tree": "C:/Users/server/src/wt/replaced-content",
+  "workspace": {
+    "command": "cargo test --workspace --locked",
+    "passed": 927,
+    "failed": 0,
+    "ignored": 3
+  },
+  "paint": {
+    "passed": 74,
+    "new_background_tests": 12
+  },
+  "image": {
+    "command": "cargo test --manifest-path crates/amazing-image/Cargo.toml --locked",
+    "unit_passed": 4,
+    "presentation_passed": 3,
+    "svg_passed": 5
+  },
+  "shell": {
+    "command": "cargo check --manifest-path crates/amazing-shell-gpui/Cargo.toml --locked",
+    "exit_code": 0
+  },
+  "root_lock_sha256": "aa0a0d8fd69000e161ad26ac31d2ea3a988152cce75fdcb4e1277ff8480b2d25",
+  "shell_lock_sha256": "f1a78c48bb57d6ab722d631b6f608e5563847eb3d26cde8b74cb9fa0594625df",
+  "changed_crate_source_hashes_match_windows": true,
+  "changed_crate_source_sha256": {
+    "crates/amazing-image/Cargo.toml": "62886a61ae07087aa8973455eb364d8319a086efae2887751b0c6fb5efd5fe9c",
+    "crates/amazing-image/examples/render_reftest.rs": "085c73075c477586b0860203e97f33ed58d5a44e059dbd4f8b29058d672b273f",
+    "crates/amazing-image/src/lib.rs": "1ebca3cc2c00bf0534338cd5fd425b170eac72966405808e96ea1b6458672364",
+    "crates/amazing-image/src/svg.rs": "79c77cb46486c6f0c280344f84c5bafb44c32bbf144ee80169aa8e79891a5d40",
+    "crates/amazing-image/tests/svg.rs": "27f896d31630c7bef29b56acab78c3fed59a28d1bc90608996004bb91a2b1749",
+    "crates/amazing-paint/src/background.rs": "a5e1bcded59658cf01ddd24618da728138fb8c0f9b841d61283e36514a0bb826",
+    "crates/amazing-paint/src/background_raster.rs": "e9cde6c7c088e4da535cc71a604e021dd7682ba4d80127d2d01de93b81f3cfdc",
+    "crates/amazing-paint/src/background_tests.rs": "be212d4585ff5902df9ee444e69d21799c53adf7720f3a6f0d2352cf2c4fc235",
+    "crates/amazing-paint/src/display_list.rs": "c9ce20434cba169df0bcec3fdf38d3ad9812098ee256a1b21e49f02e05045151",
+    "crates/amazing-paint/src/image.rs": "c03608bffbcd5392f4072cec573cc738b27ba8aae56e0b429950e78722357043",
+    "crates/amazing-paint/src/lib.rs": "f00f8c2c6e07396675c22151bf32434c7fee0d3c2319cf1cc17d168be596aead",
+    "crates/amazing-paint/src/paint.rs": "b6f5eb5d7cff339441cb31c5f25c831ac4637a2e90ae4ce7affc83e2ef8968a7",
+    "crates/amazing-shell-gpui/src/engine_viewport.rs": "a391847dd890bb22054995e5994e0ddec51043a7d658265b4487ba1fa1456e8f"
+  },
+  "notes": [
+    "Stale Cargo net artifacts were cleaned; final baseline rebuilt and owned patch re-synced afterward.",
+    "No root workspace or lockfile edits. No local builds/tests. No interactive shell visual proof."
+  ]
+}

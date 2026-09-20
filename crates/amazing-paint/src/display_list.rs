@@ -92,7 +92,7 @@ impl GroupEffect {
 
 pub(crate) enum PaintCommand<'a> {
     BeginGroup(GroupEffect),
-    PaintDecorations(&'a LayoutBox),
+    PaintDecorations(&'a LayoutBox, crate::background::BackgroundPlan),
     PaintContent(&'a LayoutBox),
     PushOverflowClip(&'a LayoutBox),
     PopClip,
@@ -159,7 +159,7 @@ fn emit_context<'a>(
         commands.push(PaintCommand::BeginGroup(effect));
     }
 
-    commands.push(PaintCommand::PaintDecorations(root));
+    commands.push(PaintCommand::PaintDecorations(root, crate::background::BackgroundPlan::from_style(&root.style)));
     let root_clips = clips_overflow(root);
     if root_clips {
         commands.push(PaintCommand::PushOverflowClip(root));
@@ -276,7 +276,7 @@ fn walk_middle<'a>(
         positioned_phase,
         middle,
         buckets,
-        PaintCommand::PaintDecorations(box_),
+        PaintCommand::PaintDecorations(box_, crate::background::BackgroundPlan::from_style(&box_.style)),
     );
     let clips = clips_overflow(box_);
     if clips {

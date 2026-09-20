@@ -97,3 +97,102 @@ these in owning lanes; do not modify upstream references to obtain passes.
 Implementation references: [CSS Images 3 object fitting](https://drafts.csswg.org/css-images-3/#the-object-fit),
 [image 0.25.9 reader](https://docs.rs/image/0.25.9/image/struct.ImageReader.html),
 [decoder limits](https://docs.rs/image/0.25.9/image/struct.Limits.html).
+
+# RC-2 — background longhands and bounded static SVG
+
+Base: `80c6636` (includes the integrator's DOM-2 and NET-3 refresh). The Mac
+worktree remains authoritative; all lane changes were re-synced after the
+refresh. A stale Cargo net artifact initially exposed an older ParsedUrl API
+although source hashes matched. Cleaning package artifacts fixed it without
+net source edits; baseline binaries were rebuilt before collecting final data.
+
+## Decisions and delivered behavior
+
+- Background layer descriptors are constructed in `display_list`; it remains
+  the only paint stage walking LayoutBox. Rasterization consumes the existing
+  stacking, clip and effect command order. Background color is below the last
+  image, the first listed image is topmost, and inset shadows/borders/content
+  retain their existing order.
+- `ImageProvider::background_image(node,url)` supplies already decoded owned
+  media pixels. Paint does no fetching or decoding. The shell resolves and
+  fetches URLs through its existing session and delegates to amazing-image.
+  The static reftest artifact uses the same adapter for local resources.
+- Longhands cover repeat/no-repeat/repeat-x/repeat-y/space/round, keyword and
+  percentage/pixel positions including edge offsets, auto/explicit sizing,
+  contain/cover, border/padding/content origin and rounded clip, comma lists,
+  shorter-list cycling and `none` slots. Token-aware splitting retains quoted
+  commas and CSS URL escapes. The bottom layer selects background-color clip.
+- Background descriptors have 32-layer/64-KiB-value bounds; the raster frame
+  has a 64-Mi sample budget. Inverse sampling avoids loops proportional to
+  tiny repeated tile sizes. Exhaustion produces the existing closed white
+  frame. The shell bounds attempted background URLs at 32 and shares the
+  128-MiB retained RGBA budget with img resources.
+- A half-pixel edge mismatch between replaced images and backgrounds was
+  fixed by using pixel-centre coverage for replaced images. A direct raster
+  regression checks matching coverage at half-pixel boundaries.
+- The next independent cluster is **static SVG images**, an explicit bounded
+  slice of the SVG cluster tied third in RC-1's measured non-pass ranking.
+  Canvas had 8/8 renderer errors and 532/533 scripted candidates; controls
+  require layout/DOM work, and embedded documents/media require lifecycle
+  seams. Static SVG shapes can produce owned pixels without those prerequisites.
+  This is not a claim that this slice resolves the broader SVG cluster.
+- SVG has its own small strict-subset parser/raster module behind the existing
+  amazing-image decode entry point. It supports explicit integral intrinsic
+  dimensions, viewBox and preserveAspectRatio meet/slice/none, rectangles,
+  circles, ellipses, inherited presentation fill/currentColor and shape alpha.
+  Unsupported features reject the whole image. Work is capped at 1024 elements,
+  depth 32 and 64-Mi pixel/shape samples, alongside adapter input/output limits.
+  The canonical amazing-css color parser is reused; paint color parsing is
+  unchanged. The CSS dependency moved from adapter dev-only to normal use;
+  no external engine dependency or root workspace membership changed.
+
+## Boundaries and routed work
+
+CSS-3 owns background shorthand expansion and stylesheet-relative URL
+provenance, accepted by the integrator. RC-2 uses unmodified upstream explicit
+longhands and does not wait for CSS-3. Layout retains inline replaced/control
+box ownership. Background attachment, gradients, logical/calc positions,
+full unit resolution (rem currently uses the engine's 16px root default),
+root/body image propagation and inline decoration fragmentation are not claimed.
+
+SVG CSS/inline style, paths, strokes, text, transforms, filters, external
+references, animation, fractional/percentage intrinsic sizing and antialiasing
+remain unsupported. The paired SVG WPT resource files use inline CSS fill;
+raw matches with those images omitted receive zero conformance credit.
+Root-driver PageMedia adoption of the richer adapter remains integrator-owned.
+No GPUI screenshot proof was collected; the standalone shell gate is a locked
+compile check, not an interactive visual claim.
+
+Windows validation after refresh and re-sync: root workspace **927 passed,
+0 failed, 3 ignored**; paint **74 passed** including 12 new background/coverage
+checks; adapter **4 unit + 3 presentation + 5 SVG tests passed**; standalone
+shell `cargo check --locked` passed. All 13 changed crate source files match
+between Mac and Windows by SHA-256. Evidence is in
+`tests/wpt-replaced-content/rc2/validation.json` and `artifacts.json`.
+
+## RC-2 pinned results
+
+WPT remains pinned at `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+The retained PNG selection moves **0/12 → 12/12**. The references now paint
+decoded backgrounds, and the two fractional object-position cases also use
+consistent pixel-centre coverage. This is a selected static reftest result,
+not a general CSS Images conformance claim or a substitute for LAYOUT-2.
+The SVG counterpart selection is **12/12 raw → 12/12 raw**, with **zero SVG
+conformance credit** because the resources require unsupported inline CSS.
+The 48-entry scope remains **25 pass / 5 mismatch / 1 unsupported / 17 renderer
+errors**, with no timeouts; its improvement over RC-1 belongs to the new dev
+baseline and is not credited to RC-2. The focused gate remains **24/24**.
+
+Reports preserve every classification, differing-pixel count and pixel hash
+under `tests/wpt-replaced-content/rc2/`. Reproduction and interpretation are in
+that directory's README; `analyze-rc2.py` compares both saved runs per phase.
+
+Next boundary: merge review of this owned slice and the minimal shell loader
+patch; CSS-3 and LAYOUT-2 remain independently owned. A future SVG ticket must
+add CSS through the canonical computation seam and select non-inert SVG
+reftests before increasing any conformance count. Do not proceed automatically.
+
+All eight before/after repeatability pairs are stable in classifications and
+actual/reference/diff hashes. Every PNG reference changed, while only the two
+half-pixel object-position actuals changed. SVG actual and reference hashes
+are unchanged across phases, corroborating zero credited SVG gains.

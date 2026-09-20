@@ -2,6 +2,8 @@
 //! Animation, ICC color management and EXIF orientation are not implemented.
 #![forbid(unsafe_code)]
 
+mod svg;
+
 use image::ImageDecoder;
 use std::io::Cursor;
 
@@ -30,6 +32,7 @@ pub enum DecodeError {
     GeometryLimit,
     AllocationLimit,
     InvalidImage,
+    UnsupportedSvg,
     DecoderPanic,
 }
 impl std::fmt::Display for DecodeError {
@@ -51,6 +54,9 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<amazing_media::Image
         .unwrap_or(Err(DecodeError::DecoderPanic))
 }
 fn decode_inner(bytes: &[u8], limits: DecodeLimits) -> Result<amazing_media::Image, DecodeError> {
+    if std::str::from_utf8(bytes).is_ok_and(|s| s.trim_start_matches('\u{feff}').trim_start().starts_with('<')) {
+        return svg::decode(bytes, limits);
+    }
     let mut reader = image::ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|_| DecodeError::InvalidImage)?;

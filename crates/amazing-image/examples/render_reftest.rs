@@ -10,13 +10,14 @@ struct Entry {
     image: amazing_media::Image,
     size: IntrinsicSize,
 }
-struct Resources(HashMap<u32, Entry>);
+struct Resources(HashMap<u32, Entry>, HashMap<String, amazing_media::Image>);
 impl ReplacedElementProvider for Resources {
     fn intrinsic_size(&self, n: NodeIdx) -> Option<IntrinsicSize> {
         self.0.get(&n.0).map(|v| v.size)
     }
 }
 impl amazing_paint::ImageProvider for Resources {
+    fn background_image(&self, _n: NodeIdx, url: &str) -> Option<&amazing_media::Image> { self.1.get(url) }
     fn image(&self, n: NodeIdx) -> Option<&amazing_media::Image> {
         self.0.get(&n.0).map(|v| &v.image)
     }
@@ -75,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     });
-    let mut resources = Resources(HashMap::new());
+    let mut resources = Resources(HashMap::new(), HashMap::new());
     let mut retained = 0usize;
     visit(&dom, NodeIdx(0), &mut |n| {
         if dom.name(n) != Some("img") || resources.0.len() >= 256 {
@@ -118,6 +119,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         resources.0.insert(n.0, Entry { image, size });
     });
+    let styles = amazing_css::compute(&dom, &[amazing_css::parse_stylesheet(&css)]);
+    let mut attempted_backgrounds = std::collections::HashSet::new();
+    visit(&dom, NodeIdx(0), &mut |n| {
+        let Some(style) = styles.get(n) else { return; };
+        for layer in amazing_paint::background::BackgroundPlan::from_style(style).layers {
+            let Some(url) = layer.url else { continue; };
+            if attempted_backgrounds.len() >= 256 || !attempted_backgrounds.insert(url.clone()) { continue; }
+            let path = resolve(page, &url);
+            if std::fs::metadata(&path).map_or(true, |m| m.len() > 16 * 1024 * 1024) { continue; }
+            let Some(image) = std::fs::read(path).ok().and_then(|bytes| amazing_image::decode(&bytes, Default::default()).ok()) else { continue; };
+            if retained.saturating_add(image.pixels.len()) > 128 * 1024 * 1024 { continue; }
+            retained += image.pixels.len();
+            resources.1.insert(url, image);
+        }
+    });
     let fonts = amazing_layout::font::FontSource::fallback();
     let root = amazing_layout::layout_dom_document_with_replaced_in_viewport(
         &dom,
@@ -128,7 +144,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &resources,
     );
     let glyphs = amazing_paint::RectInkProvider;
-    let styles = amazing_css::compute(&dom, &[amazing_css::parse_stylesheet(&css)]);
     let images = amazing_paint::image::StyledImages {
         images: &resources,
         styles: &styles,
