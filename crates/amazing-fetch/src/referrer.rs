@@ -36,7 +36,7 @@ pub fn determine_referrer(
 ) -> Option<String> {
     let source = source?;
     let origin = format!("{}/", source.origin().serialize());
-    let full = source.without_fragment();
+    let full = source.referrer_url();
     let full = if full.len() > 4096 {
         origin.clone()
     } else {

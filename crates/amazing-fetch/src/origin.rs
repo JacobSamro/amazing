@@ -1,4 +1,6 @@
 use crate::FetchError;
+use amazing_net::url::TupleOrigin;
+use amazing_net::{ParsedUrl, UrlOrigin};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Opaque origins carry identity, even though each serializes as `null`.
@@ -6,11 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub struct Origin(OriginKind);
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum OriginKind {
-    Tuple {
-        scheme: String,
-        host: String,
-        port: u16,
-    },
+    Tuple(TupleOrigin),
     Opaque(u64),
 }
 impl Origin {
@@ -24,27 +22,20 @@ impl Origin {
     pub fn serialize(&self) -> String {
         match &self.0 {
             OriginKind::Opaque(_) => "null".into(),
-            OriginKind::Tuple { scheme, host, port } => {
-                let suffix =
-                    if (*port == 443 && scheme == "https") || (*port == 80 && scheme == "http") {
-                        String::new()
-                    } else {
-                        format!(":{port}")
-                    };
-                format!("{scheme}://{host}{suffix}")
-            }
+            OriginKind::Tuple(origin) => origin.serialize(),
         }
     }
     /// No last-two-label heuristic: registrable domains require a PSL provider.
     pub fn site(&self, domains: &impl RegistrableDomain) -> Site {
         match &self.0 {
             OriginKind::Opaque(id) => Site::Opaque(*id),
-            OriginKind::Tuple { scheme, host, .. } => Site::Tuple {
-                scheme: scheme.clone(),
-                domain: domains
-                    .registrable_domain(host)
-                    .unwrap_or_else(|| host.clone()),
-            },
+            OriginKind::Tuple(origin) => {
+                let host = origin.host().serialize();
+                Site::Tuple {
+                    scheme: origin.scheme().into(),
+                    domain: domains.registrable_domain(&host).unwrap_or(host),
+                }
+            }
         }
     }
 }
@@ -60,118 +51,61 @@ pub enum Site {
     Opaque(u64),
 }
 
+/// Validated HTTP(S) URL. Syntax, canonicalization and origin projection all
+/// come from amazing-net's ParsedUrl. Credentials are preserved for policy.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpUrl {
+    parsed: ParsedUrl,
     origin: Origin,
-    path_query: String,
-    fragment: Option<String>,
 }
 impl HttpUrl {
-    /// Strict canonical ASCII subset. Rejects userinfo, backslashes, controls,
-    /// non-ASCII, legacy IPv4 spellings, and percent-encoded hosts.
+    /// WHATWG parsing with UTF-8 encoding and the default deferred-IDNA seam.
+    /// Non-ASCII special hosts still fail; Unicode paths and recovery forms work.
     pub fn parse(input: &str) -> Result<Self, FetchError> {
-        if !input.is_ascii() || input.bytes().any(|b| b <= 32 || b == 127 || b == b'\\') {
+        Self::from_parsed(ParsedUrl::parse(input).map_err(|_| FetchError::InvalidUrl)?)
+    }
+    /// Adopt an already validated URL without reparsing or losing userinfo.
+    pub fn from_parsed(parsed: ParsedUrl) -> Result<Self, FetchError> {
+        if !matches!(parsed.scheme(), "http" | "https") {
             return Err(FetchError::InvalidUrl);
         }
-        let (scheme, rest) = input.split_once("://").ok_or(FetchError::InvalidUrl)?;
-        let scheme = scheme.to_ascii_lowercase();
-        if !matches!(scheme.as_str(), "http" | "https") {
+        let UrlOrigin::Tuple(origin) = parsed.origin() else {
             return Err(FetchError::InvalidUrl);
-        }
-        let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-        let authority = &rest[..end];
-        if authority.contains('@') {
-            return Err(FetchError::InvalidUrl);
-        }
-        let (host, port) = if authority.starts_with('[') {
-            let end = authority.find(']').ok_or(FetchError::InvalidUrl)?;
-            let ip: std::net::Ipv6Addr = authority[1..end]
-                .parse()
-                .map_err(|_| FetchError::InvalidUrl)?;
-            let tail = &authority[end + 1..];
-            (
-                format!("[{ip}]"),
-                if tail.is_empty() {
-                    None
-                } else {
-                    Some(tail.strip_prefix(':').ok_or(FetchError::InvalidUrl)?)
-                },
-            )
-        } else {
-            let (host, port) = authority
-                .split_once(':')
-                .map_or((authority, None), |(h, p)| (h, Some(p)));
-            if host.is_empty()
-                || host.split('.').any(|label| {
-                    label.is_empty()
-                        || label.starts_with('-')
-                        || label.ends_with('-')
-                        || !label
-                            .bytes()
-                            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
-                })
-            {
-                return Err(FetchError::InvalidUrl);
-            }
-            let lower = host.to_ascii_lowercase();
-            let last = lower.rsplit('.').next().unwrap();
-            if last.bytes().all(|b| b.is_ascii_digit()) || last.starts_with("0x") {
-                let ip: std::net::Ipv4Addr = host.parse().map_err(|_| FetchError::InvalidUrl)?;
-                if ip.to_string() != host {
-                    return Err(FetchError::InvalidUrl);
-                }
-            }
-            (host.to_ascii_lowercase(), port)
-        };
-        let port = match port {
-            Some(p) if !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()) => {
-                p.parse().map_err(|_| FetchError::InvalidUrl)?
-            }
-            Some(_) => return Err(FetchError::InvalidUrl),
-            None => {
-                if scheme == "https" {
-                    443
-                } else {
-                    80
-                }
-            }
-        };
-        let (path, fragment) = rest[end..]
-            .split_once('#')
-            .map_or((&rest[end..], None), |(p, f)| (p, Some(f.to_owned())));
-        let path_query = if path.starts_with('/') {
-            path.to_owned()
-        } else {
-            format!("/{path}")
         };
         Ok(Self {
-            origin: Origin(OriginKind::Tuple { scheme, host, port }),
-            path_query,
-            fragment,
+            parsed,
+            origin: Origin(OriginKind::Tuple(origin)),
         })
+    }
+    pub fn as_parsed(&self) -> &ParsedUrl {
+        &self.parsed
+    }
+    pub fn resolve(&self, reference: &str) -> Result<Self, FetchError> {
+        Self::from_parsed(
+            self.parsed
+                .resolve(reference)
+                .map_err(|_| FetchError::InvalidUrl)?,
+        )
     }
     pub fn origin(&self) -> &Origin {
         &self.origin
     }
     pub fn is_secure(&self) -> bool {
-        matches!(&self.origin.0, OriginKind::Tuple { scheme, .. } if scheme == "https")
+        self.parsed.scheme() == "https"
+    }
+    pub fn includes_credentials(&self) -> bool {
+        self.parsed.includes_credentials()
     }
     pub fn without_fragment(&self) -> String {
-        format!("{}{}", self.origin.serialize(), self.path_query)
+        self.parsed.serialize_without_fragment()
     }
     pub fn serialize(&self) -> String {
-        let mut s = self.without_fragment();
-        if let Some(f) = &self.fragment {
-            s.push('#');
-            s.push_str(f);
-        }
-        s
+        self.parsed.serialize()
     }
-    /// Redirect targets must already be resolved by the URL layer. Inherit
-    /// source fragment only if Location did not contain one (including empty).
+    pub(crate) fn referrer_url(&self) -> String {
+        self.parsed.serialize_referrer()
+    }
     pub(crate) fn inherit_fragment(&mut self, source: &Self) {
-        if self.fragment.is_none() {
-            self.fragment = source.fragment.clone();
-        }
+        self.parsed = self.parsed.with_inherited_fragment(&source.parsed);
     }
 }

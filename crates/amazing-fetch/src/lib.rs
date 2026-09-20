@@ -1,6 +1,6 @@
 //! Pure HTTP Fetch policy prototype. No I/O, cookies, cache or JS bindings.
-//! URL input is deliberately limited to canonical ASCII HTTP(S); this is not
-//! a WHATWG URL parser. A future URL crate must supply normalized URLs.
+//! HTTP(S) URL syntax and resolution use amazing-net ParsedUrl; IDNA remains
+//! deferred behind its provider seam. This policy model has no live dispatcher.
 #![forbid(unsafe_code)]
 mod cors;
 mod headers;

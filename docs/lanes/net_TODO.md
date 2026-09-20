@@ -276,3 +276,87 @@ though it were the replacement parser. Test262 was not run or claimed.
 
 Full Windows workspace gate: `cargo test --workspace --locked` exited 0; **777 passed, 0 failed, 3 ignored** across 48 test-target/doc-test summaries. The root workspace excludes the standalone GPUI shell.
 Ignored tests are external HTTPS and two real-GPU probes; none added by NET-2.
+
+## NET-3 — Adopt the shared parser in transport and Fetch policy
+
+### Production boundary and unresolved integration hazard
+
+`amazing-net::fetch` now parses URL input and resolves HTTP Location using
+`ParsedUrl`. Its HTTP/HTTPS transport uses canonical host/port and origin-form
+path/query from that record. File URL loading uses the same parser with an
+explicit local-file conversion policy. Bare filesystem paths retain their
+separate loading route. The public loading API and NetError variants remain
+compatible; ParseError maps to NetError::Url(UrlError::InvalidUrl).
+
+`amazing-fetch::HttpUrl` now wraps ParsedUrl. Origin equality and CORS origin
+serialization derive from its TupleOrigin; referrers strip userinfo and
+fragments. `HttpUrl::resolve` and `redirect_location` resolve raw Location
+values through the shared parser, preserving absent versus empty fragments.
+Credential-bearing redirect targets remain represented until CORS policy checks
+reject them where required. This is the production implementation of the
+policy crate, **not a newly connected live Fetch dispatcher**: shell orchestration,
+preflight exchange, cookies and cache are still outside this ticket.
+
+**Correctness hazard until shell adoption: shell URL and origin decisions can
+differ from the now-canonical transport.** The public-field legacy Url and free
+resolve retain their previous semantics for GPUI `session_state.rs` cookie and
+cache keys, `dom_runtime.rs` storage origins/resource resolution,
+`engine_viewport.rs`, shell `main.rs` navigation, and driver `main.rs`/`gui.rs`.
+They are documented as compatibility-only; no shell or driver files changed.
+The integrator explicitly owns this migration using the NET-2 table. Persisted
+cookie, cache and storage keys under local app data need a deliberate migration
+plan before canonicalization changes their identity. This ticket does not
+establish whole-browser URL/origin consistency.
+
+### Intentional behavior changes and bounded scope
+
+- The original 39 Fetch policy tests remain, with one explicitly renamed and
+  updated: `ambiguous_urls_fail_closed` becomes
+  `url_parser_recovery_replaces_the_strict_ascii_shortcut`. Userinfo, short/radix
+  IPv4, backslashes, embedded CR/LF and percent-encoded hosts now follow WHATWG
+  canonicalization rather than being rejected. Unicode paths encode as UTF-8.
+  Non-HTTP(S) Fetch URLs, Unicode special hosts without IDNA and invalid ports
+  still reject. Five additional policy tests cover adoption and its boundaries.
+- Transport canonicalizes encoded dot segments, host spellings, default ports,
+  Unicode paths and empty queries. Fragments/userinfo never enter the HTTP
+  request target. Redirects inherit a missing fragment, retain an explicit empty
+  fragment, and cannot switch a network load into file or another unsupported
+  scheme. Userinfo does not automatically generate HTTP authentication.
+- File URLs normalize localhost and drive letters, percent-decode valid UTF-8,
+  and reject remote hosts, NUL, invalid UTF-8 and encoded filesystem separators.
+  Windows conversion also rejects UNC/device-shaped paths; bare native paths
+  preserve the existing separate route. File parsing alone does not authorize
+  remote file access.
+- Legacy shim tests preserve legacy semantics. IDNA/Unicode tables, PSL data,
+  parser state-machine changes, cookie/cache migration, arbitrary-method
+  single-hop Fetch transport and shell dispatcher integration remain deferred.
+
+### Validation
+
+NET-2 baseline: 39 Fetch policy + 65 net + 13 URL API + 2 TLS = 119 passing
+native tests; pinned constructor corpus 864 pass / 0 fail / 32 unsupported.
+NET-3 final win-001 lane gate: **132 passed / 0 failed / 0 ignored**:
+44 Fetch policy (39 retained + 5 new), 65 existing net, 13 URL API,
+8 new transport integration, 2 TLS. All builds/tests ran on win-001 with
+CARGO_TARGET_DIR=C:/Users/server/target/net and four build jobs.
+
+Pinned corpus revision/selection is unchanged from NET-2. Both runs measured
+**864 pass / 0 fail / 0 timeout / 32 IDNA unsupported**, out of 896 objects.
+Both normalized stdout SHA-256 values:
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+Sorted 30-file lane source manifest SHA-256:
+`7b4b1ba8f21df26fb17a3e7f2c4081ed987d93a3b7844da746af5e88c507a012`.
+Local and Windows source hashes matched before/after the two corpus runs.
+
+Full Windows workspace: `cargo test --workspace --locked` exited 0;
+**857 passed / 0 failed / 3 ignored**, across 51 test-target/doc-test summaries.
+GPUI's isolated manifest is outside this gate. The published NET-2 workspace
+count was 777; the refreshed sibling tree also contributes to the increase,
+so only the 13 new lane tests are attributed to NET-3. No Test262 or Fetch WPT
+measurement is claimed. Evidence: `.agents/net/net3-{unit-final,workspace}.txt`,
+`net3-wpt-{1,2}.{stdout,stderr}`, `net3-hashes-{before,after}.txt`, and
+`net3-source-hashes.txt` in the integrator checkout.
+
+Rebased on origin/dev `2960422` (only AGENTS.md differs from the integrator's
+`26c64de` refresh), then re-synced owned source after that refresh. No sibling
+source, root manifest, lockfile, shell or driver changes. NET-3 ends here.

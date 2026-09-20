@@ -76,21 +76,25 @@ fn schemeful_sites_use_provider_not_last_two_labels() {
     assert_ne!(Origin::opaque().site(&Psl), Origin::opaque().site(&Psl));
 }
 #[test]
-fn ambiguous_urls_fail_closed() {
-    for s in [
-        "https://u:p@a.test/",
-        "file:///x",
-        "https://é.test/",
-        "https://127.1/",
-        "https://0x7f000001/",
-        "https://a\\b/",
-        "https://a.test:65536/",
-        "https://a.test/\r\nx",
-        "https://a%2etest/",
+fn url_parser_recovery_replaces_the_strict_ascii_shortcut() {
+    // NET-3 intentional changes: these were rejected by NET-1's shortcut.
+    for (input, expected) in [
+        ("https://u:p@a.test/", "https://u:p@a.test/"),
+        ("https://127.1/", "https://127.0.0.1/"),
+        ("https://0x7f000001/", "https://127.0.0.1/"),
+        ("https://a\\b/", "https://a/b/"),
+        ("https://a.test/\r\nx", "https://a.test/x"),
+        ("https://a%2etest/", "https://a.test/"),
     ] {
-        assert!(HttpUrl::parse(s).is_err(), "{s}");
+        assert_eq!(HttpUrl::parse(input).unwrap().serialize(), expected);
+    }
+    // These rejections are unchanged: Fetch supports HTTP(S), no IDNA yet,
+    // and the standard still rejects out-of-range ports.
+    for input in ["file:///x", "https://é.test/", "https://a.test:65536/"] {
+        assert!(HttpUrl::parse(input).is_err(), "{input}");
     }
 }
+
 #[test]
 fn methods_and_bodies_are_validated() {
     let mut r = request(false);
@@ -696,4 +700,91 @@ fn redirect_referrer_cannot_regain_stripped_path() {
         r.prepare().unwrap().referrer.as_deref(),
         Some("https://a.test/")
     );
+}
+
+#[test]
+fn parsed_url_adoption_unifies_origins_and_cors_serialization() {
+    let a = HttpUrl::from_parsed(
+        amazing_net::ParsedUrl::parse("https://u:p@0x7f000001:443/é").unwrap(),
+    )
+    .unwrap();
+    assert_eq!(a.origin(), url("https://127.0.0.1/").origin());
+    assert_eq!(a.origin().serialize(), "https://127.0.0.1");
+    assert_eq!(a.serialize(), "https://u:p@127.0.0.1/%C3%A9");
+    let mut r = Request::new(url("https://b.test/"), a.origin().clone());
+    r.prepare().unwrap();
+    assert!(cors_check(
+        &r,
+        &response(200, &[("access-control-allow-origin", "https://127.0.0.1")]).headers
+    )
+    .is_ok());
+    assert!(HttpUrl::from_parsed(amazing_net::ParsedUrl::parse("file:///x").unwrap()).is_err());
+}
+#[test]
+fn raw_location_resolution_preserves_query_and_fragment_presence() {
+    let mut r = Request::new(
+        url("https://a.test/a/b#old"),
+        url("https://a.test/").origin().clone(),
+    );
+    assert_eq!(
+        redirect_location(&mut r, &response(302, &[]), Some("../%2e/é?")),
+        Ok(RedirectAction::Follow)
+    );
+    assert_eq!(r.url().serialize(), "https://a.test/%C3%A9?#old");
+    redirect_location(&mut r, &response(302, &[]), Some("#")).unwrap();
+    assert_eq!(r.url().serialize(), "https://a.test/%C3%A9?#");
+}
+#[test]
+fn location_absence_is_distinct_from_invalid_and_unsupported_targets() {
+    let mut r = request(false);
+    assert_eq!(
+        redirect_location(&mut r, &response(302, &[]), None),
+        Ok(RedirectAction::NotRedirect)
+    );
+    for input in ["https://x:65536/", "https://é.test/", "file:///x"] {
+        assert_eq!(
+            redirect_location(&mut r, &response(302, &[]), Some(input)),
+            Err(FetchError::InvalidUrl)
+        );
+        assert_eq!(r.url_list().len(), 1);
+    }
+    r.redirect = RedirectMode::Manual;
+    assert!(matches!(
+        redirect_location(&mut r, &response(302, &[]), Some("https://x:65536/")),
+        Ok(RedirectAction::Manual(_))
+    ));
+}
+#[test]
+fn cors_redirects_reject_credentials_even_when_chain_returns_to_origin() {
+    let mut r = request(false);
+    assert_eq!(
+        redirect_location(&mut r, &response(302, &[]), Some("https://u:p@b.test/")),
+        Err(FetchError::Cors)
+    );
+    assert_eq!(r.url_list().len(), 1);
+    // Same-origin credentials remain represented, rather than rejected by URL syntax.
+    redirect_location(&mut r, &response(302, &[]), Some("https://u:p@a.test/next")).unwrap();
+    assert!(r.url().includes_credentials());
+    redirect_location(&mut r, &response(302, &[]), Some("https://b.test/")).unwrap();
+    assert_eq!(
+        redirect_location(
+            &mut r,
+            &response(302, &[("access-control-allow-origin", "https://a.test")]),
+            Some("https://u:p@a.test/")
+        ),
+        Err(FetchError::Cors)
+    );
+}
+#[test]
+fn referrers_strip_credentials_and_fragments_but_keep_encoded_path() {
+    let source = url("https://u:p@a.test/é?q#private");
+    assert_eq!(
+        determine_referrer(
+            Some(&source),
+            &url("https://a.test/"),
+            ReferrerPolicy::UnsafeUrl
+        ),
+        Some("https://a.test/%C3%A9?q".into())
+    );
+    assert!(source.without_fragment().contains("u:p@"));
 }

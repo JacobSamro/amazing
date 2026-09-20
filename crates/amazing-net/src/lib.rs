@@ -4,9 +4,9 @@
 //! Content-Length and chunked bodies, redirects, `file://` fetching).
 //!
 //! Modules, in dependency order:
-//! - [`url`]: `http`/`https`/`file` URL parser, RFC 3986-style relative
+//! - [`url`]: live [`ParsedUrl`] WHATWG parser plus a legacy compatibility URL; relative
 //!   resolution against a base, percent-decoding. Never panics on malformed
-//!   input; every failure is an [`UrlError`].
+//!   input; parsing failures are [`ParseError`] (legacy APIs use [`UrlError`]).
 //! - [`headers`]: case-insensitive multi-value header map.
 //! - [`response`]: final [`Response`] value with `text()`/`content_type()`.
 //! - [`http`]: request writing + status-line/header parsing + body framing
@@ -51,7 +51,7 @@
 //! - cookies, caching, conditional requests, authentication
 //! - HTTP/2+ (deferred indefinitely per the Phase 0 scope note)
 //! - obsolete line folding and full obs-fold handling in headers
-//! - IDNA/punycode host normalization; hosts are compared as sent
+//! - IDNA/punycode: Unicode special hosts fail via the deferred provider seam
 
 pub mod fetch;
 pub mod headers;
@@ -129,5 +129,13 @@ impl From<std::io::Error> for NetError {
 impl From<UrlError> for NetError {
     fn from(e: UrlError) -> Self {
         NetError::Url(e)
+    }
+}
+
+// Keep the existing public NetError::Url shape for downstream error matches.
+// The new parser's typed error remains available directly from ParsedUrl.
+impl From<ParseError> for NetError {
+    fn from(error: ParseError) -> Self {
+        Self::Url(UrlError::InvalidUrl(error.to_string()))
     }
 }
