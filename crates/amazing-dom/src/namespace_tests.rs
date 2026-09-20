@@ -186,3 +186,192 @@ fn detached_constructor_uses_requested_document_and_checked_attachment() {
         Err(DomError::InvalidNode)
     );
 }
+
+#[test]
+fn xml_parser_can_create_unprefixed_xmlns_without_relaxing_dom_api() {
+    let mut dom = Dom::new();
+    assert_eq!(
+        dom.create_element_ns(NodeIdx(0), None, "xmlns"),
+        Err(DomError::NamespaceError)
+    );
+    let root = dom
+        .create_element_expanded(NodeIdx(0), None, None, "xmlns")
+        .unwrap();
+    assert_eq!(dom.namespace(root), Some(Namespace::Null));
+    assert_eq!(dom.qualified_name(root).as_deref(), Some("xmlns"));
+    let child = dom
+        .create_element_expanded(root, Some("urn:default"), None, "xmlns")
+        .unwrap();
+    assert_eq!(dom.namespace_uri(child), Some("urn:default"));
+    assert_eq!(dom.prefix(child), None);
+    assert_eq!(
+        dom.create_element_ns(root, Some("urn:default"), "xmlns"),
+        Err(DomError::NamespaceError)
+    );
+}
+
+#[test]
+fn expanded_parser_creation_keeps_names_case_and_checked_tree_ownership() {
+    let mut dom = Dom::new();
+    let document = dom.create_document();
+    let root = dom
+        .create_element_expanded_in(document, Some("urn:a"), Some("P"), "Mixed")
+        .unwrap();
+    assert_eq!(dom.get(root).parent, None);
+    assert_eq!(dom.owner_document(root), Some(document));
+    assert_eq!(dom.qualified_name(root).as_deref(), Some("P:Mixed"));
+    dom.pre_insert(root, document, None).unwrap();
+    assert_eq!(
+        dom.create_element_expanded(document, None, None, "second"),
+        Err(DomError::HierarchyRequestError)
+    );
+    assert_eq!(
+        dom.create_element_expanded_in(root, None, None, "x"),
+        Err(DomError::NotSupportedError)
+    );
+    let clone = dom.clone_node(root, false).unwrap();
+    assert_eq!(dom.qualified_name(clone), dom.qualified_name(root));
+}
+
+#[test]
+fn qualified_attributes_keep_prefix_and_expanded_lookup_identity() {
+    let mut dom = Dom::new();
+    let root = dom
+        .create_element_ns(NodeIdx(0), Some("urn:element"), "root")
+        .unwrap();
+    dom.set_attribute_qualified_ns(root, Some("urn:a"), "p:a", "first")
+        .unwrap();
+    dom.set_attribute_qualified_ns(root, Some("urn:b"), "p:a", "other")
+        .unwrap();
+    dom.set_attribute_qualified_ns(root, None, "a", "null")
+        .unwrap();
+    assert_eq!(
+        dom.get_attribute_ns(root, Some("urn:a"), "a"),
+        Some("first")
+    );
+    assert_eq!(dom.get_attribute_ns(root, Some("urn:a"), "p:a"), None);
+    let a = dom.attribute_ns(root, Some("urn:a"), "a").unwrap();
+    assert_eq!(a.namespace_uri, Some("urn:a"));
+    assert_eq!(a.prefix, Some("p"));
+    assert_eq!(a.qualified_name(), "p:a");
+    assert_eq!(
+        dom.attribute_ns(root, None, "a").unwrap().namespace_uri,
+        None
+    );
+    // DOM set-an-attribute-value changes value, not an existing Attr's prefix.
+    dom.set_attribute_qualified_ns(root, Some("urn:a"), "q:a", "second")
+        .unwrap();
+    assert_eq!(
+        dom.attribute_ns(root, Some("urn:a"), "a")
+            .unwrap()
+            .qualified_name(),
+        "p:a"
+    );
+    assert_eq!(
+        dom.get_attribute_ns(root, Some("urn:b"), "a"),
+        Some("other")
+    );
+    dom.remove_attribute_ns(root, Some("urn:a"), "a").unwrap();
+    assert_eq!(dom.attribute_ns(root, Some("urn:a"), "a"), None);
+    dom.set_attribute_qualified_ns(root, Some("urn:a"), "q:a", "new")
+        .unwrap();
+    assert_eq!(
+        dom.attribute_ns(root, Some("urn:a"), "a").unwrap().prefix,
+        Some("q")
+    );
+}
+
+#[test]
+fn qualified_attribute_validation_precedes_mutation_and_supports_xmlns_attributes() {
+    let mut dom = Dom::new();
+    let root = dom.create_element(NodeIdx(0), "root");
+    let mut initial = dom.begin_mutation_checkpoint();
+    while dom.next_mutation_delivery(&mut initial).is_some() {}
+    let observer = dom.create_mutation_observer(1);
+    dom.observe(
+        observer,
+        root,
+        crate::mutation::ObserveOptions {
+            attributes: Some(true),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    for name in ["", "p:", "p:a=b", "p:a b"] {
+        assert_eq!(
+            dom.set_attribute_qualified_ns(root, Some("urn:a"), name, "x"),
+            Err(DomError::InvalidCharacterError)
+        );
+    }
+    for (uri, name) in [
+        (None, "p:a"),
+        (Some("urn:a"), "xml:lang"),
+        (None, "xmlns"),
+        (Some(XMLNS), "p:a"),
+    ] {
+        assert_eq!(
+            dom.set_attribute_qualified_ns(root, uri, name, "x"),
+            Err(DomError::NamespaceError)
+        );
+    }
+    assert!(!dom.mutation_microtask_pending());
+    assert!(dom.take_mutation_records(observer).is_empty());
+    dom.set_attribute_qualified_ns(root, Some(XMLNS), "xmlns", "urn:default")
+        .unwrap();
+    dom.set_attribute_qualified_ns(root, Some(XMLNS), "xmlns:p", "urn:p")
+        .unwrap();
+    assert_eq!(
+        dom.attribute_ns(root, Some(XMLNS), "xmlns")
+            .unwrap()
+            .qualified_name(),
+        "xmlns"
+    );
+    assert_eq!(
+        dom.attribute_ns(root, Some(XMLNS), "p")
+            .unwrap()
+            .qualified_name(),
+        "xmlns:p"
+    );
+    // Attribute local-name validation permits a leading digit; element validation does not.
+    dom.set_attribute_qualified_ns(root, None, "1", "allowed by DOM")
+        .unwrap();
+}
+
+#[test]
+fn expanded_attributes_clone_and_notify_by_local_name() {
+    use crate::mutation::ObserveOptions;
+    let mut dom = Dom::new();
+    let root = dom.create_element(NodeIdx(0), "root");
+    let observer = dom.create_mutation_observer(1);
+    dom.observe(
+        observer,
+        root,
+        ObserveOptions {
+            attributes: Some(true),
+            attribute_old_value: Some(true),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    dom.set_attribute_expanded(root, Some("urn:a"), Some("p"), "a", "old")
+        .unwrap();
+    dom.set_attribute_ns(root, Some("urn:a"), "a", "new")
+        .unwrap();
+    let records = dom.take_mutation_records(observer);
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[1].attribute_name.as_deref(), Some("a"));
+    assert_eq!(records[1].attribute_namespace.as_deref(), Some("urn:a"));
+    assert_eq!(records[1].old_value.as_deref(), Some("old"));
+    let clone = dom.clone_node(root, true).unwrap();
+    let attr = dom.attribute_ns(clone, Some("urn:a"), "a").unwrap();
+    assert_eq!(attr.prefix, Some("p"));
+    assert_eq!(attr.value, "new");
+    let document = dom.create_document();
+    dom.pre_insert(clone, document, None).unwrap();
+    assert_eq!(
+        dom.attribute_ns(clone, Some("urn:a"), "a")
+            .unwrap()
+            .qualified_name(),
+        "p:a"
+    );
+}

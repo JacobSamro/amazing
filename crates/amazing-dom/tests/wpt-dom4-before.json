@@ -1,0 +1,218 @@
+{
+  "by_directory": {
+    "dom": {
+      "error": 1,
+      "fail": 6,
+      "pass": 0,
+      "timeout": 1,
+      "unsupported": 2
+    },
+    "dom/abort": {
+      "error": 0,
+      "fail": 2,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 4
+    },
+    "dom/collections": {
+      "error": 0,
+      "fail": 9,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 1
+    },
+    "dom/events": {
+      "error": 23,
+      "fail": 42,
+      "pass": 1,
+      "timeout": 6,
+      "unsupported": 20
+    },
+    "dom/events/non-cancelable-when-passive": {
+      "error": 40,
+      "fail": 2,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 0
+    },
+    "dom/events/scrolling": {
+      "error": 29,
+      "fail": 0,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 6
+    },
+    "dom/lists": {
+      "error": 1,
+      "fail": 4,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 0
+    },
+    "dom/nodes": {
+      "error": 55,
+      "fail": 98,
+      "pass": 1,
+      "timeout": 10,
+      "unsupported": 64
+    },
+    "dom/nodes/Document-contentType/contentType": {
+      "error": 0,
+      "fail": 3,
+      "pass": 0,
+      "timeout": 12,
+      "unsupported": 0
+    },
+    "dom/nodes/insertion-removing-steps": {
+      "error": 1,
+      "fail": 15,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 4
+    },
+    "dom/nodes/moveBefore": {
+      "error": 27,
+      "fail": 22,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 2
+    },
+    "dom/observable/tentative": {
+      "error": 1,
+      "fail": 0,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 26
+    },
+    "dom/observable/tentative/crashtests": {
+      "error": 0,
+      "fail": 0,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 2
+    },
+    "dom/ranges": {
+      "error": 34,
+      "fail": 12,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 1
+    },
+    "dom/ranges/tentative": {
+      "error": 5,
+      "fail": 14,
+      "pass": 0,
+      "timeout": 0,
+      "unsupported": 0
+    },
+    "dom/traversal": {
+      "error": 4,
+      "fail": 12,
+      "pass": 0,
+      "timeout": 1,
+      "unsupported": 1
+    }
+  },
+  "excluded_files": 192,
+  "executable_sha256": "907482bcd7e6abd85e4fb63e533d0641c7b55c9b3be999bf1a6358ff29e86be3",
+  "harness_sha256": "d2399236c2a09c429804ff2299ad6629e17e2b53f17a74dd341e936adb11ae3e",
+  "long_deadline_ms": 60000,
+  "normal_deadline_ms": 10000,
+  "outcome_changes": [],
+  "proof": {
+    "checks": "exact subtest names/statuses, harness OK, file classifications, exit codes",
+    "expected_source": "unmodified upstream embedded expected JSON",
+    "rounds": [
+      {
+        "files": {
+          "error": 0,
+          "fail": 1,
+          "pass": 1,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "outcome_sha256": "955a95d1fd7db2790c52d61aeddc9019c5840a4825a6cfb11722bb6e499409c2",
+        "raw_sha256": "fda888792ad20e12b69ab4909e69896b98916b170c7ecf259cd79854ebe404bd",
+        "subtests": {
+          "error": 0,
+          "fail": 14,
+          "notrun": 0,
+          "pass": 4,
+          "timeout": 0
+        }
+      },
+      {
+        "files": {
+          "error": 0,
+          "fail": 1,
+          "pass": 1,
+          "timeout": 0,
+          "unsupported": 0
+        },
+        "outcome_sha256": "955a95d1fd7db2790c52d61aeddc9019c5840a4825a6cfb11722bb6e499409c2",
+        "raw_sha256": "fda888792ad20e12b69ab4909e69896b98916b170c7ecf259cd79854ebe404bd",
+        "subtests": {
+          "error": 0,
+          "fail": 14,
+          "notrun": 0,
+          "pass": 4,
+          "timeout": 0
+        }
+      }
+    ],
+    "tests": [
+      "resources/test/tests/functional/order.html",
+      "resources/test/tests/functional/assert-array-equals.html"
+    ]
+  },
+  "rounds": [
+    {
+      "files": {
+        "error": 221,
+        "fail": 241,
+        "pass": 2,
+        "timeout": 30,
+        "unsupported": 133
+      },
+      "outcome_sha256": "327f8456d54edf7b306759439ffda04763a1f6c0ffc705ebdb7d8bc2cf0aa4d4",
+      "raw_sha256": "3601e251023d0f34e0668c7e9b8d1b24df1fbca43391e0cff123ab51ee719f4c",
+      "subtests": {
+        "error": 0,
+        "fail": 2584,
+        "notrun": 0,
+        "pass": 83,
+        "timeout": 0
+      }
+    },
+    {
+      "files": {
+        "error": 221,
+        "fail": 241,
+        "pass": 2,
+        "timeout": 30,
+        "unsupported": 133
+      },
+      "outcome_sha256": "327f8456d54edf7b306759439ffda04763a1f6c0ffc705ebdb7d8bc2cf0aa4d4",
+      "raw_sha256": "3601e251023d0f34e0668c7e9b8d1b24df1fbca43391e0cff123ab51ee719f4c",
+      "subtests": {
+        "error": 0,
+        "fail": 2584,
+        "notrun": 0,
+        "pass": 83,
+        "timeout": 0
+      }
+    }
+  ],
+  "selected_source_files": 627,
+  "selection_sha256": "9787de028efe5dc83f491ce2a818e2a549b4a07a236e6538c1e6165bb437b0b5",
+  "stable": true,
+  "viewport": [
+    800,
+    600
+  ],
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "measurement_stage": "before scheduler integration; driver uses legacy JS queues",
+  "integration_base": "3d0c2b0",
+  "native_core_tested_before_measurement": 133,
+  "source_manifest_files_verified": 181
+}
