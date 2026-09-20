@@ -70,6 +70,12 @@ LANE_PATHS = {
         "crates/amazing-media/",
         "crates/amazing-image/",
     ],
+    "html": ["crates/amazing-html/"],
+    # Drains the integrator's routed queue: driver-side work the engine lanes
+    # correctly refused to do. Shell files are granted individually, and
+    # engine_viewport.rs is deliberately NOT among them while replaced-content
+    # holds its grant there -- two lanes never share a file.
+    "integrator-assist": ["crates/amazing/"],
 }
 # Narrow, temporary grants recorded here so `doctor` does not cry wolf about an
 # exception the orchestrator deliberately made. Remove one when its ticket lands.
@@ -88,6 +94,10 @@ LANE_GRANTS = {
 # JS-2 adds the amazing-js -> amazing-regex dependency edge, which only cargo
 # can record. Granted for that single edge, verified by diff at merge.
 LANE_GRANTS["js-lang"] = ["Cargo.lock", "scripts/test262.py"]  # JS-3 fixes the runner
+LANE_GRANTS["integrator-assist"] = [
+    "crates/amazing-shell-gpui/src/session_state.rs",
+    "crates/amazing-shell-gpui/src/dom_runtime.rs",
+]
 # CSS-3 rewires the driver's stylesheet collection to preserve per-sheet
 # provenance. Granted for the collection and compute call sites only.
 LANE_GRANTS["css"] = [
