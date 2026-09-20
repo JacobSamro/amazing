@@ -30,7 +30,7 @@ ARCHIVE_REMOTE="C:\\Users\\server\\dev-refresh-$STAMP.tar"
 cleanup() { rm -f "$ARCHIVE_LOCAL"; }
 trap cleanup EXIT
 
-ALL_LANES=(js-lang dom-bindings layout css net replaced-content html integrator-assist)
+ALL_LANES=(js-lang js-runtime dom-bindings layout css net replaced-content html integrator-assist)
 
 # Lanes run this for THEMSELVES, so a bare invocation must not touch anyone
 # else's tree. Refreshing every lane is an integrator action and has to be

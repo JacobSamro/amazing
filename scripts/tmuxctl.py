@@ -60,7 +60,25 @@ DEFAULT_SESSION_PREFIX = "termirust-amazing-"
 # files (ARCHITECTURE.md, README.md, todo.md, root Cargo.toml) belong to the
 # integrator alone and appear in no lane.
 LANE_PATHS = {
-    "js-lang": ["crates/amazing-js/", "crates/amazing-regex/"],
+    # amazing-js is split between two lanes. js-lang owns the front half
+    # (lexing, parsing, AST) and amazing-regex; js-runtime owns the execution
+    # half. ast.rs is the contract: js-lang owns it and only adds to it.
+    "js-lang": [
+        "crates/amazing-js/src/lexer.rs",
+        "crates/amazing-js/src/parser.rs",
+        "crates/amazing-js/src/ast.rs",
+        "crates/amazing-js/src/tokens.rs",
+        "crates/amazing-regex/",
+    ],
+    "js-runtime": [
+        "crates/amazing-js/src/interp.rs",
+        "crates/amazing-js/src/interp_builtins.rs",
+        "crates/amazing-js/src/interp_tests.rs",
+        "crates/amazing-js/src/value.rs",
+        "crates/amazing-js/src/env.rs",
+        "crates/amazing-js/src/vm/",
+        "crates/amazing-js/src/gc/",
+    ],
     "dom-bindings": ["crates/amazing-dom/", "crates/amazing-bindings/"],
     "layout": ["crates/amazing-layout/"],
     "css": ["crates/amazing-css/"],
