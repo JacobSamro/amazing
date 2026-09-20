@@ -10,7 +10,8 @@
 //!
 //! Deferred/deviations:
 //! - `@supports` evaluates the static variable-bearing declaration conditions
-//!   used by the computed-value gate; other at-rules are consumed and dropped
+//!   used by the computed-value gate; `@layer` and `@scope` retain group context;
+//!   other at-rules are consumed and dropped
 //! - nested style rules remain deferred
 //! - declaration values stay normalized strings; the private computed-value
 //!   module tokenizes them for custom-property substitution and defaulting
@@ -28,6 +29,9 @@ pub struct Declaration {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rule {
+    /// Layer path; an empty selector list records a layer ordering statement.
+    pub layer: Vec<LayerName>,
+    pub scopes: Vec<Scope>,
     /// One entry per top-level comma-separated selector (trimmed).
     pub selector_srcs: Vec<String>,
     pub declarations: Vec<Declaration>,
@@ -36,7 +40,24 @@ pub struct Rule {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Stylesheet {
     pub rules: Vec<Rule>,
+    /// Parent of the stylesheet owner node, for implicit `@scope`.
+    pub scope_root: Option<amazing_dom::NodeIdx>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum LayerName {
+    Named(String),
+    Anonymous(usize),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Scope {
+    pub start: Option<Vec<String>>,
+    pub end: Option<Vec<String>>,
+}
+
+#[path = "group_rules.rs"]
+mod group_rules;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FontSource {
@@ -372,72 +393,7 @@ impl Parser<'_> {
     }
 
     fn rule_list(&mut self) -> Stylesheet {
-        let mut sheet = Stylesheet::default();
-        while let Some(token) = self.peek() {
-            match token {
-                Token::Whitespace | Token::Semicolon => self.pos += 1,
-                Token::AtKeyword(name) if name.eq_ignore_ascii_case("supports") => {
-                    sheet.rules.extend(self.supports_rule());
-                },
-                Token::AtKeyword(_) => self.skip_at_rule(),
-                _ => {
-                    if let Some(rule) = self.qualified_rule()
-                        && !rule.selector_srcs.is_empty()
-                        && !rule.declarations.is_empty()
-                    {
-                        sheet.rules.push(rule);
-                    }
-                },
-            }
-        }
-        sheet
-    }
-
-    fn supports_rule(&mut self) -> Vec<Rule> {
-        debug_assert!(matches!(self.peek(), Some(Token::AtKeyword(name)) if name.eq_ignore_ascii_case("supports")));
-        self.pos += 1;
-        let prelude_start = self.pos;
-        let mut depth = 0usize;
-        while let Some(token) = self.peek() {
-            match token {
-                Token::OpenParen | Token::OpenSquare => depth += 1,
-                Token::CloseParen | Token::CloseSquare => depth = depth.saturating_sub(1),
-                Token::OpenCurly if depth == 0 => break,
-                Token::Semicolon if depth == 0 => {
-                    self.pos += 1;
-                    return Vec::new();
-                },
-                _ => {},
-            }
-            self.pos += 1;
-        }
-        if self.peek() != Some(&Token::OpenCurly) {
-            return Vec::new();
-        }
-        let prelude_end = self.pos;
-        self.pos += 1;
-        let body_start = self.pos;
-        let mut braces = 1usize;
-        while let Some(token) = self.peek() {
-            match token {
-                Token::OpenCurly => braces += 1,
-                Token::CloseCurly => {
-                    braces -= 1;
-                    if braces == 0 {
-                        let body_end = self.pos;
-                        self.pos += 1;
-                        return if supports_condition(&self.toks[prelude_start..prelude_end]) {
-                            parse_rule_list(&self.toks[body_start..body_end]).rules
-                        } else {
-                            Vec::new()
-                        };
-                    }
-                },
-                _ => {},
-            }
-            self.pos += 1;
-        }
-        Vec::new()
+        group_rules::parse(self.toks, &[], &[], &mut 0, 0)
     }
 
     /// Skips an at-rule: through the next ';' or its balanced {} block.
@@ -501,7 +457,7 @@ impl Parser<'_> {
             }
         }
 
-        Some(Rule { selector_srcs, declarations })
+        Some(Rule { selector_srcs, declarations, layer: Vec::new(), scopes: Vec::new() })
     }
 
     /// Reads declarations until the block's closing '}' (consumed) or EOF.

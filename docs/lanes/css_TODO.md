@@ -134,7 +134,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1 `
   -SkipFetch -SkipBuild
 ```
 
-## CSS-2 — remove transitional paint color parser
+## Cross-lane follow-up — remove transitional paint color parser
+
+Originally labeled CSS-2 in the CSS-1 handoff; this is a replaced-content
+follow-up, separate from the CSS-2 cascade ticket.
 
 **Owner:** replaced-content, coordinated with css. **State:** relayed and acknowledged by
 replaced-content via the integrator; do not implement as part of CSS-1.
@@ -155,4 +158,166 @@ colors, and hex forms. Rerun paint's focused 24-case gate and workspace tests.
 
 - Layout/paint adopt `ComputedStyle::typed` for their supported properties.
   Keep percentages and missing metrics explicit at the used-value boundary.
-- Independent `@layer` cascade ordering, after CSS-1 review.
+
+## CSS-2 — cascade layers, origin/layer rollback, and scope
+
+Implementation stays inside `amazing-css`; `compute(dom, sheets)` and typed
+computed values remain the consumer seam. No caller/layout/paint files changed.
+
+### Decisions and behavior
+
+- Parse layer statements and blocks, dotted/nested names, and anonymous layers.
+  Keep empty ordering declarations, including layers without matching rules.
+  Names are case-sensitive and shared across author sheets; anonymous segments
+  are private to each occurrence and stylesheet. Preserve token adjacency in
+  dotted names; `default` is a valid identifier, CSS-wide keywords are not.
+- Compile hierarchical first-appearance order across all sheets of an origin.
+  A parent's direct declarations occupy its last implicit sublayer; unlayered
+  rules occupy the outermost last layer. Important declarations reverse that
+  entire order; inline style keeps its separate precedence.
+- Compare importance, origin (reversed for important), element-attached style,
+  layer (reversed for important), matched-selector specificity, scope proximity,
+  then declaration order. Scope-start specificity never enters the rule's key.
+- Retain the property candidate lists until rollback finishes. `revert` removes
+  the author origin at both importance levels; UA revert defaults as unset.
+  `revert-layer` removes the current layer and the important-to-normal interval,
+  with the element-attached important exception. Rollback can chain through
+  several layers. Logical margins join physical candidates before final ranking.
+- Custom properties roll back before their dependency graph is resolved.
+  Longhand and supported deferred-shorthand rollback keywords produced by
+  variable substitution use the same retained candidates. Invalid substituted
+  values still default; they do not revive a lower candidate. `all` also accepts
+  variable substitution while retaining its CSS-wide-only grammar and excluding
+  direction, unicode-bidi, and custom properties.
+- Parse explicit scope roots/limits and nested scopes. Consider every applicable
+  ancestor root, exclude limits and descendants, and use innermost-root distance
+  only after specificity. `:scope` resolves through compound selector functions
+  and combinators; outside an explicit scope it matches the document element.
+  Implicit relative scope anchors contribute zero specificity.
+- Group nesting and combined layer-name depth are capped at 128. Oversized
+  constructs are dropped, not partially flattened into unlayered declarations.
+
+References: [Cascade 5 sorting/layers/rollback](https://www.w3.org/TR/css-cascade-5/),
+[Cascade 6 scoped rules and proximity](https://drafts.csswg.org/css-cascade-6/).
+
+### Approved integration boundary and limits
+
+`Stylesheet::scope_root: Option<NodeIdx>` stores the stylesheet owner's parent
+for implicit scope; `None` is the ownerless document default. Explicit
+`@scope (<selector>)` does not require it. The user approved this seam and owns
+integrator work to preserve **separate stylesheets and owner nodes** through the
+driver and shell, which currently concatenate CSS. This is also prerequisite
+provenance for CSS-3 URL resolution.
+
+**Implicit @scope cannot be measured end to end until that driver/shell wiring
+lands.** Public-seam tests assigning `scope_root` prove only CSS behavior, not
+end-to-end browser support. No caller code is changed by this ticket.
+
+Existing selector limitations remain (pseudo-elements, complex functional
+selector arguments, CSS nesting `&`, and shadow-tree behavior). Layer-qualified
+imports and media evaluation remain outside the parser's supported rule set.
+User-origin sheets, animation origins, and transitions have no input seam;
+origin rollback here covers the existing author and UA origins. This ticket
+makes no full Cascade 5/6 conformance claim.
+
+### Validation
+
+Clean-artifact Windows workspace: **943 passed / 0 failed / 3 ignored**, across
+52 test/doc-test targets. CSS: **88 unit + 27 cascade-context + 17 color-parity
++ 5 typed-compute tests**, all passing. The 27 public-seam tests plus one added
+UA-origin unit test are regression tests, not added WPT coverage. Rendering
+measurements are recorded below. Evidence uses base 80c6636
+(133292f plus the refresh-script commit). The first refresh invalidated earlier
+CSS-2 runs. A subsequent full-workspace attempt found stale Cargo library
+artifacts even though source hashes matched: NET-3 tests could not find methods
+present in `ParsedUrl`. Tar extraction restored older mtimes, so source-hash
+verification alone was insufficient. All 18 first-party workspace packages were
+cleaned from the isolated CSS target, and both measurements restarted as `r3`.
+Only `css2-r3-*` artifacts qualify as final evidence. Build inputs are checked
+before and after compilation, and immutable executable hashes before/after
+rendering; the final source tree is also checked after all gates.
+
+
+WPT revision: **c2a2fce69e5c2509d9dc28440ec8b42532e5c293**. Unchanged
+`tests/wpt-render/<selection>-manifest.json` selections; lane-local WPT checkout,
+800x600 viewport, scale 1, same fonts/resources. Counts are
+**pass / mismatch / timeout / unsupported / crash**.
+
+| Selection | Before | After |
+|---|---|---|
+| cascade (two runs each) | 32/27/0/13/0 | 35/24/0/13/0 |
+| Variables subset (two runs each) | 12/0/0/0/0 | 12/0/0/0/0 |
+| block-collapse | 9/0/0/0/0 | 9/0/0/0/0 |
+| position | 9/3/0/0/0 | 9/3/0/0/0 |
+| text-flow | 14/2/0/0/0 | 14/2/0/0/0 |
+| flex-grid | 24/0/0/0/0 | 24/0/0/0/0 |
+| paint-compositing | 24/0/0/0/0 | 24/0/0/0/0 |
+| text-shaping | 12/0/0/0/0 | 12/0/0/0/0 |
+| vertical-ruby | 11/9/0/0/0 | 11/9/0/0/0 |
+
+Both baseline normalized hashes:
+`f722c4dda0d3324bfa245734c6dc4d7688b2b819a0a46a9f8ca003f099ed8183`.
+Both final normalized hashes:
+`a259e9d395326e4c39b890dd494b159dcacb28a834ccc497e6ee94a7ec608026`.
+Normalization is the same sorted per-case classification/difference/image-SHA256
+projection used for CSS-1, excluding timestamps and filesystem paths. Every
+one of the seven downstream selections is identical before/after, including
+actual/reference/diff image hashes, not just counts.
+
+Exactly three cascade cases change mismatch → pass:
+`css-cascade__scope-featureless.html`,
+`css-cascade__all-prop-revert-color.html`, and
+`css-cascade__scope-pseudo-element.html`. The last remains **partially inert**:
+pseudo-element/generated-content selectors are dropped in both test and reference;
+this is a measured pixel pass after the root background starts matching, not a
+claim of pseudo-element conformance. The three selected `revert-layer` cases
+remain unsupported because their references require XHTML/XML parsing. Layer
+semantics are covered by focused Rust tests, not added WPT passes.
+
+The refreshed baseline is 32/27/13, not CSS-1's historical 33/26/13:
+`css-values__calc-max-height-block-1.html` already mismatches on the refreshed
+siblings before CSS-2. That drift is not attributed to this change.
+
+Artifacts on win-001, all under `C:/Users/server/target/css/`:
+
+- Baseline executable `css2-r3-before.exe`, SHA256
+  `b16ce505d6334bf8ea33051d1bea99c5843a631764713b3553f06eeba340e230`.
+- Final executable `css2-r3-final.exe`, SHA256
+  `60442ba140ed95eb21bfdc240387469ed610b3956c87ccffdd4446d8f0648430`.
+- `css2-r3-{before,final}-<index>-<selection>/run-*/report.json` and PNGs.
+  Indices 1/2 are cascade; 3–9 follow the downstream order in the table.
+- `css2-r3-workspace.log`, source/executable build proofs, and per-run logs.
+
+Local orchestration evidence in the main checkout's `.agents/css/`:
+`css2-r3-evidence.json`, `css2-r3-summary.json`, `css2-r3-workspace.log`,
+`css2-baseline-source.json` (196 inputs), `css2-final-source.json` (199 inputs),
+`css2-r3-{before,final}-build-proof.json`, and source-proof text files. The final
+199 source/input hashes still matched after all gates. No Mac build or test ran.
+
+Reproduce on Windows after syncing the complete chosen base, then the lane CSS
+sources. Invalidate first-party Cargo artifacts after archive-based refreshes;
+otherwise restored old mtimes can leave the wrong libraries cached. Use two jobs:
+
+```powershell
+Set-Location C:\Users\server\src\wt\css
+$env:CARGO_TARGET_DIR = 'C:\Users\server\target\css'
+$env:CARGO_BUILD_JOBS = '2'
+cargo test -p amazing-css --locked
+cargo test --workspace --locked
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1 `
+  -ManifestPath tests\wpt-render\cascade-manifest.json `
+  -WptRoot C:\Users\server\target\css\wpt `
+  -ExecutablePath C:\Users\server\target\css\css2-r3-final.exe `
+  -OutputDirectory C:\Users\server\target\css\css2-review `
+  -SkipFetch -SkipBuild
+```
+
+## CSS-3 — background shorthand and stylesheet URL provenance (queued)
+
+User queued this ticket during CSS-2; **do not start until CSS-2 is complete and
+reviewed**. Replaced-content has implemented background longhands in paint.
+CSS owns expansion of the full multi-layer `background` shorthand grammar;
+the current single-colour arm makes shorthand values containing `url()` unusable.
+CSS must also preserve the winning declaration's stylesheet-relative URL
+provenance through computed values, resolving against the originating stylesheet.
+Keep this work separate from CSS-2 cascade layers, revert, and scope.

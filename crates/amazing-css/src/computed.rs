@@ -723,6 +723,11 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     }
     let parts: Vec<&str> = value.split_ascii_whitespace().collect();
     match property.as_str() {
+        "all" if contains_var_function(value) => PROPERTIES
+            .iter()
+            .filter(|property| !matches!(property.name, "direction" | "unicode-bidi"))
+            .map(|property| (property.name.to_owned(), deferred(DEFERRED_ALL, value)))
+            .collect(),
         "all" if css_wide_keyword(value).is_some() => PROPERTIES
             .iter()
             .filter(|property| !matches!(property.name, "direction" | "unicode-bidi"))
@@ -967,6 +972,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     }
 }
 
+const DEFERRED_ALL: &str = "amazing-internal-all";
 const DEFERRED_FLEX_DIRECTION: &str = "amazing-internal-flex-flow-direction";
 const DEFERRED_FLEX_WRAP: &str = "amazing-internal-flex-flow-wrap";
 const DEFERRED_GRID_ROWS: &str = "amazing-internal-grid-template-rows";
@@ -2226,6 +2232,42 @@ pub(crate) fn resolve_with_root(
     style
 }
 
+/// Determine rollback after variable substitution without reviving invalid values.
+/// Custom properties have already cascaded; CSS-wide tokens produced inside a
+/// custom property's substitution remain tokens until consumed by a longhand.
+pub(crate) fn substituted_rollback(
+    style: &ComputedStyle,
+    property: &str,
+    value: &str,
+) -> Option<Rollback> {
+    if property.starts_with("--") || !contains_var_function(value) {
+        return None;
+    }
+    let local = BTreeMap::new();
+    let cycles = BTreeSet::new();
+    let mut resolver = CustomResolver {
+        local: &local,
+        inherited: &style.custom,
+        cycles: &cycles,
+        memo: BTreeMap::new(),
+        resolving: BTreeSet::new(),
+    };
+    let tokens = resolver.substitute(&tokenize(value))?;
+    let value = serialize_computed(&tokens);
+    let value = resolve_deferred_shorthand(property, &value).ok()?;
+    match css_wide_keyword(&value) {
+        Some(CssWide::Revert) => Some(Rollback::Origin),
+        Some(CssWide::RevertLayer) => Some(Rollback::Layer),
+        _ => None,
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Rollback {
+    Origin,
+    Layer,
+}
+
 fn couple_overflow_axes(properties: &mut BTreeMap<String, String>) {
     let x = properties
         .get("overflow-x")
@@ -2311,9 +2353,10 @@ fn compute_normal_value(
             Some(CssWide::Initial) => property.initial.to_owned(),
             Some(CssWide::Inherit) => parent.unwrap_or(property.initial).to_owned(),
             Some(CssWide::Unset) => default_value(property, parent),
-            // Origin/layer rollback needs retained lower cascade candidates and is
-            // deliberately not fabricated at this stage.
-            Some(CssWide::Revert | CssWide::RevertLayer) | None => value,
+            // Cascade handles rollback (including substituted keywords) before
+            // the final computed pass. Standalone computation defaults safely.
+            Some(CssWide::Revert | CssWide::RevertLayer) => default_value(property, parent),
+            None => value,
         }
     };
     let computed = if property.name == "font-size" {
@@ -2370,6 +2413,30 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    if let Some(inner) = deferred_inner(value, DEFERRED_ALL) {
+        return css_wide_keyword(inner).map(|_| inner.to_owned()).ok_or(());
+    }
+
+    // Every shorthand accepts CSS-wide values after variable substitution.
+    for function in [
+        DEFERRED_FLEX_DIRECTION,
+        DEFERRED_FLEX_WRAP,
+        DEFERRED_GRID_ROWS,
+        DEFERRED_GRID_COLUMNS,
+        DEFERRED_RADIUS_TOP_LEFT,
+        DEFERRED_RADIUS_TOP_RIGHT,
+        DEFERRED_RADIUS_BOTTOM_RIGHT,
+        DEFERRED_RADIUS_BOTTOM_LEFT,
+        DEFERRED_OVERFLOW_X,
+        DEFERRED_OVERFLOW_Y,
+    ] {
+        if let Some(inner) = deferred_inner(value, function) {
+            if css_wide_keyword(inner).is_some() {
+                return Ok(inner.to_owned());
+            }
+        }
+    }
+
     let overflow_function = match property {
         "overflow-x" => Some((DEFERRED_OVERFLOW_X, 0usize)),
         "overflow-y" => Some((DEFERRED_OVERFLOW_Y, 1usize)),
