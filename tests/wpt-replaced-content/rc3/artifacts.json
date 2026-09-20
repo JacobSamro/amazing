@@ -1,0 +1,26 @@
+[
+  {
+    "modified_utc": "2026-09-20T18:17:07.2173939Z",
+    "sha256": "28ed75c9ae233db9ecbf604fe4d8594315095a7f3d49c39a23f156634e2da52c",
+    "file": "rc3-driver-before.exe",
+    "bytes": 38348288
+  },
+  {
+    "modified_utc": "2026-09-20T18:21:10.9085675Z",
+    "sha256": "11b5392dda342c0fd85a249478606a82e5d3ac3dc55a04ea46cbddf7e8f1be02",
+    "file": "rc3-driver-after.exe",
+    "bytes": 38377984
+  },
+  {
+    "modified_utc": "2026-09-20T18:17:11.9704220Z",
+    "sha256": "2f33cec9014150fe306ab1dc27e7350c7cba803e56dadee3e461ca1ca1c18449",
+    "file": "rc3-images-before.exe",
+    "bytes": 5327360
+  },
+  {
+    "modified_utc": "2026-09-20T18:21:12.8602214Z",
+    "sha256": "8e219e33a3a7eac2e7acf033cdc414eaf0b5678cf4e008e9fd7977b8e43f5f02",
+    "file": "rc3-images-after.exe",
+    "bytes": 5356544
+  }
+]

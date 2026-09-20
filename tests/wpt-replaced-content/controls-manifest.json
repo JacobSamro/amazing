@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "sha256-static-control-kinds-unique",
+    "per_kind": 4
+  },
+  "sparse_paths": [
+    "html/semantics/forms",
+    "html/rendering/widgets",
+    "css/css-ui",
+    "css/css-forms"
+  ],
+  "tests": [
+    {
+      "id": "text-input__css__css-ui__appearance-listbox-001.html",
+      "test": "css/css-ui/appearance-listbox-001.html",
+      "kind": "text-input"
+    },
+    {
+      "id": "text-input__css__css-ui__webkit-appearance-menulist-button-001.html",
+      "test": "css/css-ui/webkit-appearance-menulist-button-001.html",
+      "kind": "text-input"
+    },
+    {
+      "id": "text-input__css__css-ui__webkit-appearance-menulist-001.html",
+      "test": "css/css-ui/webkit-appearance-menulist-001.html",
+      "kind": "text-input"
+    },
+    {
+      "id": "text-input__html__rendering__widgets__input-password-background-suppresses-appearance.html",
+      "test": "html/rendering/widgets/input-password-background-suppresses-appearance.html",
+      "kind": "text-input"
+    },
+    {
+      "id": "checkbox__html__rendering__widgets__input-checkbox-zero-size.html",
+      "test": "html/rendering/widgets/input-checkbox-zero-size.html",
+      "kind": "checkbox"
+    },
+    {
+      "id": "checkbox__css__css-ui__webkit-appearance-checkbox-001.html",
+      "test": "css/css-ui/webkit-appearance-checkbox-001.html",
+      "kind": "checkbox"
+    },
+    {
+      "id": "checkbox__css__css-ui__appearance-revert-001.tentative.html",
+      "test": "css/css-ui/appearance-revert-001.tentative.html",
+      "kind": "checkbox"
+    },
+    {
+      "id": "checkbox__css__css-ui__webkit-appearance-searchfield-001.html",
+      "test": "css/css-ui/webkit-appearance-searchfield-001.html",
+      "kind": "checkbox"
+    },
+    {
+      "id": "radio__html__rendering__widgets__input-radio-no-centering.html",
+      "test": "html/rendering/widgets/input-radio-no-centering.html",
+      "kind": "radio"
+    },
+    {
+      "id": "radio__css__css-ui__webkit-appearance-progress-bar-001.html",
+      "test": "css/css-ui/webkit-appearance-progress-bar-001.html",
+      "kind": "radio"
+    },
+    {
+      "id": "radio__css__css-ui__compute-kind-widget-fallback-props-revert-001.html",
+      "test": "css/css-ui/compute-kind-widget-fallback-props-revert-001.html",
+      "kind": "radio"
+    },
+    {
+      "id": "radio__css__css-ui__webkit-appearance-textfield-001.html",
+      "test": "css/css-ui/webkit-appearance-textfield-001.html",
+      "kind": "radio"
+    },
+    {
+      "id": "button__html__rendering__widgets__button-layout__centering-004.html",
+      "test": "html/rendering/widgets/button-layout/centering-004.html",
+      "kind": "button"
+    },
+    {
+      "id": "button__html__rendering__widgets__button-layout__block-in-inline.html",
+      "test": "html/rendering/widgets/button-layout/block-in-inline.html",
+      "kind": "button"
+    },
+    {
+      "id": "button__html__rendering__widgets__button-layout__scrollable-button-centering.html",
+      "test": "html/rendering/widgets/button-layout/scrollable-button-centering.html",
+      "kind": "button"
+    },
+    {
+      "id": "button__css__css-ui__appearance-menulist-001.html",
+      "test": "css/css-ui/appearance-menulist-001.html",
+      "kind": "button"
+    },
+    {
+      "id": "select__html__rendering__widgets__the-select-element__option-only-label.html",
+      "test": "html/rendering/widgets/the-select-element/option-only-label.html",
+      "kind": "select"
+    },
+    {
+      "id": "select__html__semantics__forms__the-select-element__customizable-select__select-base-appearance-writing-modes.html",
+      "test": "html/semantics/forms/the-select-element/customizable-select/select-base-appearance-writing-modes.html",
+      "kind": "select"
+    },
+    {
+      "id": "select__html__rendering__widgets__the-select-element__option-empty-label.html",
+      "test": "html/rendering/widgets/the-select-element/option-empty-label.html",
+      "kind": "select"
+    },
+    {
+      "id": "select__html__semantics__forms__the-select-element__customizable-select__select-explicit-size.html",
+      "test": "html/semantics/forms/the-select-element/customizable-select/select-explicit-size.html",
+      "kind": "select"
+    },
+    {
+      "id": "textarea__css__css-ui__appearance-checkbox-001.html",
+      "test": "css/css-ui/appearance-checkbox-001.html",
+      "kind": "textarea"
+    },
+    {
+      "id": "textarea__css__css-ui__appearance-button-001.html",
+      "test": "css/css-ui/appearance-button-001.html",
+      "kind": "textarea"
+    },
+    {
+      "id": "textarea__html__semantics__forms__the-textarea-element__textarea-newline-bidi.html",
+      "test": "html/semantics/forms/the-textarea-element/textarea-newline-bidi.html",
+      "kind": "textarea"
+    },
+    {
+      "id": "textarea__css__css-ui__webkit-appearance-auto-001.html",
+      "test": "css/css-ui/webkit-appearance-auto-001.html",
+      "kind": "textarea"
+    }
+  ]
+}

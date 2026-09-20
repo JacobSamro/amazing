@@ -206,3 +206,50 @@ measurements, distinct from the merged product head. RC-2 was merged as
 d8437f3. The integrator reports the authoritative clean merged-head workspace
 gate: **992 passed, 0 failed, 3 ignored across 52 targets**, lock prefix
 3FEAF813. No new feature work follows RC-2.
+
+## RC-3 — control painting and the payload boundary
+
+Implemented chrome for TextInput, Checkbox, Radio, Button, Select and Textarea
+from layout's `styled_replaced_fragments()` view. Only the display-list builder
+enumerates the view; rasterization consumes flattened commands and supplied
+geometry, retaining clipping, stacking and compositing. Author visible
+backgrounds/borders and appearance:none are honored. Default chrome is a bounded
+platform-neutral design; specialized appearance keywords are not implemented.
+
+`amazing_paint::controls::ControlProvider` supplies checked/disabled and borrowed,
+already-positioned `LineBox` glyph runs. The additive
+`paint_document_with_text_resources_and_controls` entrypoint consumes these
+through the shared shaped-glyph raster path, clipped to the control content
+rectangle. No DOM state lookup, label selection, shaping or measurement is added.
+Existing entrypoints default to unchecked/enabled/no label. The integrator routed
+production state to DOM and control-label shaping/placement to layout; production
+state/value/selected-label behavior remains unclaimed until those are wired.
+Only controls exposed by the inline replaced view are covered by this slice.
+
+Integrator decision: computed initial transparent background and none borders
+cannot distinguish explicit author defaults. Treat ambiguous defaults as absent
+styling; do not infer provenance. CSS owns the queued provenance follow-up.
+The transitional paint color parser is unchanged.
+
+Pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`: 63 static eligible
+candidates, 24 unique selected by path hash, four per control kind with greedy
+uniqueness. Before and after are both **21 matches / 2 mismatches / 1 unsupported**;
+zero new conformance passes claimed. Twenty matches change both sides, one
+changes neither. Base-select explicit-size and writing-mode cases still mismatch.
+Zero-size checkbox is unsupported because the integrator-owned harness resolves
+its root-relative blank reference against the test directory, despite the pinned
+reference being present. This request is routed; no upstream files were changed.
+
+CSS Images remains **12/12** and focused paint **24/24**, both before and after.
+All six repeated pairs have stable classifications, difference counts and pixel
+hashes. Final Windows gate on refreshed `0cc0ea0` plus owned changes: **1,029 passed,
+0 failed, 3 ignored across 52 targets**. Paint **86 passed**, including 12 new
+control tests. The image example builds with `--locked` after the integrator's
+standalone-shell lock fix. First-party artifacts were invalidated, baseline
+rebuilt, final owned sources re-synced and rebuilt with CARGO_INCREMENTAL=0;
+source hashes also match. Full evidence and reproduction live in
+`tests/wpt-replaced-content/rc3/`. No shell/workspace/lock edits in RC-3.
+
+Boundary: deliver for review and stop. Follow-ups are provider integration,
+CSS provenance, specialized appearance/layout coverage, and root-relative WPT
+reference resolution. None is silently credited by raw matching reftests.

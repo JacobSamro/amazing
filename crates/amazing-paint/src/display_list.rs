@@ -94,6 +94,7 @@ pub(crate) enum PaintCommand<'a> {
     BeginGroup(GroupEffect),
     PaintDecorations(&'a LayoutBox, crate::background::BackgroundPlan),
     PaintContent(&'a LayoutBox),
+    PaintControl(Box<crate::controls::ControlPaint>),
     PushOverflowClip(&'a LayoutBox),
     PopClip,
     EndGroup,
@@ -159,7 +160,10 @@ fn emit_context<'a>(
         commands.push(PaintCommand::BeginGroup(effect));
     }
 
-    commands.push(PaintCommand::PaintDecorations(root, crate::background::BackgroundPlan::from_style(&root.style)));
+    commands.push(PaintCommand::PaintDecorations(
+        root,
+        crate::background::BackgroundPlan::from_style(&root.style),
+    ));
     let root_clips = clips_overflow(root);
     if root_clips {
         commands.push(PaintCommand::PushOverflowClip(root));
@@ -196,6 +200,10 @@ fn emit_context<'a>(
             return false;
         }
     }
+    let Some(controls) = control_commands(root) else {
+        return false;
+    };
+    commands.extend(controls);
     commands.push(PaintCommand::PaintContent(root));
     commands.append(&mut middle);
     for item in buckets.middle_phase {
@@ -276,7 +284,10 @@ fn walk_middle<'a>(
         positioned_phase,
         middle,
         buckets,
-        PaintCommand::PaintDecorations(box_, crate::background::BackgroundPlan::from_style(&box_.style)),
+        PaintCommand::PaintDecorations(
+            box_,
+            crate::background::BackgroundPlan::from_style(&box_.style),
+        ),
     );
     let clips = clips_overflow(box_);
     if clips {
@@ -287,6 +298,12 @@ fn walk_middle<'a>(
             PaintCommand::PushOverflowClip(box_),
         );
         inherited_clips.push(box_);
+    }
+    let Some(controls) = control_commands(box_) else {
+        return false;
+    };
+    for control in controls {
+        push_middle_command(positioned_phase, middle, buckets, control);
     }
     push_middle_command(
         positioned_phase,
@@ -570,4 +587,53 @@ fn parse_angle(value: &str) -> Option<f32> {
     } else {
         None
     }
+}
+
+/// Only this stage enumerates layout's directly-owned replaced fragment view.
+fn control_commands(box_: &LayoutBox) -> Option<Vec<PaintCommand<'_>>> {
+    use amazing_layout::{replaced::ReplacedKind, Display};
+    let mut commands = Vec::new();
+    for fragment in box_.styled_replaced_fragments() {
+        if fragment.kind == ReplacedKind::Image
+            || fragment
+                .style
+                .get("visibility")
+                .is_some_and(|v| matches!(v, "hidden" | "collapse"))
+        {
+            continue;
+        }
+        if commands.len() >= MAX_CHILDREN_PER_BOX {
+            return None;
+        }
+        let mut geometry = LayoutBox::new(
+            Some(fragment.node),
+            Display::Inline,
+            fragment.style.clone(),
+            fragment.font_size,
+            0.0,
+        );
+        geometry.content_box = fragment.content_box;
+        geometry.border_box = fragment.border_box;
+        geometry.padding = fragment.padding;
+        geometry.border = fragment.border;
+        let effect = effect_for(&geometry);
+        if effect.is_some_and(|e| e.opacity <= 0.0) {
+            continue;
+        }
+        let background = crate::background::BackgroundPlan::from_style(fragment.style);
+        if let Some(effect) = effect {
+            commands.push(PaintCommand::BeginGroup(effect));
+        }
+        commands.push(PaintCommand::PaintControl(Box::new(
+            crate::controls::ControlPaint {
+                kind: fragment.kind,
+                geometry,
+                background,
+            },
+        )));
+        if effect.is_some() {
+            commands.push(PaintCommand::EndGroup);
+        }
+    }
+    Some(commands)
 }

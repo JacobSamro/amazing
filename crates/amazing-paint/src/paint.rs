@@ -42,8 +42,8 @@ use amazing_text::{GlyphCacheKey, GlyphContent, GlyphImage, TextSystem};
 
 use crate::color::parse_css_color;
 use crate::display_list::{build_display_list, GroupEffect, PaintCommand};
-use crate::surface::Surface;
 use crate::image::ImagePresentation;
+use crate::surface::Surface;
 use crate::text::{draw_fragment_clipped, GlyphProvider, RectInkProvider};
 
 const CANVAS_WHITE: [u8; 4] = [255, 255, 255, 255];
@@ -279,7 +279,13 @@ fn source_over(source: [u8; 4], destination: [u8; 4], opacity: f32) -> [u8; 4] {
 pub trait ImageProvider {
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image>;
     /// Decoded background resource resolved by the embedding loader. No I/O during paint.
-    fn background_image(&self, _node: amazing_dom::NodeIdx, _url: &str) -> Option<&amazing_media::Image> { None }
+    fn background_image(
+        &self,
+        _node: amazing_dom::NodeIdx,
+        _url: &str,
+    ) -> Option<&amazing_media::Image> {
+        None
+    }
     /// Inline fragments retain node identity; callers supply its computed style.
     fn presentation(&self, _node: amazing_dom::NodeIdx) -> ImagePresentation {
         ImagePresentation::default()
@@ -345,7 +351,31 @@ pub fn paint_document_with_resources(
             PaintCommand::PaintDecorations(box_, background) => {
                 let color = resolve_text_color(&box_.style);
                 let clip = state.clip();
-                if !paint_decorations(&mut state.surface, box_, color, images, &background, clip, &mut state.background_samples) { state.failed = true; }
+                if !paint_decorations(
+                    &mut state.surface,
+                    box_,
+                    color,
+                    images,
+                    &background,
+                    clip,
+                    &mut state.background_samples,
+                ) {
+                    state.failed = true;
+                }
+            }
+            PaintCommand::PaintControl(control) => {
+                let clip = state.clip();
+                let content = crate::controls::ControlContent::default();
+                if !control_raster::paint(
+                    &mut state.surface,
+                    &control,
+                    &content,
+                    images,
+                    clip,
+                    &mut state.background_samples,
+                ) {
+                    state.failed = true;
+                }
             }
             PaintCommand::PaintContent(box_) => {
                 let color = resolve_text_color(&box_.style);
@@ -369,6 +399,25 @@ pub fn paint_document_with_text_resources(
     text: &dyn TextSystem,
     images: &dyn ImageProvider,
 ) -> Surface {
+    paint_document_with_text_resources_and_controls(
+        root,
+        viewport_w,
+        viewport_h,
+        text,
+        images,
+        &crate::controls::NoControls,
+    )
+}
+
+/// Additive state/glyph seam. Labels must already be shaped and positioned by layout.
+pub fn paint_document_with_text_resources_and_controls(
+    root: &LayoutBox,
+    viewport_w: u32,
+    viewport_h: u32,
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+    controls: &dyn crate::controls::ControlProvider,
+) -> Surface {
     let commands = build_display_list(root);
     let mut state = RasterState::new(viewport_w, viewport_h);
     for command in commands {
@@ -380,7 +429,36 @@ pub fn paint_document_with_text_resources(
             PaintCommand::PaintDecorations(box_, background) => {
                 let color = resolve_text_color(&box_.style);
                 let clip = state.clip();
-                if !paint_decorations(&mut state.surface, box_, color, images, &background, clip, &mut state.background_samples) { state.failed = true; }
+                if !paint_decorations(
+                    &mut state.surface,
+                    box_,
+                    color,
+                    images,
+                    &background,
+                    clip,
+                    &mut state.background_samples,
+                ) {
+                    state.failed = true;
+                }
+            }
+            PaintCommand::PaintControl(control) => {
+                let clip = state.clip();
+                let content = controls.content(control.geometry.node.unwrap());
+                if !control_raster::paint(
+                    &mut state.surface,
+                    &control,
+                    &content,
+                    images,
+                    clip,
+                    &mut state.background_samples,
+                ) {
+                    state.failed = true;
+                }
+                let rect = control.geometry.content_box;
+                let text_clip = clip.intersect(rect.x, rect.y, rect.w, rect.h);
+                for line in content.lines {
+                    paint_line_glyphs(&mut state.surface, line, text, text_clip);
+                }
             }
             PaintCommand::PaintContent(box_) => {
                 let clip = state.clip();
@@ -405,12 +483,20 @@ fn paint_decorations(
 ) -> bool {
     paint_box_shadow(surface, box_, text_color, clip);
     paint_background(surface, box_, text_color, background.color_clip, clip);
-    if !background_raster::paint(surface, box_, background, images, clip, budget) { return false; }
+    if !background_raster::paint(surface, box_, background, images, clip, budget) {
+        return false;
+    }
     paint_inset_box_shadow(surface, box_, text_color, clip);
     paint_borders(surface, box_, text_color, clip);
     if box_.replaced_size.is_some() {
         if let Some(image) = box_.node.and_then(|node| images.image(node)) {
-            paint_image(surface, &box_.content_box, image, ImagePresentation::from_style(&box_.style), clip);
+            paint_image(
+                surface,
+                &box_.content_box,
+                image,
+                ImagePresentation::from_style(&box_.style),
+                clip,
+            );
         }
     }
     true
@@ -810,62 +896,70 @@ fn paint_shaped_lines(
                 );
             }
         }
-        for decoration in &line.decorations {
-            if let Some(color) = parse_css_color(&decoration.color) {
-                if color[3] != 0 {
-                    fill_rect_clipped(
-                        surface,
-                        decoration.x,
-                        decoration.y,
-                        decoration.width,
-                        decoration.height,
-                        color,
-                        clip,
-                    );
-                }
+        paint_line_glyphs(surface, line, text, clip);
+    }
+}
+
+fn paint_line_glyphs(
+    surface: &mut Surface,
+    line: &amazing_layout::LineBox,
+    text: &dyn TextSystem,
+    clip: ClipRect,
+) {
+    for decoration in &line.decorations {
+        if let Some(color) = parse_css_color(&decoration.color) {
+            if color[3] != 0 {
+                fill_rect_clipped(
+                    surface,
+                    decoration.x,
+                    decoration.y,
+                    decoration.width,
+                    decoration.height,
+                    color,
+                    clip,
+                );
             }
         }
-        for glyph in &line.glyphs {
-            let color = parse_css_color(&glyph.color).unwrap_or(FALLBACK_TEXT_COLOR);
-            let baseline = if glyph.writing_mode.is_vertical_flow() {
-                glyph.y
-            } else {
-                line.baseline + glyph.y - glyph.offset_y
-            };
-            let subpixel =
-                |value: f32| ((value.fract().rem_euclid(1.0) * 64.0).round() as u8).min(63);
-            let Some(key) = GlyphCacheKey::new(
-                text.generation(),
-                glyph.font,
-                glyph.glyph,
-                glyph.font_size,
-                subpixel(glyph.x),
-                subpixel(baseline),
-            ) else {
-                continue;
-            };
-            let key = key.with_style(&glyph.variations, glyph.synthesis);
-            let Ok(Some(image)) = text.rasterize(amazing_text::GlyphRasterRequest {
-                key,
-                variations: &glyph.variations,
-                synthesis: glyph.synthesis,
-            }) else {
-                continue;
-            };
-            blit_text_image(
-                surface,
-                &image,
-                GlyphBlit {
-                    origin_x: glyph.x.floor() as i64,
-                    origin_y: baseline.floor() as i64,
-                    orientation: glyph.orientation,
-                    scale_x: glyph.scale_x,
-                    scale_y: glyph.scale_y,
-                    color,
-                },
-                clip,
-            );
-        }
+    }
+    for glyph in &line.glyphs {
+        let color = parse_css_color(&glyph.color).unwrap_or(FALLBACK_TEXT_COLOR);
+        let baseline = if glyph.writing_mode.is_vertical_flow() {
+            glyph.y
+        } else {
+            line.baseline + glyph.y - glyph.offset_y
+        };
+        let subpixel = |value: f32| ((value.fract().rem_euclid(1.0) * 64.0).round() as u8).min(63);
+        let Some(key) = GlyphCacheKey::new(
+            text.generation(),
+            glyph.font,
+            glyph.glyph,
+            glyph.font_size,
+            subpixel(glyph.x),
+            subpixel(baseline),
+        ) else {
+            continue;
+        };
+        let key = key.with_style(&glyph.variations, glyph.synthesis);
+        let Ok(Some(image)) = text.rasterize(amazing_text::GlyphRasterRequest {
+            key,
+            variations: &glyph.variations,
+            synthesis: glyph.synthesis,
+        }) else {
+            continue;
+        };
+        blit_text_image(
+            surface,
+            &image,
+            GlyphBlit {
+                origin_x: glyph.x.floor() as i64,
+                origin_y: baseline.floor() as i64,
+                orientation: glyph.orientation,
+                scale_x: glyph.scale_x,
+                scale_y: glyph.scale_y,
+                color,
+            },
+            clip,
+        );
     }
 }
 
@@ -1120,7 +1214,13 @@ fn resolve_color(style: &ComputedStyle, prop: &str, text_color: [u8; 4]) -> Opti
 
 /// Fills the padding box (content box grown by the resolved paddings).
 /// A transparent or unparseable background paints nothing.
-fn paint_background(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], area: crate::background::BoxArea, clip: ClipRect) {
+fn paint_background(
+    surface: &mut Surface,
+    b: &LayoutBox,
+    text_color: [u8; 4],
+    area: crate::background::BoxArea,
+    clip: ClipRect,
+) {
     let bg = match resolve_color(&b.style, "background-color", text_color) {
         Some(c) => c,
         None => return,
@@ -1409,11 +1509,19 @@ fn paint_image(
     presentation: ImagePresentation,
     clip: ClipRect,
 ) {
-    let Some(expected) = (image.width as usize).checked_mul(image.height as usize)
-        .and_then(|n| n.checked_mul(4)) else { return; };
-    if image.pixels.len() != expected { return; }
+    let Some(expected) = (image.width as usize)
+        .checked_mul(image.height as usize)
+        .and_then(|n| n.checked_mul(4))
+    else {
+        return;
+    };
+    if image.pixels.len() != expected {
+        return;
+    }
     let clip = clip.intersect(rect.x, rect.y, rect.w, rect.h);
-    let Some(destination) = presentation.destination(*rect, (image.width, image.height)) else { return; };
+    let Some(destination) = presentation.destination(*rect, (image.width, image.height)) else {
+        return;
+    };
     let rect = &destination;
     if image.width == 0 || image.height == 0 || rect.w <= 0.0 || rect.h <= 0.0 {
         return;
@@ -1432,10 +1540,12 @@ fn paint_image(
     let clipped_y1 = y1.max(0).min(pixel_clip[3]).min(surface.height as i64);
     for y in clipped_y0..clipped_y1 {
         let source_y = (((y as f64 + 0.5 - rect.y as f64) / rect.h as f64) * image.height as f64)
-            .floor().clamp(0.0, image.height.saturating_sub(1) as f64) as u32;
+            .floor()
+            .clamp(0.0, image.height.saturating_sub(1) as f64) as u32;
         for x in clipped_x0..clipped_x1 {
             let source_x = (((x as f64 + 0.5 - rect.x as f64) / rect.w as f64) * image.width as f64)
-                .floor().clamp(0.0, image.width.saturating_sub(1) as f64) as u32;
+                .floor()
+                .clamp(0.0, image.width.saturating_sub(1) as f64) as u32;
             let source_index = ((source_y as usize * image.width as usize + source_x as usize) * 4)
                 .min(image.pixels.len());
             let Some(source) = image.pixels.get(source_index..source_index + 4) else {
@@ -1859,3 +1969,10 @@ mod background_raster;
 #[cfg(test)]
 #[path = "background_tests.rs"]
 mod background_tests;
+
+#[path = "control_raster.rs"]
+mod control_raster;
+
+#[cfg(test)]
+#[path = "control_tests.rs"]
+mod control_tests;
