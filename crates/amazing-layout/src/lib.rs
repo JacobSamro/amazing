@@ -44,8 +44,8 @@
 //!   `max(0, child − parent)` inside the parent (the collapsed excess does
 //!   not propagate above the parent's border edge); sibling signed collapse
 //!   and direct empty-block collapse-through are modeled
-//! - inline-block/inline-table and table-internal roles are blockified rather
-//!   than atomic-inline/table-formatted; `list-item` renders without markers
+//! - non-replaced inline-block and inline-table outer flow remains blockified;
+//!   table internals use CSS table formatting; `list-item` renders without markers
 //! - no min/max-width clamping or intrinsic width keywords, no `box-sizing`
 //!   (content-box always), no text-align beyond left
 //! - text-only line boxes use the block's strut (font + line-height);
@@ -70,6 +70,9 @@
 
 pub mod block;
 pub mod box_tree;
+mod table_tree;
+mod table;
+pub mod table_decoration;
 pub mod flex;
 mod flex_algorithm;
 #[cfg(test)]
@@ -155,6 +158,10 @@ pub struct LayoutBox {
     pub positioned: Vec<LayoutBox>,
     /// Intrinsic dimensions when this box itself is replaced content.
     pub replaced_size: Option<IntrinsicSize>,
+    pub(crate) table_decoration: table_decoration::TableDecoration,
+    pub(crate) table_wrapper: bool,
+    pub(crate) table_colspan: usize,
+    pub(crate) table_rowspan: usize,
     /// Definite containing-block height, distinct from content-derived height.
     pub(crate) containing_block_height: Option<f32>,
 
@@ -190,6 +197,10 @@ impl LayoutBox {
             flow: Flow::Empty,
             positioned: Vec::new(),
             replaced_size: None,
+            table_decoration: Default::default(),
+            table_wrapper: false,
+            table_colspan: 1,
+            table_rowspan: 1,
             containing_block_height: None,
             margin: values::SidesM::default(),
             padding: values::Sides::default(),
@@ -251,7 +262,7 @@ pub struct RubyColumn {
     pub annotation_hidden: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InlineNode {
     /// A whitespace-collapsed text run from one DOM text node, rendered at
     /// the effective font size of the inline chain it came from.
@@ -445,7 +456,8 @@ pub fn layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
 }
 
 fn has_floats(layout: &LayoutBox) -> bool {
-    floats::side(&layout.style).is_some()
+    table_tree::role(layout) == table_tree::Role::Table
+        || floats::side(&layout.style).is_some()
         || match &layout.flow {
             Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
                 children.iter().any(has_floats)
@@ -1547,3 +1559,6 @@ mod shaped_text_tests {
         assert!(annotation.x < b.x);
     }
 }
+
+#[cfg(test)]
+mod table_tests;

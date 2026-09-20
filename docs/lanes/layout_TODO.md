@@ -320,3 +320,29 @@ placement, and platform/content-dependent control sizing remain outside this
 inline-box slice. Image HTML dimension presentational hints are not introduced
 here; they belong in the upstream style/hint path after removing provider-side
 used sizing.
+
+
+## LAYOUT-3 — Table formatting (in progress)
+
+- Anonymous table object generation follows CSS 2.1 §17.2.1, grouping adjacent
+  misparented siblings before descending into wrappers. HTML parser repair is
+  not a substitute for CSS box repair.
+- Fixed widths use columns, first-row cells, then equal remaining columns.
+  Automatic widths distribute cell min/max contributions, including spans.
+  Row spans clamp at row-group boundaries; zero spans run to the group end.
+  Overlap follows the source-order option permitted by CSS 2.1 §17.5.
+- **Resolved CSS dependency:** `border-spacing` inherited computed metadata is
+  queued to the CSS lane after CSS-3 provenance. Layout reads computed style
+  only and defaults an absent value to the initial `0`; it does not implement
+  cascade/inheritance or edit CSS. Explicit computed table spacing is consumed.
+- **Resolved paint dependency:** the integrator approved an additive
+  `LayoutBox::table_decoration()` seam. `TableDecoration` exposes suppression
+  of ordinary borders/backgrounds, absolute background holes for hidden empty
+  cells, and table-owned `TableBorderSegment` values carrying the **resolved
+  winner** (rectangle, orientation, style, RGBA color, source node) per edge.
+  Conflict resolution stays in layout; paint must not reconstruct candidates.
+  Hidden winners suppress geometry; inset/outset map to ridge/groove. Paint
+  adoption belongs to replaced-content after merge; no paint files are edited.
+- Fresh Windows baseline built from `d8437f3` after removing first-party
+  artifacts and disabling incremental compilation. Existing 164 layout tests
+  and the first 10 new table regressions pass on Windows; final gates pending.

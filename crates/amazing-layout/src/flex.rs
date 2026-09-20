@@ -1006,6 +1006,8 @@ fn stretch_height(it: &mut LayoutBox, target_border_h: f32) {
 /// boxes, word fragments, recursively.
 pub(crate) fn translate(b: &mut LayoutBox, dx: f32, dy: f32) {
     b.border_box = shift(b.border_box, dx, dy);
+    for segment in &mut b.table_decoration.borders {segment.rect=shift(segment.rect,dx,dy);}
+    for hole in &mut b.table_decoration.background_holes {*hole=shift(*hole,dx,dy);}
     b.content_box = shift(b.content_box, dx, dy);
     for line in &mut b.lines {
         line.y_top += dy;
@@ -1043,6 +1045,8 @@ fn shift(r: Rect, dx: f32, dy: f32) -> Rect {
 /// widest child (plus horizontal margins) for block/flex children, plus
 /// this box's own horizontal padding and border.
 pub(crate) fn max_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
+    if b.table_wrapper {return max_content_inner_width(b,fonts);}
+    if crate::table_tree::role(b) == crate::table_tree::Role::Table { return crate::table::intrinsic(b, fonts).1; }
     let em = b.font_size;
     let pad = values::resolve_padding(&b.style, em, 0.0);
     let bor = values::resolve_borders(&b.style, em);
@@ -1057,6 +1061,8 @@ pub(crate) fn max_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
 /// Approximate min-content width: the widest unbreakable inline token or
 /// descendant min-content contribution, plus this box's horizontal chrome.
 pub(crate) fn min_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
+    if b.table_wrapper {return min_content_inner_width(b,fonts);}
+    if crate::table_tree::role(b) == crate::table_tree::Role::Table { return crate::table::intrinsic(b, fonts).0; }
     let em = b.font_size;
     let pad = values::resolve_padding(&b.style, em, 0.0);
     let bor = values::resolve_borders(&b.style, em);
@@ -1068,7 +1074,7 @@ pub(crate) fn min_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     chrome + inner
 }
 
-fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
+pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     match &b.flow {
         Flow::Inlines(items) => inline_run_width(items, fonts),
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children
@@ -1084,7 +1090,7 @@ fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     }
 }
 
-fn min_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
+pub(crate) fn min_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     match &b.flow {
         Flow::Inlines(items) => inline_min_content_width(items, fonts),
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children

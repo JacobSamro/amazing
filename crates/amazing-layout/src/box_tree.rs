@@ -46,7 +46,11 @@ pub fn build_layout_tree_with_replaced(
         .and_then(|html| find_element(dom, html, "body"))
         .or_else(|| dom_html(dom));
     match start {
-        Some(idx) => build_element(dom, styled, idx, values::ROOT_FONT_SIZE, fonts, replaced),
+        Some(idx) => {
+            let mut root = build_element(dom, styled, idx, values::ROOT_FONT_SIZE, fonts, replaced);
+            crate::table_tree::normalize(&mut root);
+            root
+        },
         None => LayoutBox::new(
             None,
             Display::Block,
@@ -75,7 +79,12 @@ fn build_element(
     fonts: &FontSource,
     replaced: &dyn ReplacedElementProvider,
 ) -> LayoutBox {
-    let style = styled.get(idx).cloned().unwrap_or_default();
+    let mut style = styled.get(idx).cloned().unwrap_or_default();
+    let table_role = crate::table_tree::Role::of(&style);
+    if !matches!(table_role, crate::table_tree::Role::Other | crate::table_tree::Role::Table)
+        && (crate::floats::side(&style).is_some() || is_out_of_flow(&style)) {
+        style.set("display", "block");
+    }
     let font_size =
         values::resolve_font_size(style.get("font-size").unwrap_or("medium"), parent_font_px);
     let normal_lh = fonts.scaled_metrics(font_size).line_height;
@@ -87,6 +96,12 @@ fn build_element(
     let display = parse_display(&style);
     let mut box_ = LayoutBox::new(Some(idx), display, style, font_size, line_height);
     box_.replaced_size = replaced.intrinsic_size(idx);
+    if matches!(dom.name(idx), Some("td" | "th")) {
+        box_.table_colspan = table_span(attribute(dom, idx, "colspan"), 1000, false);
+        box_.table_rowspan = table_span(attribute(dom, idx, "rowspan"), 65534, true);
+    } else if matches!(dom.name(idx), Some("col" | "colgroup")) {
+        box_.table_colspan = table_span(attribute(dom, idx, "span"), 1000, false);
+    }
     let classified = classify_children(dom, styled, idx, font_size, fonts, replaced);
     box_.flow = classified.flow;
     box_.positioned = classified.positioned;
@@ -1593,4 +1608,15 @@ mod tests {
         assert_eq!(columns[0].annotation.as_ref().unwrap().text, "shared");
         assert!(columns[1].annotation.is_none());
     }
+}
+
+
+fn table_span(value: Option<&str>, limit: usize, zero_allowed: bool) -> usize {
+    let Some(value) = value else { return 1; };
+    let value = value.trim_start_matches([' ', '\t', '\n', '\r', '\u{000c}']);
+    let value = value.strip_prefix('+').unwrap_or(value);
+    let digits: Vec<_> = value.bytes().take_while(u8::is_ascii_digit).collect();
+    if digits.is_empty() { return 1; }
+    let value = digits.into_iter().fold(0usize, |n,d| n.saturating_mul(10).saturating_add((d-b'0') as usize).min(limit));
+    if zero_allowed {value} else {value.max(1)}
 }

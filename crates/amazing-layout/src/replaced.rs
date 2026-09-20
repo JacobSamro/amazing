@@ -21,7 +21,7 @@ pub enum ReplacedKind {
 }
 
 /// Style and natural geometry retained through flattening and repeated layout.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InlineReplaced {
     pub kind: ReplacedKind,
     pub style: ComputedStyle,

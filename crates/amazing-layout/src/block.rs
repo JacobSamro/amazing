@@ -138,6 +138,11 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
     )
 }
 
+pub(crate) fn layout_table_content(b: &mut LayoutBox, x:f32, y:f32, width:f32,
+    fonts:&FontSource, text:Option<&dyn amazing_text::TextSystem>) -> f32 {
+    layout_block_in_context(b,x,y,width,fonts,&mut FloatContext::default(),text,true)
+}
+
 fn layout_block_in_context(
     b: &mut LayoutBox,
     x: f32,
@@ -148,6 +153,10 @@ fn layout_block_in_context(
     text: Option<&dyn amazing_text::TextSystem>,
     root: bool,
 ) -> f32 {
+    if b.table_wrapper { return crate::table::layout_wrapper(b,x,y,cbw,fonts,text); }
+    if crate::table_tree::role(b) == crate::table_tree::Role::Table {
+        return crate::table::layout(b, x, y, cbw, fonts, text, 0.0);
+    }
     let font_px = b.font_size;
     b.margin = values::resolve_margins(&b.style, font_px, cbw);
     b.padding = values::resolve_padding(&b.style, font_px, cbw);

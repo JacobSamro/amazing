@@ -285,6 +285,8 @@ fn shift_box(box_: &mut LayoutBox, dx: f32, dy: f32) {
     if dx == 0.0 && dy == 0.0 {
         return;
     }
+    for segment in &mut box_.table_decoration.borders {segment.rect.x+=dx;segment.rect.y+=dy;}
+    for hole in &mut box_.table_decoration.background_holes {hole.x+=dx;hole.y+=dy;}
     box_.border_box.x += dx;
     box_.border_box.y += dy;
     box_.content_box.x += dx;

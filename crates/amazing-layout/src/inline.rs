@@ -2361,3 +2361,36 @@ mod tests {
         assert!(lines[0].words[0].width > 30.0);
     }
 }
+
+/// Intrinsic contributions from the same shaped units used for line fitting.
+/// This keeps table sizing on provider advances, including atomic content and
+/// legal no-wrap runs, instead of estimating text using fallback glyph widths.
+pub(crate) fn intrinsic_widths_shaped(
+    items: &[InlineNode],
+    direction: amazing_text::Direction,
+    text: &dyn TextSystem,
+) -> Option<(f32, f32)> {
+    let refs: Vec<_> = items.iter().collect();
+    let units = shape_inline_items(&refs, direction, text)?;
+    let mut minimum = 0.0f32;
+    let mut maximum = 0.0f32;
+    let mut line = 0.0f32;
+    let mut ruby_run = 0.0f32;
+    for unit in units {
+        match unit {
+            ShapedUnit::Break => { maximum = maximum.max(line); line = 0.0; ruby_run = 0.0; }
+            ShapedUnit::Word(word) => {
+                minimum = minimum.max(word.width + word.hyphen_advance);
+                line += word.width + if line > 0.0 || word.preserve_space_before {word.space_before} else {0.0};
+                ruby_run = 0.0;
+            }
+            ShapedUnit::Replaced { size, .. } => {minimum = minimum.max(size.width); line += size.width; ruby_run = 0.0;}
+            ShapedUnit::Combined { shaped, .. } => {minimum = minimum.max(shaped.width); line += shaped.width; ruby_run = 0.0;}
+            ShapedUnit::Ruby(ruby) => {
+                ruby_run += ruby.width; minimum = minimum.max(ruby_run); line += ruby.width;
+                if ruby.break_after {ruby_run = 0.0;}
+            }
+        }
+    }
+    Some((minimum, maximum.max(line)))
+}
