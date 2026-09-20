@@ -54,6 +54,31 @@ else
 fi
 
 cd "$REPO"
+
+# A lane mid-gate can create .agents/<lane>/REFRESH-HOLD to protect its tree.
+# A refresh overwrites lane-owned files, so doing it during a final gate
+# invalidates the run -- that has now happened twice, both times because the
+# integrator simply forgot. Remembering is not a mechanism; this is.
+held=()
+for l in "${LANES[@]}"; do
+  if [ -f ".agents/$l/REFRESH-HOLD" ]; then
+    held+=("$l")
+    echo "SKIP $l: REFRESH-HOLD set -- $(head -1 ".agents/$l/REFRESH-HOLD" 2>/dev/null)" >&2
+  fi
+done
+if [ ${#held[@]} -gt 0 ]; then
+  remaining=()
+  set +u
+  for l in "${LANES[@]}"; do
+    skip=0
+    for h in "${held[@]}"; do [ "$l" = "$h" ] && skip=1; done
+    [ $skip -eq 0 ] && remaining+=("$l")
+  done
+  LANES=("${remaining[@]}")
+  set -u
+  [ ${#LANES[@]} -eq 0 ] && { echo "all requested lanes are on REFRESH-HOLD; nothing to do" >&2; exit 0; }
+fi
+
 COMMIT="$(git rev-parse --short HEAD)"
 echo "refreshing lane trees to $COMMIT: ${LANES[*]}"
 
