@@ -416,6 +416,24 @@ def age_of(stamp: str) -> str:
     return f"{secs // 86400}d"
 
 
+def open_questions(lane: str) -> list[str]:
+    """Bulleted questions a lane is still waiting on.
+
+    A question stays in the file as a record once answered, so anything marked
+    RESOLVED is dropped -- otherwise settled items pile up in the dashboard and
+    drown the ones that still need a decision.
+    """
+    out = []
+    for line in tail_file(lane, "questions.md", 100):
+        if not line.lstrip().startswith(("-", "*")):
+            continue
+        body = line.lstrip("-* ").strip()
+        if body.upper().startswith(("RESOLVED", "ANSWERED", "DONE")):
+            continue
+        out.append(body)
+    return out
+
+
 def tail_file(lane: str, name: str, n: int) -> list[str]:
     path = AGENTS_DIR / lane / name
     if not path.exists():
@@ -628,9 +646,8 @@ def cmd_digest(args) -> int:
             problems.append(f"BLOCKED  {lane}: {b}")
 
     for lane in reg:
-        for q in tail_file(lane, "questions.md", 20):
-            if q.lstrip().startswith(("-", "*")):
-                problems.append(f"ASK      {lane}: {q.lstrip('-* ').strip()}")
+        for q in open_questions(lane):
+            problems.append(f"ASK      {lane}: {q}")
 
     if problems:
         print("\n-- needs attention --")
@@ -715,12 +732,12 @@ def cmd_questions(args) -> int:
     """Collect every open cross-lane request and decision the fleet is waiting on."""
     found = False
     for lane in lanes_or_all(args.targets):
-        items = [q for q in tail_file(lane, "questions.md", 50) if q.lstrip().startswith(("-", "*"))]
+        items = open_questions(lane)
         if items:
             found = True
             print(f"[{lane}]")
             for q in items:
-                print(f"  {q.lstrip('-* ').strip()}")
+                print(f"  {q}")
     if not found:
         print("no open questions")
     return 0
