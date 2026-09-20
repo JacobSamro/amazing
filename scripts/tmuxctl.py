@@ -117,7 +117,13 @@ LANE_GRANTS = {
 # grant and two lanes must not edit the shell at once.
 # JS-2 adds the amazing-js -> amazing-regex dependency edge, which only cargo
 # can record. Granted for that single edge, verified by diff at merge.
-LANE_GRANTS["js-lang"] = ["Cargo.lock", "scripts/test262.py"]  # JS-3 fixes the runner
+LANE_GRANTS["js-lang"] = [
+    "Cargo.lock",
+    "scripts/test262.py",
+    # JS-3 needs a real Test262 host binary; it lives with the front half
+    # the lane owns, not in the runtime half js-runtime took.
+    "crates/amazing-js/examples/test262_host.rs",
+]
 LANE_GRANTS["integrator-assist"] = [
     "crates/amazing-shell-gpui/src/session_state.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
