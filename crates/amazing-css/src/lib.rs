@@ -23,8 +23,8 @@
 //! - `@supports` handles static variable-bearing declaration conditions;
 //!   other at-rule bodies (`@media`, `@layer`, `@scope`, `@keyframes`, …) are
 //!   balanced then dropped
-//! - property-specific computed grammars remain string-backed outside custom
-//!   properties and CSS-wide defaulting
+//! - typed computed values cover primitive numeric/color values and common
+//!   layout keywords; remaining compound grammars are explicitly unparsed
 //! - pseudo-elements invalidate their rule (nothing can paint them yet)
 //! - presentational HTML attributes and `<style media>` are ignored
 //!
@@ -36,14 +36,16 @@
 //! [`selectors::parse_selector`] / [`compute`].
 
 pub mod cascade;
+pub mod color;
 mod computed;
 pub mod parser;
 pub mod selectors;
 pub mod syntax;
+pub mod values;
 
-pub use cascade::{compute, StyledDom};
+pub use cascade::{StyledDom, compute};
 pub use computed::ComputedStyle;
 pub use parser::{
-    parse_declarations, parse_font_faces, parse_stylesheet, Declaration, FontFaceRule,
-    FontSource, Rule, Stylesheet,
+    Declaration, FontFaceRule, FontSource, Rule, Stylesheet, parse_declarations, parse_font_faces,
+    parse_stylesheet,
 };

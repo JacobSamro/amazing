@@ -6,6 +6,7 @@
 //! and supported shorthand expansion stay behind this seam.
 
 use crate::syntax::{Token, serialize, tokenize};
+use crate::values::{self, ComputedValue};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,13 +18,55 @@ enum CustomValue {
 /// Final computed properties for one element. Normal property names are
 /// ASCII-lowercase. Custom properties remain private implementation state and
 /// preserve their case-sensitive names for inheritance and `var()` lookup.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComputedStyle {
     props: BTreeMap<String, String>,
+    typed: BTreeMap<String, ComputedValue>,
     custom: BTreeMap<String, CustomValue>,
+    root_font_px: f64,
+}
+
+impl Default for ComputedStyle {
+    fn default() -> Self {
+        Self {
+            props: BTreeMap::new(),
+            typed: BTreeMap::new(),
+            custom: BTreeMap::new(),
+            root_font_px: 16.0,
+        }
+    }
 }
 
 impl ComputedStyle {
+    /// Parsed once during computation. Custom properties are never exposed.
+    /// `Unparsed` marks a standard/unknown grammar outside the typed prototype.
+    pub fn typed(&self, property: &str) -> Option<&ComputedValue> {
+        self.typed.get(property)
+    }
+
+    fn rebuild_typed(&mut self) {
+        self.typed = self
+            .props
+            .iter()
+            .map(|(name, css)| {
+                (
+                    name.clone(),
+                    values::parse(name, css).unwrap_or(ComputedValue::Unparsed),
+                )
+            })
+            .collect();
+    }
+
+    fn resolve_typed_units(&mut self) {
+        let font = match self.typed.get("font-size") {
+            Some(ComputedValue::LengthPercentage(values::LengthPercentage::Px(px))) => *px,
+            _ => 16.0,
+        };
+        for (name, value) in &mut self.typed {
+            values::resolve_font_units(value, font, self.root_font_px, name == "line-height");
+        }
+    }
+
     pub fn get(&self, property: &str) -> Option<&str> {
         self.props.get(property).map(String::as_str)
     }
@@ -44,8 +87,11 @@ impl ComputedStyle {
             return;
         }
         for (longhand, expanded) in expand_declaration(property, value) {
+            let typed = values::parse(&longhand, &expanded).unwrap_or(ComputedValue::Unparsed);
+            self.typed.insert(longhand.clone(), typed);
             self.props.insert(longhand, expanded);
         }
+        self.resolve_typed_units();
     }
 
     #[cfg(test)]
@@ -69,6 +115,7 @@ impl FromIterator<(String, String)> for ComputedStyle {
                 style.props.insert(name.to_ascii_lowercase(), value);
             }
         }
+        style.rebuild_typed();
         style
     }
 }
@@ -666,6 +713,14 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     } else {
         property.to_ascii_lowercase()
     };
+    if metadata(&property).is_some()
+        && css_wide_keyword(value).is_none()
+        && !contains_var_function(value)
+        && !matches!(property.as_str(), "opacity" | "overflow")
+        && values::parse(&property, value).is_none()
+    {
+        return Vec::new();
+    }
     let parts: Vec<&str> = value.split_ascii_whitespace().collect();
     match property.as_str() {
         "all" if css_wide_keyword(value).is_some() => PROPERTIES
@@ -1324,7 +1379,7 @@ fn valid_transform_function(tokens: &[Token]) -> bool {
     }
 }
 
-fn transform_arguments(tokens: &[Token]) -> Option<Vec<&[Token]>> {
+pub(crate) fn transform_arguments(tokens: &[Token]) -> Option<Vec<&[Token]>> {
     let tokens = trim_tokens(tokens);
     if tokens.is_empty() {
         return None;
@@ -1373,7 +1428,7 @@ fn valid_transform_angle(tokens: &[Token]) -> bool {
             trim_tokens(tokens),
             [Token::Dimension(value, unit)] if value.is_finite() && matches!(
                 unit.to_ascii_lowercase().as_str(),
-                "deg" | "rad" | "turn"
+                "deg" | "grad" | "rad" | "turn"
             )
         )
 }
@@ -1470,7 +1525,7 @@ fn expand_grid_template(value: &str) -> Option<Vec<(String, String)>> {
     ])
 }
 
-fn top_level_components(tokens: &[Token]) -> Option<Vec<&[Token]>> {
+pub(crate) fn top_level_components(tokens: &[Token]) -> Option<Vec<&[Token]>> {
     let mut components = Vec::new();
     let mut stack = Vec::new();
     let mut start = 0usize;
@@ -1529,7 +1584,7 @@ fn split_top_level_comma(tokens: &[Token]) -> Option<(&[Token], &[Token])> {
     ))
 }
 
-fn function_inner<'a>(tokens: &'a [Token], expected: &str) -> Option<&'a [Token]> {
+pub(crate) fn function_inner<'a>(tokens: &'a [Token], expected: &str) -> Option<&'a [Token]> {
     let tokens = trim_tokens(tokens);
     match (tokens.first(), tokens.get(1), tokens.last()) {
         (Some(Token::Function(name)), Some(Token::OpenParen), Some(Token::CloseParen))
@@ -2103,10 +2158,11 @@ pub(crate) fn resolve_with_root(
     }
 
     let mut properties = BTreeMap::new();
+    let mut inherited_typed = BTreeMap::new();
     for property in PROPERTIES {
         let parent_value = parent.and_then(|style| style.get(property.name));
-        let value = match cascaded.remove(property.name) {
-            None => default_value(*property, parent_value),
+        let (value, inherits) = match cascaded.remove(property.name) {
+            None => (default_value(*property, parent_value), property.inherited),
             Some(specified) => compute_normal_value(
                 *property,
                 &specified,
@@ -2115,7 +2171,20 @@ pub(crate) fn resolve_with_root(
                 &mut resolver,
             ),
         };
+        if inherits {
+            if let Some(typed) = parent.and_then(|style| style.typed(property.name)) {
+                inherited_typed.insert(property.name.to_owned(), typed.clone());
+            }
+        }
         properties.insert(property.name.to_owned(), value);
+    }
+    // Initial font-size is typed even when no declaration supplied it.
+    if let Some(font) = properties.get_mut("font-size") {
+        if let Some(px) =
+            computed_font_size(font, parent.and_then(|p| p.get("font-size")), root_font_px)
+        {
+            *font = px;
+        }
     }
     couple_overflow_axes(&mut properties);
     // Preserve declared unknown properties for diagnostics and forward
@@ -2132,10 +2201,29 @@ pub(crate) fn resolve_with_root(
     }
     drop(resolver);
     inherited_custom.extend(resolved_local);
-    ComputedStyle {
+    let mut style = ComputedStyle {
         props: properties,
+        typed: BTreeMap::new(),
         custom: inherited_custom,
+        root_font_px: f64::from(root_font_px),
+    };
+    style.rebuild_typed();
+    style.typed.extend(inherited_typed);
+    // Axis coupling happens after inheritance and can change an inherited axis.
+    for axis in ["overflow-x", "overflow-y"] {
+        if let Some(value) = style.get(axis).and_then(|css| values::parse(axis, css)) {
+            style.typed.insert(axis.to_owned(), value);
+        }
     }
+    if parent.is_none() {
+        if let Some(ComputedValue::LengthPercentage(values::LengthPercentage::Px(px))) =
+            style.typed("font-size")
+        {
+            style.root_font_px = *px;
+        }
+    }
+    style.resolve_typed_units();
+    style
 }
 
 fn couple_overflow_axes(properties: &mut BTreeMap<String, String>) {
@@ -2175,13 +2263,13 @@ fn compute_normal_value(
     parent: Option<&str>,
     root_font_px: f32,
     resolver: &mut CustomResolver<'_>,
-) -> String {
+) -> (String, bool) {
     let Some(tokens) = resolver.substitute(&tokenize(specified)) else {
         // Invalid at computed-value time behaves as `unset`.
-        return default_value(property, parent);
+        return (default_value(property, parent), property.inherited);
     };
     if trim_tokens(&tokens).is_empty() {
-        return default_value(property, parent);
+        return (default_value(property, parent), property.inherited);
     }
     let value = serialize_computed(&tokens);
     let Ok(value) = resolve_deferred_shorthand(property.name, &value) else {
@@ -2189,7 +2277,7 @@ fn compute_normal_value(
         // its substituted grammar is invalid, the winning declaration is
         // invalid at computed-value time and behaves as unset; lower cascade
         // candidates do not revive.
-        return default_value(property, parent);
+        return (default_value(property, parent), property.inherited);
     };
     if matches!(
         property.name,
@@ -2200,26 +2288,42 @@ fn compute_normal_value(
         // Longhand track lists enforce the same grammar as the
         // `grid-template` shorthand; an invalid winner behaves as unset and
         // lower cascade candidates do not revive.
-        return default_value(property, parent);
+        return (default_value(property, parent), property.inherited);
     }
     if css_wide_keyword(&value).is_none() && !valid_new_paint_property(property.name, &value) {
-        return default_value(property, parent);
+        return (default_value(property, parent), property.inherited);
     }
-    let computed = match css_wide_keyword(&value) {
-        Some(CssWide::Initial) => property.initial.to_owned(),
-        Some(CssWide::Inherit) => parent.unwrap_or(property.initial).to_owned(),
-        Some(CssWide::Unset) => default_value(property, parent),
-        // Origin/layer rollback needs retained lower cascade candidates and is
-        // deliberately not fabricated at this stage.
-        Some(CssWide::Revert | CssWide::RevertLayer) | None => value,
+    if css_wide_keyword(&value).is_none()
+        && values::parse(property.name, &value).is_none()
+        && property.name != "opacity"
+    {
+        return (default_value(property, parent), property.inherited);
+    }
+    let inherits = match css_wide_keyword(&value) {
+        Some(CssWide::Inherit) => true,
+        Some(CssWide::Unset) => property.inherited,
+        _ => property.name == "color" && value.eq_ignore_ascii_case("currentcolor"),
     };
-    if property.name == "font-size" {
+    let computed = if property.name == "color" && value.eq_ignore_ascii_case("currentcolor") {
+        parent.unwrap_or(property.initial).to_owned()
+    } else {
+        match css_wide_keyword(&value) {
+            Some(CssWide::Initial) => property.initial.to_owned(),
+            Some(CssWide::Inherit) => parent.unwrap_or(property.initial).to_owned(),
+            Some(CssWide::Unset) => default_value(property, parent),
+            // Origin/layer rollback needs retained lower cascade candidates and is
+            // deliberately not fabricated at this stage.
+            Some(CssWide::Revert | CssWide::RevertLayer) | None => value,
+        }
+    };
+    let computed = if property.name == "font-size" {
         computed_font_size(&computed, parent, root_font_px).unwrap_or(computed)
     } else if property.name == "opacity" {
         computed_opacity(&computed).unwrap_or_else(|| property.initial.to_owned())
     } else {
         computed
-    }
+    };
+    (computed, inherits)
 }
 
 fn computed_opacity(value: &str) -> Option<String> {
@@ -2345,7 +2449,10 @@ fn computed_font_size(value: &str, parent: Option<&str>, root_font_px: f32) -> O
         }
         _ if lower.ends_with("em") => parent_px * lower[..lower.len() - 2].parse::<f32>().ok()?,
         _ if lower.ends_with("px") => lower[..lower.len() - 2].parse::<f32>().ok()?,
-        _ => return None,
+        _ => match values::LengthPercentage::parse(&lower)? {
+            values::LengthPercentage::Px(px) => px as f32,
+            _ => return None,
+        },
     };
     if !px.is_finite() || !(0.0..=4096.0).contains(&px) {
         return None;
@@ -2747,10 +2854,14 @@ mod tests {
     #[test]
     fn substitution_preserves_token_boundaries() {
         let style = resolve(None, cascaded(&[("--n", "1"), ("width", "var(--n)px")]));
-        assert_eq!(style.get("width"), Some("1/**/px"));
+        assert_eq!(style.get("width"), Some("auto"));
         assert_eq!(
-            tokenize(style.get("width").unwrap()),
-            vec![Token::Number(1.0), Token::Ident("px".into())]
+            style.typed("width"),
+            Some(&ComputedValue::Keyword(values::Keyword::Auto))
+        );
+        assert_eq!(
+            serialize_computed(&[Token::Number(1.0), Token::Ident("px".into())]),
+            "1/**/px"
         );
     }
 
