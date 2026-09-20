@@ -663,3 +663,75 @@ Evidence is in `.agents/net/net5-{workspace,lane,clean}-{1,2}.txt`,
 Cookie tests are focused native Rust cases, not WPT cookie conformance
 percentages. No shell/driver, other lane source, manifest or dependency changes.
 NET-5 ends at this library/provider boundary.
+
+## NET-6 — Approved pinned PSL and network Brotli (in progress)
+
+Architecture 6c/6d and accepted ADR 0002 supersede the earlier pending decisions
+above. No additional runtime IDNA approval is implied.
+
+### PSL provider and update procedure
+
+`amazing_fetch::psl::PublicSuffixList` implements the existing RegistrableDomain
+seam with the same ICANN + PRIVATE snapshot for registrable domains and suffix
+classification. `classify` separately exposes IP, invalid, public-suffix and
+registrable results. It implements longest exact/wildcard matches, exception
+priority, and the implicit one-label wildcard for unknown TLDs. Input must be
+canonical lowercase ASCII; the URL/IDNA layer owns normalization. A-label
+lookup does not grant `validated_a_label` cookie authorization. A terminal root
+dot is preserved in lookup results; cookie validation retains its own stricter
+host grammar. Default CookieStore remains ConservativeDomains; an embedding
+opts in by passing PublicSuffixList, with no parser/store algorithm changes.
+
+Upstream commit `645b36c9a51ff0b3718df0ba02f6570aa6921632`, original list SHA-256
+`d3fba7b2934b0e1b9c958baf42bef85107b53cd0115ff7e81a7e61c7119a36d0`.
+`crates/amazing-fetch/data/psl/pin.json` pins the list, MPL-2.0 licence and CC0
+upstream test inputs. Lossless 3,000-line shards retain the entire list and
+comments within the repository line limit. Offline `tools/normalize_psl.py`
+uses RFC3492 punycode for upstream Unicode spelling, without IDNA2003 mappings
+or runtime fetching. `generated.json` pins generator and normalized outputs;
+Windows `--check` must regenerate identical bytes.
+
+Review updates monthly, but ship only explicit reviewed PRs:
+
+1. Select an exact upstream commit, obtain list/licence/fixture bytes, verify
+   their hashes, and split the original list losslessly as recorded by pin.json.
+2. Regenerate both sections offline. Review normalized additions, removals,
+   wildcard/exception changes and generated fixture diffs; adjust the static
+   rule-shard includes if the shard count changes. Retain the licence.
+3. Add boundary-change cases for affected domains, child hosts, siblings and
+   private tenants. Repeat native PSL/cookie and pinned URL gates on win-001.
+4. Explicitly review persisted-key migration before deployment: old/new eTLD+1
+   mappings, changed schemeful SameSite decisions, newly invalid Domain cookies,
+   cookie quota grouping and cache/partition-key splits or merges. Retrieval
+   revalidation rejects newly public Domain cookies, but is not a full migration.
+5. The embedding/integrator owns profile migration or invalidation, version tags
+   on persisted data, rollback behavior and clearing affected caches. Never
+   merge old site partitions merely because the new list combines them; decide
+   whether discarding affected state is safer. Host-only cookies and unchanged
+   boundaries need a documented preservation decision. This library has no
+   persistence I/O and does not silently rewrite profiles or fetch list updates.
+
+### Brotli integration dependency
+
+Requested integrator registration/ownership of `amazing-net-brotli` through
+`.agents/net/questions.md`; root workspace/lockfile remain integrator-owned.
+An isolated draft and its fixtures are in lane reporting scratch pending that
+registration. `br` remains unadvertised until the production adapter and HTTP
+path pass the measured Windows gates. Draft validation is not production proof.
+
+
+### NET-6 checkpoint evidence (not the final gate)
+
+Windows network lane measured200 passed /0 failed /0 ignored: Fetch87
+(35 cookie +44 policy +8 PSL), net111, TLS2. PSL tests include all78 normalized
+upstream fixtures and boundary witnesses for all10,326 normalized rules.
+The pinned URL corpus remains864 pass /0 fail /32 unsupported (one checkpoint
+run, not the final repeated gate).
+Offline generator verification passes on Windows Python3.12 against data prepared
+on Mac Python3.11, using explicit UTF-8 input and identical pinned outputs.
+
+The isolated Brotli draft measured9 passed /0 failed /0 ignored on win-001,
+covering18 independently encoded vectors and the allocation/refusal cases.
+This does not prove production HTTP integration: the crate is not registered,
+no amazing-net dependency is added, and Accept-Encoding is unchanged.
+Final repeated full-workspace/URL gates remain pending that registration.

@@ -1,0 +1,23 @@
+{
+  "upstream": "https://github.com/publicsuffix/list",
+  "commit": "645b36c9a51ff0b3718df0ba02f6570aa6921632",
+  "files": {
+    "public_suffix_list.dat": {
+      "sha256": "d3fba7b2934b0e1b9c958baf42bef85107b53cd0115ff7e81a7e61c7119a36d0",
+      "parts": [
+        "upstream-00.dat",
+        "upstream-01.dat",
+        "upstream-02.dat",
+        "upstream-03.dat",
+        "upstream-04.dat",
+        "upstream-05.dat"
+      ]
+    },
+    "LICENSE": {
+      "sha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172"
+    },
+    "tests/test_psl.txt": {
+      "sha256": "8f50ad958916d6a8f79fba2363501475571acce752757f9126fe9d2f17dd920d"
+    }
+  }
+}
