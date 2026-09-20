@@ -61,17 +61,17 @@ asserts exact file and subtest classifications, validates JSON/provenance/exit
 codes, and compares SHA-256 hashes of both JSONL artifacts. With `-WptRoot`,
 it also runs the explicitly selected three-file `dom/nodes/` baseline twice.
 
-## Pending gates
+## DOM-1 exit gates
 
 - [x] Finish scaffold verification and record measured artifacts below.
 - [x] Execute unmodified pinned harness after JS-2; route subsequent engine or
   browser-host gaps through lane questions rather than adding substitute APIs.
 - [x] Known-passing and known-failing **upstream** harness tests.
 - [x] Repeated upstream proof classifications with stable hashes.
-- [x] Full workspace green on measured base d8437f3; rebase refresh pending.
+- [x] Final refreshed workspace green on base 0e298c1: 1017 passed, 0 failed, 3 ignored.
 
-First follow-up: rerun the pinned CharacterData selection using the runner
-against JS-2. The initial upstream script was rejected at line 581, column 43,
+Historical blocker (resolved by JS-2 and the final upstream gate below):
+the initial upstream script was rejected at line 581, column 43,
 inside a regex literal, before any tests could register. Regex support may
 expose further missing ECMAScript or host behavior; it is not evidence that
 all remaining upstream requirements will work.
@@ -314,7 +314,8 @@ separate checkpoint commit; this ticket does not close its upstream gate.
 
 ## DOM-1 upstream gate and baseline — resumed after JS-2
 
-Integration base: `d8437f3` (JS-2, LAYOUT-2, CSS-2 and RC-2 merged).
+Final integration base: `0e298c1` (including NET-4); initial measurement base
+was `d8437f3` (JS-2, LAYOUT-2, CSS-2 and RC-2 merged).
 DOM-3 is parked on local `checkpoint/dom-3`; its unmerged code is absent from
 this baseline. The integrator refreshed the Windows lane tree with current
 mtimes and first-party artifact invalidation. Earlier gates do not substitute
@@ -376,7 +377,8 @@ Proof raw JSONL SHA-256 (both runs):
 `fda888792ad20e12b69ab4909e69896b98916b170c7ecf259cd79854ebe404bd`.
 Proof outcome SHA-256 (both runs):
 `955a95d1fd7db2790c52d61aeddc9019c5840a4825a6cfb11722bb6e499409c2`.
-Measured baseline on d8437f3, identical in both runs:
+Final measured baseline on 0e298c1, identical in both runs and unchanged from
+the two earlier d8437f3 runs:
 
 | Unit | Pass | Fail | Timeout | Error | Unsupported / notrun |
 |---|---:|---:|---:|---:|---:|
@@ -391,9 +393,10 @@ Outcome SHA-256 (both runs):
 Selection SHA-256:
 `9787de028efe5dc83f491ce2a818e2a549b4a07a236e6538c1e6165bb437b0b5`.
 Measured executable SHA-256:
-`ccc9cef3f2b806f42b575d7594f9b49746c7e6890b164ae5a74f5a6078212dd9`.
-159 Rust source/manifests/measurement-script files matched Mac. Full Windows
-workspace: 992 passed, zero failed, three existing ignored across 52 targets.
+`6882b3534422bc3c91de071249134b99527e5a6df70dffe6536fe4e63155476c`.
+188 source/manifest/fixture files matched Mac. First-party compilation is
+recorded after the artifact-invalidating refresh. Final Windows workspace:
+1017 passed, zero failed, three existing ignored across 52 targets.
 A prior concurrent build hit Windows' executable lock before testing; the
 successful workspace gate ran sequentially after measurement.
 
@@ -411,7 +414,13 @@ inventory-unsupported sources. No overall expanded-WPT-URL pass rate is claimed.
 Durable evidence lives in `crates/amazing/src/cmd/wpt_harness_results/`:
 summary, one complete baseline JSONL (the second is byte-identical), upstream
 proof JSONL, and selected/excluded source inventory JSONL. Full two-run files,
-logs and original selection.json also live in `.agents/dom-bindings/dom-1-upstream/`
-and `C:/Users/server/target/dom-bindings/dom-1-upstream/`; the latter includes
+logs and original selection.json also live in `.agents/dom-bindings/dom-1-upstream-final/`
+and `C:/Users/server/target/dom-bindings/dom-1-upstream-final/`; the latter includes
 the preserved measured `amazing.exe`. Scaffolding remains separate and earns
 zero WPT credit.
+
+
+Final scaffold regression is separate: 14 cases twice, stable
+`F8DB03A6109855078313208AC15DC229B663729F9F8B7C2A970C46DAA5475519`,
+zero WPT credit. Zero remaining lane workers were verified. DOM-1 is complete;
+DOM-3 remains on its committed checkpoint for the next integration boundary.

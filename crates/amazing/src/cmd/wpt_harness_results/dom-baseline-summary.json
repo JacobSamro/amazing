@@ -114,7 +114,7 @@
     }
   },
   "excluded_files": 192,
-  "executable_sha256": "ccc9cef3f2b806f42b575d7594f9b49746c7e6890b164ae5a74f5a6078212dd9",
+  "executable_sha256": "6882b3534422bc3c91de071249134b99527e5a6df70dffe6536fe4e63155476c",
   "harness_sha256": "d2399236c2a09c429804ff2299ad6629e17e2b53f17a74dd341e936adb11ae3e",
   "long_deadline_ms": 60000,
   "normal_deadline_ms": 10000,
@@ -211,12 +211,20 @@
     600
   ],
   "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
-  "engine_base": "d8437f3",
+  "engine_base": "0e298c194711ab8dc065cce600b05d218fb54604",
   "measurement_unit": "tracked test source file, not expanded WPT URL",
   "workspace": {
-    "passed": 992,
+    "passed": 1017,
     "failed": 0,
     "ignored": 3,
     "targets": 52
+  },
+  "source_manifest_files": 188,
+  "runnable_artifact": "C:/Users/server/target/dom-bindings/dom-1-upstream-final/amazing.exe",
+  "scaffold_regression": {
+    "cases": 14,
+    "repeats": 2,
+    "wpt_credit": 0,
+    "sha256": "F8DB03A6109855078313208AC15DC229B663729F9F8B7C2A970C46DAA5475519"
   }
 }
