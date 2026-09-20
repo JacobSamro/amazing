@@ -1,0 +1,9 @@
+[package]
+name = "amazing-regex"
+description = "Hand-written ECMA-262 RegExp engine: pattern parsing, compilation, and matching"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

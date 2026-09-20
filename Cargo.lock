@@ -172,6 +172,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "amazing-regex"
+version = "0.0.1"
+
+[[package]]
 name = "amazing-text"
 version = "0.0.1"
 
