@@ -207,7 +207,7 @@ for implicit scope; `None` is the ownerless document default. Explicit
 `@scope (<selector>)` does not require it. The user approved this seam and owns
 integrator work to preserve **separate stylesheets and owner nodes** through the
 driver and shell, which currently concatenate CSS. This is also prerequisite
-provenance for CSS-3 URL resolution.
+provenance for CSS-4 URL resolution (originally queued as CSS-3).
 
 **Implicit @scope cannot be measured end to end until that driver/shell wiring
 lands.** Public-seam tests assigning `scope_root` prove only CSS behavior, not
@@ -312,12 +312,127 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1 `
   -SkipFetch -SkipBuild
 ```
 
-## CSS-3 — background shorthand and stylesheet URL provenance (queued)
+## CSS-3 — stylesheet ownership and implicit scope through the driver
 
-User queued this ticket during CSS-2; **do not start until CSS-2 is complete and
-reviewed**. Replaced-content has implemented background longhands in paint.
+The integrator reassigned CSS-3 to close the CSS-2 caller boundary. Background
+shorthand and URL-base propagation are now CSS-4. Final base: origin/dev `0e298c1`.
+
+- Driver `<style>` and fetched `<link rel=stylesheet>` sources are parsed as
+  separate sheets in document order, with `scope_root` set to the owner node's
+  parent. `style` and `layout` preserve their existing inline-then-extra-file
+  policy; render preserves interleaved style/link document order after scripts.
+- `compute` receives the ordered sheet slice. The layout command uses existing
+  public box-tree and fallback layout functions with that computed result.
+- A narrowly granted additive layout entry point,
+  `layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport`,
+  performs the existing fallback layout, float-aware shaping, replaced content,
+  and optional fixed viewport pipeline. The existing string entry point is
+  unchanged, per the integrator's explicit restriction during the tables ticket.
+- Raw source text remains available for legacy font discovery. This does not
+  yet resolve font URLs relative to their external stylesheet.
+- Driver CLI regressions exercise split versus concatenated cascade order,
+  shared named layers and important reversal, variables, extra-file order,
+  interleaved fetched sheets, implicit scope for style/link owners, nested scope
+  proximity, layout output, and parser recovery at a stylesheet boundary.
+- GPUI is not changed. The integrator must collect separate sheets after DOM
+  changes, set owner-parent scope roots, and use the new sheet-aware layout API
+  (or pass the slice to `compute` at its existing direct call sites).
+
+### Final CSS-3 evidence
+
+All builds and tests ran on win-001, source `C:/Users/server/src/wt/css`,
+target `C:/Users/server/target/css`, two Cargo jobs. Final base `0e298c1`
+received an integrator artifact-invalidating refresh, followed by rebase and
+re-sync of the three granted source/test files. Only `css3-r3-*` evidence is
+final; earlier attempts were superseded by refreshes. No new dependencies.
+
+- Full locked workspace: **1,023 passed / 0 failed / 3 ignored**, 53 targets.
+- New actual-driver CLI regressions: **6 passed / 0 failed** (included above).
+- Pinned WPT revision: `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`;
+  unchanged `tests/wpt-render/cascade-manifest.json`, 800x600, scale 1,
+  lane-local WPT checkout and the same fonts/resources.
+- Two baseline and two candidate runs each: **35 pass / 24 mismatch /
+  13 unsupported / 0 timeout / 0 crash**. Variables: **12/12** in all four.
+  Every per-case classification, differing-pixel count, maximum difference,
+  and actual/reference/diff image SHA256 is unchanged across all four runs.
+- All four normalized evidence hashes:
+  `a259e9d395326e4c39b890dd494b159dcacb28a834ccc497e6ee94a7ec608026`.
+  Normalization is the sorted per-case projection documented for CSS-2 above.
+  This preserves the pinned corpus; it does not add WPT conformance passes.
+
+The dedicated runnable **80x60 implicit-scope fixture** has three 20px bands.
+A style owned by the first section scopes it green, an external link owned by
+its sibling scopes that section blue, and the unscoped third section stays red.
+Compared with the explicit-selector reference, the baseline differs at
+**3,200 pixels**, while the candidate differs at **0 pixels**. Candidate and
+reference PPM SHA256 both equal
+`e38c7b3cde94c88dbc92af0c36dcfb0e197bbce0a040ea303bfee19683897ec7`.
+The final PPM was copied to the Mac, converted to PNG, and visually inspected.
+This is driver software-raster evidence, not a GPUI window-capture claim.
+The durable equivalent fixture and assertions live in
+`crates/amazing/tests/css3_stylesheets.rs`.
+
+Source manifests cover first-party Rust/manifests, root lock/manifest, the
+render runner and selected cascade manifest. **163 baseline / 164 candidate**
+inputs match before/after compilation; all 164 candidate inputs match again
+after the gates and match the Mac source tree. Immutable executable hashes
+were checked throughout both gate runs and at final collection.
+
+Artifacts under `C:/Users/server/target/css/`:
+
+- Baseline: `css3-r3-before.exe`, SHA256
+  `d0ef0834ed903f409ff5423bc5a30de990bc775019290a8389a2f7df9ada818d`.
+- Candidate: `css3-r3-final.exe`, SHA256
+  `a7ba29b18321020c61b0b2f2c8214970939b130cb3ba6aa4f83ca8f19a30c11e`.
+- Cascade reports/images: `css3-r3-{before,final}-{1,2}/run-*/`.
+- Scope fixture: `css3-scope.html`, `css3-scoped.css`,
+  `css3-scope-reference.html`; rendered `css3-r3-{before,final}-scope.ppm`,
+  `css3-r3-reference.ppm`, and `css3-r3-scope-proof.json`.
+- Workspace log: `css3-r3-workspace.log`.
+
+Local summaries, build/source proofs, fixture/PPM/PNG copies, and reproduction
+helpers are in the main checkout's `.agents/css/`: `css3-r3-evidence.json`,
+`css3-r3-summary.json`, `css3-r3-*-source.json`, `css3-r3-*-build-proof.json`,
+`css3-r3-final-source-proof.txt`, and `summarize_css3.py`.
+
+Reproduce after the approved tree refresh and re-sync on Windows:
+
+```powershell
+Set-Location C:\Users\server\src\wt\css
+$env:CARGO_TARGET_DIR = 'C:\Users\server\target\css'
+$env:CARGO_BUILD_JOBS = '2'
+cargo test -p amazing --test css3_stylesheets --locked
+cargo test --workspace --locked
+& C:\Users\server\target\css\css3-r3-final.exe render-wpt `
+  C:\Users\server\target\css\css3-scope.html `
+  C:\Users\server\target\css\css3-scope-review.ppm 80 60
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1 `
+  -ManifestPath tests\wpt-render\cascade-manifest.json `
+  -WptRoot C:\Users\server\target\css\wpt `
+  -ExecutablePath C:\Users\server\target\css\css3-r3-final.exe `
+  -OutputDirectory C:\Users\server\target\css\css3-review `
+  -SkipFetch -SkipBuild
+```
+
+The existing `&str` layout API is unchanged. Exactly five driver functions
+changed: `cmd_style`, `collect_style_text`, `collect_author_css`, `cmd_layout`,
+and `render_surface`. All authored files remain below 4,000 lines (driver:
+3,519; layout lib: 1,549; CLI regressions: 197). CSS-3 is complete; stop here.
+
+## CSS-4 — background shorthand and stylesheet URL provenance (queued)
+
+User originally queued this during CSS-2; **do not start without a new brief**. Replaced-content has implemented background longhands in paint.
 CSS owns expansion of the full multi-layer `background` shorthand grammar;
 the current single-colour arm makes shorthand values containing `url()` unusable.
 CSS must also preserve the winning declaration's stylesheet-relative URL
 provenance through computed values, resolving against the originating stylesheet.
 Keep this work separate from CSS-2 cascade layers, revert, and scope.
+
+
+CSS-4 still needs an explicit stylesheet base-URL seam: preserve the fetched
+stylesheet's final URL, inline/ownerless sheet document base, and the winning
+declaration's provenance through cascade/variable/shorthand computation. CSS-3
+preserves sheet identity and scope roots, not URL bases. Font discovery still
+uses joined source text and the page URL; the render command's extra CSS string
+also retains its existing combined ownerless input. Coordinate those caller
+seams with the integrator before claiming relative-resource conformance.
