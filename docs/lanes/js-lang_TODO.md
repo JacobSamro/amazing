@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-3 complete — conformant runner and stable full-tree baseline**. JS-2 is merged;
+Frontier: **JS-4 — external scheduling seam (contract/routing)**. JS-3 is merged as `493e3d0`; JS-2 is merged;
 unmodified upstream WPT testharness.js parses and completes.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -821,3 +821,105 @@ Directories are grouped by the first two directory components (never by filename
 35 failing variants across 19 files terminate abnormally. They remain failures in the tables above. Counts by observed cause: RefCell borrow panic: 22, stack overflow: 13. Full stderr and exit codes remain in the per-variant JSON.
 
 JS-3 stops here. The next front-end or runtime ticket is selected from this baseline; none is started by this lane.
+
+
+## JS-4 — External scheduling seam (local design; gates not run)
+
+Integrator authorized this ticket after merging JS-3. Two integration lanes
+need the JS timers, intervals, animation frames, queueMicrotask callbacks and
+Promise jobs to participate in the driver-stepped DOM event loop. Execution
+files now belong to js-runtime. This lane defines/reviews the contract and
+owns the preserved Test262 measurement; implementation is routed to js-runtime
+in its own worktree, separated from JSRT-1's VM/GC slice. No AST change is needed.
+
+### Audited coupling
+
+At dev `9bf1224`, `run_program`, `dispatch_dom_event` and `pump_timers` call
+`drain_jobs`; the latter runs the entire private Promise queue. Four enqueue
+sites in interp_builtins.rs push PromiseJob directly. Timers own Instant
+expiries and rearm internally. requestAnimationFrame is a 16ms timer with
+constant timestamp zero. queueMicrotask is not installed. Exposing only
+pump_timers/drain_microtasks would preserve the bug instead of supplying the
+DOM loop with independently invocable work.
+
+### Proposed contract sent to the execution owner
+
+Use an opt-in external-mode constructor before any page code, retaining
+Interpreter::new() as the standalone default. Types can live under the existing
+public amazing_js::interp module; no JS-to-DOM dependency or root lock edit is
+needed. Exact Rust names await the owner's acknowledgment.
+
+A synchronous scheduling sink receives ordered registration/cancellation
+requests with scalar metadata and opaque rooted tokens. Its only job is to
+register work; it cannot call JS reentrantly. A post-script outbox alone is
+insufficient: native mutation-observer enqueue notifications must interleave
+with Promise and queueMicrotask notifications at their original enqueue points.
+All Promise enqueue sites must use this same emission path.
+
+Requests distinguish timers (registration, token, signed converted delay,
+repeat), timer cancellation, animation frames, frame cancellation and individual
+microtasks. JS roots callback values/arguments/reactions behind tokens; the
+embedding maps registrations to DOM TimerId/AnimationFrameId. The future GC
+must trace these roots. One-shot roots are released on consumption, intervals
+on cancellation; all on interpreter teardown. Stale tokens cannot alias newer
+work after handle reuse. No registry/object borrow spans a JS invocation or
+synchronous sink notification.
+
+External time belongs to the embedding's EventLoop::advance_to(Duration).
+JS emits relative delays and never reads Instant, sleeps, independently computes
+expiry or rearms intervals in external mode. DOM owns timer nesting/clamping,
+active-time eligibility, task selection and interval repetition. Frame callbacks
+receive caller-supplied monotonic Duration converted to milliseconds; rAF is
+not a timer. The embedding supplies the Window receiver and preserves timer
+extra arguments. Timer/interval cancellation shares its namespace; rAF is
+separate.
+
+**One owned callback/job invocation runs exactly one item.** New requests remain
+observable in enqueue order. No hidden drain is allowed on return, throw,
+nested eval or Promise settlement. External run_script/run_program and DOM
+entrypoints also omit automatic drains; explicit legacy pump/drain APIs cannot
+bypass external scheduling. A thrown callback leaves other work intact. The
+adapter reports the error and completes the DOM StepId before continuing.
+
+The driver controls checkpoints and rendering opportunities, including explicit
+per-callback boundaries inside an enclosing task where appropriate. A single
+final dispatch drain is not a resumable multi-listener dispatch seam. Required
+additional DOM/driver continuation hooks must be routed to their owners and
+remain unclaimed until implemented.
+
+### Acceptance traces and failure cases
+
+| Case | Required observable result |
+|---|---|
+| External script registers work | Registration notifications only; no callbacks execute |
+| Timer A queues Promise P, then microtask Q; P queues R | Invoke A alone: A; host checkpoint invokes P,Q,R; next task B sees A,P,Q,R,B |
+| Two pending Promise jobs | Invoking first leaves second untouched; any chained reaction is a new request |
+| Promise P, native mutation M, queueMicrotask Q | Same shared enqueue order P,M,Q; post-return polling is insufficient |
+| Callback schedules Q then throws | Q remains observable; later work remains invocable; host reports error and completes current step |
+| A cancels already-due timer B | B token cannot invoke; cancellation reaches the DOM timer map |
+| rAF A queues P which cancels frame B | Host's checkpoint runs P before continuing frame snapshot; B does not execute |
+| Interval clears itself | Callback roots released; no private rearm/reappearance |
+| Nested eval from one callback | It cannot trigger another queued job |
+| Stale/consumed/foreign or wrong-kind token | Defined rejection/no-op; cannot execute unrelated work |
+| Frame time and callback payloads | Supplied monotonic timestamp, Window receiver and timer arguments preserved |
+
+Runtime-owned focused tests use a recording sink and explicit invocations, with
+no sleeps. Driver/DOM owners must also connect the seam to actual EventLoop
+steps for the task/microtask/frame ordering proof; this request is recorded in
+questions.md. Contract packet: `.agents/js-lang/js4-contract.md` in the central
+lane reporting directory.
+
+### Gate plan and current limits
+
+JS-4 has **no build/test results yet**. The integrator's fleet-wide win-001
+SSH/SCP stand-down is active; no new connection attempts are permitted. All
+work in this checkpoint is local reading, rebasing, design and coordination.
+The prior JS-3 numbers are the comparison target, not a JS-4 pass claim.
+
+After recovery and implementation handoff: review the runtime-owned diff;
+rebase/own-tree refresh/re-sync; verify all compiled inputs around the Windows
+gates; run focused scheduling tests with nextest and the JS doctest; run the
+unchanged full pinned Test262 measurement at 60s/jobs=8 against the JS-3
+classification hash; finish with workspace nextest and separate JS/HTML
+doctests. Required Test262 files remain 10314/33292/16/9956 plus 294 fixtures,
+with 102918 variants. No VM/GC work or broad Promise fixes are part of JS-4.
