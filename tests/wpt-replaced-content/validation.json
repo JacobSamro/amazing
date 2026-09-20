@@ -1,0 +1,58 @@
+{
+  "host": "win-001",
+  "root": "C:\\Users\\server\\src\\wt\\replaced-content",
+  "gates": [
+    {
+      "gate": "workspace",
+      "passed": 733,
+      "failed": 0,
+      "ignored": 3,
+      "test_binaries_and_doctest_groups": 46,
+      "log_sha256": "b744db756ad7ef9bde681dca1966bef254602b3bed37c2a9b44f8bba18164a65"
+    },
+    {
+      "gate": "focused-unit",
+      "passed": 69,
+      "failed": 0,
+      "ignored": 0,
+      "test_binaries_and_doctest_groups": 4,
+      "log_sha256": "33addf24406f137de5add1cd8612721578b51c3c330b20a160603e1d52615e3e"
+    },
+    {
+      "gate": "image-tests-final",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0,
+      "test_binaries_and_doctest_groups": 3,
+      "log_sha256": "84d651ba5fc907bde7bd2b4b4b8652aa66e6cb4eb79ea9f3af60526f8764ed93"
+    }
+  ],
+  "shell_locked_check_exit": 0,
+  "shell_locked_log_sha256": "b4cbfec2ef64e6c462402493f386ed20f1ce704a96001526c15866804be23de1",
+  "artifacts": [
+    {
+      "path": "C:\\Users\\server\\src\\wt\\replaced-content\\target\\rc1-baseline.exe",
+      "sha256": "3e4ec11d8a725e8d42a37b77bd71b199b95db15faaed0943a3a36e27a7fd0aea",
+      "bytes": 37257728,
+      "modified_utc": "2026-09-20T16:39:45.0668288Z"
+    },
+    {
+      "path": "C:\\Users\\server\\src\\wt\\replaced-content\\target\\rc1-image-before.exe",
+      "sha256": "99c56c29f694a30639514ef02ace57ed6924bed6210f135c795d8cdb14d85fe4",
+      "bytes": 4988416,
+      "modified_utc": "2026-09-20T16:42:09.1056363Z"
+    },
+    {
+      "path": "C:\\Users\\server\\src\\wt\\replaced-content\\target\\rc1-after.exe",
+      "sha256": "b8715b423abc5a2941a98a5c6083fc6bf325d82d2e9cdb75619b0df0f67e6a00",
+      "bytes": 37278208,
+      "modified_utc": "2026-09-20T16:54:02.1216597Z"
+    },
+    {
+      "path": "C:\\Users\\server\\target\\replaced-content-image\\debug\\examples\\render_reftest.exe",
+      "sha256": "7102f79c4e338ab8f0ade5049a26c0f2d24cae73993bea6717fddf68ec3a09cb",
+      "bytes": 4475904,
+      "modified_utc": "2026-09-20T16:53:30.6070477Z"
+    }
+  ]
+}

@@ -45,6 +45,7 @@
 //! - the canvas starts opaque white; transparent backgrounds skip filling
 
 pub mod color;
+pub mod image;
 mod display_list;
 pub mod paint;
 pub mod surface;

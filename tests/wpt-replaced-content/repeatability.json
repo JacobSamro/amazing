@@ -1,0 +1,43 @@
+{
+  "projection": "Ordered id, classification, differing_pixels, actual/reference/diff SHA256; compact ConvertTo-Json UTF8",
+  "pairs": [
+    {
+      "runs": [
+        "focused-final-1",
+        "focused-final-2"
+      ],
+      "stable": true,
+      "normalized_projection_sha256": "eeec0e4236c4d75d4b994de51b3aeed86275c1a5bfbba496d6ba4969c16aadcc"
+    },
+    {
+      "runs": [
+        "images-final-1",
+        "images-final-2"
+      ],
+      "stable": true,
+      "normalized_projection_sha256": "a58d0003e0dd253db1886682ebf7d27650129df65b5d285c09192793d2c783a6"
+    },
+    {
+      "runs": [
+        "scope-final-after-1",
+        "scope-final-after-2"
+      ],
+      "stable": true,
+      "normalized_projection_sha256": "8db65ec1d6cc82b50cab00604f1a00a3782ae3ef622985338e1cdf3f53713535"
+    }
+  ],
+  "former_image_matches": [
+    {
+      "id": "object-position-png-001i",
+      "before_actual_equals_reference": true,
+      "reference_unchanged": true,
+      "actual_changed": true
+    },
+    {
+      "id": "object-position-png-002i",
+      "before_actual_equals_reference": true,
+      "reference_unchanged": true,
+      "actual_changed": true
+    }
+  ]
+}

@@ -8,6 +8,9 @@
 
 #![forbid(unsafe_code)]
 
+pub mod image_size;
+pub use image_size::ImageSize;
+
 use std::fmt;
 
 /// A decoded, tightly packed RGBA8 image with a top-left origin.
