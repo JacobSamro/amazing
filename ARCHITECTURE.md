@@ -226,6 +226,14 @@ fallback, so a peer that does not offer HTTP/2 still connects over the
 unchanged HTTP/1.1 path. This widens a protocol negotiation only -- it adds no
 dependency, and every other constraint in this decision, especially always-on
 certificate and server-name verification, is unchanged.
+The adapter additionally exposes a bounded `fill_random` seam that fills a
+caller-provided buffer from the vetted system CSPRNG, because `std` has no RNG
+and RFC 6455 requires unpredictable WebSocket nonces and per-frame masks. This
+adds no dependency -- `amazing-net` already depends on this adapter and it
+already pins ring -- and mirrors decision 6a, where the WebRTC crypto adapter
+generates STUN transaction IDs the same way. It is available for plain `ws` as
+well as `wss`; no provider type crosses the boundary.
+
 Provider types never cross the adapter boundary. An unclean TLS EOF is accepted
 only when HTTP `Content-Length` or chunked framing independently proves that the
 body is complete.
