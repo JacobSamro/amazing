@@ -120,6 +120,9 @@ LANE_GRANTS["js-lang"] = ["Cargo.lock", "scripts/test262.py"]  # JS-3 fixes the 
 LANE_GRANTS["integrator-assist"] = [
     "crates/amazing-shell-gpui/src/session_state.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
+    # IA-1 routed harness fixes: WPT-root resources and Git-free pinned
+    # revision validation. Read the rewrite diff before integration.
+    "scripts/run-render-wpt.ps1",
 ]
 # CSS-3 rewires the driver's stylesheet collection to preserve per-sheet
 # provenance. Granted for the collection and compute call sites only.
@@ -150,6 +153,7 @@ LANE_GRANTS["dom-bindings"] += [
 LANE_GRANTS_REWRITE = {
     "css": ["crates/amazing/src/main.rs"],
     "js-lang": ["scripts/test262.py", "Cargo.lock"],
+    "integrator-assist": ["scripts/run-render-wpt.ps1"],
 }
 
 
