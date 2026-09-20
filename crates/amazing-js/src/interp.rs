@@ -117,6 +117,7 @@ pub struct Interpreter {
     pub set_proto: Obj,
     pub date_proto: Obj,
     pub promise_proto: Obj,
+    pub regexp_proto: Obj,
     pub output: RefCell<Vec<String>>,
     depth: u32,
     native_stack: Vec<Obj>,
@@ -168,6 +169,11 @@ impl Interpreter {
             o.proto = Some(object_proto.clone());
             o
         })));
+        let regexp_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let global_obj = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
@@ -184,6 +190,7 @@ impl Interpreter {
             set_proto,
             date_proto,
             promise_proto,
+            regexp_proto,
             output: RefCell::new(Vec::new()),
             depth: 0,
             native_stack: Vec::new(),
@@ -210,6 +217,7 @@ impl Interpreter {
         i.global_obj.borrow_mut().set_own("window", window.clone());
         let _ = i.global_env.declare_var("window", window);
         i.install_builtins();
+        i.install_regexp();
         i.install_location();
         i.install_history();
         i.install_storage();
@@ -249,15 +257,36 @@ impl Interpreter {
     fn install_history(&mut self) {
         let mut history = JsObject::ordinary();
         history.proto = Some(self.object_proto.clone());
-        history.set_own("back", Self::native("back", native_history_back, &self.function_proto));
-        history.set_own("forward", Self::native("forward", native_history_forward, &self.function_proto));
-        history.set_own("go", Self::native("go", native_history_go, &self.function_proto));
-        history.set_own("pushState", Self::native("pushState", native_history_push_state, &self.function_proto));
-        history.set_own("replaceState", Self::native("replaceState", native_history_replace_state, &self.function_proto));
+        history.set_own(
+            "back",
+            Self::native("back", native_history_back, &self.function_proto),
+        );
+        history.set_own(
+            "forward",
+            Self::native("forward", native_history_forward, &self.function_proto),
+        );
+        history.set_own(
+            "go",
+            Self::native("go", native_history_go, &self.function_proto),
+        );
+        history.set_own(
+            "pushState",
+            Self::native("pushState", native_history_push_state, &self.function_proto),
+        );
+        history.set_own(
+            "replaceState",
+            Self::native(
+                "replaceState",
+                native_history_replace_state,
+                &self.function_proto,
+            ),
+        );
         history.set_own("length", JsValue::num(1.0));
         history.set_own("state", JsValue::Null);
         let history = JsValue::Object(Obj(Rc::new(RefCell::new(history))));
-        self.global_obj.borrow_mut().set_own("history", history.clone());
+        self.global_obj
+            .borrow_mut()
+            .set_own("history", history.clone());
         let _ = self.global_env.declare_var("history", history);
     }
 
@@ -285,13 +314,32 @@ impl Interpreter {
                 setter: Some(Box::new(href_setter)),
             },
         );
-        location.set_own("assign", Self::native("assign", native_location_assign, &self.function_proto));
-        location.set_own("replace", Self::native("replace", native_location_assign, &self.function_proto));
-        location.set_own("reload", Self::native("reload", native_location_reload, &self.function_proto));
+        location.set_own(
+            "assign",
+            Self::native("assign", native_location_assign, &self.function_proto),
+        );
+        location.set_own(
+            "replace",
+            Self::native("replace", native_location_assign, &self.function_proto),
+        );
+        location.set_own(
+            "reload",
+            Self::native("reload", native_location_reload, &self.function_proto),
+        );
         let location = JsValue::Object(Obj(Rc::new(RefCell::new(location))));
-        self.global_obj.borrow_mut().set_own("[[LocationObject]]", location.clone());
-        let location_getter = Self::native("get location", native_window_location_get, &self.function_proto);
-        let location_setter = Self::native("set location", native_window_location_set, &self.function_proto);
+        self.global_obj
+            .borrow_mut()
+            .set_own("[[LocationObject]]", location.clone());
+        let location_getter = Self::native(
+            "get location",
+            native_window_location_get,
+            &self.function_proto,
+        );
+        let location_setter = Self::native(
+            "set location",
+            native_window_location_set,
+            &self.function_proto,
+        );
         let location_getter = match location_getter {
             JsValue::Object(o) => o.borrow().func.clone().expect("native location getter"),
             _ => unreachable!(),
@@ -318,15 +366,27 @@ impl Interpreter {
     pub fn set_dom_host(&mut self, host: Rc<RefCell<dyn DomHost>>) {
         self.dom_host = Some(host);
         let window = JsValue::Object(self.global_obj.clone());
-        self.global_obj.borrow_mut().set_own("window", window.clone());
-        self.global_obj.borrow_mut().set_own("[[DomNode]]", JsValue::num(0.0));
+        self.global_obj
+            .borrow_mut()
+            .set_own("window", window.clone());
+        self.global_obj
+            .borrow_mut()
+            .set_own("[[DomNode]]", JsValue::num(0.0));
         self.global_obj.borrow_mut().set_own(
             "addEventListener",
-            Self::native("addEventListener", native_dom_add_event_listener, &self.function_proto),
+            Self::native(
+                "addEventListener",
+                native_dom_add_event_listener,
+                &self.function_proto,
+            ),
         );
         self.global_obj.borrow_mut().set_own(
             "removeEventListener",
-            Self::native("removeEventListener", native_dom_remove_event_listener, &self.function_proto),
+            Self::native(
+                "removeEventListener",
+                native_dom_remove_event_listener,
+                &self.function_proto,
+            ),
         );
         let _ = self.global_env.declare_var("window", window);
         self.install_location();
@@ -370,7 +430,9 @@ impl Interpreter {
 
     pub fn set_history_length(&mut self, length: usize) {
         if let Some(JsValue::Object(history)) = self.global_obj.borrow().get_own("history") {
-            history.borrow_mut().set_own("length", JsValue::num(length as f64));
+            history
+                .borrow_mut()
+                .set_own("length", JsValue::num(length as f64));
         }
     }
 
@@ -406,12 +468,7 @@ impl Interpreter {
         self.drain_jobs()
     }
 
-    pub fn schedule_timer(
-        &mut self,
-        callback: JsValue,
-        delay_ms: u64,
-        args: Vec<JsValue>,
-    ) -> u32 {
+    pub fn schedule_timer(&mut self, callback: JsValue, delay_ms: u64, args: Vec<JsValue>) -> u32 {
         self.schedule_timer_kind(callback, delay_ms, args, false)
     }
 
@@ -488,11 +545,19 @@ impl Interpreter {
         event_obj.set_own("defaultPrevented", JsValue::Bool(false));
         event_obj.set_own(
             "stopPropagation",
-            Self::native("stopPropagation", native_event_stop_propagation, &self.function_proto),
+            Self::native(
+                "stopPropagation",
+                native_event_stop_propagation,
+                &self.function_proto,
+            ),
         );
         event_obj.set_own(
             "preventDefault",
-            Self::native("preventDefault", native_event_prevent_default, &self.function_proto),
+            Self::native(
+                "preventDefault",
+                native_event_prevent_default,
+                &self.function_proto,
+            ),
         );
         let event = JsValue::Object(Obj(Rc::new(RefCell::new(event_obj))));
         let mut current = Some(node);
@@ -548,8 +613,9 @@ impl Interpreter {
     }
 
     fn set_dom_handler(&mut self, node: u32, event: &str, callback: Option<JsValue>) {
-        self.dom_listeners
-            .retain(|listener| !(listener.node == node && listener.event == event && listener.property));
+        self.dom_listeners.retain(|listener| {
+            !(listener.node == node && listener.event == event && listener.property)
+        });
         if let Some(callback) = callback {
             self.dom_listeners.push(DomListener {
                 node,
@@ -1119,12 +1185,13 @@ impl Interpreter {
 
     pub fn eval_expr(&mut self, e: &ast::Expr, env: &EnvHandle) -> Result<JsValue, Throw> {
         match &e.kind {
+            ExprKind::RegExp(regex) => self.make_regexp(regex.clone()),
             ExprKind::Num(n) => self.numeric(n),
             ExprKind::Str(s) => Ok(JsValue::str(s.as_str())),
             ExprKind::Bool(b) => Ok(JsValue::Bool(*b)),
             ExprKind::Null => Ok(JsValue::Null),
-            ExprKind::Ident(i) => env
-                .resolve(&i.name)
+            ExprKind::Ident(i) => self
+                .identifier_value(env, &i.name)?
                 .ok_or_else(|| Throw::reference_error(format!("{} is not defined", i.name))),
             ExprKind::This => Ok(env.resolve_this()),
             ExprKind::Super => {
@@ -1298,7 +1365,7 @@ impl Interpreter {
                 match &x.kind {
                     ExprKind::Ident(i) => {
                         return Ok(JsValue::str(
-                            env.resolve(&i.name)
+                            self.identifier_value(env, &i.name)?
                                 .map(|v| self.typeof_value(&v))
                                 .unwrap_or("undefined"),
                         ));
@@ -1306,7 +1373,7 @@ impl Interpreter {
                     ExprKind::Paren(inner) if matches!(inner.kind, ExprKind::Ident(_)) => {
                         if let ExprKind::Ident(i) = &inner.kind {
                             return Ok(JsValue::str(
-                                env.resolve(&i.name)
+                                self.identifier_value(env, &i.name)?
                                     .map(|v| self.typeof_value(&v))
                                     .unwrap_or("undefined"),
                             ));
@@ -1535,16 +1602,41 @@ impl Interpreter {
         }
     }
 
+    // testharness.js exports its API by assigning properties of global_scope.
+    // Unresolved lexical names must therefore consult the global object record.
+    fn identifier_value(&mut self, env: &EnvHandle, name: &str) -> Result<Option<JsValue>, Throw> {
+        if let Some(value) = env.resolve(name) {
+            return Ok(Some(value));
+        }
+        let exists = self.global_obj.borrow().has_property(name);
+        if exists {
+            let global = JsValue::Object(self.global_obj.clone());
+            self.get_prop(&global, name).map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+
     fn resolve_reference(
         &mut self,
         target: &ast::Expr,
         env: &EnvHandle,
     ) -> Result<(Reference, JsValue), Throw> {
         match &target.kind {
-            ExprKind::Ident(identifier) => Ok((
-                Reference::Binding(identifier.name.clone()),
-                env.resolve(&identifier.name).unwrap_or(JsValue::Undefined),
-            )),
+            ExprKind::Ident(identifier) => {
+                if let Some(value) = env.resolve(&identifier.name) {
+                    Ok((Reference::Binding(identifier.name.clone()), value))
+                } else if self.global_obj.borrow().has_property(&identifier.name) {
+                    let global = JsValue::Object(self.global_obj.clone());
+                    let value = self.get_prop(&global, &identifier.name)?;
+                    Ok((Reference::Property(global, identifier.name.clone()), value))
+                } else {
+                    Ok((
+                        Reference::Binding(identifier.name.clone()),
+                        JsValue::Undefined,
+                    ))
+                }
+            }
             ExprKind::Member { obj, prop, .. } => {
                 let base = self.eval_expr(obj, env)?;
                 let key = match prop {
@@ -1834,7 +1926,9 @@ impl Interpreter {
         args: Vec<JsValue>,
     ) -> Result<(), Throw> {
         for (i, p) in ps.iter().enumerate() {
-            let v = if let Some(v) = args.get(i) {
+            let v = if p.rest {
+                array_values(self, args.iter().skip(i).cloned().collect())?
+            } else if let Some(v) = args.get(i) {
                 v.clone()
             } else if let Some(d) = &p.default {
                 self.eval_expr(d, e)?
@@ -1843,11 +1937,12 @@ impl Interpreter {
             };
             self.bind_pattern(&p.binding, v, ast::VarKind::Let, e)?;
         }
+        let argument_count = args.len();
         let a = JsValue::object(JsObject::array());
         for (i, v) in args.into_iter().enumerate() {
             self.set_prop(&a, &i.to_string(), v)?;
         }
-        self.set_prop(&a, "length", JsValue::num(ps.len() as f64))?;
+        self.set_prop(&a, "length", JsValue::num(argument_count as f64))?;
         e.declare_var("arguments", a)?;
         Ok(())
     }
@@ -2070,39 +2165,75 @@ impl Interpreter {
         document.set_own("[[DomNode]]", JsValue::num(0.0));
         document.set_own(
             "querySelector",
-            Self::native("querySelector", native_dom_query_selector, &self.function_proto),
+            Self::native(
+                "querySelector",
+                native_dom_query_selector,
+                &self.function_proto,
+            ),
         );
         document.set_own(
             "querySelectorAll",
-            Self::native("querySelectorAll", native_dom_query_selector_all, &self.function_proto),
+            Self::native(
+                "querySelectorAll",
+                native_dom_query_selector_all,
+                &self.function_proto,
+            ),
         );
         document.set_own(
             "getElementById",
-            Self::native("getElementById", native_dom_get_element_by_id, &self.function_proto),
+            Self::native(
+                "getElementById",
+                native_dom_get_element_by_id,
+                &self.function_proto,
+            ),
         );
         document.set_own(
             "getElementsByTagName",
-            Self::native("getElementsByTagName", native_dom_get_elements_by_tag, &self.function_proto),
+            Self::native(
+                "getElementsByTagName",
+                native_dom_get_elements_by_tag,
+                &self.function_proto,
+            ),
         );
         document.set_own(
             "getElementsByClassName",
-            Self::native("getElementsByClassName", native_dom_get_elements_by_class, &self.function_proto),
+            Self::native(
+                "getElementsByClassName",
+                native_dom_get_elements_by_class,
+                &self.function_proto,
+            ),
         );
         document.set_own(
             "createElement",
-            Self::native("createElement", native_dom_create_element, &self.function_proto),
+            Self::native(
+                "createElement",
+                native_dom_create_element,
+                &self.function_proto,
+            ),
         );
         document.set_own(
             "createTextNode",
-            Self::native("createTextNode", native_dom_create_text_node, &self.function_proto),
+            Self::native(
+                "createTextNode",
+                native_dom_create_text_node,
+                &self.function_proto,
+            ),
         );
         document.set_own(
             "addEventListener",
-            Self::native("addEventListener", native_dom_add_event_listener, &self.function_proto),
+            Self::native(
+                "addEventListener",
+                native_dom_add_event_listener,
+                &self.function_proto,
+            ),
         );
         document.set_own(
             "removeEventListener",
-            Self::native("removeEventListener", native_dom_remove_event_listener, &self.function_proto),
+            Self::native(
+                "removeEventListener",
+                native_dom_remove_event_listener,
+                &self.function_proto,
+            ),
         );
         let title_getter = Self::native("get title", native_dom_title_get, &self.function_proto);
         let title_setter = Self::native("set title", native_dom_title_set, &self.function_proto);
@@ -2174,8 +2305,16 @@ impl Interpreter {
                 setter: Some(Box::new(inner_setter)),
             },
         );
-        let inner_getter = Self::native("get innerHTML", native_dom_inner_html_get, &self.function_proto);
-        let inner_setter = Self::native("set innerHTML", native_dom_inner_html_set, &self.function_proto);
+        let inner_getter = Self::native(
+            "get innerHTML",
+            native_dom_inner_html_get,
+            &self.function_proto,
+        );
+        let inner_setter = Self::native(
+            "set innerHTML",
+            native_dom_inner_html_set,
+            &self.function_proto,
+        );
         let inner_getter = match inner_getter {
             JsValue::Object(o) => o.borrow().func.clone().expect("native innerHTML getter"),
             _ => unreachable!(),
@@ -2197,19 +2336,35 @@ impl Interpreter {
         );
         element.set_own(
             "getAttribute",
-            Self::native("getAttribute", native_dom_get_attribute, &self.function_proto),
+            Self::native(
+                "getAttribute",
+                native_dom_get_attribute,
+                &self.function_proto,
+            ),
         );
         element.set_own(
             "setAttribute",
-            Self::native("setAttribute", native_dom_set_attribute, &self.function_proto),
+            Self::native(
+                "setAttribute",
+                native_dom_set_attribute,
+                &self.function_proto,
+            ),
         );
         element.set_own(
             "hasAttribute",
-            Self::native("hasAttribute", native_dom_has_attribute, &self.function_proto),
+            Self::native(
+                "hasAttribute",
+                native_dom_has_attribute,
+                &self.function_proto,
+            ),
         );
         element.set_own(
             "removeAttribute",
-            Self::native("removeAttribute", native_dom_remove_attribute, &self.function_proto),
+            Self::native(
+                "removeAttribute",
+                native_dom_remove_attribute,
+                &self.function_proto,
+            ),
         );
         element.set_own(
             "append",
@@ -2223,15 +2378,29 @@ impl Interpreter {
             "remove",
             Self::native("remove", native_dom_remove, &self.function_proto),
         );
-        element.set_own("matches", Self::native("matches", native_dom_matches, &self.function_proto));
-        element.set_own("closest", Self::native("closest", native_dom_closest, &self.function_proto));
+        element.set_own(
+            "matches",
+            Self::native("matches", native_dom_matches, &self.function_proto),
+        );
+        element.set_own(
+            "closest",
+            Self::native("closest", native_dom_closest, &self.function_proto),
+        );
         element.set_own(
             "addEventListener",
-            Self::native("addEventListener", native_dom_add_event_listener, &self.function_proto),
+            Self::native(
+                "addEventListener",
+                native_dom_add_event_listener,
+                &self.function_proto,
+            ),
         );
         element.set_own(
             "removeEventListener",
-            Self::native("removeEventListener", native_dom_remove_event_listener, &self.function_proto),
+            Self::native(
+                "removeEventListener",
+                native_dom_remove_event_listener,
+                &self.function_proto,
+            ),
         );
         element.set_own(
             "click",
@@ -2244,18 +2413,45 @@ impl Interpreter {
         let mut dataset = JsObject::ordinary();
         dataset.proto = Some(self.object_proto.clone());
         dataset.set_own("[[DomDatasetNode]]", JsValue::num(id as f64));
-        element.set_own("dataset", JsValue::Object(Obj(Rc::new(RefCell::new(dataset)))));
+        element.set_own(
+            "dataset",
+            JsValue::Object(Obj(Rc::new(RefCell::new(dataset)))),
+        );
         let mut class_list = JsObject::ordinary();
         class_list.proto = Some(self.object_proto.clone());
         class_list.set_own("[[DomClassListNode]]", JsValue::num(id as f64));
-        class_list.set_own("contains", Self::native("contains", native_class_list_contains, &self.function_proto));
-        class_list.set_own("add", Self::native("add", native_class_list_add, &self.function_proto));
-        class_list.set_own("remove", Self::native("remove", native_class_list_remove, &self.function_proto));
-        class_list.set_own("toggle", Self::native("toggle", native_class_list_toggle, &self.function_proto));
-        class_list.set_own("toString", Self::native("toString", native_class_list_to_string, &self.function_proto));
-        element.set_own("classList", JsValue::Object(Obj(Rc::new(RefCell::new(class_list)))));
-        let onclick_getter = Self::native("get onclick", native_dom_onclick_get, &self.function_proto);
-        let onclick_setter = Self::native("set onclick", native_dom_onclick_set, &self.function_proto);
+        class_list.set_own(
+            "contains",
+            Self::native("contains", native_class_list_contains, &self.function_proto),
+        );
+        class_list.set_own(
+            "add",
+            Self::native("add", native_class_list_add, &self.function_proto),
+        );
+        class_list.set_own(
+            "remove",
+            Self::native("remove", native_class_list_remove, &self.function_proto),
+        );
+        class_list.set_own(
+            "toggle",
+            Self::native("toggle", native_class_list_toggle, &self.function_proto),
+        );
+        class_list.set_own(
+            "toString",
+            Self::native(
+                "toString",
+                native_class_list_to_string,
+                &self.function_proto,
+            ),
+        );
+        element.set_own(
+            "classList",
+            JsValue::Object(Obj(Rc::new(RefCell::new(class_list)))),
+        );
+        let onclick_getter =
+            Self::native("get onclick", native_dom_onclick_get, &self.function_proto);
+        let onclick_setter =
+            Self::native("set onclick", native_dom_onclick_set, &self.function_proto);
         let onclick_getter = match onclick_getter {
             JsValue::Object(o) => o.borrow().func.clone().expect("native onclick getter"),
             _ => unreachable!(),
@@ -2289,14 +2485,18 @@ impl Interpreter {
 
     fn dom_dataset_id(object: &Obj) -> Option<u32> {
         match object.borrow().get_own("[[DomDatasetNode]]") {
-            Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => Some(n as u32),
+            Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => {
+                Some(n as u32)
+            }
             _ => None,
         }
     }
 
     fn dom_class_list_id(object: &Obj) -> Option<u32> {
         match object.borrow().get_own("[[DomClassListNode]]") {
-            Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => Some(n as u32),
+            Some(JsValue::Num(n)) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => {
+                Some(n as u32)
+            }
             _ => None,
         }
     }
@@ -2315,6 +2515,15 @@ impl Interpreter {
     }
 
     fn get_prop(&mut self, v: &JsValue, k: &str) -> Result<JsValue, Throw> {
+        self.get_prop_receiver(v, k, v.clone())
+    }
+
+    fn get_prop_receiver(
+        &mut self,
+        v: &JsValue,
+        k: &str,
+        receiver: JsValue,
+    ) -> Result<JsValue, Throw> {
         match v {
             JsValue::Object(o) => {
                 if let Some(node) = Self::dom_dataset_id(o) {
@@ -2359,23 +2568,37 @@ impl Interpreter {
                         return Ok(JsValue::num(size as f64));
                     }
                 }
-                if let Some(property) = o.borrow().own_prop(k).cloned() {
+                let property = o.borrow().own_prop(k).cloned();
+                let prototype = o.borrow().proto.clone();
+                if let Some(property) = property {
                     if let Some(getter) = property.getter {
                         let function = JsValue::Object(Obj(Rc::new(RefCell::new(
                             JsObject::function(*getter),
                         ))));
-                        self.call_value(&function, JsValue::Object(o.clone()), Vec::new())
+                        self.call_value(&function, receiver, Vec::new())
                     } else {
                         Ok(property.value)
                     }
-                } else if let Some(p) = o.borrow().proto.clone() {
-                    self.get_prop(&JsValue::Object(p), k)
+                } else if let Some(p) = prototype {
+                    self.get_prop_receiver(&JsValue::Object(p), k, receiver)
                 } else {
                     Ok(JsValue::Undefined)
                 }
             }
             JsValue::Str(s) => {
-                if k == "split" {
+                if k == "match" {
+                    Ok(Self::native(
+                        "match",
+                        native_string_match,
+                        &self.function_proto,
+                    ))
+                } else if k == "search" {
+                    Ok(Self::native(
+                        "search",
+                        native_string_search,
+                        &self.function_proto,
+                    ))
+                } else if k == "split" {
                     Ok(Self::native(
                         "split",
                         native_string_split,
@@ -2865,11 +3088,19 @@ impl Interpreter {
         );
         self.define_global(
             "requestAnimationFrame",
-            Self::native("requestAnimationFrame", native_request_animation_frame, &self.function_proto),
+            Self::native(
+                "requestAnimationFrame",
+                native_request_animation_frame,
+                &self.function_proto,
+            ),
         );
         self.define_global(
             "cancelAnimationFrame",
-            Self::native("cancelAnimationFrame", native_clear_timeout, &self.function_proto),
+            Self::native(
+                "cancelAnimationFrame",
+                native_clear_timeout,
+                &self.function_proto,
+            ),
         );
         self.define_global(
             "Error",
@@ -2894,6 +3125,25 @@ impl Interpreter {
         self.define_global(
             "SyntaxError",
             Self::native("SyntaxError", native_syntax_error, &self.function_proto),
+        );
+        let function_ctor = Self::native(
+            "Function",
+            native_function_constructor,
+            &self.function_proto,
+        );
+        if let JsValue::Object(object) = &function_ctor {
+            object
+                .borrow_mut()
+                .set_own("prototype", JsValue::Object(self.function_proto.clone()));
+        }
+        self.define_global("Function", function_ctor);
+        self.object_proto.borrow_mut().set_own(
+            "hasOwnProperty",
+            Self::native(
+                "hasOwnProperty",
+                native_has_own_property,
+                &self.function_proto,
+            ),
         );
         let object_ctor = Self::native("Object", native_object, &self.function_proto);
         if let JsValue::Object(o) = &object_ctor {
@@ -2960,6 +3210,11 @@ impl Interpreter {
             Self::native("Array", native_array, &self.function_proto),
         );
         if let Some(array) = self.global_env.resolve("Array") {
+            let _ = self.set_prop(
+                &array,
+                "prototype",
+                JsValue::Object(self.array_proto.clone()),
+            );
             let _ = self.set_prop(
                 &array,
                 "isArray",
@@ -3088,6 +3343,7 @@ impl Interpreter {
             ("join", native_array_join as crate::value::NativeFn),
             ("map", native_array_map as crate::value::NativeFn),
             ("filter", native_array_filter as crate::value::NativeFn),
+            ("some", native_array_some as crate::value::NativeFn),
             ("forEach", native_array_for_each as crate::value::NativeFn),
             ("reduce", native_array_reduce as crate::value::NativeFn),
             ("slice", native_array_slice as crate::value::NativeFn),
@@ -3170,10 +3426,21 @@ impl Interpreter {
             "Number",
             Self::native("Number", native_number, &self.function_proto),
         );
-        self.define_global(
-            "String",
-            Self::native("String", native_string, &self.function_proto),
-        );
+        let string_ctor = Self::native("String", native_string, &self.function_proto);
+        if let JsValue::Object(object) = &string_ctor {
+            let _ = object.borrow_mut().define(
+                "fromCharCode",
+                regexp_property(
+                    Self::native(
+                        "fromCharCode",
+                        native_string_from_char_code,
+                        &self.function_proto,
+                    ),
+                    true,
+                ),
+            );
+        }
+        self.define_global("String", string_ctor);
         self.define_global(
             "Boolean",
             Self::native("Boolean", native_boolean, &self.function_proto),
@@ -3250,6 +3517,6 @@ fn for_iteration_env(left: &ForLeft, env: &EnvHandle) -> EnvHandle {
     }
 }
 
-
 include!("interp_builtins.rs");
+include!("interp_regexp.rs");
 include!("interp_tests.rs");

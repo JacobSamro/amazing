@@ -279,3 +279,173 @@ The integrator explicitly selected regex as the next ticket because two lanes ar
 ### JS-1 validation
 
 Windows `cargo test -p amazing-js --locked`: 143 unit tests + 1 doctest passed. Final `cargo test --workspace --locked` passed: 725 passed, 0 failed, 3 ignored across 46 test-result groups. Initial workspace attempts were blocked by incomplete integrator skeleton sync and then by the in-use baseline executable; the final run completed after both measurements.
+
+## JS-2 delivered: bounded RegExp and upstream harness unblock
+
+The **unmodified pinned testharness.js now parses**. It also initializes and
+executes real upstream assertion callbacks with only the shell host alias
+`var self=globalThis;`. The diagnostic reports one PASS, one intentional FAIL,
+and harness completion OK. This proves the parser/runtime unblock; it is not
+a DOM WPT conformance result. The file was not patched or replaced with a shim.
+
+Pinned WPT revision: `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+UTF-8/LF harness source SHA-256:
+`d2399236c2a09c429804ff2299ad6629e17e2b53f17a74dd341e936adb11ae3e`.
+Without a host-provided `self`, the standalone CLI correctly reports that name
+missing; the DOM harness host already supplies it.
+
+### Scope and why the additional fixes are required
+
+The new std-only amazing-regex core implements classes/ranges, greedy and lazy
+quantifiers, groups/captures, alternation, anchors, backreferences, positive and
+negative lookahead, UTF-16 indexing and flags g/i/m/s/u/y. Parser-directed slash
+lexing preserves division. The interpreter supplies constructor/exec/test,
+source and flag getters, lastIndex and regex-aware String match/search/replace.
+Unicode case folding uses pinned Unicode 17.0.0 C/S data with its license.
+
+The pinned harness itself exposed these prerequisites, all fixed in amazing-js:
+
+- Its dynamically constructed escape regex uses a template substitution inside
+  a function: record each substitution's enclosing brace depth.
+- Its escape map calls String.fromCharCode: implement conversion for strings
+  representable by the current UTF-8 JS value model.
+- Its API is exported as global object properties: unresolved identifiers and
+  typeof consult that object; assignments to such properties keep the reference.
+- Its setup overload checks actual arguments.length and instanceof Function;
+  supply the actual count and Function constructor/prototype identity.
+- Its property setup calls Object.prototype.hasOwnProperty, and its step wrapper
+  calls Array.prototype.slice.call: supply the method and correct Array prototype.
+- Its assertion wrapper forwards rest parameters: bind the remaining arguments
+  as an array rather than taking only the first value.
+- Its completion predicate calls Array.prototype.some: implement the short-circuit
+  callback with hole skipping and a bounded length.
+- RegExp inherited getters preserve the original receiver and drop object borrows
+  before calling JS, including a getter that mutates its receiver.
+
+`crates/amazing-js/examples/probe_harness.rs` is the runnable shell proof. It
+parses the supplied unchanged script, initializes it, executes regex assertions,
+checks both real result callbacks, and checks the completion callback after jobs
+are drained. No debug instrumentation remains in engine code.
+
+### Measured gate
+
+Build base: `80c66360c75281eb293c21e17688ddd993fb8de8` (refreshed Windows tree).
+All owned changes were re-synced after refresh. 149 Rust/manifest files matched
+Mac SHA-256 values immediately before and after the final workspace gate.
+Earlier results affected by refresh are superseded by these final measurements.
+
+Test262 revision remains `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`. Selection is the union of
+the original 747 directly attributed failures, all `/RegExp/` or `/regexp/`
+directory files, and built-ins/String/prototype match, replace, search and split
+files. Exact membership is recorded in scratch `js2-selection.json`.
+
+| Run | Discovered | Pass | Fail | Timeout | Skip |
+|---|---:|---:|---:|---:|---:|
+| JS-1 baseline, same selection | 2714 | 127 | 1856 | 0 | 731 |
+| JS-2 final run 1 | 2714 | 798 | 1185 | 0 | 731 |
+| JS-2 final run 2 | 2714 | 798 | 1185 | 0 | 731 |
+
+671 fail-to-pass transitions; zero pass-to-fail regressions; zero classification
+or reason changes between final runs. Of the original 747 directly regex-attributed
+failures, 391 now pass and 356 still fail (including other exposed engine/harness
+limitations). These gains include the required harness prerequisites above.
+
+| Directory/selection group | Files | Before pass | Before fail | After pass | After fail | Skip | After pass / eligible |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Annex B regex directories | 168 | 2 | 101 | 33 | 70 | 65 | 32.04% |
+| Other direct-regex failures | 149 | 0 | 149 | 69 | 80 | 0 | 46.31% |
+| built-ins/RegExp | 1879 | 91 | 1347 | 586 | 852 | 441 | 40.75% |
+| built-ins/String/prototype/endsWith | 1 | 0 | 1 | 0 | 1 | 0 | 0.00% |
+| built-ins/String/prototype/includes | 1 | 0 | 1 | 0 | 1 | 0 | 0.00% |
+| built-ins/String/prototype/match | 51 | 2 | 40 | 20 | 22 | 9 | 47.62% |
+| built-ins/String/prototype/matchAll | 2 | 0 | 2 | 2 | 0 | 0 | 100.00% |
+| built-ins/String/prototype/replace | 55 | 7 | 39 | 33 | 13 | 9 | 71.74% |
+| built-ins/String/prototype/replaceAll | 1 | 0 | 1 | 0 | 1 | 0 | 0.00% |
+| built-ins/String/prototype/search | 43 | 2 | 30 | 11 | 21 | 11 | 34.38% |
+| built-ins/String/prototype/split | 120 | 5 | 105 | 6 | 104 | 10 | 5.45% |
+| built-ins/String/prototype/startsWith | 1 | 0 | 1 | 0 | 1 | 0 | 0.00% |
+| built-ins/String/prototype/toLocaleLowerCase | 1 | 0 | 1 | 0 | 1 | 0 | 0.00% |
+| built-ins/String/prototype/toLocaleUpperCase | 1 | 0 | 1 | 0 | 1 | 0 | 0.00% |
+| built-ins/String/prototype/toLowerCase | 1 | 0 | 1 | 0 | 1 | 0 | 0.00% |
+| built-ins/String/prototype/toUpperCase | 1 | 0 | 1 | 0 | 1 | 0 | 0.00% |
+| built-ins/String/prototype/trim | 1 | 0 | 1 | 0 | 1 | 0 | 0.00% |
+| language/literals/regexp | 238 | 18 | 34 | 38 | 14 | 186 | 73.08% |
+
+All rows have zero timeouts. Percentages describe this harness's eligible files,
+not complete ECMA-262 conformance. JS-1's caveats remain: missing includes, strict
+variants not run, incomplete sameValue/throws assertions, and metadata skips.
+For example, two matchAll exception tests pass under this permissive throws
+helper even though matchAll is not implemented. No full-tree post-JS-2 result
+is claimed; the historical full-tree baseline remains 53872/5438/23165/7/25262.
+
+Final Windows validation:
+
+- `cargo test -p amazing-js -p amazing-regex --locked`: 156 JS unit tests,
+  10 regex unit tests, 1 JS doctest passed; no failures.
+- `cargo test --workspace --locked`: 938 passed, 0 failed,
+  3 ignored across 51 result groups; exit 0.
+- CLI and both examples build with --locked. The unchanged upstream probe exits
+  0 and prints `parsed; initialized; subtests=PASS,FAIL; completion=OK`.
+- Every owned file is below 4000 lines; git diff --check passes.
+
+Reproducibility hashes:
+
+| Artifact | SHA-256 |
+|---|---|
+| Final CLI | `7ca264a349d28b00e13245c10fb24a760b2b0116c6928b133636895cc21eb186` |
+| Both final classifications | `952ab71398b351d130aeea88c5a7f18cc5e9b1e6d67b18011806bd5a17b10338` |
+| Selection paths | `fbaaf7f7d0e897133a0d32fe439f79e1ef91fc4f46380d01350f3e4965d4a353` |
+| Selected Test262 sources | `3425ae5f4b28a9b51472d0edf46ca8af60e3f6b5762b71e753f4577a5a27422d` |
+| Unchanged scripts/test262.py | `26d666f7529a1788fbbfe7c119f7f6f149cf32c0e0914a604017592cda8ab79c` |
+| Selection observer | `5baccd96598cb68db46ac45e29eeacc0f7e4fc007c3506e6607425544b18ee62` |
+| 149-file source manifest | `053d9f0ad9ec6d06848be3532efa148a64835de30806c753318f29d7c21add5b` |
+| Final Cargo.lock | `3feaf8130f2c60230292a4d70311c6e480d848a2ffdebc036fd09a603581ba7d` |
+
+### Unsupported surface and bounds
+
+Still missing: named captures/backreferences, lookbehind, property escapes,
+inline modifiers, d/v flags and Unicode sets; Annex B octal/decimal fallbacks,
+incomplete escapes and quantified lookahead; Symbol protocols, species/subclass
+semantics, custom exec dispatch in String methods, regex split, matchAll,
+replaceAll, RegExp.escape, compile and legacy RegExp static properties. Existing
+strict-mode, descriptor and built-in gaps still apply. String.fromCharCode and
+regex capture/replacement output cannot represent lone surrogates in the current
+UTF-8 JS string model and throw explicitly; the regex core supports lossless u16.
+
+Bounds: 16384 pattern bytes, 64 nesting levels, 128 captures, 32768 compilation
+work/instruction units, 1048576 input code units, 1000000 shared matching steps,
+8192 backtracking frames and 1048576 saved slots. Global collection caps at
+100000 matches, replacement capture storage at 1048576 slots, and replacement
+output at 16777216 bytes. Execution limit failures are RangeErrors; regex literal
+compilation failures are positioned parse errors. See the regex README for detail.
+
+### Lockfile exception and reproduction
+
+Cargo regenerated root Cargo.lock on Windows using `cargo check -p amazing-js
+--offline`. An exact comparison with the pre-build file and a final comparison
+against origin/dev confirmed that the **only** change is adding amazing-regex
+to amazing-js's dependency list. No manual lockfile editing or other dependency
+change occurred. The full diff is included in the lane report.
+
+```powershell
+$env:CARGO_TARGET_DIR='C:\Users\server\target\js-lang'
+cargo test -p amazing-js -p amazing-regex --locked
+cargo build -p amazing --locked
+cargo build -p amazing-js --examples --locked
+python .agents/js-lang/observe_js2.py --harness scripts/test262.py --root .agents/js-lang/test262-full --binary C:/Users/server/target/js-lang/debug/amazing.exe --output .agents/js-lang/js2-final1 --selection .agents/js-lang/js2-selection.json
+# Repeat with --output .agents/js-lang/js2-final2.
+python .agents/js-lang/probe_upstream.py
+cargo test --workspace --locked
+```
+
+For a fresh upstream checkout, feed the unchanged resources/testharness.js bytes
+to `target/js-lang/debug/examples/probe_harness.exe` on Windows. The scratch
+probe does this from the pinned source JSON and records source/executable hashes.
+
+### Next boundary
+
+JS-2 is complete. Integrate this lane, then resume DOM-1 against the real upstream
+harness. No DOM conformance percentage is claimed here. Do not silently broaden
+JS-2 into full UTF-16 strings, Symbol protocols or harness repair: choose those
+as separate measured tickets. The largest JS-1 helper-loading cluster remains
+a candidate for an integrator-owned scripts/test262.py follow-up. Stop here.

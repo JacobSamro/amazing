@@ -40,7 +40,7 @@
 //! - Destructuring assignment targets, computed pattern keys, and full
 //!   iterator-closing/error semantics (basic declaration/parameter/for-head
 //!   array/object patterns are implemented).
-//! - Regex literals (division always; see `lexer` docs), tagged templates.
+//! - Tagged templates. RegExp literal support uses parser-selected lexical goals.
 //! - `with`, `new.target`, `import.meta`, labels-on-non-loop `continue`
 //!   subtleties beyond loop/switch depth checks, strict-mode early errors,
 //!   duplicate-binding checks, getter/setter arity validation, `for await`.
@@ -53,8 +53,7 @@ use crate::tokens::{Punct, SourceLocation, Span, Token, TokenKind};
 
 /// Parses a full script (modules are deferred; see module docs).
 pub fn parse_script(src: &str) -> Result<Program, SyntaxError> {
-    let toks = crate::lexer::tokenize(src)?;
-    Parser::new(toks).parse_program()
+    Parser::new(src).parse_program()
 }
 
 /// Which kind of binary operator the Pratt loop is currently holding.
@@ -72,7 +71,7 @@ struct LabelCtx {
 }
 
 struct Parser {
-    toks: Vec<Token>,
+    tokens: std::cell::RefCell<crate::token_stream::TokenStream>,
     pos: usize,
     /// End of the most recently consumed token (for node spans).
     last_end: SourceLocation,
@@ -94,13 +93,10 @@ struct Parser {
 }
 
 impl Parser {
-    fn new(toks: Vec<Token>) -> Self {
-        let last_end = toks
-            .first()
-            .map(|t| t.span.start)
-            .unwrap_or(SourceLocation::new(1, 1));
+    fn new(src: &str) -> Self {
+        let last_end = SourceLocation::new(1, 1);
         Parser {
-            toks,
+            tokens: std::cell::RefCell::new(crate::token_stream::TokenStream::new(src)),
             pos: 0,
             last_end,
             no_in: false,
@@ -116,18 +112,17 @@ impl Parser {
 
     // ----- token cursor ---------------------------------------------------
 
-    fn cur(&self) -> &Token {
+    fn cur(&self) -> Token {
         self.nth(0)
     }
 
-    fn nth(&self, n: usize) -> &Token {
-        let i = (self.pos + n).min(self.toks.len() - 1);
-        &self.toks[i]
+    fn nth(&self, n: usize) -> Token {
+        self.tokens.borrow_mut().get(self.pos + n)
     }
 
     fn bump(&mut self) -> Token {
-        let t = self.cur().clone();
-        if self.pos < self.toks.len() - 1 {
+        let t = self.cur();
+        if !matches!(t.kind, TokenKind::Eof) {
             self.pos += 1;
         }
         self.last_end = t.span.end;
@@ -147,6 +142,9 @@ impl Parser {
     }
 
     fn err(&self, msg: impl Into<String>) -> SyntaxError {
+        if let TokenKind::Invalid(error) = self.cur().kind {
+            return error;
+        }
         SyntaxError::new(msg, self.cur_loc().line, self.cur_loc().column)
     }
 
@@ -879,7 +877,9 @@ impl Parser {
     /// restricted-production checks (`return`/`yield` operand suppression).
     fn starts_expression(&self) -> bool {
         match &self.cur().kind {
-            TokenKind::Numeric(_)
+            TokenKind::Punct(Punct::Slash | Punct::SlashEq)
+            | TokenKind::RegExp { .. }
+            | TokenKind::Numeric(_)
             | TokenKind::Str(_)
             | TokenKind::TemplatePart { .. }
             | TokenKind::Ident(_)
@@ -1677,7 +1677,19 @@ impl Parser {
     fn parse_primary(&mut self) -> Result<Expr, SyntaxError> {
         let start = self.cur_loc();
         use crate::tokens::Keyword as K;
+        if self.at_punct(Punct::Slash) || self.at_punct(Punct::SlashEq) {
+            self.tokens.borrow_mut().regex(self.pos)?;
+        }
         match self.cur().kind.clone() {
+            TokenKind::RegExp { pattern, flags } => {
+                let compiled = amazing_regex::Regex::new(&pattern, &flags)
+                    .map_err(|e| self.err(e.to_string()))?;
+                self.bump();
+                Ok(Expr::new(
+                    ExprKind::RegExp(std::rc::Rc::new(compiled)),
+                    self.span_from(start),
+                ))
+            }
             TokenKind::Numeric(n) => {
                 self.bump();
                 Ok(Expr::new(ExprKind::Num(n), self.span_from(start)))

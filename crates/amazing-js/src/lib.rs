@@ -21,9 +21,8 @@
 //!   punctuators, numeric/string literal storage, and the `newline_before`
 //!   flag that drives ASI.
 //! - [`lexer`] — the scanner: template-literal modes, escape sequences,
-//!   positioned [`SyntaxError`]s. Regex literals are deferred (`/` is
-//!   always division); see its module docs for where the division/regex
-//!   ambiguity will be resolved.
+//!   positioned [`SyntaxError`]s and parser-selected RegExp lexical goals.
+//!   Matching delegates to the first-party std-only amazing-regex crate.
 //! - [`ast`] — the syntactic grammar as data (statements, expressions,
 //!   functions/classes), with implemented-vs-deferred lists.
 //! - [`parser`] — recursive descent + precedence climbing with correct
@@ -31,7 +30,7 @@
 //!   the `??`-mixing restriction.
 //! - [`errors`] — [`SyntaxError`] with line/column positions.
 //!
-//! Deferred: regex/tagged templates, destructuring everywhere, modules,
+//! Deferred: tagged templates, destructuring everywhere, modules,
 //! private class members, strict-mode early errors, generators, symbols,
 //! and a true asynchronous Promise job queue. Runtime errors are represented
 //! by [`value::Throw`]; no input is allowed to panic the engine.
@@ -42,6 +41,9 @@ pub mod errors;
 pub mod interp;
 pub mod lexer;
 pub mod parser;
+#[cfg(test)]
+mod regexp_tests;
+mod token_stream;
 pub mod tokens;
 pub mod value;
 

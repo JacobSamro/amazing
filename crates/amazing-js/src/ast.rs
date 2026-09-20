@@ -33,7 +33,7 @@
 //! - `for await (... of ...)` (async iteration).
 //! - Optional-chain short-circuit grouping: `optional` flags are recorded
 //!   per link but the runtime grouping semantics are the interpreter's job.
-//! - Tagged templates, regex literals, private class members, decorators,
+//! - Tagged templates, private class members, decorators,
 //!   `new.target`/`import.meta` meta properties, `with` statements
 //!   (Annex B), getters/setters via `Object` literal `__proto__` special
 //!   case, default-export-only module items.
@@ -317,6 +317,8 @@ impl Expr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
+    /// A validated pattern; evaluation creates a fresh RegExp object.
+    RegExp(std::rc::Rc<amazing_regex::Regex>),
     Num(Numeric),
     Str(String),
     Bool(bool),
