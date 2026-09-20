@@ -62,7 +62,7 @@ pub mod url;
 pub use fetch::{fetch, FetchOptions};
 pub use headers::Headers;
 pub use response::Response;
-pub use url::{resolve, Url, UrlError};
+pub use url::{resolve, ParseError, ParsedUrl, Url, UrlError, UrlOrigin};
 
 /// Top-level error type for network operations.
 ///

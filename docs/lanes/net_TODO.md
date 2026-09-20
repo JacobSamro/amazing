@@ -68,7 +68,7 @@ Authorization always needs an explicit grant. Exposed-header wildcard is literal
 with `include`. Redirect-tainted origin serializes as `null` in CORS without
 collapsing opaque identity.
 
-### NET-2 proposed seam
+### NET-1 follow-up seam proposal (now deferred to NET-3)
 
 `NetworkOrCache::exchange(request, plan, top_level_site)` is a trusted single-hop
 boundary implemented by the shell/driver. Cookies/cache stay in the shell. It
@@ -136,3 +136,143 @@ are in `.agents/net/{baseline,gate-1,gate-2}.txt` and `source-hashes.txt`.
 
 Full Windows workspace gate: `cargo test --workspace --locked` exited 0; 764 passed, 0 failed, 3 ignored (sum of 47 test-target/doc-test summaries).
 The isolated GPUI shell is excluded by the root workspace manifest.
+
+## NET-2 — Additive shared WHATWG URL layer
+
+**Legacy `amazing_net::Url` remains the live engine path.** The corpus results
+below measure the new `ParsedUrl` API in isolation, not production page loading.
+The integrator approved this boundary on 2026-09-20; neither legacy `Url` nor
+Fetch `HttpUrl::parse` changes behavior in this ticket.
+
+### Public surface and implementation
+
+`amazing_net::ParsedUrl` / `amazing_net::url::ParsedUrl` is an owned URL record
+with private fields and no unchecked/default constructor or mutation API.
+`parse`, `parse_with_base`, `resolve`, and `parse_with_idna` construct validated
+records; read-only getters expose encoded components. Null query/fragment and
+present-but-empty query/fragment are distinct. Host absence, an empty host,
+segmented path and opaque path are also distinct. `Port` is an optional u16
+(non-default only); `effective_port` supplies the scheme default when needed.
+
+The parser follows the URL Standard's named basic-parser states directly:
+scheme start/scheme/no scheme, relative/authority variants, host/port, file
+variants, path start/path/opaque path, query and fragment. Recoverable syntax
+conditions continue in the specified state; fatal errors return typed
+`ParseError`. No validation-diagnostic stream is exposed yet. Parsing takes
+Rust scalar-value strings and uses UTF-8; WebIDL USVString conversion belongs at
+the binding boundary. Setter state overrides, legacy query encodings, and
+URLSearchParams are outside this construction API.
+
+`Host` distinguishes domain, IPv4, IPv6, opaque and empty forms. Special hosts
+percent-decode before domain processing. ASCII domains lowercase without DNS
+label heuristics. IPv4 uses the standard radix/short-form and range rules;
+IPv6 uses std's validated address parser plus a WHATWG hex-only serializer
+(first longest zero sequence, never dotted mapped-address output). Non-special
+opaque hosts preserve case and percent-encode UTF-8 without IDNA.
+
+Percent encoding exposes the C0-control, fragment, query, special-query, path,
+userinfo and component sets. Path processing handles encoded dot segments and
+platform-independent Windows drive letters; serialization disambiguates a
+hostless path beginning `//` with `/.`.
+
+`UrlOrigin::Tuple(TupleOrigin)` projects normalized scheme/host/port.
+`UrlOrigin::Opaque` instructs the embedding to allocate an opaque security
+origin; it deliberately does not implement equality. It is not a shared `null`
+identity. File URLs receive opaque origins; blob origins derive only from an
+HTTP(S) inner URL. `TupleOrigin` has private fields and supports equality/hash.
+
+Sources: https://url.spec.whatwg.org/ (living standard dated 2026-09-10),
+especially basic URL parsing, host parsing, serialization, and origin sections.
+The parser does not select a PSL or introduce dependencies.
+
+### Deferred Unicode/IDNA seam
+
+`IdnaProvider::domain_to_ascii` receives the UTF-8-decoded, percent-decoded
+Unicode special host. `AsciiOnly`, the default provider, returns the distinct
+`ParseError::IdnaRequired`. This includes malformed UTF-8 decoded with replacement;
+such inputs are not misreported as proven URL failures by the corpus runner.
+Unicode characters in paths/query/fragments/userinfo, and opaque hosts, do not
+need IDNA and are processed normally. ASCII `xn--` labels are retained as ASCII:
+the current URL Standard's non-strict ASCII domain branch lowercases even when
+strict Unicode validation would diagnose a label. No punycode codec is bundled.
+
+A future provider must supply version-pinned UTS #46 Unicode mapping and ToASCII,
+nontransitional processing, CheckBidi/CheckJoiners true, IgnoreInvalidPunycode
+false, and non-strict CheckHyphens/UseSTD3ASCIIRules/VerifyDnsLength false. The
+full domain-parser diagnostic path also needs strict ToASCII results with those
+three flags true; the current API does not surface validation diagnostics.
+The provider must handle Unicode normalization/mapping, label separator mapping,
+punycode, invalid code points and empty output, not merely lowercase strings.
+The URL layer still checks ASCII output, forbidden domain code points and IP
+classification after the provider. Provider data/source licensing, Unicode
+revision, reproducible generation and update policy need project-level approval.
+No Unicode mapping tables, PSL, third-party core crate or provider implementation
+is included here. The unit-test provider is only a fixed stub proving the seam.
+
+### Concrete adoption order for a future brief
+
+All steps are deferred; integrator coordinates consumer owners. NET-3 must define
+whether compatibility wrappers preserve old acceptance or intentionally broaden
+it, and gate each semantic change separately.
+
+| Order | Consumer and adoption | Compatibility work / behavior that changes |
+|---|---|---|
+| 1 | `amazing-net/src/http.rs` accepts a typed HTTP-only view derived from ParsedUrl; prepare a single-hop transport entry point. | Replace public `.scheme/.host/.port/.path` reads with getters; require HTTP(S), host and effective port; produce origin-form targets, omit fragments/userinfo from wire targets. New parser accepts schemes the transport cannot load, so parsing success is not transport authorization. |
+| 2 | `amazing-net/src/fetch.rs` uses ParsedUrl for initial URL and Location resolution; keep a compatibility entry point for existing callers until integration. | `NetError::Url(UrlError)` needs explicit ParseError mapping or a new variant. Preserve bare filesystem-path routing; define safe file-to-path/UNC handling instead of silently ignoring remote file hosts. Preserve redirect policy outside single-hop I/O. Canonical root `/`, empty `?`, encoded dot segments, backslashes, IPv4 spellings and userinfo now differ from legacy. Existing behavior tests require intentional updates, not deletion. |
+| 3 | `amazing-fetch/src/origin.rs` wraps/adopts ParsedUrl inside `HttpUrl`, maps TupleOrigin into existing Origin identity; `model.rs`, `redirect.rs`, `referrer.rs` consume the wrapper. | Keep NET-1 method signatures. Strict parse currently rejects recovery forms, userinfo and legacy IPv4: broadening acceptance is a behavior change even without a Rust API change. Add an explicit validated-conversion entry point first; preserve credential presence until CORS rejects it. Opaque identity must remain unique. Fragment inheritance needs a validated update method, not mutable fields. Referrer stripping must remove userinfo as well as fragment. |
+| 4 | GPUI `session_state.rs`: BrowserSession::fetch, cookie_header, store_cookie, and cache keys adopt the exact same parsed request supplied by Fetch. | Cookie domains/paths and cache keys currently use legacy host/path and raw input. Canonicalizing can merge old keys; retain embedding ownership and design persisted-data migration. Do not infer PSL/SameSite policy from URL parsing. The single-hop FetchPlan/Site seam remains a proposal pending shell confirmation. |
+| 5 | GPUI `dom_runtime.rs`: resolve/fetch host hooks and `storage_origin` adopt ParsedUrl and tuple/opaque origin handling. | Current storage_origin reconstructs scheme/host/port and falls back to arbitrary input. Canonical tuples can change persisted storage namespaces; opaque URLs must not share serialized `null` as a key. DOM host API behavior and security identity need integration tests. |
+| 6 | GPUI `engine_viewport.rs::resolve_resource_address` and link navigation in `main.rs` adopt ParsedUrl::resolve; feed session/Fetch with the same record. | Stylesheets, scripts, images and navigation acquire WHATWG relative recovery and serialization. Retain explicit local-file fallback separately; do not silently treat parser failure or unsupported IDNA as a filesystem path. Update URL display versus navigation serialization expectations. |
+| 7 | Driver `crates/amazing/src/main.rs` resource-resolution helpers and fallback `gui.rs` navigation/resource loading adopt the shared API. | Same relative/file/serialization changes as GPUI; legacy GUI remains diagnostic. CLI output and fixture expectations may gain root slashes, empty queries, normalized hosts or encoded paths. Integrator-owned files cannot be changed by net lane. |
+| 8 | Deprecate/remove public-field legacy Url and free resolve only after a repository-wide consumer audit and coordinated release. | This is a Rust API break for public-field construction/access and UrlError matches; requires integrator sign-off. Only then can production conformance claims cite the new parser's gates. |
+
+### NET-2 corpus scope and reproduction
+
+Pinned WPT revision: `c48d58747e1f211527fb695fd60548a997fae617`.
+Selection: every object record in `url/resources/urltestdata.json` (896 objects;
+comment strings are not cases). Vendored data retains object order and original
+array-index identifiers. `tests/wpt/PROVENANCE.md` records upstream raw SHA-256
+and license. JSON is whitespace-normalized to one record per line to respect
+the repository's 4000-line limit. No cases are selected based on parser output.
+
+`tests/wpt/generate.py` converts pinned data to Rust constants without executing
+tests. It performs USVString replacement for unpaired surrogates, matching the
+upstream URL constructor boundary. `cargo run -p amazing-net --example url_wpt
+--locked` executes on win-001 only. It checks failure or href, origin (when
+specified), protocol, username, password, host, hostname, port, pathname, search
+and hash. `searchParams` expectations and `relativeTo` extra variant expansion
+are not exercised: this is the explicit input/base constructor selection, not
+all URL APIs or all WPT url/ tests. Unsupported counts come only from a distinct
+IdnaRequired parse result, are listed by original case index, and never count
+as passes even when upstream expects failure. The runner exits nonzero for any
+mismatch and prints pass/fail/timeout/unsupported totals.
+
+### Measured NET-2 gate
+
+Both final win-001 runs at WPT revision
+`c48d58747e1f211527fb695fd60548a997fae617`, on the 896-object input/base selection:
+
+| Run | Pass | Fail | Timeout | Unsupported |
+|---|---:|---:|---:|---:|
+| 1 | 864 | 0 | 0 | 32 (IDNA) |
+| 2 | 864 | 0 | 0 | 32 (IDNA) |
+
+The normalized stdout SHA-256 is identical for both runs:
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+Sorted per-file hash-manifest SHA-256 (source, tests, corpus, fixture generator):
+`9f489b47886842edcb1a6cf8f061ba25780d3d818d9d68b8d87fb152c4ebd2f0`.
+Hashes matched the local tree before and the Windows tree before/after both
+runs. AppleDouble `._*` metadata is excluded; it is not compiled source.
+Evidence is `.agents/net/net2-wpt-run-{1,2}.{stdout,stderr}` and
+`net2-source-hashes.txt`.
+
+Existing lane gates: amazing-net **65 passed**, TLS adapter **2 passed**,
+amazing-fetch **39 passed** (all unchanged). Added **13 passing** native tests
+for the URL API, percent sets, IP validation, provider boundary, recovery,
+relative/file/opaque paths, serialization and origins. Total **119 passed**,
+**0 failed**, **0 ignored** in the final lane run. No baseline WPT result exists
+for ParsedUrl: the API/runner are new; legacy Url was deliberately not scored as
+though it were the replacement parser. Test262 was not run or claimed.
+
+Full Windows workspace gate: `cargo test --workspace --locked` exited 0; **777 passed, 0 failed, 3 ignored** across 48 test-target/doc-test summaries. The root workspace excludes the standalone GPUI shell.
+Ignored tests are external HTTPS and two real-GPU probes; none added by NET-2.
