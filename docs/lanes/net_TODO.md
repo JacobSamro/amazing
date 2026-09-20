@@ -776,3 +776,69 @@ results.json, clean/workspace/lane/WPT logs for both runs, source manifests,
 PSL regeneration and feature inspection. No Test262, WPT fetch/cookie percentage,
 UI proof or external-page compatibility rate is claimed. No shell/persistence
 migration is performed. NET-6 ends at this provider and HTTP adapter boundary.
+
+## NET-7 — HTTP/2 over the verified TLS adapter
+
+The integrator's NET-7 brief adds HTTP/2; integrator decision 6 update `11dd8a8`
+widens ALPN without a new dependency or a certificate/server-name verification
+exception. The earlier PSL and Brotli exceptions were user-approved separately.
+Production TLS prefers `h2`, falls back to `http/1.1` when selected or when ALPN
+is absent, and retains Mozilla roots. The legacy byte-exchange API explicitly
+advertises only HTTP/1.1. No rustls types cross the adapter boundary.
+
+The std-only core implements RFC 9113 framing and a hand-written RFC 7541 HPACK
+codec. Published Appendix C vectors anchor integer, literal, Huffman and dynamic
+index behavior; Appendix A/B numerical tables have a pinned source digest.
+Decoder accepts all literal forms and Huffman strings, rejects EOS/padding,
+overflow, invalid indexes and late/oversized table updates. Encoder uses indexed
+fields and plain literals, inserts/evicts dynamic entries and emits minimum/final
+table size updates; sensitive cookie/authorization fields are never indexed.
+Outbound Huffman encoding is optional and not implemented.
+
+`http2::Client<S: Read + Write>` owns a connection, starts several streams, polls
+incoming frames and retrieves replies independently. Upload chunks rotate across
+streams subject to both connection and stream credit; SETTINGS window changes
+can leave negative stream credit. DATA padding consumes credit. Closed-stream
+DATA still counts at connection level, and closed-stream HEADERS still decode to
+maintain HPACK state, as allowed by RFC 9113 section 5.1. No unbounded tombstone
+set is retained. Continuations cannot interleave. Informational responses,
+trailers, content-length and bodyless response rules are checked. RST_STREAM
+isolates failure; GOAWAY stops new streams and identifies unprocessed requests
+without automatically replaying them. Fatal errors send a best-effort GOAWAY
+and drop the owned transport. A complete response survives NO_ERROR upload reset.
+
+| Resource | Hard ceiling / default |
+| --- | --- |
+| Frame payload | 16 KiB, validated before payload reserve |
+| Compressed header block | 64 KiB across HEADERS/CONTINUATION |
+| Decoded header list | 64 KiB including RFC per-field 32-byte accounting |
+| Dynamic table | 4 KiB in each direction, RFC entry accounting |
+| Concurrent retained streams | 32, further reduced by peer SETTINGS |
+| Encoded body | 32 MiB per stream and 32 MiB aggregate upload/response bytes |
+| Incoming frames | 100,000 default, configurable up to 1,000,000 |
+| Informational responses | 8 per stream |
+
+Caller limits can lower these ceilings. Length/credit/accounting checks precede
+peer-sized payload copies and reserves. Container overhead, allocator rounding,
+TLS internals and a fixed Huffman trie are separate from byte-payload accounting;
+these are bounded protocol structures, not a process-RSS guarantee. Decoded
+content reuses the existing per-layer gzip/deflate/Brotli caller limit. HEAD
+responses do not attempt to decompress the absent body.
+
+The blocking fetch dispatcher creates one connection per fetch; multiplexing is
+exposed through Client but connection pooling is not implemented. h2c, push,
+prioritization, CONNECT, automatic replay, HTTP/3 and asynchronous integration
+remain outside this ticket. Existing Response header strings still require UTF-8.
+The transport uses existing I/O timeouts; this is not an event-loop scheduler.
+
+Authenticated loopback tests use pinned, test-only CA/leaf/key data through an
+opt-in adapter test-support feature. They exercise the production post-ALPN
+fetch dispatch, Brotli body decoding and HTTP/1.1/no-ALPN fallback. Production
+connect still rejects that CA. No verification bypass or new dependency exists.
+`cargo run -p amazing-net --locked --example h2_fetch -- https://nghttp2.org/`
+is a separate public-root TLS interoperability artifact; live site sizes are not
+stable conformance measurements. Deterministic fixture tests are the gate.
+
+Standards: https://www.rfc-editor.org/rfc/rfc9113.html and
+https://www.rfc-editor.org/rfc/rfc7541.html. No broad WPT fetch percentage claimed.
+Final nextest, separate doctest and pinned URL measurements are recorded below.

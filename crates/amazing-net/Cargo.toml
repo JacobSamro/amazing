@@ -9,3 +9,6 @@ rust-version.workspace = true
 [dependencies]
 amazing-net-brotli = { path = "../amazing-net-brotli" }
 amazing-net-tls = { path = "../amazing-net-tls" }
+
+[dev-dependencies]
+amazing-net-tls = { path = "../amazing-net-tls", features = ["test-support"] }

@@ -17,7 +17,7 @@
 //!
 //! Deferred: keep-alive/pipelining, other methods, `Expect: 100-continue`,
 //! obs-fold header lines, bare-LF line endings in
-//! the framing layer (header *values* tolerate them), HTTP/2+.
+//! the framing layer (header *values* tolerate them), HTTP/3.
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -96,22 +96,38 @@ pub(crate) fn get(url: &ParsedUrl, options: &FetchOptions) -> Result<Response, N
             (read_to_eof(&stream, wire_limit)?, false)
         }
         "https" => {
-            let response = amazing_net_tls::exchange(
-                connect_host,
-                port,
-                &request,
-                options.timeout,
-                wire_limit,
-            )
-            .map_err(|error| match error {
-                amazing_net_tls::TlsError::ResponseTooLarge => NetError::ResponseTooLarge,
-                other => NetError::Tls(other.to_string()),
-            })?;
-            (response.bytes, !response.peer_closed_cleanly)
+            let stream = amazing_net_tls::connect(connect_host, port, options.timeout)
+                .map_err(|e| NetError::Tls(e.to_string()))?;
+            return tls_response(stream, url, options, &request);
         }
         other => return Err(NetError::UnsupportedScheme(other.to_string())),
     };
     response_from_raw_with_limit(url, &raw, require_explicit_body_length, body_limit)
+}
+
+/// Shared post-handshake dispatch; loopback TLS proof uses this exact path.
+pub(crate) fn tls_response(
+    stream: amazing_net_tls::TlsStream,
+    url: &ParsedUrl,
+    options: &FetchOptions,
+    request: &[u8],
+) -> Result<Response, NetError> {
+    if stream.protocol() == amazing_net_tls::Protocol::H2 {
+        return crate::http2::fetch(stream, url, options);
+    }
+    let body_limit = options.max_response_bytes.min(MAX_BODY_BYTES);
+    let response = stream
+        .exchange_http1(request, body_limit.saturating_add(MAX_HEADER_BYTES))
+        .map_err(|error| match error {
+            amazing_net_tls::TlsError::ResponseTooLarge => NetError::ResponseTooLarge,
+            other => NetError::Tls(other.to_string()),
+        })?;
+    response_from_raw_with_limit(
+        url,
+        &response.bytes,
+        !response.peer_closed_cleanly,
+        body_limit,
+    )
 }
 
 #[cfg(test)]
@@ -295,7 +311,7 @@ fn content_length(headers: &Headers) -> Result<Option<usize>, NetError> {
 
 /// Validate wire framing before applying transfer codings, then content
 /// codings. Content-Length counts encoded wire bytes, never decoded bytes.
-fn decode_body(
+pub(crate) fn decode_body(
     body: &[u8],
     headers: &Headers,
     require_explicit_length: bool,
@@ -528,8 +544,8 @@ pub(crate) mod tests {
             ..FetchOptions::default()
         };
         crate::fetch::fetch(&format!("http://127.0.0.1:{port}/headers"), &options).unwrap();
-        let request = String::from_utf8(requests.recv_timeout(Duration::from_secs(5)).unwrap())
-            .unwrap();
+        let request =
+            String::from_utf8(requests.recv_timeout(Duration::from_secs(5)).unwrap()).unwrap();
         assert!(request.contains("Cookie: sid=abc\r\n"));
         assert!(!request.contains("Injected"));
         assert!(!request.contains("bad\nvalue"));
