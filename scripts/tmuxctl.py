@@ -87,10 +87,17 @@ LANE_GRANTS = {
 # grant and two lanes must not edit the shell at once.
 # JS-2 adds the amazing-js -> amazing-regex dependency edge, which only cargo
 # can record. Granted for that single edge, verified by diff at merge.
-LANE_GRANTS["js-lang"] = ["Cargo.lock"]
+LANE_GRANTS["js-lang"] = ["Cargo.lock", "scripts/test262.py"]  # JS-3 fixes the runner
 # CSS-3 rewires the driver's stylesheet collection to preserve per-sheet
 # provenance. Granted for the collection and compute call sites only.
-LANE_GRANTS["css"] = ["crates/amazing/src/main.rs"]
+LANE_GRANTS["css"] = [
+    "crates/amazing/src/main.rs",
+    # CSS-3 also needs an ADDITIVE &[Stylesheet] entry point on layout,
+    # whose public API currently takes CSS as &str so provenance cannot
+    # flow through. Additive signature only; no layout behaviour changes.
+    "crates/amazing-layout/src/lib.rs",
+    "crates/amazing/tests/css3_stylesheets.rs",
+]
 LANE_GRANTS["dom-bindings"] += [
     "crates/amazing-html/src/tree.rs",
     "crates/amazing-layout/src/box_tree.rs",
