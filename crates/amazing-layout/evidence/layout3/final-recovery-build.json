@@ -1,0 +1,942 @@
+{
+  "source_manifest_sha256": "fa397a5d34143d7ff87542d7c5b72c9b667971dd8f4406a35ac7a1851eb8a5ab",
+  "image_executable": "C:\\Users\\server\\target\\layout\\layout3-final-recovery-images.exe",
+  "sources_verified_before_build_and_after_every_command": true,
+  "completed_utc": "2026-09-20T19:18:49.8929384Z",
+  "image_executable_sha256": "b698c94417d376c69ffdeee22e65e3ea8d59381d5772fcb1e401c8a9285319a6",
+  "compiler_artifacts": [
+    {
+      "fresh": false,
+      "name": "amazing_common",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+      "log": "layout3-final-recovery-tests.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+      "log": "layout3-final-recovery-tests.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_dom",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+      "log": "layout3-final-recovery-tests.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_html",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+      "log": "layout3-final-recovery-tests.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_css",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout3-final-recovery-tests.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_layout",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+      "log": "layout3-final-recovery-tests.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_layout",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+      "log": "layout3-final-recovery-tests.log"
+    },
+    {
+      "fresh": true,
+      "name": "amazing_dom",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": true,
+      "name": "amazing_common",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": true,
+      "name": "amazing_css",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": true,
+      "name": "amazing_text",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": true,
+      "name": "amazing_html",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": true,
+      "name": "amazing_layout",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": true,
+      "name": "amazing_layout",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net_tls",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net-tls#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_media",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-media#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_regex",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-regex#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "typed_compute",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "color_parity",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "cascade_context",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_media",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-media#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_common",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc_codecs",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-codecs#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net_tls",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net-tls#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_fetch",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-fetch#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_paint",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-paint#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text_provider",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text-provider#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_dom",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_html",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "parsed_url",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text_provider",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text-provider#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "cookies",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-fetch#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc_crypto",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-crypto#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc_codecs",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-codecs#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "policy",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-fetch#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_regex",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-regex#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_fetch",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-fetch#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "transport_url",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "url_wpt",
+      "test_profile": false,
+      "kind": [
+        "example"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_js",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-js#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_css",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_paint",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-paint#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc_crypto",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-crypto#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "render_wpt",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "parse_script",
+      "test_profile": false,
+      "kind": [
+        "example"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-js#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_js",
+      "test_profile": true,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-js#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "phase9_gpu",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "phase5_fetch_parse",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "phase3_layout",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "probe_harness",
+      "test_profile": false,
+      "kind": [
+        "example"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-js#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "phase2_style",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "css3_stylesheets",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "phase6_paint",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "phase5_flex_grid",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "phase9_media",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "https_live",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "phase9_webrtc",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "phase35_flex_grid",
+      "test_profile": true,
+      "kind": [
+        "test"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing",
+      "test_profile": true,
+      "kind": [
+        "bin"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing",
+      "test_profile": false,
+      "kind": [
+        "bin"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-workspace.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_common",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net_tls",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net-tls#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_media",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-media#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_dom",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_regex",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-regex#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_html",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc_codecs",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-codecs#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text_provider",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text-provider#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc_crypto",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-crypto#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_css",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_js",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-js#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_layout",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_paint",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-paint#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing",
+      "test_profile": false,
+      "kind": [
+        "bin"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout3-final-recovery-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_common",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+      "log": "layout3-final-recovery-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_media",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-media#0.0.1",
+      "log": "layout3-final-recovery-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+      "log": "layout3-final-recovery-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_dom",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+      "log": "layout3-final-recovery-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_html",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+      "log": "layout3-final-recovery-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_css",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout3-final-recovery-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_image",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-image#0.0.1",
+      "log": "layout3-final-recovery-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_layout",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+      "log": "layout3-final-recovery-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_paint",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-paint#0.0.1",
+      "log": "layout3-final-recovery-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "render_reftest",
+      "test_profile": false,
+      "kind": [
+        "example"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-image#0.0.1",
+      "log": "layout3-final-recovery-images-build.log"
+    }
+  ],
+  "verified_source_files": 175,
+  "started_utc": "2026-09-20T19:17:37.3626772Z",
+  "executable": "C:\\Users\\server\\target\\layout\\layout3-final-recovery.exe",
+  "incremental_compilation": false,
+  "executable_sha256": "5af1198a4c4f9213ecc9ed39289402939087382013f14c6db9080f584d86977a",
+  "phase": "final-recovery",
+  "first_party_fingerprints_and_artifacts_removed": true,
+  "logs": {
+    "layout3-final-recovery-workspace.log": "856d36c3c6a174c265ff7eb3af880a4864352f5ec3fe62073ac1552ab7431898",
+    "layout3-final-recovery-tests.log": "222f6ec05ed387bf4ee19805160a2acad9fb9317a504e48a9a73cce627050497",
+    "layout3-final-recovery-images-build.log": "93d8e9b91f8b833535f3cded5e24c716c566fb6182cff26ae28e3f997a2a91f8",
+    "layout3-final-recovery-renderer.log": "7ef1b1c4f321cf7e2f4756ac4c2c38bd6dce39a029096d8780d801e4e61d9aca"
+  }
+}
