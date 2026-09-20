@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "kind": "focused-unit-tests-not-wpt",
-  "engine_revision": "41ac0c7c7c6ac0e125aa4caed2598a02e753a971",
+  "engine_revision": "381c73ac13336b33b11f3bf3234d901d344b1617",
   "repeat_runs": 2,
   "unit": {
-    "passed": 81,
+    "passed": 82,
     "failed": 0,
     "ignored": 0
   },
@@ -13,7 +13,7 @@
     "failed": 0,
     "ignored": 0
   },
-  "canonical_test_lines_sha256": "55d66df06d32f14b882f374f83028e986f3e03bbf2f5892825afaae282b3efee",
+  "canonical_test_lines_sha256": "2d1239223728c53fd16cde8267ed6d5796adb48dbabe95c9301704ae87a253cb",
   "source_hashes": [
     {
       "path": "crates/amazing-html/Cargo.toml",
@@ -37,15 +37,75 @@
     },
     {
       "path": "crates/amazing-html/src/tree.rs",
-      "sha256": "e2da6e73b5d3a3eaa7b08cdcac4c96763642faece84b52d725a06a67a2a382a6"
+      "sha256": "65f398c05b563efd3668f6824cde174f57c68826cdc1a6c471842502c175887f"
     },
     {
       "path": "crates/amazing-html/src/xml.rs",
-      "sha256": "7297ed1b6dc207b8e41f5e3b8152eb3dba0e1c451b2e083df04713f7f4898d4d"
+      "sha256": "29796bfb74668da99846a08b857d973008be0d0c8eecce19cf7e9cec0835c19f"
     },
     {
       "path": "crates/amazing-html/src/xml_tests.rs",
-      "sha256": "9c737f66a109aa541b50ed31db51f51c10ef3541b3450f23f857e30fc941482a"
+      "sha256": "6f57eab7638be3d4c3ad22336820757f8dca0008b4659275bc11cdbf61afba67"
+    },
+    {
+      "path": "crates/amazing-dom/Cargo.toml",
+      "sha256": "6e857c787c0d795c15ea5dd62d4e4173da2c947462c32a7c2b4f0a00a397e2f2"
+    },
+    {
+      "path": "crates/amazing-dom/src/events.rs",
+      "sha256": "37919ca08f856ce685cab0be252fba1e53dec5372106f14d3cd65e48183421fd"
+    },
+    {
+      "path": "crates/amazing-dom/src/events_tests.rs",
+      "sha256": "5d70d1a76e120f879614f1dff1a12b985cc8a99a231e910fec7e1b122d570630"
+    },
+    {
+      "path": "crates/amazing-dom/src/lib.rs",
+      "sha256": "4914b2be3d6510377869963f2b1614cb2e72a6883e4ecab8dbc9d444f9bca1f3"
+    },
+    {
+      "path": "crates/amazing-dom/src/mutation.rs",
+      "sha256": "35e0cfcfcfe2117c752a9fb6a3157ba26cc879f434a736cb6d5c8e0d83c69cbb"
+    },
+    {
+      "path": "crates/amazing-dom/src/mutation_tests.rs",
+      "sha256": "c8698f30b4e68eca614debe7c02f61b53591f9f965c20ba8a719e40d91132bb9"
+    },
+    {
+      "path": "crates/amazing-dom/src/namespace.rs",
+      "sha256": "3ac81d7d245a7f479c7de378f2650ed1f19143cfe4e4648a8f00774c77e30296"
+    },
+    {
+      "path": "crates/amazing-dom/src/namespace_tests.rs",
+      "sha256": "c579a5d0668f833e7d9767f6d1c28a0c0c5929c50023565c14480ca8d2101a47"
+    },
+    {
+      "path": "crates/amazing-dom/src/range.rs",
+      "sha256": "07f036ff491b4dbc9ebf845ade608158604a939436c58383fd5cb1a7bb8f9a2b"
+    },
+    {
+      "path": "crates/amazing-dom/src/range_contents.rs",
+      "sha256": "046fd3ac1c9ee9ae4010a62717ae91b531af541b598a38f24c715b68d7651590"
+    },
+    {
+      "path": "crates/amazing-dom/src/range_tests.rs",
+      "sha256": "72d19c791b9f37da88233c01a68c64f236248c603bb4bdd9cf71c211029dc630"
+    },
+    {
+      "path": "crates/amazing-dom/src/traversal.rs",
+      "sha256": "bdb655ceb3bd1177c1ec878ea991e81ea0f5c75d7cf195ed948ca357d32017be"
+    },
+    {
+      "path": "crates/amazing-dom/src/traversal_tests.rs",
+      "sha256": "7ac4a261488f53586956ac1711bea349ba78f68e0dd109ed4b20cde9219f77ab"
+    },
+    {
+      "path": "crates/amazing-dom/src/tree.rs",
+      "sha256": "582c98895b1f861afd7c03caa452fe284f67b8c597e099047c939430cb46c2df"
+    },
+    {
+      "path": "crates/amazing-dom/src/tree_tests.rs",
+      "sha256": "2f736402f145fb67a0e46aa43f1fbcebdd56e094a1b16519c98a098a574d42ca"
     }
   ]
 }

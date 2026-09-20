@@ -37,12 +37,14 @@
 
 ### Evidence so far
 
-On win-001, refreshed HTML lane, `cargo test -p amazing-html --locked`:
-81 unit passed / 0 failed / 0 ignored and 1 doctest passed. This includes 18
-new focused XML tests (hand-authored, **not** a WPT pass rate). Two identical focused runs passed at `41ac0c7`, rebased on `156cc13`, after
-refresh/re-sync. All 8 HTML crate file SHA256s matched. Canonical results and
-source hashes: `tests/wpt-html/unit-results.json`. DOM integration and the
-workspace gate remain pending.
+On win-001 at `381c73a`, rebased onto namespace merge `c8c8264`, refreshed
+and re-synced HTML tree: two runs each **82 unit passed / 0 failed / 0 ignored**
+and **1 doctest passed / 0 failed / 0 ignored**. All 19 XML tests now assert the
+real DOM rather than a recording sink. The new DOM identity test proves null
+namespace, arbitrary URI, prefix, local name, and qualified name preservation.
+All 23 HTML/DOM crate source-file hashes matched the Mac. Canonical results and
+source hashes are in `tests/wpt-html/unit-results.json`. The workspace and
+render integration gates remain pending.
 
 Parser-only cascade XML diagnostic: 12 parsed / 0 error / 0 timeout /
 2 unsupported out of 14 distinct documents, two identical runs. Per-source
@@ -62,7 +64,8 @@ pending driver dispatch and harness routing; no measured improvement claimed.
 ### Exit checks
 
 - [x] Fatal well-formedness/entity/CDATA/namespace tests on Windows.
-- [ ] DOM-owned arbitrary/null namespaces and qualified attributes integrated.
+- [x] DOM-owned arbitrary/null element namespaces and prefix/local identity.
+- [ ] Qualified attribute-prefix preservation follow-up (URI/local lookup works).
 - [ ] Driver XML dispatch and removal of WPT XML exclusions (owner changes).
 - [ ] Two stable cascade runs, before/after counts and hashes.
 - [ ] Fresh full workspace gate, no regressions.
@@ -90,7 +93,9 @@ that mismatch. The HTML scope arm is now upstream.
 The temporary `XmlTreeSink` and `parse_xml_into` are removed. Direct DOM
 construction via `create_element_ns` passes **82 unit tests / 0 failures / 0
 ignored, plus 1 doctest** on win-001, including 19 XML tests that assert actual
-DOM identity. Repeat evidence is being refreshed for this source revision.
+DOM identity. Two identical runs and current source hashes are recorded in
+`tests/wpt-html/unit-results.json`; the parser-only corpus also repeated
+identically with the same 12/0/0/2 counts and stable projection hash.
 
 Remaining routed work: qualified attribute-prefix preservation, parser-safe
 creation of a valid unprefixed XML element named xmlns, driver XML dispatch,
