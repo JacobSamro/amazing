@@ -167,6 +167,14 @@ function Invoke-FixedRender {
     $stderr = $process.StandardError.ReadToEnd()
     $stdout | Set-Content -LiteralPath "$LogStem.stdout.txt"
     $stderr | Set-Content -LiteralPath "$LogStem.stderr.txt"
+    # Driver protocol: XML document errors are distinct from unimplemented XML
+    # features and ordinary renderer/JavaScript/process failures.
+    if ($process.ExitCode -eq 2 -or $process.ExitCode -eq 3) {
+        return [pscustomobject]@{
+            classification = $(if ($process.ExitCode -eq 3) { "unsupported" } else { "error" })
+            detail = $stderr.Trim()
+        }
+    }
     if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
         return [pscustomobject]@{
             classification = "crash"
@@ -393,7 +401,11 @@ foreach ($test in @($manifest.tests)) {
                     $referenceRun = Invoke-FixedRender $reftest.reference_path $referenceOutputPath (Join-Path $testDirectory "reference")
                     if ($referenceRun.classification -ne "rendered") {
                         $classification = $referenceRun.classification
-                        $result = [ordered]@{ id = $id; classification = $classification; expected = $expected; detail = "reference: $($referenceRun.detail)" }
+                        $result = [ordered]@{
+                            id = $id; classification = $classification; expected = $expected
+                            actual_sha256 = (Get-FileHash $actualPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                            detail = "reference: $($referenceRun.detail)"
+                        }
                     } else {
                         $fuzzy = Get-FuzzyLimits $testPath
                         $comparison = Compare-Ppm $actualPath $referenceOutputPath $diffPath $fuzzy.max_difference $fuzzy.total_pixels
@@ -424,7 +436,7 @@ foreach ($test in @($manifest.tests)) {
     Write-Host ("{0,-10} {1}" -f $classification.ToUpperInvariant(), $id)
 }
 
-$counts = [ordered]@{ pass = 0; mismatch = 0; timeout = 0; unsupported = 0; crash = 0 }
+$counts = [ordered]@{ pass = 0; mismatch = 0; error = 0; timeout = 0; unsupported = 0; crash = 0 }
 foreach ($result in $results) { $counts[$result.classification]++ }
 $report = [ordered]@{
     schema = 1
@@ -440,6 +452,6 @@ $report = [ordered]@{
 $reportPath = Join-Path $runDirectory "report.json"
 $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportPath -Encoding UTF8
 Write-Host "Report: $reportPath"
-Write-Host ("Counts: pass={0} mismatch={1} timeout={2} unsupported={3} crash={4}; unexpected={5}" -f
-    $counts.pass, $counts.mismatch, $counts.timeout, $counts.unsupported, $counts.crash, $unexpected)
+Write-Host ("Counts: pass={0} mismatch={1} error={2} timeout={3} unsupported={4} crash={5}; unexpected={6}" -f
+    $counts.pass, $counts.mismatch, $counts.error, $counts.timeout, $counts.unsupported, $counts.crash, $unexpected)
 if ($unexpected -ne 0) { exit 1 }

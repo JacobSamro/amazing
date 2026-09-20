@@ -2,6 +2,7 @@
 use std::{cell::RefCell, rc::Rc, process::ExitCode};
 use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text}, gui};
 use super::{parse::read_source, js::execute_inline_scripts};
+use crate::document::{DocumentKind, PageError, parse_document};
 /// Phase 2 demo artifact: compute styles for an HTML page.
 ///
 /// Stylesheets come from every `<style>` element in document order plus any
@@ -24,7 +25,13 @@ pub(crate) fn cmd_style(args: &[String]) -> ExitCode {
         Ok(s) => s,
         Err(code) => return code,
     };
-    let dom = amazing_html::parse(&html);
+    let dom = match parse_document(&html, html_path, None) {
+        Ok(document) => document.dom,
+        Err(error) => {
+            eprintln!("amazing style: {error}");
+            return error.exit_code();
+        }
+    };
 
     // Gather author stylesheets: inline <style> elements first.
     let mut sources = Vec::new();
@@ -95,7 +102,13 @@ pub(crate) fn cmd_layout(args: &[String]) -> ExitCode {
         Ok(s) => s,
         Err(code) => return code,
     };
-    let dom = amazing_html::parse(&html);
+    let dom = match parse_document(&html, html_path, None) {
+        Ok(document) => document.dom,
+        Err(error) => {
+            eprintln!("amazing layout: {error}");
+            return error.exit_code();
+        }
+    };
 
     // Author CSS: <style> elements + extra files (same policy as `style`).
     let mut sources = Vec::new();
@@ -152,7 +165,7 @@ pub(crate) fn cmd_render(args: &[String]) -> ExitCode {
         Ok(surface) => surface,
         Err(error) => {
             eprintln!("amazing render: {error}");
-            return ExitCode::FAILURE;
+            return error.exit_code();
         }
     };
 
@@ -181,11 +194,16 @@ pub(crate) fn render_surface(
     width: f32,
     fixed_height: Option<u32>,
     extra_css: &str,
-) -> Result<amazing_paint::Surface, String> {
+) -> Result<amazing_paint::Surface, PageError> {
+    let document = parse_document(html, html_path, None)?;
+    document.require_static_xml()?;
+    let scripting = document.kind == DocumentKind::Html;
     let host = Rc::new(RefCell::new(BrowserDomHost {
-        dom: amazing_html::parse(html),
+        dom: document.dom,
     }));
-    execute_inline_scripts(&host, html_path)?;
+    if scripting {
+        execute_inline_scripts(&host, html_path)?;
+    }
 
     let mut sources = Vec::new();
     let dom = host.borrow();

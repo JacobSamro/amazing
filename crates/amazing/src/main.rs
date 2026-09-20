@@ -4,6 +4,7 @@ use std::process::ExitCode;
 mod browser_peer;
 mod cmd;
 mod dom_host;
+mod document;
 mod gpu;
 mod gui;
 mod page;
