@@ -812,7 +812,15 @@ def cmd_log(args) -> int:
 def cmd_questions(args) -> int:
     """Collect every open cross-lane request and decision the fleet is waiting on."""
     found = False
-    for lane in lanes_or_all(args.targets):
+    lanes = lanes_or_all(args.targets)
+    # Report-only integrators have no tmux registry entry. Their questions must
+    # still reach the daily dashboard; do not register a fictitious session.
+    if not args.targets:
+        lanes = list(dict.fromkeys(lanes + [
+            path.parent.name for path in sorted(AGENTS_DIR.glob("*/questions.md"))
+            if (path.parent / "status.json").is_file()
+        ]))
+    for lane in lanes:
         items = open_questions(lane)
         if items:
             found = True
