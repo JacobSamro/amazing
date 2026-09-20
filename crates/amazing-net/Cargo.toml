@@ -1,6 +1,6 @@
 [package]
 name = "amazing-net"
-description = "Hand-written HTTP/1.1 client with isolated vetted TLS, URL parsing, and file:// fetching"
+description = "Hand-written HTTP/1.1 and HTTP/2 client with isolated vetted TLS, URL parsing, and file:// fetching"
 edition = "2021"
 version.workspace = true
 license.workspace = true
@@ -9,3 +9,6 @@ rust-version.workspace = true
 [dependencies]
 amazing-net-brotli = { path = "../amazing-net-brotli" }
 amazing-net-tls = { path = "../amazing-net-tls" }
+
+[dev-dependencies]
+amazing-net-tls = { path = "../amazing-net-tls", features = ["test-support"] }

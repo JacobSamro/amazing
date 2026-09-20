@@ -23,7 +23,7 @@
 //! implementation as infrastructure — the same call every serious
 //! from-scratch engine makes — rather than hand-roll one. HTTPS crosses the
 //! safe `amazing-net-tls` adapter, which pins rustls, verifies certificates
-//! against Mozilla roots, and advertises only HTTP/1.1 over ALPN. Provider
+//! against Mozilla roots, and negotiates h2 with HTTP/1.1 fallback. Provider
 //! types never cross into this crate's public API.
 //!
 //! # Implemented vs. deferred (deliberate, documented)
@@ -34,8 +34,9 @@
 //! - status line + header parsing (case-insensitive names, repeated headers)
 //! - body framing: `Content-Length`, `Transfer-Encoding: chunked` (with
 //!   trailer section), and read-to-EOF when neither is present
-//! - bounded gzip and zlib-wrapped deflate content/transfer decoding, advertised
-//!   as `Accept-Encoding: gzip, deflate`; checksum and framing validation
+//! - bounded gzip, zlib-wrapped deflate and isolated Brotli decoding, advertised
+//!   as `Accept-Encoding: gzip, deflate, br`; checksum and framing validation
+//! - negotiated HTTP/2, HPACK and bounded multiplexed streams
 //! - redirect following (301/302/303/307/308) with `Location` resolved
 //!   against the response URL, capped at 5 hops
 //! - configurable socket timeout ([`FetchOptions::timeout`], default 10 s)
@@ -48,9 +49,8 @@
 //! Deferred (each is its own later work item, not an oversight):
 //! - keep-alive / connection pooling (v1 sends `Connection: close`)
 //! - methods other than GET/POST
-//! - brotli content coding (requires a project-approved adapter)
 //! - cookies, caching, conditional requests, authentication
-//! - HTTP/2+ (deferred indefinitely per the Phase 0 scope note)
+//! - HTTP/3, h2c, server push and cross-fetch HTTP/2 connection pooling
 //! - obsolete line folding and full obs-fold handling in headers
 //! - IDNA/punycode: Unicode special hosts fail via the deferred provider seam
 
@@ -58,6 +58,7 @@ mod coding;
 pub mod fetch;
 pub mod headers;
 pub mod http;
+pub mod http2;
 pub mod response;
 pub mod url;
 

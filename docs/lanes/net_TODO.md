@@ -776,3 +776,130 @@ results.json, clean/workspace/lane/WPT logs for both runs, source manifests,
 PSL regeneration and feature inspection. No Test262, WPT fetch/cookie percentage,
 UI proof or external-page compatibility rate is claimed. No shell/persistence
 migration is performed. NET-6 ends at this provider and HTTP adapter boundary.
+
+## NET-7 — HTTP/2 over the verified TLS adapter
+
+The integrator's NET-7 brief adds HTTP/2; integrator decision 6 update `11dd8a8`
+widens ALPN without a new dependency or a certificate/server-name verification
+exception. The earlier PSL and Brotli exceptions were user-approved separately.
+Production TLS prefers `h2`, falls back to `http/1.1` when selected or when ALPN
+is absent, and retains Mozilla roots. The legacy byte-exchange API explicitly
+advertises only HTTP/1.1. No rustls types cross the adapter boundary.
+
+The std-only core implements RFC 9113 framing and a hand-written RFC 7541 HPACK
+codec. Published Appendix C vectors anchor integer, literal, Huffman and dynamic
+index behavior; Appendix A/B numerical tables have a pinned source digest.
+Decoder accepts all literal forms and Huffman strings, rejects EOS/padding,
+overflow, invalid indexes and late/oversized table updates. Acknowledging a
+smaller advertised table limit requires the peer's HPACK size update before
+its next fields. Response TE is rejected; request TE permits only trailers.
+Encoder uses indexed fields and plain literals, inserts/evicts dynamic entries
+and emits minimum/final
+table size updates; sensitive cookie/authorization fields are never indexed.
+Outbound Huffman encoding is optional and not implemented.
+
+`http2::Client<S: Read + Write>` owns a connection, starts several streams, polls
+incoming frames and retrieves replies independently. Upload chunks rotate across
+streams subject to both connection and stream credit; SETTINGS window changes
+can leave negative stream credit. DATA padding consumes credit. Closed-stream
+DATA still counts at connection level, and closed-stream HEADERS still decode to
+maintain HPACK state, as allowed by RFC 9113 section 5.1. No unbounded tombstone
+set is retained. Continuations cannot interleave. Informational responses,
+trailers, content-length and bodyless response rules are checked. RST_STREAM
+isolates failure; GOAWAY stops new streams and identifies unprocessed requests
+without automatically replaying them. Fatal errors send a best-effort GOAWAY
+and drop the owned transport. A complete response survives NO_ERROR upload reset.
+
+| Resource | Hard ceiling / default |
+| --- | --- |
+| Frame payload | 16 KiB, validated before payload reserve |
+| Compressed header block | 64 KiB across HEADERS/CONTINUATION |
+| Decoded header list | 64 KiB including RFC per-field 32-byte accounting |
+| Dynamic table | 4 KiB in each direction, RFC entry accounting |
+| Concurrent retained streams | 32, further reduced by peer SETTINGS |
+| Encoded body | 32 MiB per stream and 32 MiB aggregate upload/response bytes |
+| Incoming frames | 100,000 default, configurable up to 1,000,000 |
+| Informational responses | 8 per stream |
+
+Caller limits can lower these ceilings. Length/credit/accounting checks precede
+peer-sized payload copies and reserves. Container overhead, allocator rounding,
+TLS internals and a fixed Huffman trie are separate from byte-payload accounting;
+these are bounded protocol structures, not a process-RSS guarantee. Decoded
+content reuses the existing per-layer gzip/deflate/Brotli caller limit. HEAD
+responses do not attempt to decompress the absent body.
+
+The blocking fetch dispatcher creates one connection per fetch; multiplexing is
+exposed through Client but connection pooling is not implemented. h2c, push,
+prioritization, CONNECT, automatic replay, HTTP/3 and asynchronous integration
+remain outside this ticket. Existing Response header strings still require UTF-8.
+The transport uses existing I/O timeouts; this is not an event-loop scheduler.
+
+Authenticated loopback tests use pinned, test-only CA/leaf/key data through an
+opt-in adapter test-support feature. They exercise the production post-ALPN
+fetch dispatch, Brotli body decoding and HTTP/1.1/no-ALPN fallback. Production
+connect still rejects that CA. No verification bypass or new dependency exists.
+`cargo run -p amazing-net --locked --example h2_fetch -- https://nghttp2.org/`
+is a separate public-root TLS interoperability artifact; live site sizes are not
+stable conformance measurements. Deterministic fixture tests are the gate.
+
+Standards: https://www.rfc-editor.org/rfc/rfc9113.html and
+https://www.rfc-editor.org/rfc/rfc7541.html. No broad WPT fetch percentage claimed.
+Final nextest, separate doctest and pinned URL measurements are recorded below.
+
+### NET-7 final evidence
+
+Rebased onto `11dd8a8`, refreshed net alone with the corrected script (root lock
+`E4D68B10`), then re-synced owned files. All builds/tests ran on win-001 with
+`CARGO_TARGET_DIR=C:\Users\server\target\net` and incremental compilation off.
+Each final run cleaned and rebuilt all 19 first-party workspace packages.
+
+| Gate | Run 1 | Run 2 |
+| --- | --- | --- |
+| Workspace nextest | 1239 passed / 0 failed / 3 skipped | identical |
+| Workspace doctests, separate `cargo test --doc` | 2 passed / 0 failed / 0 ignored | identical |
+| Lane nextest | 244 passed / 0 failed / 0 skipped | identical |
+| Lane doctests, separate `cargo test --doc` | 0 tests | identical |
+| Pinned URL WPT | 864 passed / 0 failed / 0 timeout / 32 unsupported | identical |
+
+The 213-test lane baseline is preserved: net now has 143 tests (114 + 29 HTTP/2),
+TLS 4 (2 + 2), Fetch 87 and Brotli 10. Focused tests include RFC HPACK vectors,
+malformed frames, allocation/stream limits, multiplexing, independent credit,
+window shrink/overflow, GOAWAY/RST, late closed frames, transport teardown,
+HPACK acknowledgement, TE validation, HEAD and verified TLS protocol dispatch.
+The authenticated h2/fallback fixture also passed five explicit repeated runs.
+
+The second workspace nextest run reported **six LEAK notices** in existing
+`amazing::phase2_style` and `amazing::phase5_flex_grid` integration tests; all
+assertions passed and nextest returned success. No NET-7 test received a notice.
+Run 1 had none. This is recorded and routed to the integrator, not attributed to
+an established cause or silently suppressed. The evidence parser was corrected
+to handle `passed (6 leaky), 3 skipped`; existing successful logs were reconciled
+on Windows without changing/re-running the tested source. Per-run notices are
+retained in `runner-notices.json`.
+
+An earlier, superseded lane run caught Windows TCP-reset timing during fixture
+teardown. The fixture now waits for the client's final connection WINDOW_UPDATE
+before closing; no sleep or automatic test retry masks the issue. Neither that
+run nor pre-review source counts form part of the final evidence above.
+
+All 367 source/input hashes match locally and on Windows before/after both final
+runs. Manifest SHA-256:
+`5799d5bc8736fb7015623fbf318b7a514eb0f369d30ac44e95e811af7af4652b`.
+This final decision-map-only edit is outside the source/input manifest.
+URL corpus revision `c48d58747e1f211527fb695fd60548a997fae617`, 896 objects,
+normalized stdout SHA-256 in both runs:
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+TLS/Brotli fixture hashes, PSL regeneration and decoder feature checks passed.
+
+Public-root TLS interoperability against `https://nghttp2.org/` returned
+`protocol=h2 status=200 body_bytes=6324 headers=14 trailers=0`, including after
+both clean gates. The live body size is one measured observation, not a pinned
+corpus. Runnable artifacts in `C:\Users\server\target\net\debug\examples\`:
+`h2_fetch.exe` and `url_wpt.exe`.
+
+Canonical evidence: integrator checkout `.agents/net/net7-final-evidence/`
+(results, both nextest/doc/lane/URL logs, source manifests, fixture/feature
+checks, runner notices and finalization). Recipe/input files: `net7_gate.py`,
+`net7-inputs.json`; `net7_finalize.py` records the summary-parser reconciliation
+and final public fetch/hash audit. Superseded logs are retained separately.
+NET-7 stops at this protocol/transport boundary; no next ticket was started.
