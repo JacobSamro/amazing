@@ -422,3 +422,15 @@ fn table_direct_row_span_stops_before_an_explicit_group() {
     near(c[2].border_box.x, 0.0);
     near(c[2].border_box.y, 20.0);
 }
+
+#[test]
+fn table_rowspan_explicit_height_is_a_minimum_across_owned_rows() {
+    let b = layout(
+        "<body><table><tr><td rowspan=2 style='height:80px'>A</td><td>B</td></tr><tr><td>C</td></tr></table>",
+        "td{vertical-align:top}table{border-spacing:0}",
+        false,
+    );
+    let c = collect(&b, Role::Cell);
+    near(c[0].border_box.h, 80.0);
+    near(c[1].border_box.h + c[2].border_box.h, 80.0);
+}

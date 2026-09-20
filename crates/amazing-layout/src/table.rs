@@ -421,6 +421,7 @@ pub(crate) fn layout(
     let mut heights = vec![0.0f32; g.rows.len()];
     let mut baselines = heights.clone();
     let mut natural = Vec::new();
+    let mut minimum_heights = Vec::new();
     let mut cell_baselines = Vec::new();
     for (r, row) in g.rows.iter().enumerate() {
         heights[r] = length(at(b, &row.path), "height", 0.0).unwrap_or(0.0);
@@ -481,6 +482,13 @@ pub(crate) fn layout(
                     + cell.border.bottom,
             );
         }
+        minimum_heights.push(
+            minimum_height
+                + cell.padding.top
+                + cell.padding.bottom
+                + cell.border.top
+                + cell.border.bottom,
+        );
         natural.push(h);
         cell_baselines.push(baseline);
     }
@@ -498,7 +506,7 @@ pub(crate) fn layout(
             &mut heights,
             c.row,
             c.rows,
-            (natural[i] + adjustment - sy * (c.rows - 1) as f32).max(0.0),
+            ((natural[i] + adjustment).max(minimum_heights[i]) - sy * (c.rows - 1) as f32).max(0.0),
         );
     }
     let desired = length(b, "height", b.containing_block_height.unwrap_or(0.0)).unwrap_or(0.0);
