@@ -1,6 +1,18 @@
 # HTML lane decision map
 
-## HTML-1 — parser ready; render integration pending
+## HTML-1 — checkpointed for daily stand-down; render integration pending
+
+Parser source `868d296` and evidence `8f15980` landed through `c4b6757`;
+Mac lane ancestry was verified and lane/html rebased cleanly to that merge.
+IA-1 was subsequently reported merged as `9bf1224`, but its authoritative
+checks are **UNRUN**; no gate was active. IA XML dispatch and the integrated
+cascade boundary remain pending owner confirmation. No new parser ticket.
+
+Daily stand-down: no SSH/SCP until the primary recovery broadcast and no lane
+work until resumed. HTML Windows source tree AND target reservation have been
+explicitly released; no HTML REFRESH-HOLD remains. Coordinate a new reservation
+before any future Windows gate. The exact restart procedure is recorded in the
+shared HTML report; first read current primary/co-integrator/IA status locally.
 
 Implementation gate revision: `868d296`, based on `origin/dev` `11dd8a8`.
 DOM expanded-name APIs were verified in `74e3c50` before adoption. The earlier
@@ -37,7 +49,16 @@ Both namespace merge issues and all DOM seam requests are now resolved.
 - References: [XML 1.0 Fifth Edition](https://www.w3.org/TR/xml/) and
   [Namespaces in XML 1.0 Third Edition](https://www.w3.org/TR/xml-names/).
 
-### Measured Windows evidence
+### Historical Windows evidence — predates the SSH outage
+
+No build or test was run by this resumed HTML agent. The measurements below
+predate the fleet SSH outage and are not current integrated-head evidence.
+Co-integrator separately reported authoritative `c4b6757` workspace nextest
+**1229 passed / 0 failed / 3 skipped**, explicit workspace doctests **2 passed /
+0 failed**, and **193 tracked Rust/manifest/lock hashes** matching before and
+after, with incremental disabled after the HTML-only refresh. That reported
+pre-outage gate is distinct from the source-checkpoint gate below and does not
+validate `9bf1224` or subsequent XML dispatch.
 
 After rebase and source re-sync following the integrator refresh, **370 tracked
 crate/workspace files matched SHA256 before and after the successful gate**.
@@ -77,13 +98,15 @@ companion xhtml-fatal.xhtml must return failure, never a recovered HTML DOM.
 - [ ] Git-free render runner/root mapping and removal of blanket XML exclusions.
 - [ ] Two stable actual cascade before/after render runs and final integrated gate.
 
-Co-integrator owns integration. Its queued IA XML task requires parse_xml on dev,
-so the parser dependency can be staged first without marking HTML-1 complete.
-The XML dispatch follow-up is still queued behind IA-1; current dev has no
-parse_xml driver calls and its render runner still excludes XHTML and invokes
-Git. Those owner changes must land before the final render gate. No server Git,
-no push/PR, no next ticket. Readiness and current owner requests are in the lane's
-status/report/questions files.
+Co-integrator owns integration. The parser dependency has landed; do not request
+its merge again or redo parser implementation. IA-XML was activated after that
+merge and must preserve IA-1 frozen sweeps. Verify the owner's actual landed
+symbols and exact integration revision on resume before claiming dispatch or
+runner completion. After recovery and owner coordination, remaining evidence is
+actual cascade before/after measurement, twice-stable pinned classifications and
+pixel hashes, and final integrated workspace nextest plus separate doctests.
+No server Git, no push/PR, and no next ticket. Historical parser counts are not
+render passes; both external-DTD Unsupported limitations remain.
 
 ## Proposed HTML-2 — strict XML byte input
 
