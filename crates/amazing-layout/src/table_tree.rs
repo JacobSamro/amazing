@@ -87,6 +87,11 @@ fn anonymous(parent: &LayoutBox, role: Role, children: Vec<LayoutBox>) -> Layout
             style.set(name, value);
         }
     }
+    // Anonymous boxes have initial non-inherited values. The legacy margin
+    // resolver treats absent entries as auto, so materialize CSS's initial 0.
+    for name in ["margin-top", "margin-right", "margin-bottom", "margin-left"] {
+        style.set(name, "0");
+    }
     style.set("display", role.display());
     let mut b = LayoutBox::new(
         None,

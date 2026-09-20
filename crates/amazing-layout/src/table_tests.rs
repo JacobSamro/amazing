@@ -59,6 +59,7 @@ fn table_orphan_cells_share_a_row_and_table() {
     assert_eq!(rows.len(), 1);
     assert!(tables[0].node.is_none() && rows[0].node.is_none());
     let cells = collect(&b, Role::Cell);
+    near(cells[0].border_box.x, 0.0);
     near(cells[1].border_box.x - cells[0].border_box.x, 30.0);
 }
 #[test]
