@@ -31,7 +31,7 @@ amazing wpt-harness [--scaffold] <root> <relative-test.html> <width> <height> <t
   dispatch load events and pump engine timers/microtasks.
 - Upstream provides `test`, `async_test`, assertions and lifecycle semantics.
   After its script runs, install native Rust result/completion callbacks and
-  request `setup({output:false, message_events:[]})`. The visual
+  request `setup({output:false})`. The visual
   `/resources/testharnessreport.js` reporter is omitted in favor of these
   callbacks. The upstream harness itself is never rewritten.
 - Native callbacks immediately stream escaped result records to the parent.
@@ -64,11 +64,11 @@ it also runs the explicitly selected three-file `dom/nodes/` baseline twice.
 ## Pending gates
 
 - [x] Finish scaffold verification and record measured artifacts below.
-- [ ] Execute unmodified pinned harness after JS-2; route subsequent engine or
+- [x] Execute unmodified pinned harness after JS-2; route subsequent engine or
   browser-host gaps through lane questions rather than adding substitute APIs.
-- [ ] Known-passing and known-failing **upstream** harness tests.
-- [ ] Repeated upstream classifications with stable hashes.
-- [ ] Full workspace green before final completion/PR.
+- [x] Known-passing and known-failing **upstream** harness tests.
+- [x] Repeated upstream proof classifications with stable hashes.
+- [x] Full workspace green on measured base d8437f3; rebase refresh pending.
 
 First follow-up: rerun the pinned CharacterData selection using the runner
 against JS-2. The initial upstream script was rejected at line 581, column 43,
@@ -310,3 +310,108 @@ Logs and machine-readable totals: main-tree orchestration directory
 `dom-2-source-hashes.json`, and `dom-2-validation.json`. Source modules and
 tests are all below 4,000 lines. DOM-1's accepted scaffold is preserved in a
 separate checkpoint commit; this ticket does not close its upstream gate.
+
+
+## DOM-1 upstream gate and baseline — resumed after JS-2
+
+Integration base: `d8437f3` (JS-2, LAYOUT-2, CSS-2 and RC-2 merged).
+DOM-3 is parked on local `checkpoint/dom-3`; its unmerged code is absent from
+this baseline. The integrator refreshed the Windows lane tree with current
+mtimes and first-party artifact invalidation. Earlier gates do not substitute
+for this fresh run.
+
+Runner integration changes:
+
+- Bind bare Window listener functions to their actual Window receiver; install
+  the top-level `parent`/`top` aliases. Existing JS/native DOM machinery runs
+  the callbacks; no harness assertions or outcomes are implemented in the runner.
+- Disable visual output with the upstream `setup({output:false})` API. Keep
+  default message callbacks: disabling them needs Array.splice, which the
+  current engine lacks. This is runner configuration, not an upstream edit.
+- Replace the visual reporter with native callbacks for both absolute and
+  relative reporter URLs. All executed test and harness sources still require
+  exact pinned git-object bytes.
+
+`measure-wpt-dom.py` first runs two unmodified upstream self-tests twice:
+`resources/test/tests/functional/order.html` (2 PASS), and
+`resources/test/tests/functional/assert-array-equals.html` (2 PASS, 14 intentional
+FAIL). It compares every subtest name/status against the upstream embedded
+`expected` JSON, requires harness status OK, checks file status and exit code,
+and requires repeat outcome hashes to agree. Assertion diagnostic strings are
+retained but not asserted equal to upstream expectations: current JS string
+replacement does not fully format the harness's messages.
+
+The measured unit is **test source files, not expanded WPT URLs**. Inventory
+comes from pinned tracked `dom/` paths: markup loading external testharness.js
+and `.any.js`/`.window.js`/`.worker.js` sources, excluding resources/support.
+Selection includes 627 sources; 192 other paths are excluded with recorded
+reasons. Of those selected, 495 are eligible for execution. The other 132
+require generated JS wrappers (64), XML/SVG parsing (55), URL variants (8),
+server template substitution (3), or HTTPS origins (2). Unsupported sources
+remain in the file denominator and have zero fabricated subtests. Script
+scheduling restrictions can also produce runtime `unsupported` results.
+
+Normal parent deadlines are 10000ms; `<meta name=timeout content=long>` selects
+60000ms. Viewport is 800×600. Each file has a fresh process; three execute at a
+time. JSONL retains each actual callback, status, name and message, including
+callbacks completed before a later error or timeout. Registered-subtest totals
+do not estimate tests that never registered. Outcome hashes include all file
+and subtest identities/statuses/counts; raw JSONL hashes also retain diagnostics.
+
+Reproduce on win-001 after building the matching runner:
+
+```powershell
+$env:CARGO_TARGET_DIR='C:\Users\server\target\dom-bindings'
+python crates/amazing/src/cmd/measure-wpt-dom.py `
+  --executable C:/Users/server/target/dom-bindings/debug/amazing.exe `
+  --wpt-root C:/Users/server/target/dom-bindings-wpt `
+  --output C:/Users/server/target/dom-bindings/dom-1-upstream --jobs 3
+```
+
+Do not rebuild `amazing.exe` concurrently with this measurement: Windows locks
+the running executable. Run workspace tests sequentially after the runner exits.
+The upstream harness SHA-256 is
+`d2399236c2a09c429804ff2299ad6629e17e2b53f17a74dd341e936adb11ae3e`.
+Proof raw JSONL SHA-256 (both runs):
+`fda888792ad20e12b69ab4909e69896b98916b170c7ecf259cd79854ebe404bd`.
+Proof outcome SHA-256 (both runs):
+`955a95d1fd7db2790c52d61aeddc9019c5840a4825a6cfb11722bb6e499409c2`.
+Measured baseline on d8437f3, identical in both runs:
+
+| Unit | Pass | Fail | Timeout | Error | Unsupported / notrun |
+|---|---:|---:|---:|---:|---:|
+| Source files | 2 | 241 | 30 | 221 | 133 unsupported |
+| Registered subtests | 83 | 2584 | 0 | 0 | 0 notrun |
+
+Two passing source files: `dom/events/event-disabled-dynamic.html` and
+`dom/nodes/getElementsByClassName-empty-set.html`. Raw JSONL SHA-256 (both runs):
+`3601e251023d0f34e0668c7e9b8d1b24df1fbca43391e0cff123ab51ee719f4c`.
+Outcome SHA-256 (both runs):
+`327f8456d54edf7b306759439ffda04763a1f6c0ffc705ebdb7d8bc2cf0aa4d4`.
+Selection SHA-256:
+`9787de028efe5dc83f491ce2a818e2a549b4a07a236e6538c1e6165bb437b0b5`.
+Measured executable SHA-256:
+`ccc9cef3f2b806f42b575d7594f9b49746c7e6890b164ae5a74f5a6078212dd9`.
+159 Rust source/manifests/measurement-script files matched Mac. Full Windows
+workspace: 992 passed, zero failed, three existing ignored across 52 targets.
+A prior concurrent build hit Windows' executable lock before testing; the
+successful workspace gate ran sequentially after measurement.
+
+The earlier three CharacterData probes went from three harness-load errors and
+zero registered subtests to three completed failing files: appendData 14 FAIL,
+data 16 FAIL, deleteData 18 FAIL. This is measurement infrastructure progress,
+not a claimed DOM implementation improvement.
+
+The largest error group is 76 testdriver.js parse errors (2451:27, `subscribe`);
+30 additional files fail in dom/common.js object-to-primitive conversion. These
+are measured follow-up inputs for JS/binding work, not hidden exclusions.
+Module/async/defer scheduling adds one runtime-unsupported source to the 132
+inventory-unsupported sources. No overall expanded-WPT-URL pass rate is claimed.
+
+Durable evidence lives in `crates/amazing/src/cmd/wpt_harness_results/`:
+summary, one complete baseline JSONL (the second is byte-identical), upstream
+proof JSONL, and selected/excluded source inventory JSONL. Full two-run files,
+logs and original selection.json also live in `.agents/dom-bindings/dom-1-upstream/`
+and `C:/Users/server/target/dom-bindings/dom-1-upstream/`; the latter includes
+the preserved measured `amazing.exe`. Scaffolding remains separate and earns
+zero WPT credit.

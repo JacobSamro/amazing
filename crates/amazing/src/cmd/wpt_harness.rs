@@ -318,6 +318,10 @@ fn execute(options: &Options) -> Result<(), String> {
     js.global_env
         .declare_var("self", global)
         .map_err(|e| e.describe())?;
+    // Native DOM listener methods currently require an explicit receiver.
+    // Global event functions are Window operations even when called bare.
+    js.run_script("var addEventListener = window.addEventListener.bind(window); var removeEventListener = window.removeEventListener.bind(window); window.parent = window; window.top = window;")
+        .map_err(|e| format!("window host initialization: {}", e.describe()))?;
     install_callback(&mut js, "__amazing_result", result_callback)?;
     install_callback(&mut js, "__amazing_complete", completion_callback)?;
     let mut handlers = Vec::new();
@@ -338,11 +342,18 @@ fn execute(options: &Options) -> Result<(), String> {
     for script in scripts {
         let (text, label, harness) = match script.src {
             Some(src) => {
-                // WPT's visual reporter is replaced by runner callbacks.
-                if !options.scaffold && src == "/resources/testharnessreport.js" {
+                let path = local_file(&root, file.parent().unwrap(), &src)?;
+                // Runner callbacks replace the visual reporter, whether its
+                // URL is root-relative or relative to the upstream test.
+                if !options.scaffold
+                    && path
+                        == root
+                            .join("resources/testharnessreport.js")
+                            .canonicalize()
+                            .map_err(|e| e.to_string())?
+                {
                     continue;
                 }
-                let path = local_file(&root, file.parent().unwrap(), &src)?;
                 let harness = path == harness_path;
                 (source(&root, &path, options.scaffold)?, src, harness)
             }
@@ -354,7 +365,7 @@ fn execute(options: &Options) -> Result<(), String> {
             if installed {
                 return Err("duplicate harness script".into());
             }
-            js.run_script("add_result_callback(__amazing_result); add_completion_callback(__amazing_complete); setup({output:false, message_events:[]});")
+            js.run_script("add_result_callback(__amazing_result); add_completion_callback(__amazing_complete); setup({output:false});")
                 .map_err(|e| format!("callback installation: {}", e.describe()))?;
             installed = true;
         }
