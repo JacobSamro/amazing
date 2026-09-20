@@ -320,3 +320,154 @@ placement, and platform/content-dependent control sizing remain outside this
 inline-box slice. Image HTML dimension presentational hints are not introduced
 here; they belong in the upstream style/hint path after removing provider-side
 used sizing.
+
+
+## LAYOUT-3 — Table formatting (completed; stopped at review boundary)
+
+- Anonymous table object generation follows CSS 2.1 §17.2.1, grouping adjacent
+  misparented siblings before descending into wrappers. HTML parser repair is
+  not a substitute for CSS box repair.
+- Fixed widths use columns, first-row cells, then equal remaining columns.
+  Automatic widths distribute cell min/max contributions, including spans.
+  Row spans clamp at row-group boundaries; zero spans run to the group end.
+  Overlap follows the source-order option permitted by CSS 2.1 §17.5.
+- **Resolved CSS dependency:** `border-spacing` inherited computed metadata is
+  queued to the CSS lane after CSS-3 provenance. Layout reads computed style
+  only and defaults an absent value to the initial `0`; it does not implement
+  cascade/inheritance or edit CSS. Explicit computed table spacing is consumed.
+- **Resolved paint dependency:** the integrator approved an additive
+  `LayoutBox::table_decoration()` seam. `TableDecoration` exposes suppression
+  of ordinary borders/backgrounds, absolute background holes for hidden empty
+  cells, and table-owned `TableBorderSegment` values carrying the **resolved
+  winner** (rectangle, orientation, style, RGBA color, source node) per edge.
+  Conflict resolution stays in layout; paint must not reconstruct candidates.
+  Hidden winners suppress geometry; inset/outset map to ridge/groove. Paint
+  adoption belongs to replaced-content after merge; no paint files are edited.
+- Final gate baseline rebuilt from `79464ca` after the lane's self-service
+  refresh. First-party artifacts/fingerprints were removed and incremental
+  compilation disabled. Final layout source is byte-identical to predecessor
+  `a0157c3`, rebased as `7de4c47`. The anonymous table margins are explicit
+  initial zeroes, and the orphan-cell regression asserts absolute x=0 in
+  addition to inter-cell spacing; both fixes survived the rebase.
+- Windows layout tests: **164 → 189 passed**. Full workspace gate repeated
+  twice: **1,095 passed / 0 failed / 3 ignored across 54 targets**. The source
+  manifest is checked before/after builds and again during evidence collection.
+  The 25 added tests exercise the table contract while all existing float and
+  atomic inline-replaced tests remain passing.
+
+### Table layout and decoration contract
+
+The wrapper and grid are distinct boxes. The principal wrapper retains the
+originating node for source-order paint traversal and owns margins, float and
+position offsets. Captions remain normal blocks outside the grid's decoration
+rectangle. The grid owns table borders, padding (separate model only), columns,
+row groups, rows and cells. First header/footer groups are placed first/last;
+subsequent groups keep source order. Column groups and columns retain geometry.
+
+The bounded HTML attribute parser handles zero-rowspan, leading plus/whitespace,
+overflow, and the HTML colspan/rowspan limits. CSS-only table cells do not acquire
+HTML span attributes from arbitrary elements. Logical column order drives RTL
+placement and tie-breaking. Direct rows form an implicit group that ends before
+the next explicit group. Overlapping colspans retain their source-order start
+rather than shifting earlier cells.
+
+Auto sizing shares shaped inline units with normal line fitting, including
+atomic replaced content and ruby. The legacy font path remains available. Cells
+are laid out at their used column extent, then row heights and first-line
+baselines are resolved. Top/middle/bottom/baseline alignment adds cell padding
+without converting an auto content height into a definite percentage basis.
+Repeated layout recomputes all geometry and decoration decisions.
+
+Collapsed-border resolution includes table, column group, column, row group,
+row and cell candidates. Hidden wins first; otherwise width, style precedence,
+origin precedence and logical source position decide. Cell geometry consumes
+half the resolved edge width. Spanning-cell interiors contain no border segment.
+The table owns the ordered resolved segments, each with absolute rectangle,
+orientation, style, RGBA color and source identity. Subtree translations move
+segments and background holes together with their boxes. Paint adoption must
+honor `suppress_border`, `suppress_background` and background holes, then paint
+the resolved table segments; it must not redo conflict resolution.
+
+Separate borders preserve explicit cell padding and both spacing axes. Hidden
+empty cells keep their layout area but suppress decoration and create holes in
+row/row-group/column backgrounds. Preserved whitespace and in-flow child boxes
+are not treated as empty. Collapsed tables ignore `empty-cells`.
+
+### Explicit boundary
+
+This is a table formatting implementation and a resolved paint-adoption seam,
+not a claim of complete CSS table conformance. Inline-table **outer** participation
+still shares the engine's pre-existing blockified non-replaced inline-block
+boundary; the inner table uses the new grid algorithm. Vertical writing modes,
+visibility-collapse, pagination/repeated headers, exact percentage-constraint
+optimization and full table background layering need further work. The table
+selection includes raw mismatches that depend on other unsupported features;
+those are not converted into supported-pass credit.
+
+Paint has not adopted the seam in this ticket. Collapsed-border and empty-cell
+pixel output therefore remains provisional even when the layout-side geometry
+and winning-edge tests pass. The queued CSS metadata change is required for
+`border-spacing` inheritance from an ancestor. CSS side-border shorthands are
+also a routed follow-up; the seam consumes computed longhands only.
+
+
+### Final gate provenance
+
+The final gate is pinned to dev `79464ca` plus implementation `7de4c47`.
+The predecessor's `a0157c3` layout source survives byte-for-byte after rebase.
+The lane ran the self-service refresh and re-synced owned source. An external
+all-tree refresh later overwrote CSS/DOM and layout source; collection rejected
+that epoch. The integrator subsequently confirmed the refresh hold and fixed
+the shared-archive/hidden-error defect upstream. The lane restored `7de4c47`
+with a unique archive and repeated all measurements with freshly built,
+immutable `baseline-recovery` and `final-recovery` artifacts.
+
+Archive extraction did not remove newly introduced files. Two newer CSS tests
+then failed against the pinned older API; seven extra authored CSS/DOM files
+and 80 AppleDouble metadata files were moved into the Windows lane's quarantine.
+The credited workspace runs follow cleanup. Collection checks all 175 final
+Rust/Cargo source hashes, rejects unexpected Rust/Cargo files, and verifies
+pinned executable and build-log hashes and successful exit codes.
+
+The earlier finish/release/probe epochs are not credited. Recovery reports,
+source manifests, build freshness records and the reproduction procedure live
+under [`evidence/layout3`](../../crates/amazing-layout/evidence/layout3/README.md).
+
+
+### Final measured WPT results
+
+Pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, 800 × 600.
+Every selection ran twice before and twice after. All per-case result and
+actual/reference/diff hash projections are identical within each pair. All
+selections have zero timeout, unsupported and crash results. No previously
+passing case regresses in any required regression selection.
+
+| Selection | Before pass / mismatch | After pass / mismatch |
+| --- | --- | --- |
+| tables | 6 / 6 | 8 / 4 |
+| geometry | 31 / 30 | 34 / 27 |
+| floats | 6 / 2 | 6 / 2 |
+| block-collapse | 9 / 0 | 9 / 0 |
+| position | 9 / 3 | 12 / 0 |
+| text-flow | 14 / 2 | 14 / 2 |
+| flex-grid | 24 / 0 | 24 / 0 |
+| paint-compositing | 24 / 0 | 24 / 0 |
+| images | 12 / 0 | 12 / 0 |
+
+Broad geometry gains are relative positioning of table rows (top and left)
+and table footer groups (top); there are no broad geometry pass losses.
+The table shard gains four `collapsing-border-model-011` through `014` cases
+and loses two raw passes: `baseline-empty-cell-001` and
+`table-row-group-nested-anonymous-001`. The retained images demonstrate that
+the old equal pixels were blockified stacked boxes. Final output activates
+table geometry but retains an empty-cell baseline discrepancy and a gap at a
+nested anonymous-group boundary. These remain raw mismatches, not reclassified
+passes. The final gate matches all retained review PPM hashes and validates
+the lossless PNG hashes. The four border-case gains do not imply that paint
+has adopted the table decoration seam.
+
+See [summary and projection hashes](../../crates/amazing-layout/evidence/layout3/summary.json)
+and [pixel review](../../crates/amazing-layout/evidence/layout3/review/review.json).
+No local builds or tests were run. LAYOUT-3 stops at this review boundary;
+no next ticket was started. The implementation and evidence are local commits;
+remote publication remains an integrator/user action.

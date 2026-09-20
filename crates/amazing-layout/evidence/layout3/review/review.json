@@ -1,0 +1,71 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "baseline_executable": "layout3-baseline-current.exe",
+  "final_executable": "layout3-final-gate.exe",
+  "capture": "retained WPT actual/reference PPM, lossless PNG conversion with sips",
+  "cases": {
+    "baseline-empty-cell-001": {
+      "baseline": {
+        "actual": {
+          "ppm_sha256": "c4b830dc439b1d099e134ead3a05c3d3133bac50da9f3094f3f18a986ddc41eb",
+          "png": "baseline-baseline-empty-cell-001-actual.png",
+          "png_sha256": "a7f0460b66c0d754199cae69693072d9cafef617d379792416a8721a17b6a93d"
+        },
+        "reference": {
+          "ppm_sha256": "c4b830dc439b1d099e134ead3a05c3d3133bac50da9f3094f3f18a986ddc41eb",
+          "png": "baseline-baseline-empty-cell-001-reference.png",
+          "png_sha256": "a7f0460b66c0d754199cae69693072d9cafef617d379792416a8721a17b6a93d"
+        }
+      },
+      "final": {
+        "actual": {
+          "ppm_sha256": "9f14f094d5b681f5a8688139e0f2cd5b0f04027ce71e047be3999b8d0e64c559",
+          "png": "final-baseline-empty-cell-001-actual.png",
+          "png_sha256": "2d5adb7ec626e38e548d2b9169b8c73829f0839dda148b5e0aa1719095f6c1cb"
+        },
+        "reference": {
+          "ppm_sha256": "5135d4f613c8bee4e78b712e8113ff1d31d7250f811daad7161898ac75255710",
+          "png": "final-baseline-empty-cell-001-reference.png",
+          "png_sha256": "d3b47173402b5ea5dd8cd7661b740472a1355823c2a6eea140b11ce5ecd72516"
+        }
+      },
+      "baseline_images_identical": true
+    },
+    "table-row-group-nested-anonymous-001": {
+      "baseline": {
+        "actual": {
+          "ppm_sha256": "bbba2c0134e08cce238455ee60c41f8f2d581f31a2a733b08945256059ca50a6",
+          "png": "baseline-table-row-group-nested-anonymous-001-actual.png",
+          "png_sha256": "2d6f28879be93f2d36d93bd8028acbd122d8409e8439cfb0e77a06703859d03f"
+        },
+        "reference": {
+          "ppm_sha256": "bbba2c0134e08cce238455ee60c41f8f2d581f31a2a733b08945256059ca50a6",
+          "png": "baseline-table-row-group-nested-anonymous-001-reference.png",
+          "png_sha256": "2d6f28879be93f2d36d93bd8028acbd122d8409e8439cfb0e77a06703859d03f"
+        }
+      },
+      "final": {
+        "actual": {
+          "ppm_sha256": "527894e22e8d01533bc46ef4ade9e28f5e068bd29379492b850ab6da8eb10d4d",
+          "png": "final-table-row-group-nested-anonymous-001-actual.png",
+          "png_sha256": "1a7182423a1e20b40817d283ddd952f8d1433deb8120b02206e6fa26daeadd8c"
+        },
+        "reference": {
+          "ppm_sha256": "c801081414ff9aa36b9382be4f021e148003f8b2b51b5197c7f31204f1315d95",
+          "png": "final-table-row-group-nested-anonymous-001-reference.png",
+          "png_sha256": "006a175c36b426a4343648fb8f6a84967c92b5c807cae21601d77d6e01b55dec"
+        }
+      },
+      "baseline_images_identical": true
+    }
+  },
+  "final_gate_revalidated": {
+    "baseline_executable": "layout3-baseline-recovery.exe",
+    "final_executable": "layout3-final-recovery.exe",
+    "all_retained_ppm_hashes_match_credited_reports": true,
+    "all_png_hashes_verified": true
+  }
+}
