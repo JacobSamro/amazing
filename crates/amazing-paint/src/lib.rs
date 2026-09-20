@@ -46,8 +46,9 @@
 
 pub mod background;
 pub mod color;
-pub mod image;
+pub mod controls;
 mod display_list;
+pub mod image;
 pub mod paint;
 pub mod surface;
 pub mod text;
@@ -55,7 +56,8 @@ pub mod text;
 pub use color::parse_css_color;
 pub use paint::{
     paint_document, paint_document_with, paint_document_with_resources,
-    paint_document_with_text_resources, ImageProvider, NoImages,
+    paint_document_with_text_resources, paint_document_with_text_resources_and_controls,
+    ImageProvider, NoImages,
 };
 pub use surface::Surface;
 pub use text::{draw_fragment, GlyphBitmap, GlyphProvider, OutlineGlyphProvider, RectInkProvider};

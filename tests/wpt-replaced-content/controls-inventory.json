@@ -1,0 +1,658 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": "First four unused SHA256-path-ranked static HTML rel=match cases per control marker, fixed kind order; no test/reference rewriting",
+  "candidate_counts": {
+    "text-input": 36,
+    "checkbox": 31,
+    "radio": 30,
+    "button": 36,
+    "select": 41,
+    "textarea": 29
+  },
+  "candidates": [
+    {
+      "test": "html/semantics/forms/the-select-element/select-marker-end-aligned.tentative.html",
+      "hash": "c2df9d272dc03335a74d082310dcc90ad3bc07e08f72e6327aab4f9fd013d532",
+      "kinds": [
+        "select"
+      ],
+      "reference": "select-marker-end-aligned-ref.tentative.html"
+    },
+    {
+      "test": "html/semantics/forms/the-select-element/select-marker-visible-overflow.tentative.html",
+      "hash": "99cfbf088fe1e4f635dbd0672bd72f900d5ea5154ebeff26dcced373308f2e75",
+      "kinds": [
+        "select"
+      ],
+      "reference": "select-marker-visible-overflow-ref.tentative.html"
+    },
+    {
+      "test": "html/semantics/forms/the-select-element/select-overflow-x.tentative.html",
+      "hash": "dd19a290ee532f20d89bcdce1eb742433b5017e62004aece7cb6b5e47027daa6",
+      "kinds": [
+        "select"
+      ],
+      "reference": "select-overflow-x-ref.tentative.html"
+    },
+    {
+      "test": "html/semantics/forms/the-select-element/customizable-select/select-base-appearance-ordering.html",
+      "hash": "e34ccb703f9f60854221b48cfd08b95ff0b99ec16872dd4a25317e23eb4ab268",
+      "kinds": [
+        "button",
+        "select"
+      ],
+      "reference": "select-base-appearance-ordering-ref.html"
+    },
+    {
+      "test": "html/semantics/forms/the-select-element/customizable-select/select-base-appearance-writing-modes.html",
+      "hash": "3fff345b6c3673a489aae9f9f840d47cc94f71c006084e0daabf48891e2569ec",
+      "kinds": [
+        "select"
+      ],
+      "reference": "select-base-appearance-writing-modes-ref.html"
+    },
+    {
+      "test": "html/semantics/forms/the-select-element/customizable-select/select-explicit-size.html",
+      "hash": "479bfc31dc8d5091baa80fb709ff250644ca81e8ddd91435d35a6414d0b27df4",
+      "kinds": [
+        "select"
+      ],
+      "reference": "select-explicit-size-ref.html"
+    },
+    {
+      "test": "html/semantics/forms/the-select-element/customizable-select/select-font-size.html",
+      "hash": "b5903dd924f98234cfc6316e46c7f6b61ded5a60d1c6d46c8a508fab3ec0a50e",
+      "kinds": [
+        "select"
+      ],
+      "reference": "select-font-size-ref.html"
+    },
+    {
+      "test": "html/semantics/forms/the-select-element/customizable-select/select-single-base-appearance-rendering.html",
+      "hash": "a835de4e3c2a52a79609d09d4abe8cce79da9bb591f5fbaa34f889ed422cdcce",
+      "kinds": [
+        "button",
+        "select"
+      ],
+      "reference": "select-single-base-appearance-rendering-ref.html"
+    },
+    {
+      "test": "html/semantics/forms/the-textarea-element/textarea-newline-bidi.html",
+      "hash": "6c38d02d45a028e085c3cb181f9296f6669cdcc270d5ebd7e326896346e72351",
+      "kinds": [
+        "textarea"
+      ],
+      "reference": "textarea-newline-bidi-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/input-checkbox-no-centering.html",
+      "hash": "a29482dac2b28e7a38ee1fa54d2ecf32a8783e28e8272fe2f8e0609de7a4a37f",
+      "kinds": [
+        "checkbox"
+      ],
+      "reference": "input-no-centering-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/input-checkbox-zero-size.html",
+      "hash": "2513845e416d775eb9a95c6282721d5311b30a881346058397059612aabe09f1",
+      "kinds": [
+        "checkbox",
+        "radio"
+      ],
+      "reference": "/css/reference/blank.html"
+    },
+    {
+      "test": "html/rendering/widgets/input-number-text-size.tentative.html",
+      "hash": "cfa409f9cc6a0934a5bdb90aadf6aa8c32ac1735dceafb455ea3d276dc0712ce",
+      "kinds": [
+        "text-input"
+      ],
+      "reference": "input-number-text-size-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/input-password-background-suppresses-appearance.html",
+      "hash": "12302553ce16303792d4ec4c8a685f3026b9134f7d9cfc5eced62d3969d0d6a0",
+      "kinds": [
+        "text-input"
+      ],
+      "reference": "input-password-background-suppresses-appearance-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/input-radio-no-centering.html",
+      "hash": "38a644b2009fedc3325bbf97b43fb6e83a51c315203dc251c30032bdb77dc1c8",
+      "kinds": [
+        "radio"
+      ],
+      "reference": "input-no-centering-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/input-text-overflow-ellipsis-focused.html",
+      "hash": "9dd85d8bc5c7c3950c689093f3b8d01b4d7a1a543725d62224c06a75de2f2f31",
+      "kinds": [
+        "text-input"
+      ],
+      "reference": "input-text-overflow-ellipsis-focused-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/textarea-multicol.html",
+      "hash": "d5bfb2f04994a0febe29a6e961278a44af4e29ad13b7e1ed43b3ce97ea78b810",
+      "kinds": [
+        "textarea",
+        "text-input"
+      ],
+      "reference": "textarea-multicol-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/button-layout/block-in-inline.html",
+      "hash": "09c11cec067d5bfe427108407d9fea034259dcd79bb9459faeee30f6a51d8662",
+      "kinds": [
+        "button"
+      ],
+      "reference": "block-in-inline-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/button-layout/centering-001.html",
+      "hash": "bde0cb52e66746bf7113ba56b94ea17719f880bcde4a174a49155a8d5eabbed7",
+      "kinds": [
+        "button"
+      ],
+      "reference": "centering-001-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/button-layout/centering-002.html",
+      "hash": "f20dfd65763b09b96225aa3e2a9bfd4c1f51746b29e4cb81b7ca3f7846dd1e60",
+      "kinds": [
+        "button"
+      ],
+      "reference": "centering-001-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/button-layout/centering-003.html",
+      "hash": "82d0e1c789669a15991c806e674e180e687382974237a54f10d474e738dc3714",
+      "kinds": [
+        "button"
+      ],
+      "reference": "centering-003-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/button-layout/centering-004.html",
+      "hash": "024e905a141e3dace0147b97da3a75595b0f756a0904f4ecf46c883de831e310",
+      "kinds": [
+        "button"
+      ],
+      "reference": "centering-004-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/button-layout/input-type-button-clip.html",
+      "hash": "6cc8a89e823e4ce59eca4803e02bb34291603b466270882ac606d28c5d6da293",
+      "kinds": [
+        "button"
+      ],
+      "reference": "input-type-button-clip-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/button-layout/scrollable-button-centering.html",
+      "hash": "3b380cd14a941fcb824f362aed39880170ecc03bc05be9e5d33c765ad44e47ba",
+      "kinds": [
+        "button"
+      ],
+      "reference": "scrollable-button-centering-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/the-select-element/option-checked-styling.html",
+      "hash": "e1e261bbe42bbe4f52d013201a00dad922785515d875386a01d392232eb6b4da",
+      "kinds": [
+        "select"
+      ],
+      "reference": "option-checked-styling-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/the-select-element/option-empty-label.html",
+      "hash": "44c917f2106bf293f27bea927a5accf511b99eed7d8da74f34056502b6331d83",
+      "kinds": [
+        "select"
+      ],
+      "reference": "option-label-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/the-select-element/option-label-and-text.html",
+      "hash": "611e64982f48200c05c2798db29598c06625343334bc6bfb7ec9ca36275ef193",
+      "kinds": [
+        "select"
+      ],
+      "reference": "option-label-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/the-select-element/option-only-label.html",
+      "hash": "393d5e2d51f0f7ea7644a412a8c86f6132eea7ded25dd92f897427300242819e",
+      "kinds": [
+        "select"
+      ],
+      "reference": "option-label-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/the-select-element/select-size-001.html",
+      "hash": "6f30053d4f00ef93b3e88343a8a9781a5252a8292f7dec693c50b121d6e97daf",
+      "kinds": [
+        "select"
+      ],
+      "reference": "select-size-ref.html"
+    },
+    {
+      "test": "html/rendering/widgets/the-select-element/select-size-002.html",
+      "hash": "df76d8ba6ddbdf1f851172184a479dbb7647d7923c722a762c39d782e5a64d0c",
+      "kinds": [
+        "select"
+      ],
+      "reference": "select-size-ref.html"
+    },
+    {
+      "test": "css/css-ui/accent-color-visited.html",
+      "hash": "b0fb6f525c260ce90bcad77625ce02813ed9e20997f6a3c62ba894edcfee4144",
+      "kinds": [
+        "checkbox"
+      ],
+      "reference": "accent-color-visited-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-auto-001.html",
+      "hash": "d546bcc7501c946840e0d1554c6374e6487151c8b0927ecbbb7a1c692050afc4",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-button-001.html",
+      "hash": "65939343358d2e2ab8aea6b6cc2d58c1565e01a8f685ddcffd30cb7fab34d42b",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-checkbox-001.html",
+      "hash": "64eb86ba3117a7afc0375893d941cf219d580444f7f8ceed28074e2966dd89a3",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-listbox-001.html",
+      "hash": "05a7cd5526c988a223c511f3ddc5a6e6d0583b520c63faaad93300c6303f1797",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-menulist-001.html",
+      "hash": "5fa5b5effb7ca5a77e75dae693a324a7fd943dfb64bd413e0b0af6cb64d4bc46",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-menulist-button-001.html",
+      "hash": "a8e67771c97904f7de4f697e9fbb2c65c5f66445eda743f094ad246d8f803313",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-meter-001.html",
+      "hash": "b0dcefbbdbdbbf5311b34f7bbc98fa298391d9bf0e4c3c7964f1b8e76dd64f20",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-progress-bar-001.html",
+      "hash": "94b94fec13fdcfa7b105231d9e64c8a283453ce68df0855b067f3a0addb1f5a8",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-radio-001.html",
+      "hash": "b9b5b1d3abd36c00fcba4aacbbd44e529315e967bc3680eb6fb1a061674d2981",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-revert-001.tentative.html",
+      "hash": "2f3e4fdd3c1628e3783c53381a91682e5803783133ac685c69696b3281662419",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-revert-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-searchfield-001.html",
+      "hash": "ee91fd0e96d78e7eb6377c83a9412ba93fad72a26f0fb6c2423961c157f2b230",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-textarea-001.html",
+      "hash": "bf4b1fb610896afdf5dcefc033d42aa9be600a7069ab2b7fdf757cdb124f0992",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/appearance-textfield-001.html",
+      "hash": "d01327b3b768642670e363a704b56e0c8c44ad20d1ba67551c96776a0999ee5f",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-textfield-001-ref.html"
+    },
+    {
+      "test": "css/css-ui/compute-kind-widget-fallback-props-revert-001.html",
+      "hash": "59deef9abe9c53b24f14d34ac1aaa3b47b423396b798d88c017b63f3ce8bc259",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "compute-kind-widget-no-fallback-ref.html"
+    },
+    {
+      "test": "css/css-ui/input-security-auto-sensitive-text-input.html",
+      "hash": "4b694f18e16d41a253170eb8086403cdc79cc7f0a865c38c5d0c386feb3e4868",
+      "kinds": [
+        "text-input"
+      ],
+      "reference": "input-security-auto-sensitive-text-input-ref.html"
+    },
+    {
+      "test": "css/css-ui/input-security-non-sensitive-elements.html",
+      "hash": "e2803a84c2f4f8dfa46b88ff4f58cfea18ddcf1a5cf1601e0fed1d4037af5f2a",
+      "kinds": [
+        "text-input"
+      ],
+      "reference": "input-security-non-sensitive-elements-ref.html"
+    },
+    {
+      "test": "css/css-ui/input-security-none-sensitive-text-input.html",
+      "hash": "4336aac1d6314456a279275f2962bb2c0b88961a90c481c2e5d5e237b1fb33c0",
+      "kinds": [
+        "text-input"
+      ],
+      "reference": "input-security-none-sensitive-text-input-ref.html"
+    },
+    {
+      "test": "css/css-ui/native-appearance-disabled-for-value-unset.html",
+      "hash": "de8ede1f43a17bdf36431878cf26a024fd5d30bfac552bb3ee4ece0deea90618",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "reference/native-appearance-disabled-for-value-unset-ref.html"
+    },
+    {
+      "test": "css/css-ui/text-overflow-ruby.html",
+      "hash": "f64a1593fc712133d3e4b5e15d2acec354376ad47dd47294f86d6248fec06659",
+      "kinds": [
+        "text-input"
+      ],
+      "reference": "text-overflow-ruby-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-auto-001.html",
+      "hash": "75aa0abc273272874e3aed3b2e3234c809eea997a19d57f23ebac3bc18e60c77",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-button-001.html",
+      "hash": "82c9dacc7a6631e733c312fdb3ffe86e2d957c9b6095551df7ea26037587ed2e",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-checkbox-001.html",
+      "hash": "2dace01e1deea8382d2a0efbb8aa12323e74d12487ad29e9335afce176a433d3",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-listbox-001.html",
+      "hash": "9c97798a6b8fd3c353133c4cc5770ba76aec9df48954a1cf2ae824cc00f0b645",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-menulist-001.html",
+      "hash": "09ae3c5260ffeaabc2003fba075e14327784299183fd484d577e5f67fe607718",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-menulist-button-001.html",
+      "hash": "06caf107f6c30e3c9ffac7bb64a8a6f259e0fc7970f0c32b8c7c3e03431f1979",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-meter-001.html",
+      "hash": "f58eed5c9612d55f65ad77d689b09263fd2eaf37a30d05332a644ba1bddf8cbf",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-progress-bar-001.html",
+      "hash": "51e95adb893815103781f90e4c0cddb2c9c4e68c78df9fe5b281d2fe8acdc8b8",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-radio-001.html",
+      "hash": "78febf5e679a3a9189d067f4ee6442ea046685873a6a32c6fec3082c01e768aa",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-searchfield-001.html",
+      "hash": "482a24059870ed6014f279c27ef8a5db959e30522b465bf38935f459cc3d2907",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-textarea-001.html",
+      "hash": "9620a6b8e14308c188230f03d5e084bdbf2a0f20514cda7deef2d34d6838c087",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-auto-ref.html"
+    },
+    {
+      "test": "css/css-ui/webkit-appearance-textfield-001.html",
+      "hash": "5a4c39dec552c3df83d4b1fd649b9548d9669006c6dae972171d29a05fb96fa1",
+      "kinds": [
+        "button",
+        "checkbox",
+        "radio",
+        "select",
+        "textarea",
+        "text-input"
+      ],
+      "reference": "appearance-textfield-001-ref.html"
+    },
+    {
+      "test": "css/css-ui/widget-percentage-height-001.html",
+      "hash": "b3384fc8de0cbafc29e8bc58703bdefc2374d714f44122f9275ab72830def67a",
+      "kinds": [
+        "checkbox",
+        "radio"
+      ],
+      "reference": "widget-percentage-height-001-ref.html"
+    },
+    {
+      "test": "css/css-forms/input-no-resizer.html",
+      "hash": "45d181aed3545aa210a9355a0dfc3f1567b5dd69001912c4781cba8542761db4",
+      "kinds": [
+        "text-input"
+      ],
+      "reference": "input-no-resizer-ref.html"
+    }
+  ]
+}

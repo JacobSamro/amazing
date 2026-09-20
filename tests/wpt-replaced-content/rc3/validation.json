@@ -1,0 +1,30 @@
+{
+  "base": "0cc0ea0",
+  "platform": "win-001",
+  "incremental": false,
+  "locked": true,
+  "artifact_freshness": "Integrator invalidated first-party artifacts; baseline source restored with current mtimes; final owned paint source re-synced before rebuilding",
+  "workspace": {
+    "passed": 1029,
+    "failed": 0,
+    "ignored": 3,
+    "targets": 52
+  },
+  "paint": {
+    "passed": 86,
+    "failed": 0,
+    "new_control_tests": 12
+  },
+  "isolated_image_example_locked_build": "passed",
+  "sha256": {
+    "Cargo.lock": "3feaf8130f2c60230292a4d70311c6e480d848a2ffdebc036fd09a603581ba7d",
+    "crates/amazing-shell-gpui/Cargo.lock": "43b49321eb607fb74da7e0add65e91f4725e31a4bb0206285bbe56607a4c84be",
+    "crates/amazing-paint/src/control_tests.rs": "dfd5e094f48eb16b551b2d0fb75632726ae6117a1e678bc97620177c46234903",
+    "crates/amazing-paint/src/control_raster.rs": "3cc3ab018fba241da4b13b60e18b0f1fd9040be3fbcd6f4023e8c2f9db447c3b",
+    "crates/amazing-paint/src/display_list.rs": "2869cd97f93b4f568a1e9eef320bd8ebb0b82f97535553d709db26b1e5c6428e",
+    "crates/amazing-paint/src/paint.rs": "7451efbe203383b963fb6ebe3bf2b951f5966a04c19cd458713919b90aff2013",
+    "crates/amazing-paint/src/lib.rs": "d8d864bb626f60f5badc5389feb2ff8a236f2aecaef1f31430895d362146884b",
+    "crates/amazing-paint/src/controls.rs": "c6697b51fbbb4b2da067a86084855ff83854e537c8580f840ee55148890cffb4"
+  },
+  "mac_windows_sources_match": true
+}

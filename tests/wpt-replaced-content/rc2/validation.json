@@ -1,5 +1,5 @@
 {
-  "base_commit": "80c66360c75281eb293c21e17688ddd993fb8de8",
+  "base_commit": "57f0e69b28b8f5bca79bc869107f24f1f031238d",
   "build_host": "win-001",
   "tree": "C:/Users/server/src/wt/replaced-content",
   "workspace": {
@@ -41,7 +41,29 @@
     "crates/amazing-shell-gpui/src/engine_viewport.rs": "a391847dd890bb22054995e5994e0ddec51043a7d658265b4487ba1fa1456e8f"
   },
   "notes": [
-    "Stale Cargo net artifacts were cleaned; final baseline rebuilt and owned patch re-synced afterward.",
+    "Fresh gate rerun after 57f0e69. First-party fingerprints/artifacts invalidated in all three target trees; incremental compilation disabled. Matching source hashes alone is not artifact-freshness evidence.",
     "No root workspace or lockfile edits. No local builds/tests. No interactive shell visual proof."
-  ]
+  ],
+  "artifact_freshness": {
+    "refresh_commit": "57f0e69",
+    "current_extraction_mtimes": true,
+    "first_party_artifacts_invalidated_in": [
+      "replaced-content",
+      "replaced-content-image",
+      "replaced-content-shell"
+    ],
+    "CARGO_INCREMENTAL": "0",
+    "before_and_after_artifact_prefix": "rc2j",
+    "supersedes": "All earlier RC-2 Windows gates, including rc2h"
+  },
+  "merged_head_verification": {
+    "commit": "d8437f3",
+    "reported_by": "integrator",
+    "authority": "Authoritative merged-head gate after artifact-invalidating refresh",
+    "passed": 992,
+    "failed": 0,
+    "ignored": 3,
+    "targets": 52,
+    "root_lock_sha256_prefix": "3FEAF813"
+  }
 }
