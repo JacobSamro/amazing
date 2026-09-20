@@ -170,6 +170,18 @@ fn legacy_config() -> Arc<ClientConfig> {
     config.alpn_protocols = vec![b"http/1.1".to_vec()];
     Arc::new(config)
 }
+/// HTTP/1.1-only authenticated stream for RFC6455 upgrades.
+pub fn connect_http1(host: &str, port: u16, timeout: Duration) -> Result<TlsStream, TlsError> {
+    connect_config(host, port, timeout, legacy_config())
+}
+/// Fill caller-owned bytes from the existing vetted provider's OS entropy.
+/// No provider type or random-state handle crosses this boundary.
+pub fn fill_random(bytes: &mut [u8]) -> Result<(), TlsError> {
+    rustls::crypto::ring::default_provider()
+        .secure_random
+        .fill(bytes)
+        .map_err(|_| TlsError::Transport("secure entropy unavailable".into()))
+}
 pub fn connect(host: &str, port: u16, timeout: Duration) -> Result<TlsStream, TlsError> {
     connect_config(host, port, timeout, client_config())
 }

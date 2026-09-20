@@ -142,3 +142,6 @@ impl From<ParseError> for NetError {
         Self::Url(UrlError::InvalidUrl(error.to_string()))
     }
 }
+
+/// Bounded RFC6455 client over TCP or verified HTTP/1.1 TLS.
+pub mod websocket;

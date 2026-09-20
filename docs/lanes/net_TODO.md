@@ -903,3 +903,40 @@ checks, runner notices and finalization). Recipe/input files: `net7_gate.py`,
 `net7-inputs.json`; `net7_finalize.py` records the summary-parser reconciliation
 and final public fetch/hash audit. Superseded logs are retained separately.
 NET-7 stops at this protocol/transport boundary; no next ticket was started.
+
+## NET-8 — WebSocket checkpoint (unfinished)
+
+Integrator brief: RFC6455 in amazing-net, std-only protocol implementation;
+HTTP/1.1 Upgrade for ws/wss, no RFC8441 extended CONNECT. Rebased onto `f1d0f50`.
+Work is checkpointed for the user-directed fleet stand-down and win-001 SSH
+outage. **No NET-8 test gate has passed.** NET-7 numbers are historical only.
+
+Partial implementation: `websocket::{connect,Client,Options,Limits,Event,Control}`;
+hand-written handshake SHA-1/base64, nonce/Accept/subprotocol checks, frame parser,
+masked outbound frames, fragmented messages, incremental UTF-8 validation,
+ping/pong notifications, close codes and handshake. The TLS adapter adds
+`connect_http1` and a caller-buffer entropy seam using its existing pinned
+rustls/ring secure_random provider. No Cargo manifest/lock change. The entropy
+seam's architecture wording was raised to the integrator in questions.md.
+
+Proposed implemented ceilings, still unverified: 16 KiB handshake, 128 response
+fields, 32 offered subprotocols of at most 256 bytes, 8 KiB input URL, 16 MiB
+hard frame limit (1 MiB default), 32 MiB hard message limit (8 MiB default),
+32 queued Ping/Pong notifications, 125-byte controls, 1,000,000 lifetime frames
+(100,000 default). Admission checks precede reserve/payload reads; private tests
+inspect capacity/read positions. No extensions, automatic redirects, browser
+policy/JS binding, cookies, proxies or automatic retries. Browser embeddings must
+supply Origin and enforce their own policy. These claims describe code intent,
+not verified protocol conformance.
+
+The only pre-stand-down Windows attempt failed compilation: E0689 in
+`websocket/tests.rs` close-code arrays, ambiguous integer types for to_be_bytes
+(current lines 460 and 464). No nextest cases ran; the chained doctest command
+was not reached. First implementation action on an authorized resume: annotate
+both arrays as u16, then review and run focused tests on Windows once the
+integrator lifts the SSH stand-down. Do not reinterpret NET-7 evidence as NET-8.
+
+Sources: RFC6455 https://www.rfc-editor.org/rfc/rfc6455.html, IANA WebSocket
+close-code registry https://www.iana.org/assignments/websocket, and rustls
+0.23.43 CryptoProvider/SecureRandom API documentation. RFC handshake/masking
+vectors and ws/wss loopback tests are authored but unexecuted.
