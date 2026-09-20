@@ -54,8 +54,8 @@ fn real_http_path_decodes_gzip_zlib_and_chunked_gzip() {
         let request =
             String::from_utf8(requests.recv_timeout(Duration::from_secs(5)).unwrap()).unwrap();
         assert_eq!(request.matches("Accept-Encoding:").count(), 1);
-        assert!(request.contains("Accept-Encoding: gzip, deflate\r\n"));
-        assert!(!request.contains("br\r\n"));
+        assert!(request.contains("Accept-Encoding: gzip, deflate, br\r\n"));
+        assert!(!request.contains("Accept-Encoding: br\r\n"));
     }
 }
 #[test]
@@ -205,4 +205,90 @@ fn real_http_expansion_is_bounded_by_caller_budget() {
         ),
         Err(NetError::ResponseTooLarge)
     ));
+}
+
+#[test]
+fn real_http_brotli_content_length_and_chunked_roundtrip() {
+    let encoded = include_bytes!("../../amazing-net-brotli/tests/vectors/hello-5.br");
+    for chunked in [false, true] {
+        let (framing, body) = if chunked {
+            ("Transfer-Encoding: chunked\r\n".into(), chunks(encoded))
+        } else {
+            (
+                format!("Content-Length: {}\r\n", encoded.len()),
+                encoded.to_vec(),
+            )
+        };
+        let (port, requests) = tests::serve(vec![raw(
+            &format!("Content-Encoding: br\r\n{framing}"),
+            &body,
+        )]);
+        let response = crate::fetch(
+            &format!("http://127.0.0.1:{port}/brotli"),
+            &FetchOptions {
+                max_response_bytes: 13,
+                ..FetchOptions::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(response.body, b"hello brotli\n");
+        assert_eq!(response.headers.get("content-encoding"), Some("br"));
+        let request =
+            String::from_utf8(requests.recv_timeout(Duration::from_secs(5)).unwrap()).unwrap();
+        assert!(request.contains("Accept-Encoding: gzip, deflate, br\r\n"));
+    }
+}
+#[test]
+fn http_brotli_limits_truncation_trailing_data_and_tls_framing() {
+    let encoded = include_bytes!("../../amazing-net-brotli/tests/vectors/hello-5.br");
+    let plain = b"hello brotli\n";
+    let fields = format!(
+        "Content-Encoding: br\r\nContent-Length: {}\r\n",
+        encoded.len()
+    );
+    assert_eq!(
+        parse(&raw(&fields, encoded), plain.len(), true)
+            .unwrap()
+            .body,
+        plain
+    );
+    assert!(matches!(
+        parse(&raw(&fields, encoded), plain.len() - 1, false),
+        Err(NetError::ResponseTooLarge)
+    ));
+    for end in 0..encoded.len() {
+        let fields = format!("Content-Encoding: br\r\nContent-Length: {end}\r\n");
+        assert!(parse(&raw(&fields, &encoded[..end]), 128, true).is_err());
+    }
+    let mut trailing = encoded.to_vec();
+    trailing.push(0);
+    assert!(parse(&raw("Content-Encoding: br\r\n", &trailing), 128, false).is_err());
+    assert!(parse(&raw("Content-Encoding: br\r\n", encoded), 128, true).is_err());
+    let bomb = include_bytes!("../../amazing-net-brotli/tests/vectors/bomb-11.br");
+    assert!(matches!(
+        parse(&raw("Content-Encoding: br\r\n", bomb), 16, false),
+        Err(NetError::ResponseTooLarge)
+    ));
+}
+#[test]
+fn stacked_brotli_and_gzip_apply_limit_to_each_layer() {
+    // Independent Google Brotli encoder compressed the existing gzip fixture.
+    let encoded = include_bytes!("../tests/coding/gzip-then-br.bin");
+    let (plain, gzip) = fixture("hello-fixed-gzip");
+    let fields = "Content-Encoding: gzip, br\r\n";
+    assert_eq!(
+        parse(&raw(fields, encoded), 1024, false).unwrap().body,
+        plain
+    );
+    assert!(matches!(
+        parse(&raw(fields, encoded), gzip.len() - 1, false),
+        Err(NetError::ResponseTooLarge)
+    ));
+    let fields = "Content-Encoding: gzip\r\nTransfer-Encoding: br, chunked\r\n";
+    assert_eq!(
+        parse(&raw(fields, &chunks(encoded)), 1024, true)
+            .unwrap()
+            .body,
+        plain
+    );
 }

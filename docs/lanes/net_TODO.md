@@ -1,33 +1,13 @@
 # Net lane decision map
 
-## External-dependency decisions — user approval required
+## Approved external-data and decoder decisions
 
-**Public Suffix List: approve a pinned data snapshot, or defer site/cookie
-correctness.** A provider must return public-suffix and registrable-domain
-(eTLD+1) results for normalized hosts, implement exact/wildcard/exception rules,
-and distinguish IPs and nonregistrable hosts; proposed coverage includes both
-ICANN and PRIVATE rules to separate tenants on shared hosting. Vendor the
-[upstream list](https://publicsuffix.org/list/) at an exact commit and SHA-256,
-retain its license, and pin rule-normalization/generator inputs and fixtures;
-propose monthly reviewed update PRs with boundary-change tests and persisted-key
-migration review, never silent runtime updates. Without it, correct SameSite,
-site-based partitioning and public-suffix Domain-cookie rejection remain blocked:
-the current full-host fallback separates sibling subdomains that should share
-a site; guessing the last two labels can instead merge unrelated sites.
-[Rule format](https://github.com/publicsuffix/list/wiki/Format).
-
-**Brotli: approve a vetted network adapter, or retain gzip/deflate without br.**
-Pin `brotli-decompressor =5.0.3`, `alloc-no-stdlib =2.0.4`,
-`alloc-stdlib =0.2.4`, lockfile checksums and safe features (no unsafe/seccomp/FFI),
-with strict-window decoding, separate output/scratch budgets and malformed-stream
-fixtures. The decoder is already transitively present through the text provider,
-whose WOFF2 adapter directly pins 5.0.3; that font approval does not authorize
-network use. Deferral still permits servers to negotiate gzip/deflate or an
-uncompressed response under [HTTP negotiation rules](https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.3),
-so lack of br does not inherently break Brotli-capable pages. The cost is
-potentially more transferred bytes and failure for br-only resources or servers
-that send br despite negotiation. No real-page failure rate or bandwidth penalty
-has been measured here; the larger evaluation below identifies adapter work.
+PSL data and isolated network Brotli decoding were approved in architecture
+6c/6d and ADR 0002. NET-6 implements them below. The PSL snapshot includes ICANN
+and PRIVATE rules and changes only through reviewed PRs with persisted-key
+migration review. Brotli is a separate network exception from font decision 4d:
+attacker-supplied bodies require a caller output limit checked before allocation.
+Runtime IDNA and live shell cookie/persistence adoption remain separate work.
 
 ## NET-1 — Fetch policy prototype
 
@@ -663,3 +643,136 @@ Evidence is in `.agents/net/net5-{workspace,lane,clean}-{1,2}.txt`,
 Cookie tests are focused native Rust cases, not WPT cookie conformance
 percentages. No shell/driver, other lane source, manifest or dependency changes.
 NET-5 ends at this library/provider boundary.
+
+## NET-6 — Pinned PSL and bounded network Brotli
+
+Architecture 6c/6d and accepted ADR 0002 supersede the earlier pending decisions
+above. No additional runtime IDNA approval is implied.
+
+### PSL provider and update procedure
+
+`amazing_fetch::psl::PublicSuffixList` implements the existing RegistrableDomain
+seam with the same ICANN + PRIVATE snapshot for registrable domains and suffix
+classification. `classify` separately exposes IP, invalid, public-suffix and
+registrable results. It implements longest exact/wildcard matches, exception
+priority, and the implicit one-label wildcard for unknown TLDs. Input must be
+canonical lowercase ASCII; the URL/IDNA layer owns normalization. A-label
+lookup does not grant `validated_a_label` cookie authorization. A terminal root
+dot is preserved in lookup results; cookie validation retains its own stricter
+host grammar. Default CookieStore remains ConservativeDomains; an embedding
+opts in by passing PublicSuffixList, with no parser/store algorithm changes.
+
+Upstream commit `645b36c9a51ff0b3718df0ba02f6570aa6921632`, original list SHA-256
+`d3fba7b2934b0e1b9c958baf42bef85107b53cd0115ff7e81a7e61c7119a36d0`.
+`crates/amazing-fetch/data/psl/pin.json` pins the list, MPL-2.0 licence and CC0
+upstream test inputs. Lossless 3,000-line shards retain the entire list and
+comments within the repository line limit. Offline `tools/normalize_psl.py`
+uses RFC3492 punycode for upstream Unicode spelling, without IDNA2003 mappings
+or runtime fetching. `generated.json` pins generator and normalized outputs;
+Windows `--check` must regenerate identical bytes.
+
+Review updates monthly, but ship only explicit reviewed PRs:
+
+1. Select an exact upstream commit, obtain list/licence/fixture bytes, verify
+   their hashes, and split the original list losslessly as recorded by pin.json.
+2. Regenerate both sections offline. Review normalized additions, removals,
+   wildcard/exception changes and generated fixture diffs; adjust the static
+   rule-shard includes if the shard count changes. Retain the licence.
+3. Add boundary-change cases for affected domains, child hosts, siblings and
+   private tenants. Repeat native PSL/cookie and pinned URL gates on win-001.
+4. Explicitly review persisted-key migration before deployment: old/new eTLD+1
+   mappings, changed schemeful SameSite decisions, newly invalid Domain cookies,
+   cookie quota grouping and cache/partition-key splits or merges. Retrieval
+   revalidation rejects newly public Domain cookies, but is not a full migration.
+5. The embedding/integrator owns profile migration or invalidation, version tags
+   on persisted data, rollback behavior and clearing affected caches. Never
+   merge old site partitions merely because the new list combines them; decide
+   whether discarding affected state is safer. Host-only cookies and unchanged
+   boundaries need a documented preservation decision. This library has no
+   persistence I/O and does not silently rewrite profiles or fetch list updates.
+
+### Brotli adapter and HTTP adoption
+
+The integrator registered `amazing-net-brotli` and granted lane ownership in
+`784dc59`. The first-party adapter forbids unsafe and pins brotli-decompressor
+5.0.3; root Cargo.lock pins alloc-no-stdlib 2.0.4 and alloc-stdlib 0.2.4 and
+registry checksums. Workspace feature inspection must exclude unsafe, seccomp,
+ffi-api and pass-through-ffi-panics. No encoder is linked.
+
+`decode(encoded, max_output)` borrows input and returns owned bytes or an owned
+error. It uses strict RFC7932 window decoding and rejects the optional larger
+window extension, incomplete streams, concatenated streams and trailing bytes.
+Each output append checks remaining allowance **before** reserve/copy. A fixed
+8 KiB stack chunk probes at most one byte beyond the remaining limit, rather
+than expanding into a growing Vec before checking. Separate allocator objects
+share a 32 MiB live scratch-request budget covering byte/word/Huffman memory;
+checked multiplication and remaining-budget checks precede allocation requests.
+Provider panics fail closed under workspace panic-unwind settings.
+
+The caller output limit is not an RSS limit: decoder history/tables have a
+separate cap and can exceed a small output allowance; allocator metadata and
+rounding are outside requested-payload accounting. Input remains borrowed;
+HTTP retains its existing independent encoded-body cap and eight-layer limit.
+No output or dependency types escape on failure.
+
+The existing amazing-net content-coding route now accepts br and applies the
+caller-selected decoded ceiling to every layer, including intermediate results.
+OutputLimit maps to ResponseTooLarge, truncation to IncompleteBody; all other
+adapter failures reject as malformed content. Headers retain the original wire
+coding metadata, as they do for gzip. Transfer-coding ordering and complete HTTP
+framing are still required before an unclean TLS EOF can be accepted.
+
+After the production decoder/HTTP gate passed, Accept-Encoding became
+`gzip, deflate, br`. Native tests verify this through loopback fetches, fixed
+length and chunked framing, gzip+br stacking, intermediate expansion limits,
+truncation, trailing data, and TLS-EOF completion checks. User-supplied
+Accept-Encoding still cannot override the controlled header.
+
+Eighteen round-trip vectors come from Node 22.23.2 / Google Brotli 1.1.0 at
+qualities 0/5/11: empty/text/Unicode/binary/repetition/incompressible input. A
+nineteenth valid large-window vector must reject in strict mode. The retained
+offline generator and pin.json hashes make fixtures reviewable; no encoder is
+in production. Tests also truncate every prefix of small vectors, inspect output
+capacity before/after bound refusal, test shared scratch/overflow/release, and
+reject a 1 MiB compression bomb at a 16-byte output limit.
+
+### Evidence
+
+Rebased onto integrator lockfile commit `af05025`, refreshed only net with the
+corrected refresh script (lock prefix `E4D68B10`), then re-synced owned files.
+Earlier checkpoints and the gate overlapped by an integrator refresh were
+discarded. Both final runs below used the landed lockfile and `--locked`.
+
+| Gate | Run 1 | Run 2 |
+| --- | --- | --- |
+| Full workspace | 1155 passed / 0 failed / 3 ignored | 1155 / 0 / 3 |
+| Network lane | 213 passed / 0 failed / 0 ignored | 213 / 0 / 0 |
+| Pinned URL WPT | 864 passed / 0 failed / 0 timeout / 32 unsupported | identical |
+
+Native lane breakdown: Fetch 87 (35 existing cookie + 44 existing policy +
+8 PSL), net 114, TLS 2, Brotli 10. Historical NET-5 lane evidence was 192/0/0;
+this ticket adds 8 PSL, 3 HTTP and 10 adapter tests. PSL tests cover all 10,326
+rules and 78 normalized upstream fixtures; decoder tests cover 18 independent
+round trips and a nineteenth valid extension that strict mode rejects. These
+native cookie/provider tests are not WPT cookie conformance percentages.
+
+Each final run separately cleaned all first-party packages with incremental
+compilation disabled. Compile logs prove all 19 rebuilt. All 288 workspace
+source/input hashes match the local tree before and after both runs; normalized
+manifest SHA-256:
+`8bb8761e8c4554ff39e2103e194e628a8078d27a3b380ff56f8de9d313557605`.
+The final decision-map documentation edit is outside that source/input manifest.
+
+The 896-object URL corpus remains pinned at
+`c48d58747e1f211527fb695fd60548a997fae617`. Both normalized stdout SHA-256 values:
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+Offline PSL regeneration and all Brotli fixture hashes pass on Windows. Resolved
+workspace feature trees for the decoder and both allocators contain none of the
+unsafe/seccomp/FFI options. The runnable URL artifact is
+`C:\Users\server\target\net\debug\examples\url_wpt.exe`.
+
+Evidence: integrator checkout `.agents/net/net6-final-evidence/`, containing
+results.json, clean/workspace/lane/WPT logs for both runs, source manifests,
+PSL regeneration and feature inspection. No Test262, WPT fetch/cookie percentage,
+UI proof or external-page compatibility rate is claimed. No shell/persistence
+migration is performed. NET-6 ends at this provider and HTTP adapter boundary.

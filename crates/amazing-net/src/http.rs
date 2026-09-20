@@ -16,7 +16,7 @@
 //! - 32 MiB buffering cap so a hostile peer cannot exhaust memory
 //!
 //! Deferred: keep-alive/pipelining, other methods, `Expect: 100-continue`,
-//! brotli decoding, obs-fold header lines, bare-LF line endings in
+//! obs-fold header lines, bare-LF line endings in
 //! the framing layer (header *values* tolerate them), HTTP/2+.
 
 use std::io::{Read, Write};
@@ -55,7 +55,7 @@ pub(crate) fn get(url: &ParsedUrl, options: &FetchOptions) -> Result<Response, N
         return Err(NetError::UnsupportedMethod(method));
     }
     let mut request = format!(
-        "{} {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nAccept-Encoding: gzip, deflate\r\nConnection: close\r\n",
+        "{} {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nAccept-Encoding: gzip, deflate, br\r\nConnection: close\r\n",
         method,
         url.http_request_target()?,
         url.host_and_port(),
@@ -256,7 +256,7 @@ fn codings(headers: &Headers, name: &str) -> Result<Vec<String>, NetError> {
             let item = item.trim().to_ascii_lowercase();
             if !matches!(
                 item.as_str(),
-                "gzip" | "x-gzip" | "deflate" | "identity" | "chunked"
+                "gzip" | "x-gzip" | "deflate" | "br" | "identity" | "chunked"
             ) {
                 return Err(NetError::MalformedResponse(format!(
                     "unsupported {name}: {item}"

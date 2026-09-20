@@ -1,0 +1,3000 @@
+sm.ua
+sumy.ua
+te.ua
+ternopil.ua
+uz.ua
+uzhgorod.ua
+uzhhorod.ua
+vinnica.ua
+vinnytsia.ua
+vn.ua
+volyn.ua
+yalta.ua
+zakarpattia.ua
+zaporizhzhe.ua
+zaporizhzhia.ua
+zhitomir.ua
+zhytomyr.ua
+zp.ua
+zt.ua
+
+// ug : https://www.registry.co.ug/
+// https://www.registry.co.ug, https://whois.co.ug
+// Confirmed by registry <support@i3c.co.ug> 2025-01-20
+ug
+ac.ug
+co.ug
+com.ug
+edu.ug
+go.ug
+gov.ug
+mil.ug
+ne.ug
+or.ug
+org.ug
+sc.ug
+us.ug
+
+// uk : https://www.iana.org/domains/root/db/uk.html
+// Submitted by registry <Michael.Daly@nominet.org.uk>
+uk
+ac.uk
+co.uk
+gov.uk
+ltd.uk
+me.uk
+net.uk
+nhs.uk
+org.uk
+plc.uk
+police.uk
+*.sch.uk
+
+// us : https://www.iana.org/domains/root/db/us.html
+// Confirmed via the .us zone file by William Harrison 2024-12-10
+us
+dni.us
+isa.us
+nsn.us
+// Geographic Names
+ak.us
+al.us
+ar.us
+as.us
+az.us
+ca.us
+co.us
+ct.us
+dc.us
+de.us
+fl.us
+ga.us
+gu.us
+hi.us
+ia.us
+id.us
+il.us
+in.us
+ks.us
+ky.us
+la.us
+ma.us
+md.us
+me.us
+mi.us
+mn.us
+mo.us
+ms.us
+mt.us
+nc.us
+nd.us
+ne.us
+nh.us
+nj.us
+nm.us
+nv.us
+ny.us
+oh.us
+ok.us
+or.us
+pa.us
+pr.us
+ri.us
+sc.us
+sd.us
+tn.us
+tx.us
+ut.us
+va.us
+vi.us
+vt.us
+wa.us
+wi.us
+wv.us
+wy.us
+// The registrar notes several more specific domains available in each state,
+// such as state.*.us, dst.*.us, etc., but resolution of these is somewhat
+// haphazard; in some states these domains resolve as addresses, while in others
+// only subdomains are available, or even nothing at all. We include the
+// most common ones where it's clear that different sites are different
+// entities.
+k12.ak.us
+k12.al.us
+k12.ar.us
+k12.as.us
+k12.az.us
+k12.ca.us
+k12.co.us
+k12.ct.us
+k12.dc.us
+k12.fl.us
+k12.ga.us
+k12.gu.us
+// k12.hi.us - Bug 614565 - Hawaii has a state-wide DOE login
+k12.ia.us
+k12.id.us
+k12.il.us
+k12.in.us
+k12.ks.us
+k12.ky.us
+k12.la.us
+k12.ma.us
+k12.md.us
+k12.me.us
+k12.mi.us
+k12.mn.us
+k12.mo.us
+k12.ms.us
+k12.mt.us
+k12.nc.us
+k12.ne.us
+k12.nh.us
+k12.nj.us
+k12.nm.us
+k12.nv.us
+k12.ny.us
+k12.oh.us
+k12.ok.us
+k12.or.us
+k12.pa.us
+k12.pr.us
+// k12.ri.us - Removed at request of Kim Cournoyer <netsupport@staff.ri.net>
+k12.sc.us
+// k12.sd.us - Bug 934131 - Removed at request of James Booze <James.Booze@k12.sd.us>
+k12.tn.us
+k12.tx.us
+k12.ut.us
+k12.va.us
+k12.vi.us
+k12.vt.us
+k12.wa.us
+k12.wi.us
+// k12.wv.us - Bug 947705 - Removed at request of Verne Britton <verne@wvnet.edu>
+cc.ak.us
+lib.ak.us
+cc.al.us
+lib.al.us
+cc.ar.us
+lib.ar.us
+cc.as.us
+lib.as.us
+cc.az.us
+lib.az.us
+cc.ca.us
+lib.ca.us
+cc.co.us
+lib.co.us
+cc.ct.us
+lib.ct.us
+cc.dc.us
+lib.dc.us
+cc.de.us
+cc.fl.us
+lib.fl.us
+cc.ga.us
+lib.ga.us
+cc.gu.us
+lib.gu.us
+cc.hi.us
+lib.hi.us
+cc.ia.us
+lib.ia.us
+cc.id.us
+lib.id.us
+cc.il.us
+lib.il.us
+cc.in.us
+lib.in.us
+cc.ks.us
+lib.ks.us
+cc.ky.us
+lib.ky.us
+cc.la.us
+lib.la.us
+cc.ma.us
+lib.ma.us
+cc.md.us
+lib.md.us
+cc.me.us
+lib.me.us
+cc.mi.us
+lib.mi.us
+cc.mn.us
+lib.mn.us
+cc.mo.us
+lib.mo.us
+cc.ms.us
+cc.mt.us
+lib.mt.us
+cc.nc.us
+lib.nc.us
+cc.ne.us
+lib.ne.us
+cc.nh.us
+lib.nh.us
+cc.nj.us
+lib.nj.us
+cc.nm.us
+lib.nm.us
+cc.nv.us
+lib.nv.us
+cc.ny.us
+lib.ny.us
+cc.oh.us
+lib.oh.us
+cc.ok.us
+lib.ok.us
+cc.or.us
+lib.or.us
+cc.pa.us
+lib.pa.us
+cc.pr.us
+lib.pr.us
+cc.ri.us
+lib.ri.us
+cc.sc.us
+lib.sc.us
+cc.sd.us
+lib.sd.us
+cc.tn.us
+lib.tn.us
+cc.tx.us
+lib.tx.us
+cc.ut.us
+lib.ut.us
+cc.va.us
+lib.va.us
+cc.vi.us
+lib.vi.us
+cc.vt.us
+lib.vt.us
+cc.wa.us
+lib.wa.us
+cc.wi.us
+lib.wi.us
+cc.wv.us
+cc.wy.us
+k12.wy.us
+// lib.wv.us - Bug 941670 - Removed at request of Larry W Arnold <arnold@wvlc.lib.wv.us>
+lib.wy.us
+// k12.ma.us contains school districts in Massachusetts. The 4LDs are
+// managed independently except for private (PVT), charter (CHTR) and
+// parochial (PAROCH) schools. Those are delegated directly to the
+// 5LD operators. <k12-ma-hostmaster@rsuc.gweep.net>
+chtr.k12.ma.us
+paroch.k12.ma.us
+pvt.k12.ma.us
+// Merit Network, Inc. maintains the registry for =~ /(k12|cc|lib).mi.us/ and the following
+// see also: https://domreg.merit.edu : domreg@merit.edu
+// see also: whois -h whois.domreg.merit.edu help
+ann-arbor.mi.us
+cog.mi.us
+dst.mi.us
+eaton.mi.us
+gen.mi.us
+mus.mi.us
+tec.mi.us
+washtenaw.mi.us
+
+// uy : http://www.nic.org.uy/
+uy
+com.uy
+edu.uy
+gub.uy
+mil.uy
+net.uy
+org.uy
+
+// uz : http://www.reg.uz/
+uz
+co.uz
+com.uz
+net.uz
+org.uz
+
+// va : https://www.iana.org/domains/root/db/va.html
+va
+
+// vc : https://www.iana.org/domains/root/db/vc.html
+// Submitted by registry <kshah@ca.afilias.info>
+vc
+com.vc
+edu.vc
+gov.vc
+mil.vc
+net.vc
+org.vc
+
+// ve : https://nic.ve/
+// https://nic.ve/site/user-agreement -> under "III. Clasificación de Nombres de Dominio"
+// Submitted by registry nic@nic.ve and nicve@conatel.gob.ve
+ve
+arts.ve
+bib.ve
+co.ve
+com.ve
+e12.ve
+edu.ve
+emprende.ve
+firm.ve
+gob.ve
+gov.ve
+ia.ve
+info.ve
+int.ve
+mil.ve
+net.ve
+nom.ve
+org.ve
+rar.ve
+rec.ve
+store.ve
+tec.ve
+web.ve
+
+// vg : https://www.iana.org/domains/root/db/vg.html
+// Confirmed by registry <tld.ops@centralnic.com> 2025-01-10
+vg
+edu.vg
+
+// vi : https://www.iana.org/domains/root/db/vi.html
+vi
+co.vi
+com.vi
+k12.vi
+net.vi
+org.vi
+
+// vn : https://vnnic.vn/en/domain-name-vn/domain-name/cctldvn
+vn
+ac.vn
+ai.vn
+biz.vn
+com.vn
+edu.vn
+gov.vn
+health.vn
+id.vn
+info.vn
+int.vn
+io.vn
+name.vn
+net.vn
+org.vn
+pro.vn
+
+// vn geographical names
+angiang.vn
+bacgiang.vn
+backan.vn
+baclieu.vn
+bacninh.vn
+baria-vungtau.vn
+bentre.vn
+binhdinh.vn
+binhduong.vn
+binhphuoc.vn
+binhthuan.vn
+camau.vn
+cantho.vn
+caobang.vn
+daklak.vn
+daknong.vn
+danang.vn
+dienbien.vn
+dongnai.vn
+dongthap.vn
+gialai.vn
+hagiang.vn
+haiduong.vn
+haiphong.vn
+hanam.vn
+hanoi.vn
+hatinh.vn
+haugiang.vn
+hoabinh.vn
+hue.vn
+hungyen.vn
+khanhhoa.vn
+kiengiang.vn
+kontum.vn
+laichau.vn
+lamdong.vn
+langson.vn
+laocai.vn
+longan.vn
+namdinh.vn
+nghean.vn
+ninhbinh.vn
+ninhthuan.vn
+phutho.vn
+phuyen.vn
+quangbinh.vn
+quangnam.vn
+quangngai.vn
+quangninh.vn
+quangtri.vn
+soctrang.vn
+sonla.vn
+tayninh.vn
+thaibinh.vn
+thainguyen.vn
+thanhhoa.vn
+thanhphohochiminh.vn
+thuathienhue.vn
+tiengiang.vn
+travinh.vn
+tuyenquang.vn
+vinhlong.vn
+vinhphuc.vn
+yenbai.vn
+
+// vu : https://www.iana.org/domains/root/db/vu.html
+// http://www.vunic.vu/
+vu
+com.vu
+edu.vu
+net.vu
+org.vu
+
+// wf : https://www.afnic.fr/wp-media/uploads/2022/12/afnic-naming-policy-2023-01-01.pdf
+wf
+
+// ws : https://www.iana.org/domains/root/db/ws.html
+// http://samoanic.ws/index.dhtml
+ws
+com.ws
+edu.ws
+gov.ws
+net.ws
+org.ws
+
+// yt : https://www.afnic.fr/wp-media/uploads/2022/12/afnic-naming-policy-2023-01-01.pdf
+yt
+
+// IDN ccTLDs
+// When submitting patches, please maintain a sort by ISO 3166 ccTLD, then
+// U-label, and follow this format:
+// // A-Label ("<Latin renderings>", <language name>[, variant info]) : <ISO 3166 ccTLD>
+// // [sponsoring org]
+// U-Label
+
+// xn--mgbaam7a8h ("Emerat", Arabic) : AE
+// http://aeda.ae/
+امارات
+
+// xn--y9a3aq ("hye", Armenian) : AM
+// ISOC AM (operated by .am Registry)
+հայ
+
+// xn--54b7fta0cc ("Bangla", Bangla) : BD
+বাংলা
+
+// xn--90ae ("bg", Bulgarian) : BG
+бг
+
+// xn--mgbcpq6gpa1a ("albahrain", Arabic) : BH
+البحرين
+
+// xn--90ais ("bel", Belarusian/Russian Cyrillic) : BY
+// Operated by .by registry
+бел
+
+// xn--fiqs8s ("Zhongguo/China", Chinese, Simplified) : CN
+// CNNIC
+// https://www.cnnic.cn/11/192/index.html
+中国
+
+// xn--fiqz9s ("Zhongguo/China", Chinese, Traditional) : CN
+// CNNIC
+// https://www.cnnic.com.cn/AU/MediaC/Announcement/201609/t20160905_54470.htm
+中國
+
+// xn--lgbbat1ad8j ("Algeria/Al Jazair", Arabic) : DZ
+الجزائر
+
+// xn--wgbh1c ("Egypt/Masr", Arabic) : EG
+// http://www.dotmasr.eg/
+مصر
+
+// xn--e1a4c ("eu", Cyrillic) : EU
+// https://eurid.eu
+ею
+
+// xn--qxa6a ("eu", Greek) : EU
+// https://eurid.eu
+ευ
+
+// xn--mgbah1a3hjkrd ("Mauritania", Arabic) : MR
+موريتانيا
+
+// xn--node ("ge", Georgian Mkhedruli) : GE
+გე
+
+// xn--qxam ("el", Greek) : GR
+// Hellenic Ministry of Infrastructure, Transport, and Networks
+ελ
+
+// xn--j6w193g ("Hong Kong", Chinese) : HK
+// https://www.hkirc.hk
+// Submitted by registry <hk.tech@hkirc.hk>
+// https://www.hkirc.hk/content.jsp?id=30#!/34
+香港
+個人.香港
+公司.香港
+政府.香港
+教育.香港
+組織.香港
+網絡.香港
+
+// xn--2scrj9c ("Bharat", Kannada) : IN
+// India
+ಭಾರತ
+
+// xn--3hcrj9c ("Bharat", Oriya) : IN
+// India
+ଭାରତ
+
+// xn--45br5cyl ("Bharatam", Assamese) : IN
+// India
+ভাৰত
+
+// xn--h2breg3eve ("Bharatam", Sanskrit) : IN
+// India
+भारतम्
+
+// xn--h2brj9c8c ("Bharot", Santali) : IN
+// India
+भारोत
+
+// xn--mgbgu82a ("Bharat", Sindhi) : IN
+// India
+ڀارت
+
+// xn--rvc1e0am3e ("Bharatam", Malayalam) : IN
+// India
+ഭാരതം
+
+// xn--h2brj9c ("Bharat", Devanagari) : IN
+// India
+भारत
+
+// xn--mgbbh1a ("Bharat", Kashmiri) : IN
+// India
+بارت
+
+// xn--mgbbh1a71e ("Bharat", Arabic) : IN
+// India
+بھارت
+
+// xn--fpcrj9c3d ("Bharat", Telugu) : IN
+// India
+భారత్
+
+// xn--gecrj9c ("Bharat", Gujarati) : IN
+// India
+ભારત
+
+// xn--s9brj9c ("Bharat", Gurmukhi) : IN
+// India
+ਭਾਰਤ
+
+// xn--45brj9c ("Bharat", Bengali) : IN
+// India
+ভারত
+
+// xn--xkc2dl3a5ee0h ("India", Tamil) : IN
+// India
+இந்தியா
+
+// xn--mgba3a4f16a ("Iran", Persian) : IR
+ایران
+
+// xn--mgba3a4fra ("Iran", Arabic) : IR
+ايران
+
+// xn--mgbtx2b ("Iraq", Arabic) : IQ
+// Communications and Media Commission
+عراق
+
+// xn--mgbayh7gpa ("al-Ordon", Arabic) : JO
+// National Information Technology Center (NITC)
+// Royal Scientific Society, Al-Jubeiha
+الاردن
+
+// xn--3e0b707e ("Republic of Korea", Hangul) : KR
+한국
+
+// xn--80ao21a ("Kaz", Kazakh) : KZ
+қаз
+
+// xn--q7ce6a ("Lao", Lao) : LA
+ລາວ
+
+// xn--fzc2c9e2c ("Lanka", Sinhalese-Sinhala) : LK
+// http://www.domains.lk/
+ලංකා
+
+// xn--xkc2al3hye2a ("Ilangai", Tamil) : LK
+// http://www.domains.lk/
+இலங்கை
+
+// xn--mgbc0a9azcg ("Morocco/al-Maghrib", Arabic) : MA
+المغرب
+
+// xn--d1alf ("mkd", Macedonian) : MK
+// MARnet
+мкд
+
+// xn--l1acc ("mon", Mongolian) : MN
+мон
+
+// xn--mix891f ("Macao", Chinese, Traditional) : MO
+// MONIC / HNET Asia (Registry Operator for .mo)
+澳門
+
+// xn--mix082f ("Macao", Chinese, Simplified) : MO
+澳门
+
+// xn--mgbx4cd0ab ("Malaysia", Malay) : MY
+مليسيا
+
+// xn--mgb9awbf ("Oman", Arabic) : OM
+عمان
+
+// xn--mgbai9azgqp6j ("Pakistan", Urdu/Arabic) : PK
+پاکستان
+
+// xn--mgbai9a5eva00b ("Pakistan", Urdu/Arabic, variant) : PK
+پاكستان
+
+// xn--ygbi2ammx ("Falasteen", Arabic) : PS
+// The Palestinian National Internet Naming Authority (PNINA)
+// http://www.pnina.ps
+فلسطين
+
+// xn--90a3ac ("srb", Cyrillic) : RS
+// https://www.rnids.rs/en/domains/national-domains
+срб
+ак.срб
+обр.срб
+од.срб
+орг.срб
+пр.срб
+упр.срб
+
+// xn--p1ai ("rf", Russian-Cyrillic) : RU
+// https://cctld.ru/files/pdf/docs/en/rules_ru-rf.pdf
+// Submitted by George Georgievsky <gug@cctld.ru>
+рф
+
+// xn--wgbl6a ("Qatar", Arabic) : QA
+// https://www.cra.gov.qa/
+قطر
+
+// xn--mgberp4a5d4ar ("AlSaudiah", Arabic) : SA
+// http://www.nic.net.sa/
+السعودية
+
+// xn--mgberp4a5d4a87g ("AlSaudiah", Arabic, variant): SA
+السعودیة
+
+// xn--mgbqly7c0a67fbc ("AlSaudiah", Arabic, variant) : SA
+السعودیۃ
+
+// xn--mgbqly7cvafr ("AlSaudiah", Arabic, variant) : SA
+السعوديه
+
+// xn--mgbpl2fh ("sudan", Arabic) : SD
+// Operated by .sd registry
+سودان
+
+// xn--yfro4i67o Singapore ("Singapore", Chinese) : SG
+新加坡
+
+// xn--clchc0ea0b2g2a9gcd ("Singapore", Tamil) : SG
+சிங்கப்பூர்
+
+// xn--ogbpf8fl ("Syria", Arabic) : SY
+سورية
+
+// xn--mgbtf8fl ("Syria", Arabic, variant) : SY
+سوريا
+
+// xn--o3cw4h ("Thai", Thai) : TH
+// http://www.thnic.co.th
+ไทย
+ทหาร.ไทย
+ธุรกิจ.ไทย
+เน็ต.ไทย
+รัฐบาล.ไทย
+ศึกษา.ไทย
+องค์กร.ไทย
+
+// xn--pgbs0dh ("Tunisia", Arabic) : TN
+// http://nic.tn
+تونس
+
+// xn--kpry57d ("Taiwan", Chinese, Traditional) : TW
+// https://twnic.tw/dnservice_catag.php
+台灣
+
+// xn--kprw13d ("Taiwan", Chinese, Simplified) : TW
+// http://www.twnic.net/english/dn/dn_07a.htm
+台湾
+
+// xn--nnx388a ("Taiwan", Chinese, variant) : TW
+臺灣
+
+// xn--j1amh ("ukr", Cyrillic) : UA
+укр
+
+// xn--mgb2ddes ("AlYemen", Arabic) : YE
+اليمن
+
+// xxx : https://icmregistry.biz/
+xxx
+
+// ye : https://www.iana.org/domains/root/db/ye.html
+ye
+com.ye
+edu.ye
+gov.ye
+mil.ye
+net.ye
+org.ye
+
+// za : https://www.iana.org/domains/root/db/za.html
+ac.za
+agric.za
+alt.za
+co.za
+edu.za
+gov.za
+grondar.za
+law.za
+mil.za
+net.za
+ngo.za
+nic.za
+nis.za
+nom.za
+org.za
+school.za
+tm.za
+web.za
+
+// zm : https://zicta.zm/
+zm
+ac.zm
+biz.zm
+co.zm
+com.zm
+edu.zm
+gov.zm
+info.zm
+mil.zm
+net.zm
+org.zm
+sch.zm
+
+// zw : https://www.potraz.gov.zw/
+// Confirmed by registry <bmtengwa@potraz.gov.zw> 2017-01-25
+zw
+ac.zw
+co.zw
+gov.zw
+mil.zw
+org.zw
+
+// newGTLDs
+
+// List of new gTLDs imported from https://www.icann.org/resources/registries/gtlds/v2/gtlds.json on 2026-07-24T16:40:16Z
+// This list is auto-generated, don't edit it manually.
+// aaa : American Automobile Association, Inc.
+// https://www.iana.org/domains/root/db/aaa.html
+aaa
+
+// aarp : AARP
+// https://www.iana.org/domains/root/db/aarp.html
+aarp
+
+// abb : ABB Ltd
+// https://www.iana.org/domains/root/db/abb.html
+abb
+
+// abbott : Abbott Laboratories, Inc.
+// https://www.iana.org/domains/root/db/abbott.html
+abbott
+
+// abbvie : AbbVie Inc.
+// https://www.iana.org/domains/root/db/abbvie.html
+abbvie
+
+// abc : Disney Enterprises, Inc.
+// https://www.iana.org/domains/root/db/abc.html
+abc
+
+// able : Able Inc.
+// https://www.iana.org/domains/root/db/able.html
+able
+
+// abogado : Registry Services, LLC
+// https://www.iana.org/domains/root/db/abogado.html
+abogado
+
+// abudhabi : Abu Dhabi Systems and Information Centre
+// https://www.iana.org/domains/root/db/abudhabi.html
+abudhabi
+
+// academy : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/academy.html
+academy
+
+// accenture : Accenture plc
+// https://www.iana.org/domains/root/db/accenture.html
+accenture
+
+// accountant : dot Accountant Limited
+// https://www.iana.org/domains/root/db/accountant.html
+accountant
+
+// accountants : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/accountants.html
+accountants
+
+// aco : ACO Severin Ahlmann GmbH & Co. KG
+// https://www.iana.org/domains/root/db/aco.html
+aco
+
+// actor : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/actor.html
+actor
+
+// ads : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/ads.html
+ads
+
+// adult : ICM Registry AD LLC
+// https://www.iana.org/domains/root/db/adult.html
+adult
+
+// aeg : Aktiebolaget Electrolux
+// https://www.iana.org/domains/root/db/aeg.html
+aeg
+
+// aetna : Aetna Life Insurance Company
+// https://www.iana.org/domains/root/db/aetna.html
+aetna
+
+// afl : Australian Football League
+// https://www.iana.org/domains/root/db/afl.html
+afl
+
+// africa : ZA Central Registry NPC trading as Registry.Africa
+// https://www.iana.org/domains/root/db/africa.html
+africa
+
+// agakhan : Fondation Aga Khan (Aga Khan Foundation)
+// https://www.iana.org/domains/root/db/agakhan.html
+agakhan
+
+// agency : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/agency.html
+agency
+
+// aig : American International Group, Inc.
+// https://www.iana.org/domains/root/db/aig.html
+aig
+
+// airbus : Airbus S.A.S.
+// https://www.iana.org/domains/root/db/airbus.html
+airbus
+
+// airforce : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/airforce.html
+airforce
+
+// airtel : Bharti Airtel Limited
+// https://www.iana.org/domains/root/db/airtel.html
+airtel
+
+// akdn : Fondation Aga Khan (Aga Khan Foundation)
+// https://www.iana.org/domains/root/db/akdn.html
+akdn
+
+// alibaba : Alibaba Group Holding Limited
+// https://www.iana.org/domains/root/db/alibaba.html
+alibaba
+
+// alipay : Alibaba Group Holding Limited
+// https://www.iana.org/domains/root/db/alipay.html
+alipay
+
+// allfinanz : Allfinanz Deutsche Vermögensberatung Aktiengesellschaft
+// https://www.iana.org/domains/root/db/allfinanz.html
+allfinanz
+
+// allstate : Allstate Fire and Casualty Insurance Company
+// https://www.iana.org/domains/root/db/allstate.html
+allstate
+
+// ally : Ally Financial Inc.
+// https://www.iana.org/domains/root/db/ally.html
+ally
+
+// alsace : Region Grand Est
+// https://www.iana.org/domains/root/db/alsace.html
+alsace
+
+// alstom : ALSTOM
+// https://www.iana.org/domains/root/db/alstom.html
+alstom
+
+// amazon : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/amazon.html
+amazon
+
+// americanexpress : American Express Travel Related Services Company, Inc.
+// https://www.iana.org/domains/root/db/americanexpress.html
+americanexpress
+
+// americanfamily : AmFam, Inc.
+// https://www.iana.org/domains/root/db/americanfamily.html
+americanfamily
+
+// amex : American Express Travel Related Services Company, Inc.
+// https://www.iana.org/domains/root/db/amex.html
+amex
+
+// amfam : AmFam, Inc.
+// https://www.iana.org/domains/root/db/amfam.html
+amfam
+
+// amica : Amica Mutual Insurance Company
+// https://www.iana.org/domains/root/db/amica.html
+amica
+
+// amsterdam : Gemeente Amsterdam
+// https://www.iana.org/domains/root/db/amsterdam.html
+amsterdam
+
+// analytics : Campus IP LLC
+// https://www.iana.org/domains/root/db/analytics.html
+analytics
+
+// android : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/android.html
+android
+
+// anquan : Beijing Qihu Keji Co., Ltd.
+// https://www.iana.org/domains/root/db/anquan.html
+anquan
+
+// anz : Australia and New Zealand Banking Group Limited
+// https://www.iana.org/domains/root/db/anz.html
+anz
+
+// aol : AOL Media LLC
+// https://www.iana.org/domains/root/db/aol.html
+aol
+
+// apartments : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/apartments.html
+apartments
+
+// app : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/app.html
+app
+
+// apple : Apple Inc.
+// https://www.iana.org/domains/root/db/apple.html
+apple
+
+// aquarelle : Aquarelle.com
+// https://www.iana.org/domains/root/db/aquarelle.html
+aquarelle
+
+// arab : League of Arab States
+// https://www.iana.org/domains/root/db/arab.html
+arab
+
+// aramco : Aramco Services Company
+// https://www.iana.org/domains/root/db/aramco.html
+aramco
+
+// archi : Identity Digital Domains Limited
+// https://www.iana.org/domains/root/db/archi.html
+archi
+
+// army : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/army.html
+army
+
+// art : UK Creative Ideas Limited
+// https://www.iana.org/domains/root/db/art.html
+art
+
+// arte : Association Relative à la Télévision Européenne G.E.I.E.
+// https://www.iana.org/domains/root/db/arte.html
+arte
+
+// asda : Asda Stores Limited
+// https://www.iana.org/domains/root/db/asda.html
+asda
+
+// associates : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/associates.html
+associates
+
+// athleta : The Gap, Inc.
+// https://www.iana.org/domains/root/db/athleta.html
+athleta
+
+// attorney : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/attorney.html
+attorney
+
+// auction : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/auction.html
+auction
+
+// audi : AUDI Aktiengesellschaft
+// https://www.iana.org/domains/root/db/audi.html
+audi
+
+// audible : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/audible.html
+audible
+
+// audio : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/audio.html
+audio
+
+// auspost : Australian Postal Corporation
+// https://www.iana.org/domains/root/db/auspost.html
+auspost
+
+// author : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/author.html
+author
+
+// auto : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/auto.html
+auto
+
+// autos : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/autos.html
+autos
+
+// aws : AWS Registry LLC
+// https://www.iana.org/domains/root/db/aws.html
+aws
+
+// axa : AXA Group Operations SAS
+// https://www.iana.org/domains/root/db/axa.html
+axa
+
+// azure : Microsoft Corporation
+// https://www.iana.org/domains/root/db/azure.html
+azure
+
+// baby : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/baby.html
+baby
+
+// baidu : Baidu, Inc.
+// https://www.iana.org/domains/root/db/baidu.html
+baidu
+
+// banamex : Citigroup Inc.
+// https://www.iana.org/domains/root/db/banamex.html
+banamex
+
+// band : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/band.html
+band
+
+// bank : fTLD Registry Services LLC
+// https://www.iana.org/domains/root/db/bank.html
+bank
+
+// bar : Punto 2012 Sociedad Anonima Promotora de Inversion de Capital Variable
+// https://www.iana.org/domains/root/db/bar.html
+bar
+
+// barcelona : Municipi de Barcelona
+// https://www.iana.org/domains/root/db/barcelona.html
+barcelona
+
+// barclaycard : Barclays Bank PLC
+// https://www.iana.org/domains/root/db/barclaycard.html
+barclaycard
+
+// barclays : Barclays Bank PLC
+// https://www.iana.org/domains/root/db/barclays.html
+barclays
+
+// barefoot : Gallo Vineyards, Inc.
+// https://www.iana.org/domains/root/db/barefoot.html
+barefoot
+
+// bargains : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/bargains.html
+bargains
+
+// baseball : MLB Advanced Media DH, LLC
+// https://www.iana.org/domains/root/db/baseball.html
+baseball
+
+// basketball : Fédération Internationale de Basketball (FIBA)
+// https://www.iana.org/domains/root/db/basketball.html
+basketball
+
+// bauhaus : Werkhaus GmbH
+// https://www.iana.org/domains/root/db/bauhaus.html
+bauhaus
+
+// bayern : Bayern Connect GmbH
+// https://www.iana.org/domains/root/db/bayern.html
+bayern
+
+// bbc : British Broadcasting Corporation
+// https://www.iana.org/domains/root/db/bbc.html
+bbc
+
+// bbt : BB&T Corporation
+// https://www.iana.org/domains/root/db/bbt.html
+bbt
+
+// bbva : BANCO BILBAO VIZCAYA ARGENTARIA, S.A.
+// https://www.iana.org/domains/root/db/bbva.html
+bbva
+
+// bcg : The Boston Consulting Group, Inc.
+// https://www.iana.org/domains/root/db/bcg.html
+bcg
+
+// bcn : Municipi de Barcelona
+// https://www.iana.org/domains/root/db/bcn.html
+bcn
+
+// beats : Beats Electronics, LLC
+// https://www.iana.org/domains/root/db/beats.html
+beats
+
+// beauty : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/beauty.html
+beauty
+
+// beer : Registry Services, LLC
+// https://www.iana.org/domains/root/db/beer.html
+beer
+
+// berlin : dotBERLIN GmbH & Co. KG
+// https://www.iana.org/domains/root/db/berlin.html
+berlin
+
+// best : BestTLD Pty Ltd
+// https://www.iana.org/domains/root/db/best.html
+best
+
+// bestbuy : BBY Solutions, Inc.
+// https://www.iana.org/domains/root/db/bestbuy.html
+bestbuy
+
+// bet : Identity Digital Domains Limited
+// https://www.iana.org/domains/root/db/bet.html
+bet
+
+// bharti : Bharti Enterprises (Holding) Private Limited
+// https://www.iana.org/domains/root/db/bharti.html
+bharti
+
+// bible : American Bible Society
+// https://www.iana.org/domains/root/db/bible.html
+bible
+
+// bid : dot Bid Limited
+// https://www.iana.org/domains/root/db/bid.html
+bid
+
+// bike : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/bike.html
+bike
+
+// bing : Microsoft Corporation
+// https://www.iana.org/domains/root/db/bing.html
+bing
+
+// bingo : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/bingo.html
+bingo
+
+// bio : Identity Digital Domains Limited
+// https://www.iana.org/domains/root/db/bio.html
+bio
+
+// black : Identity Digital Domains Limited
+// https://www.iana.org/domains/root/db/black.html
+black
+
+// blackfriday : Registry Services, LLC
+// https://www.iana.org/domains/root/db/blackfriday.html
+blackfriday
+
+// blockbuster : Dish DBS Corporation
+// https://www.iana.org/domains/root/db/blockbuster.html
+blockbuster
+
+// blog : Knock Knock WHOIS There, LLC
+// https://www.iana.org/domains/root/db/blog.html
+blog
+
+// bloomberg : Bloomberg IP Holdings LLC
+// https://www.iana.org/domains/root/db/bloomberg.html
+bloomberg
+
+// blue : Identity Digital Domains Limited
+// https://www.iana.org/domains/root/db/blue.html
+blue
+
+// bms : Bristol-Myers Squibb Company
+// https://www.iana.org/domains/root/db/bms.html
+bms
+
+// bmw : Bayerische Motoren Werke Aktiengesellschaft
+// https://www.iana.org/domains/root/db/bmw.html
+bmw
+
+// bnpparibas : BNP Paribas
+// https://www.iana.org/domains/root/db/bnpparibas.html
+bnpparibas
+
+// boats : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/boats.html
+boats
+
+// boehringer : Boehringer Ingelheim International GmbH
+// https://www.iana.org/domains/root/db/boehringer.html
+boehringer
+
+// bofa : Bank of America Corporation
+// https://www.iana.org/domains/root/db/bofa.html
+bofa
+
+// bom : Núcleo de Informação e Coordenação do Ponto BR - NIC.br
+// https://www.iana.org/domains/root/db/bom.html
+bom
+
+// bond : ShortDot SA
+// https://www.iana.org/domains/root/db/bond.html
+bond
+
+// boo : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/boo.html
+boo
+
+// book : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/book.html
+book
+
+// booking : Booking.com B.V.
+// https://www.iana.org/domains/root/db/booking.html
+booking
+
+// bosch : Robert Bosch GMBH
+// https://www.iana.org/domains/root/db/bosch.html
+bosch
+
+// bostik : Bostik SA
+// https://www.iana.org/domains/root/db/bostik.html
+bostik
+
+// boston : Registry Services, LLC
+// https://www.iana.org/domains/root/db/boston.html
+boston
+
+// bot : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/bot.html
+bot
+
+// boutique : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/boutique.html
+boutique
+
+// box : Intercap Registry Inc.
+// https://www.iana.org/domains/root/db/box.html
+box
+
+// bradesco : Banco Bradesco S.A.
+// https://www.iana.org/domains/root/db/bradesco.html
+bradesco
+
+// bridgestone : Bridgestone Corporation
+// https://www.iana.org/domains/root/db/bridgestone.html
+bridgestone
+
+// broadway : Celebrate Broadway, Inc.
+// https://www.iana.org/domains/root/db/broadway.html
+broadway
+
+// broker : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/broker.html
+broker
+
+// brother : Brother Industries, Ltd.
+// https://www.iana.org/domains/root/db/brother.html
+brother
+
+// brussels : DNS.be vzw
+// https://www.iana.org/domains/root/db/brussels.html
+brussels
+
+// build : Plan Bee LLC
+// https://www.iana.org/domains/root/db/build.html
+build
+
+// builders : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/builders.html
+builders
+
+// business : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/business.html
+business
+
+// buy : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/buy.html
+buy
+
+// buzz : DOTSTRATEGY CO.
+// https://www.iana.org/domains/root/db/buzz.html
+buzz
+
+// bzh : Association www.bzh
+// https://www.iana.org/domains/root/db/bzh.html
+bzh
+
+// cab : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/cab.html
+cab
+
+// cafe : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/cafe.html
+cafe
+
+// cal : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/cal.html
+cal
+
+// call : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/call.html
+call
+
+// calvinklein : PVH gTLD Holdings LLC
+// https://www.iana.org/domains/root/db/calvinklein.html
+calvinklein
+
+// cam : Cam Connecting SARL
+// https://www.iana.org/domains/root/db/cam.html
+cam
+
+// camera : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/camera.html
+camera
+
+// camp : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/camp.html
+camp
+
+// canon : Canon Inc.
+// https://www.iana.org/domains/root/db/canon.html
+canon
+
+// capetown : ZA Central Registry NPC trading as ZA Central Registry
+// https://www.iana.org/domains/root/db/capetown.html
+capetown
+
+// capital : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/capital.html
+capital
+
+// capitalone : Capital One Financial Corporation
+// https://www.iana.org/domains/root/db/capitalone.html
+capitalone
+
+// car : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/car.html
+car
+
+// caravan : Caravan International, Inc.
+// https://www.iana.org/domains/root/db/caravan.html
+caravan
+
+// cards : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/cards.html
+cards
+
+// care : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/care.html
+care
+
+// career : dotCareer LLC
+// https://www.iana.org/domains/root/db/career.html
+career
+
+// careers : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/careers.html
+careers
+
+// cars : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/cars.html
+cars
+
+// casa : Registry Services, LLC
+// https://www.iana.org/domains/root/db/casa.html
+casa
+
+// case : Digity, LLC
+// https://www.iana.org/domains/root/db/case.html
+case
+
+// cash : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/cash.html
+cash
+
+// casino : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/casino.html
+casino
+
+// catering : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/catering.html
+catering
+
+// catholic : Pontificium Consilium de Comunicationibus Socialibus (PCCS) (Pontifical Council for Social Communication)
+// https://www.iana.org/domains/root/db/catholic.html
+catholic
+
+// cba : COMMONWEALTH BANK OF AUSTRALIA
+// https://www.iana.org/domains/root/db/cba.html
+cba
+
+// cbn : The Christian Broadcasting Network, Inc.
+// https://www.iana.org/domains/root/db/cbn.html
+cbn
+
+// cbre : CBRE, Inc.
+// https://www.iana.org/domains/root/db/cbre.html
+cbre
+
+// center : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/center.html
+center
+
+// ceo : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/ceo.html
+ceo
+
+// cern : European Organization for Nuclear Research ("CERN")
+// https://www.iana.org/domains/root/db/cern.html
+cern
+
+// cfa : CFA Institute
+// https://www.iana.org/domains/root/db/cfa.html
+cfa
+
+// cfd : ShortDot SA
+// https://www.iana.org/domains/root/db/cfd.html
+cfd
+
+// chanel : Chanel International B.V.
+// https://www.iana.org/domains/root/db/chanel.html
+chanel
+
+// channel : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/channel.html
+channel
+
+// charity : Public Interest Registry
+// https://www.iana.org/domains/root/db/charity.html
+charity
+
+// chase : JPMorgan Chase Bank, National Association
+// https://www.iana.org/domains/root/db/chase.html
+chase
+
+// chat : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/chat.html
+chat
+
+// cheap : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/cheap.html
+cheap
+
+// chintai : CHINTAI Corporation
+// https://www.iana.org/domains/root/db/chintai.html
+chintai
+
+// christmas : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/christmas.html
+christmas
+
+// chrome : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/chrome.html
+chrome
+
+// church : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/church.html
+church
+
+// cipriani : Hotel Cipriani Srl
+// https://www.iana.org/domains/root/db/cipriani.html
+cipriani
+
+// circle : Jolly Host, LLC
+// https://www.iana.org/domains/root/db/circle.html
+circle
+
+// cisco : Cisco Technology, Inc.
+// https://www.iana.org/domains/root/db/cisco.html
+cisco
+
+// citadel : Citadel Domain LLC
+// https://www.iana.org/domains/root/db/citadel.html
+citadel
+
+// citi : Citigroup Inc.
+// https://www.iana.org/domains/root/db/citi.html
+citi
+
+// citic : CITIC Group Corporation
+// https://www.iana.org/domains/root/db/citic.html
+citic
+
+// city : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/city.html
+city
+
+// claims : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/claims.html
+claims
+
+// cleaning : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/cleaning.html
+cleaning
+
+// click : Waterford Limited
+// https://www.iana.org/domains/root/db/click.html
+click
+
+// clinic : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/clinic.html
+clinic
+
+// clinique : The Estée Lauder Companies Inc.
+// https://www.iana.org/domains/root/db/clinique.html
+clinique
+
+// clothing : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/clothing.html
+clothing
+
+// cloud : Aruba PEC S.p.A.
+// https://www.iana.org/domains/root/db/cloud.html
+cloud
+
+// club : Registry Services, LLC
+// https://www.iana.org/domains/root/db/club.html
+club
+
+// clubmed : Club Méditerranée S.A.
+// https://www.iana.org/domains/root/db/clubmed.html
+clubmed
+
+// coach : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/coach.html
+coach
+
+// codes : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/codes.html
+codes
+
+// coffee : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/coffee.html
+coffee
+
+// college : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/college.html
+college
+
+// cologne : dotKoeln GmbH
+// https://www.iana.org/domains/root/db/cologne.html
+cologne
+
+// commbank : COMMONWEALTH BANK OF AUSTRALIA
+// https://www.iana.org/domains/root/db/commbank.html
+commbank
+
+// community : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/community.html
+community
+
+// company : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/company.html
+company
+
+// compare : Registry Services, LLC
+// https://www.iana.org/domains/root/db/compare.html
+compare
+
+// computer : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/computer.html
+computer
+
+// comsec : VeriSign, Inc.
+// https://www.iana.org/domains/root/db/comsec.html
+comsec
+
+// condos : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/condos.html
+condos
+
+// construction : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/construction.html
+construction
+
+// consulting : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/consulting.html
+consulting
+
+// contact : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/contact.html
+contact
+
+// contractors : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/contractors.html
+contractors
+
+// cooking : Registry Services, LLC
+// https://www.iana.org/domains/root/db/cooking.html
+cooking
+
+// cool : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/cool.html
+cool
+
+// corsica : Collectivité de Corse
+// https://www.iana.org/domains/root/db/corsica.html
+corsica
+
+// country : Internet Naming Company LLC
+// https://www.iana.org/domains/root/db/country.html
+country
+
+// coupon : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/coupon.html
+coupon
+
+// coupons : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/coupons.html
+coupons
+
+// courses : Registry Services, LLC
+// https://www.iana.org/domains/root/db/courses.html
+courses
+
+// cpa : American Institute of Certified Public Accountants
+// https://www.iana.org/domains/root/db/cpa.html
+cpa
+
+// credit : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/credit.html
+credit
+
+// creditcard : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/creditcard.html
+creditcard
+
+// creditunion : DotCooperation LLC
+// https://www.iana.org/domains/root/db/creditunion.html
+creditunion
+
+// cricket : dot Cricket Limited
+// https://www.iana.org/domains/root/db/cricket.html
+cricket
+
+// crown : Crown Equipment Corporation
+// https://www.iana.org/domains/root/db/crown.html
+crown
+
+// crs : Federated Co-operatives Limited
+// https://www.iana.org/domains/root/db/crs.html
+crs
+
+// cruise : Viking River Cruises (Bermuda) Ltd.
+// https://www.iana.org/domains/root/db/cruise.html
+cruise
+
+// cruises : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/cruises.html
+cruises
+
+// cuisinella : SCHMIDT GROUPE S.A.S.
+// https://www.iana.org/domains/root/db/cuisinella.html
+cuisinella
+
+// cymru : Nominet UK
+// https://www.iana.org/domains/root/db/cymru.html
+cymru
+
+// cyou : ShortDot SA
+// https://www.iana.org/domains/root/db/cyou.html
+cyou
+
+// dad : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/dad.html
+dad
+
+// dance : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/dance.html
+dance
+
+// data : Dish DBS Corporation
+// https://www.iana.org/domains/root/db/data.html
+data
+
+// date : dot Date Limited
+// https://www.iana.org/domains/root/db/date.html
+date
+
+// dating : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/dating.html
+dating
+
+// datsun : NISSAN MOTOR CO., LTD.
+// https://www.iana.org/domains/root/db/datsun.html
+datsun
+
+// day : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/day.html
+day
+
+// dclk : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/dclk.html
+dclk
+
+// dds : Registry Services, LLC
+// https://www.iana.org/domains/root/db/dds.html
+dds
+
+// deal : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/deal.html
+deal
+
+// dealer : Intercap Registry Inc.
+// https://www.iana.org/domains/root/db/dealer.html
+dealer
+
+// deals : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/deals.html
+deals
+
+// degree : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/degree.html
+degree
+
+// delivery : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/delivery.html
+delivery
+
+// dell : Dell Inc.
+// https://www.iana.org/domains/root/db/dell.html
+dell
+
+// deloitte : Deloitte Touche Tohmatsu
+// https://www.iana.org/domains/root/db/deloitte.html
+deloitte
+
+// delta : Delta Air Lines, Inc.
+// https://www.iana.org/domains/root/db/delta.html
+delta
+
+// democrat : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/democrat.html
+democrat
+
+// dental : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/dental.html
+dental
+
+// dentist : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/dentist.html
+dentist
+
+// desi
+// https://www.iana.org/domains/root/db/desi.html
+desi
+
+// design : Registry Services, LLC
+// https://www.iana.org/domains/root/db/design.html
+design
+
+// dev : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/dev.html
+dev
+
+// dhl : Deutsche Post AG
+// https://www.iana.org/domains/root/db/dhl.html
+dhl
+
+// diamonds : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/diamonds.html
+diamonds
+
+// diet : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/diet.html
+diet
+
+// digital : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/digital.html
+digital
+
+// direct : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/direct.html
+direct
+
+// directory : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/directory.html
+directory
+
+// discount : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/discount.html
+discount
+
+// discover : Discover Financial Services
+// https://www.iana.org/domains/root/db/discover.html
+discover
+
+// dish : Dish DBS Corporation
+// https://www.iana.org/domains/root/db/dish.html
+dish
+
+// diy : Internet Naming Company LLC
+// https://www.iana.org/domains/root/db/diy.html
+diy
+
+// dnp : Dai Nippon Printing Co., Ltd.
+// https://www.iana.org/domains/root/db/dnp.html
+dnp
+
+// docs : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/docs.html
+docs
+
+// doctor : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/doctor.html
+doctor
+
+// dog : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/dog.html
+dog
+
+// domains : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/domains.html
+domains
+
+// dot : Dish DBS Corporation
+// https://www.iana.org/domains/root/db/dot.html
+dot
+
+// download : dot Support Limited
+// https://www.iana.org/domains/root/db/download.html
+download
+
+// drive : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/drive.html
+drive
+
+// dtv : Dish DBS Corporation
+// https://www.iana.org/domains/root/db/dtv.html
+dtv
+
+// dubai : Dubai Smart Government Department
+// https://www.iana.org/domains/root/db/dubai.html
+dubai
+
+// dupont : DuPont Specialty Products USA, LLC
+// https://www.iana.org/domains/root/db/dupont.html
+dupont
+
+// durban : ZA Central Registry NPC trading as ZA Central Registry
+// https://www.iana.org/domains/root/db/durban.html
+durban
+
+// dvag : Deutsche Vermögensberatung Aktiengesellschaft DVAG
+// https://www.iana.org/domains/root/db/dvag.html
+dvag
+
+// dvr : DISH Technologies L.L.C.
+// https://www.iana.org/domains/root/db/dvr.html
+dvr
+
+// earth : Interlink Systems Innovation Institute K.K.
+// https://www.iana.org/domains/root/db/earth.html
+earth
+
+// eat : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/eat.html
+eat
+
+// eco : Big Room Inc.
+// https://www.iana.org/domains/root/db/eco.html
+eco
+
+// edeka : EDEKA Verband kaufmännischer Genossenschaften e.V.
+// https://www.iana.org/domains/root/db/edeka.html
+edeka
+
+// education : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/education.html
+education
+
+// email : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/email.html
+email
+
+// emerck : Merck KGaA
+// https://www.iana.org/domains/root/db/emerck.html
+emerck
+
+// energy : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/energy.html
+energy
+
+// engineer : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/engineer.html
+engineer
+
+// engineering : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/engineering.html
+engineering
+
+// enterprises : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/enterprises.html
+enterprises
+
+// epson : Seiko Epson Corporation
+// https://www.iana.org/domains/root/db/epson.html
+epson
+
+// equipment : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/equipment.html
+equipment
+
+// ericsson : Telefonaktiebolaget L M Ericsson
+// https://www.iana.org/domains/root/db/ericsson.html
+ericsson
+
+// erni : ERNI Group Holding AG
+// https://www.iana.org/domains/root/db/erni.html
+erni
+
+// esq : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/esq.html
+esq
+
+// estate : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/estate.html
+estate
+
+// eurovision : European Broadcasting Union (EBU)
+// https://www.iana.org/domains/root/db/eurovision.html
+eurovision
+
+// eus : Puntueus Fundazioa
+// https://www.iana.org/domains/root/db/eus.html
+eus
+
+// events : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/events.html
+events
+
+// exchange : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/exchange.html
+exchange
+
+// expert : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/expert.html
+expert
+
+// exposed : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/exposed.html
+exposed
+
+// express : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/express.html
+express
+
+// extraspace : Extra Space Storage LLC
+// https://www.iana.org/domains/root/db/extraspace.html
+extraspace
+
+// fage : Fage International S.A.
+// https://www.iana.org/domains/root/db/fage.html
+fage
+
+// fail : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/fail.html
+fail
+
+// fairwinds : FairWinds Partners, LLC
+// https://www.iana.org/domains/root/db/fairwinds.html
+fairwinds
+
+// faith : dot Faith Limited
+// https://www.iana.org/domains/root/db/faith.html
+faith
+
+// family : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/family.html
+family
+
+// fan : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/fan.html
+fan
+
+// fans : ZDNS International Limited
+// https://www.iana.org/domains/root/db/fans.html
+fans
+
+// farm : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/farm.html
+farm
+
+// farmers : Farmers Insurance Exchange
+// https://www.iana.org/domains/root/db/farmers.html
+farmers
+
+// fashion : Registry Services, LLC
+// https://www.iana.org/domains/root/db/fashion.html
+fashion
+
+// fast : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/fast.html
+fast
+
+// fedex : Federal Express Corporation
+// https://www.iana.org/domains/root/db/fedex.html
+fedex
+
+// feedback : Top Level Spectrum, Inc.
+// https://www.iana.org/domains/root/db/feedback.html
+feedback
+
+// ferrari : Fiat Chrysler Automobiles N.V.
+// https://www.iana.org/domains/root/db/ferrari.html
+ferrari
+
+// ferrero : Ferrero Trading Lux S.A.
+// https://www.iana.org/domains/root/db/ferrero.html
+ferrero
+
+// fidelity : Fidelity Brokerage Services LLC
+// https://www.iana.org/domains/root/db/fidelity.html
+fidelity
+
+// fido : Rogers Communications Canada Inc.
+// https://www.iana.org/domains/root/db/fido.html
+fido
+
+// film : Motion Picture Domain Registry Pty Ltd
+// https://www.iana.org/domains/root/db/film.html
+film
+
+// final : Núcleo de Informação e Coordenação do Ponto BR - NIC.br
+// https://www.iana.org/domains/root/db/final.html
+final
+
+// finance : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/finance.html
+finance
+
+// financial : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/financial.html
+financial
+
+// fire : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/fire.html
+fire
+
+// firestone : Bridgestone Licensing Services, Inc
+// https://www.iana.org/domains/root/db/firestone.html
+firestone
+
+// firmdale : Firmdale Holdings Limited
+// https://www.iana.org/domains/root/db/firmdale.html
+firmdale
+
+// fish : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/fish.html
+fish
+
+// fishing : Registry Services, LLC
+// https://www.iana.org/domains/root/db/fishing.html
+fishing
+
+// fit : Registry Services, LLC
+// https://www.iana.org/domains/root/db/fit.html
+fit
+
+// fitness : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/fitness.html
+fitness
+
+// flickr : Flickr, Inc.
+// https://www.iana.org/domains/root/db/flickr.html
+flickr
+
+// flights : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/flights.html
+flights
+
+// flir : FLIR Systems, Inc.
+// https://www.iana.org/domains/root/db/flir.html
+flir
+
+// florist : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/florist.html
+florist
+
+// flowers : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/flowers.html
+flowers
+
+// fly : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/fly.html
+fly
+
+// foo : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/foo.html
+foo
+
+// food : Internet Naming Company LLC
+// https://www.iana.org/domains/root/db/food.html
+food
+
+// football : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/football.html
+football
+
+// ford : Ford Motor Company
+// https://www.iana.org/domains/root/db/ford.html
+ford
+
+// forex : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/forex.html
+forex
+
+// forsale : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/forsale.html
+forsale
+
+// forum : Waterford Limited
+// https://www.iana.org/domains/root/db/forum.html
+forum
+
+// foundation : Public Interest Registry
+// https://www.iana.org/domains/root/db/foundation.html
+foundation
+
+// fox : FOX Registry, LLC
+// https://www.iana.org/domains/root/db/fox.html
+fox
+
+// free : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/free.html
+free
+
+// fresenius : Fresenius Immobilien-Verwaltungs-GmbH
+// https://www.iana.org/domains/root/db/fresenius.html
+fresenius
+
+// frl : FRLregistry B.V.
+// https://www.iana.org/domains/root/db/frl.html
+frl
+
+// frogans : OP3FT
+// https://www.iana.org/domains/root/db/frogans.html
+frogans
+
+// frontier : Frontier Communications Corporation
+// https://www.iana.org/domains/root/db/frontier.html
+frontier
+
+// ftr : Frontier Communications Corporation
+// https://www.iana.org/domains/root/db/ftr.html
+ftr
+
+// fujitsu : Fujitsu Limited
+// https://www.iana.org/domains/root/db/fujitsu.html
+fujitsu
+
+// fun : Radix Technologies Inc SEZC
+// https://www.iana.org/domains/root/db/fun.html
+fun
+
+// fund : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/fund.html
+fund
+
+// furniture : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/furniture.html
+furniture
+
+// futbol : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/futbol.html
+futbol
+
+// fyi : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/fyi.html
+fyi
+
+// gal : Asociación puntoGAL
+// https://www.iana.org/domains/root/db/gal.html
+gal
+
+// gallery : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/gallery.html
+gallery
+
+// gallo : Gallo Vineyards, Inc.
+// https://www.iana.org/domains/root/db/gallo.html
+gallo
+
+// gallup : Gallup, Inc.
+// https://www.iana.org/domains/root/db/gallup.html
+gallup
+
+// game : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/game.html
+game
+
+// games : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/games.html
+games
+
+// gap : The Gap, Inc.
+// https://www.iana.org/domains/root/db/gap.html
+gap
+
+// garden : Registry Services, LLC
+// https://www.iana.org/domains/root/db/garden.html
+garden
+
+// gay : Registry Services, LLC
+// https://www.iana.org/domains/root/db/gay.html
+gay
+
+// gbiz : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/gbiz.html
+gbiz
+
+// gdn : Joint Stock Company "Navigation-information systems"
+// https://www.iana.org/domains/root/db/gdn.html
+gdn
+
+// gea : GEA Group Aktiengesellschaft
+// https://www.iana.org/domains/root/db/gea.html
+gea
+
+// gent : Easyhost BV
+// https://www.iana.org/domains/root/db/gent.html
+gent
+
+// genting : Resorts World Inc Pte. Ltd.
+// https://www.iana.org/domains/root/db/genting.html
+genting
+
+// george : Wal-Mart Stores, Inc.
+// https://www.iana.org/domains/root/db/george.html
+george
+
+// ggee : GMO Internet, Inc.
+// https://www.iana.org/domains/root/db/ggee.html
+ggee
+
+// gift : DotGift, LLC
+// https://www.iana.org/domains/root/db/gift.html
+gift
+
+// gifts : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/gifts.html
+gifts
+
+// gives : Public Interest Registry
+// https://www.iana.org/domains/root/db/gives.html
+gives
+
+// giving : Public Interest Registry
+// https://www.iana.org/domains/root/db/giving.html
+giving
+
+// glass : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/glass.html
+glass
+
+// gle : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/gle.html
+gle
+
+// global : Identity Digital Domains Limited
+// https://www.iana.org/domains/root/db/global.html
+global
+
+// globo : Globo Comunicação e Participações S.A
+// https://www.iana.org/domains/root/db/globo.html
+globo
+
+// gmail : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/gmail.html
+gmail
+
+// gmbh : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/gmbh.html
+gmbh
+
+// gmo : GMO Internet, Inc.
+// https://www.iana.org/domains/root/db/gmo.html
+gmo
+
+// gmx : 1&1 Mail & Media GmbH
+// https://www.iana.org/domains/root/db/gmx.html
+gmx
+
+// godaddy : Go Daddy East, LLC
+// https://www.iana.org/domains/root/db/godaddy.html
+godaddy
+
+// gold : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/gold.html
+gold
+
+// goldpoint : YODOBASHI CAMERA CO.,LTD.
+// https://www.iana.org/domains/root/db/goldpoint.html
+goldpoint
+
+// golf : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/golf.html
+golf
+
+// goodyear : The Goodyear Tire & Rubber Company
+// https://www.iana.org/domains/root/db/goodyear.html
+goodyear
+
+// goog : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/goog.html
+goog
+
+// google : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/google.html
+google
+
+// gop : Republican State Leadership Committee, Inc.
+// https://www.iana.org/domains/root/db/gop.html
+gop
+
+// got : Jolly Host, LLC
+// https://www.iana.org/domains/root/db/got.html
+got
+
+// grainger : Grainger Registry Services, LLC
+// https://www.iana.org/domains/root/db/grainger.html
+grainger
+
+// graphics : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/graphics.html
+graphics
+
+// gratis : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/gratis.html
+gratis
+
+// green : Identity Digital Domains Limited
+// https://www.iana.org/domains/root/db/green.html
+green
+
+// gripe : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/gripe.html
+gripe
+
+// grocery : Wal-Mart Stores, Inc.
+// https://www.iana.org/domains/root/db/grocery.html
+grocery
+
+// group : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/group.html
+group
+
+// gucci : Guccio Gucci S.p.a.
+// https://www.iana.org/domains/root/db/gucci.html
+gucci
+
+// guge : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/guge.html
+guge
+
+// guide : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/guide.html
+guide
+
+// guitars : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/guitars.html
+guitars
+
+// guru : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/guru.html
+guru
+
+// hair : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/hair.html
+hair
+
+// hamburg : Hamburg Top-Level-Domain GmbH
+// https://www.iana.org/domains/root/db/hamburg.html
+hamburg
+
+// hangout : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/hangout.html
+hangout
+
+// haus : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/haus.html
+haus
+
+// hbo : HBO Registry Services, Inc.
+// https://www.iana.org/domains/root/db/hbo.html
+hbo
+
+// hdfc : HDFC BANK LIMITED
+// https://www.iana.org/domains/root/db/hdfc.html
+hdfc
+
+// hdfcbank : HDFC BANK LIMITED
+// https://www.iana.org/domains/root/db/hdfcbank.html
+hdfcbank
+
+// health : Registry Services, LLC
+// https://www.iana.org/domains/root/db/health.html
+health
+
+// healthcare : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/healthcare.html
+healthcare
+
+// help : Innovation service Limited
+// https://www.iana.org/domains/root/db/help.html
+help
+
+// helsinki : City of Helsinki
+// https://www.iana.org/domains/root/db/helsinki.html
+helsinki
+
+// here : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/here.html
+here
+
+// hermes : HERMES INTERNATIONAL
+// https://www.iana.org/domains/root/db/hermes.html
+hermes
+
+// hiphop : Dot Hip Hop, LLC
+// https://www.iana.org/domains/root/db/hiphop.html
+hiphop
+
+// hisamitsu : Hisamitsu Pharmaceutical Co.,Inc.
+// https://www.iana.org/domains/root/db/hisamitsu.html
+hisamitsu
+
+// hitachi : Hitachi, Ltd.
+// https://www.iana.org/domains/root/db/hitachi.html
+hitachi
+
+// hiv : Internet Naming Company LLC
+// https://www.iana.org/domains/root/db/hiv.html
+hiv
+
+// hkt : PCCW-HKT DataCom Services Limited
+// https://www.iana.org/domains/root/db/hkt.html
+hkt
+
+// hockey : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/hockey.html
+hockey
+
+// holdings : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/holdings.html
+holdings
+
+// holiday : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/holiday.html
+holiday
+
+// homedepot : Home Depot Product Authority, LLC
+// https://www.iana.org/domains/root/db/homedepot.html
+homedepot
+
+// homegoods : The TJX Companies, Inc.
+// https://www.iana.org/domains/root/db/homegoods.html
+homegoods
+
+// homes : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/homes.html
+homes
+
+// homesense : The TJX Companies, Inc.
+// https://www.iana.org/domains/root/db/homesense.html
+homesense
+
+// honda : Honda Motor Co., Ltd.
+// https://www.iana.org/domains/root/db/honda.html
+honda
+
+// horse : Registry Services, LLC
+// https://www.iana.org/domains/root/db/horse.html
+horse
+
+// hospital : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/hospital.html
+hospital
+
+// host : Radix Technologies Inc SEZC
+// https://www.iana.org/domains/root/db/host.html
+host
+
+// hosting : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/hosting.html
+hosting
+
+// hot : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/hot.html
+hot
+
+// hotel : HOTEL Top-Level-Domain S.a.r.l
+// https://www.iana.org/domains/root/db/hotel.html
+hotel
+
+// hotels : Booking.com B.V.
+// https://www.iana.org/domains/root/db/hotels.html
+hotels
+
+// hotmail : Microsoft Corporation
+// https://www.iana.org/domains/root/db/hotmail.html
+hotmail
+
+// house : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/house.html
+house
+
+// how : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/how.html
+how
+
+// hsbc : HSBC Global Services (UK) Limited
+// https://www.iana.org/domains/root/db/hsbc.html
+hsbc
+
+// hughes : Hughes Satellite Systems Corporation
+// https://www.iana.org/domains/root/db/hughes.html
+hughes
+
+// hyatt : Hyatt GTLD, L.L.C.
+// https://www.iana.org/domains/root/db/hyatt.html
+hyatt
+
+// hyundai : Hyundai Motor Company
+// https://www.iana.org/domains/root/db/hyundai.html
+hyundai
+
+// ibm : International Business Machines Corporation
+// https://www.iana.org/domains/root/db/ibm.html
+ibm
+
+// icbc : Industrial and Commercial Bank of China Limited
+// https://www.iana.org/domains/root/db/icbc.html
+icbc
+
+// ice : IntercontinentalExchange, Inc.
+// https://www.iana.org/domains/root/db/ice.html
+ice
+
+// icu : ShortDot SA
+// https://www.iana.org/domains/root/db/icu.html
+icu
+
+// ieee : IEEE Global LLC
+// https://www.iana.org/domains/root/db/ieee.html
+ieee
+
+// ifm : ifm electronic gmbh
+// https://www.iana.org/domains/root/db/ifm.html
+ifm
+
+// ikano : Ikano S.A.
+// https://www.iana.org/domains/root/db/ikano.html
+ikano
+
+// imamat : Fondation Aga Khan (Aga Khan Foundation)
+// https://www.iana.org/domains/root/db/imamat.html
+imamat
+
+// imdb : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/imdb.html
+imdb
+
+// immo : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/immo.html
+immo
+
+// immobilien : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/immobilien.html
+immobilien
+
+// inc : Intercap Registry Inc.
+// https://www.iana.org/domains/root/db/inc.html
+inc
+
+// industries : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/industries.html
+industries
+
+// infiniti : NISSAN MOTOR CO., LTD.
+// https://www.iana.org/domains/root/db/infiniti.html
+infiniti
+
+// ing : Charleston Road Registry Inc.
+// https://www.iana.org/domains/root/db/ing.html
+ing
+
+// ink : Registry Services, LLC
+// https://www.iana.org/domains/root/db/ink.html
+ink
+
+// institute : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/institute.html
+institute
+
+// insurance : fTLD Registry Services LLC
+// https://www.iana.org/domains/root/db/insurance.html
+insurance
+
+// insure : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/insure.html
+insure
+
+// international : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/international.html
+international
+
+// intuit : Intuit Administrative Services, Inc.
+// https://www.iana.org/domains/root/db/intuit.html
+intuit
+
+// investments : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/investments.html
+investments
+
+// ipiranga : Ipiranga Produtos de Petroleo S.A.
+// https://www.iana.org/domains/root/db/ipiranga.html
+ipiranga
+
+// irish : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/irish.html
+irish
+
+// ismaili : Fondation Aga Khan (Aga Khan Foundation)
+// https://www.iana.org/domains/root/db/ismaili.html
+ismaili
+
+// ist : Istanbul Metropolitan Municipality
+// https://www.iana.org/domains/root/db/ist.html
+ist
+
+// istanbul : Istanbul Metropolitan Municipality
+// https://www.iana.org/domains/root/db/istanbul.html
+istanbul
+
+// itau : Itau Unibanco Holding S.A.
+// https://www.iana.org/domains/root/db/itau.html
+itau
+
+// itv : ITV Services Limited
+// https://www.iana.org/domains/root/db/itv.html
+itv
+
+// jaguar : Jaguar Land Rover Ltd
+// https://www.iana.org/domains/root/db/jaguar.html
+jaguar
+
+// java : Oracle Corporation
+// https://www.iana.org/domains/root/db/java.html
+java
+
+// jcb : JCB Co., Ltd.
+// https://www.iana.org/domains/root/db/jcb.html
+jcb
+
+// jeep : FCA US LLC.
+// https://www.iana.org/domains/root/db/jeep.html
+jeep
+
+// jetzt : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/jetzt.html
+jetzt
+
+// jewelry : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/jewelry.html
+jewelry
+
+// jio : Reliance Industries Limited
+// https://www.iana.org/domains/root/db/jio.html
+jio
+
+// jll : Jones Lang LaSalle Incorporated
+// https://www.iana.org/domains/root/db/jll.html
+jll
+
+// jmp : Matrix IP LLC
+// https://www.iana.org/domains/root/db/jmp.html
+jmp
+
+// jnj : Johnson & Johnson Services, Inc.
+// https://www.iana.org/domains/root/db/jnj.html
+jnj
+
+// joburg : ZA Central Registry NPC trading as ZA Central Registry
+// https://www.iana.org/domains/root/db/joburg.html
+joburg
+
+// jot : Jolly Host, LLC
+// https://www.iana.org/domains/root/db/jot.html
+jot
+
+// joy : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/joy.html
+joy
+
+// jpmorgan : JPMorgan Chase Bank, National Association
+// https://www.iana.org/domains/root/db/jpmorgan.html
+jpmorgan
+
+// jprs : Japan Registry Services Co., Ltd.
+// https://www.iana.org/domains/root/db/jprs.html
+jprs
+
+// juegos : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/juegos.html
+juegos
+
+// juniper : JUNIPER NETWORKS, INC.
+// https://www.iana.org/domains/root/db/juniper.html
+juniper
+
+// kaufen : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/kaufen.html
+kaufen
+
+// kddi : KDDI CORPORATION
+// https://www.iana.org/domains/root/db/kddi.html
+kddi
+
+// kerryhotels : Kerry Trading Co. Limited
+// https://www.iana.org/domains/root/db/kerryhotels.html
+kerryhotels
+
+// kerryproperties : Kerry Trading Co. Limited
+// https://www.iana.org/domains/root/db/kerryproperties.html
+kerryproperties
+
+// kfh : Kuwait Finance House
+// https://www.iana.org/domains/root/db/kfh.html
+kfh
+
+// kia : KIA MOTORS CORPORATION
+// https://www.iana.org/domains/root/db/kia.html
+kia
+
+// kids : DotKids Foundation Limited
+// https://www.iana.org/domains/root/db/kids.html
+kids
+
+// kim : Identity Digital Domains Limited
+// https://www.iana.org/domains/root/db/kim.html
+kim
+
+// kindle : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/kindle.html
+kindle
+
+// kitchen : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/kitchen.html
+kitchen
+
+// kiwi : DOT KIWI LIMITED
+// https://www.iana.org/domains/root/db/kiwi.html
+kiwi
+
+// koeln : dotKoeln GmbH
+// https://www.iana.org/domains/root/db/koeln.html
+koeln
+
+// komatsu : Komatsu Ltd.
+// https://www.iana.org/domains/root/db/komatsu.html
+komatsu
+
+// kosher : Kosher Marketing Assets LLC
+// https://www.iana.org/domains/root/db/kosher.html
+kosher
+
+// kpmg : KPMG International Cooperative (KPMG International Genossenschaft)
+// https://www.iana.org/domains/root/db/kpmg.html
+kpmg
+
+// kpn : Koninklijke KPN N.V.
+// https://www.iana.org/domains/root/db/kpn.html
+kpn
+
+// krd : KRG Department of Information Technology
+// https://www.iana.org/domains/root/db/krd.html
+krd
+
+// kred : KredTLD Pty Ltd
+// https://www.iana.org/domains/root/db/kred.html
+kred
+
+// kuokgroup : Kerry Trading Co. Limited
+// https://www.iana.org/domains/root/db/kuokgroup.html
+kuokgroup
+
+// kyoto : Academic Institution: The University of Informatics
+// https://www.iana.org/domains/root/db/kyoto.html
+kyoto
+
+// lacaixa : Fundación Bancaria Caixa d’Estalvis i Pensions de Barcelona, “la Caixa”
+// https://www.iana.org/domains/root/db/lacaixa.html
+lacaixa
+
+// lamborghini : Automobili Lamborghini S.p.A.
+// https://www.iana.org/domains/root/db/lamborghini.html
+lamborghini
+
+// lamer : The Estée Lauder Companies Inc.
+// https://www.iana.org/domains/root/db/lamer.html
+lamer
+
+// land : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/land.html
+land
+
+// landrover : Jaguar Land Rover Ltd
+// https://www.iana.org/domains/root/db/landrover.html
+landrover
+
+// lanxess : LANXESS Corporation
+// https://www.iana.org/domains/root/db/lanxess.html
+lanxess
+
+// lasalle : Jones Lang LaSalle Incorporated
+// https://www.iana.org/domains/root/db/lasalle.html
+lasalle
+
+// lat : XYZ.COM LLC
+// https://www.iana.org/domains/root/db/lat.html
+lat
+
+// latino : Dish DBS Corporation
+// https://www.iana.org/domains/root/db/latino.html
+latino
+
+// latrobe : La Trobe University
+// https://www.iana.org/domains/root/db/latrobe.html
+latrobe
+
+// law : Registry Services, LLC
+// https://www.iana.org/domains/root/db/law.html
+law
+
+// lawyer : Dog Beach, LLC
+// https://www.iana.org/domains/root/db/lawyer.html
+lawyer
+
+// lds : IRI Domain Management, LLC
+// https://www.iana.org/domains/root/db/lds.html
+lds
+
+// lease : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/lease.html
+lease
+
+// leclerc : A.C.D. LEC Association des Centres Distributeurs Edouard Leclerc
+// https://www.iana.org/domains/root/db/leclerc.html
+leclerc
+
+// lefrak : LeFrak Organization, Inc.
+// https://www.iana.org/domains/root/db/lefrak.html
+lefrak
+
+// legal : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/legal.html
+legal
+
+// lego : LEGO Juris A/S
+// https://www.iana.org/domains/root/db/lego.html
+lego
+
+// lexus : TOYOTA MOTOR CORPORATION
+// https://www.iana.org/domains/root/db/lexus.html
+lexus
+
+// lgbt : Identity Digital Domains Limited
+// https://www.iana.org/domains/root/db/lgbt.html
+lgbt
+
+// lidl : Schwarz Domains und Services GmbH & Co. KG
+// https://www.iana.org/domains/root/db/lidl.html
+lidl
+
+// life : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/life.html
+life
+
+// lifeinsurance : American Council of Life Insurers
+// https://www.iana.org/domains/root/db/lifeinsurance.html
+lifeinsurance
+
+// lifestyle : Internet Naming Company LLC
+// https://www.iana.org/domains/root/db/lifestyle.html
+lifestyle
+
+// lighting : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/lighting.html
+lighting
+
+// like : Amazon Registry Services, Inc.
+// https://www.iana.org/domains/root/db/like.html
+like
+
+// lilly : Eli Lilly and Company
+// https://www.iana.org/domains/root/db/lilly.html
+lilly
+
+// limited : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/limited.html
+limited
+
+// limo : Binky Moon, LLC
+// https://www.iana.org/domains/root/db/limo.html
+limo
+
+// lincoln : Ford Motor Company
+// https://www.iana.org/domains/root/db/lincoln.html
+lincoln
