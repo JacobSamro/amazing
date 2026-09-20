@@ -711,3 +711,29 @@ image with width=64,height=32. CSS computes auto, but the current driver reports
 64x32 as intrinsic dimensions: **2044 differing pixels before and after** versus
 the true 2x2 reference. This is routed to integrator-assist and is explicitly
 not claimed fixed. No driver/provider workaround was added to CSS.
+
+
+### CSS-5 day-end checkpoint — 2026-09-21
+
+Stopped by user instruction during the fleet SSH outage. Source commits are
+`a3953bc` and `736d4e7`; no new ticket or remote publication started. Recorded
+**pre-outage** Windows results: CSS 168/0 including explicit cellspacing;
+workspace nextest 1241/0/3 skipped; explicit doctests 2/0. These were not rerun
+during stand-down and are not evidence for a later rebased/refreshed tree.
+
+The saved bundle contains 36 completed pinned rendering reports (nine selections,
+two runs on each side); both repetitions have stable per-case/image hashes.
+The original eight selections are unchanged; cascade remains 35 pass / 24
+mismatch / 13 unsupported, including Variables 12/12. Raw pinned cellspacing
+improves 478 -> 371 differing pixels and remains a mismatch. Layout needs the
+`table cellspacing` nonnegative-integer -> `border-spacing` Hint-origin mapping,
+including zero, combined with its display:contents work. CLI percentage-size
+proof remains 1024 -> 0; the driver author-auto diagnostic remains 2044 -> 2044.
+
+Final remote process and post-render source/executable integrity checks were
+not obtained before SSH became unavailable. FIRST resume action: read the
+main checkout `.agents/css/report.md` and wait for the integrator recovery
+broadcast before any SSH/SCP; then verify preserved artifacts and source
+identity before deciding which gates need rerunning. Full background shorthand,
+URL provenance, driver intrinsic-size integration, and context-dependent HTML
+mappings remain queued. No CSS-owned REFRESH-HOLD was present at stand-down.
