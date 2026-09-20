@@ -79,6 +79,87 @@ page/fixture, viewport, and capture path are recorded. It complements but does
 not replace pinned WPT measurements. Remove temporary scheduled tasks and
 throwaway capture helpers after the proof is collected.
 
+## Multi-agent orchestration
+
+Parallel work is split into **lanes**, one per crate boundary, each driven by a
+Codex agent in its own tmux session. `scripts/tmuxctl.py` is the only supported
+way to drive and monitor them.
+
+### Why not raw tmux
+
+`tmux capture-pane` on a Codex TUI returns the startup banner, hook warnings,
+the usage-limit notice, an animated braille spinner, and a redraw of the prompt
+just sent — hundreds of wasted tokens per look, with replies wrapped mid-token
+across rows. Worse, `send-keys … Enter` is unreliable straight after a literal
+send: the TUI may still be consuming the paste, so the Enter lands in the
+composer instead of submitting. Re-pressing Enter blindly then submits stray
+partial messages.
+
+`tmuxctl.py` solves both: it filters panes down to transcript events, and it
+presses Enter once then *polls for acceptance* before pressing again.
+
+### Reporting is files, not screens
+
+Agents report by writing files; the orchestrator reads those. Screen scraping is
+for liveness only, never for results. Each lane owns `.agents/<lane>/`:
+
+| File | Written by | Purpose |
+|------|-----------|---------|
+| `brief.md` | orchestrator | the ticket, its exit criteria, and lane rules |
+| `status.json` | agent | heartbeat — `lane`, `state`, `ticket`, `step`, `updated` (ISO-8601 UTC), `blockers[]` |
+| `log.md` | agent | append-only activity log, newest last |
+| `questions.md` | agent | `-` bulleted cross-lane requests and decisions needed |
+| `report.md` | agent | final ticket report, or a checkpoint before restart |
+
+`.agents/` is gitignored — it is orchestration scratch, not project history.
+Anything durable belongs in the lane's decision map under `docs/lanes/`.
+
+### Commands
+
+```sh
+scripts/tmuxctl.py adopt --lanes js-lang,layout,css   # bind sessions to lanes
+scripts/tmuxctl.py assign layout ../amazing-wt/layout # bind a lane to its worktree
+scripts/tmuxctl.py digest            # fleet dashboard — the main monitoring view
+scripts/tmuxctl.py doctor            # isolation / ownership / stall / context checks
+scripts/tmuxctl.py brief layout f.md # deliver a long brief as a file + pointer
+scripts/tmuxctl.py send layout "..." # one-line prompt, submission confirmed
+scripts/tmuxctl.py wait layout --timeout 900
+scripts/tmuxctl.py log layout        # tail the lane's log.md
+scripts/tmuxctl.py questions         # everything the fleet is waiting on
+scripts/tmuxctl.py reply layout      # cleaned transcript (liveness/debug only)
+scripts/tmuxctl.py handoff layout    # checkpoint a low-context agent
+scripts/tmuxctl.py raw layout        # unfiltered pane — escape hatch
+```
+
+Deliver multi-line instructions with `brief`, never `send`: a newline inside a
+TUI composer submits the prompt early and corrupts it.
+
+`wait` blocks by design and will outlive a 120s foreground tool timeout — run it
+as a background command, or just poll `digest`, which is cheap. Note also that a
+narrow tmux pane truncates the TUI status bar, so `CTX` reads `?` for that lane;
+widen the pane if the context budget matters for it.
+
+### Orchestration rules
+
+- **One lane, one worktree.** Agents never share a checkout. `doctor` reports a
+  lane with no worktree as an ISOLATION finding, and ownership checking only
+  runs once a lane is isolated.
+- **Lane ownership is enforced.** `LANE_PATHS` in `tmuxctl.py` lists the paths
+  each lane may write. `ARCHITECTURE.md`, `README.md`, `todo.md`, and the root
+  `Cargo.toml` belong to the integrator alone. A lane needing a change
+  elsewhere defines a trait in the lower crate and files a request in
+  `questions.md` — it does not edit another lane's files.
+- **Context exhaustion is routine, not failure.** Below 25% remaining,
+  `doctor` flags the lane; `handoff` makes the agent write `report.md` so a
+  fresh agent resumes without re-deriving the work.
+- **Stalls are detected, not waited on.** A lane whose tmux pane is busy while
+  `status.json` has gone 20+ minutes stale is reported by `doctor`.
+- **win-001 is a single 16-core box.** It sustains ~3 concurrent builds. Agents
+  iterate with `cargo test -p <their crate>` and run `--workspace` only before
+  opening a PR.
+- **One ticket, one PR, then stop.** This mirrors the existing per-phase rule:
+  report measured results and wait, never auto-proceed.
+
 ## Project notes
 
 - Amazing: from-scratch std-only browser engine. Zero external crates in engine
