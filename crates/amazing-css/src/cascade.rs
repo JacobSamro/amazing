@@ -6,7 +6,7 @@
 //!   ANY invalid selector is dropped whole (never partially applied)
 //! - cascade per property with the full key: importance → origin
 //!   (UA < author; reversed for `!important`) → inline style beats sheets →
-//!   specificity → source order
+//!   layer → specificity → scope proximity → source order
 //! - per-declaration source order and the specificity of the most-specific
 //!   selector in a list that actually matches
 //! - a private specified-to-computed stage for property metadata,
@@ -18,10 +18,10 @@
 //! Deferred/deviations:
 //! - presentational attributes (`bgcolor`, `width=…`) and `<style media>`
 //!   conditions are ignored
-//! - `revert`/`revert-layer` require retaining lower origin/layer candidates
-//!   and remain unresolved; unknown properties get no initial metadata
+//! - unknown properties get no initial metadata; user-origin sheets, animations
+//!   and transitions have no input seam yet
 
-use crate::computed::{self, ComputedStyle};
+use crate::computed::{self, ComputedStyle, Rollback};
 use crate::parser::{parse_declarations, parse_stylesheet, Declaration, Stylesheet};
 use crate::selectors::{parse_selector, Specificity, Selector};
 use amazing_dom::{Dom, NodeIdx};
@@ -61,11 +61,8 @@ impl StyledDom {
 /// sheet with the given author sheets (in order).
 pub fn compute(dom: &Dom, author_sheets: &[Stylesheet]) -> StyledDom {
     // Compile UA + author rules up front; invalid selectors drop their rule.
-    let ua_rules = compile_sheet(&parse_stylesheet(UA_SHEET), true);
-    let mut author_rules = Vec::new();
-    for sheet in author_sheets {
-        author_rules.extend(compile_sheet(sheet, false));
-    }
+    let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true);
+    let author_rules = compile_sheets(author_sheets, false);
 
     let mut out = StyledDom::default();
     style_subtree(
@@ -140,41 +137,9 @@ fn style_subtree(
 // Compilation + matching
 // ---------------------------------------------------------------------------
 
-struct CompiledRule {
-    selectors: Vec<(Selector, Specificity)>,
-    decls: Vec<Declaration>,
-    ua: bool,
-}
-
-/// Parses every selector of a rule. Per spec, one bad selector invalidates
-/// the entire rule, so any parse failure drops all of them.
-fn compile_sheet(sheet: &Stylesheet, ua: bool) -> Vec<CompiledRule> {
-    let mut out = Vec::new();
-    for rule in &sheet.rules {
-        let mut selectors = Vec::with_capacity(rule.selector_srcs.len());
-        let mut valid = true;
-        for src in &rule.selector_srcs {
-            match parse_selector(src) {
-                Some(sel) => {
-                    let spec = sel.specificity();
-                    selectors.push((sel, spec));
-                },
-                None => {
-                    valid = false;
-                    break;
-                },
-            }
-        }
-        if valid && !rule.declarations.is_empty() {
-            out.push(CompiledRule {
-                selectors,
-                decls: rule.declarations.clone(),
-                ua,
-            });
-        }
-    }
-    out
-}
+#[path = "cascade_context.rs"]
+mod context;
+use context::{compile_sheets, CompiledRule};
 
 /// One declaration competing for a property during the cascade.
 #[derive(Clone, Copy)]
@@ -185,16 +150,18 @@ struct Candidate<'a> {
     ua: bool,
     spec: Specificity,
     order: u64,
+    layer: usize,
+    proximity: usize,
 }
 
 /// Full cascade key (css-cascade-4 §6): importance first; origin next, which
-/// flips for important declarations; then inline > sheet; then specificity;
-/// finally later source order.
+/// flips for important declarations; then inline > sheet; layer (also reversed
+/// for important), specificity, scope proximity, and finally source order.
 fn beats(new: &Candidate<'_>, cur: &Candidate<'_>) -> bool {
     match (new.important, cur.important) {
         (true, false) => return true,
         (false, true) => return false,
-        _ => {},
+        _ => {}
     }
     if new.ua != cur.ua {
         // Normal origin order: author beats UA. Important reverses it.
@@ -203,25 +170,75 @@ fn beats(new: &Candidate<'_>, cur: &Candidate<'_>) -> bool {
     if new.inline != cur.inline {
         return new.inline;
     }
+    if new.layer != cur.layer {
+        return if new.important {
+            new.layer < cur.layer
+        } else {
+            new.layer > cur.layer
+        };
+    }
     if new.spec != cur.spec {
         return new.spec > cur.spec;
+    }
+    if new.proximity != cur.proximity {
+        return new.proximity < cur.proximity;
     }
     new.order > cur.order
 }
 
-/// Installs `cand` for `prop` unless the current champion already outranks it.
-/// One named lifetime ties the map's key/value borrows to the arguments.
-fn consider<'d>(
-    champs: &mut BTreeMap<&'d str, Candidate<'d>>,
-    prop: &'d str,
-    cand: Candidate<'d>,
-) {
-    match champs.get(prop) {
-        Some(cur) if !beats(&cand, cur) => {},
-        _ => {
-            champs.insert(prop, cand);
-        },
-    }
+/// Retain all candidates until rollback has excluded the whole origin/layer.
+fn winners<'a>(
+    candidates: &BTreeMap<&'a str, Vec<Candidate<'a>>>,
+    context: Option<&ComputedStyle>,
+) -> BTreeMap<&'a str, Candidate<'a>> {
+    candidates
+        .iter()
+        .filter_map(|(property, values)| {
+            let mut values = values.clone();
+            loop {
+                let winner = values
+                    .iter()
+                    .copied()
+                    .reduce(|a, b| if beats(&b, &a) { b } else { a })?;
+                let substituted = context.and_then(|style| {
+                    computed::substituted_rollback(style, property, winner.value)
+                });
+                if winner.value.trim().eq_ignore_ascii_case("revert")
+                    || substituted == Some(Rollback::Origin)
+                {
+                    // UA revert is unset; author revert removes both importance levels.
+                    if winner.ua {
+                        return None;
+                    }
+                    values.retain(|c| c.ua);
+                } else if winner.value.trim().eq_ignore_ascii_case("revert-layer")
+                    || substituted == Some(Rollback::Layer)
+                {
+                    values.retain(|c| {
+                        if c.ua != winner.ua {
+                            // The UA important-to-normal interval also spans
+                            // every author declaration, not just UA layers.
+                            return !(winner.ua && winner.important);
+                        }
+                        if winner.inline {
+                            return !c.inline;
+                        }
+                        if c.inline {
+                            return false;
+                        }
+                        // Important rollback excludes the interval down through the
+                        // layer's normal level, including stronger normal layers.
+                        if winner.important && !c.important {
+                            return c.layer < winner.layer;
+                        }
+                        c.layer != winner.layer
+                    });
+                } else {
+                    return Some((*property, winner));
+                }
+            }
+        })
+        .collect()
 }
 
 fn compute_one(
@@ -242,6 +259,8 @@ fn compute_one(
         ua: bool,
         spec: Specificity,
         order: u64,
+        layer: usize,
+        proximity: usize,
     }
 
     // Collect declarations from every matching rule plus the inline
@@ -262,18 +281,12 @@ fn compute_one(
             ua: false,
             spec: Specificity::default(),
             order: 0,
+            layer: usize::MAX,
+            proximity: usize::MAX,
         });
     }
     for rule in ua_rules.iter().chain(author_rules.iter()) {
-        let matched_specificity = rule
-            .selectors
-            .iter()
-            .filter(|(selector, _)| crate::selectors::matches(dom, el, selector))
-            .map(|(_, specificity)| *specificity)
-            .max();
-        let Some(specificity) = matched_specificity else {
-            continue;
-        };
+        let Some((specificity, proximity)) = rule.matching(dom, el) else { continue; };
         for decl in &rule.decls {
             source_order += 1;
             for (property, value) in
@@ -287,6 +300,8 @@ fn compute_one(
                     ua: rule.ua,
                     spec: specificity,
                     order: source_order,
+                    layer: rule.layer,
+                    proximity,
                 });
             }
         }
@@ -306,13 +321,15 @@ fn compute_one(
                 ua: false,
                 spec: Specificity::default(),
                 order: source_order,
+                layer: usize::MAX,
+                proximity: usize::MAX,
             });
         }
     }
 
     // Collect champions per property. Keys/values borrow from `pool`,
     // which is frozen from here on and outlives the loop below.
-    let mut champs: BTreeMap<&str, Candidate<'_>> = BTreeMap::new();
+    let mut candidates: BTreeMap<&str, Vec<Candidate<'_>>> = BTreeMap::new();
     for d in &pool {
         let cand = Candidate {
             value: &d.value,
@@ -321,9 +338,13 @@ fn compute_one(
             ua: d.ua,
             spec: d.spec,
             order: d.order,
+            layer: d.layer,
+            proximity: d.proximity,
         };
-        consider(&mut champs, &d.prop, cand);
+        candidates.entry(&d.prop).or_default().push(cand);
     }
+
+    let mut champs = winners(&candidates, None);
 
     // Logical properties map with the element's COMPUTED axes, not the raw
     // winning tokens: `direction: inherit` and `var()` must see the inherited
@@ -336,21 +357,25 @@ fn compute_one(
             .collect(),
         root_font_px,
     );
+    champs = winners(&candidates, Some(&provisional));
+    let provisional = computed::resolve_with_root(
+        parent_style,
+        champs.iter().map(|(p, c)| ((*p).to_owned(), c.value.to_owned())).collect(),
+        root_font_px,
+    );
     let rtl = provisional
         .get("direction")
         .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
     let writing_mode = provisional.get("writing-mode").unwrap_or("horizontal-tb");
     for logical in [
-        "margin-inline-start",
-        "margin-inline-end",
-        "margin-block-start",
-        "margin-block-end",
+        "margin-inline-start", "margin-inline-end", "margin-block-start", "margin-block-end",
     ] {
-        if let Some(candidate) = champs.get(logical).copied() {
+        if let Some(values) = candidates.get(logical).cloned() {
             let physical = physical_margin_for(logical, rtl, writing_mode);
-            consider(&mut champs, physical, candidate);
+            candidates.entry(physical).or_default().extend(values);
         }
     }
+    champs = winners(&candidates, Some(&provisional));
 
     let cascaded = champs
         .into_iter()
@@ -477,6 +502,22 @@ mod tests {
         let a = dom.create_element(body, "a");
         dom.set_attrs(a, vec![("href".into(), "/next".into())]);
         (dom, vec![html, head, title, body, h1, p, a])
+    }
+
+    #[test]
+    fn ua_important_reverses_origin_order_and_ua_revert_defaults() {
+        let (dom, elements) = fixture();
+        let author = compile_sheets(&[parse_stylesheet("p{color:red!important;display:flex}")], false);
+        for (ua_css, expected) in [
+            ("p{color:green!important}", "green"),
+            ("p{color:revert!important}", "black"),
+            ("p{color:revert-layer!important}", "black"),
+            ("@layer a,b;@layer a{p{color:revert-layer!important}}@layer b{p{color:green!important}}", "green"),
+        ] {
+            let ua = compile_sheets(&[parse_stylesheet(ua_css)], true);
+            let style = compute_one(&dom, elements[5], None, 16.0, &ua, &author);
+            assert_eq!(style.get("color"), Some(expected));
+        }
     }
 
     #[test]

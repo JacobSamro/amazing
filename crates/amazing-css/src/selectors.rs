@@ -94,6 +94,7 @@ pub enum AttrOp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pseudo {
     Root,
+    Scope,
     FirstChild,
     LastChild,
     OnlyChild,
@@ -393,6 +394,7 @@ impl<'t> SelParser<'t> {
         };
         let pseudo = match name.to_ascii_lowercase().as_str() {
             "root" => Pseudo::Root,
+            "scope" => Pseudo::Scope,
             "first-child" => Pseudo::FirstChild,
             "last-child" => Pseudo::LastChild,
             "only-child" => Pseudo::OnlyChild,
@@ -572,14 +574,19 @@ fn parse_anb(text: &str) -> Option<(i32, i32)> {
 
 /// Does element `el` match the whole complex selector?
 pub fn matches(dom: &Dom, el: NodeIdx, sel: &Selector) -> bool {
-    match_rightward(dom, el, sel, sel.compounds.len() - 1)
+    matches_in_scope(dom, el, sel, None)
+}
+
+/// Match with an explicit scoping root; absent roots use the document element.
+pub(crate) fn matches_in_scope(dom: &Dom, el: NodeIdx, sel: &Selector, scope: Option<NodeIdx>) -> bool {
+    match_rightward(dom, el, sel, sel.compounds.len() - 1, scope)
 }
 
 /// Right-to-left matching: compound at position `pos` must match `el`, then
 /// the combinator at `pos - 1` determines which candidate nodes the previous
 /// compound is tried against.
-fn match_rightward(dom: &Dom, el: NodeIdx, sel: &Selector, pos: usize) -> bool {
-    if !matches_compound(dom, el, &sel.compounds[pos]) {
+fn match_rightward(dom: &Dom, el: NodeIdx, sel: &Selector, pos: usize, scope: Option<NodeIdx>) -> bool {
+    if !compound_in_scope(dom, el, &sel.compounds[pos], scope) {
         return false;
     }
     if pos == 0 {
@@ -589,12 +596,12 @@ fn match_rightward(dom: &Dom, el: NodeIdx, sel: &Selector, pos: usize) -> bool {
         None => false,
         Some(parent) => match sel.combinators[pos - 1] {
             Combinator::Child => {
-                parent_is_element(dom, parent) && match_rightward(dom, parent, sel, pos - 1)
+                parent_is_element(dom, parent) && match_rightward(dom, parent, sel, pos - 1, scope)
             },
             Combinator::Descendant => {
                 let mut anc = Some(parent);
                 while let Some(a) = anc {
-                    if parent_is_element(dom, a) && match_rightward(dom, a, sel, pos - 1) {
+                    if parent_is_element(dom, a) && match_rightward(dom, a, sel, pos - 1, scope) {
                         return true;
                     }
                     anc = dom.get(a).parent;
@@ -604,11 +611,11 @@ fn match_rightward(dom: &Dom, el: NodeIdx, sel: &Selector, pos: usize) -> bool {
             Combinator::NextSibling => dom
                 .get(el)
                 .prev_sibling
-                .is_some_and(|sib| match_rightward(dom, sib, sel, pos - 1)),
+                .is_some_and(|sib| match_rightward(dom, sib, sel, pos - 1, scope)),
             Combinator::LaterSibling => {
                 let mut sib = dom.get(el).prev_sibling;
                 while let Some(s) = sib {
-                    if match_rightward(dom, s, sel, pos - 1) {
+                    if match_rightward(dom, s, sel, pos - 1, scope) {
                         return true;
                     }
                     sib = dom.get(s).prev_sibling;
@@ -626,10 +633,18 @@ fn parent_is_element(dom: &Dom, idx: NodeIdx) -> bool {
 
 /// True when element `el` matches every simple selector in `comp`.
 pub fn matches_compound(dom: &Dom, el: NodeIdx, comp: &Compound) -> bool {
-    comp.simple.iter().all(|s| matches_simple(dom, el, s))
+    compound_in_scope(dom, el, comp, None)
+}
+
+fn compound_in_scope(dom: &Dom, el: NodeIdx, comp: &Compound, scope: Option<NodeIdx>) -> bool {
+    comp.simple.iter().all(|s| simple_in_scope(dom, el, s, scope))
 }
 
 pub fn matches_simple(dom: &Dom, el: NodeIdx, s: &Simple) -> bool {
+    simple_in_scope(dom, el, s, None)
+}
+
+fn simple_in_scope(dom: &Dom, el: NodeIdx, s: &Simple, scope: Option<NodeIdx>) -> bool {
     match s {
         Simple::Type(name) => dom.name(el).is_some_and(|local| {
             if dom.namespace(el) == Some(Namespace::Html) {
@@ -642,16 +657,17 @@ pub fn matches_simple(dom: &Dom, el: NodeIdx, s: &Simple) -> bool {
         Simple::Id(id) => attr_is(dom, el, "id", id),
         Simple::Class(class) => class_list_contains(dom, el, class),
         Simple::Attr { name, op, value, ci } => match_attr(dom, el, name, *op, value, *ci),
+        Simple::Pseudo(Pseudo::Scope) => scope.map_or_else(|| matches_pseudo(dom, el, Pseudo::Root), |root| root == el),
         Simple::Pseudo(p) => matches_pseudo(dom, el, *p),
-        Simple::Negation(args) => !args.iter().any(|c| matches_compound(dom, el, c)),
-        Simple::Matches(args) => args.iter().any(|c| matches_compound(dom, el, c)),
-        Simple::Where(args) => args.iter().any(|c| matches_compound(dom, el, c)),
+        Simple::Negation(args) => !args.iter().any(|c| compound_in_scope(dom, el, c, scope)),
+        Simple::Matches(args) => args.iter().any(|c| compound_in_scope(dom, el, c, scope)),
+        Simple::Where(args) => args.iter().any(|c| compound_in_scope(dom, el, c, scope)),
     }
 }
 
 fn matches_pseudo(dom: &Dom, el: NodeIdx, p: Pseudo) -> bool {
     match p {
-        Pseudo::Root => dom
+        Pseudo::Root | Pseudo::Scope => dom
             .get(el)
             .parent
             .is_some_and(|par| dom.name(par).is_none()),
