@@ -106,9 +106,10 @@ LANE_GRANTS = {
     # DOM-1 needs a subcommand entry point; the integrator still owns main.rs
     # beyond the single dispatch line, and is splitting it separately.
     "dom-bindings": ["crates/amazing/src/cmd/", "crates/amazing/src/main.rs"],
-    # RC-1 moves image decoding out of the shell, which requires a minimal edit
-    # to the shell's manifest and viewport. Reviewed at merge, not open-ended.
-    "replaced-content": ["crates/amazing-shell-gpui/"],
+    # RC-1's shell grant is RETIRED: that lane confirmed it needs no remaining
+    # shell or viewport access, and engine_viewport.rs transferred exclusively
+    # to integrator-assist. Two lanes never share a shell file.
+    "replaced-content": [],
 }
 # DOM-2 adds NodeKind variants, which breaks exhaustive matches in 9 files
 # across 5 crates. Granted for ADDED MATCH ARMS ONLY, verified at merge; the
@@ -123,6 +124,10 @@ LANE_GRANTS["integrator-assist"] = [
     # IA-1 routed harness fixes: WPT-root resources and Git-free pinned
     # revision validation. Read the rewrite diff before integration.
     "scripts/run-render-wpt.ps1",
+    # Transferred from replaced-content once that lane confirmed it needed no
+    # remaining shell access. Scope is the natural-intrinsic-dimensions
+    # migration, not the shell at large.
+    "crates/amazing-shell-gpui/src/engine_viewport.rs",
 ]
 # CSS-3 rewires the driver's stylesheet collection to preserve per-sheet
 # provenance. Granted for the collection and compute call sites only.
