@@ -79,11 +79,80 @@ page/fixture, viewport, and capture path are recorded. It complements but does
 not replace pinned WPT measurements. Remove temporary scheduled tasks and
 throwaway capture helpers after the proof is collected.
 
+## End goal
+
+Amazing is a complete, independent browser: a Blink-class engine and a
+Chromium-class product, written from scratch in Rust. Not a wrapper, not a fork,
+not an embed. Phases 0–9 are done; what remains is the bulk of the web platform.
+
+The route there, in dependency order. Each stage keeps the existing evidence
+discipline — a pinned WPT or Test262 selection, measured counts, a runnable
+artifact, and a stop at the boundary for review.
+
+| Stage | Goal | Gate |
+|-------|------|------|
+| 0 | Repo made safe for parallel work: server reconciled, per-lane worktrees, testharness.js runner, oversized `main.rs` split | fleet can build independently |
+| 1 | Run real pages: JS engine v2 (bytecode + GC + regex + modules), DOM/WebIDL bindings and the spec event loop, layout completeness (floats, tables, inline-block), replaced content, Fetch + security policy | Test262 %, WPT `dom/`, `fetch/`, geometry corpora |
+| 2 | Performance architecture: incremental style/layout/paint invalidation, property trees, GPU compositor, animations, workers, storage | frame-time traces, Speedometer-style DOM benchmarks |
+| 3 | Chromium-style process model: IPC layer, browser/renderer/network/GPU processes, sandboxing, site isolation, session history, bfcache | fuzzing + security review per release |
+| 4 | The product: omnibox, tabs, find-in-page, editing/IME, permissions and trust UI, accessibility tree, internal pages, DevTools (CDP), extensions, macOS/Linux ports | screenshot proofs, AT testing, `wpt run` unmodified |
+| 5 | Long tail: WebGL/WebGPU, WebAssembly, WebAudio, WebCodecs, MSE/EME, PWAs, MathML, PDF | per-feature WPT |
+
+Stage 1's JS engine and DOM bindings are the long pole; everything downstream
+waits on them. Plan in years and let the measured gates say where the project
+actually is.
+
+Five locked decisions must be revisited as project-level events before Stage 2:
+single-threaded execution, the tree-walking interpreter, software-only raster,
+the no-sandbox/no-multi-process non-goal, and DevTools/extensions being out of
+scope. Record each in `docs/adr/` rather than editing the locked list silently.
+
 ## Multi-agent orchestration
 
 Parallel work is split into **lanes**, one per crate boundary, each driven by a
 Codex agent in its own tmux session. `scripts/tmuxctl.py` is the only supported
 way to drive and monitor them.
+
+### Lanes
+
+| Lane | Owns | Gate |
+|------|------|------|
+| `js-lang` | `amazing-js`, `amazing-regex` | Test262 % per directory |
+| `dom-bindings` | `amazing-dom`, `amazing-bindings` | WPT `dom/` testharness |
+| `layout` | `amazing-layout` | geometry + flex/grid diagnostics |
+| `css` | `amazing-css` | cascade corpus |
+| `net` | `amazing-net`, `amazing-net-tls`, `amazing-fetch` | WPT `fetch/`, `cookies/` |
+| `replaced-content` | `amazing-paint`, `amazing-media`, `amazing-image` | paint diagnostic |
+
+`amazing-webrtc*` is frozen until `dom-bindings` and `replaced-content` deliver
+HTMLMediaElement. `amazing-html` and a fuzzing lane are added once merge cadence
+holds. The integrator owns everything no lane lists.
+
+### How a lane works
+
+One ticket, one PR, then stop — the same rule as the per-phase gates.
+
+1. The orchestrator writes a brief and delivers it with `tmuxctl.py brief`.
+2. The agent works **only** inside its worktree and its owned paths.
+3. It iterates with `cargo test -p <its crate>` on win-001, never a full
+   workspace build (the box sustains ~3 concurrent builds across six lanes).
+4. It records progress in `status.json` and `log.md` as it goes.
+5. Before opening a PR: rebase on `origin/dev`, full workspace green on
+   win-001, its gate run twice with stable hashes, measured before/after numbers
+   in the PR body, and its decision map under `docs/lanes/` updated.
+6. It writes `report.md` and stops. It does not start the next ticket.
+
+### Escalation
+
+A lane that needs something outside its paths does **not** edit another lane's
+files. It defines the trait it needs in the lower crate and appends a `-`
+bulleted line to `questions.md`. The orchestrator collects these with
+`tmuxctl.py questions` and either decides, routes the request to the owning
+lane's decision map, or escalates to the user as a numbered list of options.
+
+Anything irreversible or outward-facing — rewriting build-server history,
+pushing a new remote branch, force-pushing, deleting work — is escalated to the
+user as options, never done on an agent's own initiative.
 
 ### Why not raw tmux
 
