@@ -95,9 +95,8 @@ LANE_PATHS = {
     ],
     "html": ["crates/amazing-html/"],
     # Drains the integrator's routed queue: driver-side work the engine lanes
-    # correctly refused to do. Shell files are granted individually, and
-    # engine_viewport.rs is deliberately NOT among them while replaced-content
-    # holds its grant there -- two lanes never share a file.
+    # correctly refused to do. Shell files are granted individually below;
+    # the exclusive viewport grant is limited to natural intrinsic dimensions.
     "integrator-assist": ["crates/amazing/"],
 }
 # Narrow, temporary grants recorded here so `doctor` does not cry wolf about an
@@ -164,7 +163,11 @@ LANE_GRANTS["dom-bindings"] += [
 LANE_GRANTS_REWRITE = {
     "css": ["crates/amazing/src/main.rs"],
     "js-lang": ["scripts/test262.py", "Cargo.lock"],
-    "integrator-assist": ["scripts/run-render-wpt.ps1"],
+    "integrator-assist": [
+        "scripts/run-render-wpt.ps1",
+        # Natural-intrinsic-dimensions migration only; read the diff at merge.
+        "crates/amazing-shell-gpui/src/engine_viewport.rs",
+    ],
 }
 
 
