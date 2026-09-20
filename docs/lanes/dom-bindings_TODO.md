@@ -151,3 +151,162 @@ DOM-1 remains **incomplete**. The independent plumbing proof is ready; the
 upstream known-pass/known-fail proof awaits JS-2 and any subsequently exposed
 host gaps. Full-workspace validation is deferred to that final gate, as the
 brief reserves it for completion. No PR has been opened.
+
+# DOM-2 — node algorithms, events, and mutation observation
+
+DOM-1 is accepted as a scaffold checkpoint and **parked/open** by the
+integrator. Its shim remains non-WPT evidence. DOM-2 adds a std-only model
+without JS or GPUI coupling. Reference algorithms: [DOM Standard
+§4.2.3](https://dom.spec.whatwg.org/#mutation-algorithms),
+[§2.9](https://dom.spec.whatwg.org/#dispatching-events), and
+[§4.3](https://dom.spec.whatwg.org/#mutation-observers), consulted 2026-09-20
+(the published living-standard header was dated 2026-08-25).
+
+## Node model
+
+- `Dom` retains the arena; `NodeIdx` identity survives removal and adoption.
+  Multiple document roots can occupy one arena. `create_document`,
+  `create_node_in`, and `create_document_fragment` carry owner-document
+  identity; adoption updates the entire subtree without copying it.
+- `ensure_pre_insert_validity`, `pre_insert`, `pre_remove`, `replace`, and
+  `replace_all` are the checked binding surface. Validation happens before
+  any mutation. Internal insertion/removal apply observer suppression and
+  fragment batching as specified. Errors retain distinct DOMException names.
+- `DocumentType` is needed as a node: validity checks depend on doctype
+  ordering, uniqueness, and replacement identity. The preexisting
+  `Dom::doctype` name metadata cannot express those properties.
+- `DocumentFragment` insertion moves its children in order and empties the
+  fragment. Its removal record is emitted even when the target operation
+  suppresses individual records. Empty fragments perform no insertion.
+- Tree order and ancestry/sibling/connected predicates are available directly.
+  `compare_document_position` supplies standard masks and a stable,
+  implementation-specific arena-index order for disconnected trees.
+- Existing parser attach/detach/attribute primitives retain their role and
+  bypass DOM hierarchy validity; they now feed mutation observation and owner
+  bookkeeping. They must not become the JS Node mutation entry points. Bulk
+  parser attribute order remains unchanged.
+
+## Event delivery without borrowing through a callback
+
+`EventTargets` owns listener lists and event objects. Nodes and non-node host
+objects use `EventTarget::Node` / `External`; callback identities are opaque
+`CallbackId`s. No Rust or JS callbacks are stored in the DOM core.
+
+1. Create an `Event` with flags and a monotonic timestamp relative to the
+   driver's time origin, then store it to get an `EventId`.
+2. `begin_dispatch` builds an owned path before callbacks. The `EventTree`
+   trait supplies parents, retargeting and default-passive policy.
+3. Call `next_listener` to receive an owned `EventInvocation`, release the
+   registry borrow, invoke the binding callback, then resume. This allows
+   tree/listener mutation and nested dispatches without aliasing the arena.
+4. Callback exception reporting records the exception and permits dispatch to
+   continue. `dispatch_result` returns false when cancellation occurred.
+   An abandoned dispatch must use `abort_dispatch` to clear transient state.
+
+Capture, both at-target groups, and bubbling use separate per-invocation
+listener snapshots. Removals take effect against existing snapshots; new
+listeners can run in later phases. Identity is type/callback/capture, so
+re-adding does not replace once/passive options. Once listeners are removed
+before invocation. Passive listeners cannot cancel defaults; ordinary
+cancelable listeners can. Stop propagation and immediate stop have distinct
+behavior. Completion clears phase/currentTarget/path/stop flags but retains
+cancellation. Dispatch of an already-dispatching event fails. Script dispatch
+sets isTrusted false; only the embedding's user-agent path sets it true.
+
+DOM-2 implements light-tree dispatch. Composed-dependent parent and retarget
+hooks are exercised with an external-target adapter. Actual shadow roots,
+closed-tree composedPath filtering, related/touch-target retargeting, slots,
+and HTML activation behaviors require the future corresponding host types;
+they are not claimed as implemented here. A UA-trusted event alone must never
+be treated as a user-activation permission by bindings.
+
+## Mutation observation
+
+- `create_mutation_observer` stores an opaque callback identity. `observe`
+  validates presence-sensitive options, including implicit attributes/data
+  enablement when old-value/filter options are present, even if false.
+- Child-list, attributes and character-data records preserve mutation order,
+  sibling context, namespace and requested old values. Overlapping ancestor
+  registrations deliver one record per observer, taking the union of old-value
+  requests. Attribute filters exclude non-null namespaces.
+- Removal installs transient subtree registrations. Delivery removes them;
+  disconnect and re-observe implement their corresponding cleanup rules.
+- `mutation_microtask_pending` is the scheduling seam. The driver calls
+  `begin_mutation_checkpoint` at its microtask checkpoint and resumes
+  `next_mutation_delivery` until exhausted. The notify set is frozen, while
+  each observer's records are drained only when its turn arrives. Callback A
+  can therefore add records delivered to B later in the same checkpoint;
+  mutations during delivery also queue the next checkpoint. The driver must
+  not nest checkpoints. `take_mutation_records` does not cancel scheduling.
+- No scheduler, JS types, Rc, RefCell, unsafe, or third-party crates are added.
+
+## DOM-3 integration obligations
+
+- Bind Node methods to checked operations, resolve callback identities, expose
+  event flags/methods via `EventId`, resume dispatch after every callback, report
+  callback exceptions, and schedule mutation notifications at real microtask
+  checkpoints. Wire driver default actions to the cancellation result.
+- Retire shell host implementations only in the separately authorized binding
+  ticket. This ticket makes **no GPUI edits**. The integrator will add the new
+  enum arms to `engine_viewport.rs` and `dom_runtime.rs` at merge.
+- Arrange shared arenas for documents that can exchange adopted nodes. A raw
+  NodeIdx from another Dom is not an adoptable identity. Existing HTML parsers
+  still record a doctype name in `Dom::doctype`; the parser integration must
+  create a correctly positioned DocumentType node when building a bindable
+  document. Fragment parsing must target the destination document/arena.
+- Attribute methods accept normalized namespace/local-name inputs. Element
+  name validation/WebIDL conversion is a binding concern. Namespaced attributes
+  have separate storage from the legacy parser's unqualified attribute vector.
+- Existing CharacterData strings remain Rust UTF-8 strings. UTF-16 code-unit
+  and lone-surrogate operations require a deliberate string-model extension
+  before exposing the complete CharacterData WebIDL surface. No range/string
+  slicing conformance is claimed by the full-value mutation setter.
+- Live Range/NodeIterator adjustment, custom-element reactions, and Shadow DOM
+  side effects must attach when those types exist. Current tree operations
+  implement the core light-tree model, not those future subsystems.
+
+## Cross-crate compatibility grant
+
+Only new-variant match arms were added outside amazing-dom:
+
+- `crates/amazing-html/src/tree.rs`: test tree dumper.
+- `crates/amazing-layout/src/box_tree.rs`: four exhaustive layout matches;
+  fragment/doctype nodes themselves produce no boxes.
+- `crates/amazing/src/main.rs`: serialization and clone-insertion matches.
+
+No CSS file required an edit; its existing matches already have fallbacks.
+No existing arms or other code in those files were changed for DOM-2. The
+DOM-1 dispatch line belongs to its separate checkpoint commit.
+
+## DOM-2 final measured gate — 2026-09-20
+
+Rebased immediately before gating to origin/dev **26c64de**. After the
+integrator's server refresh, remeasured the base crate, re-synced the Mac
+changes and verified **153** source/manifest/fixture SHA-256 hashes on win-001.
+Pre-refresh results are not final gate evidence.
+
+| Windows measurement | Pass | Fail | Ignored | Repeats |
+|---|---:|---:|---:|---:|
+| Base amazing-dom | 7 | 0 | 0 | 2 |
+| DOM-2 amazing-dom | 65 | 0 | 0 | 2 |
+| Full workspace, including doctests | 902 | 0 | 3 | 1 |
+
+Commands: `cargo test -p amazing-dom --locked -- --test-threads=1` and
+`cargo test --workspace --locked -- --test-threads=1`, with the lane's dedicated
+Windows `CARGO_TARGET_DIR`. Both base and final runs have stable SHA-256 over
+sorted `test ... ... ok/FAILED/ignored` lines (elapsed timings excluded):
+
+- Before: `f751d8aca01d1ea708f3f7a603a41ff62e85fba52aa77a34a0437b6540aa9b6e`
+- After: `45236395e4d9203355d569c9ae45d312c67fb026f07aa9db510b2a2d4f648f8f`
+
+The three preexisting ignored tests require external HTTPS or real D3D11
+hardware. They were not newly ignored. All executed workspace suites pass;
+no separate sibling browser/WPT corpus was rerun or credited. **DOM WPT:
+not measured.** The isolated GPUI workspace was not built or modified; its two
+new-variant match sites remain the integrator's explicitly retained merge task.
+
+Logs and machine-readable totals: main-tree orchestration directory
+`.agents/dom-bindings/dom-2/`, `dom-2-before.log`,
+`dom-2-source-hashes.json`, and `dom-2-validation.json`. Source modules and
+tests are all below 4,000 lines. DOM-1's accepted scaffold is preserved in a
+separate checkpoint commit; this ticket does not close its upstream gate.

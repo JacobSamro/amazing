@@ -2397,6 +2397,14 @@ mod tests {
 
     fn shape_node(dom: &Dom, idx: NodeIdx, out: &mut String) {
         match &dom.get(idx).kind {
+            NodeKind::DocumentFragment => {
+                out.push_str("#document-fragment[");
+                for child in dom.children(idx) { shape_node(dom, child, out); }
+                out.push(']');
+            },
+            NodeKind::DocumentType { name, .. } => {
+                out.push_str("<!DOCTYPE "); out.push_str(name); out.push('>');
+            },
             NodeKind::Document => {
                 out.push_str("doc");
                 let kids: Vec<NodeIdx> = dom.children(idx).collect();
