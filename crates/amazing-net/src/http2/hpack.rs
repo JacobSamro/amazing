@@ -175,6 +175,8 @@ impl Table {
 pub(super) struct Decoder {
     table: Table,
     ceiling: usize,
+    signaled_max: usize,
+    require_update: bool,
 }
 impl Decoder {
     pub fn new(ceiling: usize) -> Self {
@@ -184,7 +186,12 @@ impl Decoder {
                 ..Table::default()
             },
             ceiling,
+            signaled_max: 4096,
+            require_update: false,
         }
+    }
+    pub fn acknowledge_limit(&mut self) {
+        self.require_update = self.signaled_max > self.ceiling;
     }
     pub fn decode(&mut self, input: &[u8], limit: usize) -> Result<Vec<Field>, Error> {
         let mut pos = 0;
@@ -202,7 +209,12 @@ impl Decoder {
                     return Err(bad());
                 }
                 self.table.resize(max);
+                self.signaled_max = max;
+                self.require_update = false;
                 continue;
+            }
+            if self.require_update {
+                return Err(bad());
             }
             seen = true;
             if limit.saturating_sub(size) < 32 {
@@ -237,6 +249,9 @@ impl Decoder {
                 self.table.insert(&field.0, &field.1);
             }
             fields.push(field);
+        }
+        if self.require_update {
+            return Err(bad());
         }
         Ok(fields)
     }

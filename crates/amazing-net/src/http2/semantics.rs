@@ -97,6 +97,9 @@ pub(super) fn response(fields: &[Field], trailers: bool) -> Result<Option<u16>, 
         } else {
             ordinary = true;
             regular(name, value)?;
+            if name == b"te" {
+                return Err(Error::Protocol);
+            }
             if trailers
                 && matches!(
                     name.as_slice(),

@@ -727,3 +727,46 @@ fn head_response_does_not_decode_absent_encoded_body() {
     assert_eq!(reply.status, 200);
     assert!(reply.body.is_empty());
 }
+
+#[test]
+fn acknowledged_lower_table_limit_requires_hpack_size_update() {
+    for update in [false, true] {
+        let bytes = if update { vec![0x20, 0x88] } else { vec![0x88] };
+        let (mut c, _) = client(
+            vec![f(4, 1, 0, &[]), f(1, 5, 1, &bytes)],
+            Limits {
+                dynamic_table_bytes: 0,
+                ..Limits::default()
+            },
+        );
+        c.start(&request(), &[]).unwrap();
+        c.poll().unwrap();
+        if update {
+            c.poll().unwrap();
+            assert_eq!(c.take_reply(1).unwrap().unwrap().status, 200);
+        } else {
+            assert!(matches!(c.poll(), Err(Error::Compression)));
+            assert!(matches!(c.poll(), Err(Error::Closed)));
+        }
+    }
+    let mut decoder = hpack::Decoder::new(0);
+    decoder.decode(&[0x20], 1024).unwrap();
+    decoder.acknowledge_limit();
+    assert!(decoder.decode(&[0x88], 1024).is_ok());
+}
+
+#[test]
+fn te_trailers_is_allowed_only_in_requests() {
+    let mut fields = request();
+    fields.push((b"te".to_vec(), b"trailers".to_vec()));
+    assert!(semantics::request(&fields).is_ok());
+    fields.last_mut().unwrap().1 = b"gzip".to_vec();
+    assert!(semantics::request(&fields).is_err());
+    let (mut c, _) = client(vec![head(1, 5, &[("te", "trailers")])], Limits::default());
+    c.start(&request(), &[]).unwrap();
+    c.poll().unwrap();
+    assert!(matches!(
+        c.take_reply(1),
+        Err(Error::StreamReset { stream: 1, code: 1 })
+    ));
+}

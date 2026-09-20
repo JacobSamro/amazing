@@ -449,6 +449,7 @@ impl<S: Read + Write> Client<S> {
                 return Err(Error::Protocol);
             }
             self.settings_outstanding = false;
+            self.decoder.acknowledge_limit();
             return Ok(());
         }
         // Validate the complete payload before applying any of it.
