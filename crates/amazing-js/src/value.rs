@@ -62,6 +62,7 @@ impl fmt::Debug for Obj {
             (Exotic::Error, _) => write!(f, "[error]"),
             (Exotic::Map(_), _) => write!(f, "[map]"),
             (Exotic::Set(_), _) => write!(f, "[set]"),
+            (Exotic::RegExp(_), _) => write!(f, "[regexp]"),
             (Exotic::Promise(_), _) => write!(f, "[promise]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
@@ -415,6 +416,7 @@ pub enum Exotic {
     Map(MapState),
     Set(SetState),
     Promise(PromiseState),
+    RegExp(Rc<amazing_regex::Regex>),
 }
 
 /// Map internals: insertion-order key/value store keyed by display string

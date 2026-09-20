@@ -62,7 +62,9 @@ fn native_dom_get_element_by_id(
     let id = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let selector = format!("#{id}");
     let node = dom_host(i)?.borrow_mut().query_selector(&selector);
-    Ok(node.map(|node| i.make_dom_element(node)).unwrap_or(JsValue::Null))
+    Ok(node
+        .map(|node| i.make_dom_element(node))
+        .unwrap_or(JsValue::Null))
 }
 
 fn native_dom_get_elements_by_tag(
@@ -72,7 +74,10 @@ fn native_dom_get_elements_by_tag(
 ) -> Result<JsValue, Throw> {
     let tag = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let ids = dom_host(i)?.borrow_mut().query_selector_all(&tag);
-    array_values(i, ids.into_iter().map(|id| i.make_dom_element(id)).collect())
+    array_values(
+        i,
+        ids.into_iter().map(|id| i.make_dom_element(id)).collect(),
+    )
 }
 
 fn native_dom_get_elements_by_class(
@@ -87,7 +92,10 @@ fn native_dom_get_elements_by_class(
         .map(|class| format!(".{class}"))
         .collect::<String>();
     let ids = dom_host(i)?.borrow_mut().query_selector_all(&selector);
-    array_values(i, ids.into_iter().map(|id| i.make_dom_element(id)).collect())
+    array_values(
+        i,
+        ids.into_iter().map(|id| i.make_dom_element(id)).collect(),
+    )
 }
 
 fn native_dom_create_element(
@@ -116,7 +124,11 @@ fn native_dom_create_text_node(
     Ok(i.make_dom_element(id))
 }
 
-fn native_dom_text_get(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn native_dom_text_get(
+    i: &mut Interpreter,
+    this: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
     let id = dom_id(&this)?;
     Ok(dom_host(i)?
         .borrow()
@@ -125,10 +137,17 @@ fn native_dom_text_get(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> R
         .unwrap_or(JsValue::Undefined))
 }
 
-fn native_dom_text_set(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn native_dom_text_set(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
     let id = dom_id(&this)?;
     let text = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    dom_host(i)?.borrow_mut().set_text_content(id, &text).map_err(Throw::type_error)?;
+    dom_host(i)?
+        .borrow_mut()
+        .set_text_content(id, &text)
+        .map_err(Throw::type_error)?;
     Ok(JsValue::Undefined)
 }
 
@@ -222,9 +241,14 @@ fn native_window_location_get(
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let JsValue::Object(window) = this else {
-        return Err(Throw::type_error("location getter receiver is not an object"));
+        return Err(Throw::type_error(
+            "location getter receiver is not an object",
+        ));
     };
-    Ok(window.borrow().get_own("[[LocationObject]]").unwrap_or(JsValue::Undefined))
+    Ok(window
+        .borrow()
+        .get_own("[[LocationObject]]")
+        .unwrap_or(JsValue::Undefined))
 }
 
 fn native_window_location_set(
@@ -240,7 +264,11 @@ fn native_history_back(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Resu
     Ok(JsValue::Undefined)
 }
 
-fn native_history_forward(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn native_history_forward(
+    i: &mut Interpreter,
+    _: JsValue,
+    _: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
     i.pending_history_delta = Some(1);
     Ok(JsValue::Undefined)
 }
@@ -252,7 +280,8 @@ fn native_history_go(
 ) -> Result<JsValue, Throw> {
     let delta = i.to_number(args.first().unwrap_or(&JsValue::num(0.0)))?;
     if delta.is_finite() {
-        i.pending_history_delta = Some(delta.trunc().clamp(i32::MIN as f64, i32::MAX as f64) as i32);
+        i.pending_history_delta =
+            Some(delta.trunc().clamp(i32::MIN as f64, i32::MAX as f64) as i32);
     }
     Ok(JsValue::Undefined)
 }
@@ -346,11 +375,7 @@ fn native_storage_clear(
     Ok(JsValue::Undefined)
 }
 
-fn native_fetch(
-    i: &mut Interpreter,
-    _: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
+fn native_fetch(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let input = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let base = i.location_url.clone();
     let result = dom_host(i)?.borrow_mut().fetch(&base, &input);
@@ -359,20 +384,25 @@ fn native_fetch(
             let value = fetch_response(i, response);
             Ok(new_promise(i, PromiseFate::Fulfilled(value)))
         }
-        Err(error) => Ok(new_promise(
-            i,
-            PromiseFate::Rejected(JsValue::str(error)),
-        )),
+        Err(error) => Ok(new_promise(i, PromiseFate::Rejected(JsValue::str(error)))),
     }
 }
 
 fn fetch_response(i: &mut Interpreter, response: HostResponse) -> JsValue {
     let object = i.object_value();
     if let JsValue::Object(object) = &object {
-        object.borrow_mut().set_own("ok", JsValue::Bool((200..300).contains(&response.status)));
-        object.borrow_mut().set_own("status", JsValue::num(response.status as f64));
-        object.borrow_mut().set_own("url", JsValue::str(response.url));
-        object.borrow_mut().set_own("[[Body]]", JsValue::str(response.body));
+        object
+            .borrow_mut()
+            .set_own("ok", JsValue::Bool((200..300).contains(&response.status)));
+        object
+            .borrow_mut()
+            .set_own("status", JsValue::num(response.status as f64));
+        object
+            .borrow_mut()
+            .set_own("url", JsValue::str(response.url));
+        object
+            .borrow_mut()
+            .set_own("[[Body]]", JsValue::str(response.body));
         let mut headers = JsObject::ordinary();
         headers.proto = Some(i.object_proto.clone());
         for (name, value) in response.headers {
@@ -386,7 +416,9 @@ fn fetch_response(i: &mut Interpreter, response: HostResponse) -> JsValue {
             "has",
             Interpreter::native("has", native_response_headers_has, &i.function_proto),
         );
-        object.borrow_mut().set_own("headers", JsValue::object(headers));
+        object
+            .borrow_mut()
+            .set_own("headers", JsValue::object(headers));
         object.borrow_mut().set_own(
             "text",
             Interpreter::native("text", native_response_text, &i.function_proto),
@@ -438,7 +470,9 @@ fn native_response_headers_get(
     let JsValue::Object(headers) = this else {
         return Err(Throw::type_error("Headers.get receiver is not an object"));
     };
-    let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?.to_ascii_lowercase();
+    let name = i
+        .to_string(args.first().unwrap_or(&JsValue::Undefined))?
+        .to_ascii_lowercase();
     Ok(headers.borrow().get_own(&name).unwrap_or(JsValue::Null))
 }
 
@@ -450,11 +484,17 @@ fn native_response_headers_has(
     let JsValue::Object(headers) = this else {
         return Err(Throw::type_error("Headers.has receiver is not an object"));
     };
-    let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?.to_ascii_lowercase();
+    let name = i
+        .to_string(args.first().unwrap_or(&JsValue::Undefined))?
+        .to_ascii_lowercase();
     Ok(JsValue::Bool(headers.borrow().get_own(&name).is_some()))
 }
 
-fn native_dom_get_attribute(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn native_dom_get_attribute(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
     let id = dom_id(&this)?;
     let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     match dom_host(i)?.borrow().get_attribute(id, &name) {
@@ -464,11 +504,18 @@ fn native_dom_get_attribute(i: &mut Interpreter, this: JsValue, args: Vec<JsValu
     }
 }
 
-fn native_dom_set_attribute(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn native_dom_set_attribute(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
     let id = dom_id(&this)?;
     let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let value = i.to_string(args.get(1).unwrap_or(&JsValue::Undefined))?;
-    dom_host(i)?.borrow_mut().set_attribute(id, &name, &value).map_err(Throw::type_error)?;
+    dom_host(i)?
+        .borrow_mut()
+        .set_attribute(id, &name, &value)
+        .map_err(Throw::type_error)?;
     Ok(JsValue::Undefined)
 }
 
@@ -479,7 +526,12 @@ fn native_dom_has_attribute(
 ) -> Result<JsValue, Throw> {
     let node = dom_id(&this)?;
     let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    Ok(JsValue::Bool(dom_host(i)?.borrow().get_attribute(node, &name).is_some_and(|value| value.is_some())))
+    Ok(JsValue::Bool(
+        dom_host(i)?
+            .borrow()
+            .get_attribute(node, &name)
+            .is_some_and(|value| value.is_some()),
+    ))
 }
 
 fn native_dom_remove_attribute(
@@ -489,22 +541,33 @@ fn native_dom_remove_attribute(
 ) -> Result<JsValue, Throw> {
     let node = dom_id(&this)?;
     let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    dom_host(i)?.borrow_mut().remove_attribute(node, &name).map_err(Throw::type_error)?;
+    dom_host(i)?
+        .borrow_mut()
+        .remove_attribute(node, &name)
+        .map_err(Throw::type_error)?;
     Ok(JsValue::Undefined)
 }
 
-fn native_dom_append(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+fn native_dom_append(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
     let parent = dom_id(&this)?;
     let host = dom_host(i)?;
     for arg in args {
         match arg {
             JsValue::Object(_) => {
                 let child = dom_id(&arg)?;
-                host.borrow_mut().append_child(parent, child).map_err(Throw::type_error)?;
+                host.borrow_mut()
+                    .append_child(parent, child)
+                    .map_err(Throw::type_error)?;
             }
             other => {
                 let text = i.to_string(&other)?;
-                host.borrow_mut().append_text(parent, &text).map_err(Throw::type_error)?;
+                host.borrow_mut()
+                    .append_text(parent, &text)
+                    .map_err(Throw::type_error)?;
             }
         }
     }
@@ -530,7 +593,10 @@ fn native_dom_remove(
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let node = dom_id(&this)?;
-    dom_host(i)?.borrow_mut().remove_node(node).map_err(Throw::type_error)?;
+    dom_host(i)?
+        .borrow_mut()
+        .remove_node(node)
+        .map_err(Throw::type_error)?;
     Ok(JsValue::Undefined)
 }
 
@@ -541,7 +607,9 @@ fn native_dom_matches(
 ) -> Result<JsValue, Throw> {
     let node = dom_id(&this)?;
     let selector = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    Ok(JsValue::Bool(dom_host(i)?.borrow().matches_selector(node, &selector)))
+    Ok(JsValue::Bool(
+        dom_host(i)?.borrow().matches_selector(node, &selector),
+    ))
 }
 
 fn native_dom_closest(
@@ -553,7 +621,9 @@ fn native_dom_closest(
     let selector = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     loop {
         let matches = dom_host(i)?.borrow().matches_selector(node, &selector);
-        if matches { return Ok(i.make_dom_element(node)); }
+        if matches {
+            return Ok(i.make_dom_element(node));
+        }
         let parent = dom_host(i)?.borrow().parent_node(node);
         let Some(parent) = parent else { break };
         node = parent;
@@ -579,7 +649,9 @@ fn write_class_tokens(i: &mut Interpreter, node: u32, tokens: &[String]) -> Resu
 
 fn class_list_node(this: &JsValue) -> Result<u32, Throw> {
     let JsValue::Object(object) = this else {
-        return Err(Throw::type_error("classList method receiver is not an object"));
+        return Err(Throw::type_error(
+            "classList method receiver is not an object",
+        ));
     };
     Interpreter::dom_class_list_id(object)
         .ok_or_else(|| Throw::type_error("classList method receiver is not a DOM element"))
@@ -592,7 +664,9 @@ fn native_class_list_contains(
 ) -> Result<JsValue, Throw> {
     let node = class_list_node(&this)?;
     let token = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    Ok(JsValue::Bool(class_tokens(i, node)?.iter().any(|item| item == &token)))
+    Ok(JsValue::Bool(
+        class_tokens(i, node)?.iter().any(|item| item == &token),
+    ))
 }
 
 fn native_class_list_add(
@@ -639,8 +713,12 @@ fn native_class_list_toggle(
     let mut tokens = class_tokens(i, node)?;
     let present = tokens.iter().any(|item| item == &token);
     let enabled = force.unwrap_or(!present);
-    if enabled && !present { tokens.push(token.clone()); }
-    if !enabled { tokens.retain(|item| item != &token); }
+    if enabled && !present {
+        tokens.push(token.clone());
+    }
+    if !enabled {
+        tokens.retain(|item| item != &token);
+    }
     write_class_tokens(i, node, &tokens)?;
     Ok(JsValue::Bool(enabled))
 }
@@ -726,9 +804,13 @@ fn native_event_stop_propagation(
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let JsValue::Object(event) = this else {
-        return Err(Throw::type_error("stopPropagation receiver is not an event"));
+        return Err(Throw::type_error(
+            "stopPropagation receiver is not an event",
+        ));
     };
-    event.borrow_mut().set_own("cancelBubble", JsValue::Bool(true));
+    event
+        .borrow_mut()
+        .set_own("cancelBubble", JsValue::Bool(true));
     Ok(JsValue::Undefined)
 }
 
@@ -740,7 +822,9 @@ fn native_event_prevent_default(
     let JsValue::Object(event) = this else {
         return Err(Throw::type_error("preventDefault receiver is not an event"));
     };
-    event.borrow_mut().set_own("defaultPrevented", JsValue::Bool(true));
+    event
+        .borrow_mut()
+        .set_own("defaultPrevented", JsValue::Bool(true));
     Ok(JsValue::Undefined)
 }
 
@@ -1322,7 +1406,9 @@ fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut In
 }
 
 fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) -> bool {
-    let Ok(source) = promise_object(value) else { return false };
+    let Ok(source) = promise_object(value) else {
+        return false;
+    };
     if Rc::ptr_eq(&source.0, &capability.0) {
         settle_promise(
             capability,
@@ -2474,6 +2560,26 @@ fn native_number(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
         Ok(value)
     }
 }
+// Required by testharness.js when building its control-character RegExp.
+fn native_string_from_char_code(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let mut units = Vec::with_capacity(args.len());
+    for arg in args {
+        let number = i.to_number(&arg)?;
+        units.push(if number.is_finite() {
+            number.trunc().rem_euclid(65536.0) as u16
+        } else {
+            0
+        });
+    }
+    let value = String::from_utf16(&units).map_err(|_| Throw::type_error(
+        "String.fromCharCode result contains a lone surrogate; UTF-16 JS strings are not implemented"))?;
+    Ok(JsValue::str(value))
+}
+
 fn native_string(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let value = JsValue::str(i.to_string(a.first().unwrap_or(&JsValue::Undefined))?);
     if let JsValue::Object(object) = &this {
@@ -2567,6 +2673,9 @@ fn native_string_replace(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let source = string_this(i, this)?;
+    if args.first().is_some_and(|v| regexp_data(v).is_some()) {
+        return regexp_replace(i, &source, &args);
+    }
     let search = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let replacement = args.get(1).cloned().unwrap_or(JsValue::Undefined);
     if let Some(position) = source.find(&search) {
@@ -2867,8 +2976,91 @@ fn native_request_animation_frame(
 ) -> Result<JsValue, Throw> {
     let callback = args.first().cloned().unwrap_or(JsValue::Undefined);
     if callable_function(&callback).is_none() {
-        return Err(Throw::type_error("requestAnimationFrame callback is not callable"));
+        return Err(Throw::type_error(
+            "requestAnimationFrame callback is not callable",
+        ));
     }
     let id = i.schedule_timer(callback, 16, vec![JsValue::num(0.0)]);
     Ok(JsValue::num(id as f64))
+}
+
+// testharness.js distinguishes callback setup from property-object setup with
+// instanceof Function, and checks setup properties with hasOwnProperty.
+fn native_function_constructor(
+    i: &mut Interpreter,
+    _: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let mut parts = args
+        .iter()
+        .map(|a| i.to_string(a))
+        .collect::<Result<Vec<_>, _>>()?;
+    let body = parts.pop().unwrap_or_default();
+    let source = format!("function anonymous({}) {{\n{}\n}}", parts.join(","), body);
+    let script = crate::parse_script(&source).map_err(|e| Throw::syntax_error(e.to_string()))?;
+    if script.body.len() != 1 {
+        return Err(Throw::syntax_error("invalid Function constructor source"));
+    }
+    if let ast::StmtKind::Function(function) = &script.body[0].kind {
+        Ok(i.make_function(function, &i.global_env))
+    } else {
+        Err(Throw::syntax_error("invalid Function constructor source"))
+    }
+}
+fn native_has_own_property(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    native_object_has_own(
+        i,
+        JsValue::Undefined,
+        vec![this, args.first().cloned().unwrap_or(JsValue::Undefined)],
+    )
+}
+
+fn native_array_some(
+    i: &mut Interpreter,
+    this: JsValue,
+    args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    if this.is_null() || this.is_undefined() {
+        return Err(Throw::type_error("Array.some receiver is nullish"));
+    }
+    let length = i.get_prop(&this, "length")?;
+    let length = i.to_number(&length)?;
+    let length = if length.is_nan() || length <= 0.0 {
+        0.0
+    } else {
+        length.floor()
+    };
+    if length > 1_048_576.0 {
+        return Err(Throw::range_error("Array.some length limit"));
+    }
+    let callback = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if callable_function(&callback).is_none() {
+        return Err(Throw::type_error("Array.some callback is not callable"));
+    }
+    let receiver = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    for index in 0..length as usize {
+        let key = index.to_string();
+        let present = match &this {
+            JsValue::Object(o) => o.borrow().has_property(&key),
+            JsValue::Str(s) => index < s.encode_utf16().count(),
+            _ => false,
+        };
+        if present {
+            let value = i.get_prop(&this, &key)?;
+            if i.call_value(
+                &callback,
+                receiver.clone(),
+                vec![value, JsValue::num(index as f64), this.clone()],
+            )?
+            .to_boolean()
+            {
+                return Ok(JsValue::Bool(true));
+            }
+        }
+    }
+    Ok(JsValue::Bool(false))
 }

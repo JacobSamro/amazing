@@ -21,16 +21,12 @@
 //!   [`Punct::DollarBrace`] and their closing `}` is absorbed by the lexer
 //!   (tracked with a brace-depth counter so nested `{}` inside
 //!   substitutions works) together with the next chunk.
-//! - All punctuators, matched longest-first (`>>>= >>>= ??= &&= ||= **= ?.
-//!   ... =>` etc.). `/` is **always division**; see the division-vs-regex
-//!   note at the bottom of this list.
+//! - All punctuators matched longest-first. The standalone tokenizer uses
+//!   the division lexical goal; the script parser uses lazy scanner snapshots
+//!   and explicitly selects the RegExp goal at operand boundaries. Escapes,
+//!   character classes and flags are consumed as one RegExp literal token.
 //!
 //! Deferred (documented, not implemented):
-//! - Regex literals entirely. The classic `/` ambiguity (division vs
-//!   regex) is resolved in favor of division because regexes are out of
-//!   scope; when they land, the parser must pass a "regex allowed here?"
-//!   feedback flag into the scanner at every operand boundary — that is
-//!   where the ASI/division ambiguity will live.
 //! - Full Unicode identifier classes: identifiers use the simplified rule
 //!   `char::is_alphabetic | $ | _` (start) and `+ is_numeric | digits`
 //!   (continuation). `\u{…}` escapes inside identifier names, ID_Start /
@@ -63,55 +59,131 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, SyntaxError> {
     Lexer::new(src).run()
 }
 
-struct Lexer {
-    chars: Vec<char>,
+#[derive(Clone)]
+pub(crate) struct Lexer {
+    chars: std::rc::Rc<[char]>,
+    pending: std::collections::VecDeque<Token>,
     idx: usize,
     line: u32,
     col: u32,
     /// Open `{` seen in plain code; distinguishes an object/block `}` from
     /// the `}` that closes a template substitution.
     brace_depth: usize,
-    /// Number of `${ … }` substitutions currently open.
-    open_templates: usize,
+    /// Plain-code brace depth at each open template substitution.
+    template_bases: Vec<usize>,
 }
 
 impl Lexer {
-    fn new(src: &str) -> Self {
+    pub(crate) fn new(src: &str) -> Self {
+        let normalized = src.replace("\r\n", "\n").replace('\r', "\n");
+        let src = normalized.as_str();
         Lexer {
-            chars: src.chars().collect(),
+            chars: src.chars().collect::<Vec<_>>().into(),
+            pending: std::collections::VecDeque::new(),
             idx: 0,
             line: 1,
             col: 1,
             brace_depth: 0,
-            open_templates: 0,
+            template_bases: Vec::new(),
         }
     }
 
     fn run(mut self) -> Result<Vec<Token>, SyntaxError> {
-        let mut toks = Vec::new();
+        let mut tokens = Vec::new();
         loop {
-            let newline_before = self.skip_trivia()?;
-            let start = self.loc();
-            if self.at_end() {
-                if self.open_templates > 0 {
-                    return Err(syntax_error("unterminated template literal", start));
-                }
-                toks.push(Token::new(TokenKind::Eof, Span::new(start, start), newline_before));
-                return Ok(toks);
-            }
-            let c = self.cur().expect("not at end");
-            match c {
-                '\'' | '"' => toks.push(self.string_token(start, newline_before)?),
-                '`' => self.template_open(start, newline_before, &mut toks)?,
-                '}' => self.rbrace_token(start, newline_before, &mut toks)?,
-                c if c.is_ascii_digit() => toks.push(self.number_token(start, newline_before)?),
-                '.' if self.peek(1).is_some_and(|c| c.is_ascii_digit()) => {
-                    toks.push(self.number_token(start, newline_before)?)
-                }
-                c if is_ident_start(c) => toks.push(self.ident_token(start, newline_before)),
-                _ => toks.push(self.punct_token(start, newline_before)?),
+            let token = self.next_token()?;
+            let done = matches!(token.kind, TokenKind::Eof);
+            tokens.push(token);
+            if done {
+                return Ok(tokens);
             }
         }
+    }
+
+    pub(crate) fn next_token(&mut self) -> Result<Token, SyntaxError> {
+        if let Some(t) = self.pending.pop_front() {
+            return Ok(t);
+        }
+        let newline_before = self.skip_trivia()?;
+        let start = self.loc();
+        if self.at_end() {
+            if !self.template_bases.is_empty() {
+                return Err(syntax_error("unterminated template literal", start));
+            }
+            return Ok(self.mk(TokenKind::Eof, start, newline_before));
+        }
+        let mut tokens = Vec::new();
+        match self.cur().expect("not at end") {
+            '\'' | '"' => tokens.push(self.string_token(start, newline_before)?),
+            '`' => self.template_open(start, newline_before, &mut tokens)?,
+            '}' => self.rbrace_token(start, newline_before, &mut tokens)?,
+            c if c.is_ascii_digit() => tokens.push(self.number_token(start, newline_before)?),
+            '.' if self.peek(1).is_some_and(|c| c.is_ascii_digit()) => {
+                tokens.push(self.number_token(start, newline_before)?)
+            }
+            c if is_ident_start(c) => tokens.push(self.ident_token(start, newline_before)),
+            _ => tokens.push(self.punct_token(start, newline_before)?),
+        }
+        self.pending.extend(tokens);
+        Ok(self
+            .pending
+            .pop_front()
+            .expect("scanner emits at least one token"))
+    }
+
+    /// Called only when the parser selects InputElementRegExp at an operand
+    /// boundary. Regex contents never enter the ordinary/template scanner.
+    pub(crate) fn regex_token(&mut self) -> Result<Token, SyntaxError> {
+        let newline_before = self.skip_trivia()?;
+        let start = self.loc();
+        if self.cur() != Some('/') {
+            return Err(syntax_error("expected RegExp literal", start));
+        }
+        self.advance();
+        let mut pattern = String::new();
+        let mut in_class = false;
+        loop {
+            let Some(c) = self.cur() else {
+                return Err(syntax_error("unterminated RegExp literal", start));
+            };
+            if matches!(c, '\n' | '\r' | '\u{2028}' | '\u{2029}') {
+                return Err(syntax_error(
+                    "line terminator in RegExp literal",
+                    self.loc(),
+                ));
+            }
+            if c == '/' && !in_class {
+                self.advance();
+                break;
+            }
+            if c == '\\' {
+                pattern.push(c);
+                self.advance();
+                let Some(escaped) = self.cur() else {
+                    return Err(syntax_error("unterminated RegExp escape", start));
+                };
+                if matches!(escaped, '\n' | '\r' | '\u{2028}' | '\u{2029}') {
+                    return Err(syntax_error("line terminator in RegExp escape", self.loc()));
+                }
+                pattern.push(escaped);
+                self.advance();
+                continue;
+            }
+            if c == '[' {
+                in_class = true;
+            }
+            if c == ']' {
+                in_class = false;
+            }
+            pattern.push(c);
+            self.advance();
+        }
+        let mut flags = String::new();
+        while self.cur().is_some_and(|c| is_ident_part(c) || c == '\\') {
+            flags.push(self.cur().unwrap());
+            self.advance();
+        }
+        Ok(self.mk(TokenKind::RegExp { pattern, flags }, start, newline_before))
     }
 
     // ----- cursor helpers -------------------------------------------------
@@ -174,8 +246,8 @@ impl Lexer {
         let mut newline = false;
         loop {
             match self.cur() {
-                Some(' ') | Some('\t') | Some('\u{000b}') | Some('\u{000c}')
-                | Some('\u{00a0}') | Some('\u{feff}') => self.advance(),
+                Some(' ') | Some('\t') | Some('\u{000b}') | Some('\u{000c}') | Some('\u{00a0}')
+                | Some('\u{feff}') => self.advance(),
                 Some('\n') | Some('\u{2028}') | Some('\u{2029}') => {
                     newline = true;
                     self.advance();
@@ -215,7 +287,11 @@ impl Lexer {
 
     // ----- strings & templates ---------------------------------------------
 
-    fn string_token(&mut self, start: SourceLocation, newline_before: bool) -> Result<Token, SyntaxError> {
+    fn string_token(
+        &mut self,
+        start: SourceLocation,
+        newline_before: bool,
+    ) -> Result<Token, SyntaxError> {
         let quote = self.cur().expect("caller checked");
         self.advance();
         let mut value = String::new();
@@ -251,10 +327,14 @@ impl Lexer {
     ) -> Result<(), SyntaxError> {
         self.advance(); // opening backtick
         let (cooked, tail) = self.scan_template_part()?;
-        toks.push(self.mk(TokenKind::TemplatePart { cooked, tail }, start, newline_before));
+        toks.push(self.mk(
+            TokenKind::TemplatePart { cooked, tail },
+            start,
+            newline_before,
+        ));
         if !tail {
             toks.push(self.mk(TokenKind::Punct(Punct::DollarBrace), start, false));
-            self.open_templates += 1;
+            self.template_bases.push(self.brace_depth);
         }
         Ok(())
     }
@@ -266,23 +346,23 @@ impl Lexer {
         toks: &mut Vec<Token>,
     ) -> Result<(), SyntaxError> {
         self.advance();
-        if self.brace_depth > 0 {
-            self.brace_depth -= 1;
-            toks.push(self.mk(TokenKind::Punct(Punct::Rbrace), start, newline_before));
-            return Ok(());
-        }
-        if self.open_templates > 0 {
+        if self.template_bases.last() == Some(&self.brace_depth) {
             // Closes a `${` substitution; the following template chunk is
             // scanned right away so the parser never sees this `}`.
             let (cooked, tail) = self.scan_template_part()?;
-            toks.push(self.mk(TokenKind::TemplatePart { cooked, tail }, start, newline_before));
+            toks.push(self.mk(
+                TokenKind::TemplatePart { cooked, tail },
+                start,
+                newline_before,
+            ));
             if tail {
-                self.open_templates -= 1;
+                self.template_bases.pop();
             } else {
                 toks.push(self.mk(TokenKind::Punct(Punct::DollarBrace), start, false));
             }
             return Ok(());
         }
+        self.brace_depth = self.brace_depth.saturating_sub(1);
         // Unmatched `}` in plain code: emit it and let the parser produce a
         // positioned "unexpected token" diagnostic.
         toks.push(self.mk(TokenKind::Punct(Punct::Rbrace), start, newline_before));
@@ -380,7 +460,10 @@ impl Lexer {
             v = v.saturating_mul(16).saturating_add(d);
             count += 1;
             if count > 6 {
-                return Err(syntax_error("too many digits in \\u{...} escape", self.loc()));
+                return Err(syntax_error(
+                    "too many digits in \\u{...} escape",
+                    self.loc(),
+                ));
             }
         }
         if count == 0 || self.cur() != Some('}') {
@@ -392,7 +475,11 @@ impl Lexer {
 
     // ----- numbers ----------------------------------------------------------
 
-    fn number_token(&mut self, start: SourceLocation, newline_before: bool) -> Result<Token, SyntaxError> {
+    fn number_token(
+        &mut self,
+        start: SourceLocation,
+        newline_before: bool,
+    ) -> Result<Token, SyntaxError> {
         let numeric = self.scan_number()?;
         if self.cur().is_some_and(is_ident_part) {
             return Err(syntax_error(
@@ -420,7 +507,10 @@ impl Lexer {
             self.advance();
             let digits = self.digit_run(radix)?;
             if digits.is_empty() {
-                return Err(syntax_error("missing digits after radix prefix", self.loc()));
+                return Err(syntax_error(
+                    "missing digits after radix prefix",
+                    self.loc(),
+                ));
             }
             let bigint = self.take_bigint_suffix();
             return Ok(Numeric::new(digits, radix, bigint));
@@ -428,9 +518,7 @@ impl Lexer {
 
         // Decimal: integer part, optional fraction, optional exponent.
         let mut raw = self.digit_run(10)?;
-        if self.cur() == Some('.')
-            && !self.peek(1).is_some_and(|c| c == '_' || is_ident_start(c))
-        {
+        if self.cur() == Some('.') && !self.peek(1).is_some_and(|c| c == '_' || is_ident_start(c)) {
             raw.push('.');
             self.advance();
             if self.cur().is_some_and(|c| c.is_ascii_digit()) {
@@ -477,7 +565,8 @@ impl Lexer {
         loop {
             match self.cur() {
                 Some('_') => {
-                    let ok = !out.is_empty() && self.peek(1).is_some_and(|c| is_radix_digit(c, radix));
+                    let ok =
+                        !out.is_empty() && self.peek(1).is_some_and(|c| is_radix_digit(c, radix));
                     if !ok {
                         return Err(syntax_error(
                             "numeric separator must be between digits",
@@ -512,7 +601,11 @@ impl Lexer {
 
     // ----- punctuators --------------------------------------------------------
 
-    fn punct_token(&mut self, start: SourceLocation, newline_before: bool) -> Result<Token, SyntaxError> {
+    fn punct_token(
+        &mut self,
+        start: SourceLocation,
+        newline_before: bool,
+    ) -> Result<Token, SyntaxError> {
         let p = self.match_punct()?;
         Ok(self.mk(TokenKind::Punct(p), start, newline_before))
     }
@@ -574,7 +667,7 @@ impl Lexer {
                     Punct::SlashEq
                 } else {
                     self.advance();
-                    Punct::Slash // always division; regex deferred
+                    Punct::Slash // default goal; the parser rescans operand-position slashes
                 }
             }
             '%' => {
@@ -764,11 +857,27 @@ mod tests {
         assert_eq!(
             got,
             p(&[
-                Punct::UShrEq, Punct::UShr, Punct::ShrEq, Punct::Shr,
-                Punct::Ge, Punct::Gt, Punct::ShlEq, Punct::Shl, Punct::Le,
-                Punct::EqEqEq, Punct::NotEqEq, Punct::EqEq, Punct::NotEq,
-                Punct::Arrow, Punct::AndAndEq, Punct::And, Punct::OrOrEq,
-                Punct::Or, Punct::NullishEq, Punct::Nullish, Punct::QuestionDot,
+                Punct::UShrEq,
+                Punct::UShr,
+                Punct::ShrEq,
+                Punct::Shr,
+                Punct::Ge,
+                Punct::Gt,
+                Punct::ShlEq,
+                Punct::Shl,
+                Punct::Le,
+                Punct::EqEqEq,
+                Punct::NotEqEq,
+                Punct::EqEq,
+                Punct::NotEq,
+                Punct::Arrow,
+                Punct::AndAndEq,
+                Punct::And,
+                Punct::OrOrEq,
+                Punct::Or,
+                Punct::NullishEq,
+                Punct::Nullish,
+                Punct::QuestionDot,
             ])
         );
     }
@@ -779,7 +888,9 @@ mod tests {
         assert_eq!(kinds("a?.5:b"), {
             let mut v = vec![TokenKind::Ident("a".into())];
             v.extend(p(&[Punct::Question]));
-            v.push(TokenKind::Numeric(crate::tokens::Numeric::new(".5", 10, false)));
+            v.push(TokenKind::Numeric(crate::tokens::Numeric::new(
+                ".5", 10, false,
+            )));
             v.extend(p(&[Punct::Colon]));
             v.push(TokenKind::Ident("b".into()));
             v
@@ -826,20 +937,20 @@ mod tests {
             vec![TokenKind::Str("a\n\t\\'A\u{1F600}Bq".into())]
         );
         // Line continuation produces nothing.
-        assert_eq!(kinds("\"one\\\n  two\""), vec![TokenKind::Str("one  two".into())]);
-        // U+2028/U+2029 are legal inside strings.
         assert_eq!(
-            kinds("'a b'"),
-            vec![TokenKind::Str("a b".into())]
+            kinds("\"one\\\n  two\""),
+            vec![TokenKind::Str("one  two".into())]
         );
+        // U+2028/U+2029 are legal inside strings.
+        assert_eq!(kinds("'a b'"), vec![TokenKind::Str("a b".into())]);
     }
 
     #[test]
     fn nbsp_and_zwnbsp_are_whitespace() {
-        assert_eq!(kinds("a\u{00a0}\u{feff}b"), vec![
-            TokenKind::Ident("a".into()),
-            TokenKind::Ident("b".into()),
-        ]);
+        assert_eq!(
+            kinds("a\u{00a0}\u{feff}b"),
+            vec![TokenKind::Ident("a".into()), TokenKind::Ident("b".into()),]
+        );
     }
 
     #[test]
@@ -870,8 +981,9 @@ mod tests {
     #[test]
     fn nested_templates_with_object_braces_tokenize_as_parts_and_transitions() {
         let got = kinds("`a${ {x: 1} }b${`inner${q}`}c`");
-        let tp = |cooked: &str, tail: bool| {
-            TokenKind::TemplatePart { cooked: cooked.into(), tail }
+        let tp = |cooked: &str, tail: bool| TokenKind::TemplatePart {
+            cooked: cooked.into(),
+            tail,
         };
         assert_eq!(
             got,
@@ -998,4 +1110,3 @@ mod tests {
         assert!(e.message.contains('@'));
     }
 }
-

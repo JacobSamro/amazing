@@ -1,14 +1,248 @@
-//! ECMA-262 RegExp: pattern parsing, compilation, and matching.
+//! Bounded, std-only ECMA-262 RegExp matching (§22.2).
 //!
-//! Hand-written against ECMA-262 §22.2, like every other parser in this engine —
-//! no `regex` crate, no `regex-syntax`. Engine cores are **std-only**.
-//!
-//! This is on the critical path: `amazing-js` lexes `/` as always-division and
-//! defers regex literals, which makes the unmodified upstream
-//! `resources/testharness.js` unparseable (SyntaxError at 581:43) and blocks the
-//! WPT testharness runner, and with it every script-driven conformance suite.
-//!
-//! Skeleton registered by the integrator so the workspace resolves; the
-//! `js-lang` lane implements it under ticket JS-2.
-
+//! Supports g/i/m/s/u/y, UTF-16 indices, classes, captures, backreferences,
+//! greedy/lazy repetition, alternatives, boundaries and lookahead. The matcher
+//! uses an explicit backtracking stack and a shared work budget, including
+//! lookaheads and search attempts. Unsupported syntax is rejected explicitly.
+//! See README.md for the deliberately incomplete ECMAScript surface.
 #![forbid(unsafe_code)]
+
+mod parser;
+mod unicode_casefold;
+mod vm;
+
+use std::fmt;
+use std::ops::Range;
+
+const MAX_PATTERN: usize = 16_384;
+const MAX_INPUT: usize = 1_048_576;
+const MAX_DEPTH: usize = 64;
+const MAX_CAPTURES: usize = 128;
+const MAX_CODE: usize = 32_768;
+const MAX_STEPS: usize = 1_000_000;
+const MAX_STACK: usize = 8_192;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Error {
+    Syntax(String),
+    Limit(&'static str),
+}
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Syntax(s) => f.write_str(s),
+            Self::Limit(s) => write!(f, "RegExp resource limit: {s}"),
+        }
+    }
+}
+impl std::error::Error for Error {}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Flags {
+    pub global: bool,
+    pub ignore_case: bool,
+    pub multiline: bool,
+    pub dot_all: bool,
+    pub unicode: bool,
+    pub sticky: bool,
+}
+impl Flags {
+    pub fn parse(text: &str) -> Result<Self, Error> {
+        let mut f = Self::default();
+        for c in text.chars() {
+            let slot = match c {
+                'g' => &mut f.global,
+                'i' => &mut f.ignore_case,
+                'm' => &mut f.multiline,
+                's' => &mut f.dot_all,
+                'u' => &mut f.unicode,
+                'y' => &mut f.sticky,
+                _ => return Err(Error::Syntax(format!("unsupported RegExp flag {c:?}"))),
+            };
+            if *slot {
+                return Err(Error::Syntax(format!("duplicate RegExp flag {c:?}")));
+            }
+            *slot = true;
+        }
+        Ok(f)
+    }
+    pub fn as_string(self) -> String {
+        [
+            (self.global, 'g'),
+            (self.ignore_case, 'i'),
+            (self.multiline, 'm'),
+            (self.dot_all, 's'),
+            (self.unicode, 'u'),
+            (self.sticky, 'y'),
+        ]
+        .into_iter()
+        .filter_map(|(yes, c)| yes.then_some(c))
+        .collect()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Regex {
+    pattern: String,
+    flags: Flags,
+    program: vm::Program,
+    captures: usize,
+}
+impl PartialEq for Regex {
+    fn eq(&self, other: &Self) -> bool {
+        self.pattern == other.pattern && self.flags == other.flags
+    }
+}
+impl Eq for Regex {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Match {
+    /// UTF-16 code-unit range of the entire match.
+    pub range: Range<usize>,
+    /// Capture 0 is the entire match; nonparticipating captures are None.
+    pub captures: Vec<Option<Range<usize>>>,
+}
+impl Regex {
+    pub fn new(pattern: &str, flags: &str) -> Result<Self, Error> {
+        if pattern.len() > MAX_PATTERN {
+            return Err(Error::Limit("pattern bytes"));
+        }
+        let flags = Flags::parse(flags)?;
+        let (ast, captures) = parser::parse(pattern, flags)?;
+        let program = vm::compile(&ast, captures, flags)?;
+        Ok(Self {
+            pattern: pattern.into(),
+            flags,
+            program,
+            captures,
+        })
+    }
+    pub fn flags(&self) -> Flags {
+        self.flags
+    }
+    pub fn pattern(&self) -> &str {
+        &self.pattern
+    }
+    pub fn capture_count(&self) -> usize {
+        self.captures
+    }
+    /// Search from a UTF-16 index. `y` restricts matching to exactly that index.
+    /// The JS binding owns lastIndex and global iteration; this object is pure.
+    pub fn exec(&self, input: &str, start: usize) -> Result<Option<Match>, Error> {
+        if input.len() > MAX_INPUT * 3 {
+            return Err(Error::Limit("input bytes"));
+        }
+        let units: Vec<u16> = input.encode_utf16().collect();
+        self.exec_utf16(&units, start)
+    }
+    /// Lossless entry point for hosts with UTF-16 strings, including lone surrogates.
+    pub fn exec_utf16(&self, input: &[u16], start: usize) -> Result<Option<Match>, Error> {
+        if input.len() > MAX_INPUT {
+            return Err(Error::Limit("input code units"));
+        }
+        self.matcher_utf16(input)?.exec(start)
+    }
+    /// A single operation's input and shared budget, reused by global iteration.
+    pub fn matcher_utf16<'a>(&'a self, input: &'a [u16]) -> Result<Matcher<'a>, Error> {
+        if input.len() > MAX_INPUT {
+            return Err(Error::Limit("input code units"));
+        }
+        Ok(Matcher {
+            regex: self,
+            input,
+            budget: vm::Budget::new(),
+            failed: false,
+        })
+    }
+}
+
+pub struct Matcher<'a> {
+    regex: &'a Regex,
+    input: &'a [u16],
+    budget: vm::Budget,
+    failed: bool,
+}
+impl Matcher<'_> {
+    pub fn exec(&mut self, start: usize) -> Result<Option<Match>, Error> {
+        if self.failed {
+            return Err(Error::Limit("matcher previously exhausted"));
+        }
+        let result = vm::search(
+            &self.regex.program,
+            self.input,
+            start,
+            self.regex.flags,
+            self.regex.captures,
+            &mut self.budget,
+        );
+        self.failed = result.is_err();
+        result
+    }
+}
+
+pub fn advance_index(input: &[u16], index: usize, unicode: bool) -> usize {
+    index.saturating_add(
+        if unicode
+            && input
+                .get(index)
+                .is_some_and(|u| (0xD800..=0xDBFF).contains(u))
+            && input
+                .get(index + 1)
+                .is_some_and(|u| (0xDC00..=0xDFFF).contains(u))
+        {
+            2
+        } else {
+            1
+        },
+    )
+}
+fn point(input: &[u16], index: usize, unicode: bool) -> Option<(u32, usize)> {
+    let first = *input.get(index)? as u32;
+    let end = advance_index(input, index, unicode);
+    Some((
+        if end == index + 2 {
+            0x10000 + ((first - 0xD800) << 10) + (input[index + 1] as u32 - 0xDC00)
+        } else {
+            first
+        },
+        end,
+    ))
+}
+fn line(c: u32) -> bool {
+    matches!(c, 10 | 13 | 0x2028 | 0x2029)
+}
+fn space(c: u32) -> bool {
+    matches!(c, 9..=13|32|0xA0|0x1680|0x2000..=0x200A|0x2028|0x2029|0x202F|0x205F|0x3000|0xFEFF)
+}
+fn canonical(c: u32, flags: Flags) -> u32 {
+    if !flags.ignore_case {
+        return c;
+    }
+    if flags.unicode {
+        return unicode_casefold::PAIRS
+            .binary_search_by_key(&c, |p| p.0)
+            .map(|i| unicode_casefold::PAIRS[i].1)
+            .unwrap_or(c);
+    }
+    let Some(ch) = char::from_u32(c) else {
+        return c;
+    };
+    let mut upper = ch.to_uppercase();
+    let u = upper.next().unwrap_or(ch) as u32;
+    if upper.next().is_some() || u > 0xFFFF || (c >= 128 && u < 128) {
+        c
+    } else {
+        u
+    }
+}
+fn word(c: u32, flags: Flags) -> bool {
+    let c = if flags.unicode && flags.ignore_case {
+        canonical(c, flags)
+    } else {
+        c
+    };
+    matches!(c, 48..=57|65..=90|95|97..=122)
+}
+
+#[cfg(test)]
+mod tests;

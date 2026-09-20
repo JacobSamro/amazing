@@ -14,10 +14,6 @@
 //!   `newline_before` flag.
 //!
 //! Deferred (documented, not implemented):
-//! - Regex literals: `/` always lexes as division. Where the classic
-//!   division-vs-regex ambiguity is decided, see [`crate::lexer`] module
-//!   docs; when regexes land they need parser feedback ("regex allowed
-//!   here?") pushed into the tokenizer.
 //! - Contextual keywords (`let of get set static async as from accessor`)
 //!   deliberately lex as plain identifiers; the parser matches them by
 //!   spelling. Future-reserved words (`enum implements interface package
@@ -93,6 +89,13 @@ impl Numeric {
 pub enum TokenKind {
     /// Numeric literal (`1`, `0xFF`, `1.5e3`, `10n`, ...).
     Numeric(Numeric),
+    /// Selected by the parser under the RegExp lexical goal.
+    RegExp {
+        pattern: String,
+        flags: String,
+    },
+    /// Deferred lexical error in parser lookahead; never emitted by tokenize.
+    Invalid(SyntaxError),
     /// String literal with escapes already cooked.
     Str(String),
     /// One chunk of a template literal. `tail == true` means this part ends
@@ -101,7 +104,10 @@ pub enum TokenKind {
     /// [`Punct::DollarBrace`]). The `}` closing a substitution never
     /// surfaces as [`Punct::Rbrace`] — the lexer consumes it together with
     /// the following template chunk (see [`crate::lexer`]).
-    TemplatePart { cooked: String, tail: bool },
+    TemplatePart {
+        cooked: String,
+        tail: bool,
+    },
     /// Identifier (including every contextual keyword spelling).
     Ident(String),
     Keyword(Keyword),
@@ -113,6 +119,8 @@ impl TokenKind {
     /// Short human label used in "expected X, found Y" messages.
     pub fn describe(&self) -> String {
         match self {
+            TokenKind::RegExp { .. } => "RegExp literal".into(),
+            TokenKind::Invalid(e) => e.message.clone(),
             TokenKind::Numeric(n) => format!("number `{}`", n.raw),
             TokenKind::Str(_) => "string literal".into(),
             TokenKind::TemplatePart { .. } => "template literal".into(),
@@ -428,7 +436,9 @@ mod tests {
     fn contextual_keywords_are_not_reserved() {
         // Deliberate: these stay identifiers so the parser owns their
         // context sensitivity.
-        for word in ["let", "of", "get", "set", "static", "async", "from", "accessor"] {
+        for word in [
+            "let", "of", "get", "set", "static", "async", "from", "accessor",
+        ] {
             assert_eq!(keyword_of(word), None, "`{word}` must not be reserved");
         }
     }
@@ -436,7 +446,16 @@ mod tests {
     #[test]
     fn future_reserved_words_are_left_as_identifiers() {
         // Strict-mode early errors deferred; documented in module docs.
-        for word in ["enum", "implements", "interface", "package", "private", "protected", "public", "static"] {
+        for word in [
+            "enum",
+            "implements",
+            "interface",
+            "package",
+            "private",
+            "protected",
+            "public",
+            "static",
+        ] {
             assert_eq!(keyword_of(word), None, "`{word}` must not be reserved yet");
         }
     }
@@ -444,15 +463,42 @@ mod tests {
     #[test]
     fn keyword_spellings_round_trip() {
         for kw in [
-            Keyword::Break, Keyword::Case, Keyword::Catch, Keyword::Class,
-            Keyword::Const, Keyword::Continue, Keyword::Debugger, Keyword::Default,
-            Keyword::Delete, Keyword::Do, Keyword::Else, Keyword::Export,
-            Keyword::Extends, Keyword::Finally, Keyword::For, Keyword::Function,
-            Keyword::If, Keyword::Import, Keyword::In, Keyword::InstanceOf,
-            Keyword::New, Keyword::Null, Keyword::Return, Keyword::Super,
-            Keyword::Switch, Keyword::This, Keyword::Throw, Keyword::True,
-            Keyword::False, Keyword::Try, Keyword::Typeof, Keyword::Var,
-            Keyword::Void, Keyword::While, Keyword::With, Keyword::Yield,
+            Keyword::Break,
+            Keyword::Case,
+            Keyword::Catch,
+            Keyword::Class,
+            Keyword::Const,
+            Keyword::Continue,
+            Keyword::Debugger,
+            Keyword::Default,
+            Keyword::Delete,
+            Keyword::Do,
+            Keyword::Else,
+            Keyword::Export,
+            Keyword::Extends,
+            Keyword::Finally,
+            Keyword::For,
+            Keyword::Function,
+            Keyword::If,
+            Keyword::Import,
+            Keyword::In,
+            Keyword::InstanceOf,
+            Keyword::New,
+            Keyword::Null,
+            Keyword::Return,
+            Keyword::Super,
+            Keyword::Switch,
+            Keyword::This,
+            Keyword::Throw,
+            Keyword::True,
+            Keyword::False,
+            Keyword::Try,
+            Keyword::Typeof,
+            Keyword::Var,
+            Keyword::Void,
+            Keyword::While,
+            Keyword::With,
+            Keyword::Yield,
         ] {
             assert_eq!(keyword_of(kw.spelling()), Some(kw));
         }
@@ -461,19 +507,63 @@ mod tests {
     #[test]
     fn punctuator_spellings_are_distinct_and_canonical() {
         let all = [
-            Punct::Lbrace, Punct::Rbrace, Punct::LParen, Punct::RParen,
-            Punct::LBracket, Punct::RBracket, Punct::Semi, Punct::Comma,
-            Punct::Dot, Punct::Ellipsis, Punct::Arrow, Punct::Question,
-            Punct::QuestionDot, Punct::Nullish, Punct::NullishEq, Punct::Colon,
-            Punct::Lt, Punct::Gt, Punct::Le, Punct::Ge, Punct::EqEq,
-            Punct::NotEq, Punct::EqEqEq, Punct::NotEqEq, Punct::Eq,
-            Punct::Plus, Punct::Minus, Punct::Star, Punct::Slash, Punct::Percent,
-            Punct::Pow, Punct::PlusEq, Punct::MinusEq, Punct::StarEq,
-            Punct::SlashEq, Punct::PercentEq, Punct::PowEq, Punct::Shl,
-            Punct::Shr, Punct::UShr, Punct::ShlEq, Punct::ShrEq, Punct::UShrEq,
-            Punct::BitAnd, Punct::BitOr, Punct::BitXor, Punct::Bang, Punct::Tilde,
-            Punct::And, Punct::Or, Punct::AndEq, Punct::OrEq, Punct::XorEq,
-            Punct::AndAndEq, Punct::OrOrEq, Punct::Inc, Punct::Dec,
+            Punct::Lbrace,
+            Punct::Rbrace,
+            Punct::LParen,
+            Punct::RParen,
+            Punct::LBracket,
+            Punct::RBracket,
+            Punct::Semi,
+            Punct::Comma,
+            Punct::Dot,
+            Punct::Ellipsis,
+            Punct::Arrow,
+            Punct::Question,
+            Punct::QuestionDot,
+            Punct::Nullish,
+            Punct::NullishEq,
+            Punct::Colon,
+            Punct::Lt,
+            Punct::Gt,
+            Punct::Le,
+            Punct::Ge,
+            Punct::EqEq,
+            Punct::NotEq,
+            Punct::EqEqEq,
+            Punct::NotEqEq,
+            Punct::Eq,
+            Punct::Plus,
+            Punct::Minus,
+            Punct::Star,
+            Punct::Slash,
+            Punct::Percent,
+            Punct::Pow,
+            Punct::PlusEq,
+            Punct::MinusEq,
+            Punct::StarEq,
+            Punct::SlashEq,
+            Punct::PercentEq,
+            Punct::PowEq,
+            Punct::Shl,
+            Punct::Shr,
+            Punct::UShr,
+            Punct::ShlEq,
+            Punct::ShrEq,
+            Punct::UShrEq,
+            Punct::BitAnd,
+            Punct::BitOr,
+            Punct::BitXor,
+            Punct::Bang,
+            Punct::Tilde,
+            Punct::And,
+            Punct::Or,
+            Punct::AndEq,
+            Punct::OrEq,
+            Punct::XorEq,
+            Punct::AndAndEq,
+            Punct::OrOrEq,
+            Punct::Inc,
+            Punct::Dec,
             Punct::DollarBrace,
         ];
         let mut spellings: Vec<&str> = all.iter().map(|p| p.spelling()).collect();
