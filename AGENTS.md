@@ -13,29 +13,39 @@ Windows build server, and run every build/test there.
 
 - Host: `server@win-001`
 - SSH key: `~/.ssh/win001-build-key` (filename is missing an "f" — correct as-is)
-- Working tree: `C:\Users\server\src\amazing`
-- Default SSH shell is cmd.exe — avoid quote-wrapped paths; prefer PowerShell
-  `-EncodedCommand` for anything non-trivial.
+- 16 cores. It sustains roughly **3 concurrent builds**; six lanes must not all
+  run a full workspace build at once.
+- Per-lane build trees: `C:\Users\server\src\wt\<lane>`
+- Per-lane target dirs: `C:\Users\server\target\<lane>` via `CARGO_TARGET_DIR`
+- Default SSH shell is cmd.exe. It mangles `for` loops and quoted paths — use
+  PowerShell `-EncodedCommand` (UTF-16LE base64) for anything beyond a single
+  simple command. Unix tools are absent: no `head`, no `rsync`.
+
+**Git lives on the Mac, not on the server.** win-001 has no GitHub credentials
+and the repo is private, so it can neither fetch nor push. It is a pure build
+box: source arrives by `scp`, results come back over ssh. Never run `git commit`
+there — server-side commits created a 139-commit branch that never reached
+GitHub and had to be archived (`archive/win001-main`, plus
+`archive/win001-phase6-paint-compositing`).
 
 ### Sync workflow
 
-1. Edit locally under `/Users/jMac/Projects/OpenSource/amazing`.
-2. Sync changed files up:
+1. Edit in your lane worktree on the Mac (`../amazing-wt/<lane>`).
+2. Sync changed files to your lane's build tree:
    ```
-   scp -q -r -i ~/.ssh/win001-build-key <paths> 'server@win-001:C:/Users/server/src/amazing/'
+   scp -q -r -i ~/.ssh/win001-build-key <paths> \
+     'server@win-001:C:/Users/server/src/wt/<lane>/'
    ```
-   (`rsync` is NOT available on the Windows side — use `scp`.)
-3. Commit on win-001 (git lives on the server):
+   For a bulk seed, `tar` locally, `scp` one archive, and expand it server-side —
+   far faster than `scp -r` over many small files.
+3. Build/test on win-001 against your own target dir:
    ```
-   git -C C:\Users\server\src\amazing add -A
-   git -C C:\Users\server\src\amazing commit -m "<message>"
+   ssh -i ~/.ssh/win001-build-key -o BatchMode=yes server@win-001 \
+     "powershell -NoProfile -EncodedCommand <b64>"
    ```
-   (server-side git identity is configured via `-c user.name/user.email` on
-   first commit; reuse it)
-4. Build/test on win-001:
-   ```
-   ssh -i ~/.ssh/win001-build-key -o BatchMode=yes server@win-001 "cd /d C:\Users\server\src\amazing && cargo test --workspace --locked"
-   ```
+   where the script sets `$env:CARGO_TARGET_DIR` to
+   `C:\Users\server\target\<lane>` and runs `cargo test -p <your crate> --locked`.
+4. Commit and push **on the Mac**, from your lane branch, then open the PR.
 
 ### Build server environment (already provisioned)
 
