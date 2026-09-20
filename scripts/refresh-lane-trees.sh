@@ -48,7 +48,27 @@ build_ps() {
 foreach (\$l in @(${lanes_ps%,})) {
   \$dest = Join-Path '$REMOTE_ROOT' \$l
   if (-not (Test-Path \$dest)) { New-Item -ItemType Directory -Force -Path \$dest | Out-Null }
-  tar -xf '$ARCHIVE_REMOTE' -C \$dest
+  # -m sets extracted files to the current time. Without it tar restores the
+  # archive's mtimes, which can be OLDER than the cached build artifacts, so
+  # Cargo's fingerprints still look fresh and the gate silently links a stale
+  # rlib against byte-correct source. Matching source hashes do NOT prove
+  # artifact freshness.
+  tar -xmf '$ARCHIVE_REMOTE' -C \$dest
+  # Belt and braces: drop first-party fingerprints and artifacts so they must
+  # rebuild, while leaving third-party deps cached so this stays cheap.
+  \$t = Join-Path 'C:\Users\server\target' \$l
+  foreach (\$p in @('debug','release')) {
+    \$fp = Join-Path \$t "\$p\.fingerprint"
+    if (Test-Path \$fp) {
+      Get-ChildItem \$fp -Directory -Filter 'amazing-*' -EA SilentlyContinue |
+        Remove-Item -Recurse -Force -EA SilentlyContinue
+    }
+    \$dp = Join-Path \$t "\$p\deps"
+    if (Test-Path \$dp) {
+      Get-ChildItem \$dp -Filter '*amazing*' -EA SilentlyContinue |
+        Remove-Item -Recurse -Force -EA SilentlyContinue
+    }
+  }
   \$probe = Join-Path \$dest 'Cargo.lock'
   \$h = (Get-FileHash \$probe -Algorithm SHA256).Hash.Substring(0,8)
   "\$l lock=\$h"
