@@ -152,6 +152,7 @@ version = "0.0.1"
 name = "amazing-net"
 version = "0.0.1"
 dependencies = [
+ "amazing-net-brotli",
  "amazing-net-tls",
 ]
 
