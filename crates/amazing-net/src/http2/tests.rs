@@ -529,6 +529,12 @@ fn authenticated_h2_fetch_and_http1_fallback_use_production_dispatch() {
         .unwrap();
         frame::write(io, 0, 1, request.stream, body).unwrap();
         io.flush().unwrap();
+        // Keep the peer open through the client's final connection-credit
+        // return. Dropping with unread DATA credit can cause a TCP reset on
+        // Windows while the client flushes that frame, racing fixture teardown.
+        let credit = frame::Frame::read(io).unwrap();
+        assert_eq!((credit.kind, credit.stream), (8, 0));
+        assert_eq!(frame::number(&credit.payload) as usize, body.len());
     });
     let url = crate::ParsedUrl::parse(&format!("https://localhost:{port}/h2?x=1")).unwrap();
     let stream = test_support::connect(port).unwrap();
