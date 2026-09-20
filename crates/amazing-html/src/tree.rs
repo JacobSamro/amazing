@@ -576,7 +576,8 @@ impl TreeBuilder {
                 Some(Namespace::Svg) => {
                     matches!(n, "foreignObject" | "desc" | "title")
                 },
-                None => false,
+                // XML null/custom namespaces are not HTML scope boundaries.
+                _ => false,
             };
             if is_terminator {
                 return false;
