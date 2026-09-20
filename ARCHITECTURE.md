@@ -536,6 +536,50 @@ timed OpenH264 frames through RFC 6184. The page reports only after five decoded
 video callbacks and a canvas checksum, producing cross-implementation visual and
 terminal evidence from the same session.
 
+### 6c. Public Suffix List exception (Phase 10)
+
+Registrable-domain (eTLD+1) boundaries cannot be derived from a hostname. The
+common shortcut of taking the last two labels is wrong in both directions: it
+splits sibling subdomains that share a site, and it merges unrelated sites under
+a multi-label suffix. Without a real list, `SameSite`, site-based partitioning
+and public-suffix `Domain` cookie rejection are all incorrect.
+
+Amazing therefore vendors the upstream Public Suffix List as **data**, not as a
+crate dependency. The snapshot is pinned at an exact upstream commit and
+SHA-256, its licence is retained beside it, and the rule-normalisation generator
+inputs and fixtures are pinned with it. Both the ICANN and PRIVATE sections are
+included, so tenants on shared hosting are separated. Updates arrive as reviewed
+pull requests carrying boundary-change tests and an explicit persisted-key
+migration review — **never a silent runtime fetch**, because a list change can
+silently alter cookie and cache keys that are already on disk under the user's
+profile.
+
+`amazing-fetch` owns a `RegistrableDomain` provider seam and the spec's domain
+matching against it. The default provider fails closed, rejecting what it cannot
+prove rather than guessing. Only the provider implementation changes when the
+snapshot updates.
+
+### 6d. Content-coding exception (Phase 10)
+
+DEFLATE, gzip and zlib are hand-written in `amazing-net` per RFCs 1951, 1952 and
+1950 and remain std-only. Brotli is not: a conformant decoder is a substantially
+larger undertaking than DEFLATE, and `br` is widely enough served that
+advertising only gzip costs real-page compatibility.
+
+Amazing therefore uses a vetted brotli **decoder** in an isolated adapter with
+`#![forbid(unsafe_code)]` in its first-party code, pinning
+`brotli-decompressor`. Dependency types never cross the adapter boundary, and
+`amazing-net` receives bounded owned bytes. Encoding is out of scope.
+
+Note that `brotli-decompressor` is already pinned transitively through `wuff` in
+`amazing-text-provider`, but that approval (decision 4d) is scoped to web-font
+decoding only. The network path is a separate, independently reviewed exception
+because it decodes attacker-supplied bodies: the caller-selected maximum decoded
+size is enforced **before** allocation, so a compression bomb fails closed
+rather than expanding first. Advertise `br` only once the adapter is measured.
+
+Revisit either exception only as a project-level security decision.
+
 ## Conformance tracking
 
 | Phase | Suite | Gate |
