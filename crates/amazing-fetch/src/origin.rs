@@ -44,6 +44,19 @@ impl Origin {
 /// for IP addresses / hosts with no registrable domain.
 pub trait RegistrableDomain {
     fn registrable_domain(&self, host: &str) -> Option<String>;
+    /// Exact public-suffix classification from the same pinned data/policy.
+    /// None means unknown, NOT "not a public suffix". Domain cookies require
+    /// Some(false), except an exact-host public suffix becomes host-only.
+    /// Implementations cover ICANN/PRIVATE wildcard and exception rules and
+    /// classify IPs as Some(false). Rechecked on retrieval after data updates.
+    fn is_public_suffix(&self, _host: &str) -> Option<bool> {
+        None
+    }
+    /// Optional IDNA validation seam for RFC6265bis canonical A-labels.
+    /// The default rejects unproven A-labels; PSL data alone cannot prove them.
+    fn validated_a_label(&self, _label: &str) -> bool {
+        false
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Site {
