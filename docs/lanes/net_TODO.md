@@ -1,5 +1,34 @@
 # Net lane decision map
 
+## External-dependency decisions — user approval required
+
+**Public Suffix List: approve a pinned data snapshot, or defer site/cookie
+correctness.** A provider must return public-suffix and registrable-domain
+(eTLD+1) results for normalized hosts, implement exact/wildcard/exception rules,
+and distinguish IPs and nonregistrable hosts; proposed coverage includes both
+ICANN and PRIVATE rules to separate tenants on shared hosting. Vendor the
+[upstream list](https://publicsuffix.org/list/) at an exact commit and SHA-256,
+retain its license, and pin rule-normalization/generator inputs and fixtures;
+propose monthly reviewed update PRs with boundary-change tests and persisted-key
+migration review, never silent runtime updates. Without it, correct SameSite,
+site-based partitioning and public-suffix Domain-cookie rejection remain blocked:
+the current full-host fallback separates sibling subdomains that should share
+a site; guessing the last two labels can instead merge unrelated sites.
+[Rule format](https://github.com/publicsuffix/list/wiki/Format).
+
+**Brotli: approve a vetted network adapter, or retain gzip/deflate without br.**
+Pin `brotli-decompressor =5.0.3`, `alloc-no-stdlib =2.0.4`,
+`alloc-stdlib =0.2.4`, lockfile checksums and safe features (no unsafe/seccomp/FFI),
+with strict-window decoding, separate output/scratch budgets and malformed-stream
+fixtures. The decoder is already transitively present through the text provider,
+whose WOFF2 adapter directly pins 5.0.3; that font approval does not authorize
+network use. Deferral still permits servers to negotiate gzip/deflate or an
+uncompressed response under [HTTP negotiation rules](https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.3),
+so lack of br does not inherently break Brotli-capable pages. The cost is
+potentially more transferred bytes and failure for br-only resources or servers
+that send br despite negotiation. No real-page failure rate or bandwidth penalty
+has been measured here; the larger evaluation below identifies adapter work.
+
 ## NET-1 — Fetch policy prototype
 
 Pure request/response policy: no socket dispatcher or JS API yet. The registered
@@ -518,3 +547,119 @@ Evidence in the integrator checkout `.agents/net/`: `net4-clean-packages.txt`,
 `net4-source-before.txt`, `net4-source-after-{1,2}.txt`, and `net4-results.json`.
 No Test262 measurement is claimed. No shell/driver, other lane source,
 manifest or dependency changes. NET-4 ends at this boundary.
+
+## NET-5 — In-memory cookie algorithms
+
+### API and specification boundary
+
+`amazing_fetch::cookies` implements parsing, storage and retrieval against
+[draft-ietf-httpbis-rfc6265bis-22](https://www.ietf.org/archive/id/draft-ietf-httpbis-rfc6265bis-22.html),
+sections 5.1 and 5.5–5.8. This names a specific draft, not a claim that a final
+RFC or all browser cookie behavior is implemented. The profile/embedding owns
+CookieStore, persistence and its clock; shell persisted state and cookie dispatch
+are untouched. No new dependency, PSL snapshot, Unicode table or lockfile change.
+
+`set_cookie` consumes a byte slice so non-UTF-8 octets and percent-looking bytes
+are preserved. It rejects forbidden controls anywhere, trims only SP/HTAB,
+accepts unnamed cookies, applies last-valid duplicate attributes and bounds
+name+value at 4096 bytes and individual attribute values at 1024. Unknown and
+oversize attributes are ignored. Dates use the specified token grammar, UTC,
+70/69 two-digit-year pivot, Gregorian validity and 1601 lower year bound.
+Expires and Max-Age clamp at 400 days; Max-Age wins, overflow saturates safely,
+and nonpositive Max-Age deletes. No clock is read internally: operations take
+signed UTC epoch seconds. The caller supplies a consistent clock; expiration
+is enforced on every operation and via explicit `expire`.
+
+The store enforces Secure (HTTPS only, no localhost trust exception), HttpOnly
+for HTTP versus non-HTTP APIs, case-insensitive __Secure-/__Host- prefixes,
+unnamed prefix-spoof rejection, and insecure overlays of existing Secure cookies
+including deletion attempts. Identity includes name/domain/host-only/path;
+replacement preserves creation time. Path matching is byte-exact and never
+percent-decodes. Cookie headers sort by descending path length then original
+creation time, and update last-access only after the complete bounded header
+can be produced. Headers are bytes; the existing UTF-8 HeaderList cannot carry
+arbitrary non-UTF-8 cookie bytes without a future transport-boundary decision.
+
+`CookieAccess` supplies the URL, current redirect-hop method, HTTP/non-HTTP API,
+top-level-navigation flag and `CookieSite`. NoClient is explicit and differs
+from CrossSite/opaque origins. The embedding must derive site-for-cookies from
+ancestor/worker context and account for redirects and UI reload rules; handing
+in the address-bar origin alone is insufficient. CookieStore compares sites
+schemefully through the provider. Strict, Lax and None are distinct; None needs
+Secure. The configurable lax-allowing-unsafe mode applies only to Default cookies
+aged at most 120 seconds, on top-level HTTP navigation. Replacement cannot renew
+that grace. Cross-site subresources/non-HTTP contexts cannot set non-None cookies;
+a cross-site top-level HTTP navigation may set them. Fetch credentials policy
+must still gate both cookie sending and acceptance when a dispatcher adopts this
+library; this ticket does not connect that dispatcher.
+
+### Domain provider contract and exactly what PSL adoption changes
+
+Reuse the existing `RegistrableDomain` trait rather than introducing a competing
+site definition. `registrable_domain(host)` returns normalized eTLD+1 or None;
+additive `is_public_suffix(host) -> Option<bool>` distinguishes proven suffix,
+proven non-suffix, and **unknown**. Old implementations continue to compile but
+default to unknown for cookie authorization. A trusted implementation must use
+the same version-pinned data and ICANN/PRIVATE policy for both methods, implement
+exact/wildcard/exception rules, and classify IPs as non-suffixes with no registrable
+domain. Matching itself requires exact equality or a dot-boundary suffix, with
+IP addresses matching only exactly. A proven suffix identical to the request
+host becomes host-only; any other public suffix rejects. Retrieval rechecks
+non-host-only domains so a list update cannot keep sending a newly invalid
+Domain cookie.
+
+`ConservativeDomains` has no data and returns unknown: it accepts host-only
+cookies but rejects **every nonempty Domain attribute**, including same-host
+Domain attributes. Site equality then falls back to identical scheme+host,
+never a last-two-label guess. Once PSL data is approved, replace only that
+provider: proven non-suffix Domain cookies become available and sibling
+subdomains can share a registrable site. Store/parser/matching algorithms do
+not change, no persisted entries are rewritten automatically, and shell
+integration still needs its recorded migration plan. Snapshot pinning, update
+review and persistence impact remain the user-level decision described above.
+
+Canonical cookie hosts reject malformed LDH labels and unproven A-labels.
+`validated_a_label` is a separate default-deny method on the provider for a
+future trusted IDNA validator; supplying PSL data alone must not authorize fake
+punycode. Unicode URL hosts remain deferred by ParsedUrl. An approved ASCII PSL
+provider may leave A-label validation unsupported and retain that restriction.
+
+### Resource policy and eviction
+
+Defaults are 3000 cookies total, 180 per exact domain field, and a 64 KiB Cookie
+header. Callers may lower count limits; total cannot exceed 3000, and header
+budget cannot exceed 16 MiB. Additional conservative policy rejects Set-Cookie
+fields over 64 KiB and URL-derived default paths over 1024 bytes before copying.
+These explicit limits can reject inputs a less restrictive UA would retain.
+Expiry runs before quota enforcement. Eviction priority is non-Secure cookies
+in over-quota domains, then other cookies in those domains, then all cookies;
+within a priority it chooses least recent access. `end_session` removes session
+cookies. Successful setting means accepted processing, not guaranteed retention
+when quotas immediately evict the new cookie. No persistence import API exists.
+
+### Evidence
+
+Final Windows gates ran twice on origin/dev `156cc13` plus this ticket (carried
+docs-only parent `866daf4`), lock prefix `3FEAF813`. Each run measured:
+
+- Workspace: **1058 passed / 0 failed / 3 ignored**, 54 test summaries.
+- Network lane: **192 passed / 0 failed / 0 ignored**: Fetch 79 (35 new cookie
+  tests + 44 unchanged policy), net 111, TLS 2. NET-4 lane baseline was 157/0/0;
+  all 35 added cases pass and the existing 157 remain green.
+- Pinned URL WPT: **864 passed / 0 failed / 0 timeout / 32 unsupported**, 896
+  objects at `c48d58747e1f211527fb695fd60548a997fae617`. Normalized stdout SHA-256
+  remains `584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+
+Before the gates, self-refresh used `bash scripts/refresh-lane-trees.sh net`,
+then owned source was re-synced with current mtimes. Each run separately cleaned
+all first-party packages with incremental compilation disabled; compile logs
+prove all 18 rebuilt. All 239 workspace source/input hashes match the Mac before
+and after both runs; normalized manifest SHA-256 is
+`3934508c3a29e7aec10db27fa6829ad5cfa643bad9bb221e443b8792150d25d1`.
+Evidence is in `.agents/net/net5-{workspace,lane,clean}-{1,2}.txt`,
+`net5-wpt-{1,2}.{stdout,stderr}`, `net5-clean-packages.txt`,
+`net5-local-source-hashes.txt`, `net5-source-before.txt`,
+`net5-source-after-{1,2}.txt`, and `net5-results.json`.
+Cookie tests are focused native Rust cases, not WPT cookie conformance
+percentages. No shell/driver, other lane source, manifest or dependency changes.
+NET-5 ends at this library/provider boundary.
