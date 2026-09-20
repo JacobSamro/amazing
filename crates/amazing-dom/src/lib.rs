@@ -17,6 +17,8 @@ pub mod events;
 pub mod event_loop;
 pub mod mutation;
 mod namespace;
+mod node_mixins;
+pub use node_mixins::NodeOrString;
 pub use namespace::{AttributeRef, NamespaceId};
 pub mod range;
 pub mod traversal;

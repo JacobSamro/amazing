@@ -772,3 +772,112 @@ Windows lane target. Native implementation is unchanged from the checkpoint;
 the higher workspace count reflects newer sibling code in the integration base.
 The authorized core/XML delivery is complete and ready for integrator merge.
 The broader DOM-4 JS/WPT integration gate remains deferred and unclaimed.
+
+
+## DOM-5 — full dom/ conformance push (in progress)
+
+Assignment: implement high-impact error/timeout clusters without waiting for the
+DOM-4 scheduling integration. Branch: `lane/dom-bindings-dom5`; starting dev
+`11dd8a8` includes merged DOM-4 core `74e3c50`. The orchestration brief still
+names DOM-3; the integrator's explicit DOM-5 assignment supersedes it.
+
+### Evidence and selection discipline
+
+A fresh BEFORE pair is running on Windows after an artifact-invalidating own-lane
+refresh and source-hash verification. The upstream known-pass/known-fail proof
+already passed twice. WPT revision remains
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`; selection is the same 627 tracked
+source files, not expanded WPT URLs. No AFTER or improvement is claimed yet.
+
+The historical DOM-1/DOM-4-before baseline is 2 pass / 241 fail / 30 timeout /
+221 error / 133 unsupported; 83 PASS / 2584 FAIL subtests. The following
+**diagnostic grouping**, not a proven causal ranking, accounts for all 251
+error/timeout sources. “Observed subtests” means callbacks recorded before the
+source ended; it is neither the source's complete potential count nor an
+estimate of passes a fix would produce. Zero means registration did not yield
+results, not that fixing the cluster has no value.
+
+| Diagnostic group | Sources | Observed subtests |
+|---|---:|---:|
+| Duplicate names / JS stringification | 7 | 744 |
+| Missing callable (mixed DOM APIs) | 35 | 129 |
+| Deadline (requires per-source analysis) | 30 | 78 |
+| Missing global/interface | 14 | 1 |
+| Conversion diagnostic (may mask setup exception) | 41 | 0 |
+| Shared testdriver parser failure | 76 | 0 |
+| Other JavaScript parser failures | 42 | 0 |
+| Unavailable upstream resource | 3 | 0 |
+| Other runtime error | 3 | 0 |
+
+The 76-source shared parser failure is `testdriver.js` at `subscribe`; another
+42 sources fail parsing other scripts. These require JS-owner work, not a DOM
+algorithm change. The 41 conversion diagnostics include 30 in `dom/common.js`;
+that shared file calls `setup(setupRangeTests)`, which needs document creation,
+node insertion, and multiple node kinds. Exception stringification may mask the
+original missing API, so treating all 41 as one proven JS coercion bug would be
+incorrect.
+
+The duplicate-name group contains 596 recorded subtests in
+`Document-createElementNS.html`, 100 in `passive-by-default.html`, and 48 in five
+shadow-range files. The first uses array stringification for names and XML/XHTML
+iframe documents. A namespace core fix alone cannot honestly claim to unlock
+596 tests. The callable group spans document factories, ChildNode/ParentNode
+methods, collection interfaces, and events and needs subdivision by the first
+missing operation. The 30 deadlines likewise include iframe/document loading,
+constructors, events, and selectors; none is automatically assigned to the
+deferred event-loop seam merely because it timed out.
+
+### Binding integration prerequisite (routed in questions.md)
+
+`amazing-bindings` does not yet exist or appear in the workspace. Current live
+wrappers are private methods/native functions in `amazing-js/src/interp.rs` and
+`interp_builtins.rs`; `BrowserDomHost` in the driver owns the parsed `Dom`.
+The existing `DomHost` trait has no general node-kind, namespace, comment,
+fragment, range, traversal, or Event object surface. Adding native algorithms
+alone cannot change WPT-visible behavior. Registration belongs to the integrator;
+JS hooks and driver adoption belong to their respective owners.
+
+Proposed additive binding route, independent of scheduling:
+
+- The runtime provides an owned native callback closure, or equivalent per-
+  interpreter extension state and invocation hook, so `amazing-bindings` can
+  install constructors, methods, and accessors using its own DOM state without
+  process-global/thread-local registries. Current `NativeFn` is a bare function
+  pointer and the interpreter's DOM host is private.
+- Expose the runtime's ordinary get/set and WebIDL-required conversion hooks to
+  the binding layer. Conversions must preserve thrown exceptions and observable
+  getter/coercion order, rather than using Rust debug formatting.
+- The driver supplies access to its **same parsed Dom**, installs bindings before
+  page scripts, and retains canonical wrappers keyed by arena node identity. A
+  second disconnected Dom would only manufacture apparent conformance. Native
+  borrows must be released before any callback/getter/coercion can re-enter JS.
+- Register `amazing-bindings` with first-party `amazing-dom` / `amazing-js`
+  dependencies and wire the driver dependency/install call. Alternatively route
+  a narrowly scoped bridge grant; no edits to another lane are assumed.
+
+Final validation remains two stable full-selection AFTER runs with the same
+upstream proof and revision, measured BEFORE/AFTER counts and cluster impact,
+Windows `cargo nextest run -p amazing-dom --locked` (and amazing-bindings once
+registered), separate doctests, then refreshed/re-synced workspace nextest plus
+workspace doctests. Report the two runner counts separately.
+
+### Diagnostic probes (not WPT results)
+
+Windows driver `--scaffold` probes on base `11dd8a8` confirm that
+`String(new Error("sentinel"))` throws “cannot convert object to primitive”,
+array stringification is incorrect, and `Math.random` is absent. Consequently
+the six NodeList tampering scripts in the callable diagnostic bucket first hit
+the JS-owned `Math.random()` interpolation in their shared support script; they
+are not six demonstrated NodeList implementation defects. Template interpolation
+of a number itself works.
+
+The same probes confirm missing Event/Node/Comment/Text/Document constructors;
+`document.createEvent/createComment/createDocumentFragment/createElementNS/
+createRange/createAttribute`, `document.implementation`, and element
+`cloneNode/insertBefore/querySelectorAll/nodeType`. `document.body` and element
+`append` do exist. In `setupRangeTests`, the earliest unsupported call after
+creating its div is `document.body.insertBefore`; its error is then liable to be
+masked by the confirmed Error stringification failure. Thirty shared-resource
+errors therefore require both setup APIs and usable exception reporting, not
+merely another Range core implementation. The probe output explicitly carries
+`suite: scaffolding-only`; it contributes zero WPT results.
