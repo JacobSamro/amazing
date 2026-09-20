@@ -15,6 +15,8 @@
 
 pub mod events;
 pub mod mutation;
+pub mod range;
+pub mod traversal;
 mod tree;
 pub use tree::{DocumentPosition, DomError};
 
@@ -64,6 +66,7 @@ pub enum NodeKind {
 pub struct Node {
     owner_document: NodeIdx,
     namespaced_attributes: Vec<(String, String, String)>,
+    character_data_units: Option<Vec<u16>>,
     pub kind: NodeKind,
     pub parent: Option<NodeIdx>,
     pub first_child: Option<NodeIdx>,
@@ -77,6 +80,8 @@ pub struct Node {
 pub struct Dom {
     nodes: Vec<Node>,
     mutations: mutation::MutationObservers,
+    ranges: Vec<Option<range::AbstractRange>>,
+    traversals: traversal::Traversals,
     /// Doctype name captured by the tree builder (Phase 1). Quirks-mode bits
     /// land here when the layout engine needs them.
     pub doctype: Option<String>,
@@ -87,11 +92,14 @@ impl Dom {
         let mut dom = Self {
             nodes: Vec::new(),
             mutations: mutation::MutationObservers::default(),
+            ranges: Vec::new(),
+            traversals: traversal::Traversals::default(),
             doctype: None,
         };
         dom.nodes.push(Node {
             owner_document: NodeIdx(0),
             namespaced_attributes: Vec::new(),
+            character_data_units: None,
             kind: NodeKind::Document,
             parent: None,
             first_child: None,
@@ -119,6 +127,7 @@ impl Dom {
         self.nodes.push(Node {
             owner_document,
             namespaced_attributes: Vec::new(),
+            character_data_units: None,
             kind,
             parent: None,
             first_child: None,
@@ -194,6 +203,7 @@ impl Dom {
         });
         let document = self.get(parent).owner_document;
         self.set_subtree_document(idx, document);
+        self.ranges_insert(parent, before, 1);
         self.link_before(parent, before, idx);
         self.queue_tree_record(parent, vec![idx], vec![], previous, before);
     }
@@ -207,11 +217,14 @@ impl Dom {
 
     /// Appends `extra` to a text node's data.
     pub fn append_text_data(&mut self, idx: NodeIdx, extra: &str) {
-        let NodeKind::Text { data } = &self.get(idx).kind else {
-            panic!("append_text_data on non-text node")
-        };
-        let value = format!("{data}{extra}");
-        self.set_character_data(idx, value).expect("text node");
+        assert!(self.is_text(idx), "append_text_data on non-text node");
+        self.replace_character_data(
+            idx,
+            self.node_length(idx),
+            0,
+            &extra.encode_utf16().collect::<Vec<_>>(),
+        )
+        .expect("text node");
     }
 
     // ---- introspection ----

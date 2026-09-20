@@ -240,7 +240,7 @@ be treated as a user-activation permission by bindings.
   not nest checkpoints. `take_mutation_records` does not cancel scheduling.
 - No scheduler, JS types, Rc, RefCell, unsafe, or third-party crates are added.
 
-## DOM-3 integration obligations
+## Binding integration obligations (recorded after DOM-2)
 
 - Bind Node methods to checked operations, resolve callback identities, expose
   event flags/methods via `EventId`, resume dispatch after every callback, report
@@ -257,13 +257,12 @@ be treated as a user-activation permission by bindings.
 - Attribute methods accept normalized namespace/local-name inputs. Element
   name validation/WebIDL conversion is a binding concern. Namespaced attributes
   have separate storage from the legacy parser's unqualified attribute vector.
-- Existing CharacterData strings remain Rust UTF-8 strings. UTF-16 code-unit
-  and lone-surrogate operations require a deliberate string-model extension
-  before exposing the complete CharacterData WebIDL surface. No range/string
-  slicing conformance is claimed by the full-value mutation setter.
-- Live Range/NodeIterator adjustment, custom-element reactions, and Shadow DOM
-  side effects must attach when those types exist. Current tree operations
-  implement the core light-tree model, not those future subsystems.
+- DOM-3 adds exact UTF-16 CharacterData access/replacement, with a private
+  sidecar for lone surrogates. Bindings must use that surface and observer
+  `old_value_utf16`; legacy Rust String fields are display projections.
+- DOM-3 attaches live Range/NodeIterator adjustment to tree/data mutation.
+  Custom-element reactions and Shadow DOM side effects still belong to their
+  future subsystems; the current tree remains the core light-tree model.
 
 ## Cross-crate compatibility grant
 
@@ -312,6 +311,7 @@ tests are all below 4,000 lines. DOM-1's accepted scaffold is preserved in a
 separate checkpoint commit; this ticket does not close its upstream gate.
 
 
+<<<<<<< HEAD
 ## DOM-1 upstream gate and baseline — resumed after JS-2
 
 Final integration base: `0e298c1` (including NET-4); initial measurement base
@@ -424,3 +424,44 @@ Final scaffold regression is separate: 14 cases twice, stable
 `F8DB03A6109855078313208AC15DC229B663729F9F8B7C2A970C46DAA5475519`,
 zero WPT credit. Zero remaining lane workers were verified. DOM-1 is complete;
 DOM-3 remains on its committed checkpoint for the next integration boundary.
+=======
+
+
+Implementation follows [DOM Standard ranges](https://dom.spec.whatwg.org/#ranges),
+[traversal](https://dom.spec.whatwg.org/#traversal), and the shared mutation,
+replace-data, split-text, and normalize algorithms (reviewed 2026-09-20).
+
+- `Range` is a non-reused arena-local live handle. `AbstractRange` is an owned
+  boundary snapshot; `StaticRange` construction rejects forbidden node types
+  but permits invalid offsets/order/roots, with a separate validity query.
+- Insert/remove/adopt/replace/fragment operations update all live ranges;
+  suppressed observer records do not suppress those updates. CharacterData
+  replacement, splitText and normalize maintain UTF-16 boundary offsets.
+- Content cloning/extraction keeps partial ancestors, clones partial data,
+  moves whole contained nodes only during extraction, and checks contained
+  doctypes before changing the source. Delete/extract collapse before mutations
+  as specified. Surround preserves the specified late-error side effects.
+- A private code-unit sidecar preserves ill-formed UTF-16 without changing the
+  public NodeKind String payloads used by sibling crates. String access is a
+  lossy compatibility projection only when lone surrogates exist. Exact data
+  and observer old values are available to future DOMString bindings.
+- NodeIterator and TreeWalker use owned `TraversalStep::Filter` requests with
+  callback identity and node handles. Resume exactly once with the converted
+  unsigned-short result; cancel native state before propagating a binding
+  exception. No callback holds an arena borrow. The iterator's reference and
+  in-flight candidate both adjust during pre-removal. TreeWalker currentNode
+  is unrestricted and does not relocate automatically.
+- `release_range`/`release_traversal` are explicit binding-GC seams; legacy
+  detach methods are no-ops. Handles must never cross Dom arenas.
+- No JS binding, custom-element/shadow-tree extension, WPT result, or broad
+  browser conformance is claimed. DOM-1 remains parked pending JS-2.
+
+Fresh-artifact Windows gate on base 57f0e69: 107 DOM tests passed twice (65
+preexisting plus 42 new), zero failed/ignored; canonical result hash
+`f9f87bb833ccdf30425e279abc5372671a5190526bb97eaeec3739b63c63a8e9`.
+Full workspace: 957 passed, zero failed, three existing ignored, twice;
+canonical result hash `05385f87dfb95722b7af7ef06b03da37ba8662eadac4e066bd513ee656b267dd`.
+144 Rust source/manifests matched Mac; logs confirm first-party recompilation
+following the integrator's artifact-invalidation refresh. These gates completed
+as the integrator redirected the lane to DOM-1; DOM-3 is checkpointed for return.
+>>>>>>> lane/dom-bindings
