@@ -151,3 +151,121 @@ fn logical_mapping_and_important_rollback_preserve_winner_provenance() {
     );
     assert!(!child.is_author_specified("background-color"));
 }
+
+#[test]
+fn whole_border_rollback_matches_explicit_longhands_for_control_chrome() {
+    for keyword in ["revert", "revert-layer"] {
+        for value in [keyword.to_owned(), format!("var(--missing, {keyword})")] {
+            let mut dom = Dom::new();
+            let html = dom.create_element(NodeIdx(0), "html");
+            let button = dom.create_element(html, "button");
+            let shorthand = compute(
+                &dom,
+                &[parse_stylesheet(&format!(
+                    "button{{background:{value};border:{value}}}"
+                ))],
+            );
+            let mut declarations = format!("background-color:{value};");
+            for side in ["top", "right", "bottom", "left"] {
+                for part in ["width", "style", "color"] {
+                    declarations.push_str(&format!("border-{side}-{part}:{value};"));
+                }
+            }
+            let longhands = compute(
+                &dom,
+                &[parse_stylesheet(&format!("button{{{declarations}}}"))],
+            );
+            let actual = shorthand.get(button).unwrap();
+            let expected = longhands.get(button).unwrap();
+            assert!(!actual.is_author_specified("background-color"));
+            for side in ["top", "right", "bottom", "left"] {
+                for part in ["width", "style", "color"] {
+                    let property = format!("border-{side}-{part}");
+                    assert_eq!(
+                        actual.get(&property),
+                        expected.get(&property),
+                        "{value}: {property}"
+                    );
+                    assert!(
+                        !actual.is_author_specified(&property),
+                        "{value}: {property} incorrectly suppresses control chrome"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn whole_border_css_wide_values_apply_to_all_components() {
+    for keyword in ["initial", "inherit", "unset"] {
+        for value in [keyword.to_owned(), format!("var(--missing, {keyword})")] {
+            let (_, child) = fixture(
+                &format!("div{{border:7px dashed blue}} p{{border:{value}}}"),
+                "",
+            );
+            for side in ["top", "right", "bottom", "left"] {
+                for (part, inherited, initial) in [
+                    ("width", "7px", "medium"),
+                    ("style", "dashed", "none"),
+                    ("color", "blue", "currentcolor"),
+                ] {
+                    let property = format!("border-{side}-{part}");
+                    assert_eq!(
+                        child.get(&property),
+                        Some(if keyword == "inherit" {
+                            inherited
+                        } else {
+                            initial
+                        }),
+                        "{value}: {property}"
+                    );
+                    assert!(child.is_author_specified(&property));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn whole_border_layer_rollback_restores_all_author_components() {
+    for value in ["revert-layer", "var(--missing, revert-layer)"] {
+        let (_, child) = fixture(
+            &format!(
+                "@layer a,b; @layer a{{p{{border:7px dotted blue}}}} @layer b{{p{{border:{value}}}}}"
+            ),
+            "",
+        );
+        for side in ["top", "right", "bottom", "left"] {
+            for (part, expected) in [("width", "7px"), ("style", "dotted"), ("color", "blue")] {
+                let property = format!("border-{side}-{part}");
+                assert_eq!(child.get(&property), Some(expected), "{value}: {property}");
+                assert!(child.is_author_specified(&property));
+            }
+        }
+    }
+}
+
+#[test]
+fn whole_border_variables_expand_atomically_after_substitution() {
+    for (declaration, expected) in [
+        (
+            "--edge:3px solid red;border:var(--edge)",
+            ["3px", "solid", "red"],
+        ),
+        ("border:var(--missing)", ["medium", "none", "currentcolor"]),
+        (
+            "--edge:solid solid;border:var(--edge)",
+            ["medium", "none", "currentcolor"],
+        ),
+    ] {
+        let (_, child) = fixture(&format!("p{{border:7px dotted blue;{declaration}}}"), "");
+        for side in ["top", "right", "bottom", "left"] {
+            for (part, expected) in ["width", "style", "color"].into_iter().zip(expected) {
+                let property = format!("border-{side}-{part}");
+                assert_eq!(child.get(&property), Some(expected));
+                assert!(child.is_author_specified(&property));
+            }
+        }
+    }
+}

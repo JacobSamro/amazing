@@ -785,6 +785,14 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         "border-top" | "border-right" | "border-bottom" | "border-left" => {
             expand_side_border(&property, value).unwrap_or_default()
         }
+        // Rollback/defaulting must reach every border longhand. Treat a
+        // var-bearing border as a deferred whole value for the same reason.
+        "border" if css_wide_keyword(value).is_some() || contains_var_function(value) => SIDES
+            .iter()
+            .flat_map(|side| {
+                expand_side_border(&format!("border-{side}"), value).unwrap_or_default()
+            })
+            .collect(),
         "border" if !parts.is_empty() => {
             let mut width = "medium";
             let mut style = "none";
