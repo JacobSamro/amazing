@@ -2373,33 +2373,40 @@ fn cmd_style(args: &[String]) -> ExitCode {
     let dom = amazing_html::parse(&html);
 
     // Gather author stylesheets: inline <style> elements first.
-    let mut css = String::new();
-    collect_style_text(&dom, amazing_dom::NodeIdx(0), &mut css);
+    let mut sources = Vec::new();
+    collect_style_text(&dom, amazing_dom::NodeIdx(0), &mut sources);
     for extra in &args[1..] {
         match read_source(Some(extra), "style") {
             Ok(s) => {
-                css.push('\n');
-                css.push_str(&s);
+                let sheet = amazing_css::parse_stylesheet(&s);
+                sources.push((s, sheet));
             }
             Err(code) => return code,
         }
     }
 
-    let sheet = amazing_css::parse_stylesheet(&css);
-    let styled = amazing_css::compute(&dom, &[sheet]);
+    let (_, sheets): (Vec<_>, Vec<_>) = sources.into_iter().unzip();
+    let styled = amazing_css::compute(&dom, &sheets);
 
     print_styled(&dom, amazing_dom::NodeIdx(0), 0, &styled);
     ExitCode::SUCCESS
 }
 
-fn collect_style_text(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, out: &mut String) {
+fn collect_style_text(
+    dom: &amazing_dom::Dom,
+    node: amazing_dom::NodeIdx,
+    out: &mut Vec<(String, amazing_css::Stylesheet)>,
+) {
     if dom.name(node) == Some("style") {
+        let mut source = String::new();
         for child in dom.children(node) {
             if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
-                out.push_str(data);
-                out.push('\n');
+                source.push_str(data);
             }
         }
+        let mut sheet = amazing_css::parse_stylesheet(&source);
+        sheet.scope_root = dom.get(node).parent;
+        out.push((source, sheet));
         return;
     }
     for child in dom.children(node) {
@@ -2411,7 +2418,7 @@ fn collect_author_css(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
     page: &str,
-    out: &mut String,
+    out: &mut Vec<(String, amazing_css::Stylesheet)>,
 ) -> Result<(), String> {
     if dom.name(node) == Some("style") {
         collect_style_text(dom, node, out);
@@ -2435,12 +2442,12 @@ fn collect_author_css(
             let url = resolve_script_url(page, href);
             let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
                 .map_err(|error| format!("stylesheet {href}: {error}"))?;
-            out.push_str(
-                &response
-                    .text()
-                    .ok_or_else(|| format!("stylesheet {href} was not text"))?,
-            );
-            out.push('\n');
+            let source = response
+                .text()
+                .ok_or_else(|| format!("stylesheet {href} was not text"))?;
+            let mut sheet = amazing_css::parse_stylesheet(&source);
+            sheet.scope_root = dom.get(node).parent;
+            out.push((source, sheet));
         }
     }
     for child in dom.children(node) {
@@ -2618,20 +2625,23 @@ fn cmd_layout(args: &[String]) -> ExitCode {
     let dom = amazing_html::parse(&html);
 
     // Author CSS: <style> elements + extra files (same policy as `style`).
-    let mut css = String::new();
-    collect_style_text(&dom, amazing_dom::NodeIdx(0), &mut css);
+    let mut sources = Vec::new();
+    collect_style_text(&dom, amazing_dom::NodeIdx(0), &mut sources);
     for extra in args.get(2..).unwrap_or(&[]) {
         match read_source(Some(extra), "layout") {
             Ok(s) => {
-                css.push('\n');
-                css.push_str(&s);
+                let sheet = amazing_css::parse_stylesheet(&s);
+                sources.push((s, sheet));
             }
             Err(code) => return code,
         }
     }
 
+    let (_, sheets): (Vec<_>, Vec<_>) = sources.into_iter().unzip();
+    let styled = amazing_css::compute(&dom, &sheets);
     let fonts = amazing_layout::font::FontSource::fallback();
-    let root = amazing_layout::layout_document(&html, &css, width, &fonts);
+    let mut root = amazing_layout::box_tree::build_layout_tree(&dom, &styled, &fonts);
+    amazing_layout::block::layout_root_in_viewport(&mut root, width, None, &fonts);
     print!("{}", amazing_layout::dump_layout(&dom, &root));
     ExitCode::SUCCESS
 }
@@ -2755,10 +2765,14 @@ fn render_surface(
     }));
     execute_inline_scripts(&host, html_path)?;
 
-    let mut css = String::new();
+    let mut sources = Vec::new();
     let dom = host.borrow();
-    collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut css)?;
-    css.push_str(extra_css);
+    collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut sources)?;
+    sources.push((extra_css.to_owned(), amazing_css::parse_stylesheet(extra_css)));
+    let (sources, sheets): (Vec<_>, Vec<_>) = sources.into_iter().unzip();
+    // Font discovery still uses the legacy text input. Style computation below
+    // consumes the separate sheets, retaining each owner's implicit scope root.
+    let css = sources.join("\n");
 
     let media = load_page_media(&dom.dom, html_path);
     for warning in &media.warnings {
@@ -2768,9 +2782,9 @@ fn render_surface(
     for warning in &page_text.warnings {
         eprintln!("amazing render: {warning}");
     }
-    let root = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
+    let root = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
         &dom.dom,
-        &css,
+        &sheets,
         width,
         fixed_height.map(|height| height as f32),
         &page_text.provider,

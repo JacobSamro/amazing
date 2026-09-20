@@ -421,6 +421,29 @@ pub fn layout_dom_document_with_text_and_replaced_in_viewport(
     root
 }
 
+/// Sheet-preserving counterpart of the string entry point. Callers retain
+/// document order and stylesheet owner scope roots through style computation.
+/// Keep the same fallback layout and shaped-text pass as the string path.
+pub fn layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
+    dom: &amazing_dom::Dom,
+    author_sheets: &[amazing_css::Stylesheet],
+    viewport_width: f32,
+    viewport_height: Option<f32>,
+    text: &dyn TextSystem,
+    replaced: &dyn ReplacedElementProvider,
+) -> LayoutBox {
+    let styled = amazing_css::compute(dom, author_sheets);
+    let fonts = font::FontSource::fallback();
+    let mut root = box_tree::build_layout_tree_with_replaced(dom, &styled, &fonts, replaced);
+    block::layout_root_in_viewport(&mut root, viewport_width, viewport_height, &fonts);
+    if has_floats(&root) {
+        block::layout_root_with_text(&mut root, viewport_width, viewport_height, text);
+    } else {
+        apply_shaped_text(&mut root, text);
+    }
+    root
+}
+
 fn has_floats(layout: &LayoutBox) -> bool {
     floats::side(&layout.style).is_some()
         || match &layout.flow {
