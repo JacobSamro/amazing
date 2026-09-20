@@ -1,0 +1,14 @@
+[
+  {
+    "modified_utc": "2026-09-20T18:38:59.8655741Z",
+    "sha256": "5021599d0b3a02091cfadd6e40c70ceddc7d7460e1c451fdc097271f53ba70ea",
+    "file": "rc3-driver-after.exe",
+    "bytes": 38389760
+  },
+  {
+    "modified_utc": "2026-09-20T18:39:03.5221210Z",
+    "sha256": "3d1a59af6507630f37044979a24332d14fede9f72f2e159b731575949168e932",
+    "file": "rc3-images-after.exe",
+    "bytes": 5357056
+  }
+]

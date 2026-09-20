@@ -1,0 +1,52 @@
+{
+  "fields": [
+    "id",
+    "classification",
+    "differing_pixels",
+    "max_difference",
+    "actual_sha256",
+    "reference_sha256",
+    "diff_sha256"
+  ],
+  "pairs": [
+    {
+      "kind": "controls",
+      "stable": true,
+      "counts": {
+        "pass": 21,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "crash": 0
+      },
+      "unchanged_from_pre_rebase": true,
+      "projection_sha256": "bb65bab991deba32128e6aa814cbd042e02ecce3dec7044453b488a4cb4df101"
+    },
+    {
+      "kind": "images",
+      "stable": true,
+      "counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged_from_pre_rebase": true,
+      "projection_sha256": "c700e2d5e6432127acc7222cbe33658ca29f2e60c671710d5c0dfb5eee30990f"
+    },
+    {
+      "kind": "focused",
+      "stable": true,
+      "counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged_from_pre_rebase": true,
+      "projection_sha256": "68e51665fb0ba96e3e3c5392a4686a5a30228fd758cafcf38ad702d560e540fd"
+    }
+  ]
+}

@@ -253,3 +253,12 @@ source hashes also match. Full evidence and reproduction live in
 Boundary: deliver for review and stop. Follow-ups are provider integration,
 CSS provenance, specialized appearance/layout coverage, and root-relative WPT
 reference resolution. None is silently credited by raw matching reftests.
+
+RC-3 merge preflight refresh: rebased cleanly onto origin/dev `156cc13`
+(implementation `0991e80`), ran the authorized lane-only refresh, re-scp'd all
+owned changes and rebuilt on Windows. Workspace **1,035 passed / 0 failed /
+3 ignored across 53 targets**; paint **86 passed**. Controls, CSS Images and
+focused paint retain the same counts and pixel hashes both across repeats and
+against the pre-rebase after runs. Evidence is preserved in
+`tests/wpt-replaced-content/rc3/rebase-156cc13/`. The integrator accepted routing
+of the root-relative reference harness bug; questions.md marks it RESOLVED.
