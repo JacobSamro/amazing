@@ -77,6 +77,9 @@ LANE_GRANTS = {
     # DOM-1 needs a subcommand entry point; the integrator still owns main.rs
     # beyond the single dispatch line, and is splitting it separately.
     "dom-bindings": ["crates/amazing/src/cmd/", "crates/amazing/src/main.rs"],
+    # RC-1 moves image decoding out of the shell, which requires a minimal edit
+    # to the shell's manifest and viewport. Reviewed at merge, not open-ended.
+    "replaced-content": ["crates/amazing-shell-gpui/"],
 }
 
 
