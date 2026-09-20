@@ -936,3 +936,33 @@ this is dependency evidence, not proof of a single runtime cause. The remaining
 four are two click activation tests, EventListener-handleEvent, and the SVG
 window.onload smoke test. Constructors can gain synchronous subtest passes while
 their cross-realm part still times out; do not claim the whole file is fixed.
+
+### DOM-5 end-of-day triage checkpoint (2026-09-20 UTC)
+
+Standing down by explicit user instruction during the win-001 SSH outage. No
+post-outage gate ran and no further SSH/scp connections are permitted until the
+integrator clears the stand-down. New durable evidence is in
+`crates/amazing-dom/tests/dom5-triage/README.md` and its adjacent artifacts.
+
+The instrumented copied harness recovered the original exception in all 41
+conversion-error sources. All 30 common.js cases reached body.insertBefore and
+threw “value is not callable” before the next statement; the harness's String(e)
+then masked it. This is a confirmed missing binding, not a native Range failure.
+A pre-outage Edge registration census measured 49,514 subtests behind those 30
+sources (34,505 Range boundaries/queries; 5,626 mutation response; 4,179 content;
+3,652 node properties/relationships; 1,552 traversal). These are reference counts,
+not Amazing results or a promise that one missing method unlocks all of them.
+The remaining fixture dependencies include CDATA and DOMImplementation APIs.
+
+All 118 parser failures have source-location attribution: 76 async object-method,
+33 await-expression, 6 trailing-call-comma, 3 surrogate-escape failures. Full
+causal ranking is still partial: the additional call-site tracer was NOT run
+because SSH failed. Remaining mixed callable/duplicate-name/deadline groups and
+the full failed/unsupported inventory need completion. The current binding/core
+implementation is unchanged; no runtime adoption or WPT AFTER result is claimed.
+
+FIRST resume action: check the integrator's current restoration/stand-down notice.
+Do not open SSH/scp until explicitly cleared. Then retrieve the reference-census
+server metadata and clean up only task-owned reference-browser profiles, review
+and run the draft call tracer, inspect routed runtime/driver adoption, and follow
+fresh rebase/refresh/re-sync gates. The report lists every remaining item.
