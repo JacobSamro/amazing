@@ -262,3 +262,65 @@ focused paint retain the same counts and pixel hashes both across repeats and
 against the pre-rebase after runs. Evidence is preserved in
 `tests/wpt-replaced-content/rc3/rebase-156cc13/`. The integrator accepted routing
 of the root-relative reference harness bug; questions.md marks it RESOLVED.
+
+## RC-4 — author provenance and the next unblocked cluster
+
+CSS-4's `ComputedStyle::is_author_specified` is now adopted for control
+background and border longhands. Explicit author transparent/none and initial
+defaults suppress native chrome; absent author styling retains it. The RC-3
+explicit-default ambiguity is resolved by the CSS-owned surface. Author rollback
+through explicit longhands is tested. A distinct `border:revert` shorthand
+provenance defect was exposed and routed to CSS, not guessed around in paint.
+The DOM state/layout glyph provider integration is still separately owned.
+
+Remeasured the unchanged 48-entry scope at WPT
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` on the CSS-4 baseline:
+
+| Remaining cluster | Pass | Mismatch | Unsupported | Renderer error | Dependency-aware priority |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Canvas | 0 | 0 | 0 | 8 | Blocked: DOM/JS context/worker contracts, driver script resource loading |
+| Controls | 2 | 1 | 0 | 5 | Remaining state/text providers and specialized widget/layout behavior |
+| SVG | 4 | 2 | 1 | 1 | Highest unblocked; RC-4 bounded geometry transforms |
+| Images/fitting | 6 | 1 | 0 | 1 | Remaining geometry/resource cases; retain dedicated 12-case PNG gate |
+| Embedded | 7 | 0 | 0 | 1 | Blocked: document lifecycle/origin/process seams |
+| Document media | 7 | 0 | 0 | 1 | Blocked: DOM state/events/timing |
+
+Totals: **26 matches / 4 mismatches / 1 unsupported / 17 renderer errors**,
+no timeout. These are overlapping bounded samples, not broad conformance rates
+or causal estimates. Canvas errors include root-relative script loading failures
+before any paint work; the integrator confirmed Canvas exclusion and routed
+script/reftest-link resolution to integrator-assist. A later ranking should
+remeasure after those blockers land rather than retain these errors as paint debt.
+
+RC-4 expands static SVG image decoding with group/shape matrix, translate,
+scale, rotation with optional pivot, and skew attribute lists. Matrix composition
+and inverse sampling reuse bounded rectangle/ellipse rendering. Singular
+transforms hide their subtree. Parsing has a 32-transform limit; invalid or
+nonfinite/overflowing input fails the complete image. Existing input, depth,
+element, allocation and raster-work limits remain. No dependencies, root graph,
+lockfiles, shell, DOM, layout or CSS files were changed. The existing strict SVG
+subset parser remains; root SVG transforms, CSS, paths, strokes, references,
+text, filters and animation remain unsupported.
+
+Owned headless render proof (not WPT): **0/9 before → 9/9 after**, twice.
+Three cases prove explicit-default provenance changes pixels; six compare SVG
+transforms against equivalent untransformed references. Fixture canvases are
+fixed at 64x64. The retained SVG WPT resource selection still requires inline CSS,
+so no raw match there receives new SVG conformance credit. The next SVG boundary
+is canonical CSS computation/presentation metadata and a non-inert upstream
+selection; general inline SVG geometry remains a separate architectural slice.
+
+Final fresh Windows workspace at dev `3d0c2b0` plus owned implementation:
+**1,135 passed / 0 failed / 3 ignored across 56 targets**. Paint **87 passed**;
+isolated image adapter **17 passed** (4 unit, 3 presentation, 10 SVG), with --locked
+example build green. Before artifacts are from `cc3761e`; intervening dev includes
+DOM/HTML namespace integration and is not credited to RC-4. The lane-only refresh,
+re-sync and isolated-target artifact invalidation precede the final gates.
+Evidence and reproduction are in `tests/wpt-replaced-content/rc4/`.
+
+Final RC-4 repeats: scope **26/4/1/17**, controls **21/2/1**, CSS Images **12/12**,
+SVG **12/12 raw with zero credit**, focused **24/24**, unchanged before/after.
+All ten WPT repeated pairs are stable; actual/reference hashes are unchanged
+across phases. Owned proof **0/9 → 9/9** has stable repeated hashes, changed
+actuals and unchanged references. Source equality was checked across 180 tracked
+Rust/Cargo inputs with zero mismatches. Stop for review; no next ticket started.

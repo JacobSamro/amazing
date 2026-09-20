@@ -1,0 +1,46 @@
+[
+  {
+    "fixture": "provenance-author-defaults",
+    "viewport": [
+      64,
+      64
+    ],
+    "renderer": "root driver",
+    "before_ppm_sha256": "86a42b92b7cfb8e2c7be21323eb44e7975a1c2d8154135d305e81f1e9a5e9423",
+    "after_ppm_sha256": "21cf9102987ef7027aee902ed66f957c43631acea3f8c1e506c9b0f80e8e9c79",
+    "changed_pixels": 764,
+    "before_pixel_10_10": [
+      239,
+      239,
+      239
+    ],
+    "after_pixel_10_10": [
+      0,
+      255,
+      0
+    ],
+    "capture": "Headless render-wpt PPM from target/rc4-fixtures-{before,after}-1; PNG montage uses nearest-neighbor 4x; not GPUI"
+  },
+  {
+    "fixture": "svg-translate-scale",
+    "viewport": [
+      64,
+      64
+    ],
+    "renderer": "static image adapter",
+    "before_ppm_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+    "after_ppm_sha256": "6305102c228af8ea78e2a44e527201d776db1870a6b4c107e021b6205eefa037",
+    "changed_pixels": 256,
+    "before_pixel_10_10": [
+      255,
+      255,
+      255
+    ],
+    "after_pixel_10_10": [
+      255,
+      0,
+      0
+    ],
+    "capture": "Headless render-wpt PPM from target/rc4-fixtures-{before,after}-1; PNG montage uses nearest-neighbor 4x; not GPUI"
+  }
+]

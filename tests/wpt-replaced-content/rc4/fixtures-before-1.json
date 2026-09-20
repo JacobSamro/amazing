@@ -1,0 +1,65 @@
+[
+  {
+    "match": false,
+    "reference_sha256": "21cf9102987ef7027aee902ed66f957c43631acea3f8c1e506c9b0f80e8e9c79",
+    "id": "provenance-author-defaults",
+    "actual_sha256": "86a42b92b7cfb8e2c7be21323eb44e7975a1c2d8154135d305e81f1e9a5e9423",
+    "differing_bytes": 2292
+  },
+  {
+    "match": false,
+    "reference_sha256": "21cf9102987ef7027aee902ed66f957c43631acea3f8c1e506c9b0f80e8e9c79",
+    "id": "provenance-author-initial",
+    "actual_sha256": "86a42b92b7cfb8e2c7be21323eb44e7975a1c2d8154135d305e81f1e9a5e9423",
+    "differing_bytes": 2292
+  },
+  {
+    "match": false,
+    "reference_sha256": "21cf9102987ef7027aee902ed66f957c43631acea3f8c1e506c9b0f80e8e9c79",
+    "id": "provenance-author-longhands",
+    "actual_sha256": "86a42b92b7cfb8e2c7be21323eb44e7975a1c2d8154135d305e81f1e9a5e9423",
+    "differing_bytes": 2292
+  },
+  {
+    "match": false,
+    "reference_sha256": "6305102c228af8ea78e2a44e527201d776db1870a6b4c107e021b6205eefa037",
+    "id": "svg-translate-scale",
+    "actual_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+    "differing_bytes": 512
+  },
+  {
+    "match": false,
+    "reference_sha256": "274254bbd4c44c24ce665aa18d12bca454516c6dee0bba8ecbd01a35931d1bbf",
+    "id": "svg-rotate",
+    "actual_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+    "differing_bytes": 768
+  },
+  {
+    "match": false,
+    "reference_sha256": "dd7f3afdad6b28e377454ac5a14e94c99adc8e469505cd5bbc31175a27853778",
+    "id": "svg-matrix",
+    "actual_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+    "differing_bytes": 768
+  },
+  {
+    "match": false,
+    "reference_sha256": "07a0ed6de20db2caf8d1ba18c4f5f8024b9212df600882550ff37966cffeccd7",
+    "id": "svg-ellipse",
+    "actual_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+    "differing_bytes": 808
+  },
+  {
+    "match": false,
+    "reference_sha256": "61747aadb81ab22a5e508d3f20f1d245db4caa3a20cdb2db7ef8eee212030302",
+    "id": "svg-viewbox",
+    "actual_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+    "differing_bytes": 2048
+  },
+  {
+    "match": false,
+    "reference_sha256": "c979923694363e4ba4338fa85be47805b5a8b13b853c962e7f46dcd021c7d103",
+    "id": "svg-singular",
+    "actual_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+    "differing_bytes": 128
+  }
+]
