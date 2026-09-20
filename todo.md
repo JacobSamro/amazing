@@ -16,11 +16,39 @@
 | 3.6 — Grid | ✅ done on win-001 (16 grid tests; track lists incl. fr/%/repeat+auto-fill, row/column/dense placement, line numbers + negative anchors, implicit tracks, alignment) |
 | 4 — Paint | ✅ crate integrated, workspace green (52 paint tests; inherited overflow clips); `render` demo writes BMP+PPM |
 | 5 — Net | ✅ GET/POST HTTP + verified HTTPS integrated (64 core tests + 2 TLS-adapter tests); `fetch` demo |
-| 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests); focused Test262 slice 196/196 supported (100%) |
+| 6 — JS | ✅ tree-walking milestone exit criteria met (143 crate tests). ⚠️ The "196/196 (100%)" Test262 claim is **withdrawn** — see the measured baseline below |
 | 7 — DOM/JS | ✅ live DOM exit criteria met: handlers mutate layout/style and repaint visibly end-to-end |
 | 8 — GUI | ✅ Windows native shell and interactive desktop exit criteria verified on win-001 |
 | 9 — Media | ✅ 47-subphase stretch milestone includes live Chromium DTLS-SRTP video |
-| 10 — Render conformance | 🟨 XHTML-safe cascade 33/26/13; HTML geometry 38/23; Position consensus 5/5; text pipeline next |
+| 10 — Render conformance | 🟨 XHTML-safe cascade 33/26/13; HTML geometry 38/23 (**does not reproduce — see below**); Position consensus 5/5 |
+
+## Withdrawn and disputed measurements
+
+Two numbers this file previously reported do not survive re-measurement. Both
+were found by lane agents re-running the evidence rather than trusting it, and
+both are recorded here because the project's evidence contract is only worth
+anything if its baselines are real.
+
+**Test262 "196/196 supported (100%)" — withdrawn.** That figure came from a
+sparse 641-file checkout. The full pinned checkout has **53,872** discovered
+`.js` files. Measured twice with identical per-file classifications:
+
+| Discovered | Pass | Fail | Timeout | Skip |
+|-----------:|-----:|-----:|--------:|-----:|
+| 53,872 | 5,438 | 23,165 | 7 | 25,262 |
+
+Worse, `scripts/test262.py` is **not a conformant Test262 runner**: it skips
+25,262 files, omits `includes` for 9,296 eligible files, ignores 274
+`onlyStrict` flags, omits strict variants, and weakens `SameValue`/`throws`.
+So even 5,438 is not an ECMA-262 compliance figure — it is a process-exit count
+from a lenient harness. Making the runner conformant is a prerequisite before
+any Test262 percentage may be quoted. Evidence:
+`docs/lanes/js-lang_TODO.md`.
+
+**HTML geometry "38 pass / 23 mismatch" — does not reproduce.** An unchanged
+renderer measured **32 pass / 29 mismatch** twice at WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, viewport 800×600. Under
+investigation; see `docs/lanes/layout_TODO.md`.
 
 Local editing tree: `/Users/jMac/Projects/OpenSource/amazing`.
 Server tree: `C:\Users\server\src\amazing` (git lives there).
