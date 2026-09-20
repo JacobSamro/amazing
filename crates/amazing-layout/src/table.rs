@@ -110,9 +110,13 @@ impl Grid {
             }
         }
         let row_count = rows.len();
-        for row in &mut rows {
-            if row.end == 0 {
-                row.end = row_count;
+        for i in 0..row_count {
+            if rows[i].end == 0 {
+                // Direct rows form an implicit group; their spans cannot enter
+                // the next explicit row group (including a reordered footer).
+                rows[i].end = (i + 1..row_count)
+                    .find(|&j| rows[j].path.len() == 2)
+                    .unwrap_or(row_count);
             }
         }
         let mut occupied_until = vec![0; MAX_COLUMNS];
@@ -694,10 +698,22 @@ fn empty(b: &LayoutBox) -> bool {
     }
     match &b.flow {
         Flow::Empty => true,
-        Flow::Inlines(items) => items
-            .iter()
-            .all(|i| matches!(i,crate::InlineNode::Text{text,..} if text.trim().is_empty())),
-        Flow::Blocks(c) | Flow::Flex(c) | Flow::Grid(c) => c.iter().all(empty),
+        Flow::Inlines(items) => items.iter().all(|i| match i {
+            crate::InlineNode::Text { text, style, .. } => {
+                if matches!(
+                    style.white_space,
+                    amazing_text::WhiteSpace::Pre
+                        | amazing_text::WhiteSpace::PreWrap
+                        | amazing_text::WhiteSpace::BreakSpaces
+                ) {
+                    text.is_empty()
+                } else {
+                    text.trim().is_empty()
+                }
+            }
+            _ => false,
+        }),
+        Flow::Blocks(c) | Flow::Flex(c) | Flow::Grid(c) => c.is_empty(),
     }
 }
 fn suppress_internal(b: &mut LayoutBox, holes: &[Rect]) {

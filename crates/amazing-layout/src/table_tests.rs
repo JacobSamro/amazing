@@ -395,3 +395,30 @@ fn table_empty_collapsed_grid_keeps_declared_height_and_ignores_padding() {
     near(t.border_box.h, 100.0);
     near(t.padding.left, 0.0);
 }
+
+#[test]
+fn table_empty_cells_does_not_hide_preserved_spaces_or_in_flow_boxes() {
+    let b = layout(
+        "<body><table><tr><td style='white-space:pre'> </td><td><div></div></td></tr></table>",
+        "table{empty-cells:hide}td{height:20px}div{width:10px;height:10px}",
+        false,
+    );
+    assert!(
+        collect(&b, Role::Cell)
+            .iter()
+            .all(|c| !c.table_decoration().suppress_background)
+    );
+}
+
+#[test]
+fn table_direct_row_span_stops_before_an_explicit_group() {
+    let b = layout(
+        "<body><table><tbody style='display:contents'><tr><td rowspan=99>A</td><td>B</td></tr></tbody><tbody><tr><td>C</td><td>D</td></tr></tbody></table>",
+        "table{width:100px;table-layout:fixed}td{height:20px}",
+        false,
+    );
+    let c = collect(&b, Role::Cell);
+    near(c[0].border_box.h, 20.0);
+    near(c[2].border_box.x, 0.0);
+    near(c[2].border_box.y, 20.0);
+}

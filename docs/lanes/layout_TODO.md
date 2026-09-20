@@ -346,3 +346,58 @@ used sizing.
 - Fresh Windows baseline built from `d8437f3` after removing first-party
   artifacts and disabling incremental compilation. Existing 164 layout tests
   and the first 10 new table regressions pass on Windows; final gates pending.
+
+### Table layout and decoration contract
+
+The wrapper and grid are distinct boxes. The principal wrapper retains the
+originating node for source-order paint traversal and owns margins, float and
+position offsets. Captions remain normal blocks outside the grid's decoration
+rectangle. The grid owns table borders, padding (separate model only), columns,
+row groups, rows and cells. First header/footer groups are placed first/last;
+subsequent groups keep source order. Column groups and columns retain geometry.
+
+The bounded HTML attribute parser handles zero-rowspan, leading plus/whitespace,
+overflow, and the HTML colspan/rowspan limits. CSS-only table cells do not acquire
+HTML span attributes from arbitrary elements. Logical column order drives RTL
+placement and tie-breaking. Direct rows form an implicit group that ends before
+the next explicit group. Overlapping colspans retain their source-order start
+rather than shifting earlier cells.
+
+Auto sizing shares shaped inline units with normal line fitting, including
+atomic replaced content and ruby. The legacy font path remains available. Cells
+are laid out at their used column extent, then row heights and first-line
+baselines are resolved. Top/middle/bottom/baseline alignment adds cell padding
+without converting an auto content height into a definite percentage basis.
+Repeated layout recomputes all geometry and decoration decisions.
+
+Collapsed-border resolution includes table, column group, column, row group,
+row and cell candidates. Hidden wins first; otherwise width, style precedence,
+origin precedence and logical source position decide. Cell geometry consumes
+half the resolved edge width. Spanning-cell interiors contain no border segment.
+The table owns the ordered resolved segments, each with absolute rectangle,
+orientation, style, RGBA color and source identity. Subtree translations move
+segments and background holes together with their boxes. Paint adoption must
+honor `suppress_border`, `suppress_background` and background holes, then paint
+the resolved table segments; it must not redo conflict resolution.
+
+Separate borders preserve explicit cell padding and both spacing axes. Hidden
+empty cells keep their layout area but suppress decoration and create holes in
+row/row-group/column backgrounds. Preserved whitespace and in-flow child boxes
+are not treated as empty. Collapsed tables ignore `empty-cells`.
+
+### Explicit boundary
+
+This is a table formatting implementation and a resolved paint-adoption seam,
+not a claim of complete CSS table conformance. Inline-table **outer** participation
+still shares the engine's pre-existing blockified non-replaced inline-block
+boundary; the inner table uses the new grid algorithm. Vertical writing modes,
+visibility-collapse, pagination/repeated headers, exact percentage-constraint
+optimization and full table background layering need further work. The table
+selection includes raw mismatches that depend on other unsupported features;
+those are not converted into supported-pass credit.
+
+Paint has not adopted the seam in this ticket. Collapsed-border and empty-cell
+pixel output therefore remains provisional even when the layout-side geometry
+and winning-edge tests pass. The queued CSS metadata change is required for
+`border-spacing` inheritance from an ancestor. CSS side-border shorthands are
+also a routed follow-up; the seam consumes computed longhands only.
