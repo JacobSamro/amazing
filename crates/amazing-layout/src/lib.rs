@@ -77,13 +77,13 @@ mod float_tests;
 #[cfg(test)]
 mod inline_replaced_tests;
 
-pub mod replaced;
 mod floats;
 pub mod font;
 pub mod grid;
 mod grid_algorithm;
 pub mod inline;
 pub mod position;
+pub mod replaced;
 pub mod values;
 
 use amazing_css::ComputedStyle;
@@ -1203,7 +1203,7 @@ mod shaped_text_tests {
         let text = AtomicOrderFake(FallbackTextSystem::new());
         let layout = layout_dom_document_with_text_and_replaced_in_viewport(
             &dom,
-            "",
+            "img{width:20px;height:10px;padding:3px;border:2px solid red}",
             200.0,
             None,
             &text,
@@ -1221,6 +1221,12 @@ mod shaped_text_tests {
             atomic.x,
             a.x
         );
+        let fragment = find(&layout, paragraph).unwrap()
+            .styled_replaced_fragments().next().unwrap();
+        assert_eq!(fragment.content_box.w, 20.0);
+        assert_eq!(fragment.border_box.w, 30.0);
+        assert_eq!(fragment.content_box.x - fragment.border_box.x, 5.0);
+        assert!(fragment.border_box.x + fragment.border_box.w <= a.x);
     }
 
     #[test]

@@ -144,10 +144,9 @@ pub(crate) fn hidden(dom: &Dom, node: NodeIdx) -> bool {
 pub(crate) fn inline_atomic(dom: &Dom, node: NodeIdx, style: &ComputedStyle) -> bool {
     kind(dom, node).is_some()
         && crate::floats::side(style).is_none()
-        && matches!(
-            style.get("display").unwrap_or("inline"),
-            "inline" | "inline-block"
-        )
+        && style.get("display").is_none_or(|display| {
+            display.eq_ignore_ascii_case("inline") || display.eq_ignore_ascii_case("inline-block")
+        })
 }
 
 pub(crate) fn construct(
