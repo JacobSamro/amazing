@@ -44,7 +44,22 @@ GitHub and had to be archived (`archive/win001-main`, plus
      "powershell -NoProfile -EncodedCommand <b64>"
    ```
    where the script sets `$env:CARGO_TARGET_DIR` to
-   `C:\Users\server\target\<lane>` and runs `cargo test -p <your crate> --locked`.
+   `C:\Users\server\target\<lane>` and runs the test command below.
+
+**Use `cargo nextest`.** Measured on this workspace: `cargo test --workspace
+--locked` takes 105.8s, `cargo nextest run --workspace --locked` takes 53.1s
+for the same 1208 tests. Roughly 2x, and it matters because every lane gates
+repeatedly.
+
+```
+cargo nextest run -p <your crate> --locked      # or --workspace before a PR
+cargo test -p <your crate> --locked --doc       # ALWAYS run this too
+```
+
+**nextest does not run doctests.** This workspace has them (`amazing-js`,
+`amazing-html`), and nextest silently reports success without them, so a lane
+that switches and forgets the `--doc` line loses that coverage without any
+failure to warn it. Report both counts.
 4. Commit and push **on the Mac**, from your lane branch, then open the PR.
 
 ### Keeping a lane tree current

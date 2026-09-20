@@ -219,8 +219,13 @@ the engine cores.
 Amazing uses vetted TLS implementations rather than hand-rolled TLS. Rationale
 for HTTPS lives in `crates/amazing-net/src/lib.rs`. Phase 5.1 implements the
 exception in `amazing-net-tls`: rustls 0.23.43 with its ring provider and
-Mozilla roots, certificate and server-name verification always enabled, ALPN
-restricted to HTTP/1.1, and bounded owned bytes returned to `amazing-net`.
+Mozilla roots, certificate and server-name verification always enabled, and
+bounded owned bytes returned to `amazing-net`. ALPN was originally restricted to
+HTTP/1.1; Phase 10 widens it to negotiate `h2` with a verified HTTP/1.1
+fallback, so a peer that does not offer HTTP/2 still connects over the
+unchanged HTTP/1.1 path. This widens a protocol negotiation only -- it adds no
+dependency, and every other constraint in this decision, especially always-on
+certificate and server-name verification, is unchanged.
 Provider types never cross the adapter boundary. An unclean TLS EOF is accepted
 only when HTTP `Content-Length` or chunked framing independently proves that the
 body is complete.
