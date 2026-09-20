@@ -18,7 +18,11 @@ pub struct Response {
     /// Reason phrase from the status line (`"OK"`, `"Not Found"`, …); may be
     /// empty when the server omitted it.
     pub reason: String,
+    /// Original wire headers. Content-Length/Content-Encoding describe the
+    /// encoded representation, while `body` is already decoded; do not decode
+    /// it again or compare its length against the wire Content-Length.
     pub headers: Headers,
+    /// Body after transfer and content decoding, bounded by FetchOptions.
     pub body: Vec<u8>,
 }
 

@@ -46,8 +46,10 @@ pub struct FetchOptions {
     pub method: String,
     /// Fully-buffered request body, bounded by the embedding caller.
     pub body: Vec<u8>,
-    /// Maximum response-body bytes. Defaults to the transport-wide 32 MiB
-    /// cap; resource loaders may select a smaller bound before any read.
+    /// Maximum decoded response bytes (also applied at each coding layer).
+    /// Defaults to 32 MiB; resource loaders may select a smaller bound. Wire
+    /// reads allow an additional 64 KiB for framing/encoding overhead and
+    /// encoded bodies are independently capped at 32 MiB.
     pub max_response_bytes: usize,
 }
 

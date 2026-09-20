@@ -360,3 +360,161 @@ measurement is claimed. Evidence: `.agents/net/net3-{unit-final,workspace}.txt`,
 Rebased on origin/dev `2960422` (only AGENTS.md differs from the integrator's
 `26c64de` refresh), then re-synced owned source after that refresh. No sibling
 source, root manifest, lockfile, shell or driver changes. NET-3 ends here.
+
+## NET-4 — Bounded HTTP content coding
+
+### Design and behavior
+
+The std-only core now implements DEFLATE stored/fixed/dynamic blocks, canonical
+Huffman decoding, overlapping length/distance copies with a 32 KiB window,
+gzip framing (optional header fields/FHCRC, concatenated members, CRC32/ISIZE),
+and zlib framing (CMF/FLG/window/Adler32). Every gzip member resets history but
+shares the caller's total output budget. HTTP `deflate` means zlib-wrapped
+DEFLATE; malformed raw-deflate servers do not get a speculative fallback.
+Preset dictionaries reject. No new dependency or parser provider is used.
+
+Source specifications: [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951),
+[RFC 1952](https://www.rfc-editor.org/rfc/rfc1952),
+[RFC 1950](https://www.rfc-editor.org/rfc/rfc1950), and
+[HTTP/1.1 framing, RFC 9112 §6–7](https://www.rfc-editor.org/rfc/rfc9112).
+
+The transport advertises `Accept-Encoding: gzip, deflate` and suppresses
+embedding-supplied Accept-Encoding overrides so it never advertises `br`.
+It also accepts the gzip alias `x-gzip`. Response processing validates encoded
+wire framing, removes transfer codings in reverse order, then content codings
+in reverse order. Repeated coding headers preserve order. Original headers
+remain wire metadata; `Response.body` is decoded, so wire Content-Length must
+not be compared with its length, nor Content-Encoding applied a second time.
+The Response field documentation records this integration contract.
+
+Content-Length must exactly match encoded bytes. This intentionally changes
+`content_length_truncates_overlong_stream_data` into
+`content_length_rejects_overlong_stream_data`. Equal repeated/comma-separated
+lengths are accepted; conflicting/malformed lengths reject. Transfer-Encoding
+plus Content-Length rejects. Chunked may appear once and last; complete trailer
+termination is required even for an unclean TLS EOF. EOF-delimited transfer
+coding needs a clean TLS close. Extra bytes after chunk framing, unknown codings,
+wrong-header codings, checksum mismatches and truncated streams fail closed.
+204/304 metadata is not decompressed as a body. Informational responses/upgrades
+remain unsupported and now fail explicitly instead of being returned as final.
+
+### Allocation and work bounds
+
+`FetchOptions.max_response_bytes` is the decoded output ceiling, capped at
+32 MiB, and applies to every decoding layer. Tiny decoded limits still allow
+encoded header/trailer overhead: wire reads retain the limit + 64 KiB bound;
+encoded bodies are independently capped at 32 MiB. Each literal, stored block,
+and back-reference checks remaining output budget before allocation or copying.
+Growth is geometric but clamped to the caller's ceiling and uses fallible exact
+reservation; gzip ISIZE is never trusted for allocation. Huffman tables and
+code-length arrays have fixed sizes. Uncompressed framing checks the smaller
+caller limit before copying. At most eight total coding layers are accepted.
+
+The input and decoded buffers coexist because the transport is buffered; this
+is a per-buffer bound, not a claim that total peak memory equals the decoded
+limit. Stacked encodings whose intermediate output exceeds the caller limit
+reject even if the final representation would fit. DEFLATE checks declared
+zlib window limits; no back-reference crosses a gzip member boundary.
+
+### Brotli evaluation — proposal only, requires project approval
+
+The existing workspace lock pins `brotli-decompressor` **5.0.3** (checksum
+`3a32acac15fe1967bc3986b2a6347dffc965602354ea6f450ad07e8bfd253583`),
+`alloc-no-stdlib` **2.0.4**, and `alloc-stdlib` **0.2.4**. Text provider
+`Cargo.toml` already directly pins `=5.0.3` for its WOFF2 callback (so this is
+stronger than merely an incidental transitive version). That does **not**
+authorize use for network bodies. No dependency or manifest is changed here,
+and `br` is neither advertised nor accepted.
+
+A future vetted adapter would need:
+
+1. A project-level ADR approving an isolated `amazing-net-brotli` exception,
+   a manifest owned by the integrator, exact version/feature/lockfile pins, and
+   an owned byte/error boundary with no provider types in engine APIs. Retain
+   BSD-3-Clause/MIT licensing notices from the crate; review the bundled
+   dictionary/source notices. Pin the current known 5.0.3 initially only after
+   a fresh security review, not a floating upgrade to the repository's head.
+2. A bounded streaming output sink plus a separate scratch/history allocation
+   budget. The high-level text-provider BoundedWriter pattern controls output,
+   but does not by itself cap decoder ring buffers and tables. Inspected
+   5.0.3 `BrotliState::new` enables the large-window extension, while
+   `new_strict` disables it: use the strict state for standard HTTP Brotli.
+   Use the low-level stream API with bounded allocators (u8/u32/HuffmanCode),
+   establish how allocator exhaustion becomes a closed error, and test that
+   path before enabling the coding. Panic isolation does not catch OOM aborts.
+3. Pin safe feature settings: no `unsafe`, `seccomp`, or `ffi-api`; audit Cargo
+   feature unification with the text provider's default `std`. The default
+   std allocator helper is already locked, but an explicit budget allocator
+   still needs implementation and review. Require full stream consumption,
+   reject truncation/trailing garbage, and retain caller limits at each layer.
+4. Differential fixtures against a pinned reference encoder/decoder, malformed
+   and expansion-bomb cases, scratch exhaustion, chunked/content-coding order,
+   TLS framing checks, and a repeatable Windows gate. Measure throughput and
+   peak scratch/output memory before advertising `br`.
+
+Cost is a separate adapter/integration/review ticket, not just adding one
+function call. Decoder algorithms and the static dictionary can be reused;
+allocation-budget handling, dependency approval and validation are the main
+new work. No delivery-time or performance estimate is claimed without a spike.
+Version details above come from the local locked 5.0.3 manifest/source; the
+[upstream project](https://github.com/dropbox/rust-brotli-decompressor) documents
+its allocator design and default/safe feature choices. Existing text-provider
+approval remains limited to fonts.
+
+### Final measured evidence and artifact freshness
+
+The integrator found the old refresh preserved archive mtimes and could reuse
+stale first-party rlibs even with byte-identical source. All earlier NET-4
+Windows runs are superseded/suspect and are **not final evidence**. Source hashes
+alone do not prove artifact freshness.
+
+Fresh final gates use integrator-refreshed **d8437f3**, Cargo.lock **3FEAF813**.
+The lane rebased onto that shared commit and re-synced owned files using
+`tar -xmf` (current extraction timestamps). Before **each** workspace run,
+`cargo clean -p ...` cleaned all 18 first-party workspace packages;
+`CARGO_INCREMENTAL=0`, `CARGO_BUILD_JOBS=4`, and
+`CARGO_TARGET_DIR=C:/Users/server/target/net`. Both build logs explicitly show
+all 18 first-party packages compiling. Third-party dependencies remained cached.
+A subsequent integrator refresh superseded the initial valid 57f0e69 gates.
+The final runs below were repeated on current dev d8437f3 after rebasing and
+re-syncing. Earlier 57f0e69 evidence is archived separately.
+
+| Gate | Fresh run 1 | Fresh run 2 |
+|---|---:|---:|
+| amazing-net unit tests | 90 passed | 90 passed |
+| amazing-net URL API | 13 passed | 13 passed |
+| amazing-net transport URL integration | 8 passed | 8 passed |
+| amazing-fetch policy (unchanged) | 44 passed | 44 passed |
+| amazing-net-tls (unchanged) | 2 passed | 2 passed |
+| Lane total | 157 passed / 0 failed / 0 ignored | 157 passed / 0 failed / 0 ignored |
+| Full workspace | 1017 passed / 0 failed / 3 ignored | 1017 passed / 0 failed / 3 ignored |
+
+Workspace gates each have 52 target/doc-test summaries and exit 0; the standalone
+GPUI manifest is excluded. The lane adds 25 tests (17 decoder/boundary + 8 HTTP)
+to NET-3's reported 132-test set. The integrator independently reported a clean baseline of 992 passed / 0 failed /
+3 ignored on the same merged head; this lane did not rerun that unmodified baseline.
+
+Fixtures in `tests/coding/` are independently encoded by Python's zlib, with
+57 deterministic raw/zlib/gzip cases and a separate stacked-coding fixture.
+Generation is data preparation only; decoder and HTTP tests execute on win-001.
+Tests compare exact bytes, exercise stored/fixed/dynamic blocks, the maximum
+32768-byte distance and cross-block history, truncate representative streams
+at every byte, corrupt checksums/headers, and verify refusal before capacity
+changes. Loopback HTTP tests verify advertising, gzip/zlib/chunked decoding,
+checksum failure and caller limits. These are native tests, not Fetch WPT.
+
+The unchanged pinned URL constructor selection was also rerun twice:
+**864 pass / 0 fail / 0 timeout / 32 IDNA unsupported** out of 896 objects,
+revision `c48d58747e1f211527fb695fd60548a997fae617`.
+Both normalized stdout SHA-256 values:
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+
+All 229 tracked workspace/input files matched the Mac before and after both
+gates. Sorted source manifest SHA-256:
+`6ec570f7c222c151bbe28f18c2750a9e939fc5d0032b2829ac7f64a416918983`.
+Evidence in the integrator checkout `.agents/net/`: `net4-clean-packages.txt`,
+`net4-clean-{1,2}.txt`, `net4-workspace-{1,2}.txt`, `net4-lane-{1,2}.txt`,
+`net4-wpt-{1,2}.{stdout,stderr}`, `net4-local-source-hashes.txt`,
+`net4-source-before.txt`, `net4-source-after-{1,2}.txt`, and `net4-results.json`.
+No Test262 measurement is claimed. No shell/driver, other lane source,
+manifest or dependency changes. NET-4 ends at this boundary.
