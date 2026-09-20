@@ -1,0 +1,254 @@
+{
+  "ticket": "LAYOUT-2",
+  "source_base": "133292f",
+  "baseline_source_base": "133292f",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "baseline_executable": "C:\\Users\\server\\target\\layout\\layout2-baseline-133.exe",
+  "final_executable": "C:\\Users\\server\\target\\layout\\layout2-final-verified.exe",
+  "baseline_executable_sha256": "20830897f08778708cc8227d0eb48d39ee9384a1646fbaac477867482e142a90",
+  "final_executable_sha256": "b7246e76141d4735e6203dc6ba14d00c1fe611fb7478f562bdc81688901bbea1",
+  "lockfile_sha256": "aa0a0d8fd69000e161ad26ac31d2ea3a988152cce75fdcb4e1277ff8480b2d25",
+  "build_source_manifest_sha256": "af16666378c2abf136f31523e2fa768820e7e38f192bbe8c3489d8d68f768ea1",
+  "sources": {
+    "inline_replaced_tests.rs": "d9cbc7d7bfd96a80bedbb1c89e9e877e1e833d8d8da26fc6f1e9455a2eae1a72",
+    "font.rs": "dd124fa71bf291808b4d4de5c10cc69b1bf0941e243af34f356506b85f1ffb01",
+    "replaced.rs": "22a1c13f5a3dca488ad41392367e310e995221b11771398b0b8d22060058caf3",
+    "flex.rs": "86953c3d6d98fc7a64783bc3ccab184ad7797a0c87dff77884c33ccfed973a1c",
+    "position.rs": "d458fe72f5a4de528625792fdbb3992055e3cbfe360fc72740ee8b156aef61c0",
+    "grid_algorithm.rs": "6a9d0bf7cd348b1c512a31b80da5a6f2318b497764b9fcb91f557de37802c589",
+    "flex_algorithm.rs": "a8a9c40f342c5a3758015ffd980f91ad9453469789cd7a0471ea8a043e606130",
+    "block.rs": "63737c81acc26bea8d22ede6b06bdb09752b35ab3c93b8615c42db9801a47643",
+    "grid.rs": "b758361075a22287d10dfbc42071383cd3c49346f51ae6f9c321213eb80e0bda",
+    "values.rs": "8fb77609c489de4c8e2882a60684dd52a9422440e6c9ddac49e60944d979b208",
+    "lib.rs": "e48d63b8db94cfb0f35948851d0154c7a341b12db8f9adc2ceacbba278accfff",
+    "inline.rs": "9c7ad7b36eb93328cf41f90f6a48b7c1c4897d1262f6be9fc19d5b40a4b17d8f",
+    "floats.rs": "1c7cd53cea0ca54dba0f72e3b8aa6e9b4d85df0cfbeb915c9dda0844a37dec44",
+    "float_tests.rs": "7ab463058c107198bf0110a2783676552db0cb981e90779dbece88a64f07725e",
+    "box_tree.rs": "a6ddad46daff82d21837441a0a4cb7ef34a53d1bd6cd6eb7da8add9d28a902bc"
+  },
+  "suites": {
+    "geometry": {
+      "before": {
+        "pass": 31,
+        "mismatch": 30,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 31,
+        "mismatch": 30,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\geometry-1\\run-20260920T174043604Z-14136",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\geometry-2\\run-20260920T174448939Z-14136"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\geometry-1\\run-20260920T174046766Z-16988",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\geometry-2\\run-20260920T174451030Z-16988"
+      ],
+      "before_projection_sha256": "7a49c63751bce57179dabe1db6876b2bf073ebece205448e2167e0c4aa2e3d63",
+      "after_projection_sha256": "7a49c63751bce57179dabe1db6876b2bf073ebece205448e2167e0c4aa2e3d63",
+      "repeat_stable": true,
+      "classification_changes": []
+    },
+    "floats": {
+      "before": {
+        "pass": 6,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 6,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\floats-1\\run-20260920T174220173Z-14136",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\floats-2\\run-20260920T174615304Z-14136"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\floats-1\\run-20260920T174222074Z-16988",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\floats-2\\run-20260920T174620840Z-16988"
+      ],
+      "before_projection_sha256": "8baed893f52ba2926d905fe15e1c94e6666c20cd5a575bd0669f87a344410a88",
+      "after_projection_sha256": "8baed893f52ba2926d905fe15e1c94e6666c20cd5a575bd0669f87a344410a88",
+      "repeat_stable": true,
+      "classification_changes": []
+    },
+    "block-collapse": {
+      "before": {
+        "pass": 9,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 9,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\block-collapse-1\\run-20260920T174235884Z-14136",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\block-collapse-2\\run-20260920T174626511Z-14136"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\block-collapse-1\\run-20260920T174238290Z-16988",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\block-collapse-2\\run-20260920T174631722Z-16988"
+      ],
+      "before_projection_sha256": "86e7829838e559e7ad23e5556610044630d928f6e143b86476c28f95bbfa035e",
+      "after_projection_sha256": "86e7829838e559e7ad23e5556610044630d928f6e143b86476c28f95bbfa035e",
+      "repeat_stable": true,
+      "classification_changes": []
+    },
+    "position": {
+      "before": {
+        "pass": 9,
+        "mismatch": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 9,
+        "mismatch": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\position-1\\run-20260920T174251050Z-14136",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\position-2\\run-20260920T174638777Z-14136"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\position-1\\run-20260920T174251887Z-16988",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\position-2\\run-20260920T174644060Z-16988"
+      ],
+      "before_projection_sha256": "4fe678b080d9f157b5fb1692c37331048a556478bc9785b2ddc1a0082bfb407a",
+      "after_projection_sha256": "4fe678b080d9f157b5fb1692c37331048a556478bc9785b2ddc1a0082bfb407a",
+      "repeat_stable": true,
+      "classification_changes": []
+    },
+    "text-flow": {
+      "before": {
+        "pass": 14,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 14,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\text-flow-1\\run-20260920T174310335Z-14136",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\text-flow-2\\run-20260920T174654695Z-14136"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\text-flow-1\\run-20260920T174309062Z-16988",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\text-flow-2\\run-20260920T174659973Z-16988"
+      ],
+      "before_projection_sha256": "c5a0a7d3d4d164921b00d80168db276be7e8c286335c6c4c3a7d46113885bda3",
+      "after_projection_sha256": "c5a0a7d3d4d164921b00d80168db276be7e8c286335c6c4c3a7d46113885bda3",
+      "repeat_stable": true,
+      "classification_changes": []
+    },
+    "flex-grid": {
+      "before": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\flex-grid-1\\run-20260920T174339133Z-14136",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\flex-grid-2\\run-20260920T174716882Z-14136"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\flex-grid-1\\run-20260920T174338200Z-16988",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\flex-grid-2\\run-20260920T174722189Z-16988"
+      ],
+      "before_projection_sha256": "36ab53bedb24655ca108bc25d6d06105400f10ad48f99a36414a673ed46d04c5",
+      "after_projection_sha256": "36ab53bedb24655ca108bc25d6d06105400f10ad48f99a36414a673ed46d04c5",
+      "repeat_stable": true,
+      "classification_changes": []
+    },
+    "paint-compositing": {
+      "before": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "before_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\paint-compositing-1\\run-20260920T174414919Z-14136",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\baseline-verified\\paint-compositing-2\\run-20260920T174747904Z-14136"
+      ],
+      "after_runs": [
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\paint-compositing-1\\run-20260920T174417002Z-16988",
+        "C:\\Users\\server\\target\\layout\\layout2-evidence\\final-verified\\paint-compositing-2\\run-20260920T174753704Z-16988"
+      ],
+      "before_projection_sha256": "56a70b2097c2ce5e22a0ff05f70551f71b0d4d84022b8596edf1a66855bb2e2d",
+      "after_projection_sha256": "56a70b2097c2ce5e22a0ff05f70551f71b0d4d84022b8596edf1a66855bb2e2d",
+      "repeat_stable": true,
+      "classification_changes": []
+    }
+  },
+  "workspace": {
+    "command": "cargo test --workspace --locked",
+    "exit_code": 0,
+    "passed": 929,
+    "failed": 0,
+    "ignored": 3,
+    "summary_count": 51,
+    "log_sha256": "619737363aa1455df2f237480684df088553c570a611ca9bbdd44cc6ee8baa5e"
+  },
+  "layout_unit_tests": {
+    "baseline": {
+      "passed": 150,
+      "failed": 0,
+      "ignored": 0,
+      "log_sha256": "3aea23dc64d292c9799d790f04a45e71b393270816b9aae5e17c55d7a9e03b0f"
+    },
+    "final": {
+      "passed": 164,
+      "failed": 0,
+      "ignored": 0,
+      "log_sha256": "e39e8e452c3df33f74a147c73d02b2567e44ef41a707031daf70af232c5e8daf"
+    }
+  }
+}
