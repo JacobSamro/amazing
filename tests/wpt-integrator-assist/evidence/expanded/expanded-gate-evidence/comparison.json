@@ -1,0 +1,87 @@
+[
+  {
+    "manifest": "block-collapse-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "cascade-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "computed-values-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "controls-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": false
+  },
+  {
+    "manifest": "flex-grid-broad-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "flex-grid-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "geometry-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "image-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": false
+  },
+  {
+    "manifest": "paint-compositing-broad-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "paint-compositing-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "position-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "svg-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "text-flow-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "text-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "text-shaping-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  },
+  {
+    "manifest": "vertical-ruby-manifest",
+    "candidate_repeats_identical": true,
+    "baseline_identical": true
+  }
+]

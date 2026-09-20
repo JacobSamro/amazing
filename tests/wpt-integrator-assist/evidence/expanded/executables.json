@@ -1,0 +1,14 @@
+﻿[
+    {
+        "name":  "expanded.exe",
+        "sha256":  "f4e75a031245731d0fed7dd45a90397c197d24fd3184f254615d199b30c8523e",
+        "bytes":  38470656,
+        "modified_utc":  "2026-09-20T19:35:48.8683959Z"
+    },
+    {
+        "name":  "routing-before.exe",
+        "sha256":  "803fedf1058a742b1957bb33528fc3879a0e2e2477c421f001fc9e18b33ba4cc",
+        "bytes":  38460416,
+        "modified_utc":  "2026-09-20T19:37:54.4994950Z"
+    }
+]

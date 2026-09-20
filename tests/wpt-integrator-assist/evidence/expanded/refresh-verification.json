@@ -1,0 +1,93 @@
+{
+  "event": "Fleet refresh during frozen sweeps",
+  "manifests": [
+    {
+      "path": "tests/wpt-render/block-collapse-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "69a8e1e1ed84b30d8cb4d1918a1a81bba073459d11b3766095395ddf4fa21545"
+    },
+    {
+      "path": "tests/wpt-render/cascade-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "f973b1769b94a0654089ea1b5ce04ab8077d5d6b3785999d95bad2d189a0a361"
+    },
+    {
+      "path": "tests/wpt-render/computed-values-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "4361217372bccf165027f021d0cc23fc0f844d2e70ae1a2fa98d1fe3316cf445"
+    },
+    {
+      "path": "tests/wpt-replaced-content/controls-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "bd4ec7ae069bd9c452102dee0872121c78e03b312effc55a5047cf565112543e"
+    },
+    {
+      "path": "tests/wpt-render/flex-grid-broad-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "10fe1ca7bdc85fdb101956fc4fe76b1519410763cd7d6e6472ce54877b4717f9"
+    },
+    {
+      "path": "tests/wpt-render/flex-grid-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "71aaaea232127d88a727d30ffdaf6d278c2b5159d98079beb6934038e9b5dd7f"
+    },
+    {
+      "path": "tests/wpt-render/geometry-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "f27f11f5e45ceef7fbb944fae6b3abb500ed64afd0d0f6e5eb62459e05de5f85"
+    },
+    {
+      "path": "tests/wpt-replaced-content/image-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "afef78579044c245a1b6cad9b90d7ead1e3831028c20a74be2e5f6ab41cfb32a"
+    },
+    {
+      "path": "tests/wpt-replaced-content/manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "6eb71106677aacdc4d596f202e9fd8d5e77d11596a0f5520f6cc4b27b1a02040"
+    },
+    {
+      "path": "tests/wpt-render/paint-compositing-broad-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "8ac0b7eb98a9bd3687a98c7fe8bbd0a3031e78682cbb7238ecc5440af723e0a0"
+    },
+    {
+      "path": "tests/wpt-render/paint-compositing-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "2543d59a94e477d61246e4c38b85264a75184d2119a9bfd866ee2f6f0e1060a2"
+    },
+    {
+      "path": "tests/wpt-render/position-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "595ee27f99b9a8308657f30b0c1277ffb116c304ed2444b56c77ec6883f900c2"
+    },
+    {
+      "path": "tests/wpt-replaced-content/svg-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "95adb9b1bb84f1b06ee508a8c3332ffcf74232ed78f1d78aabbeabe784fccba5"
+    },
+    {
+      "path": "tests/wpt-render/text-flow-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "8bcabc716faf357d52eaa386f752ac4d26590e9bdd99cd498e46fef671c6e2ae"
+    },
+    {
+      "path": "tests/wpt-render/text-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "58ab979b53eabc95bb61df64e6da7267d2f5aff4bc8c51b419ce47ee2591ba5f"
+    },
+    {
+      "path": "tests/wpt-render/text-shaping-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "71f8b5cb137fb0201d16bcedad8db9dafaa3bb40692be98bd0b29ad9360ddb2a"
+    },
+    {
+      "path": "tests/wpt-render/vertical-ruby-manifest.json",
+      "json_equal": true,
+      "canonical_sha256": "6ea8157723538596ccf7e4d451e16768bbca9720e685baf21368c7b43bad3ed9"
+    }
+  ],
+  "frozen_binaries_hashes_unchanged": true,
+  "build_source_graph": "784dc59aec23e83ac04114a2830f19731e74d902",
+  "refreshed_source_graph_not_built": true
+}

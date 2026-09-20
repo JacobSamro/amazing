@@ -1,0 +1,37 @@
+﻿[
+    {
+        "id":  "root",
+        "classification":  "pass",
+        "actual":  "94203a3e5262569e7186658b556718a52449cb404a7148daf662718460b69f78",
+        "reference":  "94203a3e5262569e7186658b556718a52449cb404a7148daf662718460b69f78",
+        "diff":  "211d551a25cc9d92089ef7966b55b05cf074bdb27c96568fabe11a48af59711e"
+    },
+    {
+        "id":  "relative",
+        "classification":  "pass",
+        "actual":  "94203a3e5262569e7186658b556718a52449cb404a7148daf662718460b69f78",
+        "reference":  "94203a3e5262569e7186658b556718a52449cb404a7148daf662718460b69f78",
+        "diff":  "211d551a25cc9d92089ef7966b55b05cf074bdb27c96568fabe11a48af59711e"
+    },
+    {
+        "id":  "encoded",
+        "classification":  "pass",
+        "actual":  "94203a3e5262569e7186658b556718a52449cb404a7148daf662718460b69f78",
+        "reference":  "94203a3e5262569e7186658b556718a52449cb404a7148daf662718460b69f78",
+        "diff":  "211d551a25cc9d92089ef7966b55b05cf074bdb27c96568fabe11a48af59711e"
+    },
+    {
+        "id":  "escape",
+        "classification":  "unsupported",
+        "actual":  null,
+        "reference":  null,
+        "diff":  null
+    },
+    {
+        "id":  "remote",
+        "classification":  "unsupported",
+        "actual":  null,
+        "reference":  null,
+        "diff":  null
+    }
+]

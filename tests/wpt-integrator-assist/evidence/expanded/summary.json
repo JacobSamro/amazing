@@ -1,0 +1,11 @@
+﻿{
+    "suite":  "scaffolding-only",
+    "wpt_credit":  0,
+    "cases":  5,
+    "pass":  3,
+    "unsupported":  2,
+    "repeats":  2,
+    "sha256":  "393091EAE8F85F2B8B4E3137979CFEE06BD9C35754A3E5C18F715D057A60E555",
+    "rejected_markers":  2,
+    "git_calls":  0
+}

@@ -1,0 +1,92 @@
+﻿[
+    {
+        "stage":  "routing-before",
+        "selection":  "controls-manifest",
+        "cases":  [
+                      {
+                          "id":  "checkbox__html__rendering__widgets__input-checkbox-zero-size.html",
+                          "classification":  "unsupported",
+                          "expected":  "",
+                          "detail":  "upstream reference is absent from the pinned checkout"
+                      }
+                  ]
+    },
+    {
+        "stage":  "routing-before",
+        "selection":  "manifest",
+        "cases":  [
+                      {
+                          "id":  "svg__svg__linking__reftests__use-descendant-combinator-003.html",
+                          "classification":  "unsupported",
+                          "expected":  "",
+                          "detail":  "upstream reference is absent from the pinned checkout"
+                      }
+                  ]
+    },
+    {
+        "stage":  "expanded-1",
+        "selection":  "controls-manifest",
+        "cases":  [
+                      {
+                          "id":  "checkbox__html__rendering__widgets__input-checkbox-zero-size.html",
+                          "classification":  "pass",
+                          "expected":  "",
+                          "relation":  "match",
+                          "reference_href":  "/css/reference/blank.html",
+                          "differing_pixels":  0,
+                          "max_difference":  0,
+                          "allowed_max_difference":  0,
+                          "allowed_differing_pixels":  0,
+                          "actual_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                          "reference_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                          "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                          "detail":  "maxDifference=0/0; totalPixels=0/0"
+                      }
+                  ]
+    },
+    {
+        "stage":  "expanded-1",
+        "selection":  "manifest",
+        "cases":  [
+                      {
+                          "id":  "svg__svg__linking__reftests__use-descendant-combinator-003.html",
+                          "classification":  "crash",
+                          "expected":  "",
+                          "detail":  "renderer exit code 1: amazing render-wpt: page script failed: TypeError: cannot access a property on nullish value"
+                      }
+                  ]
+    },
+    {
+        "stage":  "expanded-2",
+        "selection":  "controls-manifest",
+        "cases":  [
+                      {
+                          "id":  "checkbox__html__rendering__widgets__input-checkbox-zero-size.html",
+                          "classification":  "pass",
+                          "expected":  "",
+                          "relation":  "match",
+                          "reference_href":  "/css/reference/blank.html",
+                          "differing_pixels":  0,
+                          "max_difference":  0,
+                          "allowed_max_difference":  0,
+                          "allowed_differing_pixels":  0,
+                          "actual_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                          "reference_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                          "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                          "detail":  "maxDifference=0/0; totalPixels=0/0"
+                      }
+                  ]
+    },
+    {
+        "stage":  "expanded-2",
+        "selection":  "manifest",
+        "cases":  [
+                      {
+                          "id":  "svg__svg__linking__reftests__use-descendant-combinator-003.html",
+                          "classification":  "crash",
+                          "expected":  "",
+                          "detail":  "renderer exit code 1: amazing render-wpt: page script failed: TypeError: cannot access a property on nullish value"
+                      }
+                  ]
+    }
+]

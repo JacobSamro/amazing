@@ -1,0 +1,218 @@
+[
+    {
+        "id":  "css-cascade__scope-pseudo-element.html",
+        "classification":  "pass",
+        "actual_sha256":  "295648cea4b182182a942ce2b7ff1cb8dea2077e862816020b392ab19841ac22",
+        "reference_sha256":  "295648cea4b182182a942ce2b7ff1cb8dea2077e862816020b392ab19841ac22",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-cascade__all-prop-revert-visited.html",
+        "classification":  "pass",
+        "actual_sha256":  "24c831503af2d60489551e61f3075bba419531d7c090f8217c12a523cc78fc62",
+        "reference_sha256":  "24c831503af2d60489551e61f3075bba419531d7c090f8217c12a523cc78fc62",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-cascade__all-prop-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "81f0a8a80b1cd4419b13c63c4c8a59ff3a5df7c96bcdc254b685198498dfe80f",
+        "reference_sha256":  "81f0a8a80b1cd4419b13c63c4c8a59ff3a5df7c96bcdc254b685198498dfe80f",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-cascade__scope-featureless.html",
+        "classification":  "pass",
+        "actual_sha256":  "2c3f3964db81fedc64ba13e1fc03c92c3c044062b01f84c89d7588eb900bdabc",
+        "reference_sha256":  "2c3f3964db81fedc64ba13e1fc03c92c3c044062b01f84c89d7588eb900bdabc",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-cascade__revert-layer-002.html",
+        "classification":  "unsupported",
+        "actual_sha256":  null,
+        "reference_sha256":  null,
+        "diff_sha256":  null,
+        "differing_pixels":  null,
+        "max_difference":  null
+    },
+    {
+        "id":  "css-cascade__all-prop-revert-color.html",
+        "classification":  "pass",
+        "actual_sha256":  "805614a7a40ae567c4fa8ba8a38eb503efcee23452f4c0925fce3ae346c512fc",
+        "reference_sha256":  "805614a7a40ae567c4fa8ba8a38eb503efcee23452f4c0925fce3ae346c512fc",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-cascade__revert-layer-011.html",
+        "classification":  "unsupported",
+        "actual_sha256":  null,
+        "reference_sha256":  null,
+        "diff_sha256":  null,
+        "differing_pixels":  null,
+        "max_difference":  null
+    },
+    {
+        "id":  "css-cascade__all-prop-initial-color.html",
+        "classification":  "pass",
+        "actual_sha256":  "805614a7a40ae567c4fa8ba8a38eb503efcee23452f4c0925fce3ae346c512fc",
+        "reference_sha256":  "805614a7a40ae567c4fa8ba8a38eb503efcee23452f4c0925fce3ae346c512fc",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-cascade__all-prop-002.html",
+        "classification":  "unsupported",
+        "actual_sha256":  null,
+        "reference_sha256":  null,
+        "diff_sha256":  null,
+        "differing_pixels":  null,
+        "max_difference":  null
+    },
+    {
+        "id":  "css-cascade__revert-layer-005.html",
+        "classification":  "unsupported",
+        "actual_sha256":  null,
+        "reference_sha256":  null,
+        "diff_sha256":  null,
+        "differing_pixels":  null,
+        "max_difference":  null
+    },
+    {
+        "id":  "css-cascade__initial-background-color.html",
+        "classification":  "pass",
+        "actual_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "reference_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-cascade__initial-color-background-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "2341ee68a983e4a05c6bf0ff987ac75cea74e33e509b44f4e51829636ff7fa4e",
+        "reference_sha256":  "2341ee68a983e4a05c6bf0ff987ac75cea74e33e509b44f4e51829636ff7fa4e",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-supports-11.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-reference-01.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-reference-09.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-declaration-39.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-supports-15.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-supports-37.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-declaration-38.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-declaration-11.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-supports-03.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-supports-01.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-supports-22.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-variables__variable-declaration-12.html",
+        "classification":  "pass",
+        "actual_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "reference_sha256":  "f9de4fd8f2270477b9b16af2d2b0ac27ed6c72b1e2876f6017c52aa86d7c5343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    }
+]

@@ -1,0 +1,48 @@
+{
+  "base": "784dc59aec23e83ac04114a2830f19731e74d902",
+  "pre_routing_head": "225c94e6f96c1bbe6f784d7fa1f7fefbe4ba39d6",
+  "source_manifest_sha256": "32cf9e00fc5332cb0d341581d71d909a27196e398b2f538f9e59cc5a07df170d",
+  "source_files_verified_on_windows": 258,
+  "runs": [
+    {
+      "log": "expanded-workspace-final.log",
+      "pass_count": 1136,
+      "fail_count": 0,
+      "ignored": 3,
+      "summaries": 58,
+      "scope": "workspace",
+      "exit_code": 0,
+      "native_pass": 1134,
+      "native_ignored": 3,
+      "doctest_pass": 2,
+      "doctest_failed": 0,
+      "runner": "cargo test --workspace --locked (includes doctests)"
+    },
+    {
+      "log": "expanded-workspace-repeat.log",
+      "pass_count": 1136,
+      "fail_count": 0,
+      "ignored": 3,
+      "summaries": 58,
+      "scope": "workspace",
+      "exit_code": 0,
+      "native_pass": 1134,
+      "native_ignored": 3,
+      "doctest_pass": 2,
+      "doctest_failed": 0,
+      "runner": "cargo test --workspace --locked (includes doctests)"
+    },
+    {
+      "log": "shell-test.log",
+      "pass_count": 16,
+      "fail_count": 0,
+      "ignored": 0,
+      "summaries": 1,
+      "scope": "engine_viewport",
+      "exit_code": 0
+    }
+  ],
+  "candidate_source_commit": "5648fb9fa19773ce4377540cf14b7aec714bb3bc",
+  "execution_host": "win-001",
+  "local_builds_or_tests": false
+}

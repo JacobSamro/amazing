@@ -97,9 +97,73 @@ retain original test IDs.
 `verify-root-mapping.ps1` uses an explicitly synthetic revision and earns zero
 WPT credit. It exercises root-relative, ordinary-relative, and encoded paths;
 rejects escaping/remote references; checks missing/wrong markers; and installs a
-throwing Git sentinel. Final expanded measurements are recorded below when done.
+throwing Git sentinel. Both runs pass 3, classify 2 unsupported, reject two bad
+markers and record zero Git invocations; these fixtures earn zero WPT credit.
 CSS owns the HTML presentational-hint follow-up; adjusted intrinsic sizes must
 not be restored.
+
+HTML-1 remains incomplete: XML dispatch, mapping `XmlErrorKind::Unsupported` to
+the render result, and removing blanket XHTML test/reference exclusions are
+pending together. Existing generic unsupported reporting and XHTML exclusions
+are retained. The parser must land before the separately queued dispatch work;
+that work must not fall back to HTML on XML errors. IA-1 claims no XML
+conformance.
+
+### Completed expanded IA-1 measurements
+
+Validated source commit `5648fb9fa19773ce4377540cf14b7aec714bb3bc`, integration
+base `784dc59aec23e83ac04114a2830f19731e74d902`. Windows workspace twice: **1134
+native passed / 0 failed / 3 ignored**, plus **2 doctests passed / 0 failed** per
+run (`cargo test --workspace --locked`). Shell viewport checks: **16 passed**.
+The new fleet standard for future runs is nextest plus explicit doctests.
+
+At WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, all **17 selections / 678
+overlapping entries** completed for one same-base baseline and two candidate
+runs. Candidate normalized result/pixel hashes match in every selection.
+Totals: baseline **362 pass / 280 mismatch / 0 timeout / 19 unsupported / 17
+crash**; each candidate **363 / 280 / 0 / 17 / 18**. This is not a unique-test
+pass rate. Every result except these two cases is byte-identical after projection:
+
+- `input-checkbox-zero-size.html`: unsupported (wrong reference location) →
+  pass, exact pixel match. Controls selection 21 pass/2 mismatch/1 unsupported →
+  22 pass/2 mismatch/0 unsupported.
+- `use-descendant-combinator-003.html`: unsupported → crash. Correct reference
+  mapping exposes an existing page-script `TypeError: cannot access a property
+  on nullish value`; it is not counted as a pass. Replaced-content manifest
+  remains 26 pass/4 mismatch, with 1 unsupported/17 crash → 0 unsupported/18 crash.
+
+| Selection | Pass | Mismatch | Timeout | Unsupported | Crash |
+|---|---:|---:|---:|---:|---:|
+| block-collapse-manifest | 9 | 0 | 0 | 0 | 0 |
+| cascade-manifest | 35 | 24 | 0 | 13 | 0 |
+| computed-values-manifest | 20 | 0 | 0 | 4 | 0 |
+| controls-manifest | 22 | 2 | 0 | 0 | 0 |
+| flex-grid-broad-manifest | 61 | 139 | 0 | 0 | 0 |
+| flex-grid-manifest | 24 | 0 | 0 | 0 | 0 |
+| geometry-manifest | 31 | 30 | 0 | 0 | 0 |
+| image-manifest | 12 | 0 | 0 | 0 | 0 |
+| manifest | 26 | 4 | 0 | 0 | 18 |
+| paint-compositing-broad-manifest | 24 | 36 | 0 | 0 | 0 |
+| paint-compositing-manifest | 24 | 0 | 0 | 0 | 0 |
+| position-manifest | 9 | 3 | 0 | 0 | 0 |
+| svg-manifest | 12 | 0 | 0 | 0 | 0 |
+| text-flow-manifest | 14 | 2 | 0 | 0 | 0 |
+| text-manifest | 17 | 31 | 0 | 0 | 0 |
+| text-shaping-manifest | 12 | 0 | 0 | 0 | 0 |
+| vertical-ruby-manifest | 11 | 9 | 0 | 0 | 0 |
+
+Evidence: `tests/wpt-integrator-assist/evidence/expanded/`. All 258 recorded
+source/input files matched Windows before a subsequent fleet refresh. During
+that refresh, all 17 manifest JSON values and both frozen executable hashes
+remained unchanged, preserving the sweeps. These are measurements of the stated
+build base, not a gate of subsequently advanced dev. No shell screenshot claim.
+The earlier original-scope evidence remains separate; it used 16 selections,
+and its text16/32 differs from the newer base's text17/31 even before root fixes.
+
+The natural-size viewport rewrite now has the exclusive transfer `5005c1c` and
+REVIEW classification `b5d1b99`. This grants no XML shell dispatch. IA-XML is
+explicitly activated as the next scoped work; IA-1 is checkpointed before that
+implementation begins.
 
 ## IA-2 proposal — shell/driver URL migration
 
