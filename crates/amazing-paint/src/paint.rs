@@ -103,6 +103,7 @@ struct RasterState {
     groups: Vec<RasterGroup>,
     rounded_clip_stack: Vec<bool>,
     layer_pixels: usize,
+    background_samples: usize,
     failed: bool,
 }
 
@@ -117,6 +118,7 @@ impl RasterState {
             groups: Vec::new(),
             rounded_clip_stack: Vec::new(),
             layer_pixels: 0,
+            background_samples: 64 * 1024 * 1024,
             failed: false,
         }
     }
@@ -276,6 +278,8 @@ fn source_over(source: [u8; 4], destination: [u8; 4], opacity: f32) -> [u8; 4] {
 /// Seam through which the painter obtains decoded pixels for replaced nodes.
 pub trait ImageProvider {
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image>;
+    /// Decoded background resource resolved by the embedding loader. No I/O during paint.
+    fn background_image(&self, _node: amazing_dom::NodeIdx, _url: &str) -> Option<&amazing_media::Image> { None }
     /// Inline fragments retain node identity; callers supply its computed style.
     fn presentation(&self, _node: amazing_dom::NodeIdx) -> ImagePresentation {
         ImagePresentation::default()
@@ -338,10 +342,10 @@ pub fn paint_document_with_resources(
         }
         match command {
             PaintCommand::BeginGroup(effect) => state.begin_group(effect),
-            PaintCommand::PaintDecorations(box_) => {
+            PaintCommand::PaintDecorations(box_, background) => {
                 let color = resolve_text_color(&box_.style);
                 let clip = state.clip();
-                paint_decorations(&mut state.surface, box_, color, images, clip);
+                if !paint_decorations(&mut state.surface, box_, color, images, &background, clip, &mut state.background_samples) { state.failed = true; }
             }
             PaintCommand::PaintContent(box_) => {
                 let color = resolve_text_color(&box_.style);
@@ -373,10 +377,10 @@ pub fn paint_document_with_text_resources(
         }
         match command {
             PaintCommand::BeginGroup(effect) => state.begin_group(effect),
-            PaintCommand::PaintDecorations(box_) => {
+            PaintCommand::PaintDecorations(box_, background) => {
                 let color = resolve_text_color(&box_.style);
                 let clip = state.clip();
-                paint_decorations(&mut state.surface, box_, color, images, clip);
+                if !paint_decorations(&mut state.surface, box_, color, images, &background, clip, &mut state.background_samples) { state.failed = true; }
             }
             PaintCommand::PaintContent(box_) => {
                 let clip = state.clip();
@@ -395,10 +399,13 @@ fn paint_decorations(
     box_: &LayoutBox,
     text_color: [u8; 4],
     images: &dyn ImageProvider,
+    background: &crate::background::BackgroundPlan,
     clip: ClipRect,
-) {
+    budget: &mut usize,
+) -> bool {
     paint_box_shadow(surface, box_, text_color, clip);
-    paint_background(surface, box_, text_color, clip);
+    paint_background(surface, box_, text_color, background.color_clip, clip);
+    if !background_raster::paint(surface, box_, background, images, clip, budget) { return false; }
     paint_inset_box_shadow(surface, box_, text_color, clip);
     paint_borders(surface, box_, text_color, clip);
     if box_.replaced_size.is_some() {
@@ -406,6 +413,7 @@ fn paint_decorations(
             paint_image(surface, &box_.content_box, image, ImagePresentation::from_style(&box_.style), clip);
         }
     }
+    true
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -1112,58 +1120,12 @@ fn resolve_color(style: &ComputedStyle, prop: &str, text_color: [u8; 4]) -> Opti
 
 /// Fills the padding box (content box grown by the resolved paddings).
 /// A transparent or unparseable background paints nothing.
-fn paint_background(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip: ClipRect) {
+fn paint_background(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], area: crate::background::BoxArea, clip: ClipRect) {
     let bg = match resolve_color(&b.style, "background-color", text_color) {
         Some(c) => c,
         None => return,
     };
-    let cb = b.content_box;
-    let padding = amazing_layout::Rect {
-        x: cb.x - b.padding.left,
-        y: cb.y - b.padding.top,
-        w: cb.w + b.padding.left + b.padding.right,
-        h: cb.h + b.padding.top + b.padding.bottom,
-    };
-    let outer_radii = resolve_corner_radii(&b.style, &b.border_box);
-    let (rect, radii) = match b.style.get("background-clip").map(str::trim) {
-        Some(value) if value.eq_ignore_ascii_case("content-box") => (
-            cb,
-            inset_radii(
-                outer_radii,
-                b.border.top + b.padding.top,
-                b.border.right + b.padding.right,
-                b.border.bottom + b.padding.bottom,
-                b.border.left + b.padding.left,
-                cb.w,
-                cb.h,
-            ),
-        ),
-        Some(value) if value.eq_ignore_ascii_case("padding-box") => (
-            padding,
-            inset_radii(
-                outer_radii,
-                b.border.top,
-                b.border.right,
-                b.border.bottom,
-                b.border.left,
-                padding.w,
-                padding.h,
-            ),
-        ),
-        _ => (b.border_box, outer_radii),
-    };
-    fill_rounded_rect_clipped(
-        surface,
-        RoundedRect {
-            x: rect.x,
-            y: rect.y,
-            width: rect.w,
-            height: rect.h,
-            radii,
-        },
-        bg,
-        clip,
-    );
+    fill_rounded_rect_clipped(surface, background_raster::area(b, area), bg, clip);
 }
 
 fn inset_radii(
@@ -1456,10 +1418,10 @@ fn paint_image(
     if image.width == 0 || image.height == 0 || rect.w <= 0.0 || rect.h <= 0.0 {
         return;
     }
-    let x0 = rect.x.round() as i64;
-    let y0 = rect.y.round() as i64;
-    let x1 = (rect.x + rect.w).round() as i64;
-    let y1 = (rect.y + rect.h).round() as i64;
+    let x0 = (rect.x as f64 - 0.5).ceil() as i64;
+    let y0 = (rect.y as f64 - 0.5).ceil() as i64;
+    let x1 = (rect.x as f64 + rect.w as f64 - 0.5).ceil() as i64;
+    let y1 = (rect.y as f64 + rect.h as f64 - 0.5).ceil() as i64;
     if x1 <= x0 || y1 <= y0 {
         return;
     }
@@ -1890,3 +1852,10 @@ mod tests {
 #[cfg(test)]
 #[path = "image_tests.rs"]
 mod image_tests;
+
+#[path = "background_raster.rs"]
+mod background_raster;
+
+#[cfg(test)]
+#[path = "background_tests.rs"]
+mod background_tests;

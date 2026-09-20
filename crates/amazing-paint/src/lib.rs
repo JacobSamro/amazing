@@ -44,6 +44,7 @@
 //!   while the shaped path retains per-inline color/background
 //! - the canvas starts opaque white; transparent backgrounds skip filling
 
+pub mod background;
 pub mod color;
 pub mod image;
 mod display_list;

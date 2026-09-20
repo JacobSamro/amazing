@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "paired-SVG-counterparts-of-PNG-selection-static-adapter"
+  },
+  "sparse_paths": [
+    "css/css-images"
+  ],
+  "tests": [
+    {
+      "id": "object-fit-fill-svg-001i",
+      "test": "css/css-images/object-fit-fill-svg-001i.html"
+    },
+    {
+      "id": "object-fit-fill-svg-002i",
+      "test": "css/css-images/object-fit-fill-svg-002i.html"
+    },
+    {
+      "id": "object-fit-contain-svg-001i",
+      "test": "css/css-images/object-fit-contain-svg-001i.html"
+    },
+    {
+      "id": "object-fit-contain-svg-002i",
+      "test": "css/css-images/object-fit-contain-svg-002i.html"
+    },
+    {
+      "id": "object-fit-cover-svg-001i",
+      "test": "css/css-images/object-fit-cover-svg-001i.html"
+    },
+    {
+      "id": "object-fit-cover-svg-002i",
+      "test": "css/css-images/object-fit-cover-svg-002i.html"
+    },
+    {
+      "id": "object-fit-none-svg-001i",
+      "test": "css/css-images/object-fit-none-svg-001i.html"
+    },
+    {
+      "id": "object-fit-none-svg-002i",
+      "test": "css/css-images/object-fit-none-svg-002i.html"
+    },
+    {
+      "id": "object-fit-scale-down-svg-001i",
+      "test": "css/css-images/object-fit-scale-down-svg-001i.html"
+    },
+    {
+      "id": "object-fit-scale-down-svg-002i",
+      "test": "css/css-images/object-fit-scale-down-svg-002i.html"
+    },
+    {
+      "id": "object-position-svg-001i",
+      "test": "css/css-images/object-position-svg-001i.html"
+    },
+    {
+      "id": "object-position-svg-002i",
+      "test": "css/css-images/object-position-svg-002i.html"
+    }
+  ]
+}

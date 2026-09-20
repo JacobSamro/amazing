@@ -28,6 +28,7 @@ struct PageImage {
 #[derive(Default)]
 struct PageResources {
     images: Vec<PageImage>,
+    backgrounds: Vec<(String, amazing_media::Image)>,
 }
 
 impl amazing_layout::ReplacedElementProvider for PageResources {
@@ -43,6 +44,9 @@ impl amazing_layout::ReplacedElementProvider for PageResources {
 }
 
 impl amazing_paint::ImageProvider for PageResources {
+    fn background_image(&self, _node: amazing_dom::NodeIdx, url: &str) -> Option<&amazing_media::Image> {
+        self.backgrounds.iter().find(|(key,_)| key == url).map(|(_,image)| image)
+    }
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
         self.images
             .iter()
@@ -255,6 +259,7 @@ impl PageRuntime {
         );
         let resources = load_page_resources(
             dom,
+            &css,
             &self.document_url,
             &self.options,
             Some(&self.session),
@@ -400,7 +405,7 @@ impl EngineViewport {
             });
         }
         let css = load_document_styles(&dom, &final_address, &options, Some(&session));
-        let resources = load_page_resources(&dom, &final_address, &options, Some(&session));
+        let resources = load_page_resources(&dom, &css, &final_address, &options, Some(&session));
         let title = document_title(&dom);
         let favicon = load_favicon(&dom, &final_address, &options, Some(&session));
         Ok(LoadedPage {
@@ -1135,6 +1140,7 @@ fn resolve_resource_address(document_url: &str, reference: &str) -> Option<Strin
 
 fn load_page_resources(
     dom: &amazing_dom::Dom,
+    css: &str,
     document_url: &str,
     options: &FetchOptions,
     session: Option<&Rc<RefCell<BrowserSession>>>,
@@ -1202,6 +1208,27 @@ fn load_page_resources(
         session,
         &mut resources,
     );
+    let styles = amazing_css::compute(dom, &[amazing_css::parse_stylesheet(css)]);
+    let mut retained: usize = resources.images.iter().map(|image| image.image.pixels.len()).sum();
+    let mut pending = vec![amazing_dom::NodeIdx(0)];
+    let mut attempted_urls = std::collections::HashSet::new();
+    while let Some(node) = pending.pop() {
+        pending.extend(dom.children(node));
+        if attempted_urls.len() >= MAX_PAGE_IMAGES { break; }
+        let Some(style) = styles.get(node) else { continue; };
+        for layer in amazing_paint::background::BackgroundPlan::from_style(style).layers {
+            let Some(url) = layer.url else { continue; };
+            if attempted_urls.len() >= MAX_PAGE_IMAGES { break; }
+            if !attempted_urls.insert(url.clone()) { continue; }
+            let Some(address) = resolve_resource_address(document_url, &url) else { continue; };
+            let Ok(response) = fetch_resource(session, &address, options) else { continue; };
+            if response.status != 200 { continue; }
+            let Some(image) = decode_web_image(&response.body) else { continue; };
+            if retained.saturating_add(image.pixels.len()) > 128 * 1024 * 1024 { continue; }
+            retained += image.pixels.len();
+            resources.backgrounds.push((url,image));
+        }
+    }
     resources
 }
 
@@ -1450,6 +1477,7 @@ mod tests {
         let dom = amazing_html::parse("<img src=../assets/pixel.ppm width=8>");
         let resources = load_page_resources(
             &dom,
+            "",
             &format!("http://127.0.0.1:{port}/pages/index.html"),
             &FetchOptions::default(),
             None,

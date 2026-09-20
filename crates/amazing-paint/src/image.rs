@@ -147,7 +147,7 @@ fn keyword(s: &str, horizontal: bool) -> Option<ObjectPosition> {
 }
 // One/two-component positions and three/four-component edge-offset syntax.
 // calc() and logical-position keywords are deliberately not parsed here.
-fn position(s: &str) -> Option<(ObjectPosition, ObjectPosition)> {
+pub(crate) fn position(s: &str) -> Option<(ObjectPosition, ObjectPosition)> {
     let normalized = s.to_ascii_lowercase();
     let tokens: Vec<_> = normalized.split_whitespace().collect();
     let center = ObjectPosition::default();
@@ -178,7 +178,7 @@ fn position(s: &str) -> Option<(ObjectPosition, ObjectPosition)> {
                 let horizontal = match edge {
                     "left" | "right" => true,
                     "top" | "bottom" => false,
-                    "center" => x.is_none(),
+                    "center" => !tokens.iter().any(|v| matches!(*v, "left" | "right")),
                     _ => return None,
                 };
                 let mut axis = keyword(edge, horizontal)?;
@@ -214,6 +214,9 @@ pub struct StyledImages<'a> {
 impl crate::ImageProvider for StyledImages<'_> {
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
         self.images.image(node)
+    }
+    fn background_image(&self, node: amazing_dom::NodeIdx, url: &str) -> Option<&amazing_media::Image> {
+        self.images.background_image(node, url)
     }
     fn presentation(&self, node: amazing_dom::NodeIdx) -> ImagePresentation {
         self.styles
