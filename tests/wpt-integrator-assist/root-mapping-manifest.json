@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "revision": "0000000000000000000000000000000000000000",
+  "selection": {
+    "kind": "scaffolding-only-no-wpt-credit"
+  },
+  "tests": [
+    {
+      "id": "root",
+      "test": "css/nested/root.html",
+      "expected": "pass"
+    },
+    {
+      "id": "relative",
+      "test": "css/nested/relative.html",
+      "expected": "pass"
+    },
+    {
+      "id": "encoded",
+      "test": "css/nested/encoded.html",
+      "expected": "pass"
+    },
+    {
+      "id": "escape",
+      "test": "css/nested/escape.html",
+      "expected": "unsupported"
+    },
+    {
+      "id": "remote",
+      "test": "css/nested/remote.html",
+      "expected": "unsupported"
+    }
+  ]
+}

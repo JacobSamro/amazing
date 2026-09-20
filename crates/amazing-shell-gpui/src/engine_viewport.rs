@@ -22,7 +22,6 @@ const MAX_SCRIPT_BYTES: usize = 4 * 1024 * 1024;
 struct PageImage {
     node: amazing_dom::NodeIdx,
     image: amazing_media::Image,
-    used_size: amazing_layout::IntrinsicSize,
 }
 
 #[derive(Default)]
@@ -39,7 +38,10 @@ impl amazing_layout::ReplacedElementProvider for PageResources {
         self.images
             .iter()
             .find(|entry| entry.node == node)
-            .map(|entry| entry.used_size)
+            .map(|entry| amazing_layout::IntrinsicSize {
+                width: entry.image.width as f32,
+                height: entry.image.height as f32,
+            })
     }
 }
 
@@ -1145,17 +1147,6 @@ fn load_page_resources(
     options: &FetchOptions,
     session: Option<&Rc<RefCell<BrowserSession>>>,
 ) -> PageResources {
-    fn dimension(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, name: &str) -> Option<f32> {
-        dom.attrs_of(node)?
-            .iter()
-            .find(|(attribute, _)| attribute.eq_ignore_ascii_case(name))?
-            .1
-            .trim()
-            .parse::<u32>()
-            .ok()
-            .map(|value| value as f32)
-    }
-
     fn walk(
         dom: &amazing_dom::Dom,
         node: amazing_dom::NodeIdx,
@@ -1183,14 +1174,9 @@ fn load_page_resources(
         {
             let retained: usize = resources.images.iter().map(|entry| entry.image.pixels.len()).sum();
             if retained.saturating_add(image.pixels.len()) > 128 * 1024 * 1024 { return; }
-            let Some(size) = amazing_media::ImageSize::resolve(
-                image.width, image.height, dimension(dom, node, "width"), dimension(dom, node, "height"),
-            ) else { return; };
-            let used_size = amazing_layout::IntrinsicSize { width: size.width, height: size.height };
             resources.images.push(PageImage {
                 node,
                 image,
-                used_size,
             });
         }
 
@@ -1484,8 +1470,11 @@ mod tests {
         );
         server.join().unwrap();
         assert_eq!(resources.images.len(), 1);
-        assert_eq!(resources.images[0].used_size.width, 8.0);
-        assert_eq!(resources.images[0].used_size.height, 4.0);
+        let natural = amazing_layout::ReplacedElementProvider::intrinsic_size(
+            &resources, resources.images[0].node,
+        ).unwrap();
+        assert_eq!(natural.width, 2.0);
+        assert_eq!(natural.height, 1.0);
         assert_eq!(resources.images[0].image.pixels[0..4], [255, 0, 0, 255]);
     }
 

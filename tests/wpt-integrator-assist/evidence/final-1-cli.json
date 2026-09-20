@@ -1,0 +1,389 @@
+[
+  {
+    "args": [
+      "version"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "amazing v0.0.1\nzero-dependency browser engine \u0393\u00c7\u00f6 pipeline status:\n  amazing-common  byte streams + text utils\n  amazing-html    Phase 1: WHATWG tokenizer/tree builder \u0393\u00c7\u00f6 `parse` subcommand\n  amazing-css     Phase 2: syntax 3 + selectors + cascade \u0393\u00c7\u00f6 `style` subcommand\n  amazing-layout  Phase 3: block/inline FC layout \u0393\u00c7\u00f6 `layout` subcommand\n  amazing-paint   Phase 4: software rasterizer \u0393\u00c7\u00f6 `render` subcommand\n  amazing-net     Phase 5: HTTP/1.1 fetcher (library; TLS deferred)\n  amazing-js      Phase 6: ECMA-262 parser + tree-walking interpreter \u0393\u00c7\u00f6 `run` subcommand\n  amazing-dom-js  Phase 7: live DOM/JS bridge \u0393\u00c7\u00f6 `domrun` subcommand\n  amazing-gui     Phase 8: native Windows shell \u0393\u00c7\u00f6 `gui` subcommand\n  amazing-media   Phase 9: image + PCM WAV media \u0393\u00c7\u00f6 `render` / `audio-info` / `play-audio`\n  amazing-webrtc  Phase 9: ICE/TURN + SDP + DTLS-SRTP nominated UDP + two-process gate\n  amazing-gpu     Phase 9: D3D11 hardware capability \u0393\u00c7\u00f6 `gpu-info` subcommand\ndom: arena skeleton present (u32 indices, no Rc<RefCell>)\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "unknown-command"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "unknown command: unknown-command\nusage: amazing [version|parse [file]|parse-fragment <context> [file]|style <page.html> [extra.css\u0393\u00c7\u00aa]|layout <page.html> [viewport_width]|render <page.html> <out.bmp> [width]|render-wpt <page.html> <out.ppm> <width> <height>|fetch <url|file>|fetch-parse <http-url>|audio-info <file.wav>|play-audio <file.wav>|webrtc-loopback|turn-probe|rtp-jitter-probe|opus-probe|video-frame-probe|vp8-decode-probe|h264-roundtrip-probe|h264-rtp-probe|secure-media-loopback|secure-media-processes|secure-video-stream <host:port>|sdp-roundtrip <offer.sdp>|sdp-browser-answer <offer.sdp>|browser-peer [http-port]|gpu-info|gpu-present-smoke|run [script.js]|domrun <page.html> <script.js>|gui [url]]\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "parse",
+      "examples/sample.html"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing parse: cannot open examples/sample.html: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "parse-fragment",
+      "table",
+      "examples/sample.html"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing parse-fragment: cannot open examples/sample.html: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "parse-fragment"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "usage: amazing parse-fragment <context> [file]\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "style",
+      "examples/sample.html"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing style: cannot open examples/sample.html: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "layout",
+      "examples/sample.html",
+      "320"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing layout: cannot open examples/sample.html: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "render",
+      "examples/sample.html",
+      "target/diagnostics/ia-parity.bmp",
+      "320"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing render: cannot open examples/sample.html: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "render-wpt",
+      "examples/sample.html",
+      "target/diagnostics/ia-parity.ppm",
+      "320",
+      "240"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing render-wpt: cannot open examples/sample.html: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "fetch",
+      "examples/sample.html"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing fetch: i/o error: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "fetch-parse"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "usage: amazing fetch-parse <http-url>\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "run",
+      "target/diagnostics/ia-parity.js"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing run: cannot open target/diagnostics/ia-parity.js: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "domrun",
+      "examples/sample.html",
+      "target/diagnostics/ia-parity.js"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing domrun html: cannot open examples/sample.html: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "audio-info",
+      "examples/phase9-audio.wav"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing audio-info: cannot read examples/phase9-audio.wav: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "play-audio"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "usage: amazing play-audio <file.wav>\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "webrtc-loopback"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "STUN mapped 127.0.0.1:60854; ICE state=Completed integrity=ok; RTP seq=7 timestamp=960 payload=15 bytes; RTCP packets=1 octets=15; loopback ok\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "turn-probe"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "TURN challenge=401 relay=127.0.0.1:60856 mapped=127.0.0.1:60857 lifetime=600s permission=ok data=12/12 nominate=ok delete=ok; turn probe ok\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "rtp-jitter-probe"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "RTP jitter packets=3 reordered=yes duplicate=rejected codecs=L16+PCMU samples=3+2; jitter/codec probe ok\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "opus-probe"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "Opus encoded=127 bytes decoded=960 samples PLC=960 samples; opus probe ok\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "video-frame-probe"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "video RTP packets=3 frame=16 bytes reordered=yes damaged=dropped; video frame probe ok\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "vp8-decode-probe"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "VP8 frames=10 interframes=9 size=176x144 pixels_changed=yes; vp8 decode probe ok\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "h264-roundtrip-probe"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "H264 first=265 bytes delta=153 bytes size=32x32 pixels_changed=yes; h264 roundtrip probe ok\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "h264-rtp-probe"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "H264 AnnexB=34652 bytes RTP=31 packets FU-A=29 max-payload=1200 size=320x180; h264 rtp probe ok\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "secure-media-loopback"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "ICE state=Completed credentials=SDP; UDP transport=127.0.0.1:60860 -> 127.0.0.1:60861; SDP identity=ok roles=active/passive; DTLS1.2 TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256; SRTP profile=AEAD_AES_128_GCM keying=56 bytes; fingerprints=ok; SRTP payload=15 bytes protected=43 bytes; SRTCP packets=1 protected=72 bytes; SRTP tamper=rejected replay=rejected; SRTCP tamper=rejected replay=rejected; secure loopback ok\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "secure-media-processes"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "processes=2 signaling=tcp-loopback; ICE credentials=SDP; codecs=SDP Opus+L16+PCMU+H264; ICE live-loss=2 sends=3 487=resolved prflx=learned; consent=Fresh expiry=detected; RTP parent->child=ok; RTP child->parent=ok; playout=adaptive loss=1 conceal=160 Opus parent->child=960 PCMU child->parent=320; video=H264 secure frames=6 32x32 clock=90k changed=yes loss=RTP1 recovery=PLI+IDR; avsync=RTCP-SR 6/6 aligned; SRTCP SR+CNAME child->parent=ok; RTCP RR+CNAME parent->child=ok; RTCP stats=computed; two-process interop ok\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "secure-video-stream"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "usage: amazing secure-video-stream <host:port>\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "__secure-media-peer"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing secure-media-peer: secure peer requires a control address\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "gpu-info"
+    ],
+    "exit": 0,
+    "timeout": false,
+    "stdout": "D3D11 hardware device, feature level 11.1\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "gpu-present-smoke"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing gpu-present-smoke: D3D11 swap-chain creation failed: 0x887a0022\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "sdp-roundtrip",
+      "examples/phase9-chromium-offer.sdp"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "amazing sdp-roundtrip: cannot read examples/phase9-chromium-offer.sdp: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "sdp-browser-answer"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "usage: amazing sdp-browser-answer <offer.sdp>\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "browser-peer",
+      "invalid"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "",
+    "stderr": "usage: amazing browser-peer [http-port]\n",
+    "artifact": null
+  },
+  {
+    "args": [
+      "wpt-harness"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "{\"schema\":1,\"status\":\"error\",\"detail\":\"usage: amazing wpt-harness [--scaffold] <root> <relative-test.html> <width> <height> <timeout-ms>\"}\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "wpt-harness-worker"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "{\"schema\":1,\"status\":\"error\",\"detail\":\"usage: amazing wpt-harness [--scaffold] <root> <relative-test.html> <width> <height> <timeout-ms>\"}\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "wpt-harness",
+      "--scaffold",
+      "crates/amazing/src/cmd/wpt_harness_fixtures",
+      "pass.html",
+      "800",
+      "600",
+      "1000"
+    ],
+    "exit": 1,
+    "timeout": false,
+    "stdout": "{\"schema\":1,\"suite\":\"scaffolding-only\",\"wpt_revision\":null,\"test\":\"pass.html\",\"viewport\":[800,600],\"timeout_ms\":1000,\"status\":\"error\",\"harness_status\":null,\"detail\":\"The system cannot find the path specified. (os error 3)\",\"file_counts\":{\"pass\":0,\"fail\":0,\"timeout\":0,\"error\":1,\"unsupported\":0},\"counts\":{\"pass\":0,\"fail\":0,\"timeout\":0,\"notrun\":0,\"error\":0},\"subtests\":[]}\n",
+    "stderr": "",
+    "artifact": null
+  },
+  {
+    "args": [
+      "gui",
+      "target/diagnostics/ia-missing.html"
+    ],
+    "exit": 1,
+    "timeout": true,
+    "stdout": "",
+    "stderr": "amazing gui: i/o error: The system cannot find the path specified. (os error 3)\n",
+    "artifact": null
+  }
+]

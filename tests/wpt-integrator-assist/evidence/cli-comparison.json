@@ -1,0 +1,30 @@
+[
+  {
+    "candidate": "C:\\Users\\server\\src\\wt\\integrator-assist\\target\\diagnostics/refactor-1/cli.json",
+    "cases": 36,
+    "exact": 33,
+    "normalized_matches": 36,
+    "sha256": "bf13d50a3f7c2eedd73d7cb97c2863190f2ab13770fb4fa2bbc3933611f23852"
+  },
+  {
+    "candidate": "C:\\Users\\server\\src\\wt\\integrator-assist\\target\\diagnostics/refactor-2/cli.json",
+    "cases": 36,
+    "exact": 33,
+    "normalized_matches": 36,
+    "sha256": "bf13d50a3f7c2eedd73d7cb97c2863190f2ab13770fb4fa2bbc3933611f23852"
+  },
+  {
+    "candidate": "C:\\Users\\server\\src\\wt\\integrator-assist\\target\\diagnostics/final-1/cli.json",
+    "cases": 36,
+    "exact": 33,
+    "normalized_matches": 36,
+    "sha256": "bf13d50a3f7c2eedd73d7cb97c2863190f2ab13770fb4fa2bbc3933611f23852"
+  },
+  {
+    "candidate": "C:\\Users\\server\\src\\wt\\integrator-assist\\target\\diagnostics/final-2/cli.json",
+    "cases": 36,
+    "exact": 33,
+    "normalized_matches": 36,
+    "sha256": "bf13d50a3f7c2eedd73d7cb97c2863190f2ab13770fb4fa2bbc3933611f23852"
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "Algorithm": "SHA256",
+    "Hash": "8748346455B60372DB8967C0FD09084FB3BEE1C937FE7B593249D8EC49E24D71",
+    "Path": "C:\\Users\\server\\src\\wt\\integrator-assist\\target\\diagnostics\\before.exe"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "22A2F79BDCE43EA24C69A4E58703F571F01E124C9366FCB1DC01C63D1E8A9832",
+    "Path": "C:\\Users\\server\\src\\wt\\integrator-assist\\target\\diagnostics\\refactor.exe"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "769624A5D6FC24A1B91ADA19DBB38BFB0CA94298383FEA9D421B0AA949EC2731",
+    "Path": "C:\\Users\\server\\src\\wt\\integrator-assist\\target\\diagnostics\\final.exe"
+  }
+]

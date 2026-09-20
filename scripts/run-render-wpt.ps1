@@ -2,6 +2,7 @@ param(
     [string]$ProfilePath = "",
     [string]$ManifestPath = "",
     [string]$WptRoot = "",
+    [string]$RevisionMarker = "",
     [string]$OutputDirectory = "",
     [string]$ExecutablePath = "",
     [string]$FontSet = "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
@@ -108,23 +109,19 @@ if (-not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf)) {
     throw "Amazing executable not found: $ExecutablePath"
 }
 
-if (-not $SkipFetch) {
-    if (-not (Test-Path -LiteralPath (Join-Path $WptRoot ".git") -PathType Container)) {
-        New-Item -ItemType Directory -Force -Path $WptRoot | Out-Null
-        Invoke-Checked "git" @("-C", $WptRoot, "init")
-        Invoke-Checked "git" @("-C", $WptRoot, "remote", "add", "origin", "https://github.com/web-platform-tests/wpt.git")
-        Invoke-Checked "git" @("-C", $WptRoot, "sparse-checkout", "init", "--cone")
-    }
-    $sparseArguments = @("-C", $WptRoot, "sparse-checkout", "set", "--cone")
-    $sparseArguments += @($manifest.sparse_paths | ForEach-Object { [string]$_ })
-    Invoke-Checked "git" $sparseArguments
-    Invoke-Checked "git" @("-C", $WptRoot, "fetch", "--depth=1", "origin", $revision)
-    Invoke-Checked "git" @("-C", $WptRoot, "checkout", "--detach", "--force", "FETCH_HEAD")
+# Git stays on the editing machine. Provision the pinned WPT checkout there
+# and transfer it to the build box. -SkipFetch remains accepted for callers;
+# this runner never invokes Git, even when that switch is omitted.
+# A detached .git/HEAD is itself a revision marker. For an archive without Git
+# metadata, pass a marker written from `git rev-parse HEAD` on the editing host.
+if (-not $RevisionMarker) { $RevisionMarker = Join-Path $WptRoot ".git\HEAD" }
+if (-not [IO.Path]::IsPathRooted($RevisionMarker)) { $RevisionMarker = Join-Path $WptRoot $RevisionMarker }
+if (-not (Test-Path -LiteralPath $RevisionMarker -PathType Leaf)) {
+    throw "Missing WPT revision marker. Transfer a verified checkout/marker from the editing host and pass -RevisionMarker."
 }
-
-$actualRevision = (& git -C $WptRoot rev-parse HEAD).Trim()
-if ($LASTEXITCODE -ne 0 -or $actualRevision -ne $revision) {
-    throw "WPT checkout is $actualRevision; expected $revision."
+$actualRevision = (Get-Content -LiteralPath $RevisionMarker -Raw).Trim().ToLowerInvariant()
+if ($actualRevision -notmatch '^[0-9a-f]{40}$' -or $actualRevision -ne $revision) {
+    throw "WPT revision marker is '$actualRevision'; expected detached revision $revision. Verify the checkout on the editing host."
 }
 
 function ConvertTo-CommandArgument {
@@ -150,6 +147,8 @@ function Invoke-FixedRender {
     $start.Arguments = $arguments -join " "
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
+    # Explicit URL root for resources loaded by the renderer child.
+    $start.EnvironmentVariables["AMAZING_WPT_ROOT"] = $WptRoot
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
     $process = New-Object Diagnostics.Process
@@ -263,8 +262,9 @@ function Get-ReftestLink {
         if ($href -match '^[A-Za-z][A-Za-z0-9+.-]*:' -or $href.StartsWith("//")) {
             return [pscustomobject]@{ supported = $false; detail = "remote reftest links are unsupported" }
         }
-        $cleanHref = ($href -split '[?#]', 2)[0] -replace '/', '\'
-        $referencePath = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $TestPath) $cleanHref))
+        $cleanHref = [Uri]::UnescapeDataString(($href -split '[?#]', 2)[0]) -replace '/', '\'
+        $baseDirectory = if ($href.StartsWith('/')) { $WptRoot } else { Split-Path -Parent $TestPath }
+        $referencePath = [IO.Path]::GetFullPath((Join-Path $baseDirectory $cleanHref.TrimStart('\')))
         $wptPrefix = $WptRoot.TrimEnd('\') + '\'
         if (-not $referencePath.StartsWith($wptPrefix, [StringComparison]::OrdinalIgnoreCase)) {
             return [pscustomobject]@{ supported = $false; detail = "reference escapes the pinned WPT checkout" }
@@ -338,7 +338,11 @@ $unexpected = 0
 
 foreach ($test in @($manifest.tests)) {
     $id = ([string]$test.id) -replace '[^A-Za-z0-9_.-]', '_'
-    $testDirectory = Join-Path $runDirectory $id
+    # Keep the reported upstream ID; shorten only its artifact directory so
+    # long WPT paths remain usable under Windows MAX_PATH.
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $directoryId = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($id))).Replace('-', '').Substring(0, 16) } finally { $sha.Dispose() }
+    $testDirectory = Join-Path $runDirectory $directoryId
     New-Item -ItemType Directory -Force -Path $testDirectory | Out-Null
     $expected = if ($test.PSObject.Properties.Name -contains "expected") {
         [string]$test.expected

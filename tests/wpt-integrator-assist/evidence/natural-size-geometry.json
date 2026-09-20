@@ -1,0 +1,22 @@
+[
+  {
+    "stage": "before",
+    "viewport": [
+      8,
+      8
+    ],
+    "colored_pixels": 24,
+    "colored_width": 4,
+    "colored_height": 6
+  },
+  {
+    "stage": "after",
+    "viewport": [
+      8,
+      8
+    ],
+    "colored_pixels": 8,
+    "colored_width": 4,
+    "colored_height": 2
+  }
+]
