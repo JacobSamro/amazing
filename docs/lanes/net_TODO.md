@@ -790,8 +790,11 @@ The std-only core implements RFC 9113 framing and a hand-written RFC 7541 HPACK
 codec. Published Appendix C vectors anchor integer, literal, Huffman and dynamic
 index behavior; Appendix A/B numerical tables have a pinned source digest.
 Decoder accepts all literal forms and Huffman strings, rejects EOS/padding,
-overflow, invalid indexes and late/oversized table updates. Encoder uses indexed
-fields and plain literals, inserts/evicts dynamic entries and emits minimum/final
+overflow, invalid indexes and late/oversized table updates. Acknowledging a
+smaller advertised table limit requires the peer's HPACK size update before
+its next fields. Response TE is rejected; request TE permits only trailers.
+Encoder uses indexed fields and plain literals, inserts/evicts dynamic entries
+and emits minimum/final
 table size updates; sensitive cookie/authorization fields are never indexed.
 Outbound Huffman encoding is optional and not implemented.
 
@@ -842,3 +845,61 @@ stable conformance measurements. Deterministic fixture tests are the gate.
 Standards: https://www.rfc-editor.org/rfc/rfc9113.html and
 https://www.rfc-editor.org/rfc/rfc7541.html. No broad WPT fetch percentage claimed.
 Final nextest, separate doctest and pinned URL measurements are recorded below.
+
+### NET-7 final evidence
+
+Rebased onto `11dd8a8`, refreshed net alone with the corrected script (root lock
+`E4D68B10`), then re-synced owned files. All builds/tests ran on win-001 with
+`CARGO_TARGET_DIR=C:\Users\server\target\net` and incremental compilation off.
+Each final run cleaned and rebuilt all 19 first-party workspace packages.
+
+| Gate | Run 1 | Run 2 |
+| --- | --- | --- |
+| Workspace nextest | 1239 passed / 0 failed / 3 skipped | identical |
+| Workspace doctests, separate `cargo test --doc` | 2 passed / 0 failed / 0 ignored | identical |
+| Lane nextest | 244 passed / 0 failed / 0 skipped | identical |
+| Lane doctests, separate `cargo test --doc` | 0 tests | identical |
+| Pinned URL WPT | 864 passed / 0 failed / 0 timeout / 32 unsupported | identical |
+
+The 213-test lane baseline is preserved: net now has 143 tests (114 + 29 HTTP/2),
+TLS 4 (2 + 2), Fetch 87 and Brotli 10. Focused tests include RFC HPACK vectors,
+malformed frames, allocation/stream limits, multiplexing, independent credit,
+window shrink/overflow, GOAWAY/RST, late closed frames, transport teardown,
+HPACK acknowledgement, TE validation, HEAD and verified TLS protocol dispatch.
+The authenticated h2/fallback fixture also passed five explicit repeated runs.
+
+The second workspace nextest run reported **six LEAK notices** in existing
+`amazing::phase2_style` and `amazing::phase5_flex_grid` integration tests; all
+assertions passed and nextest returned success. No NET-7 test received a notice.
+Run 1 had none. This is recorded and routed to the integrator, not attributed to
+an established cause or silently suppressed. The evidence parser was corrected
+to handle `passed (6 leaky), 3 skipped`; existing successful logs were reconciled
+on Windows without changing/re-running the tested source. Per-run notices are
+retained in `runner-notices.json`.
+
+An earlier, superseded lane run caught Windows TCP-reset timing during fixture
+teardown. The fixture now waits for the client's final connection WINDOW_UPDATE
+before closing; no sleep or automatic test retry masks the issue. Neither that
+run nor pre-review source counts form part of the final evidence above.
+
+All 367 source/input hashes match locally and on Windows before/after both final
+runs. Manifest SHA-256:
+`5799d5bc8736fb7015623fbf318b7a514eb0f369d30ac44e95e811af7af4652b`.
+This final decision-map-only edit is outside the source/input manifest.
+URL corpus revision `c48d58747e1f211527fb695fd60548a997fae617`, 896 objects,
+normalized stdout SHA-256 in both runs:
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+TLS/Brotli fixture hashes, PSL regeneration and decoder feature checks passed.
+
+Public-root TLS interoperability against `https://nghttp2.org/` returned
+`protocol=h2 status=200 body_bytes=6324 headers=14 trailers=0`, including after
+both clean gates. The live body size is one measured observation, not a pinned
+corpus. Runnable artifacts in `C:\Users\server\target\net\debug\examples\`:
+`h2_fetch.exe` and `url_wpt.exe`.
+
+Canonical evidence: integrator checkout `.agents/net/net7-final-evidence/`
+(results, both nextest/doc/lane/URL logs, source manifests, fixture/feature
+checks, runner notices and finalization). Recipe/input files: `net7_gate.py`,
+`net7-inputs.json`; `net7_finalize.py` records the summary-parser reconciliation
+and final public fetch/hash audit. Superseded logs are retained separately.
+NET-7 stops at this protocol/transport boundary; no next ticket was started.
