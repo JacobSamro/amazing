@@ -148,6 +148,7 @@ struct Candidate<'a> {
     important: bool,
     inline: bool,
     ua: bool,
+    author_declaration: bool,
     spec: Specificity,
     order: u64,
     layer: usize,
@@ -257,6 +258,7 @@ fn compute_one(
         important: bool,
         inline: bool,
         ua: bool,
+        author_declaration: bool,
         spec: Specificity,
         order: u64,
         layer: usize,
@@ -279,6 +281,7 @@ fn compute_one(
             important: false,
             inline: false,
             ua: false,
+            author_declaration: false,
             spec: Specificity::default(),
             order: 0,
             layer: usize::MAX,
@@ -298,6 +301,7 @@ fn compute_one(
                     important: decl.important,
                     inline: false,
                     ua: rule.ua,
+                    author_declaration: !rule.ua,
                     spec: specificity,
                     order: source_order,
                     layer: rule.layer,
@@ -319,6 +323,7 @@ fn compute_one(
                 important: decl.important,
                 inline: true,
                 ua: false,
+                author_declaration: true,
                 spec: Specificity::default(),
                 order: source_order,
                 layer: usize::MAX,
@@ -336,6 +341,7 @@ fn compute_one(
             important: d.important,
             inline: d.inline,
             ua: d.ua,
+            author_declaration: d.author_declaration,
             spec: d.spec,
             order: d.order,
             layer: d.layer,
@@ -377,11 +383,19 @@ fn compute_one(
     }
     champs = winners(&candidates, Some(&provisional));
 
+    let author_properties: Vec<_> = champs.iter()
+        .filter(|(_, candidate)| candidate.author_declaration)
+        .map(|(property, _)| *property)
+        .collect();
     let cascaded = champs
         .into_iter()
         .map(|(property, candidate)| (property.to_owned(), candidate.value.to_owned()))
         .collect();
-    computed::resolve_with_root(parent_style, cascaded, root_font_px)
+    let mut style = computed::resolve_with_root(parent_style, cascaded, root_font_px);
+    for property in author_properties {
+        style.mark_author_specified(property);
+    }
+    style
 }
 
 fn physical_margin_for(logical: &str, rtl: bool, writing_mode: &str) -> &'static str {

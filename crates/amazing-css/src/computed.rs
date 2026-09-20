@@ -24,6 +24,7 @@ pub struct ComputedStyle {
     typed: BTreeMap<String, ComputedValue>,
     custom: BTreeMap<String, CustomValue>,
     root_font_px: f64,
+    author_specified: BTreeSet<String>,
 }
 
 impl Default for ComputedStyle {
@@ -33,6 +34,7 @@ impl Default for ComputedStyle {
             typed: BTreeMap::new(),
             custom: BTreeMap::new(),
             root_font_px: 16.0,
+            author_specified: BTreeSet::new(),
         }
     }
 }
@@ -42,6 +44,28 @@ impl ComputedStyle {
     /// `Unparsed` marks a standard/unknown grammar outside the typed prototype.
     pub fn typed(&self, property: &str) -> Option<&ComputedValue> {
         self.typed.get(property)
+    }
+
+    /// Whether this element's final cascaded winner came from an author
+    /// declaration (stylesheet or inline style), after origin/layer rollback.
+    /// Query longhands; shorthands mark each expanded longhand. Custom names
+    /// remain case-sensitive; normal property names are ASCII-insensitive.
+    ///
+    /// Explicit `initial`, `inherit`, and `unset` count, as do author winners
+    /// that become invalid after variable substitution and default as unset.
+    /// Inheritance without a local declaration, UA defaults, and presentational
+    /// hints do not count. `revert`/`revert-layer` report the restored winner.
+    /// Synthetic `set`/FromIterator values are not author declarations.
+    pub fn is_author_specified(&self, property: &str) -> bool {
+        if property.starts_with("--") {
+            self.author_specified.contains(property)
+        } else {
+            self.author_specified.contains(&property.to_ascii_lowercase())
+        }
+    }
+
+    pub(crate) fn mark_author_specified(&mut self, property: &str) {
+        self.author_specified.insert(property.to_owned());
     }
 
     fn rebuild_typed(&mut self) {
@@ -89,6 +113,8 @@ impl ComputedStyle {
         for (longhand, expanded) in expand_declaration(property, value) {
             let typed = values::parse(&longhand, &expanded).unwrap_or(ComputedValue::Unparsed);
             self.typed.insert(longhand.clone(), typed);
+            // Layout-time synthesis replaces this value, not an author rule.
+            self.author_specified.remove(&longhand);
             self.props.insert(longhand, expanded);
         }
         self.resolve_typed_units();
@@ -756,6 +782,9 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 )
             })
             .collect(),
+        "border-top" | "border-right" | "border-bottom" | "border-left" => {
+            expand_side_border(&property, value).unwrap_or_default()
+        }
         "border" if !parts.is_empty() => {
             let mut width = "medium";
             let mut style = "none";
@@ -972,6 +1001,10 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     }
 }
 
+const DEFERRED_BORDER_WIDTH: &str = "amazing-internal-border-side-width";
+const DEFERRED_BORDER_STYLE: &str = "amazing-internal-border-side-style";
+const DEFERRED_BORDER_COLOR: &str = "amazing-internal-border-side-color";
+
 const DEFERRED_ALL: &str = "amazing-internal-all";
 const DEFERRED_FLEX_DIRECTION: &str = "amazing-internal-flex-flow-direction";
 const DEFERRED_FLEX_WRAP: &str = "amazing-internal-flex-flow-wrap";
@@ -1040,6 +1073,58 @@ fn deferred_overflow(value: &str) -> Vec<(String, String)> {
             deferred(DEFERRED_OVERFLOW_Y, value),
         ),
     ]
+}
+
+/// One optional width, style and color, in any order. Validate the complete
+/// shorthand atomically so an invalid component cannot reset other longhands.
+fn expand_side_border(property: &str, value: &str) -> Option<Vec<(String, String)>> {
+    let components = [
+        ("width", DEFERRED_BORDER_WIDTH),
+        ("style", DEFERRED_BORDER_STYLE),
+        ("color", DEFERRED_BORDER_COLOR),
+    ];
+    if css_wide_keyword(value).is_some() || contains_var_function(value) {
+        return Some(components.into_iter().map(|(component, function)| {
+            (format!("{property}-{component}"), if contains_var_function(value) {
+                deferred(function, value)
+            } else {
+                value.to_owned()
+            })
+        }).collect());
+    }
+    let tokens = tokenize(value);
+    let parts = top_level_components(&tokens)?;
+    if !(1..=3).contains(&parts.len()) {
+        return None;
+    }
+    let mut slots: [Option<String>; 3] = [None, None, None];
+    for part in parts {
+        let text = serialize_computed(part);
+        let index = if values::parse("border-top-width", &text).is_some() {
+            0
+        } else if is_border_style(&text) {
+            1
+        } else {
+            // Preserve known unsupported color spaces just as longhands do,
+            // but never interpret an unrelated function as a color component.
+            if let Some(Token::Function(name)) = part.first() {
+                if !matches!(name.to_ascii_lowercase().as_str(),
+                    "rgb" | "rgba" | "hsl" | "hsla" | "hwb" | "lab" | "lch"
+                    | "oklab" | "oklch" | "color" | "color-mix" | "light-dark") {
+                    return None;
+                }
+            }
+            values::parse("border-top-color", &text)?;
+            2
+        };
+        if slots[index].replace(text).is_some() {
+            return None;
+        }
+    }
+    Some(components.into_iter().zip(slots).zip(["medium", "none", "currentcolor"])
+        .map(|(((component, _), value), initial)| {
+            (format!("{property}-{component}"), value.unwrap_or_else(|| initial.to_owned()))
+        }).collect())
 }
 
 fn expand_border_radius(value: &str) -> Option<Vec<(String, String)>> {
@@ -2212,6 +2297,7 @@ pub(crate) fn resolve_with_root(
         typed: BTreeMap::new(),
         custom: inherited_custom,
         root_font_px: f64::from(root_font_px),
+        author_specified: BTreeSet::new(),
     };
     style.rebuild_typed();
     style.typed.extend(inherited_typed);
@@ -2419,6 +2505,9 @@ fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()>
 
     // Every shorthand accepts CSS-wide values after variable substitution.
     for function in [
+        DEFERRED_BORDER_WIDTH,
+        DEFERRED_BORDER_STYLE,
+        DEFERRED_BORDER_COLOR,
         DEFERRED_FLEX_DIRECTION,
         DEFERRED_FLEX_WRAP,
         DEFERRED_GRID_ROWS,
@@ -2437,6 +2526,17 @@ fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()>
         }
     }
 
+    for (suffix, function) in [
+        ("width", DEFERRED_BORDER_WIDTH),
+        ("style", DEFERRED_BORDER_STYLE),
+        ("color", DEFERRED_BORDER_COLOR),
+    ] {
+        if let Some(inner) = deferred_inner(value, function) {
+            let side = property.strip_suffix(&format!("-{suffix}")).ok_or(())?;
+            return expand_side_border(side, inner).ok_or(())?.into_iter()
+                .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());
+        }
+    }
     let overflow_function = match property {
         "overflow-x" => Some((DEFERRED_OVERFLOW_X, 0usize)),
         "overflow-y" => Some((DEFERRED_OVERFLOW_Y, 1usize)),

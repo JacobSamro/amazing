@@ -419,7 +419,150 @@ changed: `cmd_style`, `collect_style_text`, `collect_author_css`, `cmd_layout`,
 and `render_surface`. All authored files remain below 4,000 lines (driver:
 3,519; layout lib: 1,549; CLI regressions: 197). CSS-3 is complete; stop here.
 
-## CSS-4 — background shorthand and stylesheet URL provenance (queued)
+## CSS-4 — side-border shorthands and author-specified provenance
+
+The integrator reassigned CSS-4 to two CSS-owned requests while shell stylesheet
+provenance remains outstanding. Background shorthand is now CSS-5. Base:
+`156cc13`. No layout, paint, driver, shell, or root-manifest changes.
+
+### Side-border shorthands
+
+`border-top`, `border-right`, `border-bottom`, and `border-left` expand to the
+side's width/style/color longhands before ranking. Each accepts one optional
+component of each category, in any order; omitted components reset to medium,
+none, and currentcolor. Duplicate, unsupported-width, or invalid components
+reject the whole declaration without emitting partial longhands. Validation
+uses the existing token component splitter and typed longhand validators.
+Known unsupported color spaces retain the existing Unparsed compatibility
+policy; this is not a new full CSS Color or math grammar.
+
+Each var-bearing side shorthand retains a deferred whole value per longhand.
+After substitution, the same atomic grammar extracts each component; an invalid
+winner defaults as unset without reviving earlier candidates. Token boundaries
+remain intact: var(--n)px cannot manufacture a dimension. CSS-wide values work
+before and after substitution, including origin/layer rollback. Expanded
+longhands retain source order, importance, specificity and layer metadata.
+Existing border shorthand behavior is unchanged by this ticket.
+
+### Additive consumer surface
+
+`ComputedStyle::is_author_specified(property: &str) -> bool` reports whether
+this element's final cascaded winner is a stylesheet or inline author
+declaration **after rollback**. It does not infer origin from the computed value.
+Query longhands (`background-color`, `border-top-style`, etc.), not shorthand
+names. Normal names are ASCII-insensitive; custom-property names preserve case.
+
+| Situation | Result |
+|---|---|
+| Explicit author value, including transparent/none/initial values | true |
+| Explicit initial, inherit, unset, or color:currentcolor | true |
+| Expanded author shorthand or all longhand | true |
+| Author winner invalid after var substitution, defaulting as unset | true |
+| No local declaration; inherited value from an author-styled parent | false |
+| UA rule, materialized initial value, or dir presentational hint | false |
+| revert / revert-layer, including substituted rollback | origin of restored winner; false if none/UA |
+| Invalid at parse time | ignored; provenance of surviving winner |
+| Synthetic FromIterator / Default | false |
+| Synthetic set | clears markers only for replaced longhands |
+
+The marker describes the winning declaration, not whether its value was valid
+at computed-value time and not historical presence of any losing author rule.
+Inheritance does not copy provenance to descendants. Explicit custom-property
+and unknown-property declarations may also be queried, without exposing custom
+values. Logical-to-physical margin mapping carries the winning origin.
+
+Both requesting lanes have adoption instructions in `.agents/css/questions.md`:
+layout can adopt side shorthands; replaced-content can query author-specified
+longhands before choosing control defaults. Existing consumers need no edits.
+CSS does not claim that control painting or the table tests have adopted it yet.
+
+### Validation
+
+Final evidence uses base **156cc13**, after the lane ran
+`bash scripts/refresh-lane-trees.sh css` with artifact invalidation and re-synced
+its own source files (lock prefix 3FEAF813). All execution was on win-001,
+source `C:/Users/server/src/wt/css`, isolated target `C:/Users/server/target/css`,
+two Cargo build jobs. No Mac builds/tests and no consumer changes.
+
+- Full locked workspace: **1,038 passed / 0 failed / 3 ignored**, 55 targets.
+- Focused CSS: **152 passed / 0 failed**, including **15 new public-compute
+  regressions** (8 provenance, 7 side-border tests exercising all four sides).
+- The initial focused failure caught Number/Ident token fusion after var
+  substitution; using boundary-preserving serialization fixed it before gates.
+- WPT revision **c2a2fce69e5c2509d9dc28440ec8b42532e5c293**; unchanged selections
+  in `tests/wpt-render/`, lane-local WPT checkout, 800x600 / scale 1 / same fonts.
+- **32 rendering runs:** two baseline and two candidate runs for every selection.
+  Every per-case classification, differing-pixel count, maximum difference,
+  and actual/reference/diff SHA256 is identical across all four runs for each
+  selection. Variables remain **12/12** in all four cascade runs.
+
+Counts are pass / mismatch / timeout / unsupported / crash, each run:
+
+| Selection | Before | After |
+|---|---|---|
+| cascade | 35/24/0/13/0 | 35/24/0/13/0 |
+| block-collapse | 9/0/0/0/0 | 9/0/0/0/0 |
+| position | 9/3/0/0/0 | 9/3/0/0/0 |
+| text-flow | 14/2/0/0/0 | 14/2/0/0/0 |
+| flex-grid | 24/0/0/0/0 | 24/0/0/0/0 |
+| paint-compositing | 24/0/0/0/0 | 24/0/0/0/0 |
+| text-shaping | 12/0/0/0/0 | 12/0/0/0/0 |
+| vertical-ruby | 11/9/0/0/0 | 11/9/0/0/0 |
+
+Normalized SHA256, identical in all four runs per selection (same sorted
+per-case projection and JSON normalization documented for CSS-2):
+
+- cascade: `a259e9d395326e4c39b890dd494b159dcacb28a834ccc497e6ee94a7ec608026`.
+- block-collapse: `86e7829838e559e7ad23e5556610044630d928f6e143b86476c28f95bbfa035e`.
+- position: `4fe678b080d9f157b5fb1692c37331048a556478bc9785b2ddc1a0082bfb407a`.
+- text-flow: `c5a0a7d3d4d164921b00d80168db276be7e8c286335c6c4c3a7d46113885bda3`.
+- flex-grid: `36ab53bedb24655ca108bc25d6d06105400f10ad48f99a36414a673ed46d04c5`.
+- paint-compositing: `56a70b2097c2ce5e22a0ff05f70551f71b0d4d84022b8596edf1a66855bb2e2d`.
+- text-shaping: `1effab2e65d081d3b2e1a2d1b6e46a2ae853d66c7bfcfcfb7ff606bb24a898f0`.
+- vertical-ruby: `30fabfc95c6d77d8796155179ee310c9a2b6be8ed1009c806bf42de482e8fb71`.
+
+**171 baseline / 173 candidate** source/build/gate inputs matched before and
+after compilation. All 173 final inputs matched again after every gate and
+against the committed Mac sources. Immutable executable hashes were checked
+through both rendering passes and at final collection. Under
+`C:/Users/server/target/css/`:
+
+- Baseline `css4-before.exe`, SHA256
+  `3a74f33b1497114b6e0d6ba59e1b8be58dca4e9e82b59cd6e5133ff753a54a00`.
+- Candidate `css4-final.exe`, SHA256
+  `d2b27fa8f5d24c5683ea81a1e529e9fd8c4d195854b56265bd55fbf628e8c6cc`.
+- Reports/PNGs: `css4-{before,final}-<selection>-{1,2}/run-*/`.
+- Logs: `css4-workspace.log` and `css4-focused.log`.
+
+Local evidence beside the main checkout's `.agents/css/report.md`:
+`css4-evidence.json`, `css4-summary.json`, `css4-*-source.json`,
+`css4-*-build-proof.json`, `css4-final-source-proof.txt`, the logs, and build,
+render, collection and normalization helpers. No new WPT passes or consumer
+adoption are claimed. The runnable driver executable above uses the new side
+shorthands; the API regressions exercise provenance through public compute.
+
+Reproduction after the lane refresh and re-sync, on Windows:
+
+```powershell
+Set-Location C:\Users\server\src\wt\css
+$env:CARGO_TARGET_DIR = 'C:\Users\server\target\css'
+$env:CARGO_BUILD_JOBS = '2'
+cargo test -p amazing-css --locked
+cargo test --workspace --locked
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-render-wpt.ps1 `
+  -ManifestPath tests\wpt-render\cascade-manifest.json `
+  -WptRoot C:\Users\server\target\css\wpt `
+  -ExecutablePath C:\Users\server\target\css\css4-final.exe `
+  -OutputDirectory C:\Users\server\target\css\css4-review `
+  -SkipFetch -SkipBuild
+```
+
+Repeat the renderer for each unchanged selection above and a second output
+folder per selection. All authored files remain below 4,000 lines; largest
+changed source is computed.rs at 3,170. CSS-4 is complete; stop here.
+
+
+## CSS-5 — background shorthand and stylesheet URL provenance (queued)
 
 User originally queued this during CSS-2; **do not start without a new brief**. Replaced-content has implemented background longhands in paint.
 CSS owns expansion of the full multi-layer `background` shorthand grammar;
@@ -429,7 +572,7 @@ provenance through computed values, resolving against the originating stylesheet
 Keep this work separate from CSS-2 cascade layers, revert, and scope.
 
 
-CSS-4 still needs an explicit stylesheet base-URL seam: preserve the fetched
+CSS-5 still needs an explicit stylesheet base-URL seam: preserve the fetched
 stylesheet's final URL, inline/ownerless sheet document base, and the winning
 declaration's provenance through cascade/variable/shorthand computation. CSS-3
 preserves sheet identity and scope roots, not URL bases. Font discovery still
