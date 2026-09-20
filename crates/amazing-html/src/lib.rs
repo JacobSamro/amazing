@@ -13,7 +13,10 @@
 //! Output is a `amazing_dom::Dom` tree built through arena indices —
 //! never `Rc<RefCell<Node>>`.
 //!
-//! Crate-level deviations from full spec (deliberate):
+//! XML/XHTML uses [`parse_xml`], a separate fatal-error parser; see [`xml`]
+//! for supported syntax, namespace handling, and explicit DTD/encoding limits.
+//!
+//! HTML deviations from full spec (deliberate):
 //! - Encoding is assumed lossy UTF-8; byte-level encoding detection is not
 //!   performed (caller decodes bytes before handing them to [`parse`]).
 //! - CDATA sections (`<![CDATA[…]]>`) tokenize as bogus comments.
@@ -32,6 +35,8 @@
 pub mod entities;
 pub mod tokenizer;
 pub mod tree;
+pub mod xml;
+pub use xml::{parse_xml, XmlError, XmlErrorKind};
 
 use amazing_dom::{Dom, Namespace, NodeIdx};
 

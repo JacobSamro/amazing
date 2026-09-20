@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "engine_revision": "868d29635270503a53ced5e33642956ee6369f10",
+  "integration_base": "11dd8a8",
+  "command": "cargo nextest run --workspace --locked",
+  "passed": 1229,
+  "failed": 0,
+  "skipped": 3,
+  "test_execution_seconds": 39.33,
+  "doctests": {
+    "command": "cargo test --workspace --locked --doc",
+    "passed": 2,
+    "failed": 0,
+    "ignored": 0,
+    "crates": {
+      "amazing-html": 1,
+      "amazing-js": 1
+    }
+  },
+  "source_verification": {
+    "files": 370,
+    "before": true,
+    "after": true,
+    "canonical_manifest_sha256": "bb61c28a515e35cecd24949a6c6b569133dbd08928764b8ca7925a653d77cb31"
+  },
+  "limitations": [
+    "No cascade render before/after measurement; driver XML dispatch and Git-free runner pending integration",
+    "Earlier cargo test workspace attempt was invalidated by a concurrent tree refresh; not credited"
+  ]
+}
