@@ -346,3 +346,14 @@ also unchanged from original before/after. Owned proof remains **9/9 twice**,
 unchanged from original after; original **0/9** before is preserved. Evidence:
 `tests/wpt-replaced-content/rc4/rebase-11dd8a8/`. RC-4 is ready for co-integrator
 review; no push, shell grant, or next-ticket work.
+
+
+RC-4 subsequent preflight checkpoint: on dev f1d0f50 + compiled lane552fd1f,
+Windows nextest **1261/0/3 skipped**, separate docs **2/0**; image **17/0**, docs0;
+owned proofs9/9 twice. Both pinned runs completed with prior counts unchanged,
+but the fleet SSH outage prevented collecting reports for hash comparison.
+Evidence is labeled incomplete in `rc4/rebase-f1d0f50/`, not a ready gate.
+Local lane rebased through IA-1 dev `9bf1224`, which changes the driver and WPT
+root mapping; fresh validation of that newer source is unrun pending restored
+server access. No new SSH/SCP attempts after stand-down. REFRESH-HOLD removed
+after the running process ended. Existing before and paired evidence preserved.
