@@ -1,0 +1,26 @@
+[
+  {
+    "sha256": "dabccaf5016bb646ef216870f366afb6f3d6d14d08f6c3e5d6520c58457025e0",
+    "file": "rc4-driver-before.exe",
+    "bytes": 38456832,
+    "built_utc": "2026-09-20T19:12:20.3605839Z"
+  },
+  {
+    "sha256": "b2faa4b19454611c3e355fd963c9c2220dfb2fe95de7aa4d4b913e1f7ac06006",
+    "file": "rc4-images-before.exe",
+    "bytes": 5424640,
+    "built_utc": "2026-09-20T19:12:27.6788392Z"
+  },
+  {
+    "sha256": "6806d4841f458b80bd74f71c05e73f143956af2d49a1eb550a9750fe50a6c638",
+    "file": "rc4-driver-after.exe",
+    "bytes": 38466048,
+    "built_utc": "2026-09-20T19:20:36.9986493Z"
+  },
+  {
+    "sha256": "4831e6b9ac820019cc54648759cfab11aa6e679b16393c57ab4d8362dbdc2157",
+    "file": "rc4-images-after.exe",
+    "bytes": 5447680,
+    "built_utc": "2026-09-20T19:20:45.7388376Z"
+  }
+]

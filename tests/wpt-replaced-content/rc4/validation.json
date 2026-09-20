@@ -1,0 +1,39 @@
+{
+  "before_base": "cc3761e",
+  "after_base": "3d0c2b0",
+  "implementation": "d9310bb",
+  "platform": "win-001",
+  "locked": true,
+  "incremental": false,
+  "workspace": {
+    "passed": 1135,
+    "failed": 0,
+    "ignored": 3,
+    "targets": 56
+  },
+  "paint": {
+    "passed": 87,
+    "failed": 0
+  },
+  "image_adapter": {
+    "passed": 17,
+    "failed": 0,
+    "unit": 4,
+    "presentation": 3,
+    "svg": 10
+  },
+  "isolated_image_example_build": "passed",
+  "root_driver_build": "passed",
+  "source_sha256": {
+    "Cargo.lock": "3feaf8130f2c60230292a4d70311c6e480d848a2ffdebc036fd09a603581ba7d",
+    "crates/amazing-image/src/svg.rs": "4b8b998486d53616b8722754c264daf65e7892d8d5ab0d25f2593d76d2174f7a",
+    "crates/amazing-paint/src/control_raster.rs": "8a579860d907fe140a295a3b478dd296c4b83f12b4b923f26d11c9cc2b385b79",
+    "crates/amazing-shell-gpui/Cargo.lock": "43b49321eb607fb74da7e0add65e91f4725e31a4bb0206285bbe56607a4c84be",
+    "crates/amazing-image/tests/svg.rs": "2925eb85929eba589fa5d82799df14ed0810352b07d038d2c81c12e555143f82",
+    "crates/amazing-paint/src/control_tests.rs": "8c7336522ca9e13a8ea2ac4bbf3db759835fefbda3c85b6c48251729f1320011",
+    "crates/amazing-image/src/svg_transform.rs": "c68146b5e4a459c420ebac4a694351929d140fa772f267ef30987b4316f9aba9"
+  },
+  "all_tracked_rust_and_cargo_inputs_checked": 180,
+  "build_input_mismatches": 0,
+  "artifact_freshness": "Lane-only refresh with first-party invalidation, current mtimes, own-file re-sync; isolated image target first-party invalidation before final build"
+}
