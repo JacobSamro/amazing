@@ -100,3 +100,101 @@ fn svg_obeys_input_geometry_output_and_work_budgets() {
         DecodeError::AllocationLimit
     );
 }
+
+#[test]
+fn transform_lists_and_nested_groups_apply_in_svg_order() {
+    let bytes = svg(
+        "",
+        r#"<g transform="translate(2, 1)"><rect width="2" height="2" fill="red" transform="scale(2)"/></g>"#,
+    );
+    assert_eq!(pixel(&bytes, 2, 1), [255, 0, 0, 255]);
+    assert_eq!(pixel(&bytes, 5, 4), [255, 0, 0, 255]);
+    assert_eq!(pixel(&bytes, 1, 1), [0; 4]);
+    let equivalent = svg(
+        "",
+        r#"<rect width="2" height="2" fill="red" transform="translate(2 1) scale(2)"/>"#,
+    );
+    assert_eq!(
+        decode(&bytes, Default::default()).unwrap().pixels,
+        decode(&equivalent, Default::default()).unwrap().pixels
+    );
+}
+#[test]
+fn rotated_and_reflected_shapes_use_inverse_sampling() {
+    let bytes = svg(
+        "",
+        r#"<rect x="1" y="1" width="2" height="3" fill="blue" transform="rotate(90 4 4)"/>"#,
+    );
+    assert_eq!(pixel(&bytes, 4, 1), [0, 0, 255, 255]);
+    assert_eq!(pixel(&bytes, 6, 2), [0, 0, 255, 255]);
+    assert_eq!(pixel(&bytes, 3, 1), [0; 4]);
+    let reflected = svg(
+        "",
+        r#"<rect x="1" y="1" width="2" height="3" fill="red" transform="matrix(-1 0 0 1 8 0)"/>"#,
+    );
+    assert_eq!(pixel(&reflected, 5, 1), [255, 0, 0, 255]);
+    assert_eq!(pixel(&reflected, 1, 1), [0; 4]);
+}
+#[test]
+fn skew_and_nonuniform_scale_transform_curved_geometry() {
+    let bytes = svg(
+        "",
+        r#"<circle cx="2" cy="2" r="1" fill="lime" transform="scale(2 1)"/>"#,
+    );
+    assert_eq!(pixel(&bytes, 2, 1), [0, 255, 0, 255]);
+    assert_eq!(pixel(&bytes, 2, 2), [0, 255, 0, 255]);
+    assert_eq!(pixel(&bytes, 1, 1), [0; 4]);
+    let skew = svg(
+        "",
+        r#"<rect width="2" height="2" fill="red" transform="skewX(45)"/>"#,
+    );
+    assert_eq!(pixel(&skew, 2, 1), [255, 0, 0, 255]);
+    assert_eq!(pixel(&skew, 0, 1), [0; 4]);
+    let skew_y = svg(
+        "",
+        r#"<rect width="2" height="2" fill="red" transform="skewY(45)"/>"#,
+    );
+    assert_eq!(pixel(&skew_y, 1, 2), [255, 0, 0, 255]);
+}
+#[test]
+fn singular_transform_hides_only_its_subtree() {
+    let bytes = svg(
+        "",
+        r#"<g transform="scale(0)"><rect width="8" height="8" fill="red"/></g><rect width="1" height="1" fill="blue"/>"#,
+    );
+    assert_eq!(pixel(&bytes, 0, 0), [0, 0, 255, 255]);
+    assert_eq!(pixel(&bytes, 4, 4), [0; 4]);
+}
+#[test]
+fn transform_errors_and_limits_fail_the_entire_image() {
+    for value in [
+        "translate(1,)",
+        "scale(NaN)",
+        "matrix(1 2)",
+        "translate(1px)",
+        "rotate(2 3)",
+        "scale(1e309)",
+        "matrix(1e308 0 0 1e308 0 0)",
+        "translate(1),",
+        "scale(1,,2)",
+    ] {
+        let bytes = svg(
+            "",
+            &format!(r#"<rect width="8" height="8"/><rect transform="{value}"/>"#),
+        );
+        assert!(decode(&bytes, Default::default()).is_err(), "{value}");
+    }
+    let list = "scale(1) ".repeat(33);
+    assert_eq!(
+        decode(
+            &svg("", &format!(r#"<g transform="{list}"/>"#)),
+            Default::default()
+        )
+        .unwrap_err(),
+        DecodeError::AllocationLimit
+    );
+    assert_eq!(
+        decode(&svg(r#"transform="scale(2)""#, ""), Default::default()).unwrap_err(),
+        DecodeError::UnsupportedSvg
+    );
+}

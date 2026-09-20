@@ -29,7 +29,9 @@ fn state(checked: bool) -> State {
 }
 fn layout(tag: &str, css: &str) -> (LayoutBox, Rect, Rect) {
     let html = format!("<body>{tag}</body>");
-    let css=format!("body{{margin:0;font-size:10px;line-height:20px}}input,button,select,textarea{{width:20px;height:20px}}{css}");
+    let css = format!(
+        "body{{margin:0;font-size:10px;line-height:20px}}input,button,select,textarea{{width:20px;height:20px}}{css}"
+    );
     let root =
         amazing_layout::layout_document_with_text(&html, &css, 64.0, &FallbackTextSystem::new());
     let (outer, inner) = build_display_list(&root)
@@ -142,15 +144,21 @@ fn disabled_state_and_accent_color_are_provider_driven() {
     );
 }
 #[test]
-fn explicit_default_styles_are_ambiguous_until_css_provenance_exists() {
+fn explicit_author_defaults_suppress_chrome_with_css_provenance() {
     let (a, _, _) = layout("<button></button>", "");
     let (b, _, _) = layout(
         "<button></button>",
         "button{background:transparent;border:none}",
     );
-    assert_eq!(
+    assert_ne!(
         draw(&a, &state(false)).pixels,
         draw(&b, &state(false)).pixels
+    );
+    assert!(
+        draw(&b, &state(false))
+            .pixels
+            .chunks_exact(4)
+            .all(|p| p == [255; 4])
     );
 }
 #[test]
@@ -241,7 +249,9 @@ fn positioned_control_labels_use_existing_glyph_ids_and_content_clip() {
 fn positioned_stacking_contexts_remain_above_or_below_controls() {
     for (z, expected) in [(2, [0, 255, 0, 255]), (-1, [239, 239, 239, 255])] {
         let html = format!("<body><div></div><button></button></body>");
-        let css=format!("body{{margin:0;position:relative}}button{{width:20px;height:20px}}div{{position:absolute;left:0;top:0;width:64px;height:64px;background:lime;z-index:{z}}}");
+        let css = format!(
+            "body{{margin:0;position:relative}}button{{width:20px;height:20px}}div{{position:absolute;left:0;top:0;width:64px;height:64px;background:lime;z-index:{z}}}"
+        );
         let b = amazing_layout::layout_document_with_text(
             &html,
             &css,
@@ -257,4 +267,27 @@ fn positioned_stacking_contexts_remain_above_or_below_controls() {
             .unwrap();
         assert_eq!(at(&draw(&b, &state(false)), r, 10.0, 10.0), expected);
     }
+}
+
+#[test]
+fn author_initial_unset_and_rollback_control_native_chrome() {
+    let (base, _, _) = layout("<button></button>", "");
+    let baseline = draw(&base, &state(false)).pixels;
+    for keyword in ["initial", "unset"] {
+        let (root, _, _) = layout(
+            "<button></button>",
+            &format!("button{{background:{keyword};border:{keyword}}}"),
+        );
+        assert_ne!(draw(&root, &state(false)).pixels, baseline);
+    }
+    let (rolled_back, _, _) = layout(
+        "<button></button>",
+        "button{background-color:revert;border-top-style:revert;border-right-style:revert;border-bottom-style:revert;border-left-style:revert}",
+    );
+    assert!(draw(&rolled_back, &state(false)).pixels == baseline);
+    let (inherited, _, _) = layout(
+        "<button></button>",
+        "body{background:transparent;border:none}",
+    );
+    assert_eq!(draw(&inherited, &state(false)).pixels, baseline);
 }
