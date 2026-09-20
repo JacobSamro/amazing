@@ -884,6 +884,15 @@ def cmd_restart(args) -> int:
         print(f"{lane}: agent would not exit; left running")
         return 1
 
+    # A session launched directly with Codex has no parent shell: exiting the
+    # agent removes the session itself. Recreate it before typing the relaunch.
+    exists = subprocess.run(
+        ["tmux", "has-session", "-t", session], capture_output=True
+    ).returncode == 0
+    if not exists:
+        tmux(["new-session", "-d", "-s", session, "-c", worktree], check=True)
+        print(f"{lane}: recreated exited session", flush=True)
+
     tmux(["send-keys", "-t", session, "-l", f"cd {worktree} && codex --yolo"])
     tmux(["send-keys", "-t", session, "Enter"])
     deadline = time.time() + 45
