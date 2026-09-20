@@ -1,0 +1,34 @@
+{
+  "base_revision": "ea57978ee5e6a776ff9e278e4973df93471988ae",
+  "host": "win-001",
+  "cargo_target_dir": "C:/Users/server/target/integrator-assist",
+  "locked": true,
+  "incremental": false,
+  "build_jobs": 4,
+  "runs": [
+    {
+      "log": "driver-test.log",
+      "passed": 98,
+      "failed": 0,
+      "ignored": 3,
+      "summaries": 13,
+      "sha256": "adeeeee5d12965c14a4ac87bd3f1888b002877d723f5f10b604fc228b38e03cb"
+    },
+    {
+      "log": "workspace.log",
+      "passed": 1024,
+      "failed": 0,
+      "ignored": 3,
+      "summaries": 53,
+      "sha256": "0cead963f2b3005d3c0c4a84b52819fe10ab35e4cd2aea6d498dbb3c33e806ae"
+    },
+    {
+      "log": "workspace-repeat.log",
+      "passed": 1024,
+      "failed": 0,
+      "ignored": 3,
+      "summaries": 53,
+      "sha256": "4d120e21d793218b0ffae1e5e9d743aede885407a9140ac78a7152f7125d3230"
+    }
+  ]
+}

@@ -1,0 +1,914 @@
+[
+    {
+        "stage":  "before",
+        "manifest":  "block-collapse-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  9,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  9,
+        "sha256":  "12ee8ff3020b48ff8e2026abf71cbe29fdf95255606f2f013c45129dec7feb10"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "cascade-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  35,
+                       "mismatch":  24,
+                       "timeout":  0,
+                       "unsupported":  13,
+                       "crash":  0
+                   },
+        "cases":  72,
+        "sha256":  "798977719b4fec6b216b74a1332c919c0309990061446ad4b2c95ea77d411a75"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "computed-values-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  20,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  4,
+                       "crash":  0
+                   },
+        "cases":  24,
+        "sha256":  "cde6a54eb2239b574ec6d04413428ef94e9fe362b53da35a044541a6739a89e7"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "flex-grid-broad-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  61,
+                       "mismatch":  139,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  200,
+        "sha256":  "b2ceea6f8e9a71dc1044c616fe86217b0eccadb73748c02e44d995b907c3b0d8"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "flex-grid-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  24,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  24,
+        "sha256":  "8247989df763e420b52f1e991cbc4794c5fca6b39189337f5ca9eacb9f39c91f"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "geometry-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  31,
+                       "mismatch":  30,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  61,
+        "sha256":  "788b466f3594267f2b7dd28882a3305cb3c69dfe7cfa71b1fffb68b85b53e3d3"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "image-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  12,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "844097480af7107139b84989d27028e9a50c82ba1cfaf2ecd0698b9cebc0ef75"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  26,
+                       "mismatch":  4,
+                       "timeout":  0,
+                       "unsupported":  1,
+                       "crash":  17
+                   },
+        "cases":  48,
+        "sha256":  "d37dfd4dedc5b8d51bcd0163228df0f61842a97d96a54638b62b6790f91b1f91"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "paint-compositing-broad-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  24,
+                       "mismatch":  36,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  60,
+        "sha256":  "ccf91a6bfa08cbd9f10a0dc1d80a0aa9b1999fc48318ab639a3cef76819018a4"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "paint-compositing-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  24,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  24,
+        "sha256":  "ec4ac987d4425e3ec6818b106dcc9717ce75ccd93750e222d6f820cb4dfceafb"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "position-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  9,
+                       "mismatch":  3,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "a97c70e61a6dc5dfdda3bc22f2d0c868520eda17816a966c9f20fabd983ac170"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "svg-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  12,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "448b5b6e06c7e911ad44d3d3e067e9ee9a455915c700d9fec38b4a153c0128db"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "text-flow-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  14,
+                       "mismatch":  2,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  16,
+        "sha256":  "635811ea35d6e467c58c69ff043713a8ad69c0a515f35a31668969c9e79fe74f"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "text-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  16,
+                       "mismatch":  32,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  48,
+        "sha256":  "641d7ad4879c83d1530b333f137906a5fd07ae31f655dd232724b63bbea8387c"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "text-shaping-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  12,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "4381d03d9623b33e56023522abf273f507a0981e2483bf85542745a34d1e37d3"
+    },
+    {
+        "stage":  "before",
+        "manifest":  "vertical-ruby-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  11,
+                       "mismatch":  9,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  20,
+        "sha256":  "64a990821ab5c743b9380cae619eafe6cd22c06e78c9bf1b7991282a3b666dd4"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "block-collapse-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  9,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  9,
+        "sha256":  "12ee8ff3020b48ff8e2026abf71cbe29fdf95255606f2f013c45129dec7feb10"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "cascade-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  35,
+                       "mismatch":  24,
+                       "timeout":  0,
+                       "unsupported":  13,
+                       "crash":  0
+                   },
+        "cases":  72,
+        "sha256":  "798977719b4fec6b216b74a1332c919c0309990061446ad4b2c95ea77d411a75"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "computed-values-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  20,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  4,
+                       "crash":  0
+                   },
+        "cases":  24,
+        "sha256":  "cde6a54eb2239b574ec6d04413428ef94e9fe362b53da35a044541a6739a89e7"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "flex-grid-broad-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  61,
+                       "mismatch":  139,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  200,
+        "sha256":  "b2ceea6f8e9a71dc1044c616fe86217b0eccadb73748c02e44d995b907c3b0d8"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "flex-grid-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  24,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  24,
+        "sha256":  "8247989df763e420b52f1e991cbc4794c5fca6b39189337f5ca9eacb9f39c91f"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "geometry-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  31,
+                       "mismatch":  30,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  61,
+        "sha256":  "788b466f3594267f2b7dd28882a3305cb3c69dfe7cfa71b1fffb68b85b53e3d3"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "image-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  12,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "844097480af7107139b84989d27028e9a50c82ba1cfaf2ecd0698b9cebc0ef75"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  26,
+                       "mismatch":  4,
+                       "timeout":  0,
+                       "unsupported":  1,
+                       "crash":  17
+                   },
+        "cases":  48,
+        "sha256":  "d37dfd4dedc5b8d51bcd0163228df0f61842a97d96a54638b62b6790f91b1f91"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "paint-compositing-broad-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  24,
+                       "mismatch":  36,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  60,
+        "sha256":  "ccf91a6bfa08cbd9f10a0dc1d80a0aa9b1999fc48318ab639a3cef76819018a4"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "paint-compositing-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  24,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  24,
+        "sha256":  "ec4ac987d4425e3ec6818b106dcc9717ce75ccd93750e222d6f820cb4dfceafb"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "position-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  9,
+                       "mismatch":  3,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "a97c70e61a6dc5dfdda3bc22f2d0c868520eda17816a966c9f20fabd983ac170"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "svg-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  12,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "448b5b6e06c7e911ad44d3d3e067e9ee9a455915c700d9fec38b4a153c0128db"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "text-flow-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  14,
+                       "mismatch":  2,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  16,
+        "sha256":  "635811ea35d6e467c58c69ff043713a8ad69c0a515f35a31668969c9e79fe74f"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "text-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  16,
+                       "mismatch":  32,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  48,
+        "sha256":  "641d7ad4879c83d1530b333f137906a5fd07ae31f655dd232724b63bbea8387c"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "text-shaping-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  12,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "4381d03d9623b33e56023522abf273f507a0981e2483bf85542745a34d1e37d3"
+    },
+    {
+        "stage":  "final-1",
+        "manifest":  "vertical-ruby-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  11,
+                       "mismatch":  9,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  20,
+        "sha256":  "64a990821ab5c743b9380cae619eafe6cd22c06e78c9bf1b7991282a3b666dd4"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "block-collapse-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  9,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  9,
+        "sha256":  "12ee8ff3020b48ff8e2026abf71cbe29fdf95255606f2f013c45129dec7feb10"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "cascade-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  35,
+                       "mismatch":  24,
+                       "timeout":  0,
+                       "unsupported":  13,
+                       "crash":  0
+                   },
+        "cases":  72,
+        "sha256":  "798977719b4fec6b216b74a1332c919c0309990061446ad4b2c95ea77d411a75"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "computed-values-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  20,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  4,
+                       "crash":  0
+                   },
+        "cases":  24,
+        "sha256":  "cde6a54eb2239b574ec6d04413428ef94e9fe362b53da35a044541a6739a89e7"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "flex-grid-broad-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  61,
+                       "mismatch":  139,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  200,
+        "sha256":  "b2ceea6f8e9a71dc1044c616fe86217b0eccadb73748c02e44d995b907c3b0d8"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "flex-grid-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  24,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  24,
+        "sha256":  "8247989df763e420b52f1e991cbc4794c5fca6b39189337f5ca9eacb9f39c91f"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "geometry-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  31,
+                       "mismatch":  30,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  61,
+        "sha256":  "788b466f3594267f2b7dd28882a3305cb3c69dfe7cfa71b1fffb68b85b53e3d3"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "image-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  12,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "844097480af7107139b84989d27028e9a50c82ba1cfaf2ecd0698b9cebc0ef75"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  26,
+                       "mismatch":  4,
+                       "timeout":  0,
+                       "unsupported":  1,
+                       "crash":  17
+                   },
+        "cases":  48,
+        "sha256":  "d37dfd4dedc5b8d51bcd0163228df0f61842a97d96a54638b62b6790f91b1f91"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "paint-compositing-broad-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  24,
+                       "mismatch":  36,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  60,
+        "sha256":  "ccf91a6bfa08cbd9f10a0dc1d80a0aa9b1999fc48318ab639a3cef76819018a4"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "paint-compositing-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  24,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  24,
+        "sha256":  "ec4ac987d4425e3ec6818b106dcc9717ce75ccd93750e222d6f820cb4dfceafb"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "position-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  9,
+                       "mismatch":  3,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "a97c70e61a6dc5dfdda3bc22f2d0c868520eda17816a966c9f20fabd983ac170"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "svg-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  12,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "448b5b6e06c7e911ad44d3d3e067e9ee9a455915c700d9fec38b4a153c0128db"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "text-flow-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  14,
+                       "mismatch":  2,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  16,
+        "sha256":  "635811ea35d6e467c58c69ff043713a8ad69c0a515f35a31668969c9e79fe74f"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "text-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  16,
+                       "mismatch":  32,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  48,
+        "sha256":  "641d7ad4879c83d1530b333f137906a5fd07ae31f655dd232724b63bbea8387c"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "text-shaping-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  12,
+                       "mismatch":  0,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  12,
+        "sha256":  "4381d03d9623b33e56023522abf273f507a0981e2483bf85542745a34d1e37d3"
+    },
+    {
+        "stage":  "final-2",
+        "manifest":  "vertical-ruby-manifest",
+        "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+        "viewport":  {
+                         "width":  800,
+                         "height":  600,
+                         "device_scale":  1
+                     },
+        "counts":  {
+                       "pass":  11,
+                       "mismatch":  9,
+                       "timeout":  0,
+                       "unsupported":  0,
+                       "crash":  0
+                   },
+        "cases":  20,
+        "sha256":  "64a990821ab5c743b9380cae619eafe6cd22c06e78c9bf1b7991282a3b666dd4"
+    }
+]

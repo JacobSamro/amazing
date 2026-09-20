@@ -1,0 +1,434 @@
+[
+    {
+        "id":  "css-fonts__system-ui-mixed.html",
+        "classification":  "pass",
+        "actual_sha256":  "23aee5210984ad79b748006582df9a3eb78b3a5a5850791d5806d5de6fe68907",
+        "reference_sha256":  "23aee5210984ad79b748006582df9a3eb78b3a5a5850791d5806d5de6fe68907",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-fonts__font-size-zero-1-ref.html",
+        "classification":  "pass",
+        "actual_sha256":  "d1539e891dbe678aede227549791e95cc028e1237db6ad3c211784708a9bdeb3",
+        "reference_sha256":  "1e21a2e119db5363ea6bf10d35a575d14de4e591ce60807c491cf6535bca500c",
+        "diff_sha256":  "bfe33861b6780a13fa04cfb99e937863b51ac0021975625402861c462da1802f",
+        "differing_pixels":  538,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-fonts__test-synthetic-italic.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "78e613c45fb3563fe8318571bb04e76240b2ca4683cea85928acf7593890ae44",
+        "reference_sha256":  "78e613c45fb3563fe8318571bb04e76240b2ca4683cea85928acf7593890ae44",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-fonts__font-variant-ligatures-11.optional.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "5855392dde42092924c565f07d7498154af1e11c5319bbc0abb2640d9a3c29b8",
+        "reference_sha256":  "fdbb5cddb39813b748314b22c1c6a3e37fba2689c0fe6f91a3ae292a466c418c",
+        "diff_sha256":  "4b494fe0b2d650c6af8ab7dc1827fa3fd9a2aa8ef0fb0ce07a0d0780c2d7edd6",
+        "differing_pixels":  424,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-fonts__matching__font-unicode-PUA-primary-font.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "94ccba913077904bb6b9417fadb779ec9de10490b9807a003fcc7b170e8d53a9",
+        "reference_sha256":  "94ccba913077904bb6b9417fadb779ec9de10490b9807a003fcc7b170e8d53a9",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-fonts__standard-font-family-19.html",
+        "classification":  "pass",
+        "actual_sha256":  "3d1bf5eb0dcfce0990dc1ec1d60f8e1166c5d02d81e16ed3dc4f927fd521da96",
+        "reference_sha256":  "d636306a3568a8e72c081a1efcb13368eb34be47fd5f82729dd71bff7272be28",
+        "diff_sha256":  "27cb3bb067f02b175d19fe9d8bfec38f3f1d01f7a46b9b58672fee6a24eb218f",
+        "differing_pixels":  10378,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-fonts__font-size-zero-1.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "1e21a2e119db5363ea6bf10d35a575d14de4e591ce60807c491cf6535bca500c",
+        "reference_sha256":  "d1539e891dbe678aede227549791e95cc028e1237db6ad3c211784708a9bdeb3",
+        "diff_sha256":  "bfe33861b6780a13fa04cfb99e937863b51ac0021975625402861c462da1802f",
+        "differing_pixels":  538,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-fonts__standard-font-family-5.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "3d1bf5eb0dcfce0990dc1ec1d60f8e1166c5d02d81e16ed3dc4f927fd521da96",
+        "reference_sha256":  "3d1bf5eb0dcfce0990dc1ec1d60f8e1166c5d02d81e16ed3dc4f927fd521da96",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-fonts__font-kerning-01.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "955b77387a4e129543e7e24257fffc7fdc0ef0be70c933813528d47375d2351d",
+        "reference_sha256":  "565eb6db29eeada492030534019a22027697424e1cef35a171d09f1afa18a491",
+        "diff_sha256":  "34581bb76e925254a38353257366f33ee29cf237eb10c079063f0ceddc033946",
+        "differing_pixels":  10000,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-fonts__font-size-adjust-zero-2.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "1e21a2e119db5363ea6bf10d35a575d14de4e591ce60807c491cf6535bca500c",
+        "reference_sha256":  "e5a517fb1ab8ea85bdb095b07b375692725dfc9bd4a0eff174322b8797427b9f",
+        "diff_sha256":  "df107a8948f32a1c3ba8db6713556d5f1f7c79c84a5d999080105a4f687b42dc",
+        "differing_pixels":  152,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-fonts__font-variant-emoji-1.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "6031119fc8f10290839add1fe570285dfa19a558ee7e792c6cb33e06145d7c92",
+        "reference_sha256":  "6031119fc8f10290839add1fe570285dfa19a558ee7e792c6cb33e06145d7c92",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-fonts__font-size-xxx-large.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "27269bbdb99649bd5afa37bd84b2f10e8c9c47ede5669a953641f2fbc4168f4c",
+        "reference_sha256":  "f142ee8a980ce65f96d095c8ff3f9786e240fe282bd80564d3e04a7b8f34ad0d",
+        "diff_sha256":  "fb22968ccb9d5f1c10448ce6d846d5691be36ccd4f8abdfa5db831f9317725bc",
+        "differing_pixels":  915,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-text__text-align__text-align-last-justify-rtl.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "4f38b9fb264cbee5eba2c089fdf98bc1c6654ea8b15fc14c21fc7990d162a5d8",
+        "reference_sha256":  "75d635b5ab7d7a74570f079d48135f0cdbcb8ed067d489b16d208fa777a8e0bc",
+        "diff_sha256":  "75f85f417d402408c638fdcc91aed4538cb7b5fbc868cf1b182fb7aa48350e64",
+        "differing_pixels":  275,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-text__tab-size__tab-size-spacing-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "b1bb887efc42383b4643847a0dfe8464600a82570e9a716e2d4b8c82cf039090",
+        "reference_sha256":  "c7a38193d8a503aa343abf494bd05b8353f5f8565db8299c8b51cbd512f5cb85",
+        "diff_sha256":  "933cd614c582a2b5764b646ced29a6b6c6327c88209e4a7caa78e4d214596e93",
+        "differing_pixels":  800,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-text__hyphens__i18n__hyphens-i18n-auto-005.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "b0c356db07a33c834d8e0950e505df1d3c71fe15301b7047a315d083ee961fe7",
+        "reference_sha256":  "39f7254d768e487ae45d240a05b6b129d08ab387afb49cf09095063d46cf034e",
+        "diff_sha256":  "3e574545d5c4498196bc5b455660fd48a74952aea236d69d7fe630271998b63c",
+        "differing_pixels":  3201,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-text__text-align__text-align-match-parent-01.html",
+        "classification":  "pass",
+        "actual_sha256":  "a52eb2a60679104c242baf0f104e5ba13c0446b0af4419ef8bd8079d8cbe2e11",
+        "reference_sha256":  "a52eb2a60679104c242baf0f104e5ba13c0446b0af4419ef8bd8079d8cbe2e11",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-text__text-align__text-align-last-justify-br.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "b33922133364b97fcaf4f2c5b2eacf414123cfa7c596071472f58cfed015d2f1",
+        "reference_sha256":  "5b96653989db1bbfb0ebbf463012262d973b4219182ff6af5eea18da8acfd333",
+        "diff_sha256":  "b13958d0a9332a84f2a3ec083d45a76f5340ce47e43e8519913cf22356285407",
+        "differing_pixels":  704,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-text__word-break__word-break-break-all-014.html",
+        "classification":  "pass",
+        "actual_sha256":  "5256f063529ddb5f318d3adcfcb6cd9f2a3e934dbcba245e8af179c5f19c09c0",
+        "reference_sha256":  "5256f063529ddb5f318d3adcfcb6cd9f2a3e934dbcba245e8af179c5f19c09c0",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-text__hyphens__hyphens-manual-inline-011.html",
+        "classification":  "pass",
+        "actual_sha256":  "5a1e0c0d527578846c13a781619772cd3c207453223ed3d7f4182748c6c2390a",
+        "reference_sha256":  "5a1e0c0d527578846c13a781619772cd3c207453223ed3d7f4182748c6c2390a",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-text__white-space__control-chars-00E.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "1c1f74fe36ae8b72c59883711a5770ff21a3784fc0ed0801cae33d3e18bea00f",
+        "reference_sha256":  "1c1f74fe36ae8b72c59883711a5770ff21a3784fc0ed0801cae33d3e18bea00f",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-text__text-indent__text-indent-percentage-004.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "ecf7d5eb7f3e3a070459a359da9d3df01c0947e49f40fa30796309e579112c3e",
+        "reference_sha256":  "46c1c96ad814f9552c40ed6a89b807e3cb75b5ea85c56b2655878f08f6985238",
+        "diff_sha256":  "a2718293ada3046dbb4dd163cf2239f09cbd3017420aea52f63934e7293e5374",
+        "differing_pixels":  219,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-text__hyphens__i18n__hyphens-i18n-auto-004.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "5c2f55138e46aaf8ef92d07809d2ee4744f893f131ab58f8e6feef7f26883b04",
+        "reference_sha256":  "255e760929ba7342cc483e2c4e1bd05d9aacfc609ffbf1e64b01210ad854a09e",
+        "diff_sha256":  "cd1f2d4e9fa81e27f8bfdbe3178bb85e25e95beedac32aaf2de7139f20d619a3",
+        "differing_pixels":  3288,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-text__text-align__text-align-justify-last-end.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "ea03a91e056e8ecd4979ff54368cec22f02c000c5e5e6c123daaba0ff7ab446f",
+        "reference_sha256":  "ea03a91e056e8ecd4979ff54368cec22f02c000c5e5e6c123daaba0ff7ab446f",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-text__word-break__auto-phrase__word-break-auto-phrase-005.html",
+        "classification":  "pass",
+        "actual_sha256":  "64cb8017d4c3e0b1aee27b7b5599be9d1fe5e4a060300e65292ff40378573590",
+        "reference_sha256":  "64cb8017d4c3e0b1aee27b7b5599be9d1fe5e4a060300e65292ff40378573590",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__forms__select-multiple-appearance-none-vlr.optional.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "f0c7dbed67ab1839f3e52899f9ce83ff52eb691c02f8d4118fe21a52d13c54c5",
+        "reference_sha256":  "f0c7dbed67ab1839f3e52899f9ce83ff52eb691c02f8d4118fe21a52d13c54c5",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__forms__select-appearance-native-horizontal.optional.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "28995fb73167a520747dcda7635f73a2b132a6e8162cd106c255ced42ab3f6e8",
+        "reference_sha256":  "28995fb73167a520747dcda7635f73a2b132a6e8162cd106c255ced42ab3f6e8",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__table-progression-slr-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "3e9da2f18730c6400f5e4b670b9fa676dae9e33b361b3ae18eb8fd4515eaf54a",
+        "reference_sha256":  "6b2981a93b5f37f87e788cf081e45657e8879dba595a02bdc45a0220fe9fa64b",
+        "diff_sha256":  "ba088fffa74a2a3c09ee1113c69e700444b3794a5d87dca39c3da0a776a82f6d",
+        "differing_pixels":  5544,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__mongolian-span-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "4668959514d677c4a733103bcd501c3dc5d353c23104f4eb7d2588f8e2e44aa4",
+        "reference_sha256":  "4668959514d677c4a733103bcd501c3dc5d353c23104f4eb7d2588f8e2e44aa4",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__abs-pos-border-offset-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "ab6e1550136a720a242ff7dac16750f078e2b8111a0354a2ab5f8b24dd26ce2e",
+        "reference_sha256":  "ab6e1550136a720a242ff7dac16750f078e2b8111a0354a2ab5f8b24dd26ce2e",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__mongolian-orientation-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "e7dc4691fc1c38933dbc61791816ea8b682802c5b9dfa728ee14daedb8d2071a",
+        "reference_sha256":  "e7dc4691fc1c38933dbc61791816ea8b682802c5b9dfa728ee14daedb8d2071a",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__forms__file-input-vertical-rtl.optional.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "80b77a5cb7ca5b28e934f529872d20771637bd6348eee2a89f03386a4c797413",
+        "reference_sha256":  "80b77a5cb7ca5b28e934f529872d20771637bd6348eee2a89f03386a4c797413",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__ch-units-vrl-006.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "17fc8555fe478e273b429fa77b5761c43f8c47e1eaf357f8d7f5106e0fd95518",
+        "reference_sha256":  "a3f3061d9eb11591f55e82ab49030121ce5f699b64b6ffc651e29ddc74abddf9",
+        "diff_sha256":  "37a0401937b090c8937cef254c59de9ab2a715a857de5df8118c7fa915dcec14",
+        "differing_pixels":  47040,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__logical-props-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "929cb7493902acb0bb8e595ee76c1b5462038549523145064d9a05a2dac6e091",
+        "reference_sha256":  "612ebb674249c05459bb7eb31d9cfbe3442cbc02a6793e0a7115406e9b554ef4",
+        "diff_sha256":  "fd21f375766509d8d43d483c0ed04e91a6a575aecd0c5aebfe5d59141bb1e960",
+        "differing_pixels":  500,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__ch-units-vrl-004.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "17fc8555fe478e273b429fa77b5761c43f8c47e1eaf357f8d7f5106e0fd95518",
+        "reference_sha256":  "a3f3061d9eb11591f55e82ab49030121ce5f699b64b6ffc651e29ddc74abddf9",
+        "diff_sha256":  "37a0401937b090c8937cef254c59de9ab2a715a857de5df8118c7fa915dcec14",
+        "differing_pixels":  47040,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__table-progression-htb-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "a70c2904ff27831910d0a8a678f21fd2330855d5a2d0954224554a56e0a4a6ae",
+        "reference_sha256":  "d9f137f6a3d65a51d22c92c401ccfcba0be5cba9603d8df4dcde982525a467a9",
+        "diff_sha256":  "20e92e9c082e4eda278e56a03dd6877c1d62a6c8c59c3999a995037890d29091",
+        "differing_pixels":  3240,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__orthogonal-cell-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "86a6168bbe9263cabcb26e551ab970c03dd87ddb4c490ac3e64db040405ffc09",
+        "reference_sha256":  "86a6168bbe9263cabcb26e551ab970c03dd87ddb4c490ac3e64db040405ffc09",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__ruby-box-model-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "5d46c1175f06cd9017039fdf0937a7b6a0c4dd16f74d7bf622fb54f09c0cb816",
+        "reference_sha256":  "5d46c1175f06cd9017039fdf0937a7b6a0c4dd16f74d7bf622fb54f09c0cb816",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__break-within-bases__no-break-opportunity-at-end.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "031a8c11caedd81174d828fb372e330625d65143715e25ea780fc27b43d22871",
+        "reference_sha256":  "2d33c0f80d5d6c4f979a2ca24865c97877196bbac46e54ab180a9bc75bcb66b5",
+        "diff_sha256":  "25761b238f0ad5594b687fb4ec463afae1390d839b287ba6002c436b7a67a5fc",
+        "differing_pixels":  1080,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-ruby__ruby-overhang-spaces-align-002.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "81a5fffde3514ad10442619383c803d1b5a3fe01d06efb0cd12ab7fde177f244",
+        "reference_sha256":  "09c90055da4bf6e0dcf27c87fbfd05331535520c3b67d7ed42cd6b17635cb6f4",
+        "diff_sha256":  "136301bfc3dfc3047680870eb8d4508b5837fefeb39056e9798df658fc4d05d2",
+        "differing_pixels":  1120,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-ruby__ruby-overhang-spaces-align-005.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "eb2331d45e10449944e32746e15ababe4577825f00a5e22ae23f3357c2ccee78",
+        "reference_sha256":  "ce30a627cbc67687855d31c7bbaadc876b1c2e1a2466f6740b7a4c3b43e723c2",
+        "diff_sha256":  "9486b005052ef9702720aa70fb330364b7f0271ad42792d2fa358c6ed1556741",
+        "differing_pixels":  1120,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-ruby__ruby-overhang-spaces-003.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "1fbe131298acf2c3d4cbc996f787288fa44ae87fc30f9c1bc6622cbc2c3e298c",
+        "reference_sha256":  "c8f135e18a7d5f1fd67b825ac43d02bc66b938224075e52a55f8b4921ad26074",
+        "diff_sha256":  "419a87e54d5bb550eccb632297f14ef0e48e07cd8254d8e0cf29370f17219817",
+        "differing_pixels":  630,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-ruby__ruby-overhang-spaces-013.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "33f222b809ccbe0ac6611605b90002d6741edd726dc9ec51e52eb29a1a586155",
+        "reference_sha256":  "c7f685a210cf737930ff4ef72666887f661f37e075be16e345d605696f0ae66c",
+        "diff_sha256":  "86581459e64551cef4e072b16ae151fb17fa59e210ddbbb02c20a785e4685b88",
+        "differing_pixels":  803,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-ruby__empty-ruby-text-container-abs.html",
+        "classification":  "pass",
+        "actual_sha256":  "9eb0b98eaa142d7242ec65fee7e3053b40589ca71a82333e9377b57447a26b80",
+        "reference_sha256":  "9eb0b98eaa142d7242ec65fee7e3053b40589ca71a82333e9377b57447a26b80",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__ruby-base-container-float.html",
+        "classification":  "pass",
+        "actual_sha256":  "bea5371ed569d971209a77166bcce547c25962914d6ae2d02a5ef1669d6b94f0",
+        "reference_sha256":  "bea5371ed569d971209a77166bcce547c25962914d6ae2d02a5ef1669d6b94f0",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__ruby-overhang-spaces-008.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "ed111dd090ecc8c84cb37b22db2d63e964bb0d086dc865758959c4c2be0969ee",
+        "reference_sha256":  "f9a22fa8353214a5973b7d942d2c945787f3a7478bf0c5c43fe0ffbce5433cc4",
+        "diff_sha256":  "e1a83437e8c01512b93a58e821ac21212aab4ed9f8689415f71cec4754d24bbd",
+        "differing_pixels":  140,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-ruby__ruby-line-break-suppression-004.html",
+        "classification":  "pass",
+        "actual_sha256":  "4bf8f63f410b107a5a805b0e9a93c9a443d4c5480c2cd25322df259b4cc2b559",
+        "reference_sha256":  "4bf8f63f410b107a5a805b0e9a93c9a443d4c5480c2cd25322df259b4cc2b559",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__pseudo-first-letter.html",
+        "classification":  "pass",
+        "actual_sha256":  "b402457363af125f1dcd693bdf43d7ccee6419667ae77568227e7b0cd8ad6ef4",
+        "reference_sha256":  "b402457363af125f1dcd693bdf43d7ccee6419667ae77568227e7b0cd8ad6ef4",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__ruby-overhang-spaces-align-003.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "67dc112c4b231472c09d3c06326771ab203e6ba2e5c01cafc7b8ca06d76c9b67",
+        "reference_sha256":  "3e1a9d0df72393c30728498c029c46e69bbe9023a5ac82464df19b6f50f13c50",
+        "diff_sha256":  "36d09409b8d93edd26f72caba21a916ff3dd2d9455275c5224d9d27978aff7f5",
+        "differing_pixels":  1260,
+        "max_difference":  255
+    }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "stage": "before",
+    "colored_pixels": 32,
+    "width": 8,
+    "height": 4,
+    "sha256": "E614D666DEFBE7AA7064A89DC5E1112124BB90354534B559D53A8FE1C9F90D09"
+  },
+  {
+    "stage": "final",
+    "colored_pixels": 2,
+    "width": 2,
+    "height": 1,
+    "sha256": "4130605981BF23FF7D53E4070079326B24F28533DEA90C4F457EFE478DFB8D02"
+  }
+]

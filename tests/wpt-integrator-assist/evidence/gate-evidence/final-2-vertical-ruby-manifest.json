@@ -1,0 +1,182 @@
+[
+    {
+        "id":  "css-writing-modes__text-orientation-initial.html",
+        "classification":  "pass",
+        "actual_sha256":  "ce400107b04a0bf6ad4ac310275f0a71cb6a403f9a129bf6428e59f4abe2710b",
+        "reference_sha256":  "ce400107b04a0bf6ad4ac310275f0a71cb6a403f9a129bf6428e59f4abe2710b",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__text-orientation-mixed-vrl-100.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "9e9afc60f435153d6e3cdd756dc81b6993cc943522dfa73ceb896596d0870f42",
+        "reference_sha256":  "b10c02475bc2bbd092e20e8baa87c1aafaa1d8d1bd1a08ee2be18e63ba83256b",
+        "diff_sha256":  "691fab6d72b22c56b88e0afddb8fc671f7eee6ba8458cf0a978600b64456b01d",
+        "differing_pixels":  1063,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__text-orientation-upright-vrl-100.html",
+        "classification":  "pass",
+        "actual_sha256":  "22ebf7ce9dee892af49baa315c6ce20395b9566ea18a3ac8e2b71fd36fe7cedc",
+        "reference_sha256":  "22ebf7ce9dee892af49baa315c6ce20395b9566ea18a3ac8e2b71fd36fe7cedc",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__text-orientation-sideways-vrl-100.html",
+        "classification":  "pass",
+        "actual_sha256":  "2850fbd96349276bca4ca2d98569a9f64d91d537641892ff5f19a8a273634729",
+        "reference_sha256":  "2850fbd96349276bca4ca2d98569a9f64d91d537641892ff5f19a8a273634729",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__direction-upright-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "e21f8a731c0260737a26832fb72b9c43262ef048f91d3d3b5eb2cb29654bb778",
+        "reference_sha256":  "aac0b840663e077a5086e60a47fdcf6929429c4684fdb1eea9598ed0996f047e",
+        "diff_sha256":  "2144140055906c0f5d735188469ea05368d7d0d617625d67ddae348db6ee40c9",
+        "differing_pixels":  5383,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__sideways-lr-main-axis.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "6777cfde46b0408604b3a49e578db0c2e4e72532612fb61a2084d518e96a3bf6",
+        "reference_sha256":  "6e88f2e9e888e1384aee8bc07320600897bd8d9dd48b059682a5ae4aa00058b9",
+        "diff_sha256":  "ce0379d8bed922b06495ac712e10411bb0c745d17220618ee59a9a6567059f0b",
+        "differing_pixels":  5600,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__two-levels-of-orthogonal-flows-fixed.html",
+        "classification":  "pass",
+        "actual_sha256":  "c9690eea4e4e648792184d2567f5d60c6358e2c9208b7e3f7b93a2347f1d894d",
+        "reference_sha256":  "c9690eea4e4e648792184d2567f5d60c6358e2c9208b7e3f7b93a2347f1d894d",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__baseline-with-orthogonal-flow-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "f265e8af082db91d214179cd5c04a43dc1b5793ba914deb1aa830d63e2eb4899",
+        "reference_sha256":  "fd76a6624c3b5183eac659b2aea4a1d036bfb787fad69253a5e16d9264d8cef0",
+        "diff_sha256":  "cdf4ff5e4bb76ef5fffe38652b0a0e428d22720627518e5d170573ef4b5c9b68",
+        "differing_pixels":  216,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__tcy-white-space-processing-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "b2af1bbc7944acc07ca9de66d8221068c2371eea30793868939d6d2bc1bd2085",
+        "reference_sha256":  "68462e00f8444357f221ded2908224370dbbfc5f9571f15cc8b33000684dab82",
+        "diff_sha256":  "ad06381d01b8cfa12f05d4f1b607fbb385d0cd8987dd271b65ac2df8ed739d81",
+        "differing_pixels":  226,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__text-combine-upright-rtl-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "5fb7bf3b587bcbcb32a75407bab9c870cd7d77f140b8d3811851578f63812343",
+        "reference_sha256":  "5fb7bf3b587bcbcb32a75407bab9c870cd7d77f140b8d3811851578f63812343",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-writing-modes__text-combine-upright-compression-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "3879de0bfb3c654631d2055dd6057e0d23fe6e8273bfc81333fef34be8661681",
+        "reference_sha256":  "866ba49002eabfcbcc31fd2bff205e078986f71ddf4a879c5eab2de3a31b07ed",
+        "diff_sha256":  "5c4cfb9129f2e3d0d8576e7c64326d9a89922fca9591fa3957baeff2cf0b15e9",
+        "differing_pixels":  4000,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-writing-modes__text-combine-upright-line-breaking-rules-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "9a793ae7c1d295fda3f7cc275e11cd4b50f7b5e84f1b2e2f8e41ba4b1fa3ffa3",
+        "reference_sha256":  "9a793ae7c1d295fda3f7cc275e11cd4b50f7b5e84f1b2e2f8e41ba4b1fa3ffa3",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__rb-display-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "906460b375087100ea429a9b00675fe5b60a313d9f51e1dd6daee8143088b8c0",
+        "reference_sha256":  "906460b375087100ea429a9b00675fe5b60a313d9f51e1dd6daee8143088b8c0",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__rt-display-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "906460b375087100ea429a9b00675fe5b60a313d9f51e1dd6daee8143088b8c0",
+        "reference_sha256":  "906460b375087100ea429a9b00675fe5b60a313d9f51e1dd6daee8143088b8c0",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__rbc-rtc-basic-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "4084b4eaa4333c662c07f8a5a391c296c1374a77b6a67b4e858f92d53ddcdd20",
+        "reference_sha256":  "ca3c33525aceb895dcf8e552d3f00ddc883ca9b5632c9693fdde90422ce4cce5",
+        "diff_sha256":  "f9912f71f2b77684e01d2cd5c55891e38489f41b087d012f964f5528d8cdb752",
+        "differing_pixels":  1260,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-ruby__nested-ruby-pairing-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "905d6f8173825cc459fb279aec5e62b12ebadb4ceb8fed7ed4f20707cc3d1157",
+        "reference_sha256":  "64c234e0d1ce6c90405cc63d9187ebafb07b693dec7f817997c4079ce1b412c9",
+        "diff_sha256":  "8eab19b871a42207a7d412021211fbab563bbd2fa36e3b1ce5cf8a2e11a69503",
+        "differing_pixels":  1069,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-ruby__ruby-autohide-001.html",
+        "classification":  "pass",
+        "actual_sha256":  "1ee3b7af78df3813df7dbdfc89628f9f82189c6130d4f5a54a17e22e70868a3a",
+        "reference_sha256":  "1ee3b7af78df3813df7dbdfc89628f9f82189c6130d4f5a54a17e22e70868a3a",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__empty-ruby-base-container.html",
+        "classification":  "pass",
+        "actual_sha256":  "bea5371ed569d971209a77166bcce547c25962914d6ae2d02a5ef1669d6b94f0",
+        "reference_sha256":  "bea5371ed569d971209a77166bcce547c25962914d6ae2d02a5ef1669d6b94f0",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "css-ruby__ruby-overhang-spaces-vertical-001.html",
+        "classification":  "mismatch",
+        "actual_sha256":  "c6deacf8191fcd022949ec1b9a50e178ecba98f40619ef586ed54617629c1f47",
+        "reference_sha256":  "eb006db2b0927fb20884f964f1210883d2773c0bb2911b379037d26bb9abc5ee",
+        "diff_sha256":  "6d1e428ec9eb7ce78691d9c6505353a635fb4df8edf7595eff083fc9f982ddd8",
+        "differing_pixels":  2520,
+        "max_difference":  255
+    },
+    {
+        "id":  "css-ruby__ruby-line-break-suppression-004.html",
+        "classification":  "pass",
+        "actual_sha256":  "4bf8f63f410b107a5a805b0e9a93c9a443d4c5480c2cd25322df259b4cc2b559",
+        "reference_sha256":  "4bf8f63f410b107a5a805b0e9a93c9a443d4c5480c2cd25322df259b4cc2b559",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    }
+]

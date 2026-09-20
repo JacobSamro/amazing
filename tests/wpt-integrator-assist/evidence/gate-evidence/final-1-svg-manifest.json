@@ -1,0 +1,110 @@
+[
+    {
+        "id":  "object-fit-fill-svg-001i",
+        "classification":  "pass",
+        "actual_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "reference_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-fit-fill-svg-002i",
+        "classification":  "pass",
+        "actual_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "reference_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-fit-contain-svg-001i",
+        "classification":  "pass",
+        "actual_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "reference_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-fit-contain-svg-002i",
+        "classification":  "pass",
+        "actual_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "reference_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-fit-cover-svg-001i",
+        "classification":  "pass",
+        "actual_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "reference_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-fit-cover-svg-002i",
+        "classification":  "pass",
+        "actual_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "reference_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-fit-none-svg-001i",
+        "classification":  "pass",
+        "actual_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "reference_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-fit-none-svg-002i",
+        "classification":  "pass",
+        "actual_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "reference_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-fit-scale-down-svg-001i",
+        "classification":  "pass",
+        "actual_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "reference_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-fit-scale-down-svg-002i",
+        "classification":  "pass",
+        "actual_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "reference_sha256":  "3a31199984448db3a7da9ad0d9d6eb3a47d09832456d6f0631bdba63ffb00df2",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-position-svg-001i",
+        "classification":  "pass",
+        "actual_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "reference_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    },
+    {
+        "id":  "object-position-svg-002i",
+        "classification":  "pass",
+        "actual_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "reference_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+        "differing_pixels":  0,
+        "max_difference":  0
+    }
+]
