@@ -576,6 +576,7 @@ impl TreeBuilder {
                 Some(Namespace::Svg) => {
                     matches!(n, "foreignObject" | "desc" | "title")
                 },
+                Some(Namespace::Null | Namespace::Other(_)) => false,
                 None => false,
             };
             if is_terminator {

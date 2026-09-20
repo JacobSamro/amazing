@@ -453,7 +453,8 @@ replace-data, split-text, and normalize algorithms (reviewed 2026-09-20).
 - `release_range`/`release_traversal` are explicit binding-GC seams; legacy
   detach methods are no-ops. Handles must never cross Dom arenas.
 - No JS binding, custom-element/shadow-tree extension, WPT result, or broad
-  browser conformance is claimed. DOM-1 remains parked pending JS-2.
+  browser conformance is claimed. DOM-1 is now merged as 156cc13; these native
+  APIs are not yet exposed to script, so its baseline is not relabeled.
 
 Fresh-artifact Windows gate on base 57f0e69: 107 DOM tests passed twice (65
 preexisting plus 42 new), zero failed/ignored; canonical result hash
@@ -463,3 +464,79 @@ canonical result hash `05385f87dfb95722b7af7ef06b03da37ba8662eadac4e066bd513ee65
 144 Rust source/manifests matched Mac; logs confirm first-party recompilation
 following the integrator's artifact-invalidation refresh. These gates completed
 as the integrator redirected the lane to DOM-1; DOM-3 is checkpointed for return.
+
+
+### DOM-3 resumption and XML namespace seam
+
+Resumed the checkpoint on integrated DOM-1 (`156cc13`). The integrator added
+the html lane's XML namespace request to DOM-3. `Namespace` keeps its existing
+copyable Html/Svg/MathMl values, adding Null and Other(NamespaceId). Arbitrary
+URI strings are interned in the Dom arena; equality compares namespace identity
+within that arena, including across document adoption. NamespaceId, like NodeIdx,
+is arena-local and must not cross arenas. No leaked/static URI allocation.
+
+- `create_element_ns(parent, Option<&str>, qualified_name)` validates namespace
+  and name, then uses checked insertion; returns Result<NodeIdx, DomError>.
+- `create_element_ns_in(document, ...)` creates an unattached element for sinks
+  and future bindings. Legacy HTML/parser constructors retain their behavior.
+- `namespace_uri`, `prefix`, `local_name` (alias of name), and `qualified_name`
+  expose the separate values. Empty URI normalizes to null. Known URI constants
+  map exactly to existing enum values; other URI strings are case-sensitive.
+- Prefix metadata survives deep cloning, range content cloning and adoption.
+  Local names remain case-preserving NodeKind::Element::name values.
+- Name validation follows the current [DOM validate-and-extract algorithm](https://dom.spec.whatwg.org/#validate-and-extract) in element context, reviewed
+  2026-09-21. XML parsers enforce stricter QName syntax before this seam; the
+  DOM API intentionally accepts some names XML syntax rejects.
+
+Seven additional tests cover null/empty/custom/known namespaces, URI equality,
+reserved prefixes, error ordering, DOM name validation, clone/adopt identity,
+partially-contained range cloning and detached/checked construction. Current
+refreshed Windows gates are pending. The one new exhaustive-match arm required
+in amazing-html's scope check has been routed through questions.md.
+
+Resumed gate on `156cc13` + lane `9229280`: 170 source/manifest hashes
+matched Mac; 114 passed / 0 failed / 0 ignored twice. Canonical result hash
+`0aa71774e90e39694ffc25b8b0e5e7a4aa78003f7a42cc998ed648222286ccc6`.
+Workspace exited 101 during compilation: missing Null/Other arms in
+`amazing-html/src/tree.rs:568`. Second workspace gate not run. DOM-3 is
+not complete; sibling compatibility is routed through questions.md.
+
+
+### DOM-3 final integrated gate — complete
+
+Base `79464ca` (NET-5 and RC-3 included), measured lane head `d39904f`.
+HTML owner commits `7ddf65e` and `a1f03f5` are included as `44aea24`/`d39904f`;
+their combined delta is exactly +1/-0 in `amazing-html/src/tree.rs`, handling
+Null/Other namespaces as non-boundaries. The DOM lane authored no HTML logic.
+The earlier E0004 blocker is resolved.
+
+After rebase, own-tree refresh used current mtimes and first-party artifact
+invalidation (lock 3FEAF813), followed by source re-sync. All 177 Rust source
+and manifest hashes matched Mac; fresh first-party compilation appears in logs.
+All builds/tests ran on win-001, isolated dom-bindings tree and target.
+
+| Gate (each run, twice) | Passed | Failed | Ignored | Targets |
+|---|---:|---:|---:|---:|
+| amazing-dom | 114 | 0 | 0 | 2 |
+| Workspace | 1119 | 0 | 3 | 54 |
+
+Native DOM coverage went from 65 existing tests to 114: 42 range/traversal
+tests and seven namespace tests. Canonical test-name/status lines (sorted,
+UTF-8 with LF endings, timing excluded) match between repeats:
+
+- DOM: `0aa71774e90e39694ffc25b8b0e5e7a4aa78003f7a42cc998ed648222286ccc6`.
+- Workspace: `cca4d3fb50e1f27e894278ff7fcacff01c7c6e257c1c49e3ddecf203592259f2`.
+
+The initial PowerShell Start-Process wrapper stalled after Cargo exited; only
+that wrapper was stopped and the gate restarted with direct Cargo invocation.
+The final four direct-invocation gates all exited zero.
+Evidence: `.agents/dom-bindings/dom-3-integration-results.json`,
+`dom-3-final-source-manifest.json`, `dom-3-final-gate-direct.log`, and
+`dom-3-final/` raw logs; corresponding Windows artifacts are under
+`C:/Users/server/target/dom-bindings/`. No DOM-3 WPT improvement is claimed: these
+range/traversal APIs still need JS bindings. DOM-1's measured baseline stands.
+
+HTML follow-ups for qualified attribute prefixes and a parser-only expanded-name
+constructor (e.g. valid XML element `xmlns`) are recorded by that owning lane
+for a later assigned scope; create_element_ns retains DOM API validation.
+DOM-3 is complete and stopped at its review boundary.
