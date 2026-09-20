@@ -20,8 +20,15 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KEY="$HOME/.ssh/win001-build-key"
 HOST="server@win-001"
 REMOTE_ROOT='C:\Users\server\src\wt'
-ARCHIVE_LOCAL="/tmp/dev-refresh.tar"
-ARCHIVE_REMOTE='C:\Users\server\dev-refresh.tar'
+# Unique per invocation. Lanes refresh themselves concurrently, and a shared
+# archive path means one run can be extracting while another overwrites or
+# locks the file -- which already produced a silent no-op refresh that still
+# printed matching hashes.
+STAMP="$$-$(date +%s)"
+ARCHIVE_LOCAL="/tmp/dev-refresh-$STAMP.tar"
+ARCHIVE_REMOTE="C:\\Users\\server\\dev-refresh-$STAMP.tar"
+cleanup() { rm -f "$ARCHIVE_LOCAL"; }
+trap cleanup EXIT
 
 ALL_LANES=(js-lang dom-bindings layout css net replaced-content html integrator-assist)
 
@@ -71,7 +78,8 @@ foreach (\$l in @(${lanes_ps%,})) {
   # Cargo's fingerprints still look fresh and the gate silently links a stale
   # rlib against byte-correct source. Matching source hashes do NOT prove
   # artifact freshness.
-  tar -xmf '$ARCHIVE_REMOTE' -C \$dest
+  tar -xmf "$ARCHIVE_REMOTE" -C \$dest
+  if (\$LASTEXITCODE -ne 0) { "REFRESH-ERROR \$l tar exit \$LASTEXITCODE"; continue }
   # Belt and braces: drop first-party fingerprints and artifacts so they must
   # rebuild, while leaving third-party deps cached so this stays cheap.
   \$t = Join-Path 'C:\Users\server\target' \$l
@@ -96,8 +104,25 @@ PS
 
 ENCODED=$(build_ps | python3 -c 'import sys,base64; print(base64.b64encode(sys.stdin.read().encode("utf-16-le")).decode())')
 ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=120 "$HOST" \
-  "powershell -NoProfile -EncodedCommand $ENCODED" 2>/dev/null |
-  tr -d '\r' | grep -E '^[a-z-]+ lock=' || true
+  "powershell -NoProfile -EncodedCommand $ENCODED" 2>&1 |
+  tr -d '\r' | tee /tmp/refresh-out-$STAMP.txt |
+  grep -E '^[a-z-]+ lock=|^REFRESH-ERROR'
+
+# A refresh that fails must never look like one that worked. Verify every
+# requested lane actually reported, and that none reported an error.
+if grep -q '^REFRESH-ERROR' /tmp/refresh-out-$STAMP.txt; then
+  echo "refresh FAILED -- see errors above" >&2
+  rm -f /tmp/refresh-out-$STAMP.txt
+  exit 1
+fi
+for l in "${LANES[@]}"; do
+  if ! grep -q "^$l lock=" /tmp/refresh-out-$STAMP.txt; then
+    echo "refresh FAILED: lane '$l' did not report a lock hash" >&2
+    rm -f /tmp/refresh-out-$STAMP.txt
+    exit 1
+  fi
+done
+rm -f /tmp/refresh-out-$STAMP.txt
 
 LOCAL_LOCK=$(shasum -a 256 Cargo.lock | cut -c1-8 | tr 'a-f' 'A-F')
 echo "local lock=$LOCAL_LOCK  (each lane above must match)"
