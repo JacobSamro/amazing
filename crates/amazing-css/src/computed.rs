@@ -5,7 +5,7 @@
 //! inheritance, dependency cycles, `var()` substitution, CSS-wide defaulting,
 //! and supported shorthand expansion stay behind this seam.
 
-use crate::syntax::{serialize, tokenize, Token};
+use crate::syntax::{Token, serialize, tokenize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -84,114 +84,573 @@ struct PropertyMetadata {
 // or paint behavior. Keeping initial/inheritance metadata in one registry is
 // what makes CSS-wide keywords and `all` property-aware.
 const PROPERTIES: &[PropertyMetadata] = &[
-    PropertyMetadata { name: "align-content", initial: "normal", inherited: false },
-    PropertyMetadata { name: "align-items", initial: "normal", inherited: false },
-    PropertyMetadata { name: "align-self", initial: "auto", inherited: false },
-    PropertyMetadata { name: "background-color", initial: "transparent", inherited: false },
-    PropertyMetadata { name: "border-bottom-color", initial: "currentcolor", inherited: false },
-    PropertyMetadata { name: "border-bottom-style", initial: "none", inherited: false },
-    PropertyMetadata { name: "border-bottom-width", initial: "medium", inherited: false },
-    PropertyMetadata { name: "border-collapse", initial: "separate", inherited: true },
-    PropertyMetadata { name: "border-left-color", initial: "currentcolor", inherited: false },
-    PropertyMetadata { name: "border-left-style", initial: "none", inherited: false },
-    PropertyMetadata { name: "border-left-width", initial: "medium", inherited: false },
-    PropertyMetadata { name: "border-right-color", initial: "currentcolor", inherited: false },
-    PropertyMetadata { name: "border-right-style", initial: "none", inherited: false },
-    PropertyMetadata { name: "border-right-width", initial: "medium", inherited: false },
-    PropertyMetadata { name: "border-top-color", initial: "currentcolor", inherited: false },
-    PropertyMetadata { name: "border-top-style", initial: "none", inherited: false },
-    PropertyMetadata { name: "border-top-width", initial: "medium", inherited: false },
-    PropertyMetadata { name: "bottom", initial: "auto", inherited: false },
-    PropertyMetadata { name: "box-sizing", initial: "content-box", inherited: false },
-    PropertyMetadata { name: "caption-side", initial: "top", inherited: true },
-    PropertyMetadata { name: "clear", initial: "none", inherited: false },
-    PropertyMetadata { name: "color", initial: "black", inherited: true },
-    PropertyMetadata { name: "column-gap", initial: "normal", inherited: false },
-    PropertyMetadata { name: "cursor", initial: "auto", inherited: true },
-    PropertyMetadata { name: "direction", initial: "ltr", inherited: true },
-    PropertyMetadata { name: "display", initial: "inline", inherited: false },
-    PropertyMetadata { name: "empty-cells", initial: "show", inherited: true },
-    PropertyMetadata { name: "flex-basis", initial: "auto", inherited: false },
-    PropertyMetadata { name: "flex-direction", initial: "row", inherited: false },
-    PropertyMetadata { name: "flex-grow", initial: "0", inherited: false },
-    PropertyMetadata { name: "flex-shrink", initial: "1", inherited: false },
-    PropertyMetadata { name: "flex-wrap", initial: "nowrap", inherited: false },
-    PropertyMetadata { name: "float", initial: "none", inherited: false },
-    PropertyMetadata { name: "font-family", initial: "serif", inherited: true },
-    PropertyMetadata { name: "font-size", initial: "medium", inherited: true },
-    PropertyMetadata { name: "font-stretch", initial: "normal", inherited: true },
-    PropertyMetadata { name: "font-style", initial: "normal", inherited: true },
-    PropertyMetadata { name: "font-variant", initial: "normal", inherited: true },
-    PropertyMetadata { name: "font-weight", initial: "normal", inherited: true },
-    PropertyMetadata { name: "grid-auto-columns", initial: "auto", inherited: false },
-    PropertyMetadata { name: "grid-auto-flow", initial: "row", inherited: false },
-    PropertyMetadata { name: "grid-auto-rows", initial: "auto", inherited: false },
-    PropertyMetadata { name: "grid-column-end", initial: "auto", inherited: false },
-    PropertyMetadata { name: "grid-column-start", initial: "auto", inherited: false },
-    PropertyMetadata { name: "grid-row-end", initial: "auto", inherited: false },
-    PropertyMetadata { name: "grid-row-start", initial: "auto", inherited: false },
-    PropertyMetadata { name: "grid-template-columns", initial: "none", inherited: false },
-    PropertyMetadata { name: "grid-template-rows", initial: "none", inherited: false },
-    PropertyMetadata { name: "height", initial: "auto", inherited: false },
-    PropertyMetadata { name: "hyphens", initial: "manual", inherited: true },
-    PropertyMetadata { name: "justify-content", initial: "normal", inherited: false },
-    PropertyMetadata { name: "justify-items", initial: "legacy", inherited: false },
-    PropertyMetadata { name: "justify-self", initial: "auto", inherited: false },
-    PropertyMetadata { name: "letter-spacing", initial: "normal", inherited: true },
-    PropertyMetadata { name: "left", initial: "auto", inherited: false },
-    PropertyMetadata { name: "line-break", initial: "auto", inherited: true },
-    PropertyMetadata { name: "line-height", initial: "normal", inherited: true },
-    PropertyMetadata { name: "list-style-image", initial: "none", inherited: true },
-    PropertyMetadata { name: "list-style-position", initial: "outside", inherited: true },
-    PropertyMetadata { name: "list-style-type", initial: "disc", inherited: true },
-    PropertyMetadata { name: "margin-bottom", initial: "0", inherited: false },
-    PropertyMetadata { name: "margin-block-end", initial: "0", inherited: false },
-    PropertyMetadata { name: "margin-block-start", initial: "0", inherited: false },
-    PropertyMetadata { name: "margin-inline-end", initial: "0", inherited: false },
-    PropertyMetadata { name: "margin-inline-start", initial: "0", inherited: false },
-    PropertyMetadata { name: "margin-left", initial: "0", inherited: false },
-    PropertyMetadata { name: "margin-right", initial: "0", inherited: false },
-    PropertyMetadata { name: "margin-top", initial: "0", inherited: false },
-    PropertyMetadata { name: "max-height", initial: "none", inherited: false },
-    PropertyMetadata { name: "max-width", initial: "none", inherited: false },
-    PropertyMetadata { name: "min-height", initial: "auto", inherited: false },
-    PropertyMetadata { name: "min-width", initial: "auto", inherited: false },
-    PropertyMetadata { name: "opacity", initial: "1", inherited: false },
-    PropertyMetadata { name: "order", initial: "0", inherited: false },
-    PropertyMetadata { name: "orphans", initial: "2", inherited: true },
-    PropertyMetadata { name: "overflow", initial: "visible", inherited: false },
-    PropertyMetadata { name: "overflow-x", initial: "visible", inherited: false },
-    PropertyMetadata { name: "overflow-y", initial: "visible", inherited: false },
-    PropertyMetadata { name: "overflow-wrap", initial: "normal", inherited: true },
-    PropertyMetadata { name: "padding-bottom", initial: "0", inherited: false },
-    PropertyMetadata { name: "padding-left", initial: "0", inherited: false },
-    PropertyMetadata { name: "padding-right", initial: "0", inherited: false },
-    PropertyMetadata { name: "padding-top", initial: "0", inherited: false },
-    PropertyMetadata { name: "position", initial: "static", inherited: false },
-    PropertyMetadata { name: "quotes", initial: "auto", inherited: true },
-    PropertyMetadata { name: "right", initial: "auto", inherited: false },
-    PropertyMetadata { name: "row-gap", initial: "normal", inherited: false },
-    PropertyMetadata { name: "text-align", initial: "start", inherited: true },
-    PropertyMetadata { name: "text-combine-upright", initial: "none", inherited: true },
-    PropertyMetadata { name: "text-decoration", initial: "none", inherited: false },
-    PropertyMetadata { name: "text-indent", initial: "0", inherited: true },
-    PropertyMetadata { name: "text-orientation", initial: "mixed", inherited: true },
-    PropertyMetadata { name: "text-transform", initial: "none", inherited: true },
-    PropertyMetadata { name: "top", initial: "auto", inherited: false },
-    PropertyMetadata { name: "unicode-bidi", initial: "normal", inherited: false },
-    PropertyMetadata { name: "vertical-align", initial: "baseline", inherited: false },
-    PropertyMetadata { name: "visibility", initial: "visible", inherited: true },
-    PropertyMetadata { name: "white-space", initial: "normal", inherited: true },
-    PropertyMetadata { name: "widows", initial: "2", inherited: true },
-    PropertyMetadata { name: "width", initial: "auto", inherited: false },
-    PropertyMetadata { name: "word-break", initial: "normal", inherited: true },
-    PropertyMetadata { name: "word-spacing", initial: "normal", inherited: true },
-    PropertyMetadata { name: "writing-mode", initial: "horizontal-tb", inherited: true },
-    PropertyMetadata { name: "z-index", initial: "auto", inherited: false },
+    PropertyMetadata {
+        name: "align-content",
+        initial: "normal",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "align-items",
+        initial: "normal",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "align-self",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "background-color",
+        initial: "transparent",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "background-clip",
+        initial: "border-box",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-bottom-color",
+        initial: "currentcolor",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-bottom-style",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-bottom-width",
+        initial: "medium",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-collapse",
+        initial: "separate",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "border-left-color",
+        initial: "currentcolor",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-left-style",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-left-width",
+        initial: "medium",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-right-color",
+        initial: "currentcolor",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-right-style",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-right-width",
+        initial: "medium",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-top-color",
+        initial: "currentcolor",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-top-style",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-top-width",
+        initial: "medium",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-top-left-radius",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-top-right-radius",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-bottom-right-radius",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "border-bottom-left-radius",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "bottom",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "box-sizing",
+        initial: "content-box",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "box-shadow",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "caption-side",
+        initial: "top",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "clear",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "color",
+        initial: "black",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "column-gap",
+        initial: "normal",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "cursor",
+        initial: "auto",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "direction",
+        initial: "ltr",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "display",
+        initial: "inline",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "empty-cells",
+        initial: "show",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "flex-basis",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "flex-direction",
+        initial: "row",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "flex-grow",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "flex-shrink",
+        initial: "1",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "flex-wrap",
+        initial: "nowrap",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "float",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "font-family",
+        initial: "serif",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "font-size",
+        initial: "medium",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "font-stretch",
+        initial: "normal",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "font-style",
+        initial: "normal",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "font-variant",
+        initial: "normal",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "font-weight",
+        initial: "normal",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "grid-auto-columns",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "grid-auto-flow",
+        initial: "row",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "grid-auto-rows",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "grid-column-end",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "grid-column-start",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "grid-row-end",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "grid-row-start",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "grid-template-columns",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "grid-template-rows",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "height",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "hyphens",
+        initial: "manual",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "justify-content",
+        initial: "normal",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "justify-items",
+        initial: "legacy",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "justify-self",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "letter-spacing",
+        initial: "normal",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "left",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "line-break",
+        initial: "auto",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "line-height",
+        initial: "normal",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "list-style-image",
+        initial: "none",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "list-style-position",
+        initial: "outside",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "list-style-type",
+        initial: "disc",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "margin-bottom",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "margin-block-end",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "margin-block-start",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "margin-inline-end",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "margin-inline-start",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "margin-left",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "margin-right",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "margin-top",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "max-height",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "max-width",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "min-height",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "min-width",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "opacity",
+        initial: "1",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "order",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "orphans",
+        initial: "2",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "overflow",
+        initial: "visible",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "overflow-x",
+        initial: "visible",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "overflow-y",
+        initial: "visible",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "overflow-wrap",
+        initial: "normal",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "padding-bottom",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "padding-left",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "padding-right",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "padding-top",
+        initial: "0",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "position",
+        initial: "static",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "quotes",
+        initial: "auto",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "right",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "row-gap",
+        initial: "normal",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "text-align",
+        initial: "start",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "text-combine-upright",
+        initial: "none",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "text-decoration",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "text-indent",
+        initial: "0",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "text-orientation",
+        initial: "mixed",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "text-transform",
+        initial: "none",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "top",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "transform",
+        initial: "none",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "transform-style",
+        initial: "flat",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "unicode-bidi",
+        initial: "normal",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "vertical-align",
+        initial: "baseline",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "visibility",
+        initial: "visible",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "white-space",
+        initial: "normal",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "widows",
+        initial: "2",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "width",
+        initial: "auto",
+        inherited: false,
+    },
+    PropertyMetadata {
+        name: "word-break",
+        initial: "normal",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "word-spacing",
+        initial: "normal",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "writing-mode",
+        initial: "horizontal-tb",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "z-index",
+        initial: "auto",
+        inherited: false,
+    },
 ];
 
 fn metadata(name: &str) -> Option<PropertyMetadata> {
-    PROPERTIES.iter().copied().find(|property| property.name == name)
+    PROPERTIES
+        .iter()
+        .copied()
+        .find(|property| property.name == name)
 }
 
 pub(crate) fn is_supported_property(name: &str) -> bool {
@@ -226,7 +685,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                     (longhand_name(&property, side), part.to_owned())
                 })
                 .collect()
-        },
+        }
         "inset" if !parts.is_empty() => SIDES
             .iter()
             .enumerate()
@@ -257,7 +716,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 expanded.push((format!("border-{side}-color"), color.to_owned()));
             }
             expanded
-        },
+        }
         "background" if parts.len() == 1 => vec![(
             "background-color".to_owned(),
             if parts[0].eq_ignore_ascii_case("none") {
@@ -266,15 +725,117 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 parts[0].to_owned()
             },
         )],
-        "font" => expand_font_shorthand(value).unwrap_or_else(|| vec![(property, value.to_owned())]),
-        "grid-column-gap"
-            if css_wide_keyword(value).is_some() || valid_gap_value(value) =>
+        "border-radius" if css_wide_keyword(value).is_some() => [
+            "border-top-left-radius",
+            "border-top-right-radius",
+            "border-bottom-right-radius",
+            "border-bottom-left-radius",
+        ]
+        .into_iter()
+        .map(|name| (name.to_owned(), value.to_owned()))
+        .collect(),
+        "border-radius" if contains_var_function(value) => deferred_border_radius(value),
+        "border-radius" => expand_border_radius(value).unwrap_or_default(),
+        "background-clip"
+            if css_wide_keyword(value).is_some()
+                || contains_var_function(value)
+                || valid_background_clip(value) =>
         {
+            vec![(property, value.to_owned())]
+        }
+        "box-shadow"
+            if css_wide_keyword(value).is_some()
+                || contains_var_function(value)
+                || valid_box_shadow(value) =>
+        {
+            vec![(property, value.to_owned())]
+        }
+        "transform"
+            if css_wide_keyword(value).is_some()
+                || contains_var_function(value)
+                || valid_transform(value) =>
+        {
+            vec![(property, value.to_owned())]
+        }
+        "transform-style"
+            if css_wide_keyword(value).is_some()
+                || contains_var_function(value)
+                || matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "flat" | "preserve-3d"
+                ) =>
+        {
+            vec![(property, value.to_owned())]
+        }
+        "opacity"
+            if css_wide_keyword(value).is_some()
+                || contains_var_function(value)
+                || valid_opacity(value) =>
+        {
+            vec![(property, value.to_owned())]
+        }
+        "z-index"
+            if css_wide_keyword(value).is_some()
+                || contains_var_function(value)
+                || valid_z_index(value) =>
+        {
+            vec![(property, value.to_owned())]
+        }
+        "overflow" if css_wide_keyword(value).is_some() => vec![
+            ("overflow-x".to_owned(), value.to_owned()),
+            ("overflow-y".to_owned(), value.to_owned()),
+        ],
+        "overflow" if contains_var_function(value) => deferred_overflow(value),
+        "overflow"
+            if (1..=2).contains(&parts.len()) && parts.iter().all(|part| valid_overflow(part)) =>
+        {
+            vec![
+                ("overflow-x".to_owned(), parts[0].to_owned()),
+                (
+                    "overflow-y".to_owned(),
+                    parts.get(1).copied().unwrap_or(parts[0]).to_owned(),
+                ),
+            ]
+        }
+        "overflow-x" | "overflow-y"
+            if css_wide_keyword(value).is_some()
+                || contains_var_function(value)
+                || valid_overflow(value) =>
+        {
+            vec![(property, value.to_owned())]
+        }
+        "border-top-left-radius"
+        | "border-top-right-radius"
+        | "border-bottom-right-radius"
+        | "border-bottom-left-radius"
+            if css_wide_keyword(value).is_some()
+                || contains_var_function(value)
+                || valid_radius_pair(value) =>
+        {
+            vec![(property, value.to_owned())]
+        }
+        "background-clip"
+        | "box-shadow"
+        | "transform"
+        | "transform-style"
+        | "opacity"
+        | "z-index"
+        | "overflow"
+        | "overflow-x"
+        | "overflow-y"
+        | "border-top-left-radius"
+        | "border-top-right-radius"
+        | "border-bottom-right-radius"
+        | "border-bottom-left-radius" => Vec::new(),
+        "font" => {
+            expand_font_shorthand(value).unwrap_or_else(|| vec![(property, value.to_owned())])
+        }
+        "grid-column-gap" if css_wide_keyword(value).is_some() || valid_gap_value(value) => {
             vec![("column-gap".to_owned(), value.to_owned())]
-        },
+        }
         "grid-row-gap" if css_wide_keyword(value).is_some() || valid_gap_value(value) => {
             vec![("row-gap".to_owned(), value.to_owned())]
-        },
+        }
         "grid-gap"
             if !parts.is_empty()
                 && parts.len() <= 2
@@ -287,7 +848,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 ("row-gap".to_owned(), row.to_owned()),
                 ("column-gap".to_owned(), column.to_owned()),
             ]
-        },
+        }
         "gap"
             if !parts.is_empty()
                 && parts.len() <= 2
@@ -300,7 +861,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 ("row-gap".to_owned(), row.to_owned()),
                 ("column-gap".to_owned(), column.to_owned()),
             ]
-        },
+        }
         "grid-column" | "grid-row" if !parts.is_empty() => {
             let prefix = property.as_str();
             let (start, end) = value
@@ -311,7 +872,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 (format!("{prefix}-start"), start.to_owned()),
                 (format!("{prefix}-end"), end.to_owned()),
             ]
-        },
+        }
         "grid-template" if contains_var_function(value) => deferred_grid_template(value),
         "grid-template" => expand_grid_template(value).unwrap_or_default(),
         "flex-flow" if !parts.is_empty() => {
@@ -325,7 +886,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             } else {
                 expand_flex_flow(value).unwrap_or_default()
             }
-        },
+        }
         "flex" if !parts.is_empty() => {
             if css_wide_keyword(value).is_some() {
                 vec![
@@ -346,7 +907,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                     None => Vec::new(),
                 }
             }
-        },
+        }
         _ => vec![(property, value.to_owned())],
     }
 }
@@ -355,6 +916,12 @@ const DEFERRED_FLEX_DIRECTION: &str = "amazing-internal-flex-flow-direction";
 const DEFERRED_FLEX_WRAP: &str = "amazing-internal-flex-flow-wrap";
 const DEFERRED_GRID_ROWS: &str = "amazing-internal-grid-template-rows";
 const DEFERRED_GRID_COLUMNS: &str = "amazing-internal-grid-template-columns";
+const DEFERRED_RADIUS_TOP_LEFT: &str = "amazing-internal-border-radius-top-left";
+const DEFERRED_RADIUS_TOP_RIGHT: &str = "amazing-internal-border-radius-top-right";
+const DEFERRED_RADIUS_BOTTOM_RIGHT: &str = "amazing-internal-border-radius-bottom-right";
+const DEFERRED_RADIUS_BOTTOM_LEFT: &str = "amazing-internal-border-radius-bottom-left";
+const DEFERRED_OVERFLOW_X: &str = "amazing-internal-overflow-x";
+const DEFERRED_OVERFLOW_Y: &str = "amazing-internal-overflow-y";
 
 fn contains_var_function(value: &str) -> bool {
     tokenize(value)
@@ -372,10 +939,7 @@ fn deferred_flex_flow(value: &str) -> Vec<(String, String)> {
             "flex-direction".to_owned(),
             deferred(DEFERRED_FLEX_DIRECTION, value),
         ),
-        (
-            "flex-wrap".to_owned(),
-            deferred(DEFERRED_FLEX_WRAP, value),
-        ),
+        ("flex-wrap".to_owned(), deferred(DEFERRED_FLEX_WRAP, value)),
     ]
 }
 
@@ -390,6 +954,428 @@ fn deferred_grid_template(value: &str) -> Vec<(String, String)> {
             deferred(DEFERRED_GRID_COLUMNS, value),
         ),
     ]
+}
+
+fn deferred_border_radius(value: &str) -> Vec<(String, String)> {
+    [
+        ("border-top-left-radius", DEFERRED_RADIUS_TOP_LEFT),
+        ("border-top-right-radius", DEFERRED_RADIUS_TOP_RIGHT),
+        ("border-bottom-right-radius", DEFERRED_RADIUS_BOTTOM_RIGHT),
+        ("border-bottom-left-radius", DEFERRED_RADIUS_BOTTOM_LEFT),
+    ]
+    .into_iter()
+    .map(|(property, function)| (property.to_owned(), deferred(function, value)))
+    .collect()
+}
+
+fn deferred_overflow(value: &str) -> Vec<(String, String)> {
+    vec![
+        (
+            "overflow-x".to_owned(),
+            deferred(DEFERRED_OVERFLOW_X, value),
+        ),
+        (
+            "overflow-y".to_owned(),
+            deferred(DEFERRED_OVERFLOW_Y, value),
+        ),
+    ]
+}
+
+fn expand_border_radius(value: &str) -> Option<Vec<(String, String)>> {
+    let tokens = tokenize(value);
+    let mut slash = None;
+    let mut stack = Vec::new();
+    for (index, token) in tokens.iter().enumerate() {
+        match token {
+            Token::OpenParen | Token::OpenSquare | Token::OpenCurly => stack.push(token),
+            Token::CloseParen | Token::CloseSquare | Token::CloseCurly => {
+                stack.pop()?;
+            }
+            Token::Delim('/') if stack.is_empty() && slash.replace(index).is_some() => {
+                return None;
+            }
+            _ => {}
+        }
+    }
+    if !stack.is_empty() {
+        return None;
+    }
+    let (horizontal, vertical) = slash.map_or((&tokens[..], None), |slash| {
+        (&tokens[..slash], Some(&tokens[slash + 1..]))
+    });
+    let horizontal = expand_radius_axis(horizontal)?;
+    let vertical = match vertical {
+        Some(vertical) => expand_radius_axis(vertical)?,
+        None => horizontal.clone(),
+    };
+    let names = [
+        "border-top-left-radius",
+        "border-top-right-radius",
+        "border-bottom-right-radius",
+        "border-bottom-left-radius",
+    ];
+    Some(
+        names
+            .into_iter()
+            .enumerate()
+            .map(|(index, name)| {
+                let value = if horizontal[index] == vertical[index] {
+                    horizontal[index].clone()
+                } else {
+                    format!("{} {}", horizontal[index], vertical[index])
+                };
+                (name.to_owned(), value)
+            })
+            .collect(),
+    )
+}
+
+fn expand_radius_axis(tokens: &[Token]) -> Option<[String; 4]> {
+    let components = top_level_components(tokens)?;
+    if components.is_empty()
+        || components.len() > 4
+        || !components
+            .iter()
+            .all(|component| valid_radius_component(component))
+    {
+        return None;
+    }
+    let values = components.into_iter().map(serialize).collect::<Vec<_>>();
+    Some(match values.as_slice() {
+        [one] => [one.clone(), one.clone(), one.clone(), one.clone()],
+        [top_left, top_right] => [
+            top_left.clone(),
+            top_right.clone(),
+            top_left.clone(),
+            top_right.clone(),
+        ],
+        [top_left, other, bottom_right] => [
+            top_left.clone(),
+            other.clone(),
+            bottom_right.clone(),
+            other.clone(),
+        ],
+        [top_left, top_right, bottom_right, bottom_left] => [
+            top_left.clone(),
+            top_right.clone(),
+            bottom_right.clone(),
+            bottom_left.clone(),
+        ],
+        _ => return None,
+    })
+}
+
+fn valid_radius_pair(value: &str) -> bool {
+    let tokens = tokenize(value);
+    top_level_components(&tokens).is_some_and(|components| {
+        (1..=2).contains(&components.len())
+            && components
+                .iter()
+                .all(|component| valid_radius_component(component))
+    })
+}
+
+fn valid_radius_component(tokens: &[Token]) -> bool {
+    match trim_tokens(tokens) {
+        [Token::Number(value)] => value.is_finite() && *value == 0.0,
+        [Token::Percentage(value)] => value.is_finite() && *value >= 0.0,
+        [Token::Dimension(value, unit)] => {
+            value.is_finite() && *value >= 0.0 && unit.eq_ignore_ascii_case("px")
+        }
+        _ => false,
+    }
+}
+
+fn valid_background_clip(value: &str) -> bool {
+    matches!(
+        trim_tokens(&tokenize(value)),
+        [Token::Ident(keyword)] if matches!(
+            keyword.to_ascii_lowercase().as_str(),
+            "border-box" | "padding-box" | "content-box"
+        )
+    )
+}
+
+fn valid_box_shadow(value: &str) -> bool {
+    if value.trim().eq_ignore_ascii_case("none") {
+        return true;
+    }
+    let tokens = tokenize(value);
+    if tokens.iter().any(|token| matches!(token, Token::Comma)) {
+        return false;
+    }
+    let Some(components) = top_level_components(&tokens) else {
+        return false;
+    };
+    let mut inset = false;
+    let mut color = false;
+    let mut lengths = Vec::new();
+    for component in components {
+        match trim_tokens(component) {
+            [Token::Ident(keyword)] if keyword.eq_ignore_ascii_case("inset") => {
+                if inset {
+                    return false;
+                }
+                inset = true;
+            }
+            [Token::Ident(keyword)] if valid_supported_color_name(keyword) => {
+                if color {
+                    return false;
+                }
+                color = true;
+            }
+            [Token::Hash(hex)] if valid_hex_color(hex) => {
+                if color {
+                    return false;
+                }
+                color = true;
+            }
+            component
+                if function_inner(component, "rgb").is_some()
+                    || function_inner(component, "rgba").is_some() =>
+            {
+                let inner =
+                    function_inner(component, "rgb").or_else(|| function_inner(component, "rgba"));
+                if color || !inner.is_some_and(valid_rgb_color_tokens) {
+                    return false;
+                }
+                color = true;
+            }
+            component => {
+                let Some(length) = shadow_length(component) else {
+                    return false;
+                };
+                lengths.push(length);
+            }
+        }
+    }
+    (2..=4).contains(&lengths.len()) && lengths.get(2).is_none_or(|blur| *blur >= 0.0)
+}
+
+fn valid_supported_color_name(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "currentcolor"
+            | "aliceblue"
+            | "antiquewhite"
+            | "aqua"
+            | "aquamarine"
+            | "azure"
+            | "beige"
+            | "black"
+            | "blue"
+            | "brown"
+            | "chocolate"
+            | "coral"
+            | "crimson"
+            | "cyan"
+            | "darkgray"
+            | "darkgrey"
+            | "dimgray"
+            | "dimgrey"
+            | "fuchsia"
+            | "gold"
+            | "goldenrod"
+            | "gray"
+            | "green"
+            | "greenyellow"
+            | "grey"
+            | "honeydew"
+            | "hotpink"
+            | "indigo"
+            | "ivory"
+            | "khaki"
+            | "lavender"
+            | "lime"
+            | "magenta"
+            | "maroon"
+            | "navy"
+            | "olive"
+            | "orange"
+            | "orchid"
+            | "pink"
+            | "plum"
+            | "purple"
+            | "rebeccapurple"
+            | "red"
+            | "salmon"
+            | "seagreen"
+            | "silver"
+            | "skyblue"
+            | "slategray"
+            | "snow"
+            | "steelblue"
+            | "tan"
+            | "teal"
+            | "thistle"
+            | "tomato"
+            | "transparent"
+            | "turquoise"
+            | "violet"
+            | "wheat"
+            | "white"
+            | "whitesmoke"
+            | "yellow"
+    )
+}
+
+fn valid_hex_color(hex: &str) -> bool {
+    matches!(hex.len(), 3 | 4 | 6 | 8) && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn valid_rgb_color_tokens(tokens: &[Token]) -> bool {
+    let value = serialize(tokens);
+    if value.contains(',') {
+        let parts = value.split(',').map(str::trim).collect::<Vec<_>>();
+        matches!(parts.len(), 3 | 4)
+            && parts[..3].iter().all(|part| valid_rgb_channel(part))
+            && parts.get(3).is_none_or(|alpha| valid_alpha_channel(alpha))
+    } else {
+        let normalized = value.replace('/', " / ");
+        let parts = normalized.split_ascii_whitespace().collect::<Vec<_>>();
+        match parts.as_slice() {
+            [red, green, blue] => [red, green, blue]
+                .into_iter()
+                .all(|part| valid_rgb_channel(part)),
+            [red, green, blue, slash, alpha] if *slash == "/" => {
+                [red, green, blue]
+                    .into_iter()
+                    .all(|part| valid_rgb_channel(part))
+                    && valid_alpha_channel(alpha)
+            }
+            _ => false,
+        }
+    }
+}
+
+fn valid_rgb_channel(value: &str) -> bool {
+    value
+        .strip_suffix('%')
+        .unwrap_or(value)
+        .parse::<f32>()
+        .is_ok_and(|value| value.is_finite())
+}
+
+fn valid_alpha_channel(value: &str) -> bool {
+    valid_rgb_channel(value)
+}
+
+fn valid_opacity(value: &str) -> bool {
+    matches!(
+        trim_tokens(&tokenize(value)),
+        [Token::Number(value)] | [Token::Percentage(value)] if value.is_finite()
+    )
+}
+
+fn valid_overflow(value: &str) -> bool {
+    matches!(
+        trim_tokens(&tokenize(value)),
+        [Token::Ident(keyword)] if matches!(
+            keyword.to_ascii_lowercase().as_str(),
+            "visible" | "hidden" | "clip" | "scroll" | "auto"
+        )
+    )
+}
+
+fn shadow_length(tokens: &[Token]) -> Option<f64> {
+    match trim_tokens(tokens) {
+        [Token::Number(value)] if *value == 0.0 => Some(*value),
+        [Token::Dimension(value, unit)] if unit.eq_ignore_ascii_case("px") => Some(*value),
+        _ => None,
+    }
+}
+
+fn valid_transform(value: &str) -> bool {
+    if value.trim().eq_ignore_ascii_case("none") {
+        return true;
+    }
+    let tokens = tokenize(value);
+    let Some(components) = top_level_components(&tokens) else {
+        return false;
+    };
+    !components.is_empty() && components.into_iter().all(valid_transform_function)
+}
+
+fn valid_transform_function(tokens: &[Token]) -> bool {
+    let tokens = trim_tokens(tokens);
+    let Some(Token::Function(name)) = tokens.first() else {
+        return false;
+    };
+    let Some(inner) = function_inner(tokens, name) else {
+        return false;
+    };
+    let Some(arguments) = transform_arguments(inner) else {
+        return false;
+    };
+    match name.to_ascii_lowercase().as_str() {
+        "translate" => {
+            (1..=2).contains(&arguments.len())
+                && arguments.iter().all(|arg| valid_transform_length(arg))
+        }
+        "translatex" | "translatey" => arguments.len() == 1 && valid_transform_length(arguments[0]),
+        "scale" => {
+            (1..=2).contains(&arguments.len())
+                && arguments.iter().all(|arg| valid_transform_number(arg))
+        }
+        "scalex" | "scaley" => arguments.len() == 1 && valid_transform_number(arguments[0]),
+        "rotate" => arguments.len() == 1 && valid_transform_angle(arguments[0]),
+        "matrix" => arguments.len() == 6 && arguments.iter().all(|arg| valid_transform_number(arg)),
+        _ => false,
+    }
+}
+
+fn transform_arguments(tokens: &[Token]) -> Option<Vec<&[Token]>> {
+    let tokens = trim_tokens(tokens);
+    if tokens.is_empty() {
+        return None;
+    }
+    if tokens.iter().any(|token| matches!(token, Token::Comma)) {
+        let mut output = Vec::new();
+        let mut start = 0usize;
+        for (index, token) in tokens.iter().enumerate() {
+            if matches!(token, Token::Comma) {
+                let argument = trim_tokens(&tokens[start..index]);
+                if argument.is_empty() {
+                    return None;
+                }
+                output.push(argument);
+                start = index + 1;
+            }
+        }
+        let argument = trim_tokens(&tokens[start..]);
+        if argument.is_empty() {
+            return None;
+        }
+        output.push(argument);
+        Some(output)
+    } else {
+        top_level_components(tokens)
+    }
+}
+
+fn valid_transform_number(tokens: &[Token]) -> bool {
+    matches!(trim_tokens(tokens), [Token::Number(value)] if value.is_finite())
+}
+
+fn valid_transform_length(tokens: &[Token]) -> bool {
+    matches!(
+        trim_tokens(tokens),
+        [Token::Number(value)] if *value == 0.0
+    ) || matches!(
+        trim_tokens(tokens),
+        [Token::Dimension(value, unit)] if value.is_finite() && unit.eq_ignore_ascii_case("px")
+    )
+}
+
+fn valid_transform_angle(tokens: &[Token]) -> bool {
+    matches!(trim_tokens(tokens), [Token::Number(value)] if *value == 0.0)
+        || matches!(
+            trim_tokens(tokens),
+            [Token::Dimension(value, unit)] if value.is_finite() && matches!(
+                unit.to_ascii_lowercase().as_str(),
+                "deg" | "rad" | "turn"
+            )
+        )
 }
 
 fn expand_flex_flow(value: &str) -> Option<Vec<(String, String)>> {
@@ -416,7 +1402,10 @@ fn expand_flex_flow(value: &str) -> Option<Vec<(String, String)>> {
     let mut wrap = None;
     for word in words {
         let lower = word.to_ascii_lowercase();
-        if matches!(lower.as_str(), "row" | "row-reverse" | "column" | "column-reverse") {
+        if matches!(
+            lower.as_str(),
+            "row" | "row-reverse" | "column" | "column-reverse"
+        ) {
             if direction.replace(lower).is_some() {
                 return None;
             }
@@ -430,8 +1419,14 @@ fn expand_flex_flow(value: &str) -> Option<Vec<(String, String)>> {
     }
 
     Some(vec![
-        ("flex-direction".to_owned(), direction.unwrap_or_else(|| "row".into())),
-        ("flex-wrap".to_owned(), wrap.unwrap_or_else(|| "nowrap".into())),
+        (
+            "flex-direction".to_owned(),
+            direction.unwrap_or_else(|| "row".into()),
+        ),
+        (
+            "flex-wrap".to_owned(),
+            wrap.unwrap_or_else(|| "nowrap".into()),
+        ),
     ])
 }
 
@@ -454,12 +1449,10 @@ fn expand_grid_template(value: &str) -> Option<Vec<(String, String)>> {
             Token::CloseParen if stack.pop() != Some(')') => return None,
             Token::CloseSquare if stack.pop() != Some(']') => return None,
             Token::CloseCurly if stack.pop() != Some('}') => return None,
-            Token::Delim('/') if stack.is_empty() => {
-                if slash.replace(index).is_some() {
-                    return None;
-                }
-            },
-            _ => {},
+            Token::Delim('/') if stack.is_empty() && slash.replace(index).is_some() => {
+                return None;
+            }
+            _ => {}
         }
     }
     if !stack.is_empty() {
@@ -495,8 +1488,8 @@ fn top_level_components(tokens: &[Token]) -> Option<Vec<&[Token]>> {
                     components.push(component);
                 }
                 start = index + 1;
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
     if !stack.is_empty() {
@@ -520,19 +1513,20 @@ fn split_top_level_comma(tokens: &[Token]) -> Option<(&[Token], &[Token])> {
             Token::CloseParen if stack.pop() != Some(')') => return None,
             Token::CloseSquare if stack.pop() != Some(']') => return None,
             Token::CloseCurly if stack.pop() != Some('}') => return None,
-            Token::Comma if stack.is_empty() => {
-                if comma.replace(index).is_some() {
-                    return None;
-                }
-            },
-            _ => {},
+            Token::Comma if stack.is_empty() && comma.replace(index).is_some() => {
+                return None;
+            }
+            _ => {}
         }
     }
     if !stack.is_empty() {
         return None;
     }
     let comma = comma?;
-    Some((trim_tokens(&tokens[..comma]), trim_tokens(&tokens[comma + 1..])))
+    Some((
+        trim_tokens(&tokens[..comma]),
+        trim_tokens(&tokens[comma + 1..]),
+    ))
 }
 
 fn function_inner<'a>(tokens: &'a [Token], expected: &str) -> Option<&'a [Token]> {
@@ -542,7 +1536,7 @@ fn function_inner<'a>(tokens: &'a [Token], expected: &str) -> Option<&'a [Token]
             if name.eq_ignore_ascii_case(expected) =>
         {
             Some(&tokens[2..tokens.len() - 1])
-        },
+        }
         _ => None,
     }
 }
@@ -592,7 +1586,10 @@ fn valid_grid_track_component(tokens: &[Token]) -> bool {
     if valid_grid_breadth(tokens, true) {
         return true;
     }
-    if matches!((tokens.first(), tokens.last()), (Some(Token::OpenSquare), Some(Token::CloseSquare))) {
+    if matches!(
+        (tokens.first(), tokens.last()),
+        (Some(Token::OpenSquare), Some(Token::CloseSquare))
+    ) {
         // One or more adjacent `[name]` blocks (`[a][b]` is valid without
         // intervening whitespace); each block validates independently.
         let mut rest: &[Token] = tokens;
@@ -614,8 +1611,8 @@ fn valid_grid_track_component(tokens: &[Token]) -> bool {
                             close = Some(index);
                             break;
                         }
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 }
             }
             let Some(close) = close else {
@@ -649,14 +1646,7 @@ fn valid_grid_track_component(tokens: &[Token]) -> bool {
 fn valid_grid_line_name(name: &str) -> bool {
     !matches!(
         name.to_ascii_lowercase().as_str(),
-        "auto"
-            | "span"
-            | "default"
-            | "initial"
-            | "inherit"
-            | "unset"
-            | "revert"
-            | "revert-layer"
+        "auto" | "span" | "default" | "initial" | "inherit" | "unset" | "revert" | "revert-layer"
     )
 }
 
@@ -667,13 +1657,13 @@ fn valid_repeat(tokens: &[Token]) -> Option<(bool, &[Token])> {
     let auto_repeat = match count {
         [Token::Number(value)] if value.is_finite() && *value >= 1.0 && value.fract() == 0.0 => {
             false
-        },
+        }
         [Token::Ident(value)]
             if value.eq_ignore_ascii_case("auto-fill")
                 || value.eq_ignore_ascii_case("auto-fit") =>
         {
             true
-        },
+        }
         _ => return None,
     };
     Some((auto_repeat, tracks))
@@ -686,7 +1676,10 @@ fn valid_fixed_track_tokens(tokens: &[Token]) -> bool {
     let mut saw_track = false;
     for component in components {
         let component = trim_tokens(component);
-        if matches!((component.first(), component.last()), (Some(Token::OpenSquare), Some(Token::CloseSquare))) {
+        if matches!(
+            (component.first(), component.last()),
+            (Some(Token::OpenSquare), Some(Token::CloseSquare))
+        ) {
             if !valid_grid_track_component(component) {
                 return false;
             }
@@ -721,10 +1714,22 @@ fn valid_fixed_breadth(tokens: &[Token]) -> bool {
                 && *value >= 0.0
                 && matches!(
                     unit.to_ascii_lowercase().as_str(),
-                    "px" | "em" | "rem" | "ex" | "ch" | "vw" | "vh" | "vmin" | "vmax"
-                        | "cm" | "mm" | "q" | "in" | "pc" | "pt"
+                    "px" | "em"
+                        | "rem"
+                        | "ex"
+                        | "ch"
+                        | "vw"
+                        | "vh"
+                        | "vmin"
+                        | "vmax"
+                        | "cm"
+                        | "mm"
+                        | "q"
+                        | "in"
+                        | "pc"
+                        | "pt"
                 )
-        },
+        }
         _ => false,
     }
 }
@@ -742,11 +1747,11 @@ fn valid_grid_breadth(tokens: &[Token], allow_fr: bool) -> bool {
                 && *value >= 0.0
                 && match unit.to_ascii_lowercase().as_str() {
                     "fr" => allow_fr,
-                    "px" | "em" | "rem" | "ex" | "ch" | "vw" | "vh" | "vmin" | "vmax"
-                    | "cm" | "mm" | "q" | "in" | "pc" | "pt" => true,
+                    "px" | "em" | "rem" | "ex" | "ch" | "vw" | "vh" | "vmin" | "vmax" | "cm"
+                    | "mm" | "q" | "in" | "pc" | "pt" => true,
                     _ => false,
                 }
-        },
+        }
         _ => false,
     }
 }
@@ -791,33 +1796,27 @@ fn expand_flex_shorthand(parts: &[&str]) -> Option<(String, String, String)> {
         ["none"] => ("0".to_owned(), "0".to_owned(), "auto".to_owned()),
         ["auto"] => ("1".to_owned(), "1".to_owned(), "auto".to_owned()),
         [grow] if valid_flex_number(grow) => (text(grow), "1".to_owned(), "0%".to_owned()),
-        [basis] if valid_flex_basis(basis) => {
-            ("1".to_owned(), "1".to_owned(), text(basis))
-        },
+        [basis] if valid_flex_basis(basis) => ("1".to_owned(), "1".to_owned(), text(basis)),
         [grow, shrink] if valid_flex_number(grow) && valid_flex_number(shrink) => {
             (text(grow), text(shrink), "0%".to_owned())
-        },
+        }
         [grow, basis] if valid_flex_number(grow) && valid_flex_basis(basis) => {
             (text(grow), "1".to_owned(), text(basis))
-        },
+        }
         [grow, shrink, basis]
-            if valid_flex_number(grow)
-                && valid_flex_number(shrink)
-                && valid_flex_basis(basis) =>
+            if valid_flex_number(grow) && valid_flex_number(shrink) && valid_flex_basis(basis) =>
         {
             (text(grow), text(shrink), text(basis))
-        },
+        }
         // §7.1.10's || combinator also permits the basis first.
         [basis, grow] if valid_flex_basis(basis) && valid_flex_number(grow) => {
             (text(grow), "1".to_owned(), text(basis))
-        },
+        }
         [basis, grow, shrink]
-            if valid_flex_basis(basis)
-                && valid_flex_number(grow)
-                && valid_flex_number(shrink) =>
+            if valid_flex_basis(basis) && valid_flex_number(grow) && valid_flex_number(shrink) =>
         {
             (text(grow), text(shrink), text(basis))
-        },
+        }
         _ => return None,
     };
     Some((grow, shrink, basis))
@@ -864,7 +1863,7 @@ fn expand_font_shorthand(value: &str) -> Option<Vec<(String, String)>> {
             return None;
         }
         match token {
-            Token::Ident(value) if value.eq_ignore_ascii_case("normal") => {},
+            Token::Ident(value) if value.eq_ignore_ascii_case("normal") => {}
             Token::Ident(value)
                 if value.eq_ignore_ascii_case("italic")
                     || value.eq_ignore_ascii_case("oblique") =>
@@ -874,14 +1873,14 @@ fn expand_font_shorthand(value: &str) -> Option<Vec<(String, String)>> {
                 }
                 style_seen = true;
                 style = value.clone();
-            },
+            }
             Token::Ident(value) if value.eq_ignore_ascii_case("small-caps") => {
                 if variant_seen {
                     return None;
                 }
                 variant_seen = true;
                 variant = value.clone();
-            },
+            }
             Token::Ident(value)
                 if matches!(
                     value.to_ascii_lowercase().as_str(),
@@ -893,14 +1892,14 @@ fn expand_font_shorthand(value: &str) -> Option<Vec<(String, String)>> {
                 }
                 weight_seen = true;
                 weight = value.clone();
-            },
+            }
             Token::Number(value) if (1.0..=1000.0).contains(value) && value.fract() == 0.0 => {
                 if weight_seen {
                     return None;
                 }
                 weight_seen = true;
                 weight = serialize(std::slice::from_ref(token));
-            },
+            }
             Token::Ident(value)
                 if value.to_ascii_lowercase().ends_with("condensed")
                     || value.to_ascii_lowercase().ends_with("expanded") =>
@@ -910,7 +1909,7 @@ fn expand_font_shorthand(value: &str) -> Option<Vec<(String, String)>> {
                 }
                 stretch_seen = true;
                 stretch = value.clone();
-            },
+            }
             _ => return None,
         }
         position += 1;
@@ -975,10 +1974,10 @@ fn valid_font_family_tokens(tokens: &[Token]) -> bool {
     let mut kind = FamilyKind::None;
     for token in tokens {
         match token {
-            Token::Whitespace => {},
+            Token::Whitespace => {}
             Token::Comma if !matches!(kind, FamilyKind::None) => {
                 kind = FamilyKind::None;
-            },
+            }
             Token::Ident(_) if !matches!(kind, FamilyKind::String) => kind = FamilyKind::Ident,
             Token::Str(_) if matches!(kind, FamilyKind::None) => kind = FamilyKind::String,
             _ => return false,
@@ -1064,9 +2063,7 @@ pub(crate) fn resolve_with_root(
     mut cascaded: BTreeMap<String, String>,
     root_font_px: f32,
 ) -> ComputedStyle {
-    let mut inherited_custom = parent
-        .map(|style| style.custom.clone())
-        .unwrap_or_default();
+    let mut inherited_custom = parent.map(|style| style.custom.clone()).unwrap_or_default();
     let custom_names: Vec<String> = cascaded
         .keys()
         .filter(|name| name.starts_with("--"))
@@ -1078,17 +2075,17 @@ pub(crate) fn resolve_with_root(
         match css_wide_keyword(&value) {
             Some(CssWide::Initial) => {
                 inherited_custom.insert(name, CustomValue::Invalid);
-            },
+            }
             Some(CssWide::Inherit | CssWide::Unset) => {
                 let inherited = parent
                     .and_then(|style| style.custom.get(&name))
                     .cloned()
                     .unwrap_or(CustomValue::Invalid);
                 inherited_custom.insert(name, inherited);
-            },
+            }
             _ => {
                 local_raw.insert(name, tokenize(&value));
-            },
+            }
         }
     }
     let cycles = cycle_members(&local_raw);
@@ -1110,18 +2107,17 @@ pub(crate) fn resolve_with_root(
         let parent_value = parent.and_then(|style| style.get(property.name));
         let value = match cascaded.remove(property.name) {
             None => default_value(*property, parent_value),
-            Some(specified) => {
-                compute_normal_value(
-                    *property,
-                    &specified,
-                    parent_value,
-                    root_font_px,
-                    &mut resolver,
-                )
-            },
+            Some(specified) => compute_normal_value(
+                *property,
+                &specified,
+                parent_value,
+                root_font_px,
+                &mut resolver,
+            ),
         };
         properties.insert(property.name.to_owned(), value);
     }
+    couple_overflow_axes(&mut properties);
     // Preserve declared unknown properties for diagnostics and forward
     // compatibility. They still receive variable substitution, but without
     // metadata an invalid or CSS-wide value cannot manufacture an initial.
@@ -1136,7 +2132,33 @@ pub(crate) fn resolve_with_root(
     }
     drop(resolver);
     inherited_custom.extend(resolved_local);
-    ComputedStyle { props: properties, custom: inherited_custom }
+    ComputedStyle {
+        props: properties,
+        custom: inherited_custom,
+    }
+}
+
+fn couple_overflow_axes(properties: &mut BTreeMap<String, String>) {
+    let x = properties
+        .get("overflow-x")
+        .cloned()
+        .unwrap_or_else(|| "visible".into());
+    let y = properties
+        .get("overflow-y")
+        .cloned()
+        .unwrap_or_else(|| "visible".into());
+    let coupled = |value: &str, other: &str| {
+        let other_scrolls = !matches!(other.to_ascii_lowercase().as_str(), "visible" | "clip");
+        if other_scrolls && value.eq_ignore_ascii_case("visible") {
+            "auto".to_owned()
+        } else if other_scrolls && value.eq_ignore_ascii_case("clip") {
+            "hidden".to_owned()
+        } else {
+            value.to_owned()
+        }
+    };
+    properties.insert("overflow-x".into(), coupled(&x, &y));
+    properties.insert("overflow-y".into(), coupled(&y, &x));
 }
 
 fn default_value(property: PropertyMetadata, parent: Option<&str>) -> String {
@@ -1169,13 +2191,18 @@ fn compute_normal_value(
         // candidates do not revive.
         return default_value(property, parent);
     };
-    if matches!(property.name, "grid-template-rows" | "grid-template-columns")
-        && css_wide_keyword(&value).is_none()
+    if matches!(
+        property.name,
+        "grid-template-rows" | "grid-template-columns"
+    ) && css_wide_keyword(&value).is_none()
         && !valid_grid_track_list(&value)
     {
         // Longhand track lists enforce the same grammar as the
         // `grid-template` shorthand; an invalid winner behaves as unset and
         // lower cascade candidates do not revive.
+        return default_value(property, parent);
+    }
+    if css_wide_keyword(&value).is_none() && !valid_new_paint_property(property.name, &value) {
         return default_value(property, parent);
     }
     let computed = match css_wide_keyword(&value) {
@@ -1188,9 +2215,47 @@ fn compute_normal_value(
     };
     if property.name == "font-size" {
         computed_font_size(&computed, parent, root_font_px).unwrap_or(computed)
+    } else if property.name == "opacity" {
+        computed_opacity(&computed).unwrap_or_else(|| property.initial.to_owned())
     } else {
         computed
     }
+}
+
+fn computed_opacity(value: &str) -> Option<String> {
+    let value = value.trim();
+    let number = value
+        .strip_suffix('%')
+        .map(|percent| percent.parse::<f32>().ok().map(|value| value / 100.0))
+        .unwrap_or_else(|| value.parse::<f32>().ok())?;
+    number
+        .is_finite()
+        .then(|| number.clamp(0.0, 1.0).to_string())
+}
+
+fn valid_new_paint_property(property: &str, value: &str) -> bool {
+    match property {
+        "background-clip" => valid_background_clip(value),
+        "box-shadow" => valid_box_shadow(value),
+        "transform" => valid_transform(value),
+        "transform-style" => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "flat" | "preserve-3d"
+        ),
+        "opacity" => valid_opacity(value),
+        "z-index" => valid_z_index(value),
+        "overflow" | "overflow-x" | "overflow-y" => valid_overflow(value),
+        "border-top-left-radius"
+        | "border-top-right-radius"
+        | "border-bottom-right-radius"
+        | "border-bottom-left-radius" => valid_radius_pair(value),
+        _ => true,
+    }
+}
+
+fn valid_z_index(value: &str) -> bool {
+    let value = value.trim();
+    value.eq_ignore_ascii_case("auto") || value.parse::<i32>().is_ok()
 }
 
 fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
@@ -1201,12 +2266,42 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    let overflow_function = match property {
+        "overflow-x" => Some((DEFERRED_OVERFLOW_X, 0usize)),
+        "overflow-y" => Some((DEFERRED_OVERFLOW_Y, 1usize)),
+        _ => None,
+    };
+    if let Some((function, index)) = overflow_function
+        && let Some(inner) = deferred_inner(value, function)
+    {
+        let parts = inner.split_ascii_whitespace().collect::<Vec<_>>();
+        if !(1..=2).contains(&parts.len()) || !parts.iter().all(|part| valid_overflow(part)) {
+            return Err(());
+        }
+        return Ok(parts.get(index).copied().unwrap_or(parts[0]).to_owned());
+    }
+    let radius_function = match property {
+        "border-top-left-radius" => Some(DEFERRED_RADIUS_TOP_LEFT),
+        "border-top-right-radius" => Some(DEFERRED_RADIUS_TOP_RIGHT),
+        "border-bottom-right-radius" => Some(DEFERRED_RADIUS_BOTTOM_RIGHT),
+        "border-bottom-left-radius" => Some(DEFERRED_RADIUS_BOTTOM_LEFT),
+        _ => None,
+    };
+    if let Some(function) = radius_function
+        && let Some(inner) = deferred_inner(value, function)
+    {
+        return expand_border_radius(inner)
+            .ok_or(())?
+            .into_iter()
+            .find_map(|(name, value)| (name == property).then_some(value))
+            .ok_or(());
+    }
     let deferred = match property {
         "flex-direction" => deferred_inner(value, DEFERRED_FLEX_DIRECTION)
             .map(|inner| (inner, "flex-direction", true)),
         "flex-wrap" => {
             deferred_inner(value, DEFERRED_FLEX_WRAP).map(|inner| (inner, "flex-wrap", true))
-        },
+        }
         "grid-template-rows" => deferred_inner(value, DEFERRED_GRID_ROWS)
             .map(|inner| (inner, "grid-template-rows", false)),
         "grid-template-columns" => deferred_inner(value, DEFERRED_GRID_COLUMNS)
@@ -1244,13 +2339,11 @@ fn computed_font_size(value: &str, parent: Option<&str>, root_font_px: f32) -> O
         "smaller" => relative_font_size(parent_px, false),
         _ if lower.ends_with('%') => {
             parent_px * lower[..lower.len() - 1].parse::<f32>().ok()? / 100.0
-        },
+        }
         _ if lower.ends_with("rem") => {
             root_font_px * lower[..lower.len() - 3].parse::<f32>().ok()?
-        },
-        _ if lower.ends_with("em") => {
-            parent_px * lower[..lower.len() - 2].parse::<f32>().ok()?
-        },
+        }
+        _ if lower.ends_with("em") => parent_px * lower[..lower.len() - 2].parse::<f32>().ok()?,
         _ if lower.ends_with("px") => lower[..lower.len() - 2].parse::<f32>().ok()?,
         _ => return None,
     };
@@ -1324,8 +2417,7 @@ fn serialize_computed(tokens: &[Token]) -> String {
             continue;
         }
         if previous.is_some_and(word_like)
-            && (word_like(token)
-                || matches!(token, Token::Function(_) | Token::OpenParen))
+            && (word_like(token) || matches!(token, Token::Function(_) | Token::OpenParen))
         {
             output.push_str("/**/");
         }
@@ -1358,14 +2450,14 @@ fn parse_var_call(tokens: &[Token], function_index: usize) -> Option<VarCall<'_>
             Token::CloseParen if paren_depth == 0 => {
                 close = Some(index);
                 break;
-            },
+            }
             Token::CloseParen => paren_depth -= 1,
             Token::OpenSquare => square_depth += 1,
             Token::CloseSquare if square_depth > 0 => square_depth -= 1,
             Token::Comma if paren_depth == 0 && square_depth == 0 && comma.is_none() => {
                 comma = Some(index);
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
     let close = close?;
@@ -1378,7 +2470,11 @@ fn parse_var_call(tokens: &[Token], function_index: usize) -> Option<VarCall<'_>
         return None;
     }
     let fallback = comma.map(|comma| &tokens[comma + 1..close]);
-    Some(VarCall { name, fallback, end: close + 1 })
+    Some(VarCall {
+        name,
+        fallback,
+        end: close + 1,
+    })
 }
 
 fn trim_tokens(mut tokens: &[Token]) -> &[Token] {
@@ -1396,14 +2492,14 @@ fn trim_tokens(mut tokens: &[Token]) -> &[Token] {
 pub(crate) fn valid_variable_syntax(tokens: &[Token]) -> bool {
     let mut index = 0usize;
     while index < tokens.len() {
-        if matches!(tokens.get(index), Some(Token::Function(name)) if name.eq_ignore_ascii_case("var")) {
+        if matches!(tokens.get(index), Some(Token::Function(name)) if name.eq_ignore_ascii_case("var"))
+        {
             let Some(call) = parse_var_call(tokens, index) else {
                 return false;
             };
             if let Some(fallback) = call.fallback
                 && (contains_bad_top_level_fallback_token(fallback)
-                    || !valid_variable_syntax(fallback)
-                )
+                    || !valid_variable_syntax(fallback))
             {
                 return false;
             }
@@ -1428,12 +2524,10 @@ fn contains_bad_top_level_fallback_token(tokens: &[Token]) -> bool {
             Token::CloseParen if paren_depth > 0 => paren_depth -= 1,
             Token::OpenSquare => square_depth += 1,
             Token::CloseSquare if square_depth > 0 => square_depth -= 1,
-            Token::Semicolon | Token::Delim('!')
-                if paren_depth == 0 && square_depth == 0 =>
-            {
+            Token::Semicolon | Token::Delim('!') if paren_depth == 0 && square_depth == 0 => {
                 return true;
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
     false
@@ -1470,9 +2564,9 @@ fn cycle_members(local: &BTreeMap<String, Vec<Token>>) -> BTreeSet<String> {
                     cycles.extend(stack[position..].iter().cloned());
                 }
                 return;
-            },
+            }
             Some(2) => return,
-            _ => {},
+            _ => {}
         }
         states.insert(name.to_owned(), 1);
         stack.push(name.to_owned());
@@ -1539,11 +2633,14 @@ impl CustomResolver<'_> {
         let mut output = Vec::new();
         let mut index = 0usize;
         while index < tokens.len() {
-            if matches!(tokens.get(index), Some(Token::Function(name)) if name.eq_ignore_ascii_case("var")) {
+            if matches!(tokens.get(index), Some(Token::Function(name)) if name.eq_ignore_ascii_case("var"))
+            {
                 let call = parse_var_call(tokens, index)?;
                 let replacement = match self.resolve_name(call.name) {
                     CustomValue::Valid(tokens) => Some(tokens),
-                    CustomValue::Invalid => call.fallback.and_then(|fallback| self.substitute(fallback)),
+                    CustomValue::Invalid => {
+                        call.fallback.and_then(|fallback| self.substitute(fallback))
+                    }
                 }?;
                 output.extend(replacement);
                 index = call.end;
@@ -1569,10 +2666,7 @@ mod tests {
 
     #[test]
     fn case_sensitive_custom_properties_inherit_and_substitute() {
-        let parent = resolve(
-            None,
-            cascaded(&[("--A", "green"), ("--a", "crimson")]),
-        );
+        let parent = resolve(None, cascaded(&[("--A", "green"), ("--a", "crimson")]));
         let child = resolve(
             Some(&parent),
             cascaded(&[("color", "var(--A)"), ("background-color", "var(--a)")]),
@@ -1619,10 +2713,7 @@ mod tests {
 
     #[test]
     fn css_wide_keywords_use_property_metadata() {
-        let parent = resolve(
-            None,
-            cascaded(&[("color", "blue"), ("display", "block")]),
-        );
+        let parent = resolve(None, cascaded(&[("color", "blue"), ("display", "block")]));
         let child = resolve(
             Some(&parent),
             cascaded(&[
@@ -1655,12 +2746,12 @@ mod tests {
 
     #[test]
     fn substitution_preserves_token_boundaries() {
-        let style = resolve(
-            None,
-            cascaded(&[("--n", "1"), ("width", "var(--n)px")]),
-        );
+        let style = resolve(None, cascaded(&[("--n", "1"), ("width", "var(--n)px")]));
         assert_eq!(style.get("width"), Some("1/**/px"));
-        assert_eq!(tokenize(style.get("width").unwrap()), vec![Token::Number(1.0), Token::Ident("px".into())]);
+        assert_eq!(
+            tokenize(style.get("width").unwrap()),
+            vec![Token::Number(1.0), Token::Ident("px".into())]
+        );
     }
 
     #[test]
@@ -1697,11 +2788,13 @@ mod tests {
 
     #[test]
     fn grid_template_only_splits_on_a_top_level_solidus() {
-        assert!(expand_declaration(
-            "grid-template",
-            "minmax(10px,calc(20px / 2)) / repeat(2,1fr)"
-        )
-        .is_empty());
+        assert!(
+            expand_declaration(
+                "grid-template",
+                "minmax(10px,calc(20px / 2)) / repeat(2,1fr)"
+            )
+            .is_empty()
+        );
         assert_eq!(
             expand_declaration("grid-template", "10px / 20px / 30px"),
             Vec::<(String, String)>::new()
@@ -1709,28 +2802,75 @@ mod tests {
         assert!(expand_declaration("grid-template", "banana / banana").is_empty());
         assert!(expand_declaration("grid-template", "fit-content(auto) / 1fr").is_empty());
         assert!(expand_declaration("grid-template", "[span] 10px / 1fr").is_empty());
-        assert!(expand_declaration(
-            "grid-template",
-            "repeat(auto-fill,1fr) / 30px"
-        )
-        .is_empty());
-        assert!(expand_declaration(
-            "grid-template",
-            "repeat(auto-fill,10px) repeat(auto-fit,20px) / 30px"
-        )
-        .is_empty());
+        assert!(expand_declaration("grid-template", "repeat(auto-fill,1fr) / 30px").is_empty());
+        assert!(
+            expand_declaration(
+                "grid-template",
+                "repeat(auto-fill,10px) repeat(auto-fit,20px) / 30px"
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn paint_properties_use_validated_computed_value_grammars() {
+        for property in [
+            "background-clip",
+            "box-shadow",
+            "transform",
+            "transform-style",
+            "border-top-left-radius",
+        ] {
+            assert!(
+                is_supported_property(property),
+                "missing metadata for {property}"
+            );
+        }
+        assert!(expand_declaration("transform", "translate(10px,20px)").len() == 1);
+        assert!(expand_declaration("transform", "translate(10px,)").is_empty());
+        assert!(expand_declaration("transform", "scale(1,2,3)").is_empty());
+        assert!(expand_declaration("box-shadow", "5px 5px black").len() == 1);
+        assert!(expand_declaration("box-shadow", "5px 5px banana").is_empty());
+        assert!(expand_declaration("box-shadow", "5px 5px rgb(banana)").is_empty());
+        assert!(expand_declaration("box-shadow", "inset inset 5px 5px black").is_empty());
+        assert!(expand_declaration("box-shadow", "5px 5px red blue").is_empty());
+        let radius = expand_declaration("border-radius", "10px 20% / 5px");
+        assert_eq!(radius.len(), 4);
+        assert_eq!(
+            radius[0],
+            ("border-top-left-radius".into(), "10px 5px".into())
+        );
+        assert_eq!(
+            radius[1],
+            ("border-top-right-radius".into(), "20% 5px".into())
+        );
+        assert!(expand_declaration("opacity", "banana").is_empty());
+        assert_eq!(
+            expand_declaration("z-index", "-2"),
+            vec![("z-index".to_owned(), "-2".to_owned())]
+        );
+        assert!(expand_declaration("z-index", "2.5").is_empty());
+        assert!(expand_declaration("z-index", "banana").is_empty());
+        assert!(expand_declaration("overflow-x", "banana").is_empty());
     }
 
     #[test]
     fn font_shorthand_expands_size_line_height_family_and_resets_optionals() {
-        let expanded = expand_declaration("font", "italic 700 120px / 2 \"Arabic Test\",sans-serif");
+        let expanded =
+            expand_declaration("font", "italic 700 120px / 2 \"Arabic Test\",sans-serif");
         let values: BTreeMap<_, _> = expanded.into_iter().collect();
 
         assert_eq!(values.get("font-size").map(String::as_str), Some("120px"));
         assert_eq!(values.get("line-height").map(String::as_str), Some("2"));
-        assert_eq!(values.get("font-family").map(String::as_str), Some("\"Arabic Test\",sans-serif"));
+        assert_eq!(
+            values.get("font-family").map(String::as_str),
+            Some("\"Arabic Test\",sans-serif")
+        );
         assert_eq!(values.get("font-style").map(String::as_str), Some("italic"));
-        assert_eq!(values.get("font-variant").map(String::as_str), Some("normal"));
+        assert_eq!(
+            values.get("font-variant").map(String::as_str),
+            Some("normal")
+        );
         assert_eq!(values.get("font-weight").map(String::as_str), Some("700"));
 
         assert_eq!(
@@ -1742,10 +2882,7 @@ mod tests {
             vec![("font".into(), "16px \"Quoted\" adjacent".into())]
         );
         assert_eq!(
-            expand_declaration(
-                "font",
-                "normal normal normal normal italic 16px serif"
-            ),
+            expand_declaration("font", "normal normal normal normal italic 16px serif"),
             vec![(
                 "font".into(),
                 "normal normal normal normal italic 16px serif".into()

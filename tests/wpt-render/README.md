@@ -121,3 +121,12 @@ repeat-stable result is 24/24, and every case passes both exact-revision Blink
 and WebKit. `flex-grid-results-ticket5.json` records every final pixel hash,
 the normalized projection, the 35/200 → 47/200 broad diagnostic, and prior
 phase regression gates.
+
+Ticket #6 uses `paint-compositing-profile.json` and a 24-case paint/compositing
+gate covering the supported stacking, opacity, rounded clipping/background,
+zero-blur shadow, and 2D transform slice. The isolated `c42df4f` fixed point is
+12/24; the final repeat-stable result is 24/24 with a 23/23 exact-revision
+Blink/WebKit consensus subset. `paint-compositing-results-ticket6.json` stores
+the final hashes, bounded broad diagnostic, and regression gates; advanced 3D,
+blend/filter, blurred-shadow, scrollbar, float, and inline-stacking
+dependencies remain explicit rather than being relabeled as passes.

@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "behavior-stratified",
+    "case_count": 24,
+    "behaviors": [
+      "stacking-context-order-and-atomicity",
+      "group-opacity",
+      "overflow-and-rounded-clipping",
+      "zero-blur-box-shadows",
+      "border-radius-and-background-clip",
+      "two-dimensional-transforms"
+    ]
+  },
+  "sparse_paths": [
+    "css/css-backgrounds",
+    "css/css-overflow",
+    "css/css-transforms",
+    "css/compositing"
+  ],
+  "tests": [
+    {"id":"background__body-propagation-008","test":"css/css-backgrounds/background-color-body-propagation-008.html"},
+    {"id":"background__paint-order","test":"css/css-backgrounds/background-paint-order-001.html"},
+    {"id":"border__small-width","test":"css/css-backgrounds/border-width-small-values-001-b.html"},
+    {"id":"border__small-width-e","test":"css/css-backgrounds/border-width-small-values-001-e.html"},
+    {"id":"overflow__clip-margin","test":"css/css-overflow/overflow-clip-margin-009.html"},
+    {"id":"shadow__simple-offset","test":"css/css-backgrounds/css3-box-shadow.html"},
+    {"id":"shadow__currentcolor","test":"css/css-backgrounds/box-shadow-currentcolor.html"},
+    {"id":"background__body-propagation","test":"css/css-backgrounds/background-color-body-propagation-009.html"},
+    {"id":"radius__zero-horizontal","test":"css/css-backgrounds/border-radius-horizontal-value-is-zero.html"},
+    {"id":"radius__content-clip","test":"css/css-backgrounds/background-clip-content-box-with-border-radius-002.html"},
+    {"id":"radius__rounded-clip","test":"css/css-backgrounds/background-clip/clip-rounded-corner.html"},
+    {"id":"transform__matrix-scale","test":"css/css-transforms/transform-matrix-007.html"},
+    {"id":"transform__translate-x-relative","test":"css/css-transforms/transform-translatex-004.html"},
+    {"id":"transform__translate-list","test":"css/css-transforms/transform-translate-005.html"},
+    {"id":"transform__overflow","test":"css/css-transforms/transform-overflow-002.html"},
+    {"id":"transform__scale-half","test":"css/css-transforms/transform-scale-001.html"},
+    {"id":"transform__translate-x","test":"css/css-transforms/ttwf-transform-translatex-001.html"},
+    {"id":"transform__translate-y-list","test":"css/css-transforms/transform-translatey-003.html"},
+    {"id":"transform__translate-reference","test":"css/css-transforms/transform-translate-003.html"},
+    {"id":"transform__translate-y","test":"css/css-transforms/transform-translatey-001.html"},
+    {"id":"transform__scale-double","test":"css/css-transforms/transform-scale-002.html"},
+    {"id":"stacking__transform-context","test":"css/css-transforms/transform-style-stacking-context.html"},
+    {"id":"opacity__root","test":"css/compositing/root-element-opacity.html"},
+    {"id":"background__clip-text-transform","test":"css/css-backgrounds/background-clip/clip-text-transform.html"}
+  ]
+}

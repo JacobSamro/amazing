@@ -15,6 +15,7 @@
 use crate::font::FontSource;
 use crate::values::{self, MaybeLen};
 use crate::{Flow, LayoutBox, Rect};
+use amazing_css::ComputedStyle;
 
 /// Lays out the root box (`<body>`) against the viewport. Returns the total
 /// page height (bottom edge of the root's margin box).
@@ -98,10 +99,7 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
 
     // The collapse context describes THIS box as a parent; it can only be
     // built after the model above is resolved.
-    let establishes_bfc = b
-        .style
-        .get("overflow")
-        .is_some_and(|value| !value.eq_ignore_ascii_case("visible"));
+    let establishes_bfc = overflow_establishes_bfc(&b.style);
     let ctx = CollapseCtx {
         parent_top: b.margin.top.unwrap_or(0.0),
         parent_bottom: b.margin.bottom.unwrap_or(0.0),
@@ -127,25 +125,25 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
                     let each = (cbw - fixed) / 2.0;
                     b.margin.left = Some(each);
                     b.margin.right = Some(each);
-                },
+                }
                 // Only left auto → left absorbs the remainder.
                 (true, false) => {
                     let l = cbw - (b.margin.right.unwrap_or(0.0) + fixed);
                     b.margin.left = Some(l);
-                },
+                }
                 // Only right auto → right absorbs the remainder.
                 (false, true) => {
                     let r = cbw - (b.margin.left.unwrap_or(0.0) + fixed);
                     b.margin.right = Some(r);
-                },
+                }
                 // Over-constrained → ignore margin-right in LTR flow.
                 (false, false) => {
                     let r = cbw - (b.margin.left.unwrap_or(0.0) + fixed);
                     b.margin.right = Some(r);
-                },
+                }
             }
             content_w = w;
-        },
+        }
         MaybeLen::Auto => {
             if let Some(size) = b.replaced_size {
                 content_w = size.width;
@@ -156,7 +154,7 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
                 let used_mr = b.margin.right.unwrap_or(0.0);
                 content_w = (cbw - used_ml - bl - pl - pr - br_ - used_mr).max(0.0);
             }
-        },
+        }
     }
 
     // Margin edges: the box's border box starts after its own margins.
@@ -176,8 +174,8 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
                     c.line_height = b.line_height;
                 }
             }
-        },
-        Flow::Inlines(_) | Flow::Empty => {},
+        }
+        Flow::Inlines(_) | Flow::Empty => {}
     }
 
     // --- children ------------------------------------------------------
@@ -185,33 +183,19 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
     let content = match &mut b.flow {
         Flow::Flex(children) => StackResult {
             content_end: crate::flex::layout_flex(
-                children,
-                &b.style,
-                font_px,
-                content_x,
-                content_y,
-                content_w,
-                def_h,
-                fonts,
+                children, &b.style, font_px, content_x, content_y, content_w, def_h, fonts,
             ),
             trailing: CollapsedMargin::default(),
         },
         Flow::Grid(children) => StackResult {
             content_end: crate::grid::layout_grid(
-                children,
-                &b.style,
-                font_px,
-                content_x,
-                content_y,
-                content_w,
-                def_h,
-                fonts,
+                children, &b.style, font_px, content_x, content_y, content_w, def_h, fonts,
             ),
             trailing: CollapsedMargin::default(),
         },
         Flow::Blocks(children) if !children.is_empty() => {
             stack_blocks(children, content_x, content_y, content_w, ctx, fonts)
-        },
+        }
         Flow::Inlines(items) => {
             let lh = if b.line_height > 0.0 {
                 b.line_height
@@ -227,7 +211,7 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
                 content_end: height,
                 trailing: CollapsedMargin::default(),
             }
-        },
+        }
         _ => StackResult::default(),
     };
 
@@ -268,7 +252,12 @@ pub fn layout_block(b: &mut LayoutBox, x: f32, y: f32, cbw: f32, fonts: &FontSou
         constrained
     };
 
-    b.content_box = Rect { x: content_x, y: content_y, w: content_w, h: final_h };
+    b.content_box = Rect {
+        x: content_x,
+        y: content_y,
+        w: content_w,
+        h: final_h,
+    };
     b.border_box = Rect {
         x: border_x,
         y: border_y,
@@ -375,25 +364,25 @@ fn can_collapse_through(block: &LayoutBox, containing_width: f32) -> bool {
     if !matches!(&block.flow, Flow::Empty) {
         return false;
     }
-    if block
-        .style
-        .get("overflow")
-        .is_some_and(|value| !value.eq_ignore_ascii_case("visible"))
-    {
+    if overflow_establishes_bfc(&block.style) {
         return false;
     }
     let padding = values::resolve_padding(&block.style, block.font_size, containing_width);
     let border = values::resolve_borders(&block.style, block.font_size);
-    if padding.top != 0.0
-        || padding.bottom != 0.0
-        || border.top != 0.0
-        || border.bottom != 0.0
-    {
+    if padding.top != 0.0 || padding.bottom != 0.0 || border.top != 0.0 || border.bottom != 0.0 {
         return false;
     }
     let min_height = size_constraint(block, "min-height", block.font_size).unwrap_or(0.0);
     let height = specified_height(block, block.font_size);
     min_height == 0.0 && height.is_none_or(|height| height == 0.0)
+}
+
+fn overflow_establishes_bfc(style: &ComputedStyle) -> bool {
+    ["overflow-x", "overflow-y"].into_iter().any(|property| {
+        style.get(property).is_some_and(|value| {
+            !value.eq_ignore_ascii_case("visible") && !value.eq_ignore_ascii_case("clip")
+        })
+    })
 }
 
 #[cfg(test)]
@@ -423,7 +412,7 @@ mod tests {
         match &layout.flow {
             Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
                 children.iter().find_map(|child| find_id(child, dom, id))
-            },
+            }
             Flow::Inlines(_) | Flow::Empty => None,
         }
     }
@@ -468,6 +457,15 @@ mod tests {
             "body{margin:0} #outer{overflow:hidden} #first{height:200px} #last{height:200px;margin-bottom:-200px}",
         );
         close(find_id(&root, &dom, "outer").unwrap().content_box.h, 200.0);
+    }
+
+    #[test]
+    fn overflow_clip_does_not_establish_a_block_formatting_context() {
+        let (dom, root) = layout(
+            "<body><div id=outer><div id=first></div><div id=last></div></div></body>",
+            "body{margin:0} #outer{overflow:clip} #first{height:200px} #last{height:200px;margin-bottom:-200px}",
+        );
+        close(find_id(&root, &dom, "outer").unwrap().content_box.h, 400.0);
     }
 
     #[test]
