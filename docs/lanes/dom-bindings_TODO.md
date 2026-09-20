@@ -240,7 +240,7 @@ be treated as a user-activation permission by bindings.
   not nest checkpoints. `take_mutation_records` does not cancel scheduling.
 - No scheduler, JS types, Rc, RefCell, unsafe, or third-party crates are added.
 
-## DOM-3 integration obligations
+## Binding integration obligations (recorded after DOM-2)
 
 - Bind Node methods to checked operations, resolve callback identities, expose
   event flags/methods via `EventId`, resume dispatch after every callback, report
@@ -257,13 +257,12 @@ be treated as a user-activation permission by bindings.
 - Attribute methods accept normalized namespace/local-name inputs. Element
   name validation/WebIDL conversion is a binding concern. Namespaced attributes
   have separate storage from the legacy parser's unqualified attribute vector.
-- Existing CharacterData strings remain Rust UTF-8 strings. UTF-16 code-unit
-  and lone-surrogate operations require a deliberate string-model extension
-  before exposing the complete CharacterData WebIDL surface. No range/string
-  slicing conformance is claimed by the full-value mutation setter.
-- Live Range/NodeIterator adjustment, custom-element reactions, and Shadow DOM
-  side effects must attach when those types exist. Current tree operations
-  implement the core light-tree model, not those future subsystems.
+- DOM-3 adds exact UTF-16 CharacterData access/replacement, with a private
+  sidecar for lone surrogates. Bindings must use that surface and observer
+  `old_value_utf16`; legacy Rust String fields are display projections.
+- DOM-3 attaches live Range/NodeIterator adjustment to tree/data mutation.
+  Custom-element reactions and Shadow DOM side effects still belong to their
+  future subsystems; the current tree remains the core light-tree model.
 
 ## Cross-crate compatibility grant
 
@@ -310,3 +309,38 @@ Logs and machine-readable totals: main-tree orchestration directory
 `dom-2-source-hashes.json`, and `dom-2-validation.json`. Source modules and
 tests are all below 4,000 lines. DOM-1's accepted scaffold is preserved in a
 separate checkpoint commit; this ticket does not close its upstream gate.
+
+
+## DOM-3 — ranges and traversal
+
+Implementation follows [DOM Standard ranges](https://dom.spec.whatwg.org/#ranges),
+[traversal](https://dom.spec.whatwg.org/#traversal), and the shared mutation,
+replace-data, split-text, and normalize algorithms (reviewed 2026-09-20).
+
+- `Range` is a non-reused arena-local live handle. `AbstractRange` is an owned
+  boundary snapshot; `StaticRange` construction rejects forbidden node types
+  but permits invalid offsets/order/roots, with a separate validity query.
+- Insert/remove/adopt/replace/fragment operations update all live ranges;
+  suppressed observer records do not suppress those updates. CharacterData
+  replacement, splitText and normalize maintain UTF-16 boundary offsets.
+- Content cloning/extraction keeps partial ancestors, clones partial data,
+  moves whole contained nodes only during extraction, and checks contained
+  doctypes before changing the source. Delete/extract collapse before mutations
+  as specified. Surround preserves the specified late-error side effects.
+- A private code-unit sidecar preserves ill-formed UTF-16 without changing the
+  public NodeKind String payloads used by sibling crates. String access is a
+  lossy compatibility projection only when lone surrogates exist. Exact data
+  and observer old values are available to future DOMString bindings.
+- NodeIterator and TreeWalker use owned `TraversalStep::Filter` requests with
+  callback identity and node handles. Resume exactly once with the converted
+  unsigned-short result; cancel native state before propagating a binding
+  exception. No callback holds an arena borrow. The iterator's reference and
+  in-flight candidate both adjust during pre-removal. TreeWalker currentNode
+  is unrestricted and does not relocate automatically.
+- `release_range`/`release_traversal` are explicit binding-GC seams; legacy
+  detach methods are no-ops. Handles must never cross Dom arenas.
+- No JS binding, custom-element/shadow-tree extension, WPT result, or broad
+  browser conformance is claimed. DOM-1 remains parked pending JS-2.
+
+Windows iteration: 105 DOM tests passed, zero failed (65 preexisting plus 40
+new focused tests). Final refreshed-tree crate/workspace repeat gates pending.

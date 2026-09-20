@@ -9,6 +9,9 @@ pub enum DomError {
     InvalidStateError,
     TypeError,
     InvalidNode,
+    InvalidNodeTypeError,
+    IndexSizeError,
+    WrongDocumentError,
 }
 impl std::fmt::Display for DomError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -356,6 +359,7 @@ impl Dom {
             }
             self.queue_tree_record(node, vec![], nodes.clone(), None, None);
         }
+        self.ranges_insert(parent, child, nodes.len());
         let previous = if let Some(child) = child {
             self.get(child).prev_sibling
         } else {
@@ -395,6 +399,8 @@ impl Dom {
         let parent = n.parent.expect("remove requires parent");
         let prev = n.prev_sibling;
         let next = n.next_sibling;
+        self.ranges_remove(node, parent);
+        self.iterators_remove(node);
         let ancestors = self.inclusive_ancestors(parent);
         self.mutations.register_transients(node, &ancestors);
         if let Some(prev) = prev {

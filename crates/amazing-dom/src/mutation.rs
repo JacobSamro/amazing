@@ -47,6 +47,8 @@ pub struct MutationRecord {
     pub attribute_name: Option<String>,
     pub attribute_namespace: Option<String>,
     pub old_value: Option<String>,
+    /// Exact CharacterData old value for DOMString bindings (including lone surrogates).
+    pub old_value_utf16: Option<Vec<u16>>,
     pub added_nodes: Vec<NodeIdx>,
     pub removed_nodes: Vec<NodeIdx>,
     pub previous_sibling: Option<NodeIdx>,
@@ -60,6 +62,7 @@ impl MutationRecord {
             attribute_name: None,
             attribute_namespace: None,
             old_value: None,
+            old_value_utf16: None,
             added_nodes: vec![],
             removed_nodes: vec![],
             previous_sibling: None,
@@ -140,6 +143,7 @@ impl MutationObservers {
             let mut record = record.clone();
             if !include_old {
                 record.old_value = None;
+                record.old_value_utf16 = None;
             }
             self.observers[id.0].records.push(record);
             if !self.pending.contains(&id) {
@@ -400,20 +404,61 @@ impl Dom {
     }
     pub fn set_character_data(&mut self, node: NodeIdx, value: String) -> Result<(), DomError> {
         self.check_node(node)?;
-        let old = self
-            .character_data(node)
-            .ok_or(DomError::NotSupportedError)?
-            .to_owned();
+        self.replace_character_data(
+            node,
+            0,
+            self.node_length(node),
+            &value.encode_utf16().collect::<Vec<_>>(),
+        )
+    }
+    /// DOMString code units. The legacy String accessor is a lossy display projection.
+    pub fn character_data_utf16(&self, node: NodeIdx) -> Option<Vec<u16>> {
+        let data = self.character_data(node)?;
+        Some(
+            self.get(node)
+                .character_data_units
+                .clone()
+                .unwrap_or_else(|| data.encode_utf16().collect()),
+        )
+    }
+    pub(crate) fn store_character_data(&mut self, node: NodeIdx, value: Vec<u16>) {
+        let string = String::from_utf16_lossy(&value);
+        self.nodes[node.0 as usize].character_data_units = if String::from_utf16(&value).is_err() {
+            Some(value)
+        } else {
+            None
+        };
         match &mut self.nodes[node.0 as usize].kind {
             NodeKind::Text { data }
             | NodeKind::Comment { data }
-            | NodeKind::ProcessingInstruction { data, .. } => *data = value,
+            | NodeKind::ProcessingInstruction { data, .. } => *data = string,
             _ => unreachable!(),
         }
+    }
+    pub fn replace_character_data(
+        &mut self,
+        node: NodeIdx,
+        offset: usize,
+        count: usize,
+        value: &[u16],
+    ) -> Result<(), DomError> {
+        self.check_node(node)?;
+        let old = self
+            .character_data_utf16(node)
+            .ok_or(DomError::NotSupportedError)?;
+        if offset > old.len() {
+            return Err(DomError::IndexSizeError);
+        }
+        let count = count.min(old.len() - offset);
         let mut record = MutationRecord::new(MutationType::CharacterData, node);
-        record.old_value = Some(old);
+        record.old_value = Some(String::from_utf16_lossy(&old));
+        record.old_value_utf16 = Some(old.clone());
         self.mutations
             .queue(&self.inclusive_ancestors(node), record);
+        let mut data = old;
+        data.splice(offset..offset + count, value.iter().copied());
+        self.store_character_data(node, data);
+        self.ranges_replace_data(node, offset, count, value.len());
         Ok(())
     }
 }
