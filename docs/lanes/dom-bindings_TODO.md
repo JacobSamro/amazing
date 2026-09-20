@@ -493,3 +493,10 @@ reserved prefixes, error ordering, DOM name validation, clone/adopt identity,
 partially-contained range cloning and detached/checked construction. Current
 refreshed Windows gates are pending. The one new exhaustive-match arm required
 in amazing-html's scope check has been routed through questions.md.
+
+Resumed gate on `156cc13` + lane `9229280`: 170 source/manifest hashes
+matched Mac; 114 passed / 0 failed / 0 ignored twice. Canonical result hash
+`0aa71774e90e39694ffc25b8b0e5e7a4aa78003f7a42cc998ed648222286ccc6`.
+Workspace exited 101 during compilation: missing Null/Other arms in
+`amazing-html/src/tree.rs:568`. Second workspace gate not run. DOM-3 is
+not complete; sibling compatibility is routed through questions.md.
