@@ -178,3 +178,41 @@ Gate the migration with relative-resource/navigation fixtures, canonical-origin
 and default-port cases, persistence round trips, the pinned URL selection, and
 actual Windows shell screenshot proof. Keep it a separate ticket: URL behavior
 must not be folded into this command extraction.
+
+## DOM-5 driver adoption — mapping checkpoint
+
+Authorized alongside IA-XML, but checkpointed separately. Inspected the actual
+`BindingHost`, `InterfaceDefinition`, `Member`, `Operation`, `install/INTERFACES`
+and `invoke` seam at DOM checkpoint `2b917f8` (including `afa9ad5`), read-only in
+the DOM lane. The runtime owns the `BindingHost` implementation; the driver must
+not create a parallel binding trait or wrapper cache.
+
+Driver changes required once the runtime adapter is supplied:
+
+- `dom_host.rs`: lend mutable access to `BrowserDomHost.dom` through the runtime's
+  actual arena hook. This must be the same arena parsed for the page, not a cloned
+  DOM. Current `amazing_js::DomHost` exposes individual operations but has no
+  arena-access callback; that contract belongs to the runtime lane.
+- `cmd/wpt_harness.rs::execute`: install the runtime's standard interfaces after
+  attaching the same host and before upstream testharness/page scripts execute.
+  `cmd/js.rs` installs that host in inline-script and run-dom paths; native-driver
+  GUI is another existing consumer of the shared host. No XML shell dispatch is
+  authorized by this adoption map.
+- Keep node brands private. Runtime factories, query results and new binding
+  operations must share its canonical wrapper identity. `childNodes` must be
+  live and same-object. UTF-16 conversion/coercion stays outside DOM borrows;
+  constructors, methods and accessors forward the supplied `Operation`.
+
+Requested dependency merge through co-integrator, without blocking acceptance
+of native-only lower-crate evidence on later driver WPT installation. The current
+runtime source has no `BindingHost` adapter/installer. The existing driver →
+`amazing-js` dependency may suffice if the runtime exposes installation. If it
+requires direct binding types, the exact additional edge is driver `amazing` →
+`amazing-bindings`; manifest/lock updates are routed, not made speculatively.
+
+Validation after dependencies land must show an API is visible in actual driver
+WPT execution, mutations reach the parsed arena, factory/query/new-interface
+node identity agrees, and a retained `childNodes` object updates after mutation.
+Use a newly installed API (for example Text construction or append) and report
+measured before/after separately from native DOM/binding counts. This map earns
+no WPT credit and does not suspend the active no-fallback/no-scripting XML work.
