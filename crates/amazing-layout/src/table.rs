@@ -268,15 +268,23 @@ fn constraints(
 pub(crate) fn intrinsic(b: &LayoutBox, fonts: &FontSource) -> (f32, f32) {
     let g = Grid::new(b);
     let (min, max) = constraints(b, &g, fonts, 0.0, None);
-    let edges = chrome(b, 0.0)
+    let model_edges = if collapsed(b) {
+        let edges =
+            crate::table_decoration::Borders::new(b, &g).widths(0, 0, g.rows.len(), g.count);
+        edges.left + edges.right
+    } else {
+        chrome(b, 0.0)
+    };
+    let edges = model_edges
         + if g.count > 0 {
             spacing(b).0 * (g.count + 1) as f32
         } else {
             0.0
         };
+    let specified = length(b, "width", 0.0).unwrap_or(0.0);
     (
-        min.iter().sum::<f32>() + edges,
-        max.iter().sum::<f32>() + edges,
+        (min.iter().sum::<f32>() + edges).max(specified),
+        (max.iter().sum::<f32>() + edges).max(specified),
     )
 }
 

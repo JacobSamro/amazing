@@ -435,3 +435,18 @@ fn table_rowspan_explicit_height_is_a_minimum_across_owned_rows() {
     near(c[0].border_box.h, 80.0);
     near(c[1].border_box.h + c[2].border_box.h, 80.0);
 }
+
+#[test]
+fn table_intrinsic_width_in_a_float_honors_width_and_collapsed_padding() {
+    for model in ["content-box", "border-box"] {
+        let b = layout(
+            "<body><div><table></table></div>",
+            &format!(
+                "div{{float:left}}table{{width:100px;height:100px;border-collapse:collapse;padding:100px;box-sizing:{model}}}"
+            ),
+            false,
+        );
+        near(kids(&b)[0].border_box.w, 100.0);
+        near(kids(&b)[0].border_box.h, 100.0);
+    }
+}
