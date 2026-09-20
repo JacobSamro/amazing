@@ -329,8 +329,8 @@ are drained. No debug instrumentation remains in engine code.
 
 ### Measured gate
 
-Build base: `80c66360c75281eb293c21e17688ddd993fb8de8` (refreshed Windows tree).
-All owned changes were re-synced after refresh. 149 Rust/manifest files matched
+Build base: `d8437f3f1693436ecdff574aba971db939f288e7` (refreshed Windows tree).
+All owned changes were re-synced after refresh. 159 Rust/manifest files matched
 Mac SHA-256 values immediately before and after the final workspace gate.
 Earlier results affected by refresh are superseded by these final measurements.
 
@@ -382,8 +382,8 @@ Final Windows validation:
 
 - `cargo test -p amazing-js -p amazing-regex --locked`: 156 JS unit tests,
   10 regex unit tests, 1 JS doctest passed; no failures.
-- `cargo test --workspace --locked`: 938 passed, 0 failed,
-  3 ignored across 51 result groups; exit 0.
+- `cargo test --workspace --locked`: 992 passed, 0 failed,
+  3 ignored across 52 result groups; exit 0.
 - CLI and both examples build with --locked. The unchanged upstream probe exits
   0 and prints `parsed; initialized; subtests=PASS,FAIL; completion=OK`.
 - Every owned file is below 4000 lines; git diff --check passes.
@@ -392,14 +392,46 @@ Reproducibility hashes:
 
 | Artifact | SHA-256 |
 |---|---|
-| Final CLI | `7ca264a349d28b00e13245c10fb24a760b2b0116c6928b133636895cc21eb186` |
+| Final CLI | `4f3a18f91d6491a02fa9d934973c8ce59e411715a02e64da24a8a843134b1bba` |
 | Both final classifications | `952ab71398b351d130aeea88c5a7f18cc5e9b1e6d67b18011806bd5a17b10338` |
 | Selection paths | `fbaaf7f7d0e897133a0d32fe439f79e1ef91fc4f46380d01350f3e4965d4a353` |
 | Selected Test262 sources | `3425ae5f4b28a9b51472d0edf46ca8af60e3f6b5762b71e753f4577a5a27422d` |
 | Unchanged scripts/test262.py | `26d666f7529a1788fbbfe7c119f7f6f149cf32c0e0914a604017592cda8ab79c` |
 | Selection observer | `5baccd96598cb68db46ac45e29eeacc0f7e4fc007c3506e6607425544b18ee62` |
-| 149-file source manifest | `053d9f0ad9ec6d06848be3532efa148a64835de30806c753318f29d7c21add5b` |
+| 159-file source manifest | `0b9ed5f690073bfbe1ac61ae6a50ec9a7aff5205fa5aec9e1ebe41c30b3ce5bb` |
 | Final Cargo.lock | `3feaf8130f2c60230292a4d70311c6e480d848a2ffdebc036fd09a603581ba7d` |
+
+### Revalidation after rebuilding artifacts
+
+The earlier JS-2 post-refresh gates were treated as suspect because archive
+mtimes could permit stale first-party artifacts. These results supersede them.
+The implementation was already merged in `29294fc`; validation was repeated
+on integrator-confirmed stable dev `d8437f3f1693436ecdff574aba971db939f288e7` after re-sync.
+
+The lane created a separate, initially **absent** Cargo target:
+`C:/Users/server/target/js-lang/js2-fresh-20260920T180036Z`. A pre-build existence guard and
+`fresh-artifact-origin.json` record that no prior artifacts existed there.
+Cargo rebuilt first-party crates and third-party adapters; build parallelism
+was limited to two jobs. Source hashes are supporting evidence, not the basis
+for claiming artifact freshness. All 159 Rust/manifest files matched the
+pinned source snapshot before and after the gates.
+
+Fresh Windows results: 156 JS unit tests, 10 regex unit tests and 1 doctest pass;
+workspace **992 passed / 0 failed / 3 ignored across 52 targets**. The workspace
+count also agrees with the integrator's independently reported clean gate.
+Both fresh Test262 runs remain **798 pass / 1185 fail / 731 skip / 0 timeout**;
+there are zero status/reason changes from the earlier classification and zero
+repeat differences. The unchanged upstream harness again parses, initializes,
+emits PASS/FAIL and completes OK in both the CLI and standalone example.
+
+Evidence: scratch `fresh-config.json`, `fresh-artifact-origin.json`,
+`fresh-source-manifest.json`, `fresh-final-parity.json`, `fresh-check.log`,
+`fresh-crate-tests.log`, `fresh-workspace-tests.log`, `fresh-workspace-summary.json`,
+`fresh-cli-build.log`, `fresh-examples-build.log`, `fresh-run1/`, `fresh-run2/`,
+`upstream-fresh-proof.json`, `upstream-fresh-example.json`, and `fresh-validation.json`.
+Root Cargo.lock still differs from the refreshed `57f0e69` version by exactly
+the authorized amazing-js -> amazing-regex edge; the original full diff in the lane report
+remains accurate. No implementation changes were necessary for revalidation.
 
 ### Unsupported surface and bounds
 
@@ -428,23 +460,24 @@ to amazing-js's dependency list. No manual lockfile editing or other dependency
 change occurred. The full diff is included in the lane report.
 
 ```powershell
-$env:CARGO_TARGET_DIR='C:\Users\server\target\js-lang'
+$env:CARGO_TARGET_DIR='C:/Users/server/target/js-lang/js2-fresh-20260920T180036Z'
+$env:CARGO_BUILD_JOBS='2'
 cargo test -p amazing-js -p amazing-regex --locked
 cargo build -p amazing --locked
 cargo build -p amazing-js --examples --locked
-python .agents/js-lang/observe_js2.py --harness scripts/test262.py --root .agents/js-lang/test262-full --binary C:/Users/server/target/js-lang/debug/amazing.exe --output .agents/js-lang/js2-final1 --selection .agents/js-lang/js2-selection.json
-# Repeat with --output .agents/js-lang/js2-final2.
-python .agents/js-lang/probe_upstream.py
+python .agents/js-lang/observe_js2.py --harness scripts/test262.py --root .agents/js-lang/test262-full --binary C:/Users/server/target/js-lang/js2-fresh-20260920T180036Z/debug/amazing.exe --output .agents/js-lang/fresh-run1 --selection .agents/js-lang/js2-selection.json
+# Repeat with --output .agents/js-lang/fresh-run2.
+python .agents/js-lang/probe_upstream_fresh.py
 cargo test --workspace --locked
 ```
 
 For a fresh upstream checkout, feed the unchanged resources/testharness.js bytes
-to `target/js-lang/debug/examples/probe_harness.exe` on Windows. The scratch
+to `debug/examples/probe_harness.exe` under that target directory on Windows. The scratch
 probe does this from the pinned source JSON and records source/executable hashes.
 
 ### Next boundary
 
-JS-2 is complete. Integrate this lane, then resume DOM-1 against the real upstream
+JS-2 is merged and freshly revalidated. Resume DOM-1 against the real upstream
 harness. No DOM conformance percentage is claimed here. Do not silently broaden
 JS-2 into full UTF-16 strings, Symbol protocols or harness repair: choose those
 as separate measured tickets. The largest JS-1 helper-loading cluster remains
