@@ -57,4 +57,3 @@ pub(crate) fn cmd_parse_fragment(context: &str, path: Option<&str>) -> ExitCode 
         Err(code) => code,
     }
 }
-

@@ -139,6 +139,9 @@ fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider
 }
 
 fn resolve_font_url(page: &str, source: &str) -> String {
+    if std::env::var_os("AMAZING_WPT_ROOT").is_some() {
+        return resolve_script_url(page, source);
+    }
     if source.starts_with('/')
         && !page.starts_with("http://")
         && !page.starts_with("https://")

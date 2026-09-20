@@ -2,7 +2,8 @@
 
 ## IA-1 — Split the driver and migrate natural image dimensions
 
-Base: `ea57978ee5e6a776ff9e278e4973df93471988ae` (`origin/dev`).
+Original evidence base: `ea57978ee5e6a776ff9e278e4973df93471988ae`.
+Expanded routing rebased onto `784dc59aec23e83ac04114a2830f19731e74d902`.
 
 The driver dispatch now lives in `crates/amazing/src/main.rs`; command families
 live in `cmd/parse.rs`, `render.rs`, `wpt.rs`, `js.rs`, `net.rs`, `webrtc.rs`, and
@@ -39,11 +40,12 @@ The rebased DOM adapter already handles `DocumentFragment`, `DocumentType`, and
 phase2 style call sites already use `Dom::name` / `if let Text`, so they have no
 missing exhaustive arms. No duplicate compatibility arms were added. The granted
 shell files contain no remaining exhaustive matches needing these variants or
-intrinsic-size adapters. `engine_viewport.rs` remains outside this ticket's grant. Its separate adapter
-still returns attribute-adjusted `used_size` and is routed through `questions.md`
-to the existing owner; this ticket does not claim that shell bug is fixed.
+intrinsic-size adapters. The integrator subsequently lifted the exclusion for
+`engine_viewport.rs`: its `PageResources::intrinsic_size` now returns decoded
+natural dimensions, its adjusted-size storage/arithmetic is removed, and the
+former 8×4 assertion now verifies the natural 2×1 dimensions.
 
-### Validation
+### Original-scope validation
 
 All builds and execution occur on win-001 in the integrator-assist source and
 target directories. The tree was refreshed after rebase, then refreshed and
@@ -74,13 +76,30 @@ incremental compilation is disabled.
   identical. Full counts and hashes are in
   `tests/wpt-integrator-assist/evidence/gate-evidence/summary.json`.
 
-### Additional routing — in progress
+### Additional routing
 
-The integrator granted the specific shell natural-size migration and assigned
-root-relative WPT resource/reference resolution plus removal of server-side Git
-from the render runner. The earlier evidence above measures the original ticket;
-fresh validation will follow these newly authorized changes. CSS owns the HTML
-presentational-hint follow-up; adjusted intrinsic sizes must not be restored.
+The render runner now resolves `/css/reference/blank.html` against `WptRoot`
+and supplies `AMAZING_WPT_ROOT` only to its renderer child. Driver root-relative
+scripts (including `/common/reftest-wait.js`), images, stylesheets and fonts use
+that explicit root for documents inside it. Ordinary relative resources retain
+their existing resolution. Query/fragment suffixes and percent-encoded names
+are handled; unsupported remote and escaping references remain classified.
+
+The runner never invokes Git, with or without `-SkipFetch`. Provision the pinned
+checkout on the editing host and transfer it. A detached `.git/HEAD` is the
+default revision marker; an exported tree can use `-RevisionMarker` with a file
+written from the verified editing-host revision. The full 40-digit marker must
+match the manifest pin. Missing, symbolic, or mismatched markers fail clearly.
+The marker records provenance; it is not a hash of every checkout file.
+Artifact directories use short hashes to avoid Windows MAX_PATH while reports
+retain original test IDs.
+
+`verify-root-mapping.ps1` uses an explicitly synthetic revision and earns zero
+WPT credit. It exercises root-relative, ordinary-relative, and encoded paths;
+rejects escaping/remote references; checks missing/wrong markers; and installs a
+throwing Git sentinel. Final expanded measurements are recorded below when done.
+CSS owns the HTML presentational-hint follow-up; adjusted intrinsic sizes must
+not be restored.
 
 ## IA-2 proposal — shell/driver URL migration
 
@@ -89,7 +108,7 @@ Follow the caller inventory and persisted-key concerns in
 DOM URL completion, and shell navigation with the canonical network URL API.
 Then migrate cookie/cache keys, storage origins, and persisted session state with
 an explicit old-key policy. Require grants for each shell file first, especially
-`engine_viewport.rs`, which another lane currently owns.
+`engine_viewport.rs`; the IA-1 grant covers only its intrinsic-size migration.
 
 Gate the migration with relative-resource/navigation fixtures, canonical-origin
 and default-port cases, persistence round trips, the pinned URL selection, and

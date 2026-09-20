@@ -46,3 +46,12 @@ $base = 'C:\Users\server\src\wt\integrator-assist\target\diagnostics'
 Run a second capture/gate with a separate output directory. The CLI renderer
 uses fixed `target/diagnostics/ia-parity.*` paths, so CLI captures run sequentially.
 Pinned render gates have separate run directories and may run concurrently.
+
+Expanded routing adds `verify-root-mapping.ps1`: run it with `-Executable` and
+`-OutputDirectory` on Windows. Three rendering diagnostics must pass and two
+reference diagnostics must remain unsupported on both runs. Missing/wrong
+revision markers must be rejected, and the Git sentinel must record zero calls.
+`root-fixtures/revision.txt` is a synthetic marker, not an upstream revision.
+The production runner accepts `-RevisionMarker` for Git-free transferred trees;
+otherwise it reads a detached `.git/HEAD` and checks it against the manifest.
+The runner no longer provisions or fetches WPT, even if `-SkipFetch` is omitted.

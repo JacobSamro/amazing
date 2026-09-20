@@ -31,4 +31,3 @@ pub(crate) fn cmd_gpu_present_smoke() -> ExitCode {
         }
     }
 }
-

@@ -293,4 +293,3 @@ pub(crate) fn cmd_play_audio(args: &[String]) -> ExitCode {
     }
     gui::play_wav_file(path)
 }
-

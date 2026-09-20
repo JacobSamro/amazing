@@ -103,6 +103,13 @@ pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &
 }
 
 pub(crate) fn resolve_script_url(page: &str, source: &str) -> String {
+    // The WPT runner supplies this only to its renderer child. A filesystem
+    // drive root is not the web server's URL root.
+    if let Some(root) = std::env::var_os("AMAZING_WPT_ROOT")
+        && let Some(mapped) = wpt_root_relative_url(page, source, std::path::Path::new(&root))
+    {
+        return mapped;
+    }
     if source.contains("://") || source.starts_with("file:") {
         return source.to_owned();
     }
@@ -213,3 +220,66 @@ pub(crate) fn format_js_error(value: &amazing_js::value::JsValue) -> String {
     }
 }
 
+/// Map a URL-absolute resource into the explicitly configured WPT checkout.
+/// Ordinary pages outside that checkout retain their normal URL semantics.
+fn wpt_root_relative_url(page: &str, source: &str, root: &std::path::Path) -> Option<String> {
+    if !source.starts_with('/') {
+        return None;
+    }
+    let root = root.canonicalize().ok()?;
+    let page = if page.starts_with("file:") {
+        amazing_net::Url::parse(page).ok()?.to_file_path().ok()?
+    } else {
+        std::path::PathBuf::from(page)
+    };
+    if !page.canonicalize().ok()?.starts_with(&root) {
+        return None;
+    }
+    let invalid = || Some("about:invalid#blocked-wpt-resource".to_owned());
+    if source.starts_with("//") {
+        return invalid();
+    }
+    let Ok(url) = amazing_net::Url::parse(&format!("https://wpt.invalid{source}")) else {
+        return invalid();
+    };
+    let decoded = url.decoded_path().replace('\\', "/");
+    let mut relative = std::path::PathBuf::new();
+    for segment in decoded.split('/') {
+        match segment {
+            "" | "." => {},
+            ".." => { relative.pop(); },
+            segment if segment.contains([':', '\0']) => return invalid(),
+            segment => relative.push(segment),
+        }
+    }
+    let resolved = root.join(relative);
+    if let Ok(actual) = resolved.canonicalize()
+        && !actual.starts_with(&root)
+    {
+        return invalid();
+    }
+    Some(resolved.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn root_relative_resources_use_the_wpt_root_not_the_test_directory() {
+        let root = std::env::temp_dir().join(format!("amazing-wpt-root-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("css/nested")).unwrap();
+        std::fs::create_dir_all(root.join("common")).unwrap();
+        let page = root.join("css/nested/test.html");
+        std::fs::write(&page, "<!doctype html>").unwrap();
+        std::fs::write(root.join("common/helper script.js"), "42").unwrap();
+        let expected = root.canonicalize().unwrap().join("common/helper script.js");
+        for source in ["/common/helper%20script.js?cache=1#fragment", "/../common/helper%20script.js"] {
+            assert_eq!(wpt_root_relative_url(&page.to_string_lossy(), source, &root), Some(expected.to_string_lossy().into_owned()));
+        }
+        assert_eq!(wpt_root_relative_url(&page.to_string_lossy(), "relative.js", &root), None);
+        assert_eq!(wpt_root_relative_url("https://example.org/page", "/common/helper.js", &root), None);
+        assert_eq!(wpt_root_relative_url(&page.to_string_lossy(), "/C:/outside.js", &root), Some("about:invalid#blocked-wpt-resource".into()));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}

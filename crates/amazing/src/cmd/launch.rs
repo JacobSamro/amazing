@@ -60,4 +60,3 @@ fn process_exit_code(status: ExitStatus) -> ExitCode {
         .and_then(|code| u8::try_from(code).ok())
         .map_or(ExitCode::FAILURE, ExitCode::from)
 }
-

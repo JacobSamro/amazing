@@ -544,4 +544,3 @@ impl amazing_js::DomHost for BrowserDomHost {
         self.write_style_declarations(idx, &declarations)
     }
 }
-

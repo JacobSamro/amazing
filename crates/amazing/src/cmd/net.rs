@@ -58,4 +58,3 @@ pub(crate) fn cmd_fetch_parse(args: &[String]) -> ExitCode {
     print!("{}", dom.dump(amazing_dom::NodeIdx(0)));
     ExitCode::SUCCESS
 }
-

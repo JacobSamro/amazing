@@ -51,4 +51,3 @@ pub(crate) fn cmd_render_wpt(args: &[String]) -> ExitCode {
     println!("rendered fixed viewport {width}x{height} px → {out_path}");
     ExitCode::SUCCESS
 }
-
