@@ -1,5 +1,6 @@
 //! Bounded RFC 1950/1951/1952 decoding. No dictionaries, raw-deflate HTTP
-//! fallback, or brotli. Each coding layer has the caller's output ceiling.
+//! fallback. Brotli crosses the isolated approved adapter. Each coding layer
+//! has the caller's output ceiling.
 mod inflate;
 use crate::NetError;
 use inflate::{inflate, Output};
@@ -12,6 +13,11 @@ pub(crate) fn decode(input: &[u8], coding: &str, limit: usize) -> Result<Vec<u8>
     match coding {
         "gzip" | "x-gzip" => gzip(input, limit),
         "deflate" => zlib(input, limit),
+        "br" => amazing_net_brotli::decode(input, limit).map_err(|error| match error {
+            amazing_net_brotli::DecodeError::OutputLimit => NetError::ResponseTooLarge,
+            amazing_net_brotli::DecodeError::Truncated => NetError::IncompleteBody,
+            _ => invalid(&error.to_string()),
+        }),
         _ => Err(invalid("unsupported encoding")),
     }
 }

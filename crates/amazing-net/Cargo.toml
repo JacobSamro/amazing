@@ -7,4 +7,5 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+amazing-net-brotli = { path = "../amazing-net-brotli" }
 amazing-net-tls = { path = "../amazing-net-tls" }
