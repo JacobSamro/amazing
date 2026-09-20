@@ -198,7 +198,7 @@ predate LAYOUT-1. Their causes have not been bisected in this ticket.
   remain outside this prototype's supported slice.
 - Do not equate the raw reftest pass count with complete CSS float conformance.
 
-## LAYOUT-2 — Atomic inline replaced boxes (in progress)
+## LAYOUT-2 — Atomic inline replaced boxes (completed; stopped at review boundary)
 
 ### Contract and ownership decisions
 
@@ -251,9 +251,72 @@ layout resolves from the retained natural dimensions and style each time.
 
 Sizing reference: [CSS2.2 used dimensions and min/max rules](https://www.w3.org/TR/CSS22/visudet.html).
 
-### Validation
+### Measured validation
 
-Pending Windows unit and pinned WPT before/after runs. Results preceding the
-integrator's all-tree refresh were explicitly invalidated and are excluded.
-The refreshed baseline is `origin/dev` `26c64de`; changed lane files are
-re-synced after the refresh. No local build/test execution.
+Windows layout tests: **150 → 164 passed**, zero failed/ignored. Fourteen new
+public-pipeline tests cover atomic direct/nested controls, hidden controls,
+inline-block replaced boxes, defaults/size attributes, provider overrides,
+image ratios, definite/indefinite percentage bases, min/max constraints,
+chrome/line fitting, border-box sizing, repeat layout, bidi metadata, and invalid
+provider sizes. The existing provider-driven visual-order test now also asserts
+styled content/border geometry after atomic reordering.
+
+Pinned WPT revision: `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+Viewport 800 × 600, device scale 1. Every selection was measured **twice before
+and twice after**, with identical result/pixel-hash projections within each
+pair. Before/after projections also match exactly: no classification changes,
+no pixel changes in these selections, and no WPT gain claimed. All selections
+have **0 timeout / 0 unsupported / 0 crash**.
+
+| Selection | Before pass / mismatch | After pass / mismatch |
+| --- | --- | --- |
+| Broad geometry | 31 / 30 | 31 / 30 |
+| Float shard | 6 / 2 | 6 / 2 |
+| Block collapse | 9 / 0 | 9 / 0 |
+| Position | 9 / 3 | 9 / 3 |
+| Text flow | 14 / 2 | 14 / 2 |
+| Focused flex/grid | 24 / 0 | 24 / 0 |
+| Focused paint | 24 / 0 | 24 / 0 |
+
+Full Windows workspace: **929 passed / 0 failed / 3 ignored**, exit **0**.
+The ignored tests require external HTTPS or an interactive D3D11 device.
+The baseline is `origin/dev` **133292f** (DOM-2 plus NET-3). The final lane
+implementation was re-synced after the integrator refresh. All **142 tracked
+Rust/build files** were hash-verified against the Mac before and after the
+credited workspace gate and again during final evidence collection.
+
+A subsequent server overwrite reset four layout files to exact dev content
+after the initial verification. The first successful workspace/WPT results
+were excluded. The lane re-synced its source, repeated the workspace gate with
+before/after source guards, and repeated all WPT measurements with preserved
+executables. `collect.ps1` now rejects source drift as well as ambiguous runs.
+No source drift remained at completion. No local builds/tests were run.
+
+Credited WPT directories are `baseline-verified` and `final-verified` below
+`C:/Users/server/target/layout/layout2-evidence`. The pristine baseline unit
+count comes from the retained `133292f` baseline build; final 164/164 was
+rechecked after restoring the lane files.
+
+- Baseline executable: `C:/Users/server/target/layout/layout2-baseline-133.exe`,
+  SHA256 `20830897f08778708cc8227d0eb48d39ee9384a1646fbaac477867482e142a90`.
+- Final executable: `C:/Users/server/target/layout/layout2-final-verified.exe`,
+  SHA256 `b7246e76141d4735e6203dc6ba14d00c1fe611fb7478f562bdc81688901bbea1`.
+- [Measured summary](../../crates/amazing-layout/evidence/layout2/results.json),
+  [reproduction notes](../../crates/amazing-layout/evidence/layout2/README.md),
+  and [verified build-source manifest](../../crates/amazing-layout/evidence/layout2/build-source-sha256.json).
+  Per-suite JSON retains case ids, counts, run directories and actual/reference/
+  diff hashes. Earlier LAYOUT-1 evidence is untouched.
+
+### Supported boundary
+
+This ticket supplies layout geometry and an adoption seam, not native control
+painting or a live form-state model. Provider adapters must migrate to natural
+sizes before CSS/HTML sizing combinations can be claimed end to end. The root
+driver still uses its existing BMP/PPM path; the separate PNG CSS Images
+selection is not measured by this ticket and its prior 0/12 is not promoted.
+Undecoded images retain their existing omission behavior. General non-replaced
+inline-block layout, blockified control defaults/content, vertical replaced
+placement, and platform/content-dependent control sizing remain outside this
+inline-box slice. Image HTML dimension presentational hints are not introduced
+here; they belong in the upstream style/hint path after removing provider-side
+used sizing.

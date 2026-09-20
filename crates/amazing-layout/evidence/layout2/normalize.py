@@ -23,11 +23,11 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 summary = {
-    "ticket": "LAYOUT-2", "source_base": source_base,
+    "ticket": "LAYOUT-2", "source_base": source_base, "baseline_source_base": source_base,
     "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
     "viewport": {"width": 800, "height": 600},
     **{key: data[key] for key in ["baseline_executable", "final_executable",
-       "baseline_executable_sha256", "final_executable_sha256", "lockfile_sha256", "sources"]},
+       "baseline_executable_sha256", "final_executable_sha256", "lockfile_sha256", "build_source_manifest_sha256", "sources"]},
     "suites": {},
 }
 for suite in ["geometry", "floats", "block-collapse", "position", "text-flow", "flex-grid", "paint-compositing"]:
@@ -64,5 +64,17 @@ summary["workspace"] = {
     "ignored": sum(int(row[3]) for row in rows), "summary_count": len(rows),
     "log_sha256": hashlib.sha256(Path(workspace).read_bytes()).hexdigest(),
 }
+summary["layout_unit_tests"] = {}
+for phase in ["baseline", "final"]:
+    unit_log = Path(workspace).with_name(f'layout2-{data[phase + "_phase"]}-tests.log')
+    unit_rows = re.findall(r"test result: (\w+)\. (\d+) passed; (\d+) failed; (\d+) ignored;",
+                           unit_log.read_text(encoding="utf-8-sig"))
+    assert unit_rows and all(row[0] == "ok" for row in unit_rows)
+    summary["layout_unit_tests"][phase] = {
+        "passed": sum(int(row[1]) for row in unit_rows),
+        "failed": sum(int(row[2]) for row in unit_rows),
+        "ignored": sum(int(row[3]) for row in unit_rows),
+        "log_sha256": hashlib.sha256(unit_log.read_bytes()).hexdigest(),
+    }
 (out / "results.json").write_text(json.dumps(summary, indent=2) + "\n")
 print("workspace", summary["workspace"])
