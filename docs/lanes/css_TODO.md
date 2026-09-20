@@ -422,7 +422,7 @@ and `render_surface`. All authored files remain below 4,000 lines (driver:
 ## CSS-4 — side-border shorthands and author-specified provenance
 
 The integrator reassigned CSS-4 to two CSS-owned requests while shell stylesheet
-provenance remains outstanding. Background shorthand is now CSS-5. Base:
+provenance remains outstanding. Background shorthand was provisionally CSS-5 (subsequently reassigned below). Base:
 `156cc13`. No layout, paint, driver, shell, or root-manifest changes.
 
 ### Side-border shorthands
@@ -692,3 +692,22 @@ References: [HTML rendering](https://html.spec.whatwg.org/multipage/rendering.ht
 Evidence is in progress: clean baseline bb79669, lock E4D68B10, source-verified
 Windows executable and two runs of all eight pinned selections. Final counts,
 image comparisons, workspace gate and source hashes will be recorded after validation.
+
+
+### Integration boundary discovered by the CLI proof
+
+At final-gate base `11dd8a8`, `crates/amazing/src/main.rs::load_page_media`
+still turns integer width/height attributes into `PageImage.used_size`, and
+`PageMedia::intrinsic_size` returns that value. The integrator-assist correction
+referenced in the assignment is not yet present in this fetched dev tree.
+Consequently an integer-only before/after fixture is masked by the old adapter.
+The CSS proof uses width=80% with height=32 at an 80x50 viewport and a decoded
+2x2 red P6 image: **1024 differing pixels before, 0 after**, versus a CSS 64x32
+reference. A low author layer overriding integer attributes to 24x12 is **0**
+different. Both full CLI proof runs have identical SHA256 results.
+
+A separate diagnostic deliberately sets author width:auto;height:auto on an
+image with width=64,height=32. CSS computes auto, but the current driver reports
+64x32 as intrinsic dimensions: **2044 differing pixels before and after** versus
+the true 2x2 reference. This is routed to integrator-assist and is explicitly
+not claimed fixed. No driver/provider workaround was added to CSS.

@@ -310,3 +310,24 @@ fn simple_background_shorthand_resets_hints_including_after_variables() {
         assert!(!s.is_author_specified("background-image"));
     }
 }
+
+#[test]
+fn table_cellspacing_zero_is_a_non_author_hint_below_every_author_layer() {
+    let attrs = [("cellspacing", "0")];
+    let hint = style("table", &attrs, "");
+    assert_eq!(hint.get("border-spacing"), Some("0px"));
+    assert!(!hint.is_author_specified("border-spacing"));
+    let author = style("table", &attrs, "@layer first{*{border-spacing:7px 3px}}");
+    assert_eq!(author.get("border-spacing"), Some("7px 3px"));
+    assert!(author.is_author_specified("border-spacing"));
+    let hint = style(
+        "table",
+        &[("cellspacing", " +6junk")],
+        "@layer first{*{border-spacing:revert-layer}}",
+    );
+    assert_eq!(hint.get("border-spacing"), Some("6px"));
+    assert!(!hint.is_author_specified("border-spacing"));
+    let reverted = style("table", &[("cellspacing", "6")], "*{border-spacing:revert}");
+    assert_eq!(reverted.get("border-spacing"), Some("2px"));
+    assert!(!reverted.is_author_specified("border-spacing"));
+}
