@@ -320,6 +320,12 @@ pub(crate) fn load_page_media(dom: &amazing_dom::Dom, page: &str) -> PageMedia {
 impl BrowserDomHost {
     fn serialize_node(&self, node: amazing_dom::NodeIdx, out: &mut String) {
         match &self.dom.get(node).kind {
+            amazing_dom::NodeKind::DocumentFragment => {
+                for child in self.dom.children(node) { self.serialize_node(child, out); }
+            }
+            amazing_dom::NodeKind::DocumentType { name, .. } => {
+                out.push_str("<!DOCTYPE "); out.push_str(name); out.push('>');
+            }
             amazing_dom::NodeKind::Document => {
                 for child in self.dom.children(node) {
                     self.serialize_node(child, out);
@@ -384,6 +390,13 @@ impl BrowserDomHost {
     ) {
         let kind = source.get(source_node).kind.clone();
         let created = match kind {
+            amazing_dom::NodeKind::DocumentFragment => {
+                for child in source.children(source_node) { self.clone_from(source, child, parent); }
+                return;
+            }
+            amazing_dom::NodeKind::DocumentType { name, public_id, system_id } => self.dom.append_child(
+                parent, amazing_dom::NodeKind::DocumentType { name, public_id, system_id },
+            ),
             amazing_dom::NodeKind::Element {
                 name,
                 attrs,
@@ -957,6 +970,7 @@ fn main() -> ExitCode {
         Some("fetch-parse") => cmd_fetch_parse(&args[2..]),
         Some("run") => cmd_run(args.get(2).map(String::as_str)),
         Some("domrun") => cmd_domrun(&args[2..]),
+        Some("wpt-harness" | "wpt-harness-worker") => { mod wpt_harness { include!("cmd/wpt_harness.rs"); } wpt_harness::run(&args[1..]) },
         Some("gui") => gui::run(args.get(2).map(String::as_str)),
         Some(other) => {
             eprintln!("unknown command: {other}");

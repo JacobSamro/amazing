@@ -1,0 +1,14 @@
+<!doctype html><title>SCAFFOLDING ONLY</title><div id="target">original</div>
+
+<script src="scaffold-harness.js"></script>
+<script>
+test(function() {
+var item = document.querySelector('#target');
+item.textContent = 'updated';
+assert_equals(document.querySelector('#target').textContent, 'updated');
+assert_equals(window.innerWidth, 800);
+assert_equals(window.innerHeight, 600);
+}, 'DOM mutation and viewport');
+var delayed = async_test('timer callback');
+setTimeout(function() { delayed.done(); done(); }, 0);
+</script>

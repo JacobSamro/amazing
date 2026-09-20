@@ -493,6 +493,7 @@ fn collect_ruby_text(
                 }
             }
         },
+        NodeKind::DocumentFragment | NodeKind::DocumentType { .. } => {},
         NodeKind::Comment { .. }
         | NodeKind::ProcessingInstruction { .. }
         | NodeKind::Document => {},
@@ -988,6 +989,7 @@ fn classify_children(
                         ));
                     }
                 }
+                NodeKind::DocumentFragment | NodeKind::DocumentType { .. } => {},
                 NodeKind::Comment { .. }
                 | NodeKind::ProcessingInstruction { .. }
                 | NodeKind::Document => {}
@@ -1039,6 +1041,7 @@ fn classify_children(
                     ));
                 }
             }
+            NodeKind::DocumentFragment | NodeKind::DocumentType { .. } => {},
             NodeKind::Comment { .. }
             | NodeKind::ProcessingInstruction { .. }
             | NodeKind::Document => {}
@@ -1206,6 +1209,7 @@ fn flatten_inline(
                     ));
                 }
             }
+            NodeKind::DocumentFragment | NodeKind::DocumentType { .. } => {},
             NodeKind::Comment { .. }
             | NodeKind::ProcessingInstruction { .. }
             | NodeKind::Document => {}

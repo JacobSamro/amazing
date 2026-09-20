@@ -1,6 +1,6 @@
 //! Amazing DOM — arena-allocated document tree.
 //!
-//! **Status: Phase 0 skeleton, extended in Phase 1.**
+//! DOM-2: checked tree algorithms, event dispatch, and mutation observation.
 //!
 //! Design decisions (locked):
 //! - Nodes are slots in a flat `Vec`; references are `NodeIdx` (u32) — no
@@ -9,10 +9,17 @@
 //!   next-sibling / prev-sibling links give O(1) traversal.
 //! - The low-level attach/detach API exists for the HTML tree constructor
 //!   (foster parenting, adoption agency). It is engine-internal surface;
-//!   Phase 7 will encapsulate it behind the DOM/JS bridge.
+//!   Bindings must use checked pre-insert/pre-remove/replace operations.
+
+#![forbid(unsafe_code)]
+
+pub mod events;
+pub mod mutation;
+mod tree;
+pub use tree::{DocumentPosition, DomError};
 
 /// Index into a [`Dom`] arena.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct NodeIdx(pub u32);
 
 /// Namespace carried by an element node. HTML is the default for DOM-created
@@ -30,6 +37,12 @@ pub enum Namespace {
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeKind {
     Document,
+    DocumentFragment,
+    DocumentType {
+        name: String,
+        public_id: String,
+        system_id: String,
+    },
     Element {
         name: String,
         attrs: Vec<(String, String)>,
@@ -49,6 +62,8 @@ pub enum NodeKind {
 
 #[derive(Debug)]
 pub struct Node {
+    owner_document: NodeIdx,
+    namespaced_attributes: Vec<(String, String, String)>,
     pub kind: NodeKind,
     pub parent: Option<NodeIdx>,
     pub first_child: Option<NodeIdx>,
@@ -58,9 +73,10 @@ pub struct Node {
 }
 
 /// Arena-backed DOM.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Dom {
     nodes: Vec<Node>,
+    mutations: mutation::MutationObservers,
     /// Doctype name captured by the tree builder (Phase 1). Quirks-mode bits
     /// land here when the layout engine needs them.
     pub doctype: Option<String>,
@@ -70,9 +86,12 @@ impl Dom {
     pub fn new() -> Self {
         let mut dom = Self {
             nodes: Vec::new(),
+            mutations: mutation::MutationObservers::default(),
             doctype: None,
         };
         dom.nodes.push(Node {
+            owner_document: NodeIdx(0),
+            namespaced_attributes: Vec::new(),
             kind: NodeKind::Document,
             parent: None,
             first_child: None,
@@ -91,7 +110,15 @@ impl Dom {
     /// [`attach_before`] it. Used by the tree builder for foster-parented
     /// insertions where the final position isn't known at creation time.
     pub fn alloc_unattached(&mut self, kind: NodeKind) -> NodeIdx {
+        let index = u32::try_from(self.nodes.len()).expect("DOM arena exhausted u32 handles");
+        let owner_document = if matches!(kind, NodeKind::Document) {
+            NodeIdx(index)
+        } else {
+            NodeIdx(0)
+        };
         self.nodes.push(Node {
+            owner_document,
+            namespaced_attributes: Vec::new(),
             kind,
             parent: None,
             first_child: None,
@@ -99,7 +126,7 @@ impl Dom {
             next_sibling: None,
             prev_sibling: None,
         });
-        NodeIdx((self.nodes.len() - 1) as u32)
+        NodeIdx(index)
     }
 
     pub fn get(&self, idx: NodeIdx) -> &Node {
@@ -115,18 +142,26 @@ impl Dom {
 
     /// Creates an element under `parent`, appended as the last child.
     pub fn create_element(&mut self, parent: NodeIdx, name: &str) -> NodeIdx {
-        self.append_child(parent, NodeKind::Element {
-            name: name.to_owned(),
-            attrs: Vec::new(),
-            namespace: Namespace::Html,
-        })
+        self.append_child(
+            parent,
+            NodeKind::Element {
+                name: name.to_owned(),
+                attrs: Vec::new(),
+                namespace: Namespace::Html,
+            },
+        )
     }
 
     /// Creates a text node under `parent`. (Phase 1 note: tree construction
     /// requires merging into a trailing text node's data instead of creating
     /// a sibling — that policy lives in the tree constructor.)
     pub fn create_text(&mut self, parent: NodeIdx, data: &str) -> NodeIdx {
-        self.append_child(parent, NodeKind::Text { data: data.to_owned() })
+        self.append_child(
+            parent,
+            NodeKind::Text {
+                data: data.to_owned(),
+            },
+        )
     }
 
     pub fn append_child(&mut self, parent: NodeIdx, kind: NodeKind) -> NodeIdx {
@@ -139,77 +174,44 @@ impl Dom {
 
     /// Appends an existing (unattached) node as the last child of `parent`.
     pub fn attach_last(&mut self, parent: NodeIdx, idx: NodeIdx) {
-        debug_assert!(self.get(idx).parent.is_none(), "node already attached");
-        let last = self.get(parent).last_child;
-        self.nodes[idx.0 as usize].parent = Some(parent);
-        self.nodes[idx.0 as usize].prev_sibling = last;
-        self.nodes[idx.0 as usize].next_sibling = None;
-        match last {
-            Some(prev) => self.nodes[prev.0 as usize].next_sibling = Some(idx),
-            None => self.nodes[parent.0 as usize].first_child = Some(idx),
-        }
-        self.nodes[parent.0 as usize].last_child = Some(idx);
+        self.attach_before(parent, None, idx);
     }
 
-    /// Inserts an existing (unattached) node under `parent`, immediately
-    /// before sibling `before` (or as last child when `before` is `None`).
-    /// Foster parenting and adoption-agency relocation use this.
-    pub fn attach_before(
-        &mut self,
-        parent: NodeIdx,
-        before: Option<NodeIdx>,
-        idx: NodeIdx,
-    ) {
-        match before {
-            None => self.attach_last(parent, idx),
-            Some(before) => {
-                debug_assert_eq!(self.get(before).parent, Some(parent));
-                let prev = self.get(before).prev_sibling;
-                self.nodes[idx.0 as usize].parent = Some(parent);
-                self.nodes[idx.0 as usize].prev_sibling = prev;
-                self.nodes[idx.0 as usize].next_sibling = Some(before);
-                self.nodes[before.0 as usize].prev_sibling = Some(idx);
-                match prev {
-                    Some(p) => self.nodes[p.0 as usize].next_sibling = Some(idx),
-                    None => self.nodes[parent.0 as usize].first_child = Some(idx),
-                }
-            },
+    /// Parser primitive: preserves links and observations but bypasses DOM
+    /// hierarchy validity (HTML construction has its own rules).
+    pub fn attach_before(&mut self, parent: NodeIdx, before: Option<NodeIdx>, idx: NodeIdx) {
+        assert!(self.get(idx).parent.is_none(), "node already attached");
+        assert!(!self.contains(idx, Some(parent)), "tree cycle");
+        if let Some(before) = before {
+            assert_eq!(self.get(before).parent, Some(parent));
         }
+        let previous = before.and_then(|n| self.get(n).prev_sibling).or_else(|| {
+            if before.is_none() {
+                self.get(parent).last_child
+            } else {
+                None
+            }
+        });
+        let document = self.get(parent).owner_document;
+        self.set_subtree_document(idx, document);
+        self.link_before(parent, before, idx);
+        self.queue_tree_record(parent, vec![idx], vec![], previous, before);
     }
 
-    /// Removes a node from its parent's child list, leaving it unattached.
+    /// Parser primitive; removing a detached node is a no-op.
     pub fn detach(&mut self, idx: NodeIdx) {
-        let (parent, prev, next) = {
-            let n = self.get(idx);
-            (n.parent, n.prev_sibling, n.next_sibling)
-        };
-        if let Some(p) = prev {
-            self.nodes[p.0 as usize].next_sibling = next;
+        if self.get(idx).parent.is_some() {
+            self.remove_internal(idx, false);
         }
-        if let Some(n) = next {
-            self.nodes[n.0 as usize].prev_sibling = prev;
-        }
-        if let Some(par) = parent {
-            if self.nodes[par.0 as usize].first_child == Some(idx) {
-                self.nodes[par.0 as usize].first_child = next;
-            }
-            if self.nodes[par.0 as usize].last_child == Some(idx) {
-                self.nodes[par.0 as usize].last_child = prev;
-            }
-        }
-        let n = &mut self.nodes[idx.0 as usize];
-        n.parent = None;
-        n.prev_sibling = None;
-        n.next_sibling = None;
     }
 
     /// Appends `extra` to a text node's data.
     pub fn append_text_data(&mut self, idx: NodeIdx, extra: &str) {
-        if let NodeKind::Text { data } = &mut self.nodes[idx.0 as usize].kind {
-            data.push_str(extra);
-        } else {
-            unreachable!("append_text_data on non-text node");
-        }
+        let NodeKind::Text { data } = &self.get(idx).kind else {
+            panic!("append_text_data on non-text node")
+        };
+        let value = format!("{data}{extra}");
+        self.set_character_data(idx, value).expect("text node");
     }
 
     // ---- introspection ----
@@ -249,9 +251,21 @@ impl Dom {
     }
 
     pub fn set_attrs(&mut self, idx: NodeIdx, attrs: Vec<(String, String)>) {
-        if let NodeKind::Element { attrs: slot, .. } =
-            &mut self.nodes[idx.0 as usize].kind
-        {
+        if self.attrs_of(idx).is_none() {
+            return;
+        }
+        let old = self.attrs_of(idx).unwrap().to_vec();
+        for (name, _) in old {
+            if !attrs.iter().any(|(n, _)| *n == name) {
+                self.remove_attribute(idx, &name).expect("element");
+            }
+        }
+        for (name, value) in &attrs {
+            self.set_attribute(idx, name, value).expect("element");
+        }
+        // Preserve the parser primitive's exact supplied ordering. Checked
+        // Element attribute operations above retain their insertion order.
+        if let NodeKind::Element { attrs: slot, .. } = &mut self.nodes[idx.0 as usize].kind {
             *slot = attrs;
         }
     }
@@ -273,10 +287,14 @@ impl Dom {
         }
         match &self.get(idx).kind {
             NodeKind::Document => out.push_str("#document\n"),
-            NodeKind::Element { name, namespace, .. } => {
+            NodeKind::DocumentFragment => out.push_str("#document-fragment\n"),
+            NodeKind::DocumentType { name, .. } => out.push_str(&format!("<!DOCTYPE {name}>\n")),
+            NodeKind::Element {
+                name, namespace, ..
+            } => {
                 out.push('<');
                 match namespace {
-                    Namespace::Html => {},
+                    Namespace::Html => {}
                     Namespace::Svg => out.push_str("svg "),
                     Namespace::MathMl => out.push_str("math "),
                 }
@@ -291,24 +309,24 @@ impl Dom {
                     }
                 }
                 out.push_str(">\n");
-            },
+            }
             NodeKind::Text { data } => {
                 out.push('"');
                 out.push_str(data);
                 out.push_str("\"\n");
-            },
+            }
             NodeKind::Comment { data } => {
                 out.push_str("<!-- ");
                 out.push_str(data);
                 out.push_str(" -->\n");
-            },
+            }
             NodeKind::ProcessingInstruction { target, data } => {
                 out.push_str("<?");
                 out.push_str(target);
                 out.push(' ');
                 out.push_str(data);
                 out.push_str("?>\n");
-            },
+            }
         }
         for child in self.children(idx) {
             self.dump_rec(child, depth + 1, out);
@@ -378,7 +396,10 @@ mod tests {
             namespace: Namespace::Html,
         });
         dom.attach_before(doc, Some(c), b);
-        let names: Vec<_> = dom.children(doc).map(|k| dom.name(k).unwrap().to_owned()).collect();
+        let names: Vec<_> = dom
+            .children(doc)
+            .map(|k| dom.name(k).unwrap().to_owned())
+            .collect();
         assert_eq!(names, ["a", "b", "c"]);
     }
 
@@ -404,7 +425,9 @@ mod tests {
         dom.append_text_data(t, "lo");
         assert_eq!(
             dom.get(t).kind,
-            NodeKind::Text { data: "hello".into() }
+            NodeKind::Text {
+                data: "hello".into()
+            }
         );
     }
 
@@ -418,5 +441,11 @@ mod tests {
             dom.dump(NodeIdx(0)),
             "#document\n  <html>\n    <p>\n      \"hello\"\n"
         );
+    }
+}
+
+impl Default for Dom {
+    fn default() -> Self {
+        Self::new()
     }
 }
