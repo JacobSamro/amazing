@@ -311,7 +311,6 @@ tests are all below 4,000 lines. DOM-1's accepted scaffold is preserved in a
 separate checkpoint commit; this ticket does not close its upstream gate.
 
 
-<<<<<<< HEAD
 ## DOM-1 upstream gate and baseline — resumed after JS-2
 
 Final integration base: `0e298c1` (including NET-4); initial measurement base
@@ -424,7 +423,7 @@ Final scaffold regression is separate: 14 cases twice, stable
 `F8DB03A6109855078313208AC15DC229B663729F9F8B7C2A970C46DAA5475519`,
 zero WPT credit. Zero remaining lane workers were verified. DOM-1 is complete;
 DOM-3 remains on its committed checkpoint for the next integration boundary.
-=======
+
 
 
 Implementation follows [DOM Standard ranges](https://dom.spec.whatwg.org/#ranges),
@@ -464,4 +463,3 @@ canonical result hash `05385f87dfb95722b7af7ef06b03da37ba8662eadac4e066bd513ee65
 144 Rust source/manifests matched Mac; logs confirm first-party recompilation
 following the integrator's artifact-invalidation refresh. These gates completed
 as the integrator redirected the lane to DOM-1; DOM-3 is checkpointed for return.
->>>>>>> lane/dom-bindings
