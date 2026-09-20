@@ -106,6 +106,68 @@ impl ParsedUrl {
     pub fn serialize_without_fragment(&self) -> String {
         self.serialize_with_fragment(false)
     }
+    /// Clone with a missing fragment inherited from a redirect source. Encoded
+    /// components only move between validated records, never through setters.
+    pub fn with_inherited_fragment(&self, source: &Self) -> Self {
+        let mut result = self.clone();
+        if result.fragment.is_none() {
+            result.fragment = source.fragment.clone();
+        }
+        result
+    }
+    /// Referrer serialization must remove both URL credentials and fragment.
+    pub fn serialize_referrer(&self) -> String {
+        let mut result = self.clone();
+        result.username.clear();
+        result.password.clear();
+        result.serialize_without_fragment()
+    }
+    /// Origin-form target for HTTP(S) only; query presence is significant.
+    pub fn http_request_target(&self) -> Result<String, super::UrlError> {
+        if !matches!(self.scheme(), "http" | "https") {
+            return Err(super::UrlError::UnsupportedScheme(self.scheme.clone()));
+        }
+        let mut target = self.pathname();
+        if let Some(query) = &self.query {
+            target.push('?');
+            target.push_str(query);
+        }
+        Ok(target)
+    }
+    /// Convert a local file URL to a native path. Remote file hosts are rejected
+    /// rather than silently read as local paths or initiating implicit UNC I/O.
+    /// Percent-encoded path separators and NUL are rejected before filesystem I/O.
+    pub fn to_file_path(&self) -> Result<std::path::PathBuf, super::UrlError> {
+        let invalid = |why: &str| super::UrlError::InvalidUrl(why.into());
+        if self.scheme != "file" {
+            return Err(invalid("not a file URL"));
+        }
+        if !matches!(self.host, Some(Host::Empty)) {
+            return Err(invalid("remote file hosts are not supported"));
+        }
+        let path = self.pathname();
+        let lower = path.to_ascii_lowercase();
+        if lower.contains("%2f") || (cfg!(windows) && lower.contains("%5c")) {
+            return Err(invalid("encoded filesystem separator"));
+        }
+        let bytes = super::encoding::percent_decode(&path);
+        if bytes.contains(&0) {
+            return Err(invalid("NUL in filesystem path"));
+        }
+        // Windows paths are Unicode; reject malformed UTF-8 rather than
+        // silently opening a different path with replacement characters.
+        let decoded = String::from_utf8(bytes).map_err(|_| invalid("non-UTF-8 filesystem path"))?;
+        if cfg!(windows) {
+            if decoded.starts_with("//") || decoded.contains('\\') {
+                return Err(invalid("UNC or device path is not supported"));
+            }
+            let b = decoded.as_bytes();
+            if b.len() >= 3 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b':' {
+                return Ok(std::path::PathBuf::from(&decoded[1..]));
+            }
+        }
+        Ok(std::path::PathBuf::from(decoded))
+    }
     fn serialize_with_fragment(&self, fragment: bool) -> String {
         let mut out = format!("{}:", self.scheme);
         if self.host.is_some() {

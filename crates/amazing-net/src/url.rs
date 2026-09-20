@@ -1,8 +1,8 @@
 //! URL parsing, relative resolution, and percent-decoding.
 //!
 //! [`ParsedUrl`] is the immutable WHATWG basic-parser API (UTF-8; Unicode
-//! domains require an [`IdnaProvider`]). It is additive, not yet the live
-//! transport path. The public-field [`Url`] below is the unchanged legacy
+//! domains require an [`IdnaProvider`]). It is the live network transport
+//! and Fetch policy parser. The public-field [`Url`] below is the deprecated legacy
 //! API; the following implementation notes describe that legacy API only.
 //!
 //! Implements the slice of WHATWG URL / RFC 3986 a v1 engine needs:
@@ -34,8 +34,8 @@
 //! Parsing never panics on malformed input; every failure is an
 //! [`UrlError`].
 
-// The immutable standards parser is additive: the legacy public-field Url
-// below remains for existing transport consumers pending their migration.
+// The immutable standards parser is live in transport and Fetch policy.
+// The legacy public-field Url below is only an external-consumer shim.
 mod encoding;
 mod host;
 mod parsed;
@@ -76,6 +76,12 @@ impl fmt::Display for UrlError {
 
 impl std::error::Error for UrlError {}
 
+/// Compatibility-only legacy URL; new code must use [`ParsedUrl`].
+///
+/// This public-field API is retained for shell/driver consumers. It is no
+/// longer used by network I/O or Fetch policy, and does not have the new
+/// parser's validation guarantees. Removal requires coordinated migration.
+///
 /// A parsed URL. `path` is stored percent-encoded exactly as written (it
 /// always starts with `/`); use [`Url::decoded_path`] for the readable form.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -231,16 +237,16 @@ fn parse_with_base(input: &str, base: Option<&Url>) -> Result<Url, UrlError> {
         None => {
             let base = base.ok_or(UrlError::RelativeWithoutBase)?;
             resolve_relative(rest, base, fragment)
-        },
+        }
     }
 }
 
 fn parse_absolute(scheme: &str, after: &str, fragment: Option<String>) -> Result<Url, UrlError> {
     match scheme {
         "http" | "https" => {
-            let rest = after
-                .strip_prefix("//")
-                .ok_or_else(|| UrlError::InvalidUrl(format!("{scheme}: URL requires a // authority")))?;
+            let rest = after.strip_prefix("//").ok_or_else(|| {
+                UrlError::InvalidUrl(format!("{scheme}: URL requires a // authority"))
+            })?;
             let (authority, path_and_query) = split_authority_end(rest);
             let (host, port) = parse_authority(authority, scheme)?;
             if host.is_empty() {
@@ -255,7 +261,7 @@ fn parse_absolute(scheme: &str, after: &str, fragment: Option<String>) -> Result
                 query,
                 fragment,
             })
-        },
+        }
         "file" => parse_file(after, fragment),
         other => Err(UrlError::UnsupportedScheme(other.to_string())),
     }
@@ -399,13 +405,13 @@ fn normalize_path(path: &str) -> String {
                 if i == last {
                     out.push(""); // "/a/." keeps its trailing slash
                 }
-            },
+            }
             ".." => {
                 out.pop();
                 if i == last {
                     out.push(""); // "/a/.." becomes "/"
                 }
-            },
+            }
             s => out.push(s),
         }
     }
@@ -421,11 +427,11 @@ fn split_path_query(s: &str) -> (String, Option<String>) {
             let q = &s[i + 1..];
             let query = if q.is_empty() { None } else { Some(q.to_string()) };
             (path.to_string(), query)
-        },
+        }
         None => {
             let path = if s.is_empty() { "/" } else { s };
             (path.to_string(), None)
-        },
+        }
     }
 }
 

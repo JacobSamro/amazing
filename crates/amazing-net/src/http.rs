@@ -25,7 +25,7 @@ use std::net::TcpStream;
 use crate::fetch::FetchOptions;
 use crate::headers::Headers;
 use crate::response::Response;
-use crate::url::Url;
+use crate::url::ParsedUrl;
 use crate::NetError;
 
 /// Upper bound on buffered response bytes, enforced during both raw reads
@@ -37,12 +37,19 @@ const USER_AGENT: &str = "Ferric/0.1";
 
 /// Performs one GET against an HTTP or HTTPS URL. HTTPS crosses the isolated
 /// vetted-rustls adapter; response parsing and safety limits remain here.
-pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetError> {
+pub(crate) fn get(url: &ParsedUrl, options: &FetchOptions) -> Result<Response, NetError> {
     let body_limit = options.max_response_bytes.min(MAX_BODY_BYTES);
     let wire_limit = body_limit.saturating_add(MAX_HEADER_BYTES);
     // ToSocketAddrs for (&str, u16) parses IP literals itself, but bracketed
     // IPv6 ("[::1]") does not parse — hand it the bare address instead.
-    let connect_host = url.host.trim_start_matches('[').trim_end_matches(']');
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(NetError::UnsupportedScheme(url.scheme().into()));
+    }
+    let host = url.hostname();
+    let connect_host = host.trim_start_matches('[').trim_end_matches(']');
+    let port = url
+        .effective_port()
+        .expect("validated HTTP(S) URL has a port");
     let method = options.method.to_ascii_uppercase();
     if !matches!(method.as_str(), "GET" | "POST") {
         return Err(NetError::UnsupportedMethod(method));
@@ -50,8 +57,8 @@ pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetErro
     let mut request = format!(
         "{} {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n",
         method,
-        url.request_target(),
-        url.host_header(),
+        url.http_request_target()?,
+        url.host_and_port(),
         USER_AGENT,
     );
     for (name, value) in &options.request_headers {
@@ -76,9 +83,9 @@ pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetErro
     request.push_str("\r\n");
     let mut request = request.into_bytes();
     request.extend_from_slice(&options.body);
-    let (raw, require_explicit_body_length) = match url.scheme.as_str() {
+    let (raw, require_explicit_body_length) = match url.scheme() {
         "http" => {
-            let mut stream = TcpStream::connect((connect_host, url.port))?;
+            let mut stream = TcpStream::connect((connect_host, port))?;
             stream.set_read_timeout(Some(options.timeout))?;
             stream.set_write_timeout(Some(options.timeout))?;
             stream.write_all(&request)?;
@@ -88,7 +95,7 @@ pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetErro
         "https" => {
             let response = amazing_net_tls::exchange(
                 connect_host,
-                url.port,
+                port,
                 &request,
                 options.timeout,
                 wire_limit,
@@ -106,7 +113,7 @@ pub(crate) fn get(url: &Url, options: &FetchOptions) -> Result<Response, NetErro
 
 #[cfg(test)]
 fn response_from_raw(
-    url: &Url,
+    url: &ParsedUrl,
     raw: &[u8],
     require_explicit_body_length: bool,
 ) -> Result<Response, NetError> {
@@ -114,7 +121,7 @@ fn response_from_raw(
 }
 
 fn response_from_raw_with_limit(
-    url: &Url,
+    url: &ParsedUrl,
     raw: &[u8],
     require_explicit_body_length: bool,
     body_limit: usize,
@@ -432,11 +439,8 @@ pub(crate) mod tests {
             body: b"q=rust+browser".to_vec(),
             ..FetchOptions::default()
         };
-        let response = crate::fetch::fetch(
-            &format!("http://127.0.0.1:{port}/submit"),
-            &options,
-        )
-        .unwrap();
+        let response =
+            crate::fetch::fetch(&format!("http://127.0.0.1:{port}/submit"), &options).unwrap();
         assert_eq!(response.text().as_deref(), Some("ok"));
         let request = requests.recv_timeout(Duration::from_secs(5)).unwrap();
         let request = String::from_utf8(request).unwrap();
@@ -519,7 +523,7 @@ pub(crate) mod tests {
 
     #[test]
     fn unclean_tls_eof_requires_http_body_framing() {
-        let url = Url::parse("https://example.test/").unwrap();
+        let url = ParsedUrl::parse("https://example.test/").unwrap();
         let unframed = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\npossibly truncated";
         assert!(matches!(
             response_from_raw(&url, unframed, true),
@@ -615,7 +619,7 @@ pub(crate) mod tests {
     #[test]
     fn connect_refused_maps_to_io_error() {
         // Port 1 on loopback: reserved, virtually guaranteed closed.
-        let url = Url::parse("http://127.0.0.1:1/x").expect("url");
+        let url = ParsedUrl::parse("http://127.0.0.1:1/x").expect("url");
         let err = get(&url, &FetchOptions::default()).expect_err("must fail");
         assert!(matches!(err, NetError::Io(_)), "got {err:?}");
     }

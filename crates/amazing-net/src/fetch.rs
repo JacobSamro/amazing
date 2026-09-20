@@ -20,14 +20,14 @@
 //! Deferred: cross-origin cookie/state tracking across redirects, method
 //! rewriting rules beyond GET, `Refresh`-style meta redirection.
 
-use std::path::Path;
 use std::io::Read;
+use std::path::Path;
 use std::time::Duration;
 
 use crate::headers::Headers;
 use crate::http;
 use crate::response::Response;
-use crate::url::{self, resolve, Url, UrlError};
+use crate::url::{self, ParsedUrl};
 use crate::NetError;
 
 /// Maximum number of redirect hops after the initial request.
@@ -66,8 +66,14 @@ impl Default for FetchOptions {
 /// Fetches `input` (an `http`/`https`/`file` URL, or a bare filesystem
 /// path) into a buffered [`Response`].
 pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> {
-    let trimmed = input.trim();
-    if !looks_like_url(trimmed) {
+    let trimmed = input.trim_matches(|c: char| c <= ' ');
+    // Match the URL parser's tab/newline removal when identifying a scheme,
+    // while preserving interior bytes in bare filesystem paths.
+    let scheme_input: String = trimmed
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\r' | '\n'))
+        .collect();
+    if !looks_like_url(&scheme_input) {
         return read_file_response(
             Path::new(trimmed),
             trimmed.to_string(),
@@ -75,16 +81,11 @@ pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> 
         );
     }
 
-    // Surface unknown-scheme errors directly (not wrapped in NetError::Url)
-    // so callers can distinguish "no such scheme" from malformed URLs.
-    let mut current = Url::parse(trimmed).map_err(|e| match e {
-        UrlError::UnsupportedScheme(s) => NetError::UnsupportedScheme(s),
-        other => NetError::Url(other),
-    })?;
+    let mut current = ParsedUrl::parse(trimmed)?;
     let mut redirects = 0usize;
     let mut request_options = options.clone();
     loop {
-        let response = match current.scheme.as_str() {
+        let response = match current.scheme() {
             "http" | "https" => http::get(&current, &request_options)?,
             "file" => {
                 let fs_path = current.to_file_path()?;
@@ -116,7 +117,15 @@ pub fn fetch(input: &str, options: &FetchOptions) -> Result<Response, NetError> 
                     && !name.eq_ignore_ascii_case("content-length")
             });
         }
-        current = resolve(&location, &current)?;
+        let target = current
+            .resolve(&location)?
+            .with_inherited_fragment(&current);
+        // A network redirect cannot turn into local filesystem access. Parsing
+        // a valid URL is separate from authorizing its loading scheme.
+        if !matches!(target.scheme(), "http" | "https") {
+            return Err(NetError::UnsupportedScheme(target.scheme().into()));
+        }
+        current = target;
     }
 }
 
@@ -293,8 +302,8 @@ mod tests {
 
     #[test]
     fn https_urls_use_the_tls_default_port() {
-        let url = Url::parse("https://example.com/x?q#f").expect("https parses");
-        assert_eq!(url.port, 443);
+        let url = ParsedUrl::parse("https://example.com/x?q#f").expect("https parses");
+        assert_eq!(url.effective_port(), Some(443));
     }
 
     #[test]

@@ -40,6 +40,12 @@ pub fn redirect(
     if request.url_list.len() > 20 {
         return Err(FetchError::RedirectLimit);
     }
+    if target.includes_credentials()
+        && ((request.mode == RequestMode::Cors && request.origin != *target.origin())
+            || plan.taint == ResponseType::Cors)
+    {
+        return Err(FetchError::Cors);
+    }
     // Fetch checks replayability before method rewriting, except for 303.
     if response.status != 303 && matches!(request.body(), Some(Body::Unreplayable)) {
         return Err(FetchError::BodyNotReplayable);
@@ -71,4 +77,24 @@ pub fn redirect(
     target.inherit_fragment(request.url());
     request.url_list.push(target);
     Ok(RedirectAction::Follow)
+}
+
+/// Resolve a raw Location with the shared URL parser before following it.
+/// Absent Location remains distinct from a malformed/unsupported target. Manual
+/// and error modes do not resolve or expose Location, matching HTTP fetch.
+pub fn redirect_location(
+    request: &mut Request,
+    response: &InternalResponse,
+    location: Option<&str>,
+) -> Result<RedirectAction, FetchError> {
+    let target = if matches!(response.status, 301 | 302 | 303 | 307 | 308)
+        && request.redirect == RedirectMode::Follow
+    {
+        location
+            .map(|value| request.url().resolve(value))
+            .transpose()?
+    } else {
+        None
+    };
+    redirect(request, response, target)
 }
