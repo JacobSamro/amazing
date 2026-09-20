@@ -47,6 +47,31 @@ GitHub and had to be archived (`archive/win001-main`, plus
    `C:\Users\server\target\<lane>` and runs `cargo test -p <your crate> --locked`.
 4. Commit and push **on the Mac**, from your lane branch, then open the PR.
 
+### Keeping a lane tree current
+
+A lane's build tree is seeded once and then only receives that lane's own
+files, so as `dev` advances it goes **stale for every crate the lane does not
+own**. A full-workspace gate run against a stale tree measures old sibling code
+and is worthless. Rebasing on the Mac does not fix this — the server tree is a
+separate copy.
+
+Before any full-workspace gate, the lane asks the integrator for a tree
+refresh. The integrator tars current `dev` on the Mac, uploads one archive, and
+expands it into all six trees:
+
+```
+tar -cf /tmp/dev-refresh.tar --exclude=.git --exclude=target --exclude=.agents <paths>
+scp -q -i ~/.ssh/win001-build-key /tmp/dev-refresh.tar server@win-001:C:/Users/server/
+# then, per lane, server-side:  tar -xf C:\Users\server\dev-refresh.tar -C C:\Users\server\src\wt\<lane>
+```
+
+**A refresh overwrites lane-owned files in the server tree with the `dev`
+versions**, including work the lane had already synced up. The Mac worktree is
+the source of truth so nothing is lost, but the lane must re-`scp` its own
+changed files afterwards, and must treat any Windows result from before the
+refresh as stale. Order is: rebase on `origin/dev` → refresh tree → re-sync own
+files → gate.
+
 ### Build server environment (already provisioned)
 
 - cargo/rustc 1.97.1, git 2.55, VS 2022 Build Tools
