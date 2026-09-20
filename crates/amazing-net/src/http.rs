@@ -11,12 +11,12 @@
 //!   header names via [`crate::headers::Headers`]
 //! - body framing priority: `Transfer-Encoding: chunked` (chunk extensions
 //!   and trailer section consumed, contents ignored) > `Content-Length`
-//!   (short reads are errors, overlong data truncated) > read-to-EOF
+//!   (both short and overlong bodies reject) > read-to-EOF
 //! - read/write timeouts from [`crate::FetchOptions::timeout`]
 //! - 32 MiB buffering cap so a hostile peer cannot exhaust memory
 //!
 //! Deferred: keep-alive/pipelining, other methods, `Expect: 100-continue`,
-//! gzip/deflate/br decoding, obs-fold header lines, bare-LF line endings in
+//! brotli decoding, obs-fold header lines, bare-LF line endings in
 //! the framing layer (header *values* tolerate them), HTTP/2+.
 
 use std::io::{Read, Write};
@@ -55,15 +55,18 @@ pub(crate) fn get(url: &ParsedUrl, options: &FetchOptions) -> Result<Response, N
         return Err(NetError::UnsupportedMethod(method));
     }
     let mut request = format!(
-        "{} {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n",
+        "{} {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nAccept-Encoding: gzip, deflate\r\nConnection: close\r\n",
         method,
         url.http_request_target()?,
         url.host_and_port(),
         USER_AGENT,
     );
     for (name, value) in &options.request_headers {
-        if !name.is_empty()
-            && name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        if !name.eq_ignore_ascii_case("accept-encoding")
+            && !name.is_empty()
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
             && !value.bytes().any(|byte| matches!(byte, b'\r' | b'\n' | 0))
         {
             request.push_str(name);
@@ -128,13 +131,32 @@ fn response_from_raw_with_limit(
 ) -> Result<Response, NetError> {
     let head_end = find_header_end(raw)
         .ok_or_else(|| NetError::MalformedResponse("no \\r\\n\\r\\n header terminator".into()))?;
+    if head_end > MAX_HEADER_BYTES {
+        return Err(NetError::ResponseTooLarge);
+    }
     let (status, reason, headers) = parse_head(&raw[..head_end])?;
-    let body = decode_body(
-        &raw[head_end + 4..],
-        &headers,
-        require_explicit_body_length,
-        body_limit,
-    )?;
+    // Metadata on bodyless responses describes a representation, not bytes to
+    // decompress. This GET/POST transport does not implement protocol upgrades.
+    if (100..200).contains(&status) {
+        return Err(NetError::MalformedResponse(
+            "informational responses unsupported".into(),
+        ));
+    }
+    let body = if matches!(status, 204 | 304) {
+        if raw.len() != head_end + 4 {
+            return Err(NetError::MalformedResponse(
+                "body on bodyless response".into(),
+            ));
+        }
+        Vec::new()
+    } else {
+        decode_body(
+            &raw[head_end + 4..],
+            &headers,
+            require_explicit_body_length,
+            body_limit,
+        )?
+    };
 
     Ok(Response {
         url: url.to_string(),
@@ -225,42 +247,118 @@ fn parse_status_line(line: &str) -> Result<(u16, String), NetError> {
     Ok((status, reason))
 }
 
-/// Applies the framing rules to the bytes received after the head.
+/// Header order is coding order; decoding runs in reverse. Bound layering as
+/// well as bytes so a header cannot request unbounded repeated work.
+fn codings(headers: &Headers, name: &str) -> Result<Vec<String>, NetError> {
+    let mut result = Vec::new();
+    for field in headers.get_all(name) {
+        for item in field.split(',') {
+            let item = item.trim().to_ascii_lowercase();
+            if !matches!(
+                item.as_str(),
+                "gzip" | "x-gzip" | "deflate" | "identity" | "chunked"
+            ) {
+                return Err(NetError::MalformedResponse(format!(
+                    "unsupported {name}: {item}"
+                )));
+            }
+            if result.len() == 8 {
+                return Err(NetError::MalformedResponse("too many coding layers".into()));
+            }
+            result.push(item);
+        }
+    }
+    Ok(result)
+}
+
+fn content_length(headers: &Headers) -> Result<Option<usize>, NetError> {
+    let mut expected = None;
+    for field in headers.get_all("content-length") {
+        for value in field.split(',') {
+            let value = value.trim();
+            if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(NetError::MalformedResponse("invalid Content-Length".into()));
+            }
+            let length = value
+                .parse::<usize>()
+                .map_err(|_| NetError::MalformedResponse("Content-Length overflow".into()))?;
+            if expected.is_some_and(|old| old != length) {
+                return Err(NetError::MalformedResponse(
+                    "conflicting Content-Length".into(),
+                ));
+            }
+            expected = Some(length);
+        }
+    }
+    Ok(expected)
+}
+
+/// Validate wire framing before applying transfer codings, then content
+/// codings. Content-Length counts encoded wire bytes, never decoded bytes.
 fn decode_body(
     body: &[u8],
     headers: &Headers,
     require_explicit_length: bool,
     limit: usize,
 ) -> Result<Vec<u8>, NetError> {
-    let chunked = headers.get_all("transfer-encoding").iter().any(|v| {
-        v.split(',')
-            .any(|t| t.trim().eq_ignore_ascii_case("chunked"))
-    });
+    let mut transfer = codings(headers, "transfer-encoding")?;
+    let content = codings(headers, "content-encoding")?;
+    if content.iter().any(|c| c == "chunked") || transfer.iter().any(|c| c == "identity") {
+        return Err(NetError::MalformedResponse("coding in wrong header".into()));
+    }
+    if !transfer.is_empty() && headers.contains("content-length") {
+        return Err(NetError::MalformedResponse(
+            "Transfer-Encoding with Content-Length".into(),
+        ));
+    }
+    let chunked = transfer.last().is_some_and(|c| c == "chunked");
     if chunked {
-        Ok(dechunk_with_limit(body, limit)?.0)
-    } else if let Some(cl) = headers.get("content-length") {
-        let len: usize = cl
-            .trim()
-            .parse()
-            .map_err(|_| NetError::MalformedResponse(format!("bad Content-Length: {cl:?}")))?;
-        if len > limit {
+        transfer.pop();
+    }
+    if transfer.iter().any(|c| c == "chunked") {
+        return Err(NetError::MalformedResponse(
+            "chunked must occur once, last".into(),
+        ));
+    }
+    if transfer.len() + content.len() > 8 {
+        return Err(NetError::MalformedResponse("too many coding layers".into()));
+    }
+    // Encoded bytes have their own transport-wide cap. A tiny decoded budget
+    // must still permit gzip headers/trailers that exceed the decoded size.
+    let compressed = transfer.iter().chain(&content).any(|c| c != "identity");
+    let framed_limit = if compressed { MAX_BODY_BYTES } else { limit };
+    let mut decoded = if chunked {
+        dechunk_with_limit(body, framed_limit)?.0
+    } else {
+        if body.len() > framed_limit {
             return Err(NetError::ResponseTooLarge);
         }
-        if body.len() < len {
+        if let Some(length) = content_length(headers)? {
+            if length > framed_limit {
+                return Err(NetError::ResponseTooLarge);
+            }
+            if body.len() < length {
+                return Err(NetError::IncompleteBody);
+            }
+            if body.len() > length {
+                return Err(NetError::MalformedResponse(
+                    "body exceeds Content-Length".into(),
+                ));
+            }
+        } else if require_explicit_length {
             return Err(NetError::IncompleteBody);
         }
-        Ok(body[..len].to_vec())
-    } else if require_explicit_length {
-        Err(NetError::IncompleteBody)
-    } else {
-        // Neither CL nor chunked: with Connection: close the body is
-        // everything up to EOF (RFC 9112 §6.3 rule 7).
-        if body.len() > limit {
-            Err(NetError::ResponseTooLarge)
-        } else {
-            Ok(body.to_vec())
+        body.to_vec()
+    };
+    for coding in transfer.iter().rev().chain(content.iter().rev()) {
+        if coding != "identity" {
+            decoded = crate::coding::decode(&decoded, coding, limit)?;
         }
     }
+    if decoded.len() > limit {
+        return Err(NetError::ResponseTooLarge);
+    }
+    Ok(decoded)
 }
 
 /// Decoded chunks plus whatever trailer section followed the last-chunk.
@@ -306,9 +404,22 @@ fn dechunk_with_limit(input: &[u8], limit: usize) -> Result<(Vec<u8>, &[u8]), Ne
         }
         pos += 2;
     }
-    // Rest of the buffer is the trailer section (possibly empty); we do not
-    // interpret it.
-    Ok((out, &input[pos.min(input.len())..]))
+    // Require the complete trailer terminator even for unclean TLS EOF, and
+    // reject extra bytes (this transport never pipelines another response).
+    let trailer_start = pos;
+    loop {
+        let end = find_crlf(input, pos).ok_or_else(|| malformed("unterminated trailer section"))?;
+        if end == pos {
+            if end + 2 != input.len() {
+                return Err(malformed("bytes after chunked message"));
+            }
+            return Ok((out, &input[trailer_start..]));
+        }
+        if !input[pos..end].contains(&b':') {
+            return Err(malformed("invalid trailer field"));
+        }
+        pos = end + 2;
+    }
 }
 
 fn find_crlf(buf: &[u8], from: usize) -> Option<usize> {
@@ -497,12 +608,14 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn content_length_truncates_overlong_stream_data() {
-        // Only CL present: the trailing garbage byte past the declared
-        // length must not leak into the body.
+    fn content_length_rejects_overlong_stream_data() {
+        // NET-4 intentional change: reject a size mismatch rather than silently
+        // truncating the extra byte as the old transport did.
         let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nabZ";
-        let resp = fetch_loopback(vec![raw.to_vec()], "/").expect("fetch");
-        assert_eq!(resp.text().as_deref(), Some("ab"));
+        assert!(matches!(
+            fetch_loopback(vec![raw.to_vec()], "/"),
+            Err(NetError::MalformedResponse(_))
+        ));
     }
 
     #[test]
@@ -624,3 +737,7 @@ pub(crate) mod tests {
         assert!(matches!(err, NetError::Io(_)), "got {err:?}");
     }
 }
+
+#[cfg(test)]
+#[path = "http_coding_tests.rs"]
+mod coding_tests;
