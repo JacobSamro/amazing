@@ -81,6 +81,18 @@ LANE_GRANTS = {
     # to the shell's manifest and viewport. Reviewed at merge, not open-ended.
     "replaced-content": ["crates/amazing-shell-gpui/"],
 }
+# DOM-2 adds NodeKind variants, which breaks exhaustive matches in 9 files
+# across 5 crates. Granted for ADDED MATCH ARMS ONLY, verified at merge; the
+# shell's two matches stay with the integrator because another lane holds that
+# grant and two lanes must not edit the shell at once.
+LANE_GRANTS["dom-bindings"] += [
+    "crates/amazing-html/src/tree.rs",
+    "crates/amazing-layout/src/box_tree.rs",
+    "crates/amazing-layout/src/lib.rs",
+    "crates/amazing-css/src/selectors.rs",
+    "crates/amazing/src/gui.rs",
+    "crates/amazing/tests/phase2_style.rs",
+]
 
 
 def owned_paths(lane: str) -> list[str]:
@@ -765,6 +777,56 @@ def cmd_handoff(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_restart(args) -> int:
+    """Replace a lane's agent with a fresh one in the same worktree.
+
+    Context exhaustion is the normal end of an agent's life. Restarting is
+    fiddly by hand: Ctrl-C during a running turn only interrupts the turn, so
+    the agent must be brought to its prompt first, and the pane must be back at
+    a shell before the relaunch is typed or the command lands in the TUI
+    composer instead. This does both, verifying each step.
+    """
+    lane = args.target
+    session = resolve(lane)
+    reg = load_registry()
+    worktree = reg.get(lane, {}).get("worktree")
+    if not worktree:
+        sys.exit(f"tmuxctl: {lane} has no worktree assigned; use `assign` first")
+
+    # Bring it to a prompt: Escape cancels a running turn, Ctrl-C then exits.
+    tmux(["send-keys", "-t", session, "Escape"])
+    time.sleep(2)
+    for _ in range(4):
+        tmux(["send-keys", "-t", session, "C-u"])
+        tmux(["send-keys", "-t", session, "C-c"])
+        tmux(["send-keys", "-t", session, "C-c"])
+        time.sleep(3)
+        shell = tmux(
+            ["display-message", "-p", "-t", session, "#{pane_current_command}"]
+        ).strip()
+        if shell not in ("node", "codex"):
+            break
+    else:
+        print(f"{lane}: agent would not exit; left running")
+        return 1
+
+    tmux(["send-keys", "-t", session, "-l", f"cd {worktree} && codex --yolo"])
+    tmux(["send-keys", "-t", session, "Enter"])
+    deadline = time.time() + 45
+    while time.time() < deadline:
+        time.sleep(3)
+        raw = capture_live(session)
+        if IDLE_MARKER in raw:
+            cwd = pane_cwd(session)
+            ok = os.path.realpath(cwd) == os.path.realpath(worktree)
+            print(
+                f"{lane}: restarted ctx={context_pct(raw)} cwd={'ok' if ok else cwd}"
+            )
+            return 0 if ok else 1
+    print(f"{lane}: relaunched but did not reach a prompt in time")
+    return 1
+
+
 def cmd_report(args) -> int:
     path = AGENTS_DIR / args.target / "report.md"
     if not path.exists():
@@ -859,6 +921,10 @@ def main() -> int:
     a = sub.add_parser("handoff", help="ask a low-context agent to checkpoint for replacement")
     a.add_argument("target")
     a.set_defaults(func=cmd_handoff)
+
+    a = sub.add_parser("restart", help="replace a lane's agent with a fresh one")
+    a.add_argument("target")
+    a.set_defaults(func=cmd_restart)
 
     a = sub.add_parser("assign", help="bind a lane to its git worktree")
     a.add_argument("target")
