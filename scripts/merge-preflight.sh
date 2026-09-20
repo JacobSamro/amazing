@@ -31,6 +31,19 @@ echo "preflight: $BRANCH onto $BASE"
 git rev-parse --verify --quiet "$BRANCH" >/dev/null || {
   note FAIL "no such branch $BRANCH"; exit 1; }
 
+# A lane may split a ticket across several branches. That has already caused a
+# merge to ship a message claiming work that was sitting on a sibling branch,
+# so surface every unmerged branch belonging to this lane rather than assuming
+# lane/<lane> is the whole story.
+siblings=$(git branch --format='%(refname:short)' |
+  grep -E "^(lane|checkpoint)/${LANE}([-/].+)?$" | grep -v "^${BRANCH}$" || true)
+for b in $siblings; do
+  ahead=$(git rev-list --count "$BASE..$b" 2>/dev/null || echo 0)
+  if [ "$ahead" -gt 0 ]; then
+    note WARN "sibling branch $b has $ahead unmerged commit(s) -- is it part of this ticket?"
+  fi
+done
+
 # 1. Rebased?
 behind=$(git rev-list --count "$BRANCH..$BASE")
 if [ "$behind" -eq 0 ]; then
