@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+"""Pinned, source-file-level DOM testharness baseline. Run on the build server.
+
+No synthetic harness or edited upstream test is accepted. This inventories
+tracked test sources, not generated WPT URLs: variants and worker/global URL
+expansion are explicitly outside the classic-script runner's supported scope.
+"""
+import argparse
+import collections
+import concurrent.futures
+import hashlib
+import html.parser
+import json
+from pathlib import Path
+import re
+import subprocess
+
+REVISION = 'c2a2fce69e5c2509d9dc28440ec8b42532e5c293'
+FILE_STATUSES = ('pass', 'fail', 'timeout', 'error', 'unsupported')
+SUBTEST_STATUSES = ('pass', 'fail', 'timeout', 'notrun', 'error')
+PROOF = ('resources/test/tests/functional/order.html',
+         'resources/test/tests/functional/assert-array-equals.html')
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def encoded(value):
+    return (json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(',', ':')) + '\n').encode()
+
+
+def git(root, *args):
+    return subprocess.check_output(['git', '-C', str(root), *args])
+
+
+class Page(html.parser.HTMLParser):
+    def __init__(self, text):
+        super().__init__()
+        self.harness = False
+        self.expected = ''
+        self.in_expected = False
+        self.variants = []
+        self.long_timeout = False
+        self.feed(text)
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'script':
+            src = attrs.get('src', '')
+            if re.search(r'(^|/)testharness\.js($|[?#])', src):
+                self.harness = True
+            self.in_expected = attrs.get('id') == 'expected'
+        if tag == 'meta':
+            if attrs.get('name') == 'variant':
+                self.variants.append(attrs.get('content', ''))
+            if attrs.get('name') == 'timeout' and attrs.get('content') == 'long':
+                self.long_timeout = True
+
+    def handle_endtag(self, tag):
+        if tag == 'script':
+            self.in_expected = False
+
+    def handle_data(self, data):
+        if self.in_expected:
+            self.expected += data
+
+
+def inventory(root):
+    selected, excluded = [], []
+    for name in git(root, 'ls-tree', '-r', '--name-only', REVISION, '--', 'dom/').decode().splitlines():
+        parts = Path(name).parts
+        if any(p in ('resources', 'support') for p in parts):
+            excluded.append({'test': name, 'reason': 'support resource'})
+            continue
+        suffix = Path(name).suffix
+        generated = re.search(r'\.(any|window|worker)\.js$', name)
+        if suffix not in ('.html', '.htm', '.xhtml', '.xht', '.svg') and not generated:
+            excluded.append({'test': name, 'reason': 'not a testharness test source'})
+            continue
+        data = (root / name).read_bytes()
+        original = git(root, 'show', REVISION + ':' + name)
+        if data != original:
+            raise RuntimeError('Modified upstream source: ' + name)
+        page = Page(data.decode('utf-8-sig', errors='replace'))
+        if not generated and not page.harness:
+            excluded.append({'test': name, 'reason': 'no external testharness script (e.g. crash/reference/support)'})
+            continue
+        reason = None
+        if generated:
+            reason = 'generated JavaScript test globals/worker wrappers are unsupported'
+        elif suffix != '.html':
+            reason = 'XML/SVG/non-HTML document parsing is unsupported'
+        elif '.manual.' in name or '-manual.' in name:
+            reason = 'manual interaction is unsupported'
+        elif '.sub.' in name:
+            reason = 'WPT server template substitution is unsupported'
+        elif '.https.' in name:
+            reason = 'HTTPS test origin is unsupported by the local runner'
+        elif page.variants:
+            reason = 'WPT URL variants are unsupported by the local source-file runner'
+        selected.append({'test': name, 'sha256': digest(data), 'unsupported': reason,
+                         'variants': page.variants, 'long_timeout': page.long_timeout})
+    return {'wpt_revision': REVISION, 'unit': 'tracked test source file; not generated WPT URL',
+            'selection_rule': 'dom/ external-testharness markup and .any/.window/.worker.js, excluding resources/support',
+            'selected': selected, 'excluded': excluded}
+
+
+def unsupported(entry, timeout):
+    return {'schema': 1, 'suite': 'wpt', 'wpt_revision': REVISION, 'test': entry['test'],
+            'viewport': [800, 600], 'timeout_ms': timeout, 'status': 'unsupported',
+            'harness_status': None, 'detail': entry['unsupported'],
+            'file_counts': {s: int(s == 'unsupported') for s in FILE_STATUSES},
+            'counts': {s: 0 for s in SUBTEST_STATUSES}, 'subtests': []}
+
+
+def run(exe, root, entry, timeout):
+    if entry.get('unsupported'):
+        return unsupported(entry, timeout)
+    proc = subprocess.run([str(exe), 'wpt-harness', str(root), entry['test'], '800', '600', str(timeout)],
+                          capture_output=True, encoding='utf-8', errors='strict', timeout=timeout / 1000 + 30)
+    result = json.loads(proc.stdout)
+    if result.get('suite') != 'wpt' or result.get('wpt_revision') != REVISION:
+        raise RuntimeError('Missing provenance: ' + proc.stdout)
+    if result['test'] != entry['test'] or result['status'] not in FILE_STATUSES:
+        raise RuntimeError('Invalid result identity/classification: ' + proc.stdout)
+    if (proc.returncode == 0) != (result['status'] == 'pass'):
+        raise RuntimeError('Exit/result mismatch: ' + proc.stdout)
+    if sum(result['counts'].values()) != len(result['subtests']):
+        raise RuntimeError('Subtest count mismatch: ' + proc.stdout)
+    return result
+
+
+def outcomes(records):
+    # Timing-dependent diagnostic text is retained in raw records, but not in
+    # the outcome hash. Names, statuses, counts and harness status are retained.
+    return [{k: ([{field: s[field] for field in ('name', 'status')} for s in r[k]]
+                   if k == 'subtests' else r[k])
+             for k in ('test', 'status', 'harness_status', 'file_counts', 'counts', 'subtests')}
+            for r in records]
+
+
+def save_round(output, label, records):
+    raw = b''.join(encoded(r) for r in records)
+    (output / (label + '.jsonl')).write_bytes(raw)
+    return {'raw_sha256': digest(raw), 'outcome_sha256': digest(encoded(outcomes(records))),
+            'files': {s: sum(r['file_counts'][s] for r in records) for s in FILE_STATUSES},
+            'subtests': {s: sum(r['counts'][s] for r in records) for s in SUBTEST_STATUSES}}
+
+
+def prove(exe, root, output):
+    expected = {}
+    for name in PROOF:
+        data = (root / name).read_bytes()
+        if data != git(root, 'show', REVISION + ':' + name):
+            raise RuntimeError('Modified proof test: ' + name)
+        e = json.loads(Page(data.decode()).expected)
+        assert e['summarized_status']['status_string'] == 'OK'
+        codes = {'PASS': 0, 'FAIL': 1, 'TIMEOUT': 2, 'NOTRUN': 3, 'PRECONDITION_FAILED': 4}
+        expected[name] = sorted((t['name'], codes[t['status_string']]) for t in e['summarized_tests'])
+    rounds = []
+    for number in (1, 2):
+        records = [run(exe, root, {'test': name}, 10000) for name in PROOF]
+        for r in records:
+            actual = sorted((t['name'], t['status']) for t in r['subtests'])
+            if r['harness_status'] != 0 or actual != expected[r['test']]:
+                (output / 'proof-failure.json').write_bytes(encoded(r))
+                raise RuntimeError('Upstream proof does not match expected names/statuses: ' + r['test'])
+        if [r['status'] for r in records] != ['pass', 'fail']:
+            raise RuntimeError('Known-pass/known-fail file classifications incorrect')
+        rounds.append(save_round(output, 'proof-' + str(number), records))
+    if rounds[0]['outcome_sha256'] != rounds[1]['outcome_sha256']:
+        raise RuntimeError('Upstream harness proof unstable')
+    return {'tests': PROOF, 'expected_source': 'unmodified upstream embedded expected JSON',
+            'checks': 'exact subtest names/statuses, harness OK, file classifications, exit codes',
+            'rounds': rounds}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--executable', type=Path, required=True)
+    ap.add_argument('--wpt-root', type=Path, required=True)
+    ap.add_argument('--output', type=Path, required=True)
+    ap.add_argument('--proof-only', action='store_true')
+    ap.add_argument('--jobs', type=int, default=3)
+    args = ap.parse_args()
+    if args.jobs < 1 or args.jobs > 8:
+        ap.error('--jobs must be 1..8')
+    root, exe, output = args.wpt_root.resolve(), args.executable.resolve(), args.output.resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    if git(root, 'rev-parse', 'HEAD').decode().strip() != REVISION:
+        raise RuntimeError('Wrong WPT revision')
+    harness = (root / 'resources/testharness.js').read_bytes()
+    if harness != git(root, 'show', REVISION + ':resources/testharness.js'):
+        raise RuntimeError('Modified upstream harness')
+    summary = {'wpt_revision': REVISION, 'harness_sha256': digest(harness),
+               'executable_sha256': digest(exe.read_bytes()), 'viewport': [800, 600],
+               'normal_deadline_ms': 10000, 'long_deadline_ms': 60000,
+               'proof': prove(exe, root, output)}
+    (output / 'summary.json').write_bytes(encoded(summary))
+    print('Upstream known-pass/known-fail proof verified twice', flush=True)
+    if args.proof_only:
+        print(json.dumps(summary), flush=True)
+        return
+    selection = inventory(root)
+    (output / 'selection.json').write_bytes(encoded(selection))
+    summary['selection_sha256'] = digest(encoded(selection))
+    summary['selected_source_files'] = len(selection['selected'])
+    summary['excluded_files'] = len(selection['excluded'])
+    rounds, results = [], []
+    for number in (1, 2):
+        records = []
+        entries = selection['selected']
+        def one(entry):
+            return run(exe, root, entry, 60000 if entry['long_timeout'] else 10000)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            for r in pool.map(one, entries):
+                records.append(r)
+                if len(records) % 25 == 0:
+                    print(f'dom round {number}: {len(records)}/{len(entries)} sources', flush=True)
+        results.append(records)
+        rounds.append(save_round(output, 'dom-' + str(number), records))
+        print(json.dumps({'round': number, **rounds[-1]}), flush=True)
+    changes = [a['test'] for a, b in zip(outcomes(results[0]), outcomes(results[1])) if a != b]
+    summary.update(rounds=rounds, stable=not changes, outcome_changes=changes)
+    summary['by_directory'] = {}
+    for r in results[0]:
+        directory = str(Path(r['test']).parent).replace('\\', '/')
+        summary['by_directory'].setdefault(directory, collections.Counter()).update(r['file_counts'])
+    (output / 'summary.json').write_bytes(encoded(summary))
+    print(json.dumps(summary), flush=True)
+    if changes:
+        raise SystemExit('Repeated baseline changed; inspect outcome_changes, do not claim stability')
+
+
+if __name__ == '__main__':
+    main()
