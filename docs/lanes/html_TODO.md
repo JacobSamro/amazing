@@ -9,20 +9,20 @@
   The caller chooses XML by media type / file extension. An error is fatal;
   callers must never fall back to HTML. Input is decoded Unicode, with leading
   BOM removal and XML end-of-line normalization. Encoding names from the XML
-  declaration are validated and available from `parse_xml_into`; this is not
+  declaration are validated and available from `xml::parse_xml_with_declaration`; this is not
   byte-level encoding sniffing or transcoding.
 - Parsing is iterative. Namespace bindings are pushed/restored per element;
   attributes resolve after all declarations on the start tag are known.
   Default namespaces never apply to unprefixed attributes. Duplicate expanded
   attribute names, reserved namespace bindings, and undeclared prefixes fail.
-  HTML/SVG/MathML use the existing DOM enum. Null/arbitrary URI support and
-  qualified attribute preservation await the DOM-owned creation seam.
-- `XmlTreeSink` is the lower-crate namespace-aware creation contract, not a
-  parallel namespace enum or DOM. It receives URI/local/prefix/qualified names.
-  Consumers discard partial state on error; `parse_xml` enforces that by owning
-  its DOM until success.
+  HTML/SVG/MathML and null/arbitrary URIs use the DOM-owned namespace identity
+  through `create_element_ns`; local names and element prefixes are preserved.
+  Qualified attribute-prefix preservation remains a routed DOM follow-up.
+- The temporary `XmlTreeSink` contract is retired. Parsing owns one real `Dom`
+  and returns it only on success; no partial document escapes a fatal error.
+  `parse_xml_with_declaration` additionally returns declaration metadata.
 - Limits: 16 MiB source, depth 512, 1024 attributes per element. No recursive
-  descent stack. Invalid XML characters are checked before tree callbacks.
+  descent stack. Invalid XML characters are checked before DOM construction.
 - Supported: XML declaration (version 1.0, encoding, standalone), elements,
   quoted attributes, five predefined entities, numeric character references,
   CDATA, comments, processing instructions, external PUBLIC/SYSTEM doctype
@@ -81,11 +81,18 @@ input failures among 14 files. Route a bounded XHTML entity policy separately;
 do not silently use the HTML entity table or fetch arbitrary external resources.
 No HTML-2 work started; rendering impact still requires the integration gate.
 
-## Integration checkpoint
+## DOM integration checkpoint
 
-Parser checkpoint `41ac0c7`; scope compatibility `7ddf65e` (equivalent to
-pre-rebase `72af438`). No push/PR. The current Dom sink rejects null/custom
-element URIs instead of inventing HTML identity; the generic sink resolves them.
-DOM qualified-name/attribute preservation, parser-safe element creation, driver
-XML dispatch, and owner-operated render harness changes are routed through
-questions.md. **HTML-1 is incomplete** until these and final gates land.
+Rebased onto verified namespace merge `c8c8264`. The earlier `d835fb3` merge
+message claimed the seam but its source lacked namespace.rs; `c8c8264` corrected
+that mismatch. The HTML scope arm is now upstream.
+
+The temporary `XmlTreeSink` and `parse_xml_into` are removed. Direct DOM
+construction via `create_element_ns` passes **82 unit tests / 0 failures / 0
+ignored, plus 1 doctest** on win-001, including 19 XML tests that assert actual
+DOM identity. Repeat evidence is being refreshed for this source revision.
+
+Remaining routed work: qualified attribute-prefix preservation, parser-safe
+creation of a valid unprefixed XML element named xmlns, driver XML dispatch,
+and owner-operated render harness changes. **HTML-1 is incomplete** until
+these and final render/workspace gates land. No push/PR.

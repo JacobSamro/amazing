@@ -5,7 +5,9 @@
 //! are unsupported. External doctype identifiers are retained but never fetched.
 //! No HTML recovery, implicit elements, case folding, or HTML named entities.
 
-use amazing_dom::{Dom, Namespace, NodeIdx, NodeKind};
+#[cfg(test)]
+use amazing_dom::Namespace;
+use amazing_dom::{Dom, NodeIdx, NodeKind};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -20,7 +22,7 @@ pub enum XmlErrorKind {
     Malformed,
     Unsupported,
     Limit,
-    Sink,
+    Dom,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,125 +51,25 @@ pub struct XmlDeclaration {
 
 /// Resolved XML name, not a second DOM namespace enum. Null namespace is None.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct XmlName {
+struct XmlName {
     pub qualified: String,
     pub local: String,
-    pub prefix: Option<String>,
     pub namespace_uri: Option<String>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct XmlAttribute {
+struct XmlAttribute {
     pub name: XmlName,
     pub value: String,
 }
 
-/// Lower-crate boundary for namespace-aware DOM creation. Implementations must
-/// discard their partial document if parsing fails. No callbacks follow failure.
-pub trait XmlTreeSink {
-    type Node: Copy;
-    fn document(&self) -> Self::Node;
-    fn element(
-        &mut self,
-        parent: Self::Node,
-        name: &XmlName,
-        attrs: &[XmlAttribute],
-    ) -> Result<Self::Node, String>;
-    fn text(&mut self, parent: Self::Node, data: &str) -> Result<(), String>;
-    fn comment(&mut self, parent: Self::Node, data: &str) -> Result<(), String>;
-    fn processing_instruction(
-        &mut self,
-        parent: Self::Node,
-        target: &str,
-        data: &str,
-    ) -> Result<(), String>;
-    fn doctype(&mut self, name: &str, public_id: &str, system_id: &str) -> Result<(), String>;
-}
-
-/// Parses XML/XHTML into the engine DOM. A failure never exposes a partial DOM.
-/// XHTML must declare its HTML namespace, as required by XML namespace rules.
+/// Parses XML/XHTML directly into the engine DOM. Errors never expose a partial
+/// document. XHTML must declare its HTML namespace; no HTML recovery is used.
 pub fn parse_xml(src: &str) -> Result<Dom, XmlError> {
-    let mut dom = Dom::new();
-    parse_xml_into(src, &mut dom)?;
-    Ok(dom)
+    parse_xml_with_declaration(src).map(|(dom, _)| dom)
 }
 
-impl XmlTreeSink for Dom {
-    type Node = NodeIdx;
-    fn document(&self) -> NodeIdx {
-        NodeIdx(0)
-    }
-    fn element(
-        &mut self,
-        parent: NodeIdx,
-        name: &XmlName,
-        attrs: &[XmlAttribute],
-    ) -> Result<NodeIdx, String> {
-        // Arbitrary/null element namespaces require the DOM-owned creation seam.
-        // Never silently label an unknown XML vocabulary as HTML.
-        let namespace = match name.namespace_uri.as_deref() {
-            Some(HTML_NAMESPACE) => Namespace::Html,
-            Some(SVG_NAMESPACE) => Namespace::Svg,
-            Some(MATHML_NAMESPACE) => Namespace::MathMl,
-            _ => return Err("DOM cannot yet represent this element namespace".into()),
-        };
-        let node = self.append_child(
-            parent,
-            NodeKind::Element {
-                name: name.local.clone(),
-                attrs: Vec::new(),
-                namespace,
-            },
-        );
-        for attr in attrs {
-            self.set_attribute_ns(
-                node,
-                attr.name.namespace_uri.as_deref(),
-                &attr.name.local,
-                &attr.value,
-            )
-            .map_err(|e| format!("{e:?}"))?;
-        }
-        Ok(node)
-    }
-    fn text(&mut self, parent: NodeIdx, data: &str) -> Result<(), String> {
-        self.create_text(parent, data);
-        Ok(())
-    }
-    fn comment(&mut self, parent: NodeIdx, data: &str) -> Result<(), String> {
-        self.append_child(parent, NodeKind::Comment { data: data.into() });
-        Ok(())
-    }
-    fn processing_instruction(
-        &mut self,
-        parent: NodeIdx,
-        target: &str,
-        data: &str,
-    ) -> Result<(), String> {
-        self.append_child(
-            parent,
-            NodeKind::ProcessingInstruction {
-                target: target.into(),
-                data: data.into(),
-            },
-        );
-        Ok(())
-    }
-    fn doctype(&mut self, name: &str, public_id: &str, system_id: &str) -> Result<(), String> {
-        self.doctype = Some(name.into());
-        self.append_child(
-            NodeIdx(0),
-            NodeKind::DocumentType {
-                name: name.into(),
-                public_id: public_id.into(),
-                system_id: system_id.into(),
-            },
-        );
-        Ok(())
-    }
-}
-
-struct Frame<N> {
-    node: N,
+struct Frame {
+    node: NodeIdx,
     qualified: String,
     previous_bindings: Vec<(String, Option<String>)>,
 }
@@ -179,12 +81,12 @@ struct Parser<'a> {
 }
 type ResultXml<T> = Result<T, XmlError>;
 
-/// Parses into an owned consumer. The declaration is returned only on success.
+/// Parses directly into an owned DOM and retains XML declaration metadata.
 /// Limits: 16 MiB input, 512 open elements, 1024 attributes per element.
-pub fn parse_xml_into<S: XmlTreeSink>(
-    src: &str,
-    sink: &mut S,
-) -> ResultXml<Option<XmlDeclaration>> {
+/// The declaration's encoding label describes caller-decoded input; this entry
+/// point does not decode bytes or reinterpret an already-decoded string.
+pub fn parse_xml_with_declaration(src: &str) -> ResultXml<(Dom, Option<XmlDeclaration>)> {
+    let mut dom = Dom::new();
     if src.len() > 16 * 1024 * 1024 {
         return Err(XmlError {
             offset: 0,
@@ -215,18 +117,18 @@ pub fn parse_xml_into<S: XmlTreeSink>(
     p.standalone = declaration
         .as_ref()
         .is_some_and(|d| d.standalone == Some(true));
-    let mut stack: Vec<Frame<S::Node>> = Vec::new();
+    let mut stack: Vec<Frame> = Vec::new();
     let mut bindings = BTreeMap::from([("xml".into(), XML_NAMESPACE.into())]);
     let mut root_seen = false;
     let mut doctype_seen = false;
     while !p.rest().is_empty() {
-        let parent = stack.last().map_or(sink.document(), |f| f.node);
+        let parent = stack.last().map_or(NodeIdx(0), |f| f.node);
         if p.take("<!--") {
             let data = p.until("-->")?;
             if data.contains("--") || data.ends_with('-') {
                 return Err(p.error("invalid comment"));
             }
-            p.sink(sink.comment(parent, data))?;
+            dom.append_child(parent, NodeKind::Comment { data: data.into() });
         } else if p.take("<?") {
             let target = p.name()?;
             if target.eq_ignore_ascii_case("xml") || target.contains(':') {
@@ -238,7 +140,13 @@ pub fn parse_xml_into<S: XmlTreeSink>(
                 p.require_space()?;
                 p.until("?>")?
             };
-            p.sink(sink.processing_instruction(parent, &target, data))?;
+            dom.append_child(
+                parent,
+                NodeKind::ProcessingInstruction {
+                    target,
+                    data: data.into(),
+                },
+            );
         } else if p.take("<!DOCTYPE") {
             if root_seen || doctype_seen {
                 return Err(p.error("doctype must precede the sole root"));
@@ -272,13 +180,21 @@ pub fn parse_xml_into<S: XmlTreeSink>(
                 ));
             }
             p.expect(">")?;
-            p.sink(sink.doctype(&name, &public_id, &system_id))?;
+            dom.doctype = Some(name.clone());
+            dom.append_child(
+                NodeIdx(0),
+                NodeKind::DocumentType {
+                    name,
+                    public_id,
+                    system_id,
+                },
+            );
         } else if p.take("<![CDATA[") {
             if stack.is_empty() {
                 return Err(p.error("CDATA outside root"));
             }
             let data = p.until("]]>")?;
-            p.sink(sink.text(parent, data))?;
+            dom.create_text(parent, data);
         } else if p.take("</") {
             let name = p.qname()?;
             p.space();
@@ -355,11 +271,10 @@ pub fn parse_xml_into<S: XmlTreeSink>(
             let mut resolved = Vec::new();
             for (key, value) in attrs {
                 let name = if key == "xmlns" || key.starts_with("xmlns:") {
-                    let (prefix, local) = split_name(&key);
+                    let (_, local) = split_name(&key);
                     XmlName {
                         qualified: key.clone(),
                         local: local.into(),
-                        prefix: prefix.map(str::to_owned),
                         namespace_uri: Some(XMLNS_NAMESPACE.into()),
                     }
                 } else {
@@ -370,7 +285,19 @@ pub fn parse_xml_into<S: XmlTreeSink>(
                 }
                 resolved.push(XmlAttribute { name, value });
             }
-            let node = p.sink(sink.element(parent, &name, &resolved))?;
+            let node = p.dom_result(dom.create_element_ns(
+                parent,
+                name.namespace_uri.as_deref(),
+                &name.qualified,
+            ))?;
+            for attr in resolved {
+                p.dom_result(dom.set_attribute_ns(
+                    node,
+                    attr.name.namespace_uri.as_deref(),
+                    &attr.name.local,
+                    &attr.value,
+                ))?;
+            }
             root_seen = true;
             if !empty {
                 stack.push(Frame {
@@ -394,7 +321,7 @@ pub fn parse_xml_into<S: XmlTreeSink>(
                     return Err(p.error("]]> in character data"));
                 }
                 let data = p.references(raw, false)?;
-                p.sink(sink.text(parent, &data))?;
+                dom.create_text(parent, &data);
             }
         }
     }
@@ -404,7 +331,7 @@ pub fn parse_xml_into<S: XmlTreeSink>(
     if !root_seen {
         return Err(p.error("missing document element"));
     }
-    Ok(declaration)
+    Ok((dom, declaration))
 }
 
 impl<'a> Parser<'a> {
@@ -421,8 +348,8 @@ impl<'a> Parser<'a> {
             message: message.into(),
         }
     }
-    fn sink<T>(&self, result: Result<T, String>) -> ResultXml<T> {
-        result.map_err(|s| self.special(XmlErrorKind::Sink, &s))
+    fn dom_result<T>(&self, result: Result<T, amazing_dom::DomError>) -> ResultXml<T> {
+        result.map_err(|error| self.special(XmlErrorKind::Dom, &format!("{error:?}")))
     }
     fn take(&mut self, s: &str) -> bool {
         if self.rest().starts_with(s) {
@@ -535,7 +462,6 @@ impl<'a> Parser<'a> {
         Ok(XmlName {
             qualified: name.into(),
             local: local.into(),
-            prefix: prefix.map(str::to_owned),
             namespace_uri: uri,
         })
     }
