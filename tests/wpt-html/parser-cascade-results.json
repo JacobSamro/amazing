@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "kind": "parser-only-cascade-xml",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "counts": {
+    "parsed": 12,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 2
+  },
+  "results": [
+    {
+      "path": "css/css-cascade/reference/ref-filled-green-100px-square.xht",
+      "status": "parsed",
+      "source_sha256": "b7d98bb3f8b7b70e8f76f0b7e99566bc09ca5e5cbae1cef571d7843be87da4f0",
+      "output_sha256": "7d60324cd7b928c8f1f9560f5a9428041f4b32e679e36969b87f8a31b1e02e04",
+      "detail": ""
+    },
+    {
+      "path": "css/css-color/t421-rgb-clip-outside-gamut-b.xht",
+      "status": "unsupported",
+      "source_sha256": "a3f5d3fac80be952510fb5304fe5b5537a862b792fce14dd52b9bf4331041992",
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "detail": "C:\\Users\\server\\target\\css\\wpt\\css\\css-color\\t421-rgb-clip-outside-gamut-b.xht: XML Unsupported at byte 1177: entity may require an external DTD; external entities are not loaded"
+    },
+    {
+      "path": "css/css-color/t425-hsla-values-b.xht",
+      "status": "unsupported",
+      "source_sha256": "e87c8f538207463a572a84785b96fe67a7dc97120bede2a3c7b68be316842997",
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "detail": "C:\\Users\\server\\target\\css\\wpt\\css\\css-color\\t425-hsla-values-b.xht: XML Unsupported at byte 1083: entity may require an external DTD; external entities are not loaded"
+    },
+    {
+      "path": "css/css-fonts/font-family-name-000.xht",
+      "status": "parsed",
+      "source_sha256": "72f78cb6025f5cf8a53a027c02f45b5910b815e68c4ace0fb04575723fb33b8a",
+      "output_sha256": "4bbd08c51b66d84ef36d9f0b120bbcb6556354388c5491cff191434580eab313",
+      "detail": ""
+    },
+    {
+      "path": "css/css-fonts/font-family-name-001.xht",
+      "status": "parsed",
+      "source_sha256": "737d400cec7391fb432c91500ce38618d58a250900a98d62172732978c71a5b8",
+      "output_sha256": "b840d863b4879065dc4ba0db78118f75c3a798c4e9a65231512ce45ff8cbdb53",
+      "detail": ""
+    },
+    {
+      "path": "css/css-fonts/font-family-name-014.xht",
+      "status": "parsed",
+      "source_sha256": "8087710c1ce09267abe42bdc697eb7a8f187c3a7ca761e6339f12afa63439636",
+      "output_sha256": "74f94284817711e01c599d32abfd489185f6494b03057d68be0d5dca51eb75eb",
+      "detail": ""
+    },
+    {
+      "path": "css/css-fonts/font-family-name-018.xht",
+      "status": "parsed",
+      "source_sha256": "00b5e403f9b649a6951576a9af86a81d985c222a314ce9b690b8c85027cde9b2",
+      "output_sha256": "cd5353a5e7563f655285c8ef42d429567572e174580b60eca57333bef4f8a34a",
+      "detail": ""
+    },
+    {
+      "path": "css/css-fonts/font-family-name-019.xht",
+      "status": "parsed",
+      "source_sha256": "397d98d213d6d731bdd1f910ffa056cb94bf839b543cc13f799db518bc9a36e8",
+      "output_sha256": "f77e88e8e69000717ae544ce45b69ea56dafd91e769e598a0187f445b02c14fd",
+      "detail": ""
+    },
+    {
+      "path": "css/css-fonts/font-family-name-022.xht",
+      "status": "parsed",
+      "source_sha256": "b1f2691499183b3b06884f0c8f202d04814407db1df6cc2e94f8a37f1ecd22fc",
+      "output_sha256": "d068f02f2123fae6780b8f8022fd5b8ce37c9fc377623712ff658ae7ea8c4060",
+      "detail": ""
+    },
+    {
+      "path": "css/css-fonts/font-family-name-022-ref.xht",
+      "status": "parsed",
+      "source_sha256": "f8b5215764c02ca6bdaef0cb471a8aac6a860dcf7b062ff69e8de1d0b8aa1121",
+      "output_sha256": "9a114ea967350bbc306a67c988b02375d1d2309e921a40c7de19d83c59538c52",
+      "detail": ""
+    },
+    {
+      "path": "css/css-fonts/font-family-name-024.xht",
+      "status": "parsed",
+      "source_sha256": "4a009ba977bfcb84ef687c71eac5143cdb236531c4a23f7feef77c872bf09665",
+      "output_sha256": "12e0adb58fcc5b32754c322e174d66632dce19876462e013d5ef73f53d624ecf",
+      "detail": ""
+    },
+    {
+      "path": "css/css-fonts/font-family-name-024-ref.xht",
+      "status": "parsed",
+      "source_sha256": "9ed59d846c8e1c334b747b6e7a861b8cb4354815420c08376b1eee3479b50a54",
+      "output_sha256": "3e11c2c2315bd74578841d70dab020faf0c95c6143f29c7cb0e5db13ee602689",
+      "detail": ""
+    },
+    {
+      "path": "css/css-fonts/font-family-name-mixcase-ref.xht",
+      "status": "parsed",
+      "source_sha256": "fb790a5e169681f7c0f6210e5ec55c6bce1705072483fadfc999baf40163588a",
+      "output_sha256": "5c3de076375e21ca67acc068df1ae6712c40eccde919c8c2f5f25fc287c21067",
+      "detail": ""
+    },
+    {
+      "path": "css/css-fonts/font-family-name-ref.xht",
+      "status": "parsed",
+      "source_sha256": "bed9400e90ebd9ddb97ae152f7be68d4ec4cb082e6ca9333859172ab4ecbb53f",
+      "output_sha256": "2e5b1d5f1589c0a848fa8be44381cff5093a2a53f77c36100f54d0a624e0d37f",
+      "detail": ""
+    }
+  ],
+  "repeat_runs": 2,
+  "stable_projection_sha256": "193d33ee4941222c4c7a6a77ac4726ea9b41c54239c05d2668024a8ef417dee2"
+}
