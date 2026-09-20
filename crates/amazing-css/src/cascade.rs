@@ -5,7 +5,7 @@
 //!   once up front; per css-selectors a rule whose selector list contains
 //!   ANY invalid selector is dropped whole (never partially applied)
 //! - cascade per property with the full key: importance → origin
-//!   (UA < author; reversed for `!important`) → inline style beats sheets →
+//!   (UA < presentational hints < author; reversed for `!important`) → inline style beats sheets →
 //!   layer → specificity → scope proximity → source order
 //! - per-declaration source order and the specificity of the most-specific
 //!   selector in a list that actually matches
@@ -16,8 +16,8 @@
 //!   heading sizes, link color) so Phase 3 layout starts from real values
 //!
 //! Deferred/deviations:
-//! - presentational attributes (`bgcolor`, `width=…`) and `<style media>`
-//!   conditions are ignored
+//! - `<style media>` conditions are ignored
+//! - HTML hints needing browsing/document state are tracked in css_TODO.md
 //! - unknown properties get no initial metadata; user-origin sheets, animations
 //!   and transitions have no input seam yet
 
@@ -64,6 +64,7 @@ pub fn compute(dom: &Dom, author_sheets: &[Stylesheet]) -> StyledDom {
     let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true);
     let author_rules = compile_sheets(author_sheets, false);
 
+    let body_link = hints::body_link(dom);
     let mut out = StyledDom::default();
     style_subtree(
         dom,
@@ -72,6 +73,7 @@ pub fn compute(dom: &Dom, author_sheets: &[Stylesheet]) -> StyledDom {
         16.0,
         &ua_rules,
         &author_rules,
+        body_link.as_deref(),
         &mut out,
     );
     out
@@ -84,6 +86,7 @@ fn style_subtree(
     root_font_px: f32,
     ua_rules: &[CompiledRule],
     author_rules: &[CompiledRule],
+    body_link: Option<&str>,
     out: &mut StyledDom,
 ) {
     if dom.name(node).is_some() {
@@ -94,6 +97,7 @@ fn style_subtree(
             root_font_px,
             ua_rules,
             author_rules,
+            body_link,
         );
         let descendant_root_font_px = if dom.name(node) == Some("html") {
             style
@@ -112,6 +116,7 @@ fn style_subtree(
                 descendant_root_font_px,
                 ua_rules,
                 author_rules,
+                body_link,
                 out,
             );
         }
@@ -127,6 +132,7 @@ fn style_subtree(
                 root_font_px,
                 ua_rules,
                 author_rules,
+                body_link,
                 out,
             );
         }
@@ -141,13 +147,19 @@ fn style_subtree(
 mod context;
 use context::{compile_sheets, CompiledRule};
 
+#[path = "presentational_hints.rs"]
+mod hints;
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Origin { Ua, Hint, Author }
+
 /// One declaration competing for a property during the cascade.
 #[derive(Clone, Copy)]
 struct Candidate<'a> {
     value: &'a str,
     important: bool,
     inline: bool,
-    ua: bool,
+    origin: Origin,
     author_declaration: bool,
     spec: Specificity,
     order: u64,
@@ -164,9 +176,9 @@ fn beats(new: &Candidate<'_>, cur: &Candidate<'_>) -> bool {
         (false, true) => return false,
         _ => {}
     }
-    if new.ua != cur.ua {
+    if new.origin != cur.origin {
         // Normal origin order: author beats UA. Important reverses it.
-        return if new.important { new.ua } else { !new.ua };
+        return if new.important { new.origin < cur.origin } else { new.origin > cur.origin };
     }
     if new.inline != cur.inline {
         return new.inline;
@@ -208,18 +220,18 @@ fn winners<'a>(
                     || substituted == Some(Rollback::Origin)
                 {
                     // UA revert is unset; author revert removes both importance levels.
-                    if winner.ua {
+                    if winner.origin == Origin::Ua {
                         return None;
                     }
-                    values.retain(|c| c.ua);
+                    values.retain(|c| c.origin == Origin::Ua);
                 } else if winner.value.trim().eq_ignore_ascii_case("revert-layer")
                     || substituted == Some(Rollback::Layer)
                 {
                     values.retain(|c| {
-                        if c.ua != winner.ua {
+                        if c.origin != winner.origin {
                             // The UA important-to-normal interval also spans
                             // every author declaration, not just UA layers.
-                            return !(winner.ua && winner.important);
+                            return !(winner.origin == Origin::Ua && winner.important);
                         }
                         if winner.inline {
                             return !c.inline;
@@ -249,6 +261,7 @@ fn compute_one(
     root_font_px: f32,
     ua_rules: &[CompiledRule],
     author_rules: &[CompiledRule],
+    body_link: Option<&str>,
 ) -> ComputedStyle {
     /// One declaration after shorthand expansion, flattened with the
     /// cascade metadata inherited from its source.
@@ -257,7 +270,7 @@ fn compute_one(
         value: String,
         important: bool,
         inline: bool,
-        ua: bool,
+        origin: Origin,
         author_declaration: bool,
         spec: Specificity,
         order: u64,
@@ -272,21 +285,16 @@ fn compute_one(
     // even though the computed map is flat.
     let mut pool: Vec<FlatDecl> = Vec::new();
     let mut source_order = 0u64;
-    if let Some(direction) = attr_of(dom, el, "dir")
-        .filter(|value| value.eq_ignore_ascii_case("ltr") || value.eq_ignore_ascii_case("rtl"))
-    {
-        pool.push(FlatDecl {
-            prop: "direction".into(),
-            value: direction.to_ascii_lowercase(),
-            important: false,
-            inline: false,
-            ua: false,
-            author_declaration: false,
-            spec: Specificity::default(),
-            order: 0,
-            layer: usize::MAX,
-            proximity: usize::MAX,
-        });
+    for (prop, value) in hints::collect(dom, el, body_link) {
+        source_order += 1;
+        for (prop, value) in computed::expand_declaration(&prop, &value) {
+            pool.push(FlatDecl {
+                prop, value, important: false, inline: false,
+                origin: Origin::Hint, author_declaration: false,
+                spec: Specificity::default(), order: source_order,
+                layer: usize::MAX, proximity: usize::MAX,
+            });
+        }
     }
     for rule in ua_rules.iter().chain(author_rules.iter()) {
         let Some((specificity, proximity)) = rule.matching(dom, el) else { continue; };
@@ -300,7 +308,7 @@ fn compute_one(
                     value,
                     important: decl.important,
                     inline: false,
-                    ua: rule.ua,
+                    origin: if rule.ua { Origin::Ua } else { Origin::Author },
                     author_declaration: !rule.ua,
                     spec: specificity,
                     order: source_order,
@@ -322,7 +330,7 @@ fn compute_one(
                 value,
                 important: decl.important,
                 inline: true,
-                ua: false,
+                origin: Origin::Author,
                 author_declaration: true,
                 spec: Specificity::default(),
                 order: source_order,
@@ -340,7 +348,7 @@ fn compute_one(
             value: &d.value,
             important: d.important,
             inline: d.inline,
-            ua: d.ua,
+            origin: d.origin,
             author_declaration: d.author_declaration,
             spec: d.spec,
             order: d.order,
@@ -379,6 +387,28 @@ fn compute_one(
         if let Some(values) = candidates.get(logical).cloned() {
             let physical = physical_margin_for(logical, rtl, writing_mode);
             candidates.entry(physical).or_default().extend(values);
+        }
+    }
+    // Resolve logical border candidates against the same computed axes as margins.
+    for (logical, margin, physicals) in [
+        ("border-inline-start-width", "margin-inline-start", ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"]),
+        ("border-inline-start-style", "margin-inline-start", ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"]),
+        ("border-inline-start-color", "margin-inline-start", ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"]),
+        ("border-inline-end-width", "margin-inline-end", ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"]),
+        ("border-inline-end-style", "margin-inline-end", ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"]),
+        ("border-inline-end-color", "margin-inline-end", ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"]),
+        ("border-block-start-width", "margin-block-start", ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"]),
+        ("border-block-start-style", "margin-block-start", ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"]),
+        ("border-block-start-color", "margin-block-start", ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"]),
+        ("border-block-end-width", "margin-block-end", ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"]),
+        ("border-block-end-style", "margin-block-end", ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"]),
+        ("border-block-end-color", "margin-block-end", ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"]),
+    ] {
+        if let Some(values) = candidates.get(logical).cloned() {
+            let index = match physical_margin_for(margin, rtl, writing_mode) {
+                "margin-top" => 0, "margin-right" => 1, "margin-bottom" => 2, _ => 3,
+            };
+            candidates.entry(physicals[index]).or_default().extend(values);
         }
     }
     champs = winners(&candidates, Some(&provisional));
@@ -529,7 +559,7 @@ mod tests {
             ("@layer a,b;@layer a{p{color:revert-layer!important}}@layer b{p{color:green!important}}", "green"),
         ] {
             let ua = compile_sheets(&[parse_stylesheet(ua_css)], true);
-            let style = compute_one(&dom, elements[5], None, 16.0, &ua, &author);
+            let style = compute_one(&dom, elements[5], None, 16.0, &ua, &author, None);
             assert_eq!(style.get("color"), Some(expected));
         }
     }

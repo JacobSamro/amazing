@@ -713,7 +713,7 @@ mod inheritance_tests {
 
 // CSS Color 4 named/system keywords; recognizes validity without extending
 // the transitional RGBA8 parser. https://www.w3.org/TR/css-color-4/#named-colors
-fn known_color_keyword(name: &str) -> bool {
+pub(crate) fn named_color_keyword(name: &str) -> bool {
     const NAMES: &[&str] = &[
         "aliceblue",
         "antiquewhite",
@@ -863,6 +863,12 @@ fn known_color_keyword(name: &str) -> bool {
         "whitesmoke",
         "yellow",
         "yellowgreen",
+    ];
+    NAMES.contains(&name.to_ascii_lowercase().as_str())
+}
+
+fn known_color_keyword(name: &str) -> bool {
+    const SYSTEM_NAMES: &[&str] = &[
         "accentcolor",
         "accentcolortext",
         "activetext",
@@ -908,5 +914,5 @@ fn known_color_keyword(name: &str) -> bool {
         "windowframe",
         "windowtext",
     ];
-    NAMES.contains(&name.to_ascii_lowercase().as_str())
+    named_color_keyword(name) || SYSTEM_NAMES.contains(&name.to_ascii_lowercase().as_str())
 }

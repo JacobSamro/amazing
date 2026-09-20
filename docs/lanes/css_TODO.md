@@ -601,7 +601,7 @@ The original 32 rendering runs above precede this follow-up; they were not rerun
 and are not claimed as post-fix evidence. This focused follow-up proves the
 canonical CSS API regression and the refreshed full workspace.
 
-## CSS-5 — background shorthand and stylesheet URL provenance (queued)
+## Later ticket — background shorthand and stylesheet URL provenance (queued)
 
 User originally queued this during CSS-2; **do not start without a new brief**. Replaced-content has implemented background longhands in paint.
 CSS owns expansion of the full multi-layer `background` shorthand grammar;
@@ -611,7 +611,7 @@ provenance through computed values, resolving against the originating stylesheet
 Keep this work separate from CSS-2 cascade layers, revert, and scope.
 
 
-CSS-5 still needs an explicit stylesheet base-URL seam: preserve the fetched
+The deferred background ticket still needs an explicit stylesheet base-URL seam: preserve the fetched
 stylesheet's final URL, inline/ownerless sheet document base, and the winning
 declaration's provenance through cascade/variable/shorthand computation. CSS-3
 preserves sheet identity and scope roots, not URL bases. Font discovery still
@@ -620,7 +620,7 @@ also retains its existing combined ownerless input. Coordinate those caller
 seams with the integrator before claiming relative-resource conformance.
 
 
-## Queued CSS ticket — HTML width/height presentational hints
+## Routed request — HTML width/height presentational hints (now CSS-5)
 
 Routed by integrator-assist after correcting the intrinsic_size contract.
 Width/height attributes were accidentally applied as intrinsic dimensions by
@@ -631,7 +631,64 @@ ordinary author CSS overriding them. Keep author-declaration provenance distinct
 from these hints, as it already is for dir. The existing StyledDom and
 ReplacedElementProvider boundaries suffice; do not restore the driver workaround.
 
-This needs a separate integrator brief/ticket number and focused sizing/cascade
-coverage. It is recorded only: no width/height implementation is part of the
-CSS-4 border rollback follow-up. CSS-5 background shorthand remains separately
-queued pending shell stylesheet provenance.
+This was recorded separately from the CSS-4 border rollback follow-up and is
+now assigned CSS-5 below. Background shorthand remains deferred pending shell
+stylesheet provenance.
+
+
+## CSS-5 — HTML presentational hints (in progress)
+
+Assigned 2026-09-21 after CSS-4 and its border rollback follow-up merged.
+The previously queued background shorthand ticket remains deferred; CSS-5 now
+owns the HTML attribute regression exposed by the corrected intrinsic-size contract.
+
+A distinct `Hint` origin sits between UA and author origins, before layer and
+specificity comparisons. Every author declaration (including a universal rule in
+the first layer) wins. Hints never set `is_author_specified`. Explicit author
+initial/inherit/unset remain author-specified. Per Cascade 5 section 6.5, author
+`revert` removes hints, whereas `revert-layer` can restore them. The same applies
+after variable substitution. Existing public compute/StyledDom signatures stay intact.
+
+DOM-local mappings implemented for review:
+
+- HTML img/embed/iframe/object/video and input[type=image] width/height;
+  img/video/image-input aspect ratio; canvas aspect ratio only (its attributes
+  remain intrinsic dimensions, not CSS width/height). HTML decimal-prefix and
+  nonnegative-integer grammars are distinct, including element-specific zero rules.
+- Replaced-element hspace/vspace, border and iframe frameborder; legacy float
+  and vertical alignment mappings that have direct CSS equivalents.
+- Table/group/row/column/cell dimensions; cellspacing, nearest-table cellpadding;
+  align/valign/nowrap; table border/frame/rules and cell/group border hints,
+  with logical sides resolved against computed writing mode.
+- Legacy body/table/group/row/cell/marquee background colors, font/hr colors,
+  table bordercolor, body text and unvisited link colors. HTML legacy color
+  recovery is separate from CSS color parsing, with all named-color keywords.
+- Body local margin attributes; font face/size; list type/value/start/reversed;
+  block text alignment, br clear, pre wrap, textarea wrap=off; hr size/align;
+  marquee width/height and spacing.
+- Background attributes serialize as a single escaped document-relative URL,
+  never as a stylesheet-relative URL. Actual resource URL resolution remains
+  the embedding loader's responsibility.
+- Initial/inherited metadata added for aspect-ratio, border-spacing and list
+  counter properties so `all`, CSS-wide keywords and inheritance cover hints.
+
+Known context/consumer boundaries, routed in questions.md (not claimed complete):
+CSS receives no document URL/encoding/quirks mode, visited or active link state,
+selected picture source, or containing frame. Exact background URL serialization,
+quirks cell nowrap exception, selected-source image dimensions, body vlink/alink,
+and frame margin fallback need those inputs. HTML descendant block alignment,
+replaced align=middle's baseline geometry and anonymous color-well backgrounds
+need layout/paint support rather than invented host-property mappings. Counter
+and aspect-ratio computed values do not by themselves claim downstream support.
+Foreign namespaces receive none of these HTML hints. The existing simple background shorthand forms (none, color, CSS-wide and
+var-substituted equivalents) now reset omitted longhands so an author shorthand
+can override a hinted image. Full layered/image/position/size shorthand and
+stylesheet URL provenance remain deferred.
+
+References: [HTML rendering](https://html.spec.whatwg.org/multipage/rendering.html),
+[HTML microsyntaxes](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html),
+[hint origin and rollback](https://drafts.csswg.org/css-cascade-5/#preshint).
+
+Evidence is in progress: clean baseline bb79669, lock E4D68B10, source-verified
+Windows executable and two runs of all eight pinned selections. Final counts,
+image comparisons, workspace gate and source hashes will be recorded after validation.
