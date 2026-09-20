@@ -39,7 +39,10 @@
 
 On win-001, refreshed HTML lane, `cargo test -p amazing-html --locked`:
 81 unit passed / 0 failed / 0 ignored and 1 doctest passed. This includes 18
-new focused XML tests (hand-authored, **not** a WPT pass rate). Final repeated gate, DOM-seam tests, and workspace gate pending.
+new focused XML tests (hand-authored, **not** a WPT pass rate). Two identical focused runs passed at `41ac0c7`, rebased on `156cc13`, after
+refresh/re-sync. All 8 HTML crate file SHA256s matched. Canonical results and
+source hashes: `tests/wpt-html/unit-results.json`. DOM integration and the
+workspace gate remain pending.
 
 Parser-only cascade XML diagnostic: 12 parsed / 0 error / 0 timeout /
 2 unsupported out of 14 distinct documents, two identical runs. Per-source
@@ -65,10 +68,24 @@ pending driver dispatch and harness routing; no measured improvement claimed.
 - [ ] Fresh full workspace gate, no regressions.
 - [ ] Final report and HTML-2 proposal grounded in measured limitations.
 
-## Proposed next investigation
+## Proposed HTML-2 — strict XML byte input
 
-HTML-2 candidates are strict byte decoding / encoding sniffing and incremental
-input. The current parser accepts a complete `&str`, so it cannot validate an
-encoding declaration against source bytes or consume split byte sequences.
-Prioritize using actual rejected pinned fixtures after the HTML-1 corpus run;
-no new ticket is started here.
+Add BOM/encoding detection and strict UTF-8/UTF-16 decoding with declaration
+consistency tests. The existing declaration test accepts decoded text declaring
+UTF-16 while the runnable CLI only reads UTF-8: this concrete API boundary
+motivates decoding before streaming. Incremental parsing should follow with
+chunk-split tests once decoder ownership is settled.
+
+The pinned diagnostic has two actual external-DTD entity blockers and no UTF-8
+input failures among 14 files. Route a bounded XHTML entity policy separately;
+do not silently use the HTML entity table or fetch arbitrary external resources.
+No HTML-2 work started; rendering impact still requires the integration gate.
+
+## Integration checkpoint
+
+Parser checkpoint `41ac0c7`; scope compatibility `7ddf65e` (equivalent to
+pre-rebase `72af438`). No push/PR. The current Dom sink rejects null/custom
+element URIs instead of inventing HTML identity; the generic sink resolves them.
+DOM qualified-name/attribute preservation, parser-safe element creation, driver
+XML dispatch, and owner-operated render harness changes are routed through
+questions.md. **HTML-1 is incomplete** until these and final gates land.

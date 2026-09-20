@@ -109,5 +109,40 @@
     }
   ],
   "repeat_runs": 2,
-  "stable_projection_sha256": "193d33ee4941222c4c7a6a77ac4726ea9b41c54239c05d2668024a8ef417dee2"
+  "stable_projection_sha256": "193d33ee4941222c4c7a6a77ac4726ea9b41c54239c05d2668024a8ef417dee2",
+  "engine_revision": "41ac0c7c7c6ac0e125aa4caed2598a02e753a971",
+  "source_hashes": [
+    {
+      "path": "crates/amazing-html/Cargo.toml",
+      "sha256": "aa077f1909364842459d53ee54799651a2f3654d02f97a1d1f7aab893f4a8eeb"
+    },
+    {
+      "path": "crates/amazing-html/examples/xml_parse.rs",
+      "sha256": "19846f5ad00c6ab97fea268688620a2c71d8a69054c7140f17b2a0b9b2c9216b"
+    },
+    {
+      "path": "crates/amazing-html/src/entities.rs",
+      "sha256": "2ea5c46e3ed769fc794892a9757bc896a695deb7ba5129955d55090a4b854013"
+    },
+    {
+      "path": "crates/amazing-html/src/lib.rs",
+      "sha256": "402bafa8f06cd695382f8d2748d368d12522088bf6de95ae289a293ab7976e2c"
+    },
+    {
+      "path": "crates/amazing-html/src/tokenizer.rs",
+      "sha256": "d1d9a7e30e39397fedb58c1e20397aa4c16ebb6585f4dec3c61b4b4a18cc9a15"
+    },
+    {
+      "path": "crates/amazing-html/src/tree.rs",
+      "sha256": "e2da6e73b5d3a3eaa7b08cdcac4c96763642faece84b52d725a06a67a2a382a6"
+    },
+    {
+      "path": "crates/amazing-html/src/xml.rs",
+      "sha256": "7297ed1b6dc207b8e41f5e3b8152eb3dba0e1c451b2e083df04713f7f4898d4d"
+    },
+    {
+      "path": "crates/amazing-html/src/xml_tests.rs",
+      "sha256": "9c737f66a109aa541b50ed31db51f51c10ef3541b3450f23f857e30fc941482a"
+    }
+  ]
 }

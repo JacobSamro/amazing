@@ -29,7 +29,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\wpt-html\run-xml-corpu
 
 Repeat with a second output directory; compare the decoded JSON reports. The
 canonical projection hash uses UTF-8 JSON, keys sorted, separators `,` / `:`
-with no spaces, over the original report (before repeat metadata is added).
+with no spaces, over the original report (before repeat/provenance metadata is added).
 `parser-cascade-results.json` retains two identical runs at WPT revision
 `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`: **12 parsed / 0 error / 0 timeout /
 2 unsupported** out of 14 distinct XML documents. Two color tests require
