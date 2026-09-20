@@ -16,3 +16,14 @@
 //! trait with `js-runtime`.
 
 #![forbid(unsafe_code)]
+
+pub mod host;
+
+mod interfaces;
+mod invoke;
+pub use amazing_dom::{Dom, DomError, NodeIdx};
+pub use interfaces::{install, INTERFACES};
+pub use invoke::invoke;
+
+#[cfg(test)]
+mod tests;

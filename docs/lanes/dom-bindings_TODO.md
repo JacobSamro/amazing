@@ -881,3 +881,58 @@ masked by the confirmed Error stringification failure. Thirty shared-resource
 errors therefore require both setup APIs and usable exception reporting, not
 merely another Range core implementation. The probe output explicitly carries
 `suite: scaffolding-only`; it contributes zero WPT results.
+
+### DOM-5 concrete runtime contract (supersedes proposed import direction above)
+
+Integrator seeded `amazing-bindings` in `62f8487`, depending only on amazing-dom.
+The concrete trait is `crates/amazing-bindings/src/host.rs::BindingHost`; runtime
+implements it and calls the binding crate, never the reverse dependency. Please
+use the file's exact types: `InterfaceDefinition`, `Member`, `Operation`, and
+`BindingHost`. Installation registers descriptors and prototypes; native entry
+points forward `Operation`, receiver and arguments to the forthcoming `invoke`.
+`with_dom` executes a non-reentrant native closure on the driver's same arena;
+all JS coercion and wrapper creation occur outside it. `node_brand` must use a
+private brand; `wrap_node` must share identity with existing wrappers, including
+the existing document object. `child_nodes` supplies a live same-object NodeList.
+DOMString conversion takes/returns UTF-16 code units and propagates throws. The
+initial operations cover node factories/base properties and ParentNode/ChildNode
+mutations, not callbacks or scheduling. `is_html_document` controls the existing
+HTML element nodeName casing rule and must reflect document kind.
+
+Native mutation work is checkpointed on this branch. The ChildNode before/after/
+replaceWith source helpers have respectively 15, 15, and 11 test declarations
+called for Comment, Element and Text: 123 source-declared registrations currently
+blocked before any result. This is a bounded synchronous candidate alongside the
+ParentNode family, not a claim that 123 tests will pass. Source-declared potential
+is kept distinct from measured registered results.
+
+Runtime install notes: new constructors require `new`; `None` constructors are
+illegal constructors with real interface/prototype objects. Install members
+without deleting unrelated legacy APIs, but migrate legacy **own** properties
+that would shadow the new prototype methods/getters. Canonical wrapping applies
+to query results and legacy createElement as well as new factories. Map
+`DomError::TypeError` to a JS TypeError and hierarchy/not-found errors to genuine
+DOMException-shaped exceptions. `is_undefined` distinguishes constructor default
+empty strings from explicit null (`"null"`). `DocumentConstructor` makes a new
+XML document; `is_html_document` must return false for it. New `NodeOrString::Utf16`
+preserves lone surrogate arguments through native fragment conversion.
+
+Targeted Windows validation on the refreshed 62f8487 tree: 149 DOM tests passed
+(140 existing + 9 mutation tests); eight binding tests passed (157 combined).
+Separate doctests: amazing-dom 0, amazing-bindings 0. These are native and host-
+contract tests, not evidence that the runtime has adopted the contract. No
+workspace or WPT AFTER claim is made at this checkpoint.
+
+Fresh BEFORE pair completed on 11dd8a8: both raw JSONL streams are byte-identical
+to each other and to DOM-1/DOM-4-before. 2 pass / 241 fail / 30 timeout / 221 error /
+133 unsupported, 83 PASS / 2584 FAIL. Summary/provenance is committed at
+`crates/amazing-dom/tests/wpt-dom5-before.json`; raw artifact SHA-256 is
+`3601e251023d0f34e0668c7e9b8d1b24df1fbca43391e0cff123ab51ee719f4c`.
+
+Timeout inspection: 24 of 30 source bodies mention iframe/frame access; the
+Comment/Text constructor pair additionally loads iframe work from their shared
+support script. Thus 26 have explicit frame dependencies in source or support;
+this is dependency evidence, not proof of a single runtime cause. The remaining
+four are two click activation tests, EventListener-handleEvent, and the SVG
+window.onload smoke test. Constructors can gain synchronous subtest passes while
+their cross-realm part still times out; do not claim the whole file is fixed.

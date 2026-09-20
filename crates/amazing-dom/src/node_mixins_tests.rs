@@ -2,7 +2,8 @@ use super::*;
 use crate::mutation::ObserveOptions;
 
 fn element(dom: &mut Dom, document: NodeIdx) -> NodeIdx {
-    dom.create_element_ns_in(document, Some("http://www.w3.org/1999/xhtml"), "div").unwrap()
+    dom.create_element_ns_in(document, Some("http://www.w3.org/1999/xhtml"), "div")
+        .unwrap()
 }
 fn children(dom: &Dom, parent: NodeIdx) -> Vec<NodeIdx> {
     dom.children(parent).collect()
@@ -26,17 +27,37 @@ fn append_and_prepend_move_duplicates_and_preserve_identity() {
 #[test]
 fn child_mixins_work_for_comment_text_element_and_doctype() {
     for kind in [
-        NodeKind::Comment { data: "comment".into() },
-        NodeKind::Text { data: "text".into() },
-        NodeKind::Element { name: "a".into(), attrs: vec![], namespace: crate::Namespace::Html },
-        NodeKind::DocumentType { name: "html".into(), public_id: String::new(), system_id: String::new() },
+        NodeKind::Comment {
+            data: "comment".into(),
+        },
+        NodeKind::Text {
+            data: "text".into(),
+        },
+        NodeKind::Element {
+            name: "a".into(),
+            attrs: vec![],
+            namespace: crate::Namespace::Html,
+        },
+        NodeKind::DocumentType {
+            name: "html".into(),
+            public_id: String::new(),
+            system_id: String::new(),
+        },
     ] {
         let mut dom = Dom::new();
         let is_doctype = matches!(kind, NodeKind::DocumentType { .. });
-        let parent = if is_doctype { NodeIdx(0) } else { element(&mut dom, NodeIdx(0)) };
+        let parent = if is_doctype {
+            NodeIdx(0)
+        } else {
+            element(&mut dom, NodeIdx(0))
+        };
         let target = dom.create_node_in(NodeIdx(0), kind).unwrap();
-        let a = dom.create_node_in(NodeIdx(0), NodeKind::Comment { data: "a".into() }).unwrap();
-        let b = dom.create_node_in(NodeIdx(0), NodeKind::Comment { data: "b".into() }).unwrap();
+        let a = dom
+            .create_node_in(NodeIdx(0), NodeKind::Comment { data: "a".into() })
+            .unwrap();
+        let b = dom
+            .create_node_in(NodeIdx(0), NodeKind::Comment { data: "b".into() })
+            .unwrap();
         dom.pre_insert(target, parent, None).unwrap();
         dom.before_nodes(target, &nodes(&[a])).unwrap();
         dom.after_nodes(target, &nodes(&[b])).unwrap();
@@ -84,7 +105,10 @@ fn detached_child_methods_do_not_convert_or_move_arguments() {
     let child = element(&mut dom, NodeIdx(0));
     dom.pre_insert(child, parent, None).unwrap();
     let count = dom.node_count();
-    let values = [NodeOrString::String("new text".into()), NodeOrString::Node(child)];
+    let values = [
+        NodeOrString::String("new text".into()),
+        NodeOrString::Node(child),
+    ];
     dom.before_nodes(detached, &values).unwrap();
     dom.after_nodes(detached, &values).unwrap();
     dom.replace_with(detached, &values).unwrap();
@@ -98,13 +122,23 @@ fn strings_are_distinct_text_nodes_and_cross_document_nodes_are_adopted() {
     let other = dom.create_document();
     let parent = element(&mut dom, other);
     let child = element(&mut dom, NodeIdx(0));
-    dom.append_nodes(parent, &[NodeOrString::String("".into()), NodeOrString::Node(child), NodeOrString::String("x".into())]).unwrap();
+    dom.append_nodes(
+        parent,
+        &[
+            NodeOrString::String("".into()),
+            NodeOrString::Node(child),
+            NodeOrString::String("x".into()),
+        ],
+    )
+    .unwrap();
     let result = children(&dom, parent);
     assert_eq!(result.len(), 3);
     assert_eq!(result[1], child);
     assert_eq!(dom.character_data(result[0]), Some(""));
     assert_eq!(dom.character_data(result[2]), Some("x"));
-    for id in result { assert_eq!(dom.owner_document(id), Some(other)); }
+    for id in result {
+        assert_eq!(dom.owner_document(id), Some(other));
+    }
 }
 
 #[test]
@@ -116,7 +150,10 @@ fn failed_final_insertion_keeps_observable_conversion_moves() {
     dom.append_nodes(parent, &nodes(&[a, b])).unwrap();
     // Conversion moves both children into a fragment; a document cannot then
     // accept that fragment's two element children. There is no rollback.
-    assert_eq!(dom.append_nodes(NodeIdx(0), &nodes(&[a, b])), Err(DomError::HierarchyRequestError));
+    assert_eq!(
+        dom.append_nodes(NodeIdx(0), &nodes(&[a, b])),
+        Err(DomError::HierarchyRequestError)
+    );
     assert!(children(&dom, parent).is_empty());
     let fragment = dom.get(a).parent.unwrap();
     assert!(matches!(dom.get(fragment).kind, NodeKind::DocumentFragment));
@@ -133,7 +170,15 @@ fn replace_children_emits_one_combined_record_and_empty_call_removes_all() {
     let b = element(&mut dom, NodeIdx(0));
     dom.pre_insert(old, parent, None).unwrap();
     let observer = dom.create_mutation_observer(1);
-    dom.observe(observer, parent, ObserveOptions { child_list: true, ..Default::default() }).unwrap();
+    dom.observe(
+        observer,
+        parent,
+        ObserveOptions {
+            child_list: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
     dom.replace_children(parent, &nodes(&[a, b])).unwrap();
     let records = dom.take_mutation_records(observer);
     assert_eq!(records.len(), 1);
@@ -152,10 +197,23 @@ fn invalid_receivers_and_single_node_cycles_do_not_mutate_tree() {
     let parent = element(&mut dom, NodeIdx(0));
     let child = element(&mut dom, NodeIdx(0));
     dom.pre_insert(child, parent, None).unwrap();
-    assert_eq!(dom.append_nodes(child, &nodes(&[parent])), Err(DomError::HierarchyRequestError));
+    assert_eq!(
+        dom.append_nodes(child, &nodes(&[parent])),
+        Err(DomError::HierarchyRequestError)
+    );
     assert_eq!(children(&dom, parent), [child]);
-    let text = dom.create_node_in(NodeIdx(0), NodeKind::Text { data: String::new() }).unwrap();
+    let text = dom
+        .create_node_in(
+            NodeIdx(0),
+            NodeKind::Text {
+                data: String::new(),
+            },
+        )
+        .unwrap();
     assert_eq!(dom.append_nodes(text, &[]), Err(DomError::TypeError));
     assert_eq!(dom.remove(NodeIdx(0)), Err(DomError::TypeError));
-    assert_eq!(dom.before_nodes(NodeIdx(u32::MAX), &[]), Err(DomError::InvalidNode));
+    assert_eq!(
+        dom.before_nodes(NodeIdx(u32::MAX), &[]),
+        Err(DomError::InvalidNode)
+    );
 }
