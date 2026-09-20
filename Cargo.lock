@@ -97,6 +97,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "amazing-bindings"
+version = "0.0.1"
+dependencies = [
+ "amazing-dom",
+]
+
+[[package]]
 name = "amazing-common"
 version = "0.0.1"
 

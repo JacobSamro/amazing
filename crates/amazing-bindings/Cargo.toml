@@ -1,0 +1,10 @@
+[package]
+name = "amazing-bindings"
+description = "WebIDL-shaped bindings installing DOM interfaces into the JS runtime"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+amazing-dom = { path = "../amazing-dom" }

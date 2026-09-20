@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/amazing-common",
     "crates/amazing-html",
+    "crates/amazing-bindings",
     "crates/amazing-css",
     "crates/amazing-dom",
     "crates/amazing-layout",
