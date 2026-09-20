@@ -100,7 +100,7 @@ Implementation references: [CSS Images 3 object fitting](https://drafts.csswg.or
 
 # RC-2 — background longhands and bounded static SVG
 
-Base: `80c6636` (includes the integrator's DOM-2 and NET-3 refresh). The Mac
+Base: `57f0e69` (includes the integrator's DOM-2 and NET-3 refresh). The Mac
 worktree remains authoritative; all lane changes were re-synced after the
 refresh. A stale Cargo net artifact initially exposed an older ParsedUrl API
 although source hashes matched. Cleaning package artifacts fixed it without
@@ -196,3 +196,13 @@ All eight before/after repeatability pairs are stable in classifications and
 actual/reference/diff hashes. Every PNG reference changed, while only the two
 half-pixel object-position actuals changed. SVG actual and reference hashes
 are unchanged across phases, corroborating zero credited SVG gains.
+
+## Artifact-freshness correction and integration
+
+All pre-fix Windows evidence was superseded. The lane repeated its builds and
+measurements at base 57f0e69 after first-party artifact invalidation in all three
+target directories with CARGO_INCREMENTAL=0. These are saved-executable lane
+measurements, distinct from the merged product head. RC-2 was merged as
+d8437f3. The integrator reports the authoritative clean merged-head workspace
+gate: **992 passed, 0 failed, 3 ignored across 52 targets**, lock prefix
+3FEAF813. No new feature work follows RC-2.

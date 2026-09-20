@@ -6,10 +6,11 @@ same 12 PNG cases, 48-entry six-cluster scope, and 24-case paint gate, plus
 `../svg-manifest.json`: the 12 paired SVG counterparts. All upstream test and
 reference files are unmodified; background references use explicit longhands.
 
-The before binaries are built from clean dev 80c6636 after the integrator's
+The before binaries are built from clean dev 57f0e69 after the integrator's
 server refresh. The after binaries include this lane's changes, re-synced from
-the Mac source of truth. All builds and renders run on win-001. Earlier runs
-at 26c64de were superseded by the refresh and are excluded here.
+the Mac source of truth. All builds and renders run on win-001. All earlier RC-2 runs were superseded by the artifact-freshness correction
+and are excluded here. First-party fingerprints/artifacts were invalidated in
+the root, image and shell target directories; CARGO_INCREMENTAL=0 was used.
 
 The PNG/SVG diagnostics use the static `render_reftest` example at 800×600,
 scale 1, fallback fonts, local resources and no script execution. Scope and the
@@ -26,16 +27,16 @@ From the Windows lane tree, build and copy binaries before changing sources:
 ```powershell
 $env:CARGO_TARGET_DIR='C:\Users\server\target\replaced-content'
 cargo build -p amazing --locked
-Copy-Item "$env:CARGO_TARGET_DIR\debug\amazing.exe" target/rc2h-driver-before.exe
+Copy-Item "$env:CARGO_TARGET_DIR\debug\amazing.exe" target/rc2j-driver-before.exe
 $env:CARGO_TARGET_DIR='C:\Users\server\target\replaced-content-image'
 cargo build --manifest-path crates/amazing-image/Cargo.toml --example render_reftest --locked
-Copy-Item "$env:CARGO_TARGET_DIR\debug\examples\render_reftest.exe" target/rc2h-images-before.exe
+Copy-Item "$env:CARGO_TARGET_DIR\debug\examples\render_reftest.exe" target/rc2j-images-before.exe
 ```
 
 Re-sync the lane patch and repeat with `after` binary names. Run each manifest
 twice for each phase using `scripts/run-render-wpt.ps1 -SkipFetch -SkipBuild`,
 `-WptRoot target/wpt`, the appropriate `-ExecutablePath`, and
-`-OutputDirectory target/rc2h-<images|svg|scope|focused>-<before|after>-<1|2>`.
+`-OutputDirectory target/rc2j-<images|svg|scope|focused>-<before|after>-<1|2>`.
 Use `../collect-rc2.ps1` to preserve reports with normalized paths.
 `analyze-rc2.py` summarizes the saved reports into `repeatability.json`, which
 compares ordered classifications, differing pixel counts,
@@ -75,3 +76,9 @@ changed; only the two half-pixel object-position actual hashes changed. SVG
 actual and reference hashes are unchanged across phases, confirming no gain.
 Workspace: 927 passed, 0 failed, 3 ignored. Paint: 74 passed, including 12 new
 checks. Adapter: 12 passed. Standalone shell: locked check passed.
+
+The 927-test lane workspace result above is for base 57f0e69 plus RC-2.
+After merging RC-2 with the other lanes as d8437f3, the integrator independently
+reported the authoritative clean integration gate: **992 passed, 0 failed,
+3 ignored across 52 targets**, lock prefix 3FEAF813. The repeated reftest
+measurements here use saved lane executables, not that later merged binary.

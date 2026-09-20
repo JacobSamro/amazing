@@ -5,7 +5,7 @@ foreach ($kind in 'images','svg','scope','focused') {
  foreach ($phase in 'before','after') {
   foreach ($runNumber in 1,2) {
    $name="$kind-$phase-$runNumber"
-   $directory=Join-Path $RepositoryRoot "target\rc2h-$name"
+   $directory=Join-Path $RepositoryRoot "target\rc2j-$name"
    $run=Get-ChildItem $directory -Directory | Sort-Object Name | Select-Object -Last 1
    if (!$run) {throw "Missing $name"}
    $report=Get-Content (Join-Path $run.FullName 'report.json') -Raw | ConvertFrom-Json

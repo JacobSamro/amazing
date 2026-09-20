@@ -8,7 +8,7 @@
     "device_scale": 1
   },
   "font_set": "Amazing text provider; pinned WPT font tree",
-  "run_directory": "run-20260920T173908028Z-3516",
+  "run_directory": "run-20260920T180352356Z-15968",
   "counts": {
     "pass": 25,
     "mismatch": 5,
