@@ -71,9 +71,26 @@ LANE_PATHS = {
         "crates/amazing-image/",
     ],
 }
-# Every lane may also write its own scratch area and its own decision map.
+# Narrow, temporary grants recorded here so `doctor` does not cry wolf about an
+# exception the orchestrator deliberately made. Remove one when its ticket lands.
+LANE_GRANTS = {
+    # DOM-1 needs a subcommand entry point; the integrator still owns main.rs
+    # beyond the single dispatch line, and is splitting it separately.
+    "dom-bindings": ["crates/amazing/src/cmd/", "crates/amazing/src/main.rs"],
+}
+
+
 def owned_paths(lane: str) -> list[str]:
-    return LANE_PATHS.get(lane, []) + [f".agents/{lane}/", f"docs/lanes/{lane}"]
+    """Paths this lane may write: its crates, its scratch, its docs, its evidence."""
+    return (
+        LANE_PATHS.get(lane, [])
+        + LANE_GRANTS.get(lane, [])
+        + [
+            f".agents/{lane}/",
+            f"docs/lanes/{lane}",
+            f"tests/wpt-{lane}/",
+        ]
+    )
 
 
 # Context below this fraction means the agent must checkpoint and be restarted
@@ -516,13 +533,14 @@ def cmd_brief(args) -> int:
         sys.exit(f"tmuxctl: no such brief file: {src}")
     dest = lane_dir(args.target) / "brief.md"
     dest.write_text(src.read_text())
-    rel = dest.relative_to(REPO)
+    # Absolute, because the agent's cwd is its worktree, not this repo. A
+    # relative path would resolve inside the worktree and silently miss.
     pointer = (
-        f"Read {rel} and follow it exactly. "
-        f"Report progress by writing .agents/{args.target}/status.json as described there."
+        f"Read {dest} and follow it exactly. "
+        f"Report progress by writing {dest.parent}/status.json as described there."
     )
     ok = submit(session, pointer)
-    print(f"{args.target}: brief -> {rel} ({'sent' if ok else 'SUBMIT FAILED'})")
+    print(f"{args.target}: brief -> {dest} ({'sent' if ok else 'SUBMIT FAILED'})")
     return 0 if ok else 1
 
 
@@ -644,8 +662,10 @@ def cmd_doctor(args) -> int:
         # In a shared checkout every lane sees every other lane's edits plus any
         # pre-existing dirt, so the check would report the same noise six times.
         if worktree:
+            # -uall expands untracked directories; git otherwise collapses
+            # them to "docs/lanes/" and a lane's own file looks like a stray.
             changed = subprocess.run(
-                ["git", "-C", worktree, "status", "--porcelain"],
+                ["git", "-C", worktree, "status", "--porcelain", "-uall"],
                 capture_output=True,
                 text=True,
             ).stdout.splitlines()
