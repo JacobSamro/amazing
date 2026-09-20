@@ -660,13 +660,15 @@ fn render_dom_with_resources(
     let controls = document_url
         .map(|url| collect_control_regions(dom, &root, url))
         .unwrap_or_default();
+    let styles = amazing_css::compute(dom, &[amazing_css::parse_stylesheet(css)]);
+    let images = amazing_paint::image::StyledImages { images: resources, styles: &styles };
     let surface = amazing_paint::paint_document_with_resources(
         &root,
         VIEWPORT_WIDTH,
         page_height,
         &fonts,
         &glyphs,
-        resources,
+        &images,
     );
     (surface, links, controls)
 }
@@ -1145,7 +1147,6 @@ fn load_page_resources(
             .trim()
             .parse::<u32>()
             .ok()
-            .filter(|value| *value > 0)
             .map(|value| value as f32)
     }
 
@@ -1174,25 +1175,12 @@ fn load_page_resources(
             && response.status == 200
             && let Some(image) = decode_web_image(&response.body)
         {
-            let intrinsic_width = image.width as f32;
-            let intrinsic_height = image.height as f32;
-            let width_attr = dimension(dom, node, "width");
-            let height_attr = dimension(dom, node, "height");
-            let used_size = match (width_attr, height_attr) {
-                (Some(width), Some(height)) => amazing_layout::IntrinsicSize { width, height },
-                (Some(width), None) => amazing_layout::IntrinsicSize {
-                    width,
-                    height: intrinsic_height * width / intrinsic_width,
-                },
-                (None, Some(height)) => amazing_layout::IntrinsicSize {
-                    width: intrinsic_width * height / intrinsic_height,
-                    height,
-                },
-                (None, None) => amazing_layout::IntrinsicSize {
-                    width: intrinsic_width,
-                    height: intrinsic_height,
-                },
-            };
+            let retained: usize = resources.images.iter().map(|entry| entry.image.pixels.len()).sum();
+            if retained.saturating_add(image.pixels.len()) > 128 * 1024 * 1024 { return; }
+            let Some(size) = amazing_media::ImageSize::resolve(
+                image.width, image.height, dimension(dom, node, "width"), dimension(dom, node, "height"),
+            ) else { return; };
+            let used_size = amazing_layout::IntrinsicSize { width: size.width, height: size.height };
             resources.images.push(PageImage {
                 node,
                 image,
@@ -1218,25 +1206,7 @@ fn load_page_resources(
 }
 
 fn decode_web_image(bytes: &[u8]) -> Option<amazing_media::Image> {
-    if let Ok(image) = amazing_media::decode_image(bytes) {
-        return Some(image);
-    }
-
-    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
-        .with_guessed_format()
-        .ok()?;
-    let mut limits = image::Limits::default();
-    limits.max_image_width = Some(8192);
-    limits.max_image_height = Some(8192);
-    limits.max_alloc = Some(64 * 1024 * 1024);
-    reader.limits(limits);
-    let rgba = reader.decode().ok()?.into_rgba8();
-    let (width, height) = rgba.dimensions();
-    Some(amazing_media::Image {
-        width,
-        height,
-        pixels: rgba.into_raw(),
-    })
+    amazing_image::decode(bytes, amazing_image::DecodeLimits::default()).ok()
 }
 
 fn document_title(dom: &amazing_dom::Dom) -> Option<String> {

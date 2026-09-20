@@ -1,0 +1,305 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "sha256-path-per-marker-cluster",
+    "per_cluster": 8
+  },
+  "sparse_paths": [
+    "css/css-images",
+    "html/semantics/forms",
+    "html/semantics/embedded-content",
+    "html/canvas",
+    "svg"
+  ],
+  "tests": [
+    {
+      "id": "controls__html__semantics__forms__the-input-element__type-change-to-password.html",
+      "test": "html/semantics/forms/the-input-element/type-change-to-password.html",
+      "cluster": "controls",
+      "scripted": true
+    },
+    {
+      "id": "controls__html__semantics__forms__the-input-element__range-tick-marks-04.html",
+      "test": "html/semantics/forms/the-input-element/range-tick-marks-04.html",
+      "cluster": "controls",
+      "scripted": false
+    },
+    {
+      "id": "controls__html__semantics__forms__the-select-element__customizable-select__select-picker-pseudo-target-text.html",
+      "test": "html/semantics/forms/the-select-element/customizable-select/select-picker-pseudo-target-text.html",
+      "cluster": "controls",
+      "scripted": true
+    },
+    {
+      "id": "controls__html__semantics__forms__the-input-element__type-change-to-same-type.html",
+      "test": "html/semantics/forms/the-input-element/type-change-to-same-type.html",
+      "cluster": "controls",
+      "scripted": true
+    },
+    {
+      "id": "controls__html__semantics__forms__the-textarea-element__multiline-placeholder.html",
+      "test": "html/semantics/forms/the-textarea-element/multiline-placeholder.html",
+      "cluster": "controls",
+      "scripted": true
+    },
+    {
+      "id": "controls__html__semantics__forms__the-select-element__reset-algorithm-rendering.html",
+      "test": "html/semantics/forms/the-select-element/reset-algorithm-rendering.html",
+      "cluster": "controls",
+      "scripted": true
+    },
+    {
+      "id": "controls__html__semantics__forms__the-input-element__dynamic-value-update.html",
+      "test": "html/semantics/forms/the-input-element/dynamic-value-update.html",
+      "cluster": "controls",
+      "scripted": true
+    },
+    {
+      "id": "controls__html__semantics__forms__the-select-element__customizable-select__select-picker-icon-content-none.html",
+      "test": "html/semantics/forms/the-select-element/customizable-select/select-picker-icon-content-none.html",
+      "cluster": "controls",
+      "scripted": true
+    },
+    {
+      "id": "images__html__semantics__embedded-content__the-img-element__animated-webp-update.tentative.html",
+      "test": "html/semantics/embedded-content/the-img-element/animated-webp-update.tentative.html",
+      "cluster": "images",
+      "scripted": true
+    },
+    {
+      "id": "images__css__css-images__object-fit-fill-svg-002o.html",
+      "test": "css/css-images/object-fit-fill-svg-002o.html",
+      "cluster": "images",
+      "scripted": false
+    },
+    {
+      "id": "images__css__css-images__object-position-png-001e.html",
+      "test": "css/css-images/object-position-png-001e.html",
+      "cluster": "images",
+      "scripted": false
+    },
+    {
+      "id": "images__css__css-images__object-fit-cover-svg-003e.html",
+      "test": "css/css-images/object-fit-cover-svg-003e.html",
+      "cluster": "images",
+      "scripted": false
+    },
+    {
+      "id": "images__css__css-images__object-fit-cover-svg-004e.html",
+      "test": "css/css-images/object-fit-cover-svg-004e.html",
+      "cluster": "images",
+      "scripted": false
+    },
+    {
+      "id": "images__css__css-images__object-fit-scale-down-svg-001i.html",
+      "test": "css/css-images/object-fit-scale-down-svg-001i.html",
+      "cluster": "images",
+      "scripted": false
+    },
+    {
+      "id": "images__css__css-images__object-view-box-contain-intrinsic-size.html",
+      "test": "css/css-images/object-view-box-contain-intrinsic-size.html",
+      "cluster": "images",
+      "scripted": false
+    },
+    {
+      "id": "images__svg__coordinate-systems__view-invalid-viewBox.html",
+      "test": "svg/coordinate-systems/view-invalid-viewBox.html",
+      "cluster": "images",
+      "scripted": false
+    },
+    {
+      "id": "svg__svg__painting__text-clip-path-transform.html",
+      "test": "svg/painting/text-clip-path-transform.html",
+      "cluster": "svg",
+      "scripted": false
+    },
+    {
+      "id": "svg__svg__linking__reftests__use-descendant-combinator-003.html",
+      "test": "svg/linking/reftests/use-descendant-combinator-003.html",
+      "cluster": "svg",
+      "scripted": true
+    },
+    {
+      "id": "svg__svg__painting__subpixel-clip-path-transform.html",
+      "test": "svg/painting/subpixel-clip-path-transform.html",
+      "cluster": "svg",
+      "scripted": false
+    },
+    {
+      "id": "svg__css__css-images__object-fit-fill-svg-002o.html",
+      "test": "css/css-images/object-fit-fill-svg-002o.html",
+      "cluster": "svg",
+      "scripted": false
+    },
+    {
+      "id": "svg__svg__styling__svg-filter-render-cross-origin-frame-in-same-origin-frame.tentative.https.html",
+      "test": "svg/styling/svg-filter-render-cross-origin-frame-in-same-origin-frame.tentative.https.html",
+      "cluster": "svg",
+      "scripted": true
+    },
+    {
+      "id": "svg__svg__painting__reftests__non-scaling-stroke-003.html",
+      "test": "svg/painting/reftests/non-scaling-stroke-003.html",
+      "cluster": "svg",
+      "scripted": false
+    },
+    {
+      "id": "svg__css__css-images__object-fit-cover-svg-003e.html",
+      "test": "css/css-images/object-fit-cover-svg-003e.html",
+      "cluster": "svg",
+      "scripted": false
+    },
+    {
+      "id": "svg__svg__render__reftests__nested-svg-overflow-clip.html",
+      "test": "svg/render/reftests/nested-svg-overflow-clip.html",
+      "cluster": "svg",
+      "scripted": false
+    },
+    {
+      "id": "canvas__html__canvas__offscreen__layers__2d.layer.ctm.resetTransform.w.html",
+      "test": "html/canvas/offscreen/layers/2d.layer.ctm.resetTransform.w.html",
+      "cluster": "canvas",
+      "scripted": true
+    },
+    {
+      "id": "canvas__html__canvas__offscreen__layers__2d.layer.clearRect.partial.w.html",
+      "test": "html/canvas/offscreen/layers/2d.layer.clearRect.partial.w.html",
+      "cluster": "canvas",
+      "scripted": true
+    },
+    {
+      "id": "canvas__html__canvas__offscreen__layers__2d.layer.nested-ctx-filter.w.html",
+      "test": "html/canvas/offscreen/layers/2d.layer.nested-ctx-filter.w.html",
+      "cluster": "canvas",
+      "scripted": true
+    },
+    {
+      "id": "canvas__html__canvas__element__compositing__2d.composite.grid.no_filter.no_shadow.drawImage.html",
+      "test": "html/canvas/element/compositing/2d.composite.grid.no_filter.no_shadow.drawImage.html",
+      "cluster": "canvas",
+      "scripted": true
+    },
+    {
+      "id": "canvas__html__canvas__offscreen__layers__2d.layer.css-filters.blur-and-shadow.tentative.w.html",
+      "test": "html/canvas/offscreen/layers/2d.layer.css-filters.blur-and-shadow.tentative.w.html",
+      "cluster": "canvas",
+      "scripted": true
+    },
+    {
+      "id": "canvas__html__canvas__offscreen__manual__layers__unclosed-layers.w.html",
+      "test": "html/canvas/offscreen/manual/layers/unclosed-layers.w.html",
+      "cluster": "canvas",
+      "scripted": true
+    },
+    {
+      "id": "canvas__html__canvas__offscreen__text__2d.text.measure.fillTextCluster-font-change.tentative.w.html",
+      "test": "html/canvas/offscreen/text/2d.text.measure.fillTextCluster-font-change.tentative.w.html",
+      "cluster": "canvas",
+      "scripted": true
+    },
+    {
+      "id": "canvas__html__canvas__offscreen__layers__2d.layer.clip-inside-and-outside.ctx-filter.html",
+      "test": "html/canvas/offscreen/layers/2d.layer.clip-inside-and-outside.ctx-filter.html",
+      "cluster": "canvas",
+      "scripted": true
+    },
+    {
+      "id": "embedded__css__css-images__object-fit-fill-svg-002o.html",
+      "test": "css/css-images/object-fit-fill-svg-002o.html",
+      "cluster": "embedded",
+      "scripted": false
+    },
+    {
+      "id": "embedded__svg__styling__svg-filter-render-cross-origin-frame-in-same-origin-frame.tentative.https.html",
+      "test": "svg/styling/svg-filter-render-cross-origin-frame-in-same-origin-frame.tentative.https.html",
+      "cluster": "embedded",
+      "scripted": true
+    },
+    {
+      "id": "embedded__css__css-images__object-position-png-001e.html",
+      "test": "css/css-images/object-position-png-001e.html",
+      "cluster": "embedded",
+      "scripted": false
+    },
+    {
+      "id": "embedded__css__css-images__object-fit-cover-svg-003e.html",
+      "test": "css/css-images/object-fit-cover-svg-003e.html",
+      "cluster": "embedded",
+      "scripted": false
+    },
+    {
+      "id": "embedded__css__css-images__object-fit-cover-svg-004e.html",
+      "test": "css/css-images/object-fit-cover-svg-004e.html",
+      "cluster": "embedded",
+      "scripted": false
+    },
+    {
+      "id": "embedded__css__css-images__object-fit-scale-down-svg-001o.html",
+      "test": "css/css-images/object-fit-scale-down-svg-001o.html",
+      "cluster": "embedded",
+      "scripted": false
+    },
+    {
+      "id": "embedded__css__css-images__object-fit-contain-svg-005e.html",
+      "test": "css/css-images/object-fit-contain-svg-005e.html",
+      "cluster": "embedded",
+      "scripted": false
+    },
+    {
+      "id": "embedded__css__css-images__image-orientation__image-orientation-none-image-document.html",
+      "test": "css/css-images/image-orientation/image-orientation-none-image-document.html",
+      "cluster": "embedded",
+      "scripted": false
+    },
+    {
+      "id": "media__css__css-images__object-fit-fill-svg-003p.html",
+      "test": "css/css-images/object-fit-fill-svg-003p.html",
+      "cluster": "media",
+      "scripted": false
+    },
+    {
+      "id": "media__css__css-images__object-fit-cover-svg-004p.html",
+      "test": "css/css-images/object-fit-cover-svg-004p.html",
+      "cluster": "media",
+      "scripted": false
+    },
+    {
+      "id": "media__css__css-images__object-fit-contain-svg-005p.html",
+      "test": "css/css-images/object-fit-contain-svg-005p.html",
+      "cluster": "media",
+      "scripted": false
+    },
+    {
+      "id": "media__css__css-images__object-position-svg-002p.html",
+      "test": "css/css-images/object-position-svg-002p.html",
+      "cluster": "media",
+      "scripted": false
+    },
+    {
+      "id": "media__css__css-images__object-fit-cover-svg-001p.html",
+      "test": "css/css-images/object-fit-cover-svg-001p.html",
+      "cluster": "media",
+      "scripted": false
+    },
+    {
+      "id": "media__html__semantics__embedded-content__media-elements__track__track-element__track-webvtt-non-snap-to-lines.html",
+      "test": "html/semantics/embedded-content/media-elements/track/track-element/track-webvtt-non-snap-to-lines.html",
+      "cluster": "media",
+      "scripted": true
+    },
+    {
+      "id": "media__css__css-images__object-fit-contain-png-001p.html",
+      "test": "css/css-images/object-fit-contain-png-001p.html",
+      "cluster": "media",
+      "scripted": false
+    },
+    {
+      "id": "media__html__semantics__embedded-content__the-embed-element__embed-represent-nothing-03.html",
+      "test": "html/semantics/embedded-content/the-embed-element/embed-represent-nothing-03.html",
+      "cluster": "media",
+      "scripted": false
+    }
+  ]
+}

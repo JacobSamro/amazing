@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "all-five-fit-modes-two-aspect-ratios-plus-object-position"
+  },
+  "sparse_paths": [
+    "css/css-images"
+  ],
+  "tests": [
+    {
+      "id": "object-fit-fill-png-001i",
+      "test": "css/css-images/object-fit-fill-png-001i.html"
+    },
+    {
+      "id": "object-fit-fill-png-002i",
+      "test": "css/css-images/object-fit-fill-png-002i.html"
+    },
+    {
+      "id": "object-fit-contain-png-001i",
+      "test": "css/css-images/object-fit-contain-png-001i.html"
+    },
+    {
+      "id": "object-fit-contain-png-002i",
+      "test": "css/css-images/object-fit-contain-png-002i.html"
+    },
+    {
+      "id": "object-fit-cover-png-001i",
+      "test": "css/css-images/object-fit-cover-png-001i.html"
+    },
+    {
+      "id": "object-fit-cover-png-002i",
+      "test": "css/css-images/object-fit-cover-png-002i.html"
+    },
+    {
+      "id": "object-fit-none-png-001i",
+      "test": "css/css-images/object-fit-none-png-001i.html"
+    },
+    {
+      "id": "object-fit-none-png-002i",
+      "test": "css/css-images/object-fit-none-png-002i.html"
+    },
+    {
+      "id": "object-fit-scale-down-png-001i",
+      "test": "css/css-images/object-fit-scale-down-png-001i.html"
+    },
+    {
+      "id": "object-fit-scale-down-png-002i",
+      "test": "css/css-images/object-fit-scale-down-png-002i.html"
+    },
+    {
+      "id": "object-position-png-001i",
+      "test": "css/css-images/object-position-png-001i.html"
+    },
+    {
+      "id": "object-position-png-002i",
+      "test": "css/css-images/object-position-png-002i.html"
+    }
+  ]
+}

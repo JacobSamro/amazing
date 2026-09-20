@@ -187,11 +187,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "amazing-js"
+name = "amazing-image"
 version = "0.0.1"
 dependencies = [
- "amazing-common",
+ "amazing-css",
+ "amazing-dom",
+ "amazing-html",
+ "amazing-layout",
+ "amazing-media",
+ "amazing-paint",
+ "image",
 ]
+
+[[package]]
+name = "amazing-js"
+version = "0.0.1"
 
 [[package]]
 name = "amazing-layout"
@@ -240,6 +250,7 @@ dependencies = [
  "amazing-css",
  "amazing-dom",
  "amazing-html",
+ "amazing-image",
  "amazing-js",
  "amazing-layout",
  "amazing-media",

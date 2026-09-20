@@ -43,6 +43,7 @@ use amazing_text::{GlyphCacheKey, GlyphContent, GlyphImage, TextSystem};
 use crate::color::parse_css_color;
 use crate::display_list::{build_display_list, GroupEffect, PaintCommand};
 use crate::surface::Surface;
+use crate::image::ImagePresentation;
 use crate::text::{draw_fragment_clipped, GlyphProvider, RectInkProvider};
 
 const CANVAS_WHITE: [u8; 4] = [255, 255, 255, 255];
@@ -275,6 +276,10 @@ fn source_over(source: [u8; 4], destination: [u8; 4], opacity: f32) -> [u8; 4] {
 /// Seam through which the painter obtains decoded pixels for replaced nodes.
 pub trait ImageProvider {
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image>;
+    /// Inline fragments retain node identity; callers supply its computed style.
+    fn presentation(&self, _node: amazing_dom::NodeIdx) -> ImagePresentation {
+        ImagePresentation::default()
+    }
 }
 
 /// Adapter used by callers that have no decoded images.
@@ -398,7 +403,7 @@ fn paint_decorations(
     paint_borders(surface, box_, text_color, clip);
     if box_.replaced_size.is_some() {
         if let Some(image) = box_.node.and_then(|node| images.image(node)) {
-            paint_image(surface, &box_.content_box, image, clip);
+            paint_image(surface, &box_.content_box, image, ImagePresentation::from_style(&box_.style), clip);
         }
     }
 }
@@ -792,6 +797,7 @@ fn paint_shaped_lines(
                         h: replaced.height,
                     },
                     image,
+                    images.presentation(replaced.node),
                     clip,
                 );
             }
@@ -1412,6 +1418,7 @@ fn paint_lines(
                         h: replaced.height,
                     },
                     image,
+                    images.presentation(replaced.node),
                     clip,
                 );
             }
@@ -1437,8 +1444,15 @@ fn paint_image(
     surface: &mut Surface,
     rect: &amazing_layout::Rect,
     image: &amazing_media::Image,
+    presentation: ImagePresentation,
     clip: ClipRect,
 ) {
+    let Some(expected) = (image.width as usize).checked_mul(image.height as usize)
+        .and_then(|n| n.checked_mul(4)) else { return; };
+    if image.pixels.len() != expected { return; }
+    let clip = clip.intersect(rect.x, rect.y, rect.w, rect.h);
+    let Some(destination) = presentation.destination(*rect, (image.width, image.height)) else { return; };
+    let rect = &destination;
     if image.width == 0 || image.height == 0 || rect.w <= 0.0 || rect.h <= 0.0 {
         return;
     }
@@ -1455,11 +1469,11 @@ fn paint_image(
     let clipped_x1 = x1.max(0).min(pixel_clip[2]).min(surface.width as i64);
     let clipped_y1 = y1.max(0).min(pixel_clip[3]).min(surface.height as i64);
     for y in clipped_y0..clipped_y1 {
-        let source_y = (((y - y0) as u64) * image.height as u64 / (y1 - y0) as u64)
-            .min(image.height.saturating_sub(1) as u64) as u32;
+        let source_y = (((y as f64 + 0.5 - rect.y as f64) / rect.h as f64) * image.height as f64)
+            .floor().clamp(0.0, image.height.saturating_sub(1) as f64) as u32;
         for x in clipped_x0..clipped_x1 {
-            let source_x = (((x - x0) as u64) * image.width as u64 / (x1 - x0) as u64)
-                .min(image.width.saturating_sub(1) as u64) as u32;
+            let source_x = (((x as f64 + 0.5 - rect.x as f64) / rect.w as f64) * image.width as f64)
+                .floor().clamp(0.0, image.width.saturating_sub(1) as f64) as u32;
             let source_index = ((source_y as usize * image.width as usize + source_x as usize) * 4)
                 .min(image.pixels.len());
             let Some(source) = image.pixels.get(source_index..source_index + 4) else {
@@ -1472,17 +1486,7 @@ fn paint_image(
             let destination = surface
                 .get_pixel(x as u32, y as u32)
                 .unwrap_or([0, 0, 0, 0]);
-            let alpha = source_color[3] as u16;
-            let inverse = 255 - alpha;
-            let blended = [
-                ((source_color[0] as u16 * alpha + destination[0] as u16 * inverse + 127) / 255)
-                    as u8,
-                ((source_color[1] as u16 * alpha + destination[1] as u16 * inverse + 127) / 255)
-                    as u8,
-                ((source_color[2] as u16 * alpha + destination[2] as u16 * inverse + 127) / 255)
-                    as u8,
-                255,
-            ];
+            let blended = source_over(source_color, destination, 1.0);
             surface.set_pixel(x as u32, y as u32, blended);
         }
     }
@@ -1882,3 +1886,7 @@ mod tests {
         assert_eq!(surf.get_pixel(4, 4), Some([128, 128, 128, 255]));
     }
 }
+
+#[cfg(test)]
+#[path = "image_tests.rs"]
+mod image_tests;
