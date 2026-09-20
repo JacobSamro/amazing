@@ -15,6 +15,8 @@
 
 pub mod events;
 pub mod mutation;
+mod namespace;
+pub use namespace::NamespaceId;
 pub mod range;
 pub mod traversal;
 mod tree;
@@ -24,14 +26,18 @@ pub use tree::{DocumentPosition, DomError};
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct NodeIdx(pub u32);
 
-/// Namespace carried by an element node. HTML is the default for DOM-created
-/// elements; the tree builder selects SVG or MathML while parsing foreign
-/// content.
+/// Namespace carried by an element node. The legacy create_element constructor
+/// defaults to HTML; namespace-aware constructors preserve null and arbitrary URIs.
+/// Other namespace handles, like NodeIdx, belong to a single Dom arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Namespace {
     Html,
     Svg,
     MathMl,
+    /// An element with no namespace (distinct from a non-element).
+    Null,
+    /// URI interned in the owning Dom; handles must not cross arenas.
+    Other(NamespaceId),
 }
 
 /// Node kinds. Grows in later phases (attributes live on `Element` since
@@ -67,6 +73,7 @@ pub struct Node {
     owner_document: NodeIdx,
     namespaced_attributes: Vec<(String, String, String)>,
     character_data_units: Option<Vec<u16>>,
+    prefix: Option<String>,
     pub kind: NodeKind,
     pub parent: Option<NodeIdx>,
     pub first_child: Option<NodeIdx>,
@@ -79,6 +86,7 @@ pub struct Node {
 #[derive(Debug)]
 pub struct Dom {
     nodes: Vec<Node>,
+    namespace_uris: Vec<String>,
     mutations: mutation::MutationObservers,
     ranges: Vec<Option<range::AbstractRange>>,
     traversals: traversal::Traversals,
@@ -91,6 +99,7 @@ impl Dom {
     pub fn new() -> Self {
         let mut dom = Self {
             nodes: Vec::new(),
+            namespace_uris: Vec::new(),
             mutations: mutation::MutationObservers::default(),
             ranges: Vec::new(),
             traversals: traversal::Traversals::default(),
@@ -100,6 +109,7 @@ impl Dom {
             owner_document: NodeIdx(0),
             namespaced_attributes: Vec::new(),
             character_data_units: None,
+            prefix: None,
             kind: NodeKind::Document,
             parent: None,
             first_child: None,
@@ -128,6 +138,7 @@ impl Dom {
             owner_document,
             namespaced_attributes: Vec::new(),
             character_data_units: None,
+            prefix: None,
             kind,
             parent: None,
             first_child: None,
@@ -310,6 +321,15 @@ impl Dom {
                     Namespace::Html => {}
                     Namespace::Svg => out.push_str("svg "),
                     Namespace::MathMl => out.push_str("math "),
+                    Namespace::Null => {}
+                    Namespace::Other(_) => {
+                        out.push_str(self.namespace_uri(idx).expect("interned namespace"));
+                        out.push(' ');
+                    }
+                }
+                if let Some(prefix) = self.prefix(idx) {
+                    out.push_str(prefix);
+                    out.push(':');
                 }
                 out.push_str(name);
                 if let NodeKind::Element { attrs, .. } = &self.get(idx).kind {
