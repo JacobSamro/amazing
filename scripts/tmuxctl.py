@@ -85,6 +85,9 @@ LANE_GRANTS = {
 # across 5 crates. Granted for ADDED MATCH ARMS ONLY, verified at merge; the
 # shell's two matches stay with the integrator because another lane holds that
 # grant and two lanes must not edit the shell at once.
+# JS-2 adds the amazing-js -> amazing-regex dependency edge, which only cargo
+# can record. Granted for that single edge, verified by diff at merge.
+LANE_GRANTS["js-lang"] = ["Cargo.lock"]
 LANE_GRANTS["dom-bindings"] += [
     "crates/amazing-html/src/tree.rs",
     "crates/amazing-layout/src/box_tree.rs",
