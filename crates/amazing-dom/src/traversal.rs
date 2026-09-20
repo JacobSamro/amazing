@@ -271,7 +271,35 @@ impl Dom {
         let id = id.into();
         let t = self.traverser(id)?;
         if t.pending.is_some() {
-            return Err(DomError::InvalidStateError);
+            // The active check belongs to filtering, not the traversal entry.
+            // A nested operation with no candidate can return null without
+            // disturbing the suspended outer callback.
+            let empty = match t.kind {
+                Kind::Walker { current } => match direction {
+                    Traverse::Parent => current == t.root || self.get(current).parent.is_none(),
+                    Traverse::FirstChild => self.get(current).first_child.is_none(),
+                    Traverse::LastChild => self.get(current).last_child.is_none(),
+                    Traverse::NextSibling | Traverse::PreviousSibling => self
+                        .walker_sibling_candidate(id, current, direction == Traverse::NextSibling)?
+                        .is_none(),
+                    Traverse::Next => self.following(current, t.root, true).is_none(),
+                    Traverse::Previous => self.walker_previous_candidate(id, current)?.is_none(),
+                },
+                Kind::Iterator { reference, .. } => match direction {
+                    Traverse::Next => {
+                        !reference.before && self.following(reference.node, t.root, true).is_none()
+                    }
+                    Traverse::Previous => {
+                        reference.before && self.preceding(reference.node, t.root).is_none()
+                    }
+                    _ => return Err(DomError::NotSupportedError),
+                },
+            };
+            return if empty {
+                Ok(TraversalStep::Done(None))
+            } else {
+                Err(DomError::InvalidStateError)
+            };
         }
         let root = t.root;
         let next = match t.kind {

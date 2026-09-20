@@ -342,5 +342,5 @@ replace-data, split-text, and normalize algorithms (reviewed 2026-09-20).
 - No JS binding, custom-element/shadow-tree extension, WPT result, or broad
   browser conformance is claimed. DOM-1 remains parked pending JS-2.
 
-Windows iteration: 105 DOM tests passed, zero failed (65 preexisting plus 40
+Windows iteration: 107 DOM tests passed, zero failed (65 preexisting plus 42
 new focused tests). Final refreshed-tree crate/workspace repeat gates pending.

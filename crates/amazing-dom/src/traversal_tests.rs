@@ -233,3 +233,53 @@ fn legacy_detach_is_noop_and_gc_release_is_explicit() {
     d.release_traversal(i);
     assert_eq!(d.iterator_reference(i), Err(DomError::InvalidStateError));
 }
+#[test]
+fn nested_traversal_without_a_filter_candidate_returns_null() {
+    let (mut d, root, a, _, _, _) = setup();
+    let w = d
+        .create_tree_walker(root, NodeFilter::SHOW_ALL, Some(1))
+        .unwrap();
+    assert!(
+        matches!(d.begin_traversal(w, Traverse::Next), Ok(TraversalStep::Filter { node, .. }) if node == a)
+    );
+    assert_eq!(
+        d.begin_traversal(w, Traverse::Parent),
+        Ok(TraversalStep::Done(None))
+    );
+    assert_eq!(
+        d.begin_traversal(w, Traverse::Next),
+        Err(DomError::InvalidStateError)
+    );
+    assert_eq!(
+        d.resume_traversal(w.into(), Ok(1)),
+        Ok(TraversalStep::Done(Some(a)))
+    );
+}
+#[test]
+fn reverse_filter_removal_moves_candidate_before_next_node() {
+    let (mut d, root, a, text, b, _) = setup();
+    let i = d
+        .create_node_iterator(root, NodeFilter::SHOW_ALL, Some(1))
+        .unwrap();
+    for _ in 0..3 {
+        run(&mut d, i, Traverse::Next, |_| 1);
+    }
+    assert!(
+        matches!(d.begin_traversal(i, Traverse::Previous), Ok(TraversalStep::Filter { node, .. }) if node == text)
+    );
+    d.detach(a);
+    assert_eq!(
+        d.resume_traversal(i.into(), Ok(2)),
+        Ok(TraversalStep::Filter {
+            traversal: i.into(),
+            callback: 1,
+            node: root
+        })
+    );
+    assert_eq!(
+        d.resume_traversal(i.into(), Ok(1)),
+        Ok(TraversalStep::Done(Some(root)))
+    );
+    assert_eq!(run(&mut d, i, Traverse::Next, |_| 1), Some(root));
+    assert_eq!(run(&mut d, i, Traverse::Next, |_| 1), Some(b));
+}
