@@ -10,6 +10,7 @@ members = [
     "crates/amazing-media",
     "crates/amazing-fetch",
     "crates/amazing-net",
+    "crates/amazing-net-brotli",
     "crates/amazing-net-tls",
     "crates/amazing-paint",
     "crates/amazing-regex",

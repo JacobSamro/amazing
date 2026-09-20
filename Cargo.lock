@@ -156,6 +156,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "amazing-net-brotli"
+version = "0.0.1"
+dependencies = [
+ "brotli-decompressor",
+]
+
+[[package]]
 name = "amazing-net-tls"
 version = "0.0.1"
 dependencies = [

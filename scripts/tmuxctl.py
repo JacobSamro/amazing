@@ -64,7 +64,12 @@ LANE_PATHS = {
     "dom-bindings": ["crates/amazing-dom/", "crates/amazing-bindings/"],
     "layout": ["crates/amazing-layout/"],
     "css": ["crates/amazing-css/"],
-    "net": ["crates/amazing-net/", "crates/amazing-net-tls/", "crates/amazing-fetch/"],
+    "net": [
+        "crates/amazing-net/",
+        "crates/amazing-net-tls/",
+        "crates/amazing-net-brotli/",
+        "crates/amazing-fetch/",
+    ],
     "replaced-content": [
         "crates/amazing-paint/",
         "crates/amazing-media/",
