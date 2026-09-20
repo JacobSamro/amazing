@@ -155,6 +155,18 @@ def capture_live(pane: str) -> str:
     return capture(pane, 0)
 
 
+def pane_cwd(session: str) -> str:
+    """The pane's current directory, read live.
+
+    Never trust the cwd cached at adopt time: an agent relaunched into its
+    worktree keeps the same session name but changes directory, and an
+    isolation check against a stale value would silently pass.
+    """
+    return tmux(
+        ["display-message", "-p", "-t", session, "#{pane_current_path}"]
+    ).strip()
+
+
 def discover(prefix: str = DEFAULT_SESSION_PREFIX) -> list[dict]:
     """Find candidate agent panes, newest session last."""
     fmt = "#{session_name}\t#{pane_id}\t#{pane_pid}\t#{pane_current_path}"
@@ -620,7 +632,7 @@ def cmd_doctor(args) -> int:
     findings: list[str] = []
     for lane, meta in reg.items():
         worktree = meta.get("worktree")
-        cwd = meta.get("cwd", "")
+        cwd = pane_cwd(resolve(lane))
 
         # 1. Isolation.
         if not worktree:
