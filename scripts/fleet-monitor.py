@@ -129,6 +129,12 @@ def scan(seen: set[str]) -> list[str]:
         # Failure paths: a stalled or context-exhausted lane must not look quiet.
         if tmuxctl.state_of(raw) == "busy":
             mins = stale_minutes(tmuxctl.age_of(st.get("updated", "-")))
+            # A restarted agent inherits its predecessor's status.json. Until
+            # it writes its own, measure staleness from the newest brief, or a
+            # fresh agent working normally looks stalled for days.
+            brief = tmuxctl.AGENTS_DIR / lane / "brief.md"
+            if brief.exists():
+                mins = min(mins, int((time.time() - brief.stat().st_mtime) // 60))
             if mins >= tmuxctl.STALL_MINUTES:
                 key = digest(f"stall:{lane}:{ticket}:{mins // 10}")
                 if key not in seen:
