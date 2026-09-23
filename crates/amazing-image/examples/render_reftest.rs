@@ -187,3 +187,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     surface.save_ppm(&args[3])?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_image_and_stylesheet_sources_do_not_become_file_paths() {
+        let page = Path::new("C:/unavailable/page.html");
+        let image = read_resource(page, "data:image/x-portable-pixmap,P6%0A1%201%0A255%0A%FF%00%00").unwrap();
+        let decoded = amazing_image::decode(&image, Default::default()).unwrap();
+        assert_eq!((decoded.width, decoded.height), (1, 1));
+        assert_eq!(read_resource(page, "data:text/css;base64,Ym9keXtjb2xvcjpyZWR9").unwrap(), b"body{color:red}");
+    }
+}

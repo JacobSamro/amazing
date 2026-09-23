@@ -273,7 +273,7 @@ pub(crate) fn load_page_media(dom: &amazing_dom::Dom, page: &str) -> PageMedia {
                 let resolved = resolve_script_url(page, source);
                 match load_resource(&resolved, 16 * 1024 * 1024)
                     .and_then(|bytes| {
-                        amazing_image::decode(&bytes, Default::default())
+                        amazing_media::decode_image(&bytes)
                             .map_err(|error| error.to_string())
                     }) {
                     Ok(image) => {
