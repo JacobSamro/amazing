@@ -1527,3 +1527,13 @@ wire echoes, and XHR visibility. Fixed Fetch header value normalization to trim
 HTTP whitespace at edges while retaining valid control bytes. Linux baseline
 128/332; after 332/332. See `crates/amazing-fetch/tests/wpt/header_xhr/PROVENANCE.md`
 for scope and pending JS runner adoption.
+
+### NET-25 — pinned XHR request-header cluster
+
+Ported 14 pinned WPT source/fixture files at `c48d5874` and a 198-expectation
+native matrix for `setRequestHeader`. Kept canonical lowercase header names for
+policy while retaining the first wire spelling, preserved combined empty
+values, accepted RFC token punctuation on HTTP/1.1, and let author Accept and
+User-Agent replace transport defaults. Linux baseline 164/198; after 198/198.
+See `crates/amazing-fetch/tests/wpt/xhr_request_headers/PROVENANCE.md` for
+selection limits and pending JS runner adoption.

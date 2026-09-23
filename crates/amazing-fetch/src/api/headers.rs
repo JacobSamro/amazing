@@ -1,5 +1,6 @@
 use super::{byte_string, ApiError};
 use crate::{safelisted_request_header, HeaderList};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeaderGuard {
@@ -13,6 +14,7 @@ pub enum HeaderGuard {
 pub struct ApiHeaders {
     guard: HeaderGuard,
     entries: Vec<(String, String)>,
+    wire_names: BTreeMap<String, String>,
 }
 impl Default for ApiHeaders {
     fn default() -> Self {
@@ -24,6 +26,7 @@ impl ApiHeaders {
         Self {
             guard,
             entries: Vec::new(),
+            wire_names: BTreeMap::new(),
         }
     }
     pub fn guard(&self) -> HeaderGuard {
@@ -31,6 +34,9 @@ impl ApiHeaders {
     }
     pub fn raw_entries(&self) -> &[(String, String)] {
         &self.entries
+    }
+    pub(crate) fn wire_name<'a>(&'a self, name: &'a str) -> &'a str {
+        self.wire_names.get(name).map_or(name, String::as_str)
     }
     pub fn set_guard(&mut self, guard: HeaderGuard) {
         self.guard = guard;
@@ -58,18 +64,20 @@ impl ApiHeaders {
         Ok(result)
     }
     pub fn from_header_list(guard: HeaderGuard, list: &HeaderList) -> Self {
-        Self {
-            guard,
-            entries: list
-                .iter()
-                .map(|(n, v)| (n.to_owned(), v.to_owned()))
-                .collect(),
+        let mut result = Self::new(guard);
+        for ((name, value), (wire_name, _)) in list.iter().zip(list.wire_iter()) {
+            result.entries.push((name.to_owned(), value.to_owned()));
+            result
+                .wire_names
+                .entry(name.to_owned())
+                .or_insert_with(|| wire_name.to_owned());
         }
+        result
     }
     pub fn to_header_list(&self) -> Result<HeaderList, ApiError> {
         let mut list = HeaderList::default();
         for (name, value) in &self.entries {
-            list.append(name, value)
+            list.append_wire(name, self.wire_name(name), value)
                 .map_err(|_| ApiError::InvalidHeaderValue)?;
         }
         Ok(list)
@@ -78,21 +86,36 @@ impl ApiHeaders {
         self.append_string(&byte_string(name)?, &byte_string(value)?)
     }
     pub fn append_string(&mut self, name: &str, value: &str) -> Result<(), ApiError> {
+        self.append_existing(name, &normalize_value(value)?)
+    }
+    /// Copy a value that has already passed API normalization. XHR may have
+    /// deliberately appended `", "` to an empty value; do not trim it again.
+    pub(crate) fn append_existing(&mut self, name: &str, value: &str) -> Result<(), ApiError> {
+        let wire_name = name;
         let name = valid_name(name)?;
-        let value = normalize_value(value)?;
+        if value
+            .chars()
+            .any(|c| matches!(c, '\0' | '\r' | '\n') || c as u32 > 255)
+        {
+            return Err(ApiError::InvalidHeaderValue);
+        }
         if !self.allowed(&name, &value)? {
             return Ok(());
         }
         if self.guard == HeaderGuard::RequestNoCors {
             let combined = match self.get_string(&name)? {
                 Some(old) => format!("{old}, {value}"),
-                None => value.clone(),
+                None => value.to_owned(),
             };
             if !safelisted_request_header(&name, &combined) {
                 return Ok(());
             }
         }
-        self.entries.push((name, value));
+        self.entries.push((name, value.to_owned()));
+        let name = &self.entries.last().unwrap().0;
+        self.wire_names
+            .entry(name.clone())
+            .or_insert_with(|| wire_name.to_owned());
         self.remove_privileged_no_cors();
         Ok(())
     }
@@ -100,6 +123,7 @@ impl ApiHeaders {
         self.set_string(&byte_string(name)?, &byte_string(value)?)
     }
     pub fn set_string(&mut self, name: &str, value: &str) -> Result<(), ApiError> {
+        let wire_name = name;
         let name = valid_name(name)?;
         let value = normalize_value(value)?;
         if !self.allowed(&name, &value)? {
@@ -110,11 +134,35 @@ impl ApiHeaders {
         }
         let first = self.entries.iter().position(|(n, _)| *n == name);
         self.entries.retain(|(n, _)| *n != name);
+        let wire_key = name.clone();
         self.entries.insert(
             first.unwrap_or(self.entries.len()).min(self.entries.len()),
             (name, value),
         );
+        self.wire_names
+            .entry(wire_key)
+            .or_insert_with(|| wire_name.to_owned());
         self.remove_privileged_no_cors();
+        Ok(())
+    }
+    /// XHR combines an already normalized author value with an existing one.
+    /// The separator's trailing SP is part of the combined value even when
+    /// the newly appended value is empty.
+    pub(crate) fn replace_combined_string(
+        &mut self,
+        name: &str,
+        value: String,
+    ) -> Result<(), ApiError> {
+        let name = valid_name(name)?;
+        if value.bytes().any(|b| matches!(b, 0 | b'\r' | b'\n')) {
+            return Err(ApiError::InvalidHeaderValue);
+        }
+        let (_, old) = self
+            .entries
+            .iter_mut()
+            .find(|(n, _)| *n == name)
+            .ok_or(ApiError::InvalidHeaderName)?;
+        *old = value;
         Ok(())
     }
     pub fn delete(&mut self, name: &[u16]) -> Result<(), ApiError> {
@@ -129,6 +177,7 @@ impl ApiHeaders {
             return Ok(());
         }
         self.entries.retain(|(n, _)| *n != name);
+        self.wire_names.remove(&name);
         self.remove_privileged_no_cors();
         Ok(())
     }
@@ -191,6 +240,7 @@ impl ApiHeaders {
     fn remove_privileged_no_cors(&mut self) {
         if self.guard == HeaderGuard::RequestNoCors {
             self.entries.retain(|(n, _)| n != "range");
+            self.wire_names.remove("range");
         }
     }
 }
@@ -205,7 +255,10 @@ fn normalize_value(value: &str) -> Result<String, ApiError> {
     // Other control bytes remain valid header values; CR/LF inside the value
     // must still be rejected before serialization to prevent line injection.
     let value = value.trim_matches([' ', '\t', '\r', '\n']);
-    if value.chars().any(|c| matches!(c, '\0' | '\r' | '\n') || c as u32 > 255) {
+    if value
+        .chars()
+        .any(|c| matches!(c, '\0' | '\r' | '\n') || c as u32 > 255)
+    {
         return Err(ApiError::InvalidHeaderValue);
     }
     Ok(value.to_owned())

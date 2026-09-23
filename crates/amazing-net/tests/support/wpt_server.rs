@@ -18,6 +18,7 @@ pub struct SeenRequest {
     pub method: String,
     pub target: String,
     pub headers: BTreeMap<String, String>,
+    pub raw_headers: Vec<(String, String)>,
     pub body: Vec<u8>,
 }
 impl SeenRequest {
@@ -132,11 +133,17 @@ fn read_request(stream: &mut TcpStream) -> Option<SeenRequest> {
     let method = first.next()?.to_owned();
     let target = first.next()?.to_owned();
     let mut headers = BTreeMap::new();
+    let mut raw_headers = Vec::new();
     for line in lines {
         let Some((name, value)) = line.split_once(':') else {
             continue;
         };
-        headers.insert(name.to_ascii_lowercase(), value.trim().to_owned());
+        let raw_value = value.strip_prefix(' ').unwrap_or(value).to_owned();
+        headers.insert(
+            name.to_ascii_lowercase(),
+            raw_value.trim_matches([' ', '\t']).to_owned(),
+        );
+        raw_headers.push((name.to_owned(), raw_value));
     }
     let body_len = headers
         .get("content-length")
@@ -156,6 +163,7 @@ fn read_request(stream: &mut TcpStream) -> Option<SeenRequest> {
         method,
         target,
         headers,
+        raw_headers,
         body: input[header_end..header_end + body_len].to_vec(),
     })
 }
@@ -251,6 +259,30 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
     let xhr = path.starts_with("/xhr/resources/");
     let name = path.rsplit('/').next().unwrap_or("");
     let mut headers = vec![header("Content-Type", "text/plain")];
+    if xhr && name == "inspect-headers.py" {
+        let filter_value = request.query("filter_value").unwrap_or_default();
+        let filter_name = request.query("filter_name").unwrap_or_default();
+        let mut body = String::new();
+        for (field, value) in &request.raw_headers {
+            if !filter_value.is_empty() {
+                if *value == filter_value {
+                    body.push_str(field);
+                    body.push(',');
+                }
+            } else if field.eq_ignore_ascii_case(&filter_name) {
+                body.push_str(&format!("{field}: {value}\n"));
+            }
+        }
+        return reply(200, "OK", headers, body.as_bytes());
+    }
+    if xhr && name == "echo-headers.py" {
+        let body = request
+            .raw_headers
+            .iter()
+            .map(|(n, v)| format!("{n}: {v}\n"))
+            .collect::<String>();
+        return reply(200, "OK", headers, body.as_bytes());
+    }
     if xhr && name == "headers.py" {
         return reply(
             200,
