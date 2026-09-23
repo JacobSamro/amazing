@@ -362,3 +362,33 @@ matched on Mac and Windows before and after the gates. Package nextest passed
 **1534/1534** with 3 skipped, and separate shared-slot workspace doctests
 **2/2**. Five tests account for the package increase from HTML-8's 112.
 No push or PR; the lane stops for co-integrator preflight.
+
+## HTML-10 — foreign attribute namespace adjustments
+
+Foreign-element insertion now applies the WHATWG eleven-entry foreign
+attribute table after the existing SVG camelCase and MathML `definitionURL`
+adjustments. Listed `xlink:*`, `xml:*`, `xmlns` and `xmlns:xlink` attributes
+use DOM's expanded-attribute storage with their exact namespace URI, prefix,
+local name, qualified name and value. Other colon-bearing names stay in the
+null namespace. The same table runs for SVG and MathML roots and descendants;
+HTML children of foreign integration points retain ordinary null-namespace
+attribute names.
+
+The fixed-base Windows baseline in `.agents/html/html10-fixtures.md` records
+exact null-namespace storage and absent expanded lookups before implementation,
+plus independent expected identities for the table, nested foreign nodes,
+HTML children and unrelated colon names. DOM `attrs_of`/`dump` exposes only
+null-namespace attributes; namespaced values are checked through
+`attribute_ns`/`get_attribute_ns`. This follows the existing DOM storage seam
+without edits to DOM, bindings, driver, manifests or lockfile. Two new tests
+assert actual expanded attributes, while the prior SVG/MathML casing test was
+updated to check the XLink expanded identity.
+
+At fixed base `a3d973e`, a 292-input Rust source, Cargo manifest and root
+lockfile hash manifest (SHA-256
+`a9fb10c9f81bf73c3bfc8514969d836cf0255455b2cb518d920a577f7f4fe0d9`)
+matched on Mac and Windows before and after the gates. Package nextest passed
+**119/119 twice**, package doctest **1/1**, shared-slot workspace nextest
+**1564/1564** with 3 skipped, and separate shared-slot workspace doctests
+**2/2**. Two new tests account for the package increase from HTML-9's 117.
+No push or PR; the lane stops for co-integrator preflight.
