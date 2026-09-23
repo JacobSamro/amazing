@@ -9,6 +9,16 @@ pub type NamedGet = dyn Fn(&mut Interpreter, HostHandle, &[u16]) -> Result<JsVal
 pub type IndexedSet = dyn Fn(&mut Interpreter, HostHandle, u32, JsValue) -> Result<(), Throw>;
 pub type NamedSet = dyn Fn(&mut Interpreter, HostHandle, &[u16], JsValue) -> Result<(), Throw>;
 pub type NamedDelete = dyn Fn(&mut Interpreter, HostHandle, &[u16]) -> Result<bool, Throw>;
+pub type PairCount = dyn Fn(HostHandle) -> Result<u32, Throw>;
+pub type PairGet = dyn Fn(&mut Interpreter, HostHandle, u32) -> Result<(JsValue, JsValue), Throw>;
+
+/// Live ordered pairs, including duplicate names. The embedding supplies
+/// native values without materializing JS array properties on the wrapper.
+#[derive(Clone)]
+pub struct PairIterableHooks {
+    pub count: Rc<PairCount>,
+    pub pair_at: Rc<PairGet>,
+}
 
 /// Callbacks are owned by the embedding. Each is invoked without a runtime
 /// object borrow; the embedding may then take a short native DOM borrow.
@@ -35,7 +45,66 @@ fn property(value: JsValue, writable: bool, enumerable: bool) -> Property {
     Property { value, writable, enumerable, configurable: true, getter: None, setter: None }
 }
 
+fn pair_method(i: &Interpreter, name: &str, callback: crate::value::NativeFn, length: f64) -> JsValue {
+    let function = Interpreter::native(name, callback, &i.function_proto);
+    if let JsValue::Object(object) = &function {
+        let mut object = object.borrow_mut();
+        object.constructible = false;
+        object.delete_own("prototype");
+        object.define("length", property(JsValue::num(length), false, false))
+            .expect("new pair method accepts length");
+    }
+    function
+}
+
 impl Interpreter {
+    pub fn binding_register_pair_iterable_hooks(&mut self, brand: u64, hooks: PairIterableHooks) {
+        self.pair_hooks.insert(brand, hooks);
+    }
+
+    /// Install WebIDL pair-iterable methods on a host interface prototype.
+    /// `@@iterator` is exactly the same function object as `entries`.
+    pub fn binding_define_pair_iterable(&mut self, brand: u64, prototype: &JsValue) -> Result<(), Throw> {
+        if !self.pair_hooks.contains_key(&brand) {
+            return Err(Throw::type_error("pair iterable needs host hooks"));
+        }
+        let JsValue::Object(prototype) = prototype else {
+            return Err(Throw::type_error("pair iterable prototype must be an object"));
+        };
+        let entries = pair_method(self, "entries", pair_entries, 0.0);
+        for (name, function) in [
+            ("entries", entries.clone()),
+            ("keys", pair_method(self, "keys", pair_keys, 0.0)),
+            ("values", pair_method(self, "values", pair_values, 0.0)),
+            ("forEach", pair_method(self, "forEach", pair_for_each, 1.0)),
+        ] {
+            prototype.borrow_mut().define(name, property(function, true, false))
+                .map_err(|_| Throw::type_error("cannot install pair-iterable method"))?;
+        }
+        prototype.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), property(entries, true, false))
+            .map_err(|_| Throw::type_error("cannot install pair-iterable symbol"))?;
+        self.pair_iterator_proto.borrow_mut().define("next", property(pair_method(self, "next", pair_iterator_next, 0.0), true, false))
+            .map_err(|_| Throw::type_error("cannot install pair iterator next"))?;
+        self.pair_iterator_proto.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), property(pair_method(self, "[Symbol.iterator]", pair_iterator_self, 0.0), true, false))
+            .map_err(|_| Throw::type_error("cannot install pair iterator symbol"))?;
+        Ok(())
+    }
+
+    fn pair_for(&self, object: &Obj) -> Option<(HostHandle, PairIterableHooks)> {
+        let identity = object.borrow().host_identity?;
+        if identity.realm != self.host_realm { return None; }
+        self.pair_hooks.get(&identity.handle.brand).cloned().map(|hooks| (identity.handle, hooks))
+    }
+
+    fn pair_iterator(&self, this: JsValue, kind: PairIteratorKind) -> Result<JsValue, Throw> {
+        let JsValue::Object(target) = this else { return Err(Throw::type_error("pair iterable receiver is not an object")); };
+        if self.pair_for(&target).is_none() { return Err(Throw::type_error("incompatible pair iterable receiver")); }
+        let mut object = JsObject::ordinary();
+        object.proto = Some(self.pair_iterator_proto.clone());
+        object.exotic = Exotic::PairIterator(PairIteratorState { target, next_index: 0, kind });
+        Ok(JsValue::object(object))
+    }
+
     /// Register one interface's live property hooks. A wrapper is matched by
     /// its private realm and brand, never by a JavaScript-visible property.
     pub fn binding_define_legacy_platform_object(&mut self, brand: u64, hooks: LegacyPlatformHooks) {
@@ -253,6 +322,57 @@ fn legacy_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> 
     };
     Ok(iterator_result(i, value, false))
 }
+
+fn pair_keys(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    i.pair_iterator(this, PairIteratorKind::Keys)
+}
+fn pair_values(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    i.pair_iterator(this, PairIteratorKind::Values)
+}
+fn pair_entries(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    i.pair_iterator(this, PairIteratorKind::Entries)
+}
+fn pair_iterator_self(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let valid = matches!(&this, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::PairIterator(_)));
+    if valid { Ok(this) } else { Err(Throw::type_error("incompatible pair iterator receiver")) }
+}
+fn pair_iterator_next(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let JsValue::Object(iterator) = this else { return Err(Throw::type_error("incompatible pair iterator receiver")); };
+    let state = match &iterator.borrow().exotic {
+        Exotic::PairIterator(state) => state.clone(),
+        _ => return Err(Throw::type_error("incompatible pair iterator receiver")),
+    };
+    let (handle, hooks) = i.pair_for(&state.target).ok_or_else(|| Throw::type_error("stale pair iterable receiver"))?;
+    if state.next_index >= (hooks.count)(handle)? {
+        return Ok(iterator_result(i, JsValue::Undefined, true));
+    }
+    let (key, value) = (hooks.pair_at)(i, handle, state.next_index)?;
+    if let Exotic::PairIterator(state) = &mut iterator.borrow_mut().exotic {
+        state.next_index += 1;
+    }
+    let value = match state.kind {
+        PairIteratorKind::Keys => key,
+        PairIteratorKind::Values => value,
+        PairIteratorKind::Entries => array_values(i, vec![key, value])?,
+    };
+    Ok(iterator_result(i, value, false))
+}
+fn pair_for_each(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let JsValue::Object(target) = &this else { return Err(Throw::type_error("pair iterable receiver is not an object")); };
+    let (handle, hooks) = i.pair_for(target).ok_or_else(|| Throw::type_error("incompatible pair iterable receiver"))?;
+    let callback = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if !i.binding_is_callable(&callback) {
+        return Err(Throw::type_error("forEach callback is not callable"));
+    }
+    let receiver = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    let mut index = 0;
+    while index < (hooks.count)(handle)? {
+        let (key, value) = (hooks.pair_at)(i, handle, index)?;
+        i.call_value(&callback, receiver.clone(), vec![value, key, this.clone()])?;
+        index += 1;
+    }
+    Ok(JsValue::Undefined)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,6 +484,47 @@ mod tests {
         assert_eq!(seen.len(), 2);
         assert_eq!(seen[0][0], JsValue::num(10.0));
         assert_eq!(seen[1][0], JsValue::num(42.0));
+    }
+
+    #[test]
+    fn pair_iterators_keep_duplicate_names_and_observe_mutation() {
+        let mut i = Interpreter::new();
+        let prototype = i.binding_create_object(Some(&i.binding_object_prototype())).unwrap();
+        let pairs = Rc::new(RefCell::new(vec![
+            (JsValue::str("a"), JsValue::str("1")),
+            (JsValue::str("a"), JsValue::str("2")),
+        ]));
+        let count_pairs = pairs.clone();
+        let get_pairs = pairs.clone();
+        i.binding_register_pair_iterable_hooks(41, PairIterableHooks {
+            count: Rc::new(move |_| Ok(count_pairs.borrow().len() as u32)),
+            pair_at: Rc::new(move |_, _, index| Ok(get_pairs.borrow()[index as usize].clone())),
+        });
+        i.binding_define_pair_iterable(41, &prototype).unwrap();
+        let handle = HostHandle { arena: 1, slot: 1, generation: 0, brand: 41 };
+        let object = i.binding_wrap_host(handle, &prototype).unwrap();
+        let entries = i.binding_get_property(&object, "entries").unwrap();
+        let iterator_method = i.get_prop(&object, WellKnownSymbol::Iterator.symbol()).unwrap();
+        assert_eq!(entries, iterator_method);
+        let iterator = i.binding_call(&entries, object.clone(), vec![]).unwrap();
+        let next = i.binding_get_property(&iterator, "next").unwrap();
+        let first = i.binding_call(&next, iterator.clone(), vec![]).unwrap();
+        let first_pair = i.binding_get_property(&first, "value").unwrap();
+        assert_eq!(i.binding_get_property(&first_pair, "0").unwrap(), JsValue::str("a"));
+        pairs.borrow_mut()[1].1 = JsValue::str("updated");
+        let second = i.binding_call(&next, iterator.clone(), vec![]).unwrap();
+        let second_pair = i.binding_get_property(&second, "value").unwrap();
+        assert_eq!(i.binding_get_property(&second_pair, "1").unwrap(), JsValue::str("updated"));
+        pairs.borrow_mut().push((JsValue::str("b"), JsValue::str("3")));
+        let third = i.binding_call(&next, iterator.clone(), vec![]).unwrap();
+        assert_eq!(i.binding_get_property(&third, "done").unwrap(), JsValue::Bool(false));
+        let fourth = i.binding_call(&next, iterator, vec![]).unwrap();
+        assert_eq!(i.binding_get_property(&fourth, "done").unwrap(), JsValue::Bool(true));
+        i.binding_define_data_property(&i.binding_global_object(), "params", object, BindingPropertyFlags::METHOD).unwrap();
+        assert_eq!(i.run_script("var seen=[]; params.forEach(function(value,key){ seen.push(key+value); }); seen.join(',')").unwrap(), JsValue::str("a1,aupdated,b3"));
+        assert_eq!(i.run_script("params.forEach.length === 1 && params.entries.length === 0 && !('prototype' in params.entries)").unwrap(), JsValue::Bool(true));
+        pairs.borrow_mut().clear();
+        assert!(i.run_script("params.forEach(1)").is_err());
     }
 
     #[test]

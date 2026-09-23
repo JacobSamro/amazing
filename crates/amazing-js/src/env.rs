@@ -45,6 +45,8 @@ pub struct Binding {
 pub enum EnvKind {
     /// Function body environment: owns `var` declarations.
     Function,
+    /// Arrow body environment: owns locals but inherits the outer `this`.
+    Arrow,
     /// Block / loop-body / catch environment.
     Block,
     /// The global environment: lookups missing here become ReferenceErrors.
@@ -60,6 +62,8 @@ pub struct Env {
     vars: HashMap<String, RefCell<Binding>>,
     /// Receiver recorded by a call (`None` = transparent frame).
     pub this_binding: Option<JsValue>,
+    /// Derived constructors have a local `this` binding that throws until super().
+    this_uninitialized: bool,
 }
 
 impl Env {
@@ -133,6 +137,19 @@ impl Env {
             None => JsValue::Undefined,
         }
     }
+
+    fn resolve_this_checked_raw(&self) -> Result<JsValue, Throw> {
+        if self.this_uninitialized {
+            return Err(Throw::reference_error("this is uninitialized before super()"));
+        }
+        if let Some(this) = &self.this_binding {
+            return Ok(this.clone());
+        }
+        match &self.parent {
+            Some(parent) => parent.0.borrow().resolve_this_checked_raw(),
+            None => Ok(JsValue::Undefined),
+        }
+    }
 }
 
 impl EnvHandle {
@@ -142,6 +159,7 @@ impl EnvHandle {
             parent,
             vars: HashMap::new(),
             this_binding: None,
+            this_uninitialized: false,
         })))
     }
 
@@ -178,8 +196,37 @@ impl EnvHandle {
         self.0.borrow().resolve_this_raw()
     }
 
+    pub fn resolve_this_checked(&self) -> Result<JsValue, Throw> {
+        self.0.borrow().resolve_this_checked_raw()
+    }
+
+    pub fn mark_this_uninitialized(&self) {
+        let mut env = self.0.borrow_mut();
+        env.this_binding = None;
+        env.this_uninitialized = true;
+    }
+
+    pub fn initialize_this(&self, this: JsValue) -> Result<(), Throw> {
+        let mut env = self.0.borrow_mut();
+        if env.kind != EnvKind::Function {
+            let parent = env.parent.clone().ok_or_else(|| {
+                Throw::reference_error("super() used outside a derived constructor")
+            })?;
+            drop(env);
+            return parent.initialize_this(this);
+        }
+        if !env.this_uninitialized {
+            return Err(Throw::reference_error("super() has already initialized this"));
+        }
+        env.this_binding = Some(this);
+        env.this_uninitialized = false;
+        Ok(())
+    }
+
     pub fn bind_this(&self, this: JsValue) {
-        self.0.borrow_mut().this_binding = Some(this);
+        let mut env = self.0.borrow_mut();
+        env.this_binding = Some(this);
+        env.this_uninitialized = false;
     }
 
     pub fn kind(&self) -> EnvKind {

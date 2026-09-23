@@ -14,8 +14,8 @@ use std::time::{Duration, Instant};
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
-    number_to_string, Exotic, FunctionBody, HostCallPolicy, HostFunctionId, HostHandle,
-    JsFunction, JsObject, JsValue, LegacyIteratorKind, LegacyIteratorState, MapKey, MapState, Obj, PendingReaction, PromiseFate,
+    number_to_string, DerivedConstructor, Exotic, FunctionBody, HostCallPolicy, HostFunctionId, HostHandle,
+    JsFunction, JsObject, JsValue, LegacyIteratorKind, LegacyIteratorState, PairIteratorKind, PairIteratorState, MapKey, MapState, Obj, PendingReaction, PromiseFate,
     PromiseState, Property, PropertyKey, CollectionIteratorKind, CollectionIteratorState,
     SequenceIteratorKind, SequenceIteratorState,
     SetState, Throw, WellKnownSymbol, JsSymbol,
@@ -36,7 +36,7 @@ mod bindings;
 pub use bindings::BindingPropertyFlags;
 #[path = "interp_legacy.rs"]
 mod legacy;
-pub use legacy::LegacyPlatformHooks;
+pub use legacy::{LegacyPlatformHooks, PairIterableHooks};
 
 /// The embedding's per-interpreter native entry point. `new_target` is present
 /// only for construction. The callable is cloned before invocation, so a nested
@@ -139,6 +139,8 @@ pub struct HostResponse {
 struct CallFrame {
     this: JsValue,
     home: Option<Obj>,
+    super_constructor: Option<JsValue>,
+    new_target: Option<JsValue>,
 }
 
 #[derive(Clone)]
@@ -222,6 +224,8 @@ pub struct Interpreter {
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
     legacy_hooks: HashMap<u64, LegacyPlatformHooks>,
     legacy_iterator_proto: Obj,
+    pair_hooks: HashMap<u64, PairIterableHooks>,
+    pair_iterator_proto: Obj,
     symbol_registry: HashMap<crate::value::JsString, JsSymbol>,
     random_state: u64,
     jobs: VecDeque<Job>,
@@ -300,6 +304,11 @@ impl Interpreter {
             o.proto = Some(object_proto.clone());
             o
         })));
+        let pair_iterator_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let host_realm = NEXT_HOST_REALM.fetch_add(1, Ordering::Relaxed);
         let mut i = Self {
             global_env,
@@ -322,6 +331,8 @@ impl Interpreter {
             host_cache: HashMap::new(),
             legacy_hooks: HashMap::new(),
             legacy_iterator_proto,
+            pair_hooks: HashMap::new(),
+            pair_iterator_proto,
             symbol_registry: HashMap::new(),
             random_state: host_realm ^ 0xA076_1D64_78BD_642F,
             jobs: VecDeque::new(),
@@ -1579,7 +1590,7 @@ impl Interpreter {
             ExprKind::Ident(i) => self
                 .identifier_value(env, &i.name)?
                 .ok_or_else(|| Throw::reference_error(format!("{} is not defined", i.name))),
-            ExprKind::This => Ok(env.resolve_this()),
+            ExprKind::This => env.resolve_this_checked(),
             ExprKind::Super => {
                 let home = self
                     .frames
@@ -2195,25 +2206,19 @@ impl Interpreter {
         optional: bool,
         e: &EnvHandle,
     ) -> Result<JsValue, Throw> {
-        let (f, this) = if matches!(&c.kind, ExprKind::Super) {
-            let home = self
-                .frames
-                .last()
-                .and_then(|frame| frame.home.clone())
-                .ok_or_else(|| Throw::syntax_error("super() used outside a method"))?;
-            let super_prototype = home
-                .borrow()
-                .proto
-                .clone()
-                .ok_or_else(|| Throw::type_error("super constructor has no prototype"))?;
-            let constructor = self.get_prop(&JsValue::Object(super_prototype), "constructor")?;
-            let receiver = self
-                .frames
-                .last()
-                .map(|frame| frame.this.clone())
-                .unwrap_or(JsValue::Undefined);
-            (constructor, receiver)
-        } else if let ExprKind::Member {
+        if matches!(&c.kind, ExprKind::Super) {
+            let frame = self.frames.last().ok_or_else(|| Throw::syntax_error("super() used outside a constructor"))?;
+            let constructor = frame.super_constructor.clone().ok_or_else(|| Throw::syntax_error("super() used outside a derived constructor"))?;
+            let new_target = frame.new_target.clone().ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
+            let argv = self.eval_args(args, e)?;
+            let result = self.construct_with_new_target(&constructor, argv, new_target)?;
+            e.initialize_this(result.clone())?;
+            if let Some(frame) = self.frames.last_mut() {
+                frame.this = result.clone();
+            }
+            return Ok(result);
+        }
+        let (f, this) = if let ExprKind::Member {
             obj,
             prop,
             optional: m,
@@ -2225,10 +2230,7 @@ impl Interpreter {
             }
             let k = self.member_key(prop, e)?;
             let receiver = if matches!(&obj.kind, ExprKind::Super) {
-                self.frames
-                    .last()
-                    .map(|frame| frame.this.clone())
-                    .unwrap_or(JsValue::Undefined)
+                e.resolve_this_checked()?
             } else {
                 o.clone()
             };
@@ -2306,6 +2308,9 @@ impl Interpreter {
             .func
             .clone()
             .ok_or_else(|| Throw::type_error("value is not callable"))?;
+        let derived_constructor = o.borrow().derived_constructor.clone();
+        let lexical_super_constructor = o.borrow().lexical_super_constructor.clone();
+        let lexical_new_target = o.borrow().lexical_new_target.clone();
         if self.depth >= MAX_CALL_DEPTH {
             return Err(Throw::range_error("maximum call stack size exceeded"));
         }
@@ -2313,6 +2318,8 @@ impl Interpreter {
         self.frames.push(CallFrame {
             this: this.clone(),
             home: fun.home.clone(),
+            super_constructor: derived_constructor.as_ref().map(|meta| meta.parent.clone()).or(lexical_super_constructor),
+            new_target: new_target.clone().or(lexical_new_target),
         });
         let previous_completion = self.completion.clone();
         self.completion = JsValue::Undefined;
@@ -2345,27 +2352,44 @@ impl Interpreter {
                     dispatch(self, id, this, args, new_target)
                 }
                 FunctionBody::Expr(x) => {
-                    let e = EnvHandle::new(EnvKind::Function, Some(fun.env.clone()));
-                    e.bind_this(if fun.is_arrow {
-                        fun.env.resolve_this()
-                    } else {
-                        this
-                    });
+                    let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
+                    if !fun.is_arrow { e.bind_this(this); }
                     self.bind_params(&e, &fun.params, args)?;
                     self.eval_expr(&x, &e)
                 }
                 FunctionBody::Block(b) => {
-                    let e = EnvHandle::new(EnvKind::Function, Some(fun.env.clone()));
-                    e.bind_this(if fun.is_arrow {
-                        fun.env.resolve_this()
+                    let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
+                    let derived = derived_constructor.is_some();
+                    if derived {
+                        if new_target.is_none() {
+                            return Err(Throw::type_error("derived constructor requires new"));
+                        }
+                        e.mark_this_uninitialized();
+                        if derived_constructor.as_ref().is_some_and(|meta| meta.implicit) {
+                            let parent = &derived_constructor.as_ref().expect("derived parent").parent;
+                            let bound = self.construct_with_new_target(parent, args.clone(), new_target.clone().expect("newTarget"))?;
+                            e.initialize_this(bound.clone())?;
+                            if let Some(frame) = self.frames.last_mut() {
+                                frame.this = bound;
+                            }
+                        }
                     } else {
-                        this
-                    });
+                        if !fun.is_arrow { e.bind_this(this); }
+                    }
                     self.bind_params(&e, &fun.params, args)?;
                     self.hoist(&b.body, &e)?;
-                    match self.exec_stmts(&b.body, &e)? {
-                        Flow::Return(v) => Ok(v),
-                        _ => Ok(JsValue::Undefined),
+                    let completion = self.exec_stmts(&b.body, &e)?;
+                    if derived {
+                        match completion {
+                            Flow::Return(value) if value.is_object() => Ok(value),
+                            Flow::Return(value) if !value.is_undefined() => Err(Throw::type_error("derived constructor returned a non-object")),
+                            _ => e.resolve_this_checked(),
+                        }
+                    } else {
+                        match completion {
+                            Flow::Return(value) => Ok(value),
+                            _ => Ok(JsValue::Undefined),
+                        }
                     }
                 }
             }
@@ -2410,6 +2434,9 @@ impl Interpreter {
         Ok(())
     }
     fn construct(&mut self, f: &JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+        self.construct_with_new_target(f, args, f.clone())
+    }
+    fn construct_with_new_target(&mut self, f: &JsValue, args: Vec<JsValue>, new_target: JsValue) -> Result<JsValue, Throw> {
         let o = match f {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("constructor is not an object")),
@@ -2425,7 +2452,25 @@ impl Interpreter {
         if !o.borrow().constructible {
             return Err(Throw::type_error("function is not a constructor"));
         }
-        let proto = match o.borrow().get_own("prototype") {
+        let derived = o.borrow().derived_constructor.is_some();
+        if derived {
+            let result = self.call_value_with_new_target(
+                f,
+                JsValue::Undefined,
+                args,
+                Some(new_target),
+            )?;
+            return if result.is_object() {
+                Ok(result)
+            } else {
+                Err(Throw::type_error("derived constructor returned a non-object"))
+            };
+        }
+        let target = match &new_target {
+            JsValue::Object(target) => target,
+            _ => return Err(Throw::type_error("newTarget is not an object")),
+        };
+        let proto = match target.borrow().get_own("prototype") {
             Some(JsValue::Object(p)) => p,
             _ => self.object_proto.clone(),
         };
@@ -2438,9 +2483,19 @@ impl Interpreter {
             f,
             JsValue::Object(obj.clone()),
             args,
-            Some(f.clone()),
+            Some(new_target.clone()),
         )?;
         if v.is_object() {
+            // Legacy native constructors create their own result object. When
+            // reached through a subclass, its prototype comes from newTarget.
+            // Host constructors return canonical wrappers and are left alone.
+            if matches!(fun.body, FunctionBody::Native(_)) && new_target != *f {
+                if let JsValue::Object(prototype) = self.get_prop(&new_target, "prototype")? {
+                    if let JsValue::Object(result) = &v {
+                        result.borrow_mut().proto = Some(prototype);
+                    }
+                }
+            }
             Ok(v)
         } else {
             Ok(JsValue::Object(obj))
@@ -2497,6 +2552,11 @@ impl Interpreter {
         });
         o.proto = Some(self.function_proto.clone());
         let handle = Obj(Rc::new(RefCell::new(o)));
+        if let Some(frame) = self.frames.last() {
+            let mut arrow = handle.borrow_mut();
+            arrow.lexical_super_constructor = frame.super_constructor.clone();
+            arrow.lexical_new_target = frame.new_target.clone();
+        }
         handle.borrow_mut().set_own("name", JsValue::str(""));
         JsValue::Object(handle)
     }
@@ -2561,7 +2621,7 @@ impl Interpreter {
                 p.borrow_mut().set_own("constructor", f.clone());
                 if let Some(super_class) = &c.super_class {
                     let super_value = self.eval_expr(super_class, e)?;
-                    let super_prototype = match super_value {
+                    let super_prototype = match &super_value {
                         JsValue::Object(super_constructor) => match super_constructor
                             .borrow()
                             .get_own("prototype")
@@ -2574,6 +2634,14 @@ impl Interpreter {
                         _ => return Err(Throw::type_error("super class is not a constructor")),
                     };
                     p.borrow_mut().proto = Some(super_prototype);
+                    o.borrow_mut().proto = match &super_value {
+                        JsValue::Object(parent) => Some(parent.clone()),
+                        _ => unreachable!(),
+                    };
+                    o.borrow_mut().derived_constructor = Some(DerivedConstructor {
+                        parent: super_value,
+                        implicit: ctor.is_none(),
+                    });
                 }
                 let mut class_function = o.borrow_mut();
                 if let Some(function) = &mut class_function.func {
