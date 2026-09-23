@@ -60,7 +60,20 @@ pub(crate) fn invoke<H: BindingHost>(
             let uri = if host.is_nullish(uri_value) { None } else { Some(string(host, uri_value)?) };
             (uri, argument(host, args, 1)?)
         };
-        let node = host.with_dom(|dom| dom.create_element_ns_in(doc, uri.as_deref(), &name))?;
+        let is_name = if op == O::CreateElement {
+            if let Some(options) = args.get(1) {
+                if host.is_nullish(options) { None } else {
+                    let value = host.get_property(options, "is")?;
+                    if host.is_undefined(&value) { None }
+                    else { Some(String::from_utf16_lossy(&host.to_dom_string(&value)?)) }
+                }
+            } else { None }
+        } else { None };
+        let node = host.with_dom(|dom| {
+            let node = dom.create_element_ns_in(doc, uri.as_deref(), &name)?;
+            if let Some(is_name) = &is_name { dom.set_attribute(node, "is", is_name)?; }
+            Ok(node)
+        })?;
         return host.wrap_node(node);
     }
     if op == O::CreateProcessingInstruction {

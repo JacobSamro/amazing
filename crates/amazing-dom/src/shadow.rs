@@ -109,6 +109,17 @@ impl Dom {
         {
             return Err(DomError::NotSupportedError);
         }
+        let definition = self.custom_element_definition_of(host).or_else(|| {
+            self.custom_element_definitions(self.get(host).owner_document).into_iter()
+                .find(|(_, definition)| definition.local_name == name
+                    && (definition.name == name
+                        || self.get_attribute_ns(host, None, "is") == Some(definition.name.as_str())))
+                .map(|(id, _)| id)
+        });
+        if definition.is_some_and(|id| self.custom_element_definition(id)
+            .is_some_and(|definition| definition.disable_shadow)) {
+            return Err(DomError::NotSupportedError);
+        }
         let root = self.create_document_fragment(self.get(host).owner_document)?;
         self.shadow_roots.push(ShadowRootData {
             root,

@@ -9,6 +9,10 @@ pub struct LifecycleCallbacks {
     pub connected_move: Option<CallbackId>,
     pub adopted: Option<CallbackId>,
     pub attribute_changed: Option<CallbackId>,
+    pub form_associated: Option<CallbackId>,
+    pub form_reset: Option<CallbackId>,
+    pub form_disabled: Option<CallbackId>,
+    pub form_state_restore: Option<CallbackId>,
 }
 
 #[derive(Clone, Debug)]
@@ -56,6 +60,7 @@ pub struct CustomElements {
     reaction_frames: Vec<Vec<CustomElementReaction>>,
     backup_queue: Vec<CustomElementReaction>,
     when_defined: Vec<(NodeIdx, String, CallbackId)>,
+    definition_running: Vec<NodeIdx>,
 }
 
 impl Dom {
@@ -195,6 +200,27 @@ impl Dom {
     }
     pub fn custom_element_when_defined(&mut self, document: NodeIdx, name: String, promise: CallbackId) {
         self.custom_elements.when_defined.push((document, name, promise));
+    }
+    pub fn custom_element_pending_promise(&self, document: NodeIdx, name: &str) -> Option<CallbackId> {
+        self.custom_elements.when_defined.iter().find(|(doc, candidate, _)|
+            *doc == document && candidate == name).map(|(_, _, promise)| *promise)
+    }
+    pub fn custom_element_begin_definition(&mut self, document: NodeIdx) -> Result<(), DomError> {
+        if self.custom_elements.definition_running.contains(&document) {
+            return Err(DomError::NotSupportedError);
+        }
+        self.custom_elements.definition_running.push(document);
+        Ok(())
+    }
+    pub fn custom_element_end_definition(&mut self, document: NodeIdx) {
+        self.custom_elements.definition_running.retain(|candidate| *candidate != document);
+    }
+    pub fn queue_custom_element_upgrades_for_tree(&mut self, root: NodeIdx) -> Result<(), DomError> {
+        self.check_node(root)?;
+        for element in self.shadow_including_tree_order(root) {
+            self.queue_custom_element_upgrade(element);
+        }
+        Ok(())
     }
     pub fn take_custom_element_when_defined(&mut self, document: NodeIdx, name: &str) -> Vec<CallbackId> {
         let mut result = Vec::new();

@@ -6,6 +6,7 @@ use crate::host::{
 pub enum OptionalCapability {
     InterfaceClassString(I),
     DomExceptionErrorPrototype,
+    CustomElementsGlobal,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -120,6 +121,13 @@ const DOM_EXCEPTION: &[Member] = &[
     getter("name", O::DOMExceptionName),
     getter("message", O::DOMExceptionMessage),
     getter("code", O::DOMExceptionCode),
+];
+const CUSTOM_ELEMENT_REGISTRY: &[Member] = &[
+    method("define", O::CustomElementRegistryDefine, 2),
+    method("get", O::CustomElementRegistryGet, 1),
+    method("getName", O::CustomElementRegistryGetName, 1),
+    method("whenDefined", O::CustomElementRegistryWhenDefined, 1),
+    method("upgrade", O::CustomElementRegistryUpgrade, 1),
 ];
 const PARENT: &[Member] = &[
     method("getElementById", O::FragmentGetElementById, 1),
@@ -668,6 +676,8 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::DOMExceptionConstructor),
         members: DOM_EXCEPTION,
     },
+    D { interface: I::CustomElementRegistry, name: "CustomElementRegistry", parent: None,
+        constructor: None, members: CUSTOM_ELEMENT_REGISTRY },
 ];
 
 /// Primary HTML interface selected from a lower-case local name.
@@ -758,6 +768,9 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
     }
     if host.install_dom_exception_error_prototype()? == OptionalHookInstall::NotSupported {
         report.not_installed.push(OptionalCapability::DomExceptionErrorPrototype);
+    }
+    if host.install_custom_elements_global()? == OptionalHookInstall::NotSupported {
+        report.not_installed.push(OptionalCapability::CustomElementsGlobal);
     }
     host.install_static_method(I::AbortSignal, "abort", O::AbortSignalAbort, 0)?;
     host.install_static_method(I::AbortSignal, "any", O::AbortSignalAny, 1)?;

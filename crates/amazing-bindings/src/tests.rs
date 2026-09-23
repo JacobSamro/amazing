@@ -17,6 +17,7 @@ enum V {
     List(NodeIdx),
     Coerce(&'static str),
     Throw,
+    Promise(u64),
 }
 #[derive(Default)]
 struct Host {
@@ -24,6 +25,9 @@ struct Host {
     installed: Vec<Interface>,
     class_strings: Vec<(Interface, &'static str)>,
     dom_exception_error_prototype: bool,
+    custom_elements_global: bool,
+    promises: Vec<(u64, Option<V>, Option<V>)>,
+    custom_element_errors: Vec<String>,
     skip_optional_hooks: bool,
     fail_class_string: Option<Interface>,
     constants: Vec<(&'static str, u16)>,
@@ -168,6 +172,50 @@ impl BindingHost for Host {
         if self.skip_optional_hooks { return Ok(OptionalHookInstall::NotSupported); }
         self.dom_exception_error_prototype = true;
         Ok(OptionalHookInstall::Installed)
+    }
+    fn install_custom_elements_global(&mut self) -> Result<OptionalHookInstall, String> {
+        if self.skip_optional_hooks { return Ok(OptionalHookInstall::NotSupported); }
+        self.custom_elements_global = true;
+        Ok(OptionalHookInstall::Installed)
+    }
+    fn is_constructor(&mut self, value: &V) -> Result<bool, String> {
+        Ok(matches!(value, V::Dictionary(entries) if entries.iter().any(|(name, value)|
+            *name == "__constructor" && *value == V::Bool(true))))
+    }
+    fn require_object(&mut self, value: &V) -> Result<(), String> {
+        if matches!(value, V::Dictionary(_) | V::Array(_)) { Ok(()) }
+        else { Err("TypeError: Expected an object".into()) }
+    }
+    fn sequence_dom_strings(&mut self, value: &V) -> Result<Vec<Vec<u16>>, String> {
+        let V::Array(values) = value else { return Err("TypeError: Expected a sequence".into()) };
+        values.iter().map(|value| self.to_dom_string(value)).collect()
+    }
+    fn construct_custom_element(&mut self, _constructor: &V, definition: usize, element: NodeIdx)
+        -> Result<V, String> {
+        assert_eq!(self.with_dom(|dom| dom.custom_element_super(definition))?, element);
+        Ok(V::Node(element))
+    }
+    fn new_promise(&mut self) -> Result<V, String> {
+        let id = self.promises.len() as u64;
+        self.promises.push((id, None, None));
+        Ok(V::Promise(id))
+    }
+    fn resolve_promise(&mut self, promise: &V, value: V) -> Result<(), String> {
+        let V::Promise(id) = promise else { return Err("TypeError: Expected a Promise".into()) };
+        self.promises[*id as usize].1 = Some(value);
+        Ok(())
+    }
+    fn reject_promise(&mut self, promise: &V, reason: V) -> Result<(), String> {
+        let V::Promise(id) = promise else { return Err("TypeError: Expected a Promise".into()) };
+        self.promises[*id as usize].2 = Some(reason);
+        Ok(())
+    }
+    fn dom_exception_value(&mut self, error: DomError) -> Result<V, String> {
+        Ok(str_value(&error.to_string()))
+    }
+    fn report_custom_element_exception(&mut self, error: String) -> Result<(), String> {
+        self.custom_element_errors.push(error);
+        Ok(())
     }
     fn install_node_constant(&mut self, n: &'static str, v: u16) -> Result<(), String> {
         self.constants.push((n, v));
@@ -632,6 +680,7 @@ fn installation_orders_parent_interfaces_and_preserves_constant_values() {
     let mut h = Host::default();
     let report = install(&mut h).unwrap();
     assert!(report.not_installed.is_empty());
+    assert!(h.custom_elements_global);
     assert_eq!(h.class_strings,
         INTERFACES.iter().map(|definition| (definition.interface, definition.name)).collect::<Vec<_>>());
     assert!(h.dom_exception_error_prototype);
@@ -656,9 +705,10 @@ fn unsupported_optional_hooks_are_recorded_without_aborting_installation() {
     assert_eq!(h.installed.len(), INTERFACES.len());
     assert!(h.class_strings.is_empty());
     assert!(!h.dom_exception_error_prototype);
-    assert_eq!(report.not_installed.len(), INTERFACES.len() + 1);
+    assert_eq!(report.not_installed.len(), INTERFACES.len() + 2);
     assert_eq!(report.not_installed[0], crate::OptionalCapability::InterfaceClassString(INTERFACES[0].interface));
-    assert_eq!(report.not_installed.last(), Some(&crate::OptionalCapability::DomExceptionErrorPrototype));
+    assert_eq!(report.not_installed[INTERFACES.len()], crate::OptionalCapability::DomExceptionErrorPrototype);
+    assert_eq!(report.not_installed.last(), Some(&crate::OptionalCapability::CustomElementsGlobal));
     assert!(h.constants.contains(&("DOCUMENT_FRAGMENT_NODE", 11)));
 }
 
@@ -1250,4 +1300,96 @@ fn element_specific_reflection_handles_urls_enums_numbers_and_rel_list() {
     let script = h.dom.create_element(root, "script");
     call(&mut h, O::ScriptSetAsync, V::Node(script), &[V::Bool(true)]);
     assert_eq!(call(&mut h, O::ScriptAsync, V::Node(script), &[]), V::Bool(true));
+}
+
+// Pinned WPT custom-elements/CustomElementRegistry.html,
+// CustomElementRegistry-getName.html, attribute-changed-callback.html,
+// connected-callbacks.html, and custom-element-reaction-queue.html ports.
+#[test]
+fn custom_element_registry_validates_defines_upgrades_and_resolves_when_defined() {
+    let mut h = Host::default();
+    let registry = crate::registry_for_document(&mut h, NodeIdx(0)).unwrap();
+    let html = h.dom.create_element(NodeIdx(0), "html");
+    let element = h.dom.create_element(html, "x-card");
+    h.dom.set_attribute(element, "title", "ready").unwrap();
+    let constructor = V::Dictionary(vec![
+        ("__constructor", V::Bool(true)), ("__id", V::Number(1.)),
+        ("prototype", V::Dictionary(vec![
+            ("attributeChangedCallback", V::Callable(11)),
+            ("connectedCallback", V::Callable(12)),
+        ])),
+        ("observedAttributes", V::Array(vec![str_value("title")])),
+    ]);
+    let pending = call(&mut h, O::CustomElementRegistryWhenDefined, registry.clone(), &[str_value("x-card")]);
+    assert_eq!(call(&mut h, O::CustomElementRegistryWhenDefined, registry.clone(), &[str_value("x-card")]), pending);
+    assert_eq!(invoke(&mut h, O::CustomElementRegistryDefine, registry.clone(),
+        &[str_value("badname"), V::Number(1.)]), Err("TypeError: Expected a constructor".into()));
+    assert_eq!(invoke(&mut h, O::CustomElementRegistryDefine, registry.clone(),
+        &[str_value("badname"), constructor.clone()]), Err("SyntaxError".into()));
+    assert_eq!(call(&mut h, O::CustomElementRegistryDefine, registry.clone(),
+        &[str_value("x-card"), constructor.clone()]), V::Undefined);
+    assert_eq!(h.promises[0].1, Some(constructor.clone()));
+    assert_eq!(call(&mut h, O::CustomElementRegistryGet, registry.clone(), &[str_value("x-card")]), constructor);
+    assert_eq!(call(&mut h, O::CustomElementRegistryGetName, registry.clone(), &[constructor.clone()]), str_value("x-card"));
+    assert_eq!(h.dom.custom_element_state(element), amazing_dom::custom_elements::CustomElementState::Custom);
+    assert_eq!(h.calls, [11, 12]);
+    assert_eq!(invoke(&mut h, O::CustomElementRegistryDefine, registry.clone(),
+        &[str_value("x-card"), constructor.clone()]), Err("NotSupportedError".into()));
+    let invalid = call(&mut h, O::CustomElementRegistryWhenDefined, registry.clone(), &[str_value("plain")]);
+    let V::Promise(id) = invalid else { panic!("expected promise") };
+    assert_eq!(h.promises[id as usize].2, Some(str_value("SyntaxError")));
+    let detached = h.dom.create_element_ns_in(NodeIdx(0), Some("http://www.w3.org/1999/xhtml"), "x-card").unwrap();
+    call(&mut h, O::CustomElementRegistryUpgrade, registry, &[V::Node(detached)]);
+    assert_eq!(h.dom.custom_element_state(detached), amazing_dom::custom_elements::CustomElementState::Custom);
+}
+
+// Pinned WPT custom-elements/attribute-changed-callback.html and
+// disconnected-callbacks.html mutation boundary ports.
+#[test]
+fn custom_element_callbacks_run_after_dom_borrow_at_mutation_boundary() {
+    let mut h = Host::default();
+    let registry = crate::registry_for_document(&mut h, NodeIdx(0)).unwrap();
+    let html = h.dom.create_element(NodeIdx(0), "html");
+    let element = h.dom.create_element(html, "x-live");
+    let constructor = V::Dictionary(vec![
+        ("__constructor", V::Bool(true)),
+        ("prototype", V::Dictionary(vec![
+            ("attributeChangedCallback", V::Callable(21)),
+            ("connectedCallback", V::Callable(22)),
+            ("disconnectedCallback", V::Callable(23)),
+        ])),
+        ("observedAttributes", V::Array(vec![str_value("title")])),
+    ]);
+    call(&mut h, O::CustomElementRegistryDefine, registry, &[str_value("x-live"), constructor]);
+    assert_eq!(h.calls, [22]);
+    call(&mut h, O::ElementSetAttribute, V::Node(element), &[str_value("title"), str_value("foo")]);
+    assert_eq!(h.calls, [22, 21]);
+    call(&mut h, O::Remove, V::Node(element), &[]);
+    assert_eq!(h.calls, [22, 21, 23]);
+    assert!(h.custom_element_errors.is_empty());
+}
+
+// Pinned WPT custom-elements/CustomElementRegistry.html and
+// Document-createElement-customized-builtins.html assertion ports.
+#[test]
+fn custom_element_creation_handles_is_and_disable_shadow() {
+    let mut h = Host::default();
+    let registry = crate::registry_for_document(&mut h, NodeIdx(0)).unwrap();
+    let built_in = V::Dictionary(vec![("__constructor", V::Bool(true)),
+        ("__id", V::Number(2.)), ("prototype", V::Dictionary(vec![]))]);
+    call(&mut h, O::CustomElementRegistryDefine, registry.clone(),
+        &[str_value("x-button"), built_in, V::Dictionary(vec![("extends", str_value("button"))])]);
+    let plain = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)), &[str_value("button")]));
+    assert_eq!(h.dom.custom_element_state(plain), amazing_dom::custom_elements::CustomElementState::Undefined);
+    let customized = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)),
+        &[str_value("button"), V::Dictionary(vec![("is", str_value("x-button"))])]));
+    assert_eq!(h.dom.custom_element_state(customized), amazing_dom::custom_elements::CustomElementState::Custom);
+    let shadow_disabled = V::Dictionary(vec![("__constructor", V::Bool(true)),
+        ("__id", V::Number(3.)), ("prototype", V::Dictionary(vec![])),
+        ("disabledFeatures", V::Array(vec![str_value("shadow")]))]);
+    call(&mut h, O::CustomElementRegistryDefine, registry,
+        &[str_value("x-no-shadow"), shadow_disabled]);
+    let host = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)), &[str_value("x-no-shadow")]));
+    assert_eq!(invoke(&mut h, O::ElementAttachShadow, V::Node(host),
+        &[V::Dictionary(vec![("mode", str_value("open"))])]), Err("NotSupportedError".into()));
 }

@@ -34,6 +34,7 @@ mod element_reflection;
 pub use abort_bindings::fire_abort_timeout;
 mod mutation_bindings;
 mod shadow_bindings;
+mod custom_element_bindings;
 mod attr_bindings;
 mod tokenlist;
 mod html_reflection;
@@ -42,6 +43,7 @@ pub use mutation_bindings::deliver_mutation_checkpoint;
 pub use amazing_dom::{Dom, DomError, NodeIdx};
 pub use interfaces::{html_element_interface, install, InstallReport, OptionalCapability, INTERFACES};
 pub use invoke::{invoke, supported_index_count, supported_names};
+pub use custom_element_bindings::{deliver_custom_element_reactions, registry_for_document};
 
 #[cfg(test)]
 mod tests;

@@ -131,6 +131,26 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
     receiver: H::Value,
     args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    host.with_dom(|dom| { dom.custom_element_push_reaction_frame(); Ok(()) })?;
+    let result = invoke_inner(host, operation, receiver, args);
+    if matches!(operation, O::CreateElement | O::CreateElementNS) {
+        if let Ok(value) = &result {
+            if let Some(node) = host.node_brand(value) {
+                host.with_dom(|dom| { dom.queue_custom_element_upgrade(node); Ok(()) })?;
+            }
+        }
+    }
+    host.with_dom(|dom| { dom.custom_element_pop_reaction_frame(); Ok(()) })?;
+    let delivered = crate::custom_element_bindings::deliver_custom_element_reactions(host);
+    match result { Err(error) => Err(error), Ok(value) => { delivered?; Ok(value) } }
+}
+
+fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + DocumentHost + UrlReflection>(
+    host: &mut H, operation: O, receiver: H::Value, args: &[H::Value],
+) -> Result<H::Value, H::Error> {
+    if crate::custom_element_bindings::handles(operation) {
+        return crate::custom_element_bindings::invoke(host, operation, receiver, args);
+    }
     if crate::shadow_bindings::handles(operation) {
         return crate::shadow_bindings::invoke(host, operation, receiver, args);
     }
