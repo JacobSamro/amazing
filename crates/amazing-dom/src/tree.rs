@@ -261,6 +261,31 @@ impl Dom {
         self.insert_internal(node, parent, reference, false);
         Ok(node)
     }
+    /// ParentNode.moveBefore preserves the node's connected state and invokes
+    /// connectedMoveCallback instead of ordinary remove/insert lifecycle hooks.
+    pub fn move_before(&mut self, node: NodeIdx, parent: NodeIdx,
+        child: Option<NodeIdx>) -> Result<(), DomError> {
+        self.check_node(node)?;
+        self.check_node(parent)?;
+        if self.get(node).parent.is_none()
+            || self.shadow_including_root(node) != self.shadow_including_root(parent)
+            || self.shadow_including_ancestors(parent).contains(&node)
+            || !matches!(self.get(node).kind, NodeKind::Element { .. }
+                | NodeKind::Text { .. } | NodeKind::CDATASection { .. }
+                | NodeKind::Comment { .. } | NodeKind::ProcessingInstruction { .. }) {
+            return Err(DomError::HierarchyRequestError);
+        }
+        if let Some(child) = child {
+            self.check_node(child)?;
+            if self.get(child).parent != Some(parent) { return Err(DomError::NotFoundError); }
+        }
+        let reference = if child == Some(node) { self.get(node).next_sibling } else { child };
+        self.ensure_pre_insert_validity(node, parent, reference)?;
+        self.custom_element_preserve_move(node, true);
+        let result = self.pre_insert(node, parent, reference);
+        self.custom_element_preserve_move(node, false);
+        result.map(|_| ())
+    }
     pub fn pre_remove(&mut self, child: NodeIdx, parent: NodeIdx) -> Result<NodeIdx, DomError> {
         self.check_node(child)?;
         self.check_node(parent)?;

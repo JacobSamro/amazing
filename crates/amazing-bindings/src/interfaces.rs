@@ -130,6 +130,7 @@ const CUSTOM_ELEMENT_REGISTRY: &[Member] = &[
     method("upgrade", O::CustomElementRegistryUpgrade, 1),
 ];
 const PARENT: &[Member] = &[
+    method("moveBefore", O::MoveBefore, 2),
     method("getElementById", O::FragmentGetElementById, 1),
     method("querySelector", O::ParentQuerySelector, 1),
     method("querySelectorAll", O::ParentQuerySelectorAll, 1),

@@ -1238,18 +1238,28 @@ fn node_base_uri_uses_first_document_base_and_document_url_fallback() {
     let html = h.dom.create_element(doc, "html");
     let head = h.dom.create_element(html, "head");
     let body = h.dom.create_element(html, "body");
-    let node = h.dom.create_element(body, "p");
-    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(node), &[]), str_value("https://example.test/page"));
+    let element = h.dom.create_element(body, "p");
+    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(element), &[]), str_value("https://example.test/page"));
+    // Pinned WPT dom/nodes/Node-baseURI.html: detached, fragment, and Attr nodes.
+    let detached = h.dom.create_element_ns_in(doc, Some("http://www.w3.org/1999/xhtml"), "div").unwrap();
+    let fragment = h.dom.create_document_fragment(doc).unwrap();
+    let in_fragment = h.dom.create_element(fragment, "div");
+    let detached_attr = node(call(&mut h, O::CreateAttribute, V::Node(doc), &[str_value("class")]));
+    call(&mut h, O::ElementSetAttribute, V::Node(element), &[str_value("class"), str_value("abc")]);
+    let attached_attr = node(call(&mut h, O::ElementGetAttributeNode, V::Node(element), &[str_value("class")]));
+    for candidate in [detached, in_fragment, detached_attr, attached_attr] {
+        assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(candidate), &[]), str_value("https://example.test/page"));
+    }
     let first = h.dom.create_element(head, "base");
     h.dom.set_attribute(first, "href", "https://cdn.test/assets/").unwrap();
     let second = h.dom.create_element(body, "base");
     h.dom.set_attribute(second, "href", "https://ignored.test/").unwrap();
-    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(node), &[]), str_value("https://cdn.test/assets/"));
+    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(element), &[]), str_value("https://cdn.test/assets/"));
     assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(doc), &[]), str_value("https://cdn.test/assets/"));
     h.dom.remove_attribute(first, "href").unwrap();
-    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(node), &[]), str_value("https://ignored.test/"));
+    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(element), &[]), str_value("https://ignored.test/"));
     h.dom.detach(second);
-    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(node), &[]), str_value("https://example.test/page"));
+    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(element), &[]), str_value("https://example.test/page"));
 }
 
 #[test]

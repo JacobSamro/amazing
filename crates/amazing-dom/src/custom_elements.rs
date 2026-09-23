@@ -61,6 +61,7 @@ pub struct CustomElements {
     backup_queue: Vec<CustomElementReaction>,
     when_defined: Vec<(NodeIdx, String, CallbackId)>,
     definition_running: Vec<NodeIdx>,
+    suppress_tree_reactions: bool,
 }
 
 impl Dom {
@@ -230,6 +231,7 @@ impl Dom {
         result
     }
     pub(crate) fn custom_element_tree_inserted(&mut self, root: NodeIdx) {
+        if self.custom_elements.suppress_tree_reactions { return; }
         for element in self.shadow_including_tree_order(root) {
             match self.custom_element_state(element) {
                 CustomElementState::Custom => {
@@ -247,6 +249,7 @@ impl Dom {
         }
     }
     pub(crate) fn custom_element_tree_removed(&mut self, root: NodeIdx) {
+        if self.custom_elements.suppress_tree_reactions { return; }
         if !self.is_connected(root) { return; }
         for element in self.shadow_including_tree_order(root) {
             if self.custom_element_state(element) == CustomElementState::Custom {
@@ -254,6 +257,25 @@ impl Dom {
                     if let Some(callback) = self.custom_elements.definitions[id].callbacks.disconnected {
                         self.enqueue_custom_element_reaction(CustomElementReaction::Disconnected { element, callback });
                     }
+                }
+            }
+        }
+    }
+    pub(crate) fn custom_element_preserve_move(&mut self, root: NodeIdx, moving: bool) {
+        self.custom_elements.suppress_tree_reactions = moving;
+        if moving || !self.is_connected(root) { return; }
+        for element in self.shadow_including_tree_order(root) {
+            if self.custom_element_state(element) != CustomElementState::Custom { continue; }
+            let Some(id) = self.custom_element_definition_of(element) else { continue };
+            let callbacks = self.custom_elements.definitions[id].callbacks;
+            if let Some(callback) = callbacks.connected_move {
+                self.enqueue_custom_element_reaction(CustomElementReaction::ConnectedMove { element, callback });
+            } else {
+                if let Some(callback) = callbacks.disconnected {
+                    self.enqueue_custom_element_reaction(CustomElementReaction::Disconnected { element, callback });
+                }
+                if let Some(callback) = callbacks.connected {
+                    self.enqueue_custom_element_reaction(CustomElementReaction::Connected { element, callback });
                 }
             }
         }
@@ -359,5 +381,31 @@ mod tests {
         assert!(matches!(reactions[3], CustomElementReaction::Connected { .. }));
         assert!(matches!(reactions[4], CustomElementReaction::Disconnected { .. }));
         assert!(matches!(reactions[5], CustomElementReaction::Adopted { .. }));
+    }
+
+    #[test]
+    fn move_before_uses_connected_move_callback_or_lifecycle_fallback() {
+        let mut dom = Dom::new();
+        let document = NodeIdx(0);
+        let html = dom.create_element(document, "html");
+        let left = dom.create_element(html, "div");
+        let right = dom.create_element(html, "section");
+        let moved = dom.create_element(left, "x-moved");
+        let mut definition = CustomElementDefinition::new(document,
+            "x-moved".into(), "x-moved".into(), CallbackId(1));
+        definition.callbacks.connected_move = Some(CallbackId(2));
+        definition.callbacks.connected = Some(CallbackId(3));
+        definition.callbacks.disconnected = Some(CallbackId(4));
+        let id = dom.define_custom_element(definition).unwrap();
+        dom.take_custom_element_reactions();
+        dom.begin_custom_element_upgrade(moved, id).unwrap();
+        dom.custom_element_super(id).unwrap();
+        dom.finish_custom_element_upgrade(moved, id, true).unwrap();
+        dom.take_custom_element_reactions();
+        dom.move_before(moved, right, None).unwrap();
+        assert_eq!(dom.take_custom_element_reactions(), vec![
+            CustomElementReaction::ConnectedMove { element: moved, callback: CallbackId(2) },
+        ]);
+        assert_eq!(dom.get(moved).parent, Some(right));
     }
 }

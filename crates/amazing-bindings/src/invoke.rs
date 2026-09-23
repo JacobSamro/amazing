@@ -213,7 +213,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     }
     let required = match operation {
         O::CreateText | O::CreateCDATASection | O::CreateComment | O::AppendChild | O::RemoveChild | O::Contains => 1,
-        O::InsertBefore | O::ReplaceChild => 2,
+        O::InsertBefore | O::ReplaceChild | O::MoveBefore => 2,
         _ => 0,
     };
     if args.len() < required {
@@ -255,7 +255,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     }
     let argument_node = if matches!(
         operation,
-        O::AppendChild | O::InsertBefore | O::ReplaceChild | O::RemoveChild
+        O::AppendChild | O::InsertBefore | O::ReplaceChild | O::RemoveChild | O::MoveBefore
     ) {
         Some(required_node(host, args.first())?)
     } else if operation == O::Contains {
@@ -263,7 +263,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     } else {
         None
     };
-    let reference = if operation == O::InsertBefore {
+    let reference = if matches!(operation, O::InsertBefore | O::MoveBefore) {
         nullable_node(host, &args[1])?
     } else if operation == O::ReplaceChild {
         Some(required_node(host, args.get(1))?)
@@ -328,6 +328,10 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
             }
             O::AppendChild | O::InsertBefore => {
                 R::Node(dom.pre_insert(argument_node.unwrap(), target, reference)?)
+            }
+            O::MoveBefore => {
+                dom.move_before(argument_node.unwrap(), target, reference)?;
+                R::Undefined
             }
             O::RemoveChild => R::Node(dom.pre_remove(argument_node.unwrap(), target)?),
             O::ReplaceChild => {

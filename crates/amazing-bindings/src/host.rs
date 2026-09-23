@@ -209,6 +209,7 @@ pub enum Operation {
     ElementSetInnerText,
     GetRootNode,
     NodeBaseURI,
+    MoveBefore,
     CustomElementRegistryDefine,
     CustomElementRegistryGet,
     CustomElementRegistryGetName,
