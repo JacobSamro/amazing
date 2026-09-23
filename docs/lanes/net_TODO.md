@@ -1299,3 +1299,47 @@ revision `2f7c70099b6ecc6a1f6a821217afd79b6ff81f28`: 47 source files
 contribute selected native assertions, while each excluded file has a reason.
 These are assertion ports, not WPT execution. Final assertion and Windows gate
 counts are recorded in `.agents/net/report.md`.
+
+## NET-15 — cooperative network dispatcher
+
+Fixed base: `bf085b7` (NET-14 merged). `amazing_net::dispatch::Dispatcher`
+accepts HTTP(S) requests with stable ids and advances one state per request on
+`step(budget, now)`: resolve, connect, retained TLS handshake, write, read head,
+framed body, completion, error or cancellation. Callers supply a monotonic
+`Instant`; timeout is checked before each step. The dispatcher allows one idle
+HTTP/1.1 connection per origin and reuses it only after an explicitly framed
+response. It emits head/body/done events, with typed admission, budget, timeout
+and buffer errors. A zero step budget does no transport work. The event-loop
+networking task source and DOM callbacks remain driver work.
+
+`Resolver` and `Connector` isolate the two blocking points in the std-only
+implementation. `StdResolver` uses `ToSocketAddrs`; DNS has no configured
+time bound.
+`StdConnector` uses `TcpStream::connect_timeout` once per step, defaulting to
+three seconds, then sets the socket non-blocking. This is the integrator's
+NET-15 decision in `.agents/net/decision-net15.md`; a true non-blocking
+connect can replace the trait implementation without changing the dispatcher.
+`amazing_net_tls::PendingTls` retains the rustls connection and socket across
+`WouldBlock`; each handshake step limits encrypted socket I/O. The old blocking
+TLS connect entry points loop that same state machine. Encrypted response I/O
+uses bounded adapter methods; caller-facing rustls types remain private.
+
+HTTP/1.1 is the dispatcher protocol. HTTP/2 requires a separate cooperative
+connection/stream scheduler and remains on the existing blocking path for now.
+The dispatcher parses framing incrementally and emits unencoded body bytes as
+chunks. It requests `Accept-Encoding: identity`; if a server sends codings
+anyway, the bounded NET-9 decoder runs when the encoded message completes and
+decoded bytes are then emitted in step-sized chunks. This means encoded
+responses do not deliver decoded bytes before the encoded body completes.
+Fetch policy hops and XHR have pending-event adapters in `amazing_fetch`; the
+existing blocking `fetch_api` and `Xhr::advance` continue to work. The driver
+must route events, call the XHR timeout check on idle ticks, and schedule
+further steps. It remains responsible for its
+cookie/cache transport seam and DOM event dispatch.
+
+The deterministic loopback tests use a non-blocking server stepped by the same
+test loop as the dispatcher. They cover out-of-order completion, abort after a
+body chunk, timeout, HTTP/1.1 keep-alive reuse, and typed bounds. TLS has an
+isolated verified localhost fixture to exercise retained handshake state
+across `WouldBlock`. The measured two-pass gate and source manifest are in
+`.agents/net/report.md`.

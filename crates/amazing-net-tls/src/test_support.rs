@@ -75,6 +75,14 @@ pub fn connect_http1(port: u16) -> Result<TlsStream, TlsError> {
     connect_fixture(port, true)
 }
 fn connect_fixture(port: u16, http1: bool) -> Result<TlsStream, TlsError> {
+    connect_config(
+        "localhost",
+        port,
+        Duration::from_secs(10),
+        fixture_config(http1),
+    )
+}
+fn fixture_config(http1: bool) -> Arc<ClientConfig> {
     let mut config = (*(if http1 {
         legacy_config()
     } else {
@@ -93,11 +101,33 @@ fn connect_fixture(port: u16, http1: bool) -> Result<TlsStream, TlsError> {
     let protocols = std::mem::take(&mut config.alpn_protocols);
     config = replacement;
     config.alpn_protocols = protocols;
-    connect_config("localhost", port, Duration::from_secs(10), Arc::new(config))
+    Arc::new(config)
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pending_handshake_retains_state_across_would_block() {
+        let (port, thread) = serve(vec![b"http/1.1".to_vec()], |_| {});
+        let socket = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        socket.set_nonblocking(true).unwrap();
+        let mut pending =
+            PendingTls::with_config("localhost", socket, fixture_config(true)).unwrap();
+        assert!(pending.step(1).unwrap().is_none());
+        let mut result = None;
+        for _ in 0..100_000 {
+            if let Some(stream) = pending.step(256).unwrap() {
+                result = Some(stream);
+                break;
+            }
+            std::thread::yield_now();
+        }
+        assert_eq!(
+            result.expect("handshake progressed").protocol(),
+            Protocol::Http11
+        );
+        thread.join().unwrap().unwrap();
+    }
     #[test]
     fn alpn_h2_h1_and_absent_with_verified_fixture() {
         for (protocols, expected) in [
