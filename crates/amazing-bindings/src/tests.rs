@@ -1,5 +1,5 @@
 use super::*;
-use crate::host::{BindingHost, Interface, InterfaceDefinition, Operation as O};
+use crate::host::{BindingHost, HostCallPolicy, Interface, InterfaceDefinition, Operation as O};
 use amazing_dom::NodeKind;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -25,6 +25,49 @@ struct Host {
 impl BindingHost for Host {
     type Value = V;
     type Error = String;
+    fn global_object(&mut self) -> Result<V, String> {
+        Err("installation capability unused by this invocation mock".into())
+    }
+    fn create_object(&mut self, _prototype: Option<&V>) -> Result<V, String> {
+        Err("installation capability unused by this invocation mock".into())
+    }
+    fn create_native_function(
+        &mut self,
+        _name: &'static str,
+        _length: u8,
+        _operation: O,
+        _policy: HostCallPolicy,
+    ) -> Result<V, String> {
+        Err("installation capability unused by this invocation mock".into())
+    }
+    fn define_data_property(
+        &mut self,
+        _object: &V,
+        _name: &'static str,
+        _value: V,
+        _writable: bool,
+        _enumerable: bool,
+        _configurable: bool,
+    ) -> Result<(), String> {
+        Err("installation capability unused by this invocation mock".into())
+    }
+    fn define_accessor_property(
+        &mut self,
+        _object: &V,
+        _name: &'static str,
+        _getter: Option<V>,
+        _setter: Option<V>,
+        _enumerable: bool,
+        _configurable: bool,
+    ) -> Result<(), String> {
+        Err("installation capability unused by this invocation mock".into())
+    }
+    fn get_property(&mut self, _object: &V, _name: &str) -> Result<V, String> {
+        Err("installation capability unused by this invocation mock".into())
+    }
+    fn set_property(&mut self, _object: &V, _name: &str, _value: V) -> Result<(), String> {
+        Err("installation capability unused by this invocation mock".into())
+    }
     fn install_interface(&mut self, d: &'static InterfaceDefinition) -> Result<(), String> {
         self.installed.push(d.interface);
         Ok(())

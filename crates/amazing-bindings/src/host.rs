@@ -82,7 +82,33 @@ pub struct InterfaceDefinition {
     pub members: &'static [Member],
 }
 
-/// The JS runtime implements this trait. The driver supplies access to its same
+/// WebIDL call and construct behavior for a native function.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostCallPolicy {
+    CallOnly,
+    ConstructOnly,
+    CallAndConstruct,
+}
+
+/// The binding layer declares this trait. The driver implements it using the
+/// runtime's backend-neutral capabilities and its same parsed DOM arena.
+///
+/// `Operation` is an opaque native callback token, not an interpreter body or
+/// tree-walker type. The driver maps it to a per-interpreter, runtime-owned
+/// `HostFunctionId` and dispatches it to `invoke`. `HostCallPolicy` expresses
+/// call-only, construct-only and call-and-construct WebIDL functions. The
+/// binding layer assembles prototypes, descriptors, globals and constants
+/// from these plain capabilities. `Value` stays runtime-owned. Existing
+/// conversion, brand and arena methods below remain separate from installation.
+/// js-runtime accepted the capability vocabulary. `install_interface` and
+/// `install_node_constant` remain the active installation contract until the
+/// driver adapter and installer are ready.
+/// The existing `string(&[u16])` and `to_dom_string() -> Vec<u16>` signatures
+/// are accepted as lossless UTF-16 boundary contracts. Neither side may use
+/// replacement characters for lone surrogates. The runtime implementation of
+/// these methods waits for its opaque UTF-16 `JsString` migration.
+///
+/// The driver supplies access to its same
 /// parsed arena. No user code may run inside `with_dom`; conversions and value
 /// wrapping happen outside its borrow. Error values preserve JS exceptions.
 ///
@@ -92,6 +118,48 @@ pub struct InterfaceDefinition {
 pub trait BindingHost: Sized {
     type Value: Clone;
     type Error;
+
+    fn global_object(&mut self) -> Result<Self::Value, Self::Error>;
+    fn create_object(
+        &mut self,
+        prototype: Option<&Self::Value>,
+    ) -> Result<Self::Value, Self::Error>;
+    fn create_native_function(
+        &mut self,
+        name: &'static str,
+        length: u8,
+        operation: Operation,
+        policy: HostCallPolicy,
+    ) -> Result<Self::Value, Self::Error>;
+    fn define_data_property(
+        &mut self,
+        object: &Self::Value,
+        name: &'static str,
+        value: Self::Value,
+        writable: bool,
+        enumerable: bool,
+        configurable: bool,
+    ) -> Result<(), Self::Error>;
+    fn define_accessor_property(
+        &mut self,
+        object: &Self::Value,
+        name: &'static str,
+        getter: Option<Self::Value>,
+        setter: Option<Self::Value>,
+        enumerable: bool,
+        configurable: bool,
+    ) -> Result<(), Self::Error>;
+    fn get_property(
+        &mut self,
+        object: &Self::Value,
+        name: &str,
+    ) -> Result<Self::Value, Self::Error>;
+    fn set_property(
+        &mut self,
+        object: &Self::Value,
+        name: &str,
+        value: Self::Value,
+    ) -> Result<(), Self::Error>;
 
     fn install_interface(
         &mut self,

@@ -1018,3 +1018,49 @@ driver integration test file at
 `crates/amazing/tests/js4_event_loop_adapter.rs`. Move and compile the draft
 there only after JS-4 merges to dev. No `amazing-dom` → `amazing-js` test
 dependency or root lockfile change is authorized.
+
+### BindingHost placement and lossless string boundary (2026-09-23 decision)
+
+`amazing_bindings::host::BindingHost` is declared by amazing-bindings, which
+continues to depend only on amazing-dom. The driver-local `RuntimeBindingHost`
+will implement it with backend-neutral capabilities exposed by amazing-js.
+js-runtime accepted the object/function/property capability vocabulary in
+`crates/amazing-bindings/src/host.rs`. `create_native_function` takes
+`HostCallPolicy::{CallOnly, ConstructOnly, CallAndConstruct}` and an opaque
+`Operation` token; the driver maps that token to a runtime-owned,
+per-interpreter `HostFunctionId`. No AST or VM type crosses the trait.
+The active opaque `install_interface` entry point is retained until the driver
+adapter and real installer are ready. Integrator-assist owns the driver file.
+
+The existing `string(&[u16]) -> Value` and
+`to_dom_string(&Value) -> Result<Vec<u16>, Error>` signatures are accepted as
+lossless UTF-16 contracts. In particular, lone surrogates must round-trip
+unchanged, without U+FFFD substitution. js-lang first adds UTF-16 literal data
+to the AST without removing the existing field. js-runtime then migrates
+`JsValue::Str` to an opaque `JsString` storing code units, verifies Test262
+before/after against the 10,314 baseline, and proves JS→DOM→JS lone-surrogate
+round-trip. Runtime string methods for BindingHost wait for `JsString`;
+independent object/function/property capabilities can proceed before it.
+
+### DOM-5 native fixed-base final gate (2026-09-23)
+
+On recorded base `2021707`, the Windows lane tree was refreshed with first-party
+artifact invalidation and owned files re-synced. The pinned 627-source `dom/`
+AFTER pair at WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`
+completed with two workers per round. The unmodified upstream known-pass and
+known-fail proof passed twice. Both rounds were byte-identical: 2 pass, 241
+fail, 30 timeout, 221 error and 133 unsupported files; 83 pass and 2,584 fail
+registered subtests, with no other subtest statuses. Each raw SHA-256 was
+`3601e251023d0f34e0668c7e9b8d1b24df1fbca43391e0cff123ab51ee719f4c`;
+each outcome SHA-256 was
+`327f8456d54edf7b306759439ffda04763a1f6c0ffc705ebdb7d8bc2cf0aa4d4`.
+These equal the BEFORE gate; no ranked cluster closed in the unadopted driver.
+The durable summary is `crates/amazing-dom/tests/wpt-dom5-after.json`.
+
+The final fixed-base Windows workspace gate verified 24 owned file hashes,
+including the accepted `HostCallPolicy` trait signatures. `cargo nextest run
+--workspace --locked` passed 1,335/1,335 tests with 3 skipped across 43
+binaries. Separate `cargo test --workspace --locked --doc` passed 2/2
+doctests; amazing-dom and amazing-bindings each had zero doctests. The JS-4
+adapter proof and driver installer remain follow-up integration work after
+native DOM-5 merge.
