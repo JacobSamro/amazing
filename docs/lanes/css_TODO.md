@@ -1187,6 +1187,6 @@ Each stylesheet can now carry its final fetched URL (or the document URL for
 inline CSS) in `Stylesheet::base_url`. The winning declaration's URL follows
 `content` and inherited `list-style-image` through the cascade. Generated
 image runs resolve relative URLs against that URL; a default `::marker` uses
-`list-style-image` before falling back to `list-style-type` text. The driver
-must populate `base_url` when collecting stylesheets (requested in the CSS
-lane's `questions.md`).
+`list-style-image` before falling back to `list-style-type` text. TEXT-6's
+driver pipeline now populates `base_url` for fetched and inline stylesheets,
+including the final response URL after a redirect.
