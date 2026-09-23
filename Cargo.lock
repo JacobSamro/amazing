@@ -111,6 +111,10 @@ name = "amazing-common"
 version = "0.0.1"
 
 [[package]]
+name = "amazing-compositor"
+version = "0.0.1"
+
+[[package]]
 name = "amazing-css"
 version = "0.0.1"
 dependencies = [
@@ -141,6 +145,10 @@ dependencies = [
  "amazing-dom",
  "amazing-encoding",
 ]
+
+[[package]]
+name = "amazing-ipc"
+version = "0.0.1"
 
 [[package]]
 name = "amazing-js"
@@ -198,7 +206,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "amazing-process"
+version = "0.0.1"
+
+[[package]]
 name = "amazing-regex"
+version = "0.0.1"
+
+[[package]]
+name = "amazing-storage"
 version = "0.0.1"
 
 [[package]]
