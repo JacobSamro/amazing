@@ -104,6 +104,7 @@ pub(crate) struct MutationObservers {
     observers: Vec<Observer>,
     registered: Vec<Registration>,
     pending: Vec<ObserverId>,
+    signal_slots: Vec<NodeIdx>,
     queued: bool,
     next_registration: u64,
 }
@@ -112,6 +113,7 @@ pub(crate) struct MutationObservers {
 #[derive(Debug)]
 pub struct MutationCheckpoint {
     remaining: VecDeque<ObserverId>,
+    slots: VecDeque<NodeIdx>,
 }
 #[derive(Debug, PartialEq, Eq)]
 pub struct MutationDelivery {
@@ -298,7 +300,18 @@ impl Dom {
         self.mutations.queued = false;
         MutationCheckpoint {
             remaining: std::mem::take(&mut self.mutations.pending).into(),
+            slots: std::mem::take(&mut self.mutations.signal_slots).into(),
         }
+    }
+    pub(crate) fn queue_slotchange(&mut self, slot: NodeIdx) {
+        if !self.mutations.signal_slots.contains(&slot) {
+            self.mutations.signal_slots.push(slot);
+        }
+        self.mutations.queued = true;
+    }
+    /// Slotchange fires after observer callbacks in the same checkpoint.
+    pub fn next_slotchange(&mut self, checkpoint: &mut MutationCheckpoint) -> Option<NodeIdx> {
+        checkpoint.slots.pop_front()
     }
     pub fn next_mutation_delivery(
         &mut self,
@@ -379,6 +392,7 @@ impl Dom {
         }
         self.sync_attached_attr_value(node, namespace, name, value);
         self.queue_attribute_record(node, namespace, name, old);
+        if namespace.is_none() && matches!(name, "name" | "slot") { self.reassign_all_slots(); }
         Ok(())
     }
     pub fn set_attribute(
@@ -437,6 +451,7 @@ impl Dom {
         }
         self.detach_attached_attr(node, namespace, name);
         self.queue_attribute_record(node, namespace, name, Some(old));
+        if namespace.is_none() && matches!(name, "name" | "slot") { self.reassign_all_slots(); }
         Ok(())
     }
     fn queue_attribute_record(

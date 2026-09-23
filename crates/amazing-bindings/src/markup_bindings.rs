@@ -64,7 +64,8 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
             _ => unreachable!(),
         };
     }
-    host.with_dom(|dom| if matches!(dom.get(node).kind, NodeKind::Element { .. }) { Ok(()) }
+    host.with_dom(|dom| if matches!(dom.get(node).kind, NodeKind::Element { .. })
+        || (matches!(op, O::ElementInnerHTML | O::ElementSetInnerHTML) && dom.is_shadow_root(node)) { Ok(()) }
         else { Err(DomError::TypeError) })?;
     match op {
         O::ElementInnerHTML | O::ElementOuterHTML => {
@@ -112,6 +113,7 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
                     _ => unreachable!(),
                 };
                 let context_node = if insertion_parent == node { node } else { insertion_parent };
+                let context_node = dom.shadow_data(context_node).map_or(context_node, |data| data.host);
                 let context = if matches!(dom.get(context_node).kind, NodeKind::Document) {
                     FragmentContext { local_name: "body".into(), namespace_uri: Some("http://www.w3.org/1999/xhtml".into()) }
                 } else {

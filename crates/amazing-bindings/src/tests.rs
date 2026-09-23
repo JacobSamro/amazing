@@ -661,6 +661,60 @@ fn webidl_stringifiers_are_installed_on_declaring_prototypes() {
 }
 
 #[test]
+fn shadow_root_and_slot_bindings_keep_identity_and_hide_closed_mode() {
+    let mut h = Host::default();
+    let host = h.dom.create_element(NodeIdx(0), "div");
+    let light = h.dom.create_element(host, "span");
+    let init = V::Dictionary(vec![("mode", str_value("open")),
+        ("delegatesFocus", V::Bool(true)), ("slotAssignment", str_value("named")),
+        ("clonable", V::Bool(true)), ("serializable", V::Bool(true))]);
+    let root = call(&mut h, O::ElementAttachShadow, V::Node(host), &[init]);
+    assert_eq!(call(&mut h, O::ElementShadowRoot, V::Node(host), &[]), root);
+    assert_eq!(call(&mut h, O::ShadowHost, root.clone(), &[]), V::Node(host));
+    assert_eq!(call(&mut h, O::ShadowMode, root.clone(), &[]), str_value("open"));
+    assert_eq!(call(&mut h, O::ShadowDelegatesFocus, root.clone(), &[]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ShadowSlotAssignment, root.clone(), &[]), str_value("named"));
+    assert_eq!(call(&mut h, O::ShadowClonable, root.clone(), &[]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ShadowSerializable, root.clone(), &[]), V::Bool(true));
+    let slot = h.dom.create_element(node(root.clone()), "slot");
+    assert_eq!(call(&mut h, O::SlotAssignedNodes, V::Node(slot), &[]), V::Array(vec![V::Node(light)]));
+    assert_eq!(call(&mut h, O::ElementAssignedSlot, V::Node(light), &[]), V::Node(slot));
+    assert_eq!(call(&mut h, O::GetRootNode, V::Node(slot), &[]), root.clone());
+    assert_eq!(call(&mut h, O::GetRootNode, V::Node(slot),
+        &[V::Dictionary(vec![("composed", V::Bool(true))])]), V::Node(NodeIdx(0)));
+    call(&mut h, O::ElementSetInnerHTML, root.clone(), &[str_value("<b>new</b>")]);
+    assert_eq!(call(&mut h, O::ElementInnerHTML, root, &[]), str_value("<b>new</b>"));
+    let closed_host = h.dom.create_element(NodeIdx(0), "div");
+    let closed_child = h.dom.create_element(closed_host, "i");
+    let closed = call(&mut h, O::ElementAttachShadow, V::Node(closed_host),
+        &[V::Dictionary(vec![("mode", str_value("closed"))])]);
+    let closed_slot = h.dom.create_element(node(closed), "slot");
+    assert_eq!(call(&mut h, O::ElementShadowRoot, V::Node(closed_host), &[]), V::Null);
+    assert_eq!(call(&mut h, O::ElementAssignedSlot, V::Node(closed_child), &[]), V::Null);
+    assert_eq!(call(&mut h, O::SlotAssignedNodes, V::Node(closed_slot), &[]),
+        V::Array(vec![V::Node(closed_child)]));
+}
+
+#[test]
+fn slotchange_uses_mutation_checkpoint_and_runs_listener_after_dom_borrow() {
+    let mut h = Host::default();
+    let host = h.dom.create_element(NodeIdx(0), "div");
+    let root = h.dom.attach_shadow(host, amazing_dom::shadow::ShadowOptions {
+        mode: amazing_dom::shadow::ShadowMode::Open, delegates_focus: false,
+        slot_assignment: amazing_dom::shadow::SlotAssignment::Named,
+        clonable: false, serializable: false,
+    }).unwrap();
+    let slot = h.dom.create_element(root, "slot");
+    call(&mut h, O::AddEventListener, V::Node(slot),
+        &[str_value("slotchange"), V::Callable(27)]);
+    h.dom.create_element(host, "span");
+    assert!(h.dom.mutation_microtask_pending());
+    deliver_mutation_checkpoint(&mut h).unwrap();
+    assert_eq!(h.calls, vec![27]);
+    assert!(!h.dom.mutation_microtask_pending());
+}
+
+#[test]
 fn constructor_defaults_differ_from_required_factory_arguments_and_preserve_units() {
     let mut h = Host::default();
     let a = node(call(

@@ -44,7 +44,7 @@ pub enum DispatchOrigin {
     Script,
     UserAgent,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Event {
     event_type: String,
     custom: bool,
@@ -53,6 +53,8 @@ pub struct Event {
     timestamp: Duration,
     trusted: bool,
     target: Option<EventTarget>,
+    related_target: Option<EventTarget>,
+    original_related_target: Option<EventTarget>,
     current_target: Option<EventTarget>,
     phase: EventPhase,
     dispatching: bool,
@@ -61,6 +63,7 @@ pub struct Event {
     canceled: bool,
     passive: bool,
     path: Vec<EventTarget>,
+    path_closed_roots: Vec<Vec<NodeIdx>>,
 }
 impl Event {
     /// Timestamp is monotonic time since the embedding's time origin. The DOM
@@ -74,6 +77,8 @@ impl Event {
             timestamp,
             trusted: false,
             target: None,
+            related_target: None,
+            original_related_target: None,
             current_target: None,
             phase: EventPhase::None,
             dispatching: false,
@@ -82,6 +87,7 @@ impl Event {
             canceled: false,
             passive: false,
             path: vec![],
+            path_closed_roots: vec![],
         }
     }
     pub fn event_type(&self) -> &str {
@@ -121,6 +127,10 @@ impl Event {
     pub fn target(&self) -> Option<EventTarget> {
         self.target
     }
+    pub fn related_target(&self) -> Option<EventTarget> { self.related_target }
+    pub fn set_related_target(&mut self, target: Option<EventTarget>) {
+        if !self.dispatching { self.related_target = target; self.original_related_target = target; }
+    }
     pub fn current_target(&self) -> Option<EventTarget> {
         self.current_target
     }
@@ -158,11 +168,18 @@ impl Event {
             self.prevent_default();
         }
     }
-    /// Light-tree path. A future Shadow DOM adapter must add closed-tree
-    /// filtering before exposing composedPath to JS across shadow boundaries.
+    /// The path and its closed-root membership are frozen before callbacks.
+    /// A listener outside a closed root cannot observe entries inside it.
     pub fn composed_path(&self) -> Vec<EventTarget> {
-        self.path.clone()
+        let Some(current) = self.current_target else { return vec![] };
+        let Some(index) = self.path.iter().position(|target| *target == current) else { return vec![] };
+        let visible = self.path_closed_roots.get(index).map(Vec::as_slice).unwrap_or(&[]);
+        self.path.iter().enumerate().filter(|(index, _)| self.path_closed_roots.get(*index)
+            .is_none_or(|roots| roots.iter().all(|root| visible.contains(root))))
+            .map(|(_, target)| *target).collect()
     }
+    pub(crate) fn raw_path(&self) -> &[EventTarget] { &self.path }
+    pub(crate) fn set_closed_path_roots(&mut self, roots: Vec<Vec<NodeIdx>>) { self.path_closed_roots = roots; }
     pub fn init_event(&mut self, event_type: impl Into<String>, bubbles: bool, cancelable: bool) {
         if self.dispatching {
             return;
@@ -191,10 +208,29 @@ pub trait EventTree {
     }
 }
 impl EventTree for Dom {
-    fn event_parent(&self, target: EventTarget, _event: &Event) -> Option<EventTarget> {
+    fn event_parent(&self, target: EventTarget, event: &Event) -> Option<EventTarget> {
         match target {
-            EventTarget::Node(node) => self.get(node).parent.map(EventTarget::Node),
+            EventTarget::Node(node) => {
+                if let Some(slot) = self.find_slot(node, false) { return Some(EventTarget::Node(slot)); }
+                if let Some(parent) = self.get(node).parent { return Some(EventTarget::Node(parent)); }
+                let root = self.shadow_data(node)?;
+                let originated_inside = event.target().is_some_and(|target|
+                    matches!(target, EventTarget::Node(original) if self.root(original) == node));
+                if event.composed() || !originated_inside { Some(EventTarget::Node(root.host)) }
+                else { None }
+            }
             EventTarget::External(_) => None,
+        }
+    }
+    fn retarget(&self, original: EventTarget, against: EventTarget) -> EventTarget {
+        let (EventTarget::Node(mut node), EventTarget::Node(reference)) = (original, against) else {
+            return original;
+        };
+        loop {
+            let root = self.root(node);
+            let Some(data) = self.shadow_data(root) else { return EventTarget::Node(node) };
+            if self.shadow_including_ancestors(reference).contains(&root) { return EventTarget::Node(node); }
+            node = data.host;
         }
     }
     fn default_passive(&self, target: EventTarget, event_type: &str) -> bool {
@@ -242,6 +278,7 @@ pub struct EventTargets {
 struct PathEntry {
     invocation: EventTarget,
     adjusted_target: EventTarget,
+    adjusted_related: Option<EventTarget>,
     at_target: bool,
 }
 #[derive(Debug)]
@@ -276,6 +313,7 @@ pub struct EventInvocation {
     pub event: EventId,
     pub current_target: EventTarget,
     pub target: EventTarget,
+    pub related_target: Option<EventTarget>,
     pub phase: EventPhase,
     /// The listener has been removed from the native registry before invocation.
     pub once: bool,
@@ -363,10 +401,13 @@ impl EventTargets {
         id: EventId,
         origin: DispatchOrigin,
     ) -> Result<Dispatch, DomError> {
-        let event = self.events.get(id.0).ok_or(DomError::InvalidStateError)?;
+        let mut event = self.events.get(id.0).ok_or(DomError::InvalidStateError)?.clone();
         if event.dispatching {
             return Err(DomError::InvalidStateError);
         }
+        // EventTree needs the original target when deciding whether a
+        // non-composed event began inside this shadow root or at a slottable.
+        event.target = Some(target);
         let mut path = vec![];
         let mut current = Some(target);
         let mut previous_adjusted = None;
@@ -375,14 +416,16 @@ impl EventTargets {
                 return Err(DomError::InvalidStateError);
             }
             let adjusted_target = tree.retarget(target, invocation);
+            let adjusted_related = event.original_related_target.map(|related| tree.retarget(related, invocation));
             let at_target = previous_adjusted != Some(adjusted_target);
             path.push(PathEntry {
                 invocation,
                 adjusted_target,
+                adjusted_related,
                 at_target,
             });
             previous_adjusted = Some(adjusted_target);
-            current = tree.event_parent(invocation, event);
+            current = tree.event_parent(invocation, &event);
         }
         let event = self.event_mut(id);
         event.dispatching = true;
@@ -436,6 +479,7 @@ impl EventTargets {
                         event: dispatch.event,
                         current_target: entry.invocation,
                         target: entry.adjusted_target,
+                        related_target: entry.adjusted_related,
                         phase: event.phase,
                         once,
                     });
@@ -456,6 +500,8 @@ impl EventTargets {
             let entry = dispatch.path[index].clone();
             let event = self.event_mut(dispatch.event);
             event.target = Some(entry.adjusted_target);
+            event.related_target = entry.adjusted_related;
+            if entry.adjusted_related == Some(entry.adjusted_target) { continue; }
             if !capturing && !entry.at_target && !event.bubbles() {
                 continue;
             }
@@ -488,7 +534,9 @@ impl EventTargets {
         let event = self.event_mut(dispatch.event);
         event.phase = EventPhase::None;
         event.current_target = None;
+        event.related_target = event.original_related_target;
         event.path.clear();
+        event.path_closed_roots.clear();
         event.dispatching = false;
         event.stop = false;
         event.immediate = false;
@@ -524,6 +572,15 @@ impl Dom {
     ) -> Result<Dispatch, DomError> {
         let mut events = std::mem::take(&mut self.events);
         let result = events.begin_dispatch(self, target, event, origin);
+        if result.is_ok() {
+            let roots = events.event(event).raw_path().iter().map(|target| match target {
+                EventTarget::Node(node) => self.shadow_including_ancestors(*node).into_iter()
+                    .filter(|id| self.shadow_data(*id).is_some_and(|data|
+                        data.options.mode == crate::shadow::ShadowMode::Closed)).collect(),
+                EventTarget::External(_) => vec![],
+            }).collect();
+            events.event_mut(event).set_closed_path_roots(roots);
+        }
         self.events = events;
         result
     }

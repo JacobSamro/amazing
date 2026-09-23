@@ -28,6 +28,7 @@ impl Dom {
     /// Core node clone, including namespaces and exact CharacterData code units.
     pub fn clone_node(&mut self, node: NodeIdx, deep: bool) -> Result<NodeIdx, DomError> {
         self.check_node(node)?;
+        if self.is_shadow_root(node) { return Err(DomError::NotSupportedError); }
         let copy = self.alloc_unattached(self.get(node).kind.clone());
         if let NodeKind::Attr { owner_element, .. } = &mut self.nodes[copy.0 as usize].kind {
             *owner_element = None;
@@ -45,6 +46,17 @@ impl Dom {
             for child in children {
                 let child = self.clone_node(child, true)?;
                 self.pre_insert(child, copy, None)?;
+            }
+        }
+        if let Some(root) = self.shadow_root_of_host(node) {
+            let options = self.shadow_data(root).unwrap().options;
+            if options.clonable {
+                let copy_root = self.attach_shadow(copy, options)?;
+                let children: Vec<_> = self.children(root).collect();
+                for child in children {
+                    let child = self.clone_node(child, true)?;
+                    self.pre_insert(child, copy_root, None)?;
+                }
             }
         }
         Ok(copy)
