@@ -1,0 +1,53 @@
+{
+  "fixed_base": "03b26ec7b4b2186bd27ed1455d045f47b1d2f0b4",
+  "build_host": "win-001",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "owned": {
+    "before_non_inert_passes": 0,
+    "after_non_inert_passes": 4,
+    "cases": 4,
+    "after_repeats": 2,
+    "stable_classifications_and_hashes": true,
+    "different_blank_pixels": [
+      1024,
+      1024,
+      576,
+      528
+    ],
+    "before_executable_sha256": "3644f53f08f3e84c6738a3296d484bee3ff3fbc36d5945894c2d029ad270c007",
+    "after_executable_sha256": "f1f34e07f92ff746cefe3d3b0eed7fac7084303b6594427ad18ec55bad60d98b"
+  },
+  "pinned_wpt": {
+    "before_passes": 4,
+    "after_passes": 4,
+    "cases": 4,
+    "after_repeats": 2,
+    "stable_classifications_and_hashes": true,
+    "new_polyline_credit": 0
+  },
+  "image_nextest": {
+    "passed": 30,
+    "failed": 0,
+    "skipped": 0
+  },
+  "image_doctests": {
+    "passed": 0,
+    "failed": 0
+  },
+  "workspace_nextest": {
+    "passed": 1551,
+    "failed": 0,
+    "skipped": 3
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "input_hashes": {
+    "count": 31,
+    "mac_windows_equal_before": true,
+    "mac_windows_equal_after": true,
+    "unchanged_across_gate": true
+  },
+  "workspace_and_full_render_build_slots": true
+}

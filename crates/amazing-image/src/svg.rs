@@ -1,5 +1,5 @@
 //! Explicit static SVG image subset, not a general SVG/DOM implementation.
-//! Strict XML subset; basic shapes and closed straight-line paths with presentation fills.
+//! Strict XML subset; basic shapes and straight-line outlines with presentation fills.
 //! Bounded inline color/fill declarations use the shared CSS computed-style seam.
 //! No scripts, stylesheets, references, curves, text, strokes or animation.
 //! Bounded attribute transforms on groups and shapes are supported.
@@ -322,7 +322,9 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
                         MAX_PATH_POINTS,
                     )?))
                 }
-                "polygon" => {
+                // SVG fill closes an open polyline's endpoints for the fill operation.
+                // Strokes remain unsupported and are rejected by check_attrs.
+                "polygon" | "polyline" => {
                     check_attrs(&attrs, &["points"])?;
                     Some(Shape::Outline(parse_points(
                         attrs.get("points").ok_or(DecodeError::UnsupportedSvg)?,
