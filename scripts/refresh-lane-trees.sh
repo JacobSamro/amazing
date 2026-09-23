@@ -83,13 +83,18 @@ if [ ${#held[@]} -gt 0 ]; then
   [ ${#LANES[@]} -eq 0 ] && { echo "all requested lanes are on REFRESH-HOLD; nothing to do" >&2; exit 0; }
 fi
 
-COMMIT="$(git rev-parse --short HEAD)"
-echo "refreshing lane trees to $COMMIT: ${LANES[*]}"
+# Refresh from a REF, not from this checkout's working tree. Lanes run this by
+# absolute path from the primary checkout, and the co-integrator pushes from its
+# own clone, so the primary checkout can lag origin/dev -- which already sent a
+# lane a stale tree while it believed it had refreshed to current dev. Every
+# worktree shares one object store, so `git archive` of the fetched ref is
+# identical no matter who runs this or what state their checkout is in.
+git fetch -q origin
+REF="${REFRESH_REF:-origin/dev}"
+COMMIT="$(git rev-parse --short "$REF")"
+echo "refreshing lane trees to $REF ($COMMIT): ${LANES[*]}"
 
-tar -cf "$ARCHIVE_LOCAL" \
-  --exclude='.git' --exclude='target' --exclude='.agents' --exclude='.DS_Store' \
-  crates docs examples scripts tests \
-  Cargo.toml Cargo.lock AGENTS.md ARCHITECTURE.md README.md todo.md CONTEXT.md goal.md
+git archive --format=tar -o "$ARCHIVE_LOCAL" "$REF"
 
 scp -q -i "$KEY" "$ARCHIVE_LOCAL" "$HOST:${ARCHIVE_REMOTE//\\//}"
 
@@ -153,8 +158,8 @@ for l in "${LANES[@]}"; do
 done
 rm -f /tmp/refresh-out-$STAMP.txt
 
-LOCAL_LOCK=$(shasum -a 256 Cargo.lock | cut -c1-8 | tr 'a-f' 'A-F')
-echo "local lock=$LOCAL_LOCK  (each lane above must match)"
+LOCAL_LOCK=$(git show "$REF:Cargo.lock" | shasum -a 256 | cut -c1-8 | tr 'a-f' 'A-F')
+echo "$REF lock=$LOCAL_LOCK  (each lane above must match)"
 echo
 echo "REMINDER: tell every refreshed lane to re-scp its own changed files"
 echo "before gating, and to treat earlier Windows results as stale."
