@@ -1,0 +1,9 @@
+[package]
+name = "amazing-compositor"
+description = "Property trees, layerization, tiled raster cache and frame building"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

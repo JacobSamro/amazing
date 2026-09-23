@@ -1,0 +1,9 @@
+[package]
+name = "amazing-storage"
+description = "Origin-partitioned storage: Web Storage, IndexedDB and Cache API engines"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

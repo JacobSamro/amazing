@@ -1,0 +1,9 @@
+[package]
+name = "amazing-process"
+description = "Process roles, launcher, bootstrap and site-isolation policy"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
