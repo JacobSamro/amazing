@@ -1,0 +1,13 @@
+id	input	expected	context	upstream
+basic-open	basic-open.input	basic-open.expected	document	shadow-dom/declarative/declarative-shadow-dom-basic.html
+closed-root	closed-root.input	closed-root.expected	document	shadow-dom/declarative/declarative-shadow-dom-basic.html
+serializable-open	serializable-open.input	serializable-open.expected	document	shadow-dom/declarative/declarative-shadow-dom-serialization.html
+serializable-nested	serializable-nested.input	serializable-nested.expected	document	shadow-dom/declarative/declarative-shadow-dom-serialization.html
+repeated-root	repeated-root.input	repeated-root.expected	document	shadow-dom/declarative/declarative-shadow-dom-basic.html
+invalid-mode	invalid-mode.input	invalid-mode.expected	document	shadow-dom/declarative/declarative-shadow-dom-basic.html
+fragment-inert	fragment-inert.input	fragment-inert.expected	fragment-div	shadow-dom/declarative/declarative-shadow-dom-opt-in.html
+eof-recovery	eof-recovery.input	eof-recovery.expected	document	shadow-dom/declarative/declarative-shadow-dom-basic.html
+attach-open-same	attach-open-same.input	attach-open-same.expected	document	shadow-dom/declarative/declarative-shadow-dom-attachment.html
+attach-closed-same	attach-closed-same.input	attach-closed-same.expected	document	shadow-dom/declarative/declarative-shadow-dom-attachment.html
+attach-open-opposite	attach-open-opposite.input	attach-open-opposite.expected	document	shadow-dom/declarative/declarative-shadow-dom-attachment.html
+delegates-focus	delegates-focus.input	delegates-focus.expected	document	shadow-dom/declarative/declarative-shadow-dom-basic.html

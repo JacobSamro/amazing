@@ -1,0 +1,4 @@
+declarative	true
+light	<template shadowrootmode="closed"><b>second</b></template>
+root	yes
+shadow	<b>first</b>

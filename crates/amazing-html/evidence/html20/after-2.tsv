@@ -1,0 +1,12 @@
+basic-open	pass	b4f616ba3ca15668
+closed-root	pass	776a8e82d6534b08
+serializable-open	pass	bf6be8f1bf3d2f27
+serializable-nested	pass	2572f95697472031
+repeated-root	pass	4d4071efab2fe55b
+invalid-mode	pass	88aa91251653c27f
+fragment-inert	pass	b54b95909f9a0595
+eof-recovery	pass	e8c7e8074b733bd2
+attach-open-same	pass	75912089d6a5a4d6
+attach-closed-same	pass	776a8e82d6534b08
+attach-open-opposite	pass	75912089d6a5a4d6
+delegates-focus	pass	0e1408b4fb3ba39b

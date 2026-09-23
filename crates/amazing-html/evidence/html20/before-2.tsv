@@ -1,0 +1,12 @@
+basic-open	fail	11556dbb0d0e9856
+closed-root	fail	0b28240a384ff2aa
+serializable-open	fail	355c7b40f3ef3b35
+serializable-nested	fail	f9c4b35ad0354777
+repeated-root	fail	57a1962570d2558d
+invalid-mode	pass	88aa91251653c27f
+fragment-inert	pass	b54b95909f9a0595
+eof-recovery	fail	52905ff4ba75b054
+attach-open-same	fail	c9620e949679b84c
+attach-closed-same	fail	0b28240a384ff2aa
+attach-open-opposite	pass	c9620e949679b84c
+delegates-focus	fail	09774817e9a93445
