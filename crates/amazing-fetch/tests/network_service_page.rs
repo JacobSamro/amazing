@@ -145,6 +145,7 @@ fn page_sequence_uses_one_network_service() {
                     Err(error) => panic!("accept: {error}"),
                 }
             };
+            socket.set_nonblocking(false).unwrap();
             socket
                 .set_read_timeout(Some(Duration::from_secs(5)))
                 .unwrap();
