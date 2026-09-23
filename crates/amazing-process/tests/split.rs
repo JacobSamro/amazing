@@ -313,6 +313,36 @@ fn demand_driven_acquire_skips_superseded_frames() {
     network.kill().unwrap();
 }
 
+#[test]
+fn forged_transferred_handle_closes_the_channel() {
+    let mut network = spawn(Role::Network);
+    let mut renderer = spawn(Role::Renderer);
+    let (proxy, notifications) = connect(&renderer, &network);
+    let ready = proxy
+        .navigate_shared(Navigate {
+            url: "http://example.test/forged".into(),
+            html_bytes: ByteBuf(b"<p>forged</p>".to_vec()),
+            viewport: Viewport {
+                width: 64,
+                height: 64,
+            },
+        })
+        .unwrap();
+    assert_eq!(
+        notifications
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .sequence,
+        ready.generation
+    );
+    let mut forged = ready;
+    forged.handle_id = u64::MAX;
+    assert!(renderer.receive_frame(&forged).is_err());
+    assert!(renderer.connection.is_closed());
+    let _ = renderer.kill();
+    network.kill().unwrap();
+}
+
 #[cfg(any(target_os = "linux", windows))]
 #[test]
 fn browser_crash_reaps_renderer_at_each_transfer_phase() {

@@ -185,7 +185,7 @@ pub struct ProcessHost {
     last_pong: Instant,
     restarts: u32,
     policy: RestartPolicy,
-    frame_channel: Option<HandleChannel>,
+    frame_channel: Mutex<Option<HandleChannel>>,
     frame_budget: Arc<Mutex<FrameBudget>>,
 }
 /// A browser mapping charged to the renderer until the browser drops its view.
@@ -263,7 +263,7 @@ impl ProcessHost {
             last_pong: Instant::now(),
             restarts: 0,
             policy,
-            frame_channel,
+            frame_channel: Mutex::new(frame_channel),
             frame_budget: Arc::new(Mutex::new(FrameBudget::new())),
         })
     }
@@ -276,7 +276,8 @@ impl ProcessHost {
             return Err(Error::Role);
         }
         let metadata = ready.metadata()?;
-        let channel = self.frame_channel.as_ref().ok_or(Error::Role)?;
+        let mut channel_guard = self.frame_channel.lock().unwrap();
+        let channel = channel_guard.as_ref().ok_or(Error::Role)?;
         let mut budget = self.frame_budget.lock().unwrap();
         budget.reserve(metadata.generation, metadata.byte_len as usize)?;
         let proxy = protocol::RendererProxy::new(self.connection.clone(), Duration::from_secs(5));
@@ -294,6 +295,8 @@ impl ProcessHost {
             }
             Err(error) => {
                 budget.release(metadata.generation);
+                channel_guard.take();
+                self.connection.close();
                 return Err(error.into());
             }
         }
@@ -301,6 +304,8 @@ impl ProcessHost {
             Ok(view) => view,
             Err(error) => {
                 budget.release(metadata.generation);
+                channel_guard.take();
+                self.connection.close();
                 return Err(error.into());
             }
         };
@@ -309,6 +314,8 @@ impl ProcessHost {
         });
         if !matches!(acknowledged, Ok(true)) {
             budget.release(metadata.generation);
+            channel_guard.take();
+            self.connection.close();
             return Err(Error::Dead);
         }
         budget.protect(metadata.generation);
