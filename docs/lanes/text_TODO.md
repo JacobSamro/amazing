@@ -117,3 +117,22 @@ computed-feature handoff, and the PUA primary-font case needs page-path
 diagnosis. The two first-available-font cases use a web font without U+0020;
 the provider's metric selection currently chooses the first face without
 checking space coverage, and page `@font-face` registration is still pending.
+
+## TEXT-4: first available font for metrics
+
+Implementation base: local TEXT-3 commit `34fde0d`. For `TextSystem::metrics`,
+select the first matching face with actual U+0020 coverage, including the
+`@font-face` unicode-range restriction and the font's character map. Ordinary
+shaping still keeps uncoded whitespace with its surrounding run. Synthetic
+font tests cover both missing cmap space and a font with a space glyph hidden
+by unicode-range. The page-path `@font-face` loader remains caller-owned.
+
+Evidence: `crates/amazing-text-provider/evidence/text4-gate-summary.json`
+compares the TEXT-3 final reports with the TEXT-4 win-001 render reports at the
+same pinned WPT revision. Font selection remains 11/15; retained text flow
+14/16, shaping 12/12, and vertical/ruby 11/20. Every case kept its
+classification and actual image hash. The two first-available-font cases still
+mismatch because page `@font-face` registration is pending; the provider
+behavior is covered by tests for missing cmap space and excluded unicode-range.
+On win-002, provider nextest passed 50/50 (one skipped), workspace nextest
+passed with 1,782 tests enumerated, and workspace doctests passed 2/2.
