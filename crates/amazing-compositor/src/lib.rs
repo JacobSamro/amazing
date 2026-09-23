@@ -5,12 +5,14 @@
 mod animation;
 mod frame;
 mod hit;
+mod paint_delta;
 mod paint_view;
 mod property;
 mod quad;
 use amazing_paint::Surface;
 pub use animation::*;
 pub use hit::*;
+pub use paint_delta::*;
 pub use paint_view::*;
 pub use property::*;
 pub use quad::*;
@@ -139,6 +141,8 @@ pub struct FrameStats {
 pub struct Compositor {
     trees: PropertyTrees,
     chunks: Vec<PaintChunk>,
+    item_count: usize,
+    paint_item_keys: Option<HashMap<PaintItemKey, usize>>,
     layers: Vec<Layer>,
     tiles: HashMap<TileKey, Tile>,
     last_frame: FrameStats,
@@ -193,6 +197,8 @@ impl Compositor {
         Ok(Self {
             trees,
             chunks,
+            item_count,
+            paint_item_keys: None,
             layers,
             tiles: HashMap::new(),
             last_frame: FrameStats::default(),
