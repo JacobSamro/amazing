@@ -2464,6 +2464,7 @@ impl Interpreter {
         let obj = Obj(Rc::new(RefCell::new({
             let mut x = JsObject::ordinary();
             x.proto = Some(proto);
+            x.constructed = true;
             x
         })));
         let v = self.call_value_with_new_target(
@@ -3644,5 +3645,8 @@ include!("builtins_std_reflect.rs");
 include!("builtins_std_collections.rs");
 include!("builtins_std_collection_iter.rs");
 include!("builtins_std_iterator.rs");
+include!("builtins_temporal.rs");
+include!("builtins_temporal_arithmetic.rs");
+include!("builtins_temporal_epoch.rs");
 include!("interp_regexp.rs");
 include!("interp_tests.rs");

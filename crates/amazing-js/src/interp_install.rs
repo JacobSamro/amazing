@@ -360,6 +360,7 @@ impl Interpreter {
         }
         self.install_std_collections();
         self.install_std_iterator_helpers();
+        self.install_temporal();
         let math = self.object_value();
         for (n, f) in [
             ("abs", native_abs as crate::value::NativeFn),
