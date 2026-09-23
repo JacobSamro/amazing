@@ -105,7 +105,10 @@ files, and 21,118 versus 21,334 passing variants. There were zero lost
 passes, 120 gained files, and 216 gained variants. The VM compiled
 19,685/34,493 eligible files (57.0696%), up from 19,494/34,493
 (56.5158%) at the try-handler gate. Classification hashes were `b9d73ca4`
-and `b1b5d146`. Linux amazing-js nextest passed 218 tests (one skipped).
+and `b1b5d146`. Linux and exact-commit win-002 amazing-js nextest passed
+218 tests (one skipped). Windows amazing-js doctest passed 1/1;
+workspace nextest passed 1,772 tests (five skipped), and workspace
+doctests passed 2/2.
 
 The current generator prototype is per function and has own method properties;
 shared `%GeneratorPrototype%` identity and full descriptor attributes remain
