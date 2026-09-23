@@ -281,8 +281,9 @@ actually is.
 
 Five locked decisions must be revisited as project-level events before Stage 2:
 single-threaded execution, the tree-walking interpreter (replaced by a bytecode
-VM in ADR 0003), software-only raster,
-the no-sandbox/no-multi-process non-goal, and DevTools/extensions being out of
+VM in ADR 0003), software-only raster (a compositor with tiled raster in ADR 0006;
+GPU raster still open), the no-sandbox/no-multi-process non-goal (replaced by
+ADR 0005), and DevTools/extensions being out of
 scope. Record each in `docs/adr/` rather than editing the locked list silently.
 
 ## Multi-agent orchestration
@@ -303,6 +304,11 @@ way to drive and monitor them.
 | `replaced-content` | `amazing-paint`, `amazing-media`, `amazing-image`, `amazing-svg` | pinned SVG/paint WPT selections |
 | `js-runtime` | `amazing-js` interpreter, built-ins, value model | Test262, zero lost passes |
 | `js-vm` | `amazing-js/src/vm`, `gc` (ADR 0003) | Test262 on the VM vs fallback |
+| `js-binary` | `amazing-js/src/builtins_binary*` | Test262 ArrayBuffer/DataView/TypedArray/Atomics, BigInt |
+| `js-stdlib` | `amazing-js/src/builtins_std*`, `builtins_temporal*` | Test262 Reflect/collections/Iterator/Temporal |
+| `ipc` | `amazing-ipc`, `amazing-process` (ADR 0005) | crate tests incl. serialization fuzzing; child-process demo |
+| `compositor` | `amazing-compositor` (ADR 0006) | pixel parity with full repaint; frame-time traces |
+| `storage` | `amazing-storage` | crash-recovery tests; engine-level IndexedDB expectations |
 | `html` | `amazing-html`, `amazing-encoding` (ADR 0004) | html5lib trees, WPT `encoding/` |
 | `text` | `amazing-text`, `amazing-text-provider` | pinned `css-fonts` selections |
 | `integrator-assist` | `crates/amazing` driver adoption | WPT through the installed runner |
