@@ -114,7 +114,8 @@ keywords! {
         Ruby => "ruby", RubyBase => "ruby-base", RubyText => "ruby-text",
         RubyBaseContainer => "ruby-base-container", RubyTextContainer => "ruby-text-container",
         InlineBlock => "inline-block", Flex => "flex", InlineFlex => "inline-flex", Grid => "grid",
-        InlineGrid => "inline-grid", Table => "table", InlineTable => "inline-table",
+        InlineGrid => "inline-grid", GridLanes => "grid-lanes",
+        InlineGridLanes => "inline-grid-lanes", Table => "table", InlineTable => "inline-table",
         TableRow => "table-row", TableCell => "table-cell", TableRowGroup => "table-row-group",
         TableHeaderGroup => "table-header-group", TableFooterGroup => "table-footer-group",
         TableColumn => "table-column", TableColumnGroup => "table-column-group",
@@ -150,6 +151,25 @@ pub enum Keyword {
     Content,
 }
 
+/// A subgridded axis adopts track sizes from its parent. Names are kept in
+/// source order; layout resolves repeat(auto-fill) against the used span.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Subgrid {
+    pub line_names: Vec<SubgridLineNames>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubgridLineNames {
+    Names(Vec<String>),
+    Repeat { count: SubgridRepeatCount, names: Vec<Vec<String>> },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubgridRepeatCount {
+    Integer(u32),
+    AutoFill,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Transform {
     Translate(LengthPercentage, LengthPercentage),
@@ -166,6 +186,7 @@ pub enum ComputedValue {
     Integer(i32),
     Keyword(Keyword),
     Display(Display),
+    Subgrid(Subgrid),
     Position(Position),
     Overflow(Overflow),
     Float(Float),
@@ -219,7 +240,15 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         };
     }
     match property {
-        "display" => keyword!(Display),
+        "display" => {
+            if matches!(significant(&tokenize(css)).as_slice(), [Token::Ident(first), Token::Ident(second)] if first.eq_ignore_ascii_case("inline") && second.eq_ignore_ascii_case("grid-lanes")) {
+                return Some(V::Display(Display::InlineGridLanes));
+            }
+            keyword!(Display)
+        }
+        "grid-template-columns" | "grid-template-rows" => {
+            return Some(crate::computed::parse_subgrid(css).map(V::Subgrid).unwrap_or(V::Unparsed));
+        }
         "position" => keyword!(Position),
         "float" => keyword!(Float),
         "clear" => keyword!(Clear),

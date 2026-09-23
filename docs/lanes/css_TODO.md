@@ -759,6 +759,53 @@ fixed-base `bebca0f` cases against exact-revision Chrome 154 and Safari 26.6.
 These are layout-lane measurements, not CSS-6 results. CSS-5 must land and
 stop at its ticket boundary before CSS-6 begins.
 
+### CSS-6 layout adoption (implemented on `lane/css`)
+
+The public `ComputedStyle::typed("grid-template-columns")` and `typed("grid-template-rows")`
+return `Some(ComputedValue::Subgrid(Subgrid { line_names }))` for a valid
+`subgrid` axis. `line_names: Vec<SubgridLineNames>` is source ordered:
+`Names(Vec<String>)` holds one bracket group (including empty `[]`), while
+`Repeat { count: SubgridRepeatCount, names: Vec<Vec<String>> }` holds the
+bracket groups inside one name-only `repeat()`. The count is `Integer(u32)` or
+`AutoFill`. Layout resolves `AutoFill` against the used subgrid span; CSS
+does not expand it. `ComputedStyle::get(...)` also retains the computed CSS
+text. A standalone track list remains `ComputedValue::Unparsed` pending a
+separate typed track-size model.
+
+`ComputedStyle::typed("display")` returns
+`Some(ComputedValue::Display(Display::GridLanes))` for `grid-lanes` and
+`Some(ComputedValue::Display(Display::InlineGridLanes))` for both
+`inline grid-lanes` and the specified `inline-grid-lanes` alias. This follows
+the [21 January 2026 Grid Level 3 Working Draft](https://www.w3.org/TR/2026/WD-css-grid-3-20260121/#valdef-display-grid-lanes).
+That draft reuses `grid-template-*` and `grid-auto-*` for track specification;
+the orientation property in §2.3 remains TBD, so CSS-6 adds no guessed
+orientation or new track property. Its `flow-tolerance` property governs
+placement precision and is outside this grammar ticket.
+
+The subgrid grammar follows [Grid Level 2 §7.2 and §7.2.3.1](https://www.w3.org/TR/css-grid-2/#track-sizing), including the one-`auto-fill`
+restriction. Formatting, parent-track adoption, grid-lanes placement, and
+used-value resolution remain layout work.
+
+CSS-6 fixed-base evidence on `9b52dfb` (WPT
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`): the layout lane's 200-case
+broad sample contains 19 failing subgrid signatures (8 Chrome/Safari consensus)
+and 61 failing Grid Lanes signatures (17 consensus). Extracting the authored
+grid/display declarations and running each through public CSS computation on
+win-001 twice gives typed reach **0/19 → 12/19** for subgrid (consensus **0/8
+→ 4/8**) and **0/61 → 61/61** for Grid Lanes (consensus **0/17 → 17/17**).
+Seven subgrid cases use the separate unsupported `grid` shorthand, which this
+longhand grammar ticket does not expand. The reach probe counts CSS values
+available to layout; it is not a rendering pass claim.
+
+CSS nextest: 171 passed, 0 skipped; CSS doctests: 0. Workspace nextest:
+1,360 passed, 3 skipped; workspace doctests: 2 passed. Nine pinned downstream
+selections (including cascade **38/32/2** and raw cellspacing **1/0/0**) were
+rendered twice on both fixed-base executables. All 36 reports have identical
+per-case classifications, differing pixels, and actual/reference/diff hashes
+within and across baseline/candidate. Thus the expected CSS-only render delta
+is zero. Full evidence is in the CSS lane's `.agents/css/css6-summary.json`,
+`css6-reach.tsv`, and `report.md` in the main checkout.
+
 
 ### CSS-5 final fixed-base gate — 2026-09-23
 
