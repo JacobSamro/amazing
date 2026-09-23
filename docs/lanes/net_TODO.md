@@ -1218,3 +1218,56 @@ this crate, WPT `content-security-policy/default-src/`,
 `content-security-policy/reporting/` become measurable. They are not counted
 as passing by the native tests here. Inline/eval coverage requires the
 DOM/JS adoption seam; network report delivery requires a reporting dispatcher.
+
+## NET-13 — native Fetch API objects
+
+Fixed base: `a858fd0`. The native object algorithms follow pinned
+[WHATWG Fetch §5 (`357bd989`)](https://github.com/whatwg/fetch/blob/357bd98924d94b81fbe8608192a2ee1f123b82f4/fetch.bs).
+`amazing_fetch::api` adds guarded `ApiHeaders`, typed `ApiRequest` and
+`ApiResponse`, bounded `ApiBody` consumption, and `fetch_api` glue to the
+existing per-hop `NetworkOrCache` policy path. A `StreamingResponse` from NET-9
+implements the body pull trait. Body clones share a bounded spool and retain
+independent disturbed/locked state. `fetch_api` checks an explicit abort input
+between hops; cancellation inside a blocking transport exchange must be supplied
+by the embedding's transport implementation. FormData and Blob conversions
+return typed Unsupported variants until their DOM data models are available.
+
+WebIDL conversion boundary: header names/values, method and statusText are
+`ByteString` from UTF-16, rejecting code points above U+00FF. URL and referrer
+are `USVString`, replacing unpaired surrogates. Integrity is `DOMString`.
+The typed init record preserves the difference between a missing body and an
+explicit null body. The native classes do not install JS constructors,
+iterators, promises or `AbortSignal`; those are DOM-7/runtime adoption seams.
+The current policy URL type accepts HTTP(S), so tests using `about:blank`
+require the embedding's broader URL path. Existing transport headers are
+string-backed; raw Latin-1 octet serialization is a lower transport seam.
+
+The following are **ported native assertion inputs**, not WPT runs, from the
+pinned [WPT revision `c48d587`](https://github.com/web-platform-tests/wpt/tree/c48d58747e1f211527fb695fd60548a997fae617/fetch/api):
+
+| WPT source file | Native assertion area |
+|---|---|
+| [headers-basic.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/headers-basic.any.js) | append, set, has, get, delete, order |
+| [headers-casing.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/headers-casing.any.js) | case-insensitive names |
+| [headers-combine.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/headers-combine.any.js) | duplicate combining and iteration |
+| [headers-errors.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/headers-errors.any.js) | invalid sequence rows, names, values and ByteString |
+| [headers-forbidden-override.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/headers-forbidden-override.any.js) | request guard |
+| [headers-no-cors.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/headers-no-cors.any.js) | no-CORS safelist |
+| [headers-normalize.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/headers-normalize.any.js) | value whitespace normalization |
+| [header-values-normalize.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/header-values-normalize.any.js) | normalized request values |
+| [header-values.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/header-values.any.js) | invalid/Latin-1 values |
+| [header-setcookie.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/header-setcookie.any.js) | per-field Set-Cookie iteration |
+| [headers-record.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/headers-record.any.js) | typed sequence/record filling; JS Proxy order remains bindings work |
+| [headers-structure.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/headers/headers-structure.any.js) | API method surface; JS property descriptors remain bindings work |
+| [request-structure.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/request/request-structure.any.js) | defaults and read-only values |
+| [request-bad-port.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/request/request-bad-port.any.js) | pre-network bad-port block |
+| [request-error.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/request/request-error.any.js) and [request-error.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/request/request-error.js) | constructor TypeError matrix |
+| [response-error.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/response/response-error.any.js) | status, statusText, null-body status |
+| [response-init-001.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/response/response-init-001.any.js) | defaults and status |
+| [response-init-002.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/response/response-init-002.any.js) | body type and headers |
+| [response-init-contenttype.any.js](https://github.com/web-platform-tests/wpt/blob/c48d58747e1f211527fb695fd60548a997fae617/fetch/api/response/response-init-contenttype.any.js) | content type preservation |
+
+Once bindings install these classes and the fetch method, WPT
+`fetch/api/headers/`, `fetch/api/request/`, `fetch/api/response/` and
+`fetch/api/basic/` can be measured. The native assertion count and two-pass
+Windows gate results are recorded in `.agents/net/report.md` after gating.
