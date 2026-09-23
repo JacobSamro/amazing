@@ -773,3 +773,19 @@ images used by the data-URL cases, and retains strict rejection of curves and
 unsupported paint. Linux iteration passed image **45/45** plus the root
 workspace and doctests. Fixed-base Windows retained WPT before/after and final
 locked gates are pending.
+
+## RC-16 — compositor display-list view
+
+ADR 0006's compositor receives a borrowed, read-only `DisplayListView` from
+paint. Ordered items expose stable indices for one view, conservative
+pre-transform bounds, transform/clip/effect/scroll state IDs and parent tables,
+plus direct `will-change`, fixed, sticky, video and scroller hints. The caller
+identifies video nodes because layout retains node identity but not element
+names. Public item records contain no `LayoutBox` references.
+
+`raster_range` replays the private paint command stream with its original
+effect and clip stack, selects a contiguous range of drawable items, then
+translates and clips the resulting RGBA ink into the caller's surface. This
+preserves the existing full-document entry points and their pixels. The
+initial seam uses a full-viewport scratch surface for each call; tile-local
+raster allocation and command culling remain a compositor performance followup.
