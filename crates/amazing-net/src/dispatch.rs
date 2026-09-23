@@ -102,6 +102,15 @@ pub trait Resolver {
 pub struct StdResolver;
 impl Resolver for StdResolver {
     fn resolve(&mut self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+        // The pinned WPT harness runs its std-only resource server on an
+        // ephemeral loopback port. Preserve URL origins and Host headers while
+        // routing only the WPT fixture domains to that server when requested.
+        if host == "web-platform.test" || host.ends_with(".web-platform.test") {
+            if let Ok(endpoint) = std::env::var("AMAZING_WPT_SHIM_ADDR") {
+                return endpoint.parse::<SocketAddr>().map(|address| vec![address])
+                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid WPT shim address"));
+            }
+        }
         (host, port).to_socket_addrs().map(Iterator::collect)
     }
 }

@@ -29,7 +29,7 @@ xhr.addEventListener("load", function(e) {
   events.push("load");
   assert_equals(xhr.status, 200);
   assert_equals(xhr.responseText, "top");
-  assert_equals(events.join(","), "r1,start,r2,r3,r4,load");
+  assert_equals(events.join(","), "r1,start,r2,r3,r3,r4,load");
   t.done();
   done();
 });
@@ -40,3 +40,24 @@ assert_equals(xhr.readyState, 1);
 </script>
 HTML
 "$CARGO_TARGET_DIR/debug/amazing" wpt-harness --scaffold "$root" xhr_http.html 800 600 5000
+cat > "$root/xhr_upload.html" <<'HTML'
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("XHR upload listeners and same-origin WPT host routing");
+var xhr = new XMLHttpRequest();
+var upload = [];
+xhr.open("POST", "http://web-platform.test/fetch/api/resources/echo-content.py");
+xhr.upload.addEventListener("loadstart", function() { upload.push("start"); });
+xhr.upload.addEventListener("load", function() { upload.push("load"); });
+xhr.addEventListener("load", function() {
+  assert_equals(xhr.status, 200);
+  assert_equals(upload.join(","), "start,load");
+  t.done();
+  done();
+});
+xhr.send("hello");
+</script>
+HTML
+AMAZING_WPT_SHIM_ADDR="${base#http://}" \
+  "$CARGO_TARGET_DIR/debug/amazing" wpt-harness --scaffold "$root" xhr_upload.html 800 600 5000

@@ -5,6 +5,10 @@ mod wpt_server;
 fn main() {
     let server = wpt_server::WptServer::new();
     println!("{}", server.url(""));
-    let mut line = String::new();
-    let _ = std::io::stdin().read_line(&mut line);
+    if std::env::args().any(|arg| arg == "--serve") {
+        loop { std::thread::sleep(std::time::Duration::from_secs(60)); }
+    } else {
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+    }
 }

@@ -10,7 +10,7 @@ xhr.addEventListener("load", function(e) {
   events.push("load");
   assert_equals(xhr.status, 200);
   assert_equals(xhr.responseText, "hello");
-  assert_equals(events.join(","), "r1,start,r2,r3,r4,load");
+  assert_equals(events.join(","), "r1,start,r2,r3,r3,r4,load");
   t.done();
   done();
 });

@@ -191,6 +191,7 @@ pub trait FetchHost: BindingHost {
     fn fetch_xhr_execute(&mut self, xhr: &mut Xhr) -> Result<Vec<XhrEvent>, XhrError>;
     fn fetch_xhr_start(&mut self, record: Rc<RefCell<FetchObject>>,
         receiver: Self::Value) -> Result<(), Self::Error>;
+    fn fetch_upload_has_listeners(&mut self, receiver: &Self::Value) -> Result<bool, Self::Error>;
     fn fetch_xhr_ready_state(&self, receiver: &Self::Value,
         current: amazing_fetch::xhr::XhrState) -> amazing_fetch::xhr::XhrState;
     fn fetch_xhr_event(&mut self, receiver: &Self::Value, event: XhrEvent) -> Result<(), Self::Error>;
@@ -1140,9 +1141,11 @@ fn xhr_invoke<H: FetchHost>(host: &mut H, op: FetchOperation,
         }
         O::XhrSend => {
             let body = args.first().map(|v| body_input(host, v)).transpose()?.flatten();
+            let upload_has_listeners = host.fetch_upload_has_listeners(receiver)?;
             let events = {
                 let mut record = record.borrow_mut();
                 let FetchObject::Xhr(xhr) = &mut *record else { return Err(host.fetch_type_error("Expected XMLHttpRequest")); };
+                xhr.set_upload_listeners(upload_has_listeners);
                 xhr.send(body, 0).map_err(|e| host.fetch_xhr_error(e))?
             };
             for event in events { host.fetch_xhr_event(receiver, event)?; }
