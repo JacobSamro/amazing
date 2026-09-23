@@ -5,6 +5,14 @@ pub use amazing_dom::events::CallbackId;
 /// only this token; the driver maps it to a value outside a DOM borrow.
 pub type RootId = CallbackId;
 
+/// Result of an optional installation capability. `NotSupported` leaves the
+/// rest of the interface usable and is recorded by the installer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OptionalHookInstall {
+    Installed,
+    NotSupported,
+}
+
 /// Identity of an arena object. A reused slot must receive a new generation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PlatformKey {
@@ -667,16 +675,15 @@ pub trait BindingHost: Sized {
     ) -> Result<(), Self::Error>;
     /// Define the prototype's real %Symbol.toStringTag% data property using
     /// the interface's qualified name. A string-keyed lookalike is invalid.
-    /// New host capabilities default to a typed unsupported error so an older
-    /// driver continues to compile until its runtime gains symbol keys.
+    /// An older driver returns typed `NotSupported` until it gains symbol keys.
     fn install_interface_class_string(&mut self, _interface: Interface, _name: &'static str)
-        -> Result<(), Self::Error> {
-        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+        -> Result<OptionalHookInstall, Self::Error> {
+        Ok(OptionalHookInstall::NotSupported)
     }
     /// DOMException.prototype inherits %Error.prototype%, including its
     /// name/message toString behavior. Kept separate from WebIDL inheritance.
-    fn install_dom_exception_error_prototype(&mut self) -> Result<(), Self::Error> {
-        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    fn install_dom_exception_error_prototype(&mut self) -> Result<OptionalHookInstall, Self::Error> {
+        Ok(OptionalHookInstall::NotSupported)
     }
     /// Standard Node constants are exposed on Node and its prototype.
     fn install_node_constant(&mut self, name: &'static str, value: u16) -> Result<(), Self::Error>;
