@@ -33,7 +33,7 @@ pub struct SlotState {
     pub assigned: Vec<NodeIdx>,
 }
 
-fn custom_element_name(name: &str) -> bool {
+pub(crate) fn custom_element_name(name: &str) -> bool {
     // HTML's valid custom element name uses the shared element-local-name
     // validator, then adds ASCII-case, hyphen, and reserved-name constraints.
     let reserved = [

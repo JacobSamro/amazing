@@ -334,9 +334,11 @@ impl Dom {
         self.set_subtree_document(node, document);
     }
     pub(crate) fn set_subtree_document(&mut self, node: NodeIdx, document: NodeIdx) {
-        if self.get(node).owner_document == document {
+        let old_document = self.get(node).owner_document;
+        if old_document == document {
             return;
         }
+        self.custom_element_adopted(node, old_document, document);
         for id in self.shadow_including_tree_order(node) {
             self.nodes[id.0 as usize].owner_document = document;
         }
@@ -403,9 +405,11 @@ impl Dom {
             self.nodes[parent.0 as usize].last_child = Some(node);
         }
         self.reassign_all_slots();
+        self.custom_element_tree_inserted(node);
         if signal_fallback { self.queue_slotchange(parent); }
     }
     pub(crate) fn remove_internal(&mut self, node: NodeIdx, suppress: bool) {
+        self.custom_element_tree_removed(node);
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
         let n = self.get(node);
         let parent = n.parent.expect("remove requires parent");
