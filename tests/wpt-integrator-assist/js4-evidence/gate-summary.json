@@ -1,0 +1,62 @@
+{
+  "base": "c8c3c21b369d300e41009948aa11819e3c602e43",
+  "implementation_revision": "1f16fec356c957922fe5428a70fcf3f521268787",
+  "server_tree": "C:/Users/server/src/wt/integrator-assist",
+  "cargo_target_dir": "C:/Users/server/target/integrator-assist",
+  "reference_proof": {
+    "command": "cargo nextest run -p amazing --test js4_event_loop_adapter --locked",
+    "passed": 5,
+    "failed": 0
+  },
+  "driver_nextest": {
+    "command": "cargo nextest run -p amazing --locked",
+    "passed": 122,
+    "failed": 0,
+    "skipped": 3,
+    "log_sha256": "8e6860a8ec1bfb2617bea8b6c8beb6264b4b57479e0856ca4ddc9b5dcddb8b89",
+    "server_log": "target/diagnostics/ia-js4-driver.log"
+  },
+  "driver_doctest": {
+    "command": "cargo test -p amazing --locked --doc",
+    "exit": 101,
+    "result": "no library targets found in package amazing"
+  },
+  "workspace_nextest": {
+    "command": "cargo nextest run --workspace --locked",
+    "passed": 1414,
+    "failed": 0,
+    "skipped": 3,
+    "log_sha256": "48d54a2dfe1f8b46567111d56078db9542330c709dbc9d67367ddd9f724db43c",
+    "server_log": "target/diagnostics/ia-js4/workspace-nextest.log"
+  },
+  "workspace_doctest": {
+    "command": "cargo test --workspace --locked --doc",
+    "passed": 2,
+    "failed": 0,
+    "summaries": 19,
+    "log_sha256": "32fd95f5790d9711854410ab488431653ad91a8030c11554573bacad85e3f201",
+    "server_log": "target/diagnostics/ia-js4/workspace-doc.log"
+  },
+  "scaffold_wpt_worker": {
+    "pass_case": {
+      "test": "pass.html",
+      "status": "pass",
+      "subtests_passed": 2,
+      "exit": 0
+    },
+    "fail_case": {
+      "test": "fail.html",
+      "status": "fail",
+      "subtests_failed": 1,
+      "exit": 1
+    },
+    "credit": "synthetic scaffold only; no WPT conformance credit"
+  },
+  "source_verification": {
+    "checked": 1109,
+    "missing": 0,
+    "mismatched": 0
+  },
+  "shared_slot_wrapper": "/Users/jMac/Projects/OpenSource/amazing/scripts/with-build-slot.sh integrator-assist",
+  "refresh_hold_released": true
+}
