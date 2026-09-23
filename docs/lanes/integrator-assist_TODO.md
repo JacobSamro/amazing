@@ -547,3 +547,66 @@ Net's `FontRequest` and `NetworkService::start_font` are ready for the driver.
 Next, route `@font-face` resource loading through that mode and register decoded
 faces with the page `TextProvider`. Keep its corpus and final Windows gate as a
 separate ticket after IA-ADOPT.
+
+## IA-ADOPT fixed-base completion evidence
+
+Commit `1d1066b` rebases the driver adoption onto fixed `dev` base `f8bdb33`,
+which includes IA-SVG, JS-9, and NET-22. The primary granted the one
+`amazing-regex` driver manifest line and one `amazing` package lockfile edge;
+both are in the same commit. `BindingHost::form_pattern_matches` compiles the
+standalone UTF-16 pattern with the JS-9 `v` engine, then compiles the anchored
+full-string form; syntax errors leave the pattern uncompiled, and resource
+errors propagate. The focused driver test passes all four assertions. The
+`HTMLInputElement.pattern` IDL reflection is still absent in DOM-15, so that
+test changes the DOM attribute with `setAttribute`; a request is in the lane
+questions file for dom-bindings. JSRT-7's derived custom-element `super()`
+facade remains unsupported.
+
+The pinned 627-source WPT `dom/` selection at revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` and selection SHA-256
+`9787de028efe5dc83f491ce2a818e2a549b4a07a236e6538c1e6165bb437b0b5`
+ran with three workers, 800×600 viewport, 20-second normal and 120-second
+long deadlines. Linux BEFORE on venus-001 repeated **87 passing files / 2,252
+passing subtests**, with identical raw SHA-256
+`2facb5712486dbe746625b7f5553332bf825774144cbfdba168b5af5ff5bdb3e`
+and outcome SHA-256
+`d4d6adb50c3aab642de5bdaa5a04baa87965268f9f1b37c793e66b19b9ee34a1`.
+Linux AFTER on venus-003 repeated **87 / 2,252**, with identical raw SHA-256
+`2915428596cb6509445060e4ff67e7b1928cc4cc00266bbe7cce85d3063c3e3c`
+and outcome SHA-256
+`77c2b8768596707f9ab77d8702cfc448f4791cdde7a8667439be28519dd13362`.
+Exact named pass comparison found **zero file pass gains, zero file pass losses,
+zero subtest pass gains, and zero subtest pass losses**. The sole file status
+change is `dom/nodes/moveBefore/slotchange-events.html` from harness error to
+failure with four executed failing assertions; no pass credit is claimed.
+The frozen upstream harness proof passed twice in each pair. Raw reports are
+retained in the lane's `.agents` evidence folders.
+
+Linux `cargo nextest run --workspace --locked` and separate
+`cargo test --workspace --locked --doc` both passed on `1d1066b`. The final
+Windows fixed-base before/after corpus and scoped/workspace/doctest gates are
+measured separately below.
+
+On win-001, the frozen BEFORE WPT pair also completed stably twice at **87
+passing files / 2,252 passing subtests**, with raw SHA-256
+`377b86b80aa6b891174bde07e54d477d0a8d8f071dc580f4c9b4a8de47fc3e1c`
+and the same outcome SHA-256 as Linux BEFORE. The host's first pair was
+stopped after that WPT result when the primary introduced win-002 for plain
+Windows gates. The scoped nextest then passed **134/134**, three skipped, on
+win-002. `amazing` has no library target, so crate doctests are N/A; the
+workspace nextest passed all **1,790 runnable tests**, and separate doctests
+passed **2/2** on win-002. Nextest's locked workspace discovery on that same
+tree lists **1,794 tests**, including four ignored (three in `amazing`, one in
+`amazing-text-provider`). Five changed code/lock files matched Mac and win-002
+hashes.
+
+The win-001 AFTER WPT pair completed stably twice at **87 passing files /
+2,252 passing subtests**, with raw SHA-256
+`a0597234a208dd0fc2df733d63893773080353096b856063335c2af36dbf8a1b`
+and the same outcome SHA-256 as Linux AFTER. Both Windows pairs had exact
+matching raw record bytes across rounds. Exact named-pass comparison found
+**zero file gains/losses and zero subtest gains/losses**. The same sole
+`slotchange-events.html` error-to-failure transition exposed four failed
+assertions and earns no conformance credit. Pinned WPT proof and selection
+hashes matched the Linux runs. Full Windows raw reports are retained in the
+lane's `.agents` evidence folders.
