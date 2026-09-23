@@ -19,6 +19,14 @@ pub enum RelativeUnit {
     Rem,
     Ex,
     Ch,
+    Ic,
+    Cap,
+    Lh,
+    Rch,
+    Ric,
+    Rex,
+    Rcap,
+    Rlh,
     Vw,
     Vh,
     Vmin,
@@ -44,6 +52,14 @@ impl LengthPercentage {
                     "rem" => return Some(Self::Relative(*n, RelativeUnit::Rem)),
                     "ex" => return Some(Self::Relative(*n, RelativeUnit::Ex)),
                     "ch" => return Some(Self::Relative(*n, RelativeUnit::Ch)),
+                    "ic" => return Some(Self::Relative(*n, RelativeUnit::Ic)),
+                    "cap" => return Some(Self::Relative(*n, RelativeUnit::Cap)),
+                    "lh" => return Some(Self::Relative(*n, RelativeUnit::Lh)),
+                    "rch" => return Some(Self::Relative(*n, RelativeUnit::Rch)),
+                    "ric" => return Some(Self::Relative(*n, RelativeUnit::Ric)),
+                    "rex" => return Some(Self::Relative(*n, RelativeUnit::Rex)),
+                    "rcap" => return Some(Self::Relative(*n, RelativeUnit::Rcap)),
+                    "rlh" => return Some(Self::Relative(*n, RelativeUnit::Rlh)),
                     "vw" => return Some(Self::Relative(*n, RelativeUnit::Vw)),
                     "vh" => return Some(Self::Relative(*n, RelativeUnit::Vh)),
                     "vmin" => return Some(Self::Relative(*n, RelativeUnit::Vmin)),
@@ -483,7 +499,7 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
     {
         return Some(V::Unparsed);
     }
-    if (margin || inset || size || padding) && crate::math::length_percentage(css, true) {
+    if crate::math::length_percentage(css, !(border || property == "letter-spacing")) {
         return Some(V::LengthPercentageExpression(crate::syntax::serialize(
             &tokenize(css),
         )));
@@ -586,6 +602,24 @@ mod tests {
         );
         for invalid in ["1 px", "1/**/px", "12", "1e999px", "2px 3px", "NaNpx"] {
             assert_eq!(LengthPercentage::parse(invalid), None, "{invalid}");
+        }
+    }
+    #[test]
+    fn values_four_font_relative_units_keep_their_metric_basis() {
+        for (css, unit) in [
+            ("2ic", RelativeUnit::Ic), ("2cap", RelativeUnit::Cap),
+            ("2lh", RelativeUnit::Lh), ("2rch", RelativeUnit::Rch),
+            ("2ric", RelativeUnit::Ric), ("2rex", RelativeUnit::Rex),
+            ("2rcap", RelativeUnit::Rcap), ("2rlh", RelativeUnit::Rlh),
+        ] {
+            assert_eq!(LengthPercentage::parse(css),
+                Some(LengthPercentage::Relative(2.0, unit)), "{css}");
+            assert!(matches!(parse("width", css),
+                Some(ComputedValue::LengthPercentage(LengthPercentage::Relative(2.0, found)))
+                    if found == unit));
+            let calc = format!("calc({css} + 1px)");
+            assert!(matches!(parse("width", &calc),
+                Some(ComputedValue::LengthPercentageExpression(value)) if value == calc));
         }
     }
     #[test]
