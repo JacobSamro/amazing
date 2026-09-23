@@ -1011,7 +1011,7 @@ The layout crate nextest passed **234/234** and doctests **0/0** on win-001.
 The source-verified workspace gate passed **1660/1660** nextest tests with 3
 skipped and **2/2** workspace doctests. No Mac builds or tests were run.
 
-## LAYOUT-11 — zoom used values and font features (in progress, 2026-09-23)
+## LAYOUT-11 — zoom used values and routed cases (completed, 2026-09-23)
 
 The pre-CSS-11 five-case baseline on lane commit `82d5574` is **0/5** twice,
 with stable case classifications and image hashes. It includes the two WPT
@@ -1031,6 +1031,26 @@ the exact `(21,5), (6,16), (12,10), (29,3)` corner pairs. Paint's separate
 `resolve_corner_radii` parser leaves 84 mismatched pixels; paint must use the
 layout result. Exact requests are in `.agents/layout/questions.md`.
 
-CSS-11 must deliver `effective_zoom()` and `scale_used_length` before zoom
-layout work starts. CSS-12 must compute the two inherited font feature
-properties before the ligature reftest can measure the layout-to-text route.
+CSS-11 landed in fixed base `582a6af` with `effective_zoom()` and
+`scale_used_length()`. Its unchanged renderer remained 0/5 twice. Layout now
+scales used absolute lengths once while preserving percentage terms against
+their already zoomed containing boxes. It applies this to box geometry, font
+size, borders, flex/grid, table spacing, replaced content and SVG. Both zoom
+reftests became exact: focused selection **0/5 → 2/5 twice**, stable hashes;
+the other three cases retained their prior pixel counts.
+
+Broad flex/grid stayed **86/200 → 86/200 twice**, with zero losses. Its only
+changed hash is a pre-existing row subgrid alignment mismatch improving from
+30,628 to 26,300 differing pixels. All ten retained selections kept their
+pass counts and every actual hash, twice: flex-grid 24/24, geometry 41/61,
+tables 10/12, floats 6/8, block-collapse 9/9, position 12/12, text-flow
+14/16, contents 6/6, paint-compositing 24/24, images 12/12. The layout crate
+passed 235/235 nextest and 0/0 doctests; the source-verified workspace gate
+passed 1719/1719 nextest (3 skipped) and 2/2 doctests on win-001.
+
+The ligature case is explicitly **blocked on CSS-12**. Computed
+`font-feature-settings` and `font-variant-ligatures` were absent from dev at
+the final fixed-base gate, so the provisional layout-to-text feature mapper
+was not merged. The two paint-owned cases remain routed in
+`.agents/layout/questions.md`. Source manifest, renderer hashes and all raw
+before/after reports are in `crates/amazing-layout/evidence/layout11/`.

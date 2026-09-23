@@ -28,3 +28,61 @@ This baseline predates CSS-11 and CSS-12. The latter must expose computed font
 features before layout can measure the ligature case. The two cascade cases
 have existing layout geometry and require the paint changes routed in
 `.agents/layout/questions.md`.
+
+## CSS-11 base and layout candidate
+
+The fixed LAYOUT-11 base is `origin/dev` `582a6af0962dd3b7e6c94427c14746915aea14ab`.
+CSS-11 exposes `effective_zoom()` and `scale_used_length`, but the unchanged
+CSS-11-only renderer still gives **0/5** in the focused selection twice, with
+exactly the pre-CSS pixel counts and hashes. Its immutable SHA256 is
+`8a8a77f196f724060b572a2da05f37f96f89f1198b03092e03a070262ab00a92`.
+
+Layout source commit `0b41e3001fe01bc3af83300ce5919c551d8f7996`
+applies zoom at used-value boundaries to ordinary box geometry, font size,
+borders, flex/grid lengths, table spacing, replaced content and SVG dimensions.
+`candidate-source.json` records 428 tracked crate source/test and Cargo files;
+all **428/428** hashes matched the win-001 build tree before and after its
+workspace gate. The immutable candidate renderer SHA256 is
+`bcec27654beb3e1bca74d6587f4fcb79c731ff0b318902d4c24f91cf1518f972`.
+
+| Frozen focused case | CSS-11 only, both runs | Layout candidate, both runs |
+| --- | ---: | ---: |
+| `css-viewport__zoom__basic.html` | mismatch, 30,000 px | **pass, 0 px** |
+| `css-viewport__zoom__inherited.html` | mismatch, 30,000 px | **pass, 0 px** |
+| `css-cascade__all-prop-002.html` | mismatch, 10,000 px | mismatch, 10,000 px |
+| `css-values__calc-border-radius-1.html` | mismatch, 84 px | mismatch, 84 px |
+| `css-fonts__font-variant-ligatures-11.optional.html` | mismatch, 424 px | mismatch, 424 px |
+
+Both repeats have identical classifications, pixel counts and actual/reference/
+diff hashes. The cascade and radius cases are paint-owned and have exact
+requests in `.agents/layout/questions.md`. The ligature case is **blocked on
+CSS-12**: computed font-feature properties were absent from dev at the final
+gate, so the provisional layout-to-text feature mapper remains unmerged.
+
+Broad flex/grid stayed **86/200 before and after, twice, zero losses**. The
+only changed actual hash was
+`css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__alignment__row-subgrid-alignment-in-subgridded-axis-001.html`,
+still a mismatch but improving from 30,628 to 26,300 differing pixels. All
+ten retained selections have zero pass losses, zero count changes and zero
+actual-hash changes, twice:
+
+| Selection | Before and after, both runs |
+| --- | ---: |
+| flex-grid | 24/24 |
+| geometry | 41/61 |
+| tables | 10/12 |
+| floats | 6/8 |
+| block-collapse | 9/9 |
+| position | 12/12 |
+| text-flow | 14/16 |
+| contents | 6/6 |
+| paint-compositing | 24/24 |
+| images | 12/12 |
+
+The layout crate passed **235/235** nextest tests and **0/0** doctests. The
+source-verified workspace gate passed **1719/1719** nextest tests with 3
+skipped and **2/2** doctests. Every build and render ran on win-001; none ran
+on macOS. Raw reports are `css11-only-{1,2}.json`, `final-focused-{1,2}.json`,
+`broad-{before,after}-{1,2}.json` and the 20 JSON files in each retained
+directory. `gate-summary.json` records per-case gains, losses and changed
+hashes for both repeats.

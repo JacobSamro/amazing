@@ -1,0 +1,553 @@
+{
+  "base": "582a6af0962dd3b7e6c94427c14746915aea14ab",
+  "source_commit": "0b41e3001fe01bc3af83300ce5919c551d8f7996",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "renderer_before_sha256": "8a8a77f196f724060b572a2da05f37f96f89f1198b03092e03a070262ab00a92",
+  "renderer_after_sha256": "bcec27654beb3e1bca74d6587f4fcb79c731ff0b318902d4c24f91cf1518f972",
+  "focused": [
+    {
+      "before": {
+        "pass": 0,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 2,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gains": [
+        "css-viewport__zoom__basic.html",
+        "css-viewport__zoom__inherited.html"
+      ],
+      "losses": [],
+      "changed_actual_sha256": [
+        "css-viewport__zoom__basic.html",
+        "css-viewport__zoom__inherited.html"
+      ]
+    },
+    {
+      "before": {
+        "pass": 0,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 2,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gains": [
+        "css-viewport__zoom__basic.html",
+        "css-viewport__zoom__inherited.html"
+      ],
+      "losses": [],
+      "changed_actual_sha256": [
+        "css-viewport__zoom__basic.html",
+        "css-viewport__zoom__inherited.html"
+      ]
+    }
+  ],
+  "broad": [
+    {
+      "before": {
+        "pass": 86,
+        "mismatch": 114,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 86,
+        "mismatch": 114,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gains": [],
+      "losses": [],
+      "changed_actual_sha256": [
+        "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__alignment__row-subgrid-alignment-in-subgridded-axis-001.html"
+      ]
+    },
+    {
+      "before": {
+        "pass": 86,
+        "mismatch": 114,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 86,
+        "mismatch": 114,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "gains": [],
+      "losses": [],
+      "changed_actual_sha256": [
+        "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__alignment__row-subgrid-alignment-in-subgridded-axis-001.html"
+      ]
+    }
+  ],
+  "retained": {
+    "flex-grid": [
+      {
+        "before": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      },
+      {
+        "before": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      }
+    ],
+    "geometry": [
+      {
+        "before": {
+          "pass": 41,
+          "mismatch": 20,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 41,
+          "mismatch": 20,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      },
+      {
+        "before": {
+          "pass": 41,
+          "mismatch": 20,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 41,
+          "mismatch": 20,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      }
+    ],
+    "tables": [
+      {
+        "before": {
+          "pass": 10,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 10,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      },
+      {
+        "before": {
+          "pass": 10,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 10,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      }
+    ],
+    "floats": [
+      {
+        "before": {
+          "pass": 6,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 6,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      },
+      {
+        "before": {
+          "pass": 6,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 6,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      }
+    ],
+    "block-collapse": [
+      {
+        "before": {
+          "pass": 9,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 9,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      },
+      {
+        "before": {
+          "pass": 9,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 9,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      }
+    ],
+    "position": [
+      {
+        "before": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      },
+      {
+        "before": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      }
+    ],
+    "text-flow": [
+      {
+        "before": {
+          "pass": 14,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 14,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      },
+      {
+        "before": {
+          "pass": 14,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 14,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      }
+    ],
+    "contents": [
+      {
+        "before": {
+          "pass": 6,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 6,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      },
+      {
+        "before": {
+          "pass": 6,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 6,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      }
+    ],
+    "paint-compositing": [
+      {
+        "before": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      },
+      {
+        "before": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      }
+    ],
+    "images": [
+      {
+        "before": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      },
+      {
+        "before": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "after": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "gains": [],
+        "losses": [],
+        "changed_actual_sha256": []
+      }
+    ]
+  }
+}
