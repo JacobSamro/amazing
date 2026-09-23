@@ -142,7 +142,7 @@ rebased workspace, not an attributed HTML-only workspace delta.
 This ticket does not change XML byte handling or the HTML-1 XML cascade. Its
 strict XML byte-input idea remains a separate possible ticket after HTML-2.
 
-## HTML-3 — incremental decoded-text parsing (in progress)
+## HTML-3 — incremental decoded-text parsing
 
 `IncrementalParser::push_chunk(&str)` feeds one tokenizer and one `TreeBuilder`;
 `finish()` signals the sole final EOF and returns the DOM. Input chunks must
@@ -153,13 +153,30 @@ releases consumed scalar input. It retains the source of a tag under
 construction for malformed-EOF literal recovery. Current-token fields such as
 an unfinished comment or attribute can still grow with that token.
 
-The Mac-only draft is awaiting the co-integrator's explicit release of the
-Windows html source tree and target before any HTML-3 sync or test. Its planned
-gate compares every scalar-boundary split and a deterministic multi-chunk
-schedule against `parse(&str)` for tags, attributes, comments, doctypes,
-references, RAWTEXT/RCDATA, malformed EOF, CRLF and non-ASCII text. Separate
-tests assert temporary exhaustion, one final EOF and bounded retained input
-after consumed chunks. No byte-stream encoding or driver change is included.
+Co-integrator explicitly released the Windows html tree/target after the
+authoritative HTML-2 merged gate. The final HTML-3 source `5bb22d3` was
+rebased on dev `2021707`, refreshed only into that tree through the primary
+checkout script, and re-synced. The gate compares every scalar-boundary split
+and a deterministic multi-chunk schedule against `parse(&str)` for 15 fixtures
+covering tags, quoted/unquoted attributes, comments, doctypes, named/numeric
+references, RAWTEXT/RCDATA, malformed EOF, CRLF and non-ASCII text. Direct
+tests assert deferred ambiguous tokens and a sole final EOF. Repeating 2,000
+complete `<p>1234567890</p>` chunks kept the retained tokenizer input at no
+more than 12 scalars after each push; this excludes the growing DOM and fields
+of a token still under construction.
+
+Final win-001 evidence at dev `2021707`: package nextest **95 passed / 0
+failed / 0 skipped** twice, four HTML-3 test-name projection SHA256
+`7a0785e40fbc66216c9e18030526191181ab2ba035ce5fa43f0d2c86891086e9`
+both times; separate package doctest **1 passed / 0 failed**. The prior
+authoritative HTML-2 HTML crate gate had 91 unit tests and one doctest, so
+HTML-3 adds four passing unit tests. Final workspace nextest **1321 passed /
+0 failed / 3 skipped**; separate workspace doctests **2 passed / 0 failed**.
+`Cargo.lock` and all four owned source hashes matched before/after the
+workspace gate. The workspace total includes contemporaneous merges from
+other lanes and is not an attributed HTML-only delta. A previous green gate
+at dev `ed6a44c` was superseded when dev advanced mid-gate. No byte-stream
+encoding or driver change is included.
 
 The pinned sample has two measured DTD-entity blockers and no UTF-8 input
 failures among 14 files. A bounded XHTML entity policy is a separate decision;
