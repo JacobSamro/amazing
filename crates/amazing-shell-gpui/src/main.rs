@@ -2,7 +2,9 @@
 
 mod audio_output;
 mod dom_runtime;
+mod engine_compositor;
 mod engine_viewport;
+mod compositor_presenter;
 mod playback_clock;
 mod session_state;
 mod secure_video;
@@ -1878,8 +1880,15 @@ impl BrowserShell {
                                 .child(
                                     div()
                                         .relative()
-                                        .w_full()
-                                        .child(img(viewport.image.clone()).w_full())
+                                        .w(px(viewport.width as f32))
+                                        .h(px(viewport.height as f32))
+                                        .child(match &viewport.compositor {
+                                            Some(scene) => scene.borrow().frame().element(),
+                                            None => img(viewport.image.clone())
+                                                .w(px(viewport.width as f32))
+                                                .h(px(viewport.height as f32))
+                                                .into_any_element(),
+                                        })
                                         .child(
                                             canvas(
                                                 |bounds, _, _| bounds,

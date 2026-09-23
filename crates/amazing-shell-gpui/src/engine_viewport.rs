@@ -1,30 +1,31 @@
 use std::sync::Arc;
 use std::{cell::RefCell, rc::Rc};
 
-use amazing_layout::font::{FontSource, ParsedFont};
 use amazing_net::{FetchOptions, Url, fetch, resolve};
-use amazing_paint::{OutlineGlyphProvider, Surface};
+use amazing_paint::Surface;
+use amazing_text_provider::TextProvider;
 use gpui::RenderImage;
 use image::{Frame, RgbaImage};
 
 use crate::dom_runtime::ShellDomHost;
+use crate::engine_compositor::EngineCompositor;
 use crate::session_state::BrowserSession;
 
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 570;
-const WINDOWS_UI_FONT: &str = r"C:\Windows\Fonts\segoeui.ttf";
 const MAX_STYLESHEETS: usize = 32;
 const MAX_STYLESHEET_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PAGE_IMAGES: usize = 32;
 const MAX_DOCUMENT_SCRIPTS: usize = 32;
 const MAX_SCRIPT_BYTES: usize = 4 * 1024 * 1024;
 
+#[derive(Clone)]
 struct PageImage {
     node: amazing_dom::NodeIdx,
     image: amazing_media::Image,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct PageResources {
     images: Vec<PageImage>,
     backgrounds: Vec<(String, amazing_media::Image)>,
@@ -134,10 +135,19 @@ article p { display: block; margin: 10px 0px 0px 0px; color: #5f6368; font-size:
 #[derive(Clone)]
 pub struct EngineViewport {
     pub image: Arc<RenderImage>,
+    pub compositor: Option<Rc<RefCell<EngineCompositor>>>,
+    page: Option<Rc<RetainedPage>>,
     pub width: u32,
     pub height: u32,
     links: Arc<Vec<LinkRegion>>,
     controls: Arc<Vec<ControlRegion>>,
+}
+
+struct RetainedPage {
+    root: amazing_layout::LayoutBox,
+    text: TextProvider,
+    styles: amazing_css::StyledDom,
+    resources: PageResources,
 }
 
 #[derive(Debug, Clone)]
@@ -253,7 +263,7 @@ impl PageRuntime {
             .map(|(url, replace, _)| (url, replace));
         let host = self.host.borrow();
         let dom = &host.dom;
-        let css = load_document_styles(
+        let (css, font_sheets) = load_document_styles(
             dom,
             &self.document_url,
             &self.options,
@@ -267,11 +277,12 @@ impl PageRuntime {
             Some(&self.session),
         );
         RuntimeUpdate {
-            viewport: EngineViewport::from_dom_with_resources(
+            viewport: EngineViewport::from_dom_with_style_sources(
                 dom,
                 &css,
-                &resources,
+                resources,
                 Some(&self.document_url),
+                &font_sheets,
             ),
             title: document_title(dom),
             favicon: load_favicon(
@@ -406,16 +417,17 @@ impl EngineViewport {
                 runtime: Some(runtime),
             });
         }
-        let css = load_document_styles(&dom, &final_address, &options, Some(&session));
+        let (css, font_sheets) = load_document_styles(&dom, &final_address, &options, Some(&session));
         let resources = load_page_resources(&dom, &css, &final_address, &options, Some(&session));
         let title = document_title(&dom);
         let favicon = load_favicon(&dom, &final_address, &options, Some(&session));
         Ok(LoadedPage {
-            viewport: Self::from_dom_with_resources(
+            viewport: Self::from_dom_with_style_sources(
                 &dom,
                 &css,
-                &resources,
+                resources,
                 Some(&final_address),
+                &font_sheets,
             ),
             final_address,
             title,
@@ -489,6 +501,8 @@ impl EngineViewport {
             ));
             frames.push(Self {
                 image,
+                compositor: None,
+                page: None,
                 width: decoded.width,
                 height: decoded.height,
                 links: Arc::new(Vec::new()),
@@ -508,6 +522,8 @@ impl EngineViewport {
         }
         Ok(Self {
             image: Arc::new(rgba_to_render_image(width, height, rgba)),
+            compositor: None,
+            page: None,
             width,
             height,
             links: Arc::new(Vec::new()),
@@ -530,18 +546,64 @@ impl EngineViewport {
         resources: &PageResources,
         document_url: Option<&str>,
     ) -> Self {
-        let (surface, links, controls) =
-            render_dom_with_resources(dom, css, resources, document_url);
+        Self::from_dom_with_style_sources(dom, css, resources.clone(), document_url, &[])
+    }
+
+    fn from_dom_with_style_sources(
+        dom: &amazing_dom::Dom,
+        css: &str,
+        resources: PageResources,
+        document_url: Option<&str>,
+        font_sheets: &[(String, String)],
+    ) -> Self {
+        let (surface, links, controls, scene) =
+            render_dom_with_resources(dom, css, resources, document_url, font_sheets);
         let width = surface.width;
         let height = surface.height;
         let image = Arc::new(surface_to_render_image(surface));
+        let (page, compositor) = match scene {
+            Some((page, compositor)) => (
+                Some(Rc::new(page)),
+                Some(Rc::new(RefCell::new(compositor))),
+            ),
+            None => (None, None),
+        };
         Self {
             image,
+            compositor,
+            page,
             width,
             height,
             links: Arc::new(links),
             controls: Arc::new(controls),
         }
+    }
+
+    /// Applies a property-only scene change while the original layout and
+    /// paint providers remain alive. The caller should notify GPUI only when
+    /// this returns true; a DOM/style rebuild creates a fresh viewport instead.
+    pub fn update_compositor_properties(
+        &self,
+        change: impl FnOnce(&mut amazing_compositor::Compositor) -> Result<(), String>,
+    ) -> Result<bool, String> {
+        let (Some(page), Some(scene)) = (&self.page, &self.compositor) else {
+            return Ok(false);
+        };
+        let images = amazing_paint::image::StyledImages {
+            images: &page.resources,
+            styles: &page.styles,
+        };
+        let view = amazing_paint::display_list_view::DisplayListView::new(
+            &page.root,
+            self.width,
+            self.height,
+            &page.text,
+            &images,
+            &amazing_paint::controls::NoControls,
+        );
+        let mut scene = scene.borrow_mut();
+        change(scene.compositor_mut())?;
+        scene.update(&view)
     }
 
     pub fn link_hit_at(&self, x: f32, y: f32) -> Option<(u32, &str)> {
@@ -639,28 +701,28 @@ fn render_demo_surface() -> Surface {
 #[cfg(test)]
 fn render_surface(html: &str, css: &str) -> Surface {
     let dom = amazing_html::parse(html);
-    render_dom_with_resources(&dom, css, &PageResources::default(), None).0
+    render_dom_with_resources(&dom, css, PageResources::default(), None, &[]).0
 }
 
 fn render_dom_with_resources(
     dom: &amazing_dom::Dom,
     css: &str,
-    resources: &PageResources,
+    resources: PageResources,
     document_url: Option<&str>,
-) -> (Surface, Vec<LinkRegion>, Vec<ControlRegion>) {
-    let fonts = load_ui_font();
-    let root = amazing_layout::layout_dom_document_with_replaced_in_viewport(
+    font_sheets: &[(String, String)],
+) -> (Surface, Vec<LinkRegion>, Vec<ControlRegion>, Option<(RetainedPage, EngineCompositor)>) {
+    let text = load_page_text(css, document_url.unwrap_or("amazing://newtab"), font_sheets);
+    let root = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
         dom,
         css,
         VIEWPORT_WIDTH as f32,
         Some(VIEWPORT_HEIGHT as f32),
-        &fonts,
-        resources,
+        &text,
+        &resources,
     );
     let page_height = amazing_layout::layout_overflow_bottom(&root)
         .ceil()
         .clamp(VIEWPORT_HEIGHT as f32, 8192.0) as u32;
-    let glyphs = OutlineGlyphProvider::new(&fonts);
     let links = document_url
         .map(|url| collect_link_regions(dom, &root, url))
         .unwrap_or_default();
@@ -668,16 +730,37 @@ fn render_dom_with_resources(
         .map(|url| collect_control_regions(dom, &root, url))
         .unwrap_or_default();
     let styles = amazing_css::compute(dom, &[amazing_css::parse_stylesheet(css)]);
-    let images = amazing_paint::image::StyledImages { images: resources, styles: &styles };
-    let surface = amazing_paint::paint_document_with_resources(
+    let images = amazing_paint::image::StyledImages { images: &resources, styles: &styles };
+    let surface = amazing_paint::paint_document_with_text_resources_and_controls(
         &root,
         VIEWPORT_WIDTH,
         page_height,
-        &fonts,
-        &glyphs,
+        &text,
         &images,
+        &amazing_paint::controls::NoControls,
     );
-    (surface, links, controls)
+    let view = amazing_paint::display_list_view::DisplayListView::new(
+        &root,
+        VIEWPORT_WIDTH,
+        page_height,
+        &text,
+        &images,
+        &amazing_paint::controls::NoControls,
+    );
+    let compositor = match EngineCompositor::new(&view, VIEWPORT_WIDTH, page_height) {
+        Ok(scene) => Some(scene),
+        Err(error) => {
+            eprintln!("amazing shell: compositor scene failed: {error}");
+            None
+        }
+    };
+    drop(view);
+    drop(images);
+    let scene = compositor.map(|compositor| (
+        RetainedPage { root, text, styles, resources },
+        compositor,
+    ));
+    (surface, links, controls, scene)
 }
 
 fn collect_link_regions(
@@ -945,8 +1028,9 @@ fn load_document_styles(
     document_url: &str,
     options: &FetchOptions,
     session: Option<&Rc<RefCell<BrowserSession>>>,
-) -> String {
+) -> (String, Vec<(String, String)>) {
     let mut css = String::new();
+    let mut font_sheets = Vec::new();
     let mut external_count = 0usize;
     collect_style_sources(
         dom,
@@ -956,8 +1040,9 @@ fn load_document_styles(
         session,
         &mut external_count,
         &mut css,
+        &mut font_sheets,
     );
-    css
+    (css, font_sheets)
 }
 
 fn collect_document_scripts(
@@ -1050,9 +1135,14 @@ fn collect_style_sources(
     session: Option<&Rc<RefCell<BrowserSession>>>,
     external_count: &mut usize,
     out: &mut String,
+    font_sheets: &mut Vec<(String, String)>,
 ) {
     if dom.name(node) == Some("style") {
+        let start = out.len();
         collect_inline_styles(dom, node, out);
+        if out.len() > start {
+            font_sheets.push((out[start..].to_owned(), document_url.to_owned()));
+        }
         return;
     }
 
@@ -1099,6 +1189,7 @@ fn collect_style_sources(
             {
                 let remaining = MAX_STYLESHEET_BYTES.saturating_sub(out.len());
                 if sheet.len() <= remaining {
+                    font_sheets.push((sheet.clone(), address));
                     out.push_str(&sheet);
                     out.push('\n');
                 }
@@ -1115,6 +1206,7 @@ fn collect_style_sources(
             session,
             external_count,
             out,
+            font_sheets,
         );
     }
 }
@@ -1297,12 +1389,552 @@ fn escape_html(value: &str) -> String {
         .replace('"', "&quot;")
 }
 
-fn load_ui_font() -> FontSource {
-    std::fs::read(WINDOWS_UI_FONT)
-        .ok()
-        .and_then(|bytes| ParsedFont::parse(&bytes))
-        .map(FontSource::Ttf)
-        .unwrap_or_else(FontSource::fallback)
+mod page_font_loader {
+//! Caller-owned font resource loading. The provider supplies source ordering and
+//! format filtering; this adapter supplies stylesheet-relative URLs and bytes.
+
+use amazing_fetch::{
+    HttpUrl, Origin,
+    service::{ClientContext, FontRequest, NetworkService, ServiceEvent},
+};
+use amazing_net::dispatch::DispatchLimits;
+use amazing_text::{FeatureSetting, TextError};
+use amazing_text_provider::{
+    FontDescriptorRange, FontDisplay, FontFaceDescriptor, FontFaceLoader, FontFaceSource,
+    FontFetchRequest, FontStyleDescriptor, UnicodeRange,
+};
+use std::time::{Duration, Instant};
+
+pub(super) fn expand_font_sheets(
+    sheets: &[(String, String)],
+    warnings: &mut Vec<String>,
+) -> Vec<(String, String)> {
+    fn visit(
+        source: &str,
+        url: &str,
+        depth: usize,
+        out: &mut Vec<(String, String)>,
+        seen: &mut std::collections::HashSet<String>,
+        warnings: &mut Vec<String>,
+    ) {
+        if depth >= 8 || out.len() >= 64 {
+            warnings.push(format!("font stylesheet import limit at {url}"));
+            return;
+        }
+        if !seen.insert(url.to_owned()) {
+            return;
+        }
+        for imported in import_urls(source) {
+            let resolved = super::resolve_font_url(url, &imported);
+            if seen.contains(&resolved) {
+                continue;
+            }
+            match super::load_resource(&resolved, 16 * 1024 * 1024) {
+                Ok(bytes) => visit(
+                    &String::from_utf8_lossy(&bytes),
+                    &resolved,
+                    depth + 1,
+                    out,
+                    seen,
+                    warnings,
+                ),
+                Err(error) => warnings.push(format!("font stylesheet {resolved}: {error}")),
+            }
+        }
+        out.push((source.to_owned(), url.to_owned()));
+    }
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (source, url) in sheets {
+        // Each top-level sheet is a distinct cascade entry, including inline
+        // sheets that share the document URL. Cycle detection is per import
+        // chain, not across those independent entries.
+        seen.clear();
+        visit(source, url, 0, &mut out, &mut seen, warnings);
+    }
+    out
+}
+
+fn import_urls(source: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let bytes = source.as_bytes();
+    let mut index = 0usize;
+    let mut depth = 0usize;
+    let mut quote = 0u8;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if quote != 0 {
+            if byte == b'\\' {
+                index = (index + 2).min(bytes.len());
+                continue;
+            }
+            if byte == quote {
+                quote = 0;
+            }
+        } else if byte == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            index += 2;
+            while index + 1 < bytes.len() && &bytes[index..index + 2] != b"*/" {
+                index += 1;
+            }
+            index = (index + 2).min(bytes.len());
+            continue;
+        } else if matches!(byte, b'\'' | b'"') {
+            quote = byte;
+        } else if byte == b'{' {
+            depth += 1;
+        } else if byte == b'}' {
+            depth = depth.saturating_sub(1);
+        } else if depth == 0
+            && bytes[index..]
+                .get(..7)
+                .is_some_and(|head| head.eq_ignore_ascii_case(b"@import"))
+        {
+            let rest = source[index + 7..].trim_start();
+            let rest = rest
+                .strip_prefix("url(")
+                .or_else(|| rest.strip_prefix("URL("));
+            if let Some(rest) = rest {
+                let value = rest.trim_start().trim_start_matches(['\'', '"']);
+                if let Some(end) = value.find(['\'', '"', ')']) {
+                    result.push(value[..end].to_owned());
+                }
+            } else {
+                let rest = source[index + 7..].trim_start();
+                if let Some(value) = rest.strip_prefix(['\'', '"'])
+                    && let Some(end) = value.find(['\'', '"'])
+                {
+                    result.push(value[..end].to_owned());
+                }
+            }
+            index += 7;
+            continue;
+        }
+        index += 1;
+    }
+    result
+}
+
+pub(super) fn descriptor_from_css(
+    face: amazing_css::FontFaceRule,
+) -> Result<FontFaceDescriptor, String> {
+    let weight = descriptor_range(&face.weight, 400, false)?;
+    let stretch = descriptor_range(&face.stretch, 100, true)?;
+    let style = match face.style.trim().to_ascii_lowercase().as_str() {
+        "normal" => FontStyleDescriptor::Normal,
+        "italic" => FontStyleDescriptor::Italic,
+        value if value.starts_with("oblique") => {
+            let angles = value[7..]
+                .split_whitespace()
+                .map(|part| part.strip_suffix("deg").unwrap_or(part).parse::<f32>())
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| "invalid font-style angle")?;
+            FontStyleDescriptor::Oblique {
+                min_degrees: *angles.first().unwrap_or(&14.0),
+                max_degrees: *angles.get(1).unwrap_or(angles.first().unwrap_or(&14.0)),
+            }
+        }
+        _ => return Err("invalid font-style".into()),
+    };
+    let unicode_ranges = face
+        .unicode_range
+        .as_deref()
+        .map(parse_unicode_ranges)
+        .transpose()?
+        .unwrap_or_default();
+    let display = match face
+        .display
+        .as_deref()
+        .unwrap_or("auto")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "auto" => FontDisplay::Auto,
+        "block" => FontDisplay::Block,
+        "swap" => FontDisplay::Swap,
+        "fallback" => FontDisplay::Fallback,
+        "optional" => FontDisplay::Optional,
+        _ => FontDisplay::Auto,
+    };
+    let percentage = |value: Option<&str>, default: Option<f32>| -> Result<Option<f32>, String> {
+        match value.map(str::trim) {
+            None | Some("normal") => Ok(default),
+            Some(raw) => raw
+                .strip_suffix('%')
+                .ok_or("expected percentage".to_owned())?
+                .trim()
+                .parse::<f32>()
+                .map(|n| Some(n / 100.0))
+                .map_err(|_| "invalid percentage".to_owned()),
+        }
+    };
+    let size_adjust = percentage(face.size_adjust.as_deref(), Some(1.0))?.unwrap_or(1.0);
+    let sources = face
+        .sources
+        .into_iter()
+        .map(|source| match source.local {
+            Some(name) => FontFaceSource::Local(name),
+            None => FontFaceSource::Url {
+                url: source.url,
+                formats: source.format.into_iter().collect(),
+                technologies: source.technologies,
+            },
+        })
+        .collect();
+    Ok(FontFaceDescriptor {
+        family: face.family,
+        sources,
+        unicode_ranges,
+        weight,
+        stretch,
+        style,
+        display,
+        size_adjust,
+        ascent_override: percentage(face.ascent_override.as_deref(), None)?,
+        descent_override: percentage(face.descent_override.as_deref(), None)?,
+        line_gap_override: percentage(face.line_gap_override.as_deref(), None)?,
+        features: face
+            .feature_settings
+            .as_deref()
+            .map(parse_features)
+            .transpose()?
+            .unwrap_or_default(),
+    })
+}
+
+fn descriptor_range(
+    value: &str,
+    default: u16,
+    percentage: bool,
+) -> Result<FontDescriptorRange, String> {
+    let mut parts = value.split_whitespace().map(|part| {
+        if part.eq_ignore_ascii_case("normal") {
+            return Ok(default);
+        }
+        if part.eq_ignore_ascii_case("bold") && !percentage {
+            return Ok(700);
+        }
+        let part = if percentage {
+            part.strip_suffix('%').ok_or("expected percentage")?
+        } else {
+            part
+        };
+        part.parse::<u16>().map_err(|_| "invalid descriptor range")
+    });
+    let min = parts
+        .next()
+        .transpose()
+        .map_err(str::to_owned)?
+        .unwrap_or(default);
+    let max = parts
+        .next()
+        .transpose()
+        .map_err(str::to_owned)?
+        .unwrap_or(min);
+    if parts.next().is_some() || min < 1 || max < min || max > 1000 {
+        return Err("invalid descriptor range".into());
+    }
+    Ok(FontDescriptorRange { min, max })
+}
+
+fn parse_unicode_ranges(value: &str) -> Result<Vec<UnicodeRange>, String> {
+    value
+        .split(',')
+        .map(|part| {
+            let raw = part
+                .trim()
+                .strip_prefix("U+")
+                .or_else(|| part.trim().strip_prefix("u+"))
+                .ok_or("invalid unicode-range")?;
+            let (start, end) = if raw.contains('?') {
+                let lower = raw.replace('?', "0");
+                let upper = raw.replace('?', "F");
+                (lower, upper)
+            } else if let Some((lower, upper)) = raw.split_once('-') {
+                (lower.to_owned(), upper.to_owned())
+            } else {
+                (raw.to_owned(), raw.to_owned())
+            };
+            let start = u32::from_str_radix(&start, 16).map_err(|_| "invalid unicode-range")?;
+            let end = u32::from_str_radix(&end, 16).map_err(|_| "invalid unicode-range")?;
+            if start > end || end > 0x10ffff {
+                return Err("invalid unicode-range".into());
+            }
+            Ok(UnicodeRange { start, end })
+        })
+        .collect::<Result<_, _>>()
+        .map_err(str::to_owned)
+}
+
+fn parse_features(value: &str) -> Result<Vec<FeatureSetting>, String> {
+    if value.trim().eq_ignore_ascii_case("normal") {
+        return Ok(Vec::new());
+    }
+    value
+        .split(',')
+        .map(|item| {
+            let item = item.trim();
+            let tag = item.get(1..5).ok_or("invalid feature tag")?;
+            if !matches!(item.as_bytes().first(), Some(b'\'' | b'"'))
+                || item.as_bytes().get(5) != item.as_bytes().first()
+                || !tag.is_ascii()
+            {
+                return Err("invalid feature tag");
+            }
+            let rest = item[6..].trim();
+            let value = if rest.is_empty() || rest.eq_ignore_ascii_case("on") {
+                1
+            } else if rest.eq_ignore_ascii_case("off") {
+                0
+            } else {
+                rest.parse::<u32>().map_err(|_| "invalid feature value")?
+            };
+            Ok(FeatureSetting {
+                tag: tag
+                    .as_bytes()
+                    .try_into()
+                    .map_err(|_| "invalid feature tag")?,
+                value,
+            })
+        })
+        .collect::<Result<_, _>>()
+        .map_err(str::to_owned)
+}
+
+pub(super) struct PageFontLoader<'a> {
+    pub stylesheet_url: &'a str,
+    pub document_url: &'a str,
+    pub warnings: Vec<String>,
+}
+
+impl PageFontLoader<'_> {
+    fn read_url(&mut self, source: &str, max_bytes: usize) -> Option<Vec<u8>> {
+        let resolved = super::resolve_font_url(self.stylesheet_url, source);
+        let result = if resolved.starts_with("http://") || resolved.starts_with("https://") {
+            self.fetch_cors(source, max_bytes)
+        } else {
+            super::load_resource(&resolved, max_bytes)
+        };
+        match result {
+            Ok(bytes) => Some(bytes),
+            Err(error) => {
+                self.warnings
+                    .push(format!("font {source:?} ({resolved}): {error}"));
+                None
+            }
+        }
+    }
+
+    fn fetch_cors(&self, source: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
+        let stylesheet =
+            HttpUrl::parse(self.stylesheet_url).map_err(|e| format!("stylesheet URL: {e:?}"))?;
+        let origin = HttpUrl::parse(self.document_url)
+            .map(|url| url.origin().clone())
+            .unwrap_or_else(|_| Origin::opaque());
+        let request = FontRequest::new(source, &stylesheet, origin, max_bytes)
+            .map_err(|e| format!("font request: {e:?}"))?;
+        let mut service = NetworkService::new(DispatchLimits::default());
+        let id = service
+            .start_font(request, ClientContext::default())
+            .map_err(|e| format!("font start: {e:?}"))?;
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut network_error = None;
+        loop {
+            for event in service.step(64, Instant::now()) {
+                if let ServiceEvent::Network { id: event_id, event } = &event
+                    && *event_id == id
+                    && matches!(event, amazing_net::dispatch::NetEvent::Error { .. })
+                {
+                    network_error = Some(format!("{event:?}"));
+                }
+                if let ServiceEvent::Finished {
+                    id: finished,
+                    result,
+                } = event
+                    && finished == id
+                {
+                    let mut response = result.map_err(|e| format!("font fetch: {e:?}; {network_error:?}"))?;
+                    if !(200..300).contains(&response.status) {
+                        return Err(format!("HTTP {}", response.status));
+                    }
+                    let bytes = response
+                        .body
+                        .bytes()
+                        .map_err(|e| format!("font body: {e:?}"))?;
+                    return (bytes.len() <= max_bytes)
+                        .then_some(bytes)
+                        .ok_or_else(|| "font size limit".to_owned());
+                }
+            }
+            if Instant::now() >= deadline {
+                service.abort(id);
+                return Err("font fetch timeout".to_owned());
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+}
+
+impl FontFaceLoader for PageFontLoader<'_> {
+    fn load_local(&mut self, name: &str, max_bytes: usize) -> Result<Option<Vec<u8>>, TextError> {
+        let file = match name.trim().to_ascii_lowercase().as_str() {
+            "arial" => Some(r"C:\Windows\Fonts\arial.ttf".to_owned()),
+            "times new roman" | "times" => Some(r"C:\Windows\Fonts\times.ttf".to_owned()),
+            "segoe ui" => Some(r"C:\Windows\Fonts\segoeui.ttf".to_owned()),
+            "consolas" => Some(r"C:\Windows\Fonts\consola.ttf".to_owned()),
+            "csshworientationtest" => std::env::var_os("AMAZING_WPT_ROOT").map(|root| {
+                std::path::Path::new(&root)
+                    .join("fonts/adobe-fonts/CSSHWOrientationTest.otf")
+                    .to_string_lossy()
+                    .into_owned()
+            }),
+            _ => None,
+        };
+        Ok(file.and_then(|path| super::load_resource(&path, max_bytes).ok()))
+    }
+
+    fn load_url(&mut self, request: FontFetchRequest<'_>) -> Result<Option<Vec<u8>>, TextError> {
+        Ok(self.read_url(request.url, request.max_bytes))
+    }
+}
+
+}
+
+const MAX_PAGE_FONT_BYTES: usize = 8 * 1024 * 1024;
+
+fn load_resource(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
+    if url.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:")) {
+        let parsed = amazing_net::ParsedUrl::parse(url).map_err(|error| format!("{error:?}"))?;
+        let data = amazing_fetch::process_data_url(&parsed)
+            .ok_or_else(|| "invalid data URL".to_owned())?;
+        return (data.body.len() <= max_bytes)
+            .then_some(data.body)
+            .ok_or_else(|| "resource size limit".to_owned());
+    }
+    let options = amazing_net::FetchOptions {
+        max_response_bytes: max_bytes,
+        ..amazing_net::FetchOptions::default()
+    };
+    amazing_net::fetch(url, &options)
+        .map(|response| response.body)
+        .map_err(|error| error.to_string())
+}
+
+fn resolve_font_url(page: &str, source: &str) -> String {
+    resolve_resource_address(page, source).unwrap_or_else(|| source.to_owned())
+}
+
+fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider) {
+    use amazing_text::FontSlant;
+    use amazing_text_provider::{FontFormat, WebFont};
+
+    for (path, family) in [
+        (r"C:\Windows\Fonts\times.ttf", "serif"),
+        (r"C:\Windows\Fonts\times.ttf", "Times"),
+        (r"C:\Windows\Fonts\times.ttf", "Times New Roman"),
+        (r"C:\Windows\Fonts\arial.ttf", "sans-serif"),
+        (r"C:\Windows\Fonts\arial.ttf", "Arial"),
+        (r"C:\Windows\Fonts\segoeui.ttf", "system-ui"),
+        (r"C:\Windows\Fonts\consola.ttf", "monospace"),
+    ] {
+        let options = amazing_net::FetchOptions {
+            max_response_bytes: MAX_PAGE_FONT_BYTES,
+            ..amazing_net::FetchOptions::default()
+        };
+        let Ok(response) = amazing_net::fetch(path, &options) else {
+            continue;
+        };
+        let _ = provider.register_web_font(WebFont {
+            family: family.into(),
+            weight: 400,
+            stretch: 100,
+            slant: FontSlant::Normal,
+            format: FontFormat::OpenType,
+            bytes: response.body,
+        });
+    }
+
+    // The pinned WPT render runner sets this root for its child process. The
+    // CSSTest faces are installed fonts in upstream tests, not @font-face URLs.
+    // Register only the known fixture files, through the same bounded provider
+    // seam used for page fonts, so their family names are available to CSS.
+    if let Some(root) = std::env::var_os("AMAZING_WPT_ROOT") {
+        for (file, family, weight, slant) in [
+            ("csstest-verify.ttf", "CSSTest Verify", 400, FontSlant::Normal),
+            ("csstest-fallback.ttf", "CSSTest Fallback", 400, FontSlant::Normal),
+            ("csstest-ascii.ttf", "CSSTest ASCII", 400, FontSlant::Normal),
+            ("csstest-familyname.ttf", "CSSTest FamilyName", 400, FontSlant::Normal),
+            ("csstest-familyname-bold.ttf", "CSSTest FamilyName", 700, FontSlant::Normal),
+            ("csstest-basic-regular.ttf", "CSSTest Basic", 400, FontSlant::Normal),
+            ("csstest-basic-bold.ttf", "CSSTest Basic", 700, FontSlant::Normal),
+            ("csstest-basic-italic.ttf", "CSSTest Basic", 400, FontSlant::Italic),
+            ("csstest-basic-bolditalic.ttf", "CSSTest Basic", 700, FontSlant::Italic),
+        ] {
+            let path = std::path::Path::new(&root).join("fonts").join("CSSTest").join(file);
+            let options = amazing_net::FetchOptions {
+                max_response_bytes: MAX_PAGE_FONT_BYTES,
+                ..amazing_net::FetchOptions::default()
+            };
+            let Ok(response) = amazing_net::fetch(&path.to_string_lossy(), &options) else {
+                continue;
+            };
+            let _ = provider.register_web_font(WebFont {
+                family: family.into(),
+                weight,
+                stretch: 100,
+                slant,
+                format: FontFormat::OpenType,
+                bytes: response.body,
+            });
+        }
+    }
+}
+
+fn load_page_text(css: &str, page: &str, sheets: &[(String, String)]) -> TextProvider {
+    let mut provider = TextProvider::new();
+    register_system_text_faces(&mut provider);
+    let initial = if sheets.is_empty() {
+        vec![(css.to_owned(), page.to_owned())]
+    } else {
+        sheets.to_vec()
+    };
+    let mut warnings = Vec::new();
+    let expanded = page_font_loader::expand_font_sheets(&initial, &mut warnings);
+    for warning in warnings {
+        eprintln!("amazing shell: {warning}");
+    }
+    for (source, stylesheet_url) in &expanded {
+      for face in amazing_css::parse_font_faces(source) {
+        let family = face.family.clone();
+        let descriptor = match page_font_loader::descriptor_from_css(face) {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("amazing shell: font-face {family:?}: {error}");
+                continue;
+            }
+        };
+        let mut loader = page_font_loader::PageFontLoader {
+            stylesheet_url,
+            document_url: page,
+            warnings: Vec::new(),
+        };
+        if let Err(error) = provider.begin_font_load(descriptor.display) {
+            eprintln!("amazing shell: font-face {family:?}: {error:?}");
+            continue;
+        }
+        let result = provider.register_font_face(descriptor, &mut loader);
+        provider.end_font_load();
+        match result {
+            Ok(Some(_)) => {},
+            Ok(None) => eprintln!("amazing shell: font-face {family:?}: no usable source"),
+            Err(error) => eprintln!("amazing shell: font-face {family:?}: {error:?}"),
+        }
+        for warning in loader.warnings {
+            eprintln!("amazing shell: {warning}");
+        }
+      }
+    }
+    provider
 }
 
 fn surface_to_render_image(surface: Surface) -> RenderImage {
@@ -1345,6 +1977,19 @@ mod tests {
         assert_eq!(viewport.image.frame_count(), 1);
         let size = viewport.image.size(0);
         assert_eq!((u32::from(size.width), u32::from(size.height)), (960, 570));
+    }
+
+    #[test]
+    fn retained_live_viewport_updates_only_on_damage() {
+        let viewport = EngineViewport::demo();
+        let scene = viewport.compositor.as_ref().expect("live page frame");
+        assert!(!scene.borrow().frame().damage.is_empty());
+        assert!(!viewport.update_compositor_properties(|_| Ok(())).unwrap());
+        assert!(viewport.update_compositor_properties(|compositor| {
+            compositor.invalidate_item(0);
+            Ok(())
+        }).unwrap());
+        assert!(!viewport.update_compositor_properties(|_| Ok(())).unwrap());
     }
 
     #[test]
@@ -1413,13 +2058,14 @@ mod tests {
              <link rel=stylesheet href=../theme.css>\
              <style>.last { color: blue; }</style>",
         );
-        let css = load_document_styles(
+        let (css, font_sheets) = load_document_styles(
             &dom,
             &format!("http://127.0.0.1:{port}/pages/index.html"),
             &FetchOptions::default(),
             None,
         );
         server.join().unwrap();
+        assert_eq!(font_sheets.len(), 3);
 
         let first = css.find(".first").unwrap();
         let external = css.find(".external").unwrap();

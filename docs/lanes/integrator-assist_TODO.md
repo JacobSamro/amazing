@@ -610,3 +610,45 @@ matching raw record bytes across rounds. Exact named-pass comparison found
 assertions and earns no conformance credit. Pinned WPT proof and selection
 hashes matched the Linux runs. Full Windows raw reports are retained in the
 lane's `.agents` evidence folders.
+
+## IA-COMPOSITOR — retained live GPUI page frames (2026-09-24)
+
+Fixed pushed base: `82d273a` (including COMP-5, RC-17a, the raw SolidColor
+direct-path fix, and TEXT-6). The live shell creates a `DisplayListView` from
+the laid-out page, its single registered `TextProvider`, styled images and
+controls, then retains a compositor and GPUI presenter per viewport. The
+presenter receives each frame before the borrowed view is dropped. The GPUI
+viewport displays `GpuiFrame::element()` with the existing link/control hit
+overlays. A scene rebuild makes a new presenter; property updates preserve
+the page inputs and notify the caller only when the frame has damage.
+
+The full-paint reference and layout use the same page `TextProvider`; system
+faces and CSS `@font-face` registrations follow the driver loader. The old
+font/outline path is no longer used for live page layout or painting. The
+isolated shell manifest adds `amazing-text` and `amazing-text-provider`. Its
+Cargo-generated lockfile adds provider dependencies and unifies `flate2`
+from 1.1.10 to the provider's reviewed 1.1.9 pin, removing unused
+`miniz_oxide` 0.9.1 and `zlib-rs` 0.6.8. The primary explicitly granted this
+resolver change.
+
+Focused 96×64 page evidence on win-002: an initial `RawLocal` direct frame
+rasterizes/uploads one tile for 6,144 pixels; an unchanged frame has zero
+damage, raster, and uploads. Translation and opacity updates retain two tile
+resource IDs, rasterize/upload zero tiles, and match the full shaped painter
+pixel for pixel. Their damage is 5,888 and 5,440 pixels respectively versus
+6,144 pixels for a full repaint. An 8-pixel scroll retains resource IDs and
+has zero raster/uploads; its pixels match a freshly composed full frame at
+the same scroll offset. Explicit item invalidation rasterizes one tile.
+Scene rebuild produces a fresh full-resource frame; controls select
+`BakedFallback`, and a rotated page uses the CPU-composed presenter path.
+The final win-002 gate on the changed source passed isolated shell nextest
+**60/60**, root workspace nextest **1,960 passed / 5 skipped**, and separate
+root workspace doctests **2/2**. The five changed shell file hashes matched
+before and after that gate. The isolated shell has no library target, so its
+separate `--doc` invocation reports N/A.
+
+The win-001 IA tree was refreshed to `82d273a`, then its five changed shell
+source/manifest/lock files were re-synced; all five SHA-256 values matched
+the Mac files. A before/after actual GPUI window screenshot remains pending
+the user's win-001 RDP reconnection. No visual-regression claim is made from
+the automated pixel tests.
