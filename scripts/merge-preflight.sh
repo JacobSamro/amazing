@@ -19,7 +19,7 @@ set -o pipefail
 
 LANE="${1:?usage: merge-preflight.sh <lane> [integration-branch]}"
 BASE="${2:-dev}"
-BRANCH="lane/$LANE"
+BRANCH="${PREFLIGHT_BRANCH:-lane/$LANE}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
