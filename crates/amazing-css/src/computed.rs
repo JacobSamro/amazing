@@ -140,8 +140,15 @@ impl ComputedStyle {
         let Some(color) = self.props.get("color") else { return };
         let Some([red, green, blue, alpha]) = crate::color::parse_css_color(color) else { return };
         let resolved = format!("#{red:02x}{green:02x}{blue:02x}{alpha:02x}");
-        for property in self.relative_colors.keys() {
-            self.props.insert(property.clone(), resolved.clone());
+        for (property, source) in &self.relative_colors {
+            let value = if relative_currentcolor_identity(source) {
+                Some(resolved.clone())
+            } else {
+                resolve_currentcolor_mix(source, &resolved)
+            };
+            if let Some(value) = value {
+                self.props.insert(property.clone(), value);
+            }
         }
     }
 
@@ -2790,7 +2797,7 @@ pub(crate) fn resolve_with_root(
                 &mut resolver,
             ),
         };
-        if relative_currentcolor_identity(&value) {
+        if relative_currentcolor_identity(&value) || color_mix_currentcolor(&value) {
             relative_colors.insert(property.name.to_owned(), value.clone());
         } else if (specified.as_deref().is_some_and(|value| matches!(css_wide_keyword(value), Some(CssWide::Inherit | CssWide::Unset))) ||
             (specified.is_none() && property.inherited)) &&
@@ -2994,6 +3001,9 @@ fn compute_normal_value(
             None => value,
         }
     };
+    let computed = if property.name == "color" && color_mix_currentcolor(&computed) {
+        resolve_currentcolor_mix(&computed, parent.unwrap_or("black")).unwrap_or(computed)
+    } else { computed };
     let computed = if property.name.starts_with("animation-") || property.name.starts_with("transition-") {
         crate::animation::canonical(property.name, &computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "font-size" {
@@ -3025,6 +3035,9 @@ fn compute_normal_value(
 // explicit inheritance so each element resolves currentColor against itself.
 fn relative_currentcolor_identity(value: &str) -> bool {
     let lower = value.trim().to_ascii_lowercase();
+    if matches!(lower.as_str(), "hsl(from currentcolor h s l)" | "hsla(from currentcolor h s l)") {
+        return true;
+    }
     let Some(inner) = lower.strip_prefix("color(").and_then(|value| value.strip_suffix(')')) else {
         return false;
     };
@@ -3033,11 +3046,30 @@ fn relative_currentcolor_identity(value: &str) -> bool {
         "display-p3-linear" | "a98-rgb" | "prophoto-rgb" | "rec2020", "r", "g", "b"])
 }
 
+fn color_mix_currentcolor(value: &str) -> bool {
+    let tokens = tokenize(value);
+    matches!(tokens.first(), Some(Token::Function(name)) if name.eq_ignore_ascii_case("color-mix"))
+        && tokens.iter().any(|token| matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case("currentcolor")))
+}
+
+fn resolve_currentcolor_mix(value: &str, color: &str) -> Option<String> {
+    if !color_mix_currentcolor(value) { return None; }
+    let [r, g, b, a] = crate::color::parse_css_color(color)?;
+    let mut tokens = tokenize(value);
+    for token in &mut tokens {
+        if matches!(token, Token::Ident(name) if name.eq_ignore_ascii_case("currentcolor")) {
+            *token = Token::Hash(format!("{r:02x}{g:02x}{b:02x}{a:02x}"));
+        }
+    }
+    let [r, g, b, a] = crate::color::parse_css_color(&serialize(&tokens))?;
+    Some(format!("#{r:02x}{g:02x}{b:02x}{a:02x}"))
+}
+
 fn normalized_extended_color(value: &str) -> Option<String> {
     let lower = value.trim().to_ascii_lowercase();
-    if !["hsl(", "hsla(", "hwb(", "lab(", "lch(", "oklab(", "oklch(", "color("].iter()
+    if !["hsl(", "hsla(", "hwb(", "lab(", "lch(", "oklab(", "oklch(", "color(", "color-mix(", "contrast-color("].iter()
         .any(|prefix| lower.starts_with(prefix))
-        && !matches!(lower.as_str(), "buttonface" | "threedface" | "buttonborder" | "threedlightshadow")
+        && !matches!(lower.as_str(), "buttonface" | "threedface" | "buttonborder" | "inactiveborder" | "threedlightshadow")
     {
         return None;
     }
