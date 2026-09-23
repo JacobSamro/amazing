@@ -1,0 +1,113 @@
+{
+  "revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "fixed_base": "7afb7b74c63289231c526c988fd951a16d77d888",
+  "rationale": "Twenty contiguous neighboring document tree cases around after-body and after-after-body recovery, omitting webkit01-035 (a separate after-head whitespace issue). Cases 024-028 exercise text or whitespace after explicit closing tags followed by comments; surrounding cases control comments before recovery, repeated end tags, and adjacent token categories. Ported tree probe; no unmodified WPT harness credit.",
+  "sources": [
+    {
+      "path": "html/syntax/parsing/resources/webkit01.dat",
+      "sha256": "063ca232535a792fa238ae769eeb0ddcc9bd2ee961d3da327ca134612d35d93c"
+    }
+  ],
+  "cases": [
+    {
+      "id": "webkit01-022",
+      "input_sha256": "d5197e0ea63ba2f55d19ddd9d43141d01468c5620b78066d911ea03da70567f7",
+      "expected_sha256": "5eadc028dd7f508ad2cf3d1ed0e0970382913d497999897353d02f41f58b06d8"
+    },
+    {
+      "id": "webkit01-023",
+      "input_sha256": "7e5253290f5c1432623c201fe28fb9a35b0578820200df8fdcbccacb920647f8",
+      "expected_sha256": "ebf4cf626191f59415084ef4f0ceede58e4a9bfb12dcc7ef55c6da63c86587f0"
+    },
+    {
+      "id": "webkit01-024",
+      "input_sha256": "262002af8f33ba7a828703620997c37f541c60103598098e815e69230e48081f",
+      "expected_sha256": "8feea27b50e379a2c1d149209d51020f9966c500be0632f8dffcd31470608a85"
+    },
+    {
+      "id": "webkit01-025",
+      "input_sha256": "061b73d6475158bb2492e83ac34b6bb59819697960e8782e8f93930ae7a4d2f1",
+      "expected_sha256": "54566d1ee039963b5ec91770ba098bfe72671367de7661eb714ed00a60037c5b"
+    },
+    {
+      "id": "webkit01-026",
+      "input_sha256": "76f178cdd33eb89f79f96d2240fe926bc2225a794e0d2e02a0e6ae5a22935118",
+      "expected_sha256": "54566d1ee039963b5ec91770ba098bfe72671367de7661eb714ed00a60037c5b"
+    },
+    {
+      "id": "webkit01-027",
+      "input_sha256": "cfa065d9733a9b9d87c47dd8bc56b0e56adf2a8930ab43c71d27d8ac202a20bf",
+      "expected_sha256": "a07f22da5f0805925850d4b6c3b5fe42e3d2793273e23139795b6a6e69d05212"
+    },
+    {
+      "id": "webkit01-028",
+      "input_sha256": "1221c68de09cce13533eae6107435c3f5dc34ad208748691bd4bfdbb52739aa1",
+      "expected_sha256": "814077a3333a32c9015e5f12b8030d902b5173b05d830669961df6fe1414fcc9"
+    },
+    {
+      "id": "webkit01-029",
+      "input_sha256": "2ef3d1c2f69c293f6aec9a1bbe0926dc0e97350f9a1a1a708f1aa45b30e91cc0",
+      "expected_sha256": "20e4fc561e695190de140be0263fe21ee306b2c53bb324e4646f1b01d7fc46d5"
+    },
+    {
+      "id": "webkit01-030",
+      "input_sha256": "bfb259c32d765a1d346c4e860dc41cebe00ffe346a673e3c2b4e79609af3309c",
+      "expected_sha256": "b8e5b07bb0d1b1be5e015f2437828cd69f9606c405c82d5669bfcb7ea810cc82"
+    },
+    {
+      "id": "webkit01-031",
+      "input_sha256": "0d0a8d5f043554235bdeaec94b4a8dbac8ced482b7593eb1f8a808ca14264182",
+      "expected_sha256": "102f29e423819a56589e9247bc12438233932ba56f0eb9eaed1cba2f47f2b2a6"
+    },
+    {
+      "id": "webkit01-032",
+      "input_sha256": "536731765bf4e549b27a881be7704819e81cc59cc5ee127f5bdefef061936f3a",
+      "expected_sha256": "5d192dd708eb601b984cbadd132ef684b812767468e98693a75966cc0b6e47f1"
+    },
+    {
+      "id": "webkit01-033",
+      "input_sha256": "374cd145831f02c426051c6a6ef8b67ff52075cf769c1267cef52e56775485a3",
+      "expected_sha256": "94b9baee2ab2c726e9d126add407d5372468b67e51c86b0b1b6dbc427ec84594"
+    },
+    {
+      "id": "webkit01-034",
+      "input_sha256": "a467e4e65cb864f3e0d019cde99b817b19ec91bec8edc5b6b8cf7c5f7c82d1e1",
+      "expected_sha256": "83fb9d5ea75c431b5a63cc47e4c3a45794735e5e751397c004540913e6c50cf3"
+    },
+    {
+      "id": "webkit01-036",
+      "input_sha256": "788fae9c8ee874a723de8f04a3ec16c384bafb9eaccaf1cdc796c7728f9e5ef8",
+      "expected_sha256": "fef729d067f63ff846274bec36096b3c0f4268ed9efe4c38622a9fc7c8ad67ea"
+    },
+    {
+      "id": "webkit01-037",
+      "input_sha256": "72a07224eb965b18ca4e7f95b0b5525af5cee7d6f9854fd4a3bf2ca9dcca79e0",
+      "expected_sha256": "e9e90e171f465c9db4a656674bd601e3e1dc2c430543666963679f5cfc454175"
+    },
+    {
+      "id": "webkit01-038",
+      "input_sha256": "d7b2ce53620e24fece4957a5f69fd82412e02ba25a392d10a5d470860d349b8c",
+      "expected_sha256": "e138736e5fd906a4fc474892827b5dd713d0843e7321d5a695ae1325927626ec"
+    },
+    {
+      "id": "webkit01-039",
+      "input_sha256": "ec9d248a016dc3919cda3ed567904feafdf07852a8b8d701ce30aefb7e827edf",
+      "expected_sha256": "1268606df05be441e35b017783b7bf0e4fb552aa246f53fc0e0f919826144471"
+    },
+    {
+      "id": "webkit01-040",
+      "input_sha256": "6d72b24e4b66b839fde194859d7f2703aceaccf0e50809d509b11b631ebbc3b1",
+      "expected_sha256": "0c22d4fa4bdd564f6abc5d7d7d0398861558c3b3988bf674234cea04c5bd97d7"
+    },
+    {
+      "id": "webkit01-041",
+      "input_sha256": "a2eefb0eca92e4b5c9a1e3de66ad32c14996d23a80ac2814329cdc558d85d302",
+      "expected_sha256": "f479378803993b545d80acdcd9bb7b0e020acd05f6908dce9dc44756c7a79f8f"
+    },
+    {
+      "id": "webkit01-042",
+      "input_sha256": "a24ce252e6a37f1f397b864f794d68929818990ef9dcc7be45199bf67b3a6bbd",
+      "expected_sha256": "45ddaffe6f39939df7346228cce3edaa667cf1e54c33132102986a87e4080dee"
+    }
+  ]
+}
