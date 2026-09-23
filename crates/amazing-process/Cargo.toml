@@ -9,3 +9,11 @@ rust-version.workspace = true
 [dependencies]
 amazing-ipc = { path = "../amazing-ipc" }
 amazing-fetch = { path = "../amazing-fetch" }
+amazing-html = { path = "../amazing-html" }
+amazing-css = { path = "../amazing-css" }
+amazing-layout = { path = "../amazing-layout" }
+amazing-paint = { path = "../amazing-paint" }
+amazing-dom = { path = "../amazing-dom" }
+amazing-media = { path = "../amazing-media" }
+amazing-svg = { path = "../amazing-svg" }
+amazing-net = { path = "../amazing-net" }
