@@ -255,6 +255,10 @@ pub fn filter_response(
     let mut copy = request.clone();
     let plan = copy.prepare()?;
     check_response_security(&copy, response, &crate::psl::PublicSuffixList)?;
+    let metadata = crate::sri::Metadata::parse(&request.integrity);
+    if !metadata.is_empty() && plan.taint == ResponseType::Opaque {
+        return Err(FetchError::Integrity);
+    }
     if plan.taint == ResponseType::Opaque {
         return Ok(Response::hidden(ResponseType::Opaque));
     }
@@ -273,6 +277,9 @@ pub fn filter_response(
         });
     } else {
         headers.retain(|name| !crate::headers::forbidden_response(name));
+    }
+    if !metadata.matches(response.body.as_deref().unwrap_or_default()) {
+        return Err(FetchError::Integrity);
     }
     Ok(Response {
         response_type: plan.taint,

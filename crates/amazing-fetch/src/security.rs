@@ -13,6 +13,7 @@ pub enum Destination {
     Empty,
     Document,
     Image,
+    Font,
     Audio,
     Video,
     Script,

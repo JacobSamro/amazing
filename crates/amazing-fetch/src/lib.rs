@@ -17,6 +17,7 @@ mod redirect;
 mod referrer;
 mod security;
 pub mod service;
+mod sri;
 pub mod xhr;
 pub use cors::*;
 pub use csp::*;
@@ -48,6 +49,8 @@ pub enum FetchError {
     MimeType,
     Nosniff,
     OpaqueResponse,
+    ResponseTooLarge,
+    Integrity,
     Csp(Vec<CspViolation>),
     Transport,
 }

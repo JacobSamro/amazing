@@ -9,25 +9,42 @@ pub struct DataUrl {
 }
 
 pub fn process_data_url(url: &ParsedUrl) -> Option<DataUrl> {
+    process_data_url_bounded(url, MAX_API_BODY_BYTES)
+}
+
+fn process_data_url_bounded(url: &ParsedUrl, limit: usize) -> Option<DataUrl> {
     if url.scheme() != "data" {
         return None;
     }
     let serialized = url.serialize_without_fragment();
     let input = serialized.strip_prefix("data:")?;
     let (raw_mime, encoded_body) = input.split_once(',')?;
-    if encoded_body.len() > MAX_API_BODY_BYTES.saturating_mul(3) {
+    if encoded_body.len() > limit.saturating_mul(12).saturating_add(1024) {
         return None;
     }
     let mut mime = raw_mime
         .trim_matches(|c: char| c.is_ascii_whitespace())
         .to_owned();
-    let mut body = percent_decode(encoded_body);
     let lower = mime.to_ascii_lowercase();
-    if lower.ends_with("base64") {
+    let is_base64 = lower.ends_with("base64")
+        && mime[..mime.len() - 6].rfind(';').is_some_and(|semicolon| {
+            mime[semicolon + 1..mime.len() - 6]
+                .chars()
+                .all(|c| c == ' ')
+        });
+    let mut body = percent_decode_bounded(
+        encoded_body,
+        if is_base64 {
+            limit.saturating_mul(4).saturating_add(1024)
+        } else {
+            limit
+        },
+    )?;
+    if is_base64 {
         let prefix = &mime[..mime.len() - 6];
         if let Some(semicolon) = prefix.rfind(';') {
             if prefix[semicolon + 1..].chars().all(|c| c == ' ') {
-                body = forgiving_base64_decode(&body)?;
+                body = forgiving_base64_decode_bounded(&body, limit)?;
                 mime.truncate(semicolon);
             }
         }
@@ -37,14 +54,25 @@ pub fn process_data_url(url: &ParsedUrl) -> Option<DataUrl> {
     }
     let mime_type = MimeType::parse(&mime)
         .unwrap_or_else(|| MimeType::parse("text/plain;charset=US-ASCII").unwrap());
-    if body.len() > MAX_API_BODY_BYTES {
+    if body.len() > limit {
         return None;
     }
     Some(DataUrl { mime_type, body })
 }
 
 pub(crate) fn data_response(url: &ParsedUrl) -> Result<InternalResponse, FetchError> {
-    let data = process_data_url(url).ok_or(FetchError::Transport)?;
+    data_response_limited(url, MAX_API_BODY_BYTES)
+}
+
+pub(crate) fn data_response_limited(
+    url: &ParsedUrl,
+    limit: usize,
+) -> Result<InternalResponse, FetchError> {
+    let data = process_data_url_bounded(url, limit).ok_or(if limit == MAX_API_BODY_BYTES {
+        FetchError::Transport
+    } else {
+        FetchError::ResponseTooLarge
+    })?;
     let mut headers = HeaderList::default();
     headers.append("Content-Type", &data.mime_type.serialize())?;
     Ok(InternalResponse {
@@ -56,6 +84,10 @@ pub(crate) fn data_response(url: &ParsedUrl) -> Result<InternalResponse, FetchEr
 }
 
 pub fn forgiving_base64_decode(input: &[u8]) -> Option<Vec<u8>> {
+    forgiving_base64_decode_bounded(input, usize::MAX)
+}
+
+fn forgiving_base64_decode_bounded(input: &[u8], limit: usize) -> Option<Vec<u8>> {
     let mut data: Vec<u8> = input
         .iter()
         .copied()
@@ -71,7 +103,7 @@ pub fn forgiving_base64_decode(input: &[u8]) -> Option<Vec<u8>> {
     if data.len() % 4 == 1 {
         return None;
     }
-    let mut out = Vec::with_capacity(data.len().saturating_mul(3) / 4);
+    let mut out = Vec::with_capacity(data.len().saturating_mul(3).saturating_div(4).min(limit));
     let mut buffer = 0u32;
     let mut bits = 0u8;
     for b in data {
@@ -87,6 +119,9 @@ pub fn forgiving_base64_decode(input: &[u8]) -> Option<Vec<u8>> {
         bits += 6;
         if bits >= 8 {
             bits -= 8;
+            if out.len() == limit {
+                return None;
+            }
             out.push((buffer >> bits) as u8);
             buffer &= (1 << bits) - 1;
         }
@@ -94,22 +129,28 @@ pub fn forgiving_base64_decode(input: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn percent_decode(input: &str) -> Vec<u8> {
+fn percent_decode_bounded(input: &str, limit: usize) -> Option<Vec<u8>> {
     let bytes = input.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
+    let mut out = Vec::with_capacity(bytes.len().min(limit));
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
             if let (Some(a), Some(b)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
+                if out.len() == limit {
+                    return None;
+                }
                 out.push(a * 16 + b);
                 i += 3;
                 continue;
             }
         }
+        if out.len() == limit {
+            return None;
+        }
         out.push(bytes[i]);
         i += 1;
     }
-    out
+    Some(out)
 }
 fn hex(b: u8) -> Option<u8> {
     match b {

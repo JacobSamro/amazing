@@ -1,10 +1,13 @@
 //! Driver-owned Fetch state. The embedding advances this once per event-loop turn.
 use crate::{
-    api::{ApiCache, ApiError, ApiRequest, ApiResponse, PendingFetchApi},
+    api::{
+        ApiCache, ApiError, ApiRequest, ApiRequestInit, ApiRequestInput, ApiResponse,
+        PendingFetchApi,
+    },
     cache::{CacheKind, CacheLimits, CacheLookup, CacheRequest, CacheResponse, CacheStore},
     cookies::{CookieAccess, CookieSite, CookieStore},
-    filter_response, CredentialsMode, CspDestination, CspPolicyList, FetchError, HeaderList,
-    HttpUrl, InternalResponse, Origin, SecurityContext,
+    filter_response, CredentialsMode, CspDestination, CspPolicyList, Destination, FetchError,
+    HeaderList, HttpUrl, InternalResponse, Origin, SecurityContext,
 };
 use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent, WebSocketEvent, WebSocketId};
 use std::{collections::BTreeMap, time::Instant};
@@ -25,6 +28,38 @@ pub struct ClientContext {
 pub struct WebSocketClient {
     pub origin: Origin,
     pub context: ClientContext,
+}
+/// A CSS Fonts 4 anonymous font fetch. Relative URLs resolve against the
+/// stylesheet, while the request origin remains the containing document's.
+pub struct FontRequest {
+    request: ApiRequest,
+}
+impl FontRequest {
+    pub fn new(
+        font_url: &str,
+        stylesheet_url: &HttpUrl,
+        document_origin: Origin,
+        max_body_bytes: usize,
+    ) -> Result<Self, ApiError> {
+        let input: Vec<u16> = font_url.encode_utf16().collect();
+        let referrer: Vec<u16> = stylesheet_url.serialize().encode_utf16().collect();
+        let mut request = ApiRequest::new(
+            ApiRequestInput::Url(&input),
+            ApiRequestInit {
+                mode: Some("cors".into()),
+                credentials: Some("same-origin".into()),
+                referrer: Some(referrer),
+                ..Default::default()
+            },
+            stylesheet_url,
+            document_origin,
+        )?;
+        request.response_body_limit = Some(max_body_bytes);
+        Ok(Self { request })
+    }
+    pub fn request(&self) -> &ApiRequest {
+        &self.request
+    }
 }
 impl Default for ClientContext {
     fn default() -> Self {
@@ -81,6 +116,15 @@ pub struct NetworkService {
     ready: Vec<ServiceEvent>,
 }
 impl NetworkService {
+    pub fn start_font(
+        &mut self,
+        font: FontRequest,
+        mut context: ClientContext,
+    ) -> Result<ServiceId, ApiError> {
+        context.security.destination = Destination::Font;
+        context.csp_destination = CspDestination::Font;
+        self.start(font.request, context)
+    }
     pub fn new(limits: DispatchLimits) -> Self {
         Self {
             dispatcher: Dispatcher::new(limits),
@@ -210,7 +254,14 @@ impl NetworkService {
             policy.csp_destination = context.csp_destination;
             let result = policy
                 .prepare()
-                .and_then(|_| crate::data_url::data_response(policy.url().as_parsed()))
+                .and_then(|_| {
+                    crate::data_url::data_response_limited(
+                        policy.url().as_parsed(),
+                        request
+                            .response_body_limit
+                            .unwrap_or(crate::api::MAX_API_BODY_BYTES),
+                    )
+                })
                 .and_then(|internal| filter_response(&policy, &internal))
                 .map_err(ApiError::Network)
                 .and_then(ApiResponse::from_policy);
@@ -256,6 +307,12 @@ impl NetworkService {
                 .map_err(|_| ApiError::Network(FetchError::Transport))?
             {
                 CacheLookup::Fresh(entry) => {
+                    if request
+                        .response_body_limit
+                        .is_some_and(|limit| entry.response.body.len() > limit)
+                    {
+                        return Err(ApiError::Network(FetchError::ResponseTooLarge));
+                    }
                     let cached = entry.response_at(context.now_unix);
                     let mut policy = request.policy_request()?;
                     policy.security = context.security;
@@ -275,9 +332,15 @@ impl NetworkService {
                     return Ok(id);
                 }
                 CacheLookup::Validate {
+                    entry,
                     headers: validators,
-                    ..
                 } => {
+                    if request
+                        .response_body_limit
+                        .is_some_and(|limit| entry.response.body.len() > limit)
+                    {
+                        return Err(ApiError::Network(FetchError::ResponseTooLarge));
+                    }
                     for (name, value) in validators.iter() {
                         if headers.get(name).is_none() {
                             conditional_headers
