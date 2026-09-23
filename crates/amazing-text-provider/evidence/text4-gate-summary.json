@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-4",
+  "implementation_base": "34fde0d",
+  "windows_render_tree_base": "6bec0a06626673d690ff0442c6c2706dbc85b2e4",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "windows_render_lock_sha256": "ADD98EE1000FB98B19A993DBF18D9A811C4B31D162FEC0D786804B7465A741C6",
+  "windows_render_provider_source_sha256": "BDB74D2F55344EE2F4798ED0CF18D9A983A730CB591C8BC3EDCDA307F4AAB750",
+  "baseline_executable_sha256": "BB58CFB8498815A1307F5BCFCCF9598100CFFBA53B0ED52BA09B843AC1900B7F",
+  "candidate_executable_sha256": "B26A58DD192827CB31BF740A141450D82729B20F89C3862969C6F07BDD4B3B31",
+  "win002_provider_nextest": {
+    "passed": 50,
+    "failed": 0,
+    "skipped": 1
+  },
+  "win002_workspace_nextest": {
+    "passed_enumerated": 1782,
+    "failed": 0
+  },
+  "win002_workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "selections": {
+    "font": {
+      "before": "text3-font-after.json",
+      "after": "text4-font-after.json",
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "actual_pixel_changes": 0
+    },
+    "flow": {
+      "before": "text3-flow-after.json",
+      "after": "text4-flow-after.json",
+      "before_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "actual_pixel_changes": 0
+    },
+    "shaping": {
+      "before": "text3-shaping-after.json",
+      "after": "text4-shaping-after.json",
+      "before_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "actual_pixel_changes": 0
+    },
+    "vertical": {
+      "before": "text3-vertical-after.json",
+      "after": "text4-vertical-after.json",
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "actual_pixel_changes": 0
+    }
+  },
+  "native_reach": "The page has not connected @font-face registration, so first-available-font-002/003 remain mismatches despite provider metric selection fix."
+}

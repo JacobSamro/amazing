@@ -480,6 +480,15 @@ impl TextProvider {
     }
 
     fn matching_font(&self, style: &TextStyle, text: Option<&str>) -> Option<usize> {
+        self.matching_font_with_space_policy(style, text, false)
+    }
+
+    fn matching_font_with_space_policy(
+        &self,
+        style: &TextStyle,
+        text: Option<&str>,
+        require_space: bool,
+    ) -> Option<usize> {
         let private_use = text.is_some_and(|value| value.chars().any(is_private_use));
         for family in &style.families {
             if private_use && is_generic_family(family) {
@@ -517,7 +526,9 @@ impl TextProvider {
                 candidates.reverse();
             }
             for index in candidates {
-                if text.is_none_or(|value| font_covers(&self.fonts[index], value)) {
+                if text.is_none_or(|value| font_covers(&self.fonts[index], value))
+                    && (!require_space || font_covers_space(&self.fonts[index]))
+                {
                     return Some(index);
                 }
             }
@@ -538,6 +549,7 @@ impl TextProvider {
                         font.family == *family
                             && font.author_face.is_none()
                             && text.is_none_or(|value| font_covers(font, value))
+                            && (!require_space || font_covers_space(font))
                     })
                     .min_by_key(|(_, font)| {
                         font_match_rank(
@@ -637,7 +649,7 @@ impl TextSystem for TextProvider {
     }
 
     fn metrics(&self, style: &TextStyle) -> Result<amazing_text::FontMetrics, TextError> {
-        let Some(index) = self.matching_font(style, None) else {
+        let Some(index) = self.matching_font_with_space_policy(style, Some(" "), true) else {
             return self.fallback.metrics(style);
         };
         font_metrics(&self.fonts[index], style.size)
@@ -1133,6 +1145,22 @@ fn font_covers(font: &FontRecord, text: &str) -> bool {
             text.chars()
                 .all(|ch| ch.is_whitespace() || is_default_ignorable(ch) || charmap.map(ch) != 0)
         })
+    }))
+    .unwrap_or(false)
+}
+
+/// CSS's first available font for metric units and the line strut must
+/// actually contain U+0020. Ordinary shaping may keep an uncoded space with
+/// its surrounding run, so it uses the separate `font_covers` policy above.
+fn font_covers_space(font: &FontRecord) -> bool {
+    if let Some(face) = &font.author_face
+        && !face.unicode_ranges.is_empty()
+        && !face.unicode_ranges.iter().any(|range| range.contains(0x20))
+    {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| {
+        SwashFontRef::from_index(&font.sfnt, 0).is_some_and(|face| face.charmap().map(' ') != 0)
     }))
     .unwrap_or(false)
 }
@@ -1705,11 +1733,20 @@ fn shape_range(
         }
         buffer.set_flags(flags);
         let scale = (style.size * 64.0).round().clamp(1.0, i32::MAX as f32) as i32;
-        let features = style
-            .features
-            .iter()
-            .map(|feature| Feature::new(Tag::new(&feature.tag), feature.value, ..))
-            .collect::<Vec<_>>();
+        let mut features = Vec::with_capacity(style.features.len() + 2);
+        if style.writing_mode.uses_vertical_metrics() {
+            let upright = orientation == GlyphOrientation::Upright;
+            features.push(Feature::new(Tag::new(b"vert"), u32::from(upright), ..));
+            // CSS selects mixed glyph orientation through UAX50 rather than
+            // delegating it to the font's vrt2 feature.
+            features.push(Feature::new(Tag::new(b"vrt2"), 0, ..));
+        }
+        features.extend(
+            style
+                .features
+                .iter()
+                .map(|feature| Feature::new(Tag::new(&feature.tag), feature.value, ..)),
+        );
         let output = shaper.shape(
             buffer,
             ShapeOptions::new().scale(Some(scale)).features(&features),
@@ -1786,7 +1823,12 @@ fn cluster_orientation(
             TextOrientation::Upright => GlyphOrientation::Upright,
             TextOrientation::Sideways => GlyphOrientation::SidewaysRight,
             TextOrientation::Mixed => {
-                let character = text[cluster].chars().next().unwrap_or('\u{fffd}');
+                let unit = &text[cluster];
+                let character = unit
+                    .chars()
+                    .find(|character| !is_default_ignorable(*character))
+                    .or_else(|| unit.chars().next())
+                    .unwrap_or('\u{fffd}');
                 match unicode_vo::char_orientation(character) {
                     VerticalOrientation::Upright | VerticalOrientation::TransformedOrUpright => {
                         GlyphOrientation::Upright
@@ -1982,6 +2024,10 @@ mod tests {
     }
 
     fn synthetic_font_with_feature(mapped: char, feature: Option<[u8; 4]>) -> Vec<u8> {
+        synthetic_font_with_metrics(mapped, feature, 800)
+    }
+
+    fn synthetic_font_with_metrics(mapped: char, feature: Option<[u8; 4]>, ascent: u16) -> Vec<u8> {
         let mut glyf = vec![0u8; 10];
         glyf[0..2].copy_from_slice(&be16(1));
         glyf[6..8].copy_from_slice(&be16(500));
@@ -2014,7 +2060,7 @@ mod tests {
         head[12..16].copy_from_slice(&be32(0x5F0F_3CF5));
         head[18..20].copy_from_slice(&be16(1000));
         let mut hhea = vec![0u8; 36];
-        hhea[4..6].copy_from_slice(&be16(800));
+        hhea[4..6].copy_from_slice(&be16(ascent));
         hhea[6..8].copy_from_slice(&be16((-200i16) as u16));
         hhea[34..36].copy_from_slice(&be16(2));
         let mut maxp = vec![0u8; 32];
@@ -2646,6 +2692,113 @@ mod tests {
     }
 
     #[test]
+    fn vertical_upright_uses_vert_and_never_defaults_to_vrt2() {
+        let glyph_count = |tag, writing_mode, text_orientation| {
+            let mut provider = TextProvider::new();
+            provider
+                .register_web_font(WebFont {
+                    family: "Vertical feature".into(),
+                    weight: 400,
+                    stretch: 100,
+                    slant: FontSlant::Normal,
+                    format: FontFormat::OpenType,
+                    bytes: synthetic_font_with_feature('A', Some(tag)),
+                })
+                .unwrap();
+            let spans = [TextSpan {
+                range: 0..2,
+                source: 0,
+                style: TextStyle {
+                    families: vec!["Vertical feature".into()],
+                    writing_mode,
+                    text_orientation,
+                    ..TextStyle::default()
+                },
+                boundary_before: ShapingBoundary::Continue,
+            }];
+            provider
+                .shape(Paragraph {
+                    text: "AA",
+                    spans: &spans,
+                    sources: &[],
+                    bidi_scopes: &[],
+                    base_direction: Direction::LeftToRight,
+                })
+                .unwrap()
+                .runs
+                .iter()
+                .map(|run| run.glyphs.len())
+                .sum::<usize>()
+        };
+        for mode in [WritingMode::VerticalRl, WritingMode::VerticalLr] {
+            assert_eq!(glyph_count(*b"vert", mode, TextOrientation::Upright), 1);
+            assert_eq!(glyph_count(*b"vert", mode, TextOrientation::Sideways), 2);
+            assert_eq!(glyph_count(*b"vrt2", mode, TextOrientation::Upright), 2);
+        }
+        assert_eq!(
+            glyph_count(
+                *b"vert",
+                WritingMode::HorizontalTb,
+                TextOrientation::Upright
+            ),
+            2
+        );
+    }
+
+    #[test]
+    fn mixed_vertical_orientation_follows_unicode_vo_for_each_base_character() {
+        for mode in [WritingMode::VerticalRl, WritingMode::VerticalLr] {
+            let style = TextStyle {
+                writing_mode: mode,
+                text_orientation: TextOrientation::Mixed,
+                ..TextStyle::default()
+            };
+            for (text, expected) in [
+                ("A", GlyphOrientation::SidewaysRight),
+                ("漢", GlyphOrientation::Upright),
+                ("Ａ", GlyphOrientation::Upright),
+                ("\u{200d}漢", GlyphOrientation::Upright),
+            ] {
+                assert_eq!(
+                    cluster_orientation(&style, text, 0..text.len()),
+                    expected,
+                    "{text}"
+                );
+            }
+        }
+        let style = TextStyle {
+            writing_mode: WritingMode::SidewaysLr,
+            ..TextStyle::default()
+        };
+        assert_eq!(
+            cluster_orientation(&style, "漢", 0.."漢".len()),
+            GlyphOrientation::SidewaysLeft
+        );
+    }
+
+    #[test]
+    fn upright_vertical_text_forces_left_to_right_bidi_direction() {
+        let text = "אב";
+        for mode in [WritingMode::VerticalRl, WritingMode::VerticalLr] {
+            let spans = [TextSpan {
+                range: 0..text.len(),
+                source: 0,
+                style: TextStyle {
+                    writing_mode: mode,
+                    text_orientation: TextOrientation::Upright,
+                    direction: Direction::RightToLeft,
+                    ..TextStyle::default()
+                },
+                boundary_before: ShapingBoundary::Continue,
+            }];
+            assert_eq!(
+                bidi_directions(text, &spans, &spans, Direction::RightToLeft, &[]).unwrap(),
+                vec![Direction::LeftToRight]
+            );
+        }
+    }
+
+    #[test]
     fn synchronous_registration_has_no_pending_font_loads() {
         let mut provider = TextProvider::new();
         assert_eq!(provider.pending_font_loads(), 0);
@@ -2829,6 +2982,99 @@ mod tests {
         assert_eq!(
             provider.fonts[provider.matching_font(&style, Some("A")).unwrap()].key,
             bold
+        );
+    }
+
+    #[test]
+    fn first_available_font_for_metrics_must_cover_space() {
+        let mut provider = TextProvider::new();
+        let no_space = provider
+            .register_web_font(WebFont {
+                family: "A no space".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font_with_metrics('A', None, 900),
+            })
+            .unwrap();
+        let with_space = provider
+            .register_web_font(WebFont {
+                family: "B with space".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font_with_metrics(' ', None, 600),
+            })
+            .unwrap();
+        let style = TextStyle {
+            families: vec!["'A no space'".into(), "B with space".into()],
+            size: 16.0,
+            ..TextStyle::default()
+        };
+        assert_eq!(
+            provider.fonts[provider.matching_font(&style, None).unwrap()].key,
+            no_space
+        );
+        let metrics = provider.metrics(&style).unwrap();
+        let expected = font_metrics(&provider.fonts[1], style.size).unwrap();
+        assert_eq!(
+            provider.fonts[provider
+                .matching_font_with_space_policy(&style, Some(" "), true)
+                .unwrap()]
+            .key,
+            with_space
+        );
+        assert_eq!(metrics, expected);
+        assert_ne!(
+            metrics.ascent,
+            font_metrics(&provider.fonts[0], style.size).unwrap().ascent
+        );
+    }
+
+    #[test]
+    fn unicode_range_can_exclude_space_from_the_first_available_font() {
+        let mut loader = FakeFontLoader::default();
+        loader.locals.insert(
+            "Space glyph".into(),
+            synthetic_font_with_metrics(' ', None, 900),
+        );
+        let mut provider = TextProvider::new();
+        provider
+            .register_font_face(
+                FontFaceDescriptor {
+                    family: "Excluded space".into(),
+                    sources: vec![FontFaceSource::Local("Space glyph".into())],
+                    unicode_ranges: vec![UnicodeRange {
+                        start: 0x61,
+                        end: 0x61,
+                    }],
+                    ..FontFaceDescriptor::default()
+                },
+                &mut loader,
+            )
+            .unwrap()
+            .unwrap();
+        provider
+            .register_web_font(WebFont {
+                family: "Included space".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font_with_metrics(' ', None, 600),
+            })
+            .unwrap();
+        let style = TextStyle {
+            families: vec!["Excluded space".into(), "Included space".into()],
+            size: 16.0,
+            ..TextStyle::default()
+        };
+        assert!(!font_covers_space(&provider.fonts[0]));
+        assert_eq!(
+            provider.metrics(&style).unwrap().ascent,
+            font_metrics(&provider.fonts[1], style.size).unwrap().ascent
         );
     }
 

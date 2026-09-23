@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-5",
+  "implementation_base": "9714fa2",
+  "windows_render_tree_base": "6bec0a06626673d690ff0442c6c2706dbc85b2e4",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "baseline_provider_sha256": "BDB74D2F55344EE2F4798ED0CF18D9A983A730CB591C8BC3EDCDA307F4AAB750",
+  "candidate_provider_sha256": "712C1D59605CE431F212229AA2DE7B9E20CB1D8F46CB15CF2AF893193C4B74BC",
+  "baseline_executable_sha256": "B26A58DD192827CB31BF740A141450D82729B20F89C3862969C6F07BDD4B3B31",
+  "candidate_executable_sha256": "D6A334D7CE82363FD9B33731DF3A4A1C71B50847603F8FCF259BB9482AD8C587",
+  "selections": {
+    "vertical": {
+      "before": "text5-vertical-before.json",
+      "after": "text5-vertical-after.json",
+      "before_counts": {
+        "pass": 2,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 2,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "classification_changes": 0,
+      "actual_pixel_changes": 0
+    },
+    "font": {
+      "before": "text4-font-after.json",
+      "after": "text5-font-after.json",
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "classification_changes": 0,
+      "actual_pixel_changes": 0
+    },
+    "flow": {
+      "before": "text4-flow-after.json",
+      "after": "text5-flow-after.json",
+      "before_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "classification_changes": 0,
+      "actual_pixel_changes": 0
+    },
+    "shaping": {
+      "before": "text4-shaping-after.json",
+      "after": "text5-shaping-after.json",
+      "before_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "classification_changes": 0,
+      "actual_pixel_changes": 0
+    },
+    "vertical-ruby": {
+      "before": "text4-vertical-after.json",
+      "after": "text5-vertical-ruby-after.json",
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "classification_changes": 0,
+      "actual_pixel_changes": 0
+    }
+  },
+  "win002_provider_and_text_nextest": {
+    "passed": 53,
+    "failed": 0,
+    "skipped": 1
+  },
+  "win002_workspace_nextest": {
+    "passed_enumerated": 1785,
+    "failed": 0
+  },
+  "win002_workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  }
+}
