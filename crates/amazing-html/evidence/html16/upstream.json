@@ -1,0 +1,30 @@
+{
+  "revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "files": [
+    {
+      "path": "html/semantics/scripting-1/the-template-element/resources/template-contents-empty.html",
+      "sha256": "62f11f8c89de97e2e916ad8731142a31b08fbbc22a5571158833c6c5f7c6aa14",
+      "local": "crates/amazing-html/evidence/html16/template-contents-empty.html"
+    },
+    {
+      "path": "html/semantics/scripting-1/the-template-element/resources/template-contents.html",
+      "sha256": "39bbff4bf4fca9eda294d551e7e9d462989092a04130ada7d70afcbd8d5ec8f5",
+      "local": "crates/amazing-html/evidence/html16/template-contents.html"
+    },
+    {
+      "path": "html/semantics/scripting-1/the-template-element/resources/template-contents-text.html",
+      "sha256": "ba6e8bee75b5905e268fbc31c0f2631de713368107bb916bb960d807ff0523ac",
+      "local": "crates/amazing-html/evidence/html16/template-contents-text.html"
+    },
+    {
+      "path": "html/semantics/scripting-1/the-template-element/resources/template-contents-nested.html",
+      "sha256": "6641bea18893b3627f1acb02154069866d78501c4d356d0963d97d23d9b040d6",
+      "local": "crates/amazing-html/evidence/html16/template-contents-nested.html"
+    },
+    {
+      "path": "html/semantics/scripting-1/the-template-element/resources/template-descendant-head.html",
+      "sha256": "0e7ad2d705439218c8a3678affe54e9b53d029624767f55fb32114ccba5f402d",
+      "local": "crates/amazing-html/evidence/html16/template-descendant-head.html"
+    }
+  ]
+}

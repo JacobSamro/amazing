@@ -55,6 +55,8 @@ mod fuzz_tests;
 #[cfg(test)]
 mod fragment_tests;
 #[cfg(test)]
+mod template_tests;
+#[cfg(test)]
 mod custom_element_tests;
 
 /// Decodes and parses a complete HTML byte stream. `transport_label` is the
@@ -102,7 +104,7 @@ pub fn parse_with_custom_element_host(
 /// Parses an HTML fragment in a supported HTML context and
 /// returns the fragment children under a standalone document node.
 ///
-/// Other contexts are rejected until their tokenizer/template
+/// Other contexts are rejected until their tokenizer
 /// initialization rules are implemented; callers never receive a plausible
 /// but context-insensitive tree.
 /// `noscript` uses this parser's fixed scripting-enabled RAWTEXT behavior;
@@ -111,7 +113,7 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     let context = context.to_ascii_lowercase();
     let supported = [
         "div", "table", "tbody", "thead", "tfoot", "tr", "td", "th", "caption", "colgroup",
-        "textarea", "title", "style", "script", "noscript", "plaintext", "select", "option",
+        "textarea", "title", "style", "script", "noscript", "plaintext", "select", "option", "template",
     ];
     if !supported.contains(&context.as_str()) {
         return Err("unsupported HTML fragment context".into());
@@ -127,6 +129,12 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
 
     fn clone_subtree(source: &Dom, source_node: NodeIdx, target: &mut Dom, parent: NodeIdx) {
         let created = target.append_child(parent, source.get(source_node).kind.clone());
+        if let Some(contents) = source.template_contents(source_node) {
+            let target_contents = target.ensure_template_contents(created).expect("cloned template");
+            for child in source.children(contents) {
+                clone_subtree(source, child, target, target_contents);
+            }
+        }
         for child in source.children(source_node) {
             clone_subtree(source, child, target, created);
         }
@@ -138,7 +146,7 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
             source.namespace(*node) == Some(Namespace::Html) && source.name(*node) == Some("html")
         })
         .ok_or_else(|| "fragment root was not constructed".to_owned())?;
-    let virtual_context = matches!(context.as_str(), "textarea" | "title" | "style" | "script" | "noscript" | "plaintext" | "select" | "option");
+    let virtual_context = matches!(context.as_str(), "textarea" | "title" | "style" | "script" | "noscript" | "plaintext" | "select" | "option" | "template");
     let mut fragment = Dom::new();
     if virtual_context {
         for child in source.children(root) {
@@ -207,7 +215,7 @@ mod tests {
             recovery.dump(NodeIdx(0)),
             "#document\n  <span>\n    \"x\"\n"
         );
-        assert!(parse_fragment("template", "x").is_err());
+        assert!(parse_fragment("template", "x").is_ok());
         let table = parse_fragment("table", "<td>x").expect("table fragment context");
         assert_eq!(
             table.dump(NodeIdx(0)),

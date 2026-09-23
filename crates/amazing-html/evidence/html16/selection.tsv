@@ -1,0 +1,13 @@
+id	file	context	templates	first_content_contains	output_contains
+wpt-empty	template-contents-empty.html	document	1	WHITESPACE	<template>
+wpt-div	template-contents.html	document	1	<div>Hello, template</div>	<template>
+wpt-text	template-contents-text.html	document	1	Some text	<template>Some text</template>
+wpt-nested	template-contents-nested.html	document	2	<template>	Inside nested template
+wpt-head	template-descendant-head.html	document	1	<div>Hello, template</div>	<template>
+basic	basic.html	document	1	<p>A</p>tail	<p>B</p>
+table	table.html	document	1	<div>A</div>	<td>after</td>
+eof	eof.html	document	1	<p>A	<template>
+stray-end	stray-end.html	document	0	EMPTY	<p>outside</p>
+nested	nested.html	document	2	<template>	<b>outer</b>
+select	select.html	document	1	<option>A</option>	<option>B</option>
+fragment-template	fragment-template.html	template	0	EMPTY	<td>x</td>
