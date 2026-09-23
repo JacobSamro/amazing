@@ -751,10 +751,20 @@ fn supports_declaration(name_tokens: &[Token], value_tokens: &[Token]) -> bool {
     ) {
         return crate::color::parse_css_color(&serialize(value_tokens)).is_some();
     }
-    crate::computed::is_supported_property(name)
-        && value_tokens.iter().any(
+    (crate::computed::is_supported_property(name)
+        || name.eq_ignore_ascii_case("font-synthesis"))
+        && (value_tokens.iter().any(
             |token| matches!(token, Token::Function(function) if function.eq_ignore_ascii_case("var")),
-        )
+        ) || if name.eq_ignore_ascii_case("font-synthesis") {
+            crate::font_properties::expand_synthesis(&serialize(value_tokens)).is_some()
+        } else if crate::font_properties::is_audited_longhand(&name.to_ascii_lowercase())
+            || matches!(name.to_ascii_lowercase().as_str(), "font-feature-settings" | "font-variant-ligatures") {
+            let value = serialize(value_tokens);
+            matches!(value.to_ascii_lowercase().as_str(), "inherit" | "initial" | "unset" | "revert" | "revert-layer")
+                || crate::values::parse(&name.to_ascii_lowercase(), &value).is_some()
+        } else {
+            false
+        })
 }
 
 fn trim_ws(mut tokens: &[Token]) -> &[Token] {

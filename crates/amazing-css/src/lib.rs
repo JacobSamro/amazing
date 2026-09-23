@@ -41,6 +41,7 @@ pub mod cascade;
 pub mod animation;
 pub mod color;
 mod computed;
+mod font_properties;
 pub mod generated;
 mod math;
 pub mod parser;

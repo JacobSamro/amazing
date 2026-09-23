@@ -1245,3 +1245,16 @@ Windows final gate on `53e37b5`: CSS **239/239**, workspace **2000/2000**
 plus five skipped, doctests **2/2**. The base and final executable SHA256 values
 were `2fc0125276088103c127c86f2e4f3b6733d59e3b0f17fb538141e6a184a058a0`
 and `ad959094b81da24a6fb9e05407b2cbb5d44d86da10e9a1737c4278a15b78b559`.
+
+## CSS Values 4 font metric unit handoff (LAYOUT-14 blocker)
+
+Commit `50d7b41` registers `ic`, `cap`, `lh`, `rch`, `ric`, `rex`, `rcap`, and
+`rlh` as typed relative lengths. The CSS math type validator now accepts them
+inside `calc()`, and all length-bearing computed properties retain valid math
+expressions as `LengthPercentageExpression` until layout supplies used-value
+font metrics. Public API tests verify `get()` and typed values for direct and
+math forms. Linux: CSS 241/241, workspace 2000/2000 (+5 skipped), doctests
+2/2. Windows: CSS 241/241; an unrelated `amazing-process` renderer-crash
+case failed once with `Remote("UnknownInterface")`, then passed in isolation;
+the full rerun passed 2002/2002 (+5 skipped) and 2/2 doctests. The LAYOUT-14
+used-value and WPT gates remain with layout.
