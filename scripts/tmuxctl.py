@@ -171,6 +171,11 @@ LANE_GRANTS["css"] = [
     "crates/amazing/tests/css3_stylesheets.rs",
 ]
 LANE_GRANTS["dom-bindings"] += [
+    # The JS-4 adapter proof spans amazing-dom and amazing-js. The driver crate
+    # already depends on both, so the proof lives there as a new file: no new
+    # dependency edge, no lockfile change, and the DOM arena crate gains no JS
+    # edge, not even a test-only one.
+    "crates/amazing/tests/js4_event_loop_adapter.rs",
     "crates/amazing-html/src/tree.rs",
     "crates/amazing-layout/src/box_tree.rs",
     "crates/amazing-layout/src/lib.rs",
