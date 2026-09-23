@@ -458,6 +458,10 @@ const PROPERTIES: &[PropertyMetadata] = &[
         inherited: true,
     },
     PropertyMetadata { name: "font-feature-settings", initial: "normal", inherited: true },
+    PropertyMetadata { name: "font-kerning", initial: "auto", inherited: true },
+    PropertyMetadata { name: "font-language-override", initial: "normal", inherited: true },
+    PropertyMetadata { name: "font-optical-sizing", initial: "auto", inherited: true },
+    PropertyMetadata { name: "font-palette", initial: "normal", inherited: true },
     PropertyMetadata {
         name: "font-size",
         initial: "medium",
@@ -479,6 +483,17 @@ const PROPERTIES: &[PropertyMetadata] = &[
         inherited: true,
     },
     PropertyMetadata { name: "font-variant-ligatures", initial: "normal", inherited: true },
+    PropertyMetadata { name: "font-variant-alternates", initial: "normal", inherited: true },
+    PropertyMetadata { name: "font-variant-caps", initial: "normal", inherited: true },
+    PropertyMetadata { name: "font-variant-east-asian", initial: "normal", inherited: true },
+    PropertyMetadata { name: "font-variant-emoji", initial: "normal", inherited: true },
+    PropertyMetadata { name: "font-variant-numeric", initial: "normal", inherited: true },
+    PropertyMetadata { name: "font-variant-position", initial: "normal", inherited: true },
+    PropertyMetadata { name: "font-variation-settings", initial: "normal", inherited: true },
+    PropertyMetadata { name: "font-synthesis-weight", initial: "auto", inherited: true },
+    PropertyMetadata { name: "font-synthesis-style", initial: "auto", inherited: true },
+    PropertyMetadata { name: "font-synthesis-small-caps", initial: "auto", inherited: true },
+    PropertyMetadata { name: "font-synthesis-position", initial: "auto", inherited: true },
     PropertyMetadata {
         name: "font-weight",
         initial: "normal",
@@ -889,6 +904,9 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     } else {
         property.to_ascii_lowercase()
     };
+    if property == "font-synthesis" {
+        return crate::font_properties::expand_synthesis(value).unwrap_or_default();
+    }
     if property == "list-style" {
         if contains_var_function(value) {
             return ["list-style-type", "list-style-image", "list-style-position"]
@@ -2398,7 +2416,10 @@ fn expand_flex_shorthand(parts: &[&str]) -> Option<(String, String, String)> {
 
 const FONT_LONGHANDS: &[&str] = &[
     "font-family", "font-feature-settings", "font-size", "font-size-adjust", "font-stretch",
-    "font-style", "font-variant", "font-variant-ligatures", "font-weight",
+    "font-style", "font-variant", "font-variant-ligatures", "font-weight", "font-kerning",
+    "font-language-override", "font-optical-sizing", "font-variant-alternates", "font-variant-caps",
+    "font-variant-east-asian", "font-variant-emoji", "font-variant-numeric",
+    "font-variant-position", "font-variation-settings",
     "line-height",
 ];
 
@@ -2507,8 +2528,18 @@ fn expand_font_shorthand(value: &str) -> Option<Vec<(String, String)>> {
     Some(vec![
         ("font-style".into(), style),
         ("font-variant".into(), variant),
+        ("font-variant-caps".into(), if variant_seen { "small-caps" } else { "normal" }.into()),
+        ("font-variant-alternates".into(), "normal".into()),
+        ("font-variant-east-asian".into(), "normal".into()),
+        ("font-variant-emoji".into(), "normal".into()),
+        ("font-variant-numeric".into(), "normal".into()),
+        ("font-variant-position".into(), "normal".into()),
         ("font-variant-ligatures".into(), "normal".into()),
         ("font-feature-settings".into(), "normal".into()),
+        ("font-kerning".into(), "auto".into()),
+        ("font-language-override".into(), "normal".into()),
+        ("font-optical-sizing".into(), "auto".into()),
+        ("font-variation-settings".into(), "normal".into()),
         ("font-weight".into(), weight),
         ("font-stretch".into(), stretch),
         ("font-size-adjust".into(), "none".into()),
@@ -2964,6 +2995,8 @@ fn compute_normal_value(
         crate::animation::canonical(property.name, &computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "font-size" {
         computed_font_size(&computed, parent, root_font_px).unwrap_or(computed)
+    } else if crate::font_properties::is_audited_longhand(property.name) {
+        crate::font_properties::canonical(property.name, &computed).unwrap_or(computed)
     } else if matches!(property.name, "font-feature-settings" | "font-variant-ligatures") {
         canonical_font_feature_value(property.name, &computed).unwrap_or(computed)
     } else if property.name == "display" {
