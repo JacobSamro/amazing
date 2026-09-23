@@ -106,9 +106,18 @@ pub fn paint_view_metadata(
                 items: item.index..item.index + 1,
                 state: PropertyTreeState {
                     transform: TransformId(p.transform as usize),
-                    clip: ClipId(p.clip as usize),
+                    clip: if h.fixed {
+                        ClipId(0)
+                    } else {
+                        ClipId(p.clip as usize)
+                    },
                     effect: EffectId(p.effect as usize),
                     scroll: ScrollId(p.scroll as usize),
+                    positioning: if h.fixed {
+                        Positioning::Fixed
+                    } else {
+                        Positioning::Flow
+                    },
                 },
                 bounds: rect(item.local_bounds),
                 reasons,

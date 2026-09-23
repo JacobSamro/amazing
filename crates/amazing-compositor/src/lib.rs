@@ -330,6 +330,7 @@ mod tests {
             scroll: sc,
             effect: ef,
             clip: ClipId(0),
+            positioning: Positioning::Flow,
         };
         let chunks = vec![
             PaintChunk {

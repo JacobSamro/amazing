@@ -174,12 +174,18 @@ fn clip_rect(trees: &PropertyTrees, state: PropertyTreeState, viewport: Rect) ->
         }
         id = node.parent
     }
-    let mut sid = state.scroll;
+    let mut sid = if state.positioning == Positioning::Fixed {
+        ScrollId(0)
+    } else {
+        state.scroll
+    };
     while sid.0 != 0 {
         let Some(node) = trees.scrolls.get(sid.0) else {
             break;
         };
-        result = intersect(result, node.container);
+        if let Some(world) = trees.scroll_container_world(sid, state.transform) {
+            result = intersect(result, world);
+        }
         sid = node.parent
     }
     result

@@ -1,5 +1,6 @@
 use amazing_compositor::{
-    baked_paint_view_compositor, paint_view_metadata, Presenter, ReferenceCpuPresenter,
+    baked_paint_view_compositor, paint_view_metadata, CompositingReasons, Compositor, PaintChunk,
+    Positioning, Presenter, Rect, ReferenceCpuPresenter, ScrollId, StickyConstraint,
 };
 use amazing_paint::controls::NoControls;
 use amazing_paint::display_list_view::DisplayListView;
@@ -50,6 +51,78 @@ fn pinned_real_pages_match_full_painter() {
         "body{margin:0;background:white;color:#223}header{position:fixed;top:0;background:#aaf}main{width:72px;padding-top:18px}p{margin:12px 0}");
     compare("effects-scroller", EFFECTS_PAGE,
         "body{margin:0;background:white}.fixed{position:fixed;left:2px;top:2px;background:red}.scroller{width:80px;height:52px;overflow:scroll;background:#ddd}.moving{will-change:transform;transform:translate(3px,4px);background:blue;width:30px;height:22px}.fade{opacity:.5;background:green;width:30px;height:22px}");
+}
+
+#[test]
+fn real_nested_overflow_fixed_sticky_and_snap_metadata() {
+    let html = "<body><section class='outer'><div class='fixed'>Fixed</div><section class='inner'><div class='sticky'>Sticky</div><p>Scrollable paragraph</p><p>Second paragraph</p></section></section></body>";
+    let css = "body{margin:0}.outer{width:80px;height:75px;overflow:scroll}.inner{width:65px;height:40px;overflow:scroll}.fixed{position:fixed;top:0;left:0;background:red}.sticky{position:sticky;top:4px;background:blue}p{margin:10px 0}";
+    let text = FallbackTextSystem::new();
+    let root = amazing_layout::layout_document_with_text(html, css, VIEWPORT as f32, &text);
+    let view = DisplayListView::new(&root, VIEWPORT, VIEWPORT, &text, &NoImages, &NoControls);
+    let (mut trees, chunks) = paint_view_metadata(&view).unwrap();
+    assert!(view.scrolls().len() >= 3, "nested overflow nodes");
+    let fixed = view.items().iter().find(|item| item.hints.fixed).unwrap();
+    let sticky = view.items().iter().find(|item| item.hints.sticky).unwrap();
+    assert_eq!(chunks[fixed.index].state.positioning, Positioning::Fixed);
+    let inner = ScrollId((view.scrolls().len() - 1) as usize);
+    let outer = ScrollId(view.scrolls()[inner.0].parent as usize);
+    assert_ne!(outer, ScrollId(0));
+    let bounds = trees.scroll(inner).unwrap().container;
+    trees
+        .set_scroll_contents(
+            inner,
+            Rect::new(bounds.x, bounds.y, bounds.w, bounds.h + 80.),
+        )
+        .unwrap();
+    trees
+        .set_snap_points(inner, vec![], vec![0., 20., 40.])
+        .unwrap();
+    let fixed_state = chunks[fixed.index].state;
+    let fixed_before = trees.matrix(fixed_state).unwrap();
+    let sticky_bounds = chunks[sticky.index].bounds;
+    let sticky_id = trees
+        .add_sticky(StickyConstraint {
+            scroll: inner,
+            normal: sticky_bounds,
+            top: Some(4.),
+            right: None,
+            bottom: None,
+            left: None,
+        })
+        .unwrap();
+    let mut selected = vec![PaintChunk {
+        items: fixed.index..fixed.index + 1,
+        state: fixed_state,
+        bounds: chunks[fixed.index].bounds,
+        reasons: CompositingReasons::FIXED,
+    }];
+    selected.push(PaintChunk {
+        items: sticky.index..sticky.index + 1,
+        state: amazing_compositor::PropertyTreeState {
+            positioning: Positioning::Sticky(sticky_id),
+            ..chunks[sticky.index].state
+        },
+        bounds: sticky_bounds,
+        reasons: CompositingReasons::SCROLLER,
+    });
+    // Source item ranges must stay in paint order.
+    selected.sort_by_key(|chunk| chunk.items.start);
+    trees.set_scroll(inner, (0., 27.)).unwrap();
+    assert_eq!(trees.snap_offset(inner, (0., 27.)), Some((0., 20.)));
+    assert_eq!(trees.matrix(fixed_state).unwrap(), fixed_before);
+    let compositor = Compositor::new(trees, selected, view.items().len()).unwrap();
+    assert!(compositor
+        .trees()
+        .matrix(
+            compositor
+                .chunks()
+                .iter()
+                .find(|c| c.state.positioning == Positioning::Sticky(sticky_id))
+                .unwrap()
+                .state
+        )
+        .is_some());
 }
 
 #[test]

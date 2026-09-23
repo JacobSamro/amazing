@@ -60,23 +60,34 @@ impl Compositor {
         let Some(hit) = self.hit_test(x, y) else {
             return Ok(WheelResult::NoScroller);
         };
-        if hit.scroll.0 == 0 {
-            return Ok(WheelResult::NoScroller);
+        let mut id = hit.scroll;
+        while id.0 != 0 {
+            let Some(node) = self.trees.scroll(id) else {
+                return Ok(WheelResult::NoScroller);
+            };
+            let max_x = (node.contents.w - node.container.w).max(0.);
+            let max_y = (node.contents.h - node.container.h).max(0.);
+            let offset = (
+                (node.offset.0 + dx).clamp(0., max_x),
+                (node.offset.1 + dy).clamp(0., max_y),
+            );
+            if offset != node.offset {
+                self.trees.set_scroll(id, offset)?;
+                return Ok(WheelResult::Scrolled { node: id, offset });
+            }
+            id = node.parent;
         }
-        let Some(node) = self.trees.scroll(hit.scroll) else {
-            return Ok(WheelResult::NoScroller);
-        };
-        let max_x = (node.contents.w - node.container.w).max(0.);
-        let max_y = (node.contents.h - node.container.h).max(0.);
-        let offset = (
-            (node.offset.0 + dx).clamp(0., max_x),
-            (node.offset.1 + dy).clamp(0., max_y),
-        );
-        self.trees.set_scroll(hit.scroll, offset)?;
-        Ok(WheelResult::Scrolled {
-            node: hit.scroll,
-            offset,
-        })
+        Ok(WheelResult::NoScroller)
+    }
+    /// Apply computed snap points after a scroll gesture settles.
+    pub fn settle_scroll(&mut self, id: ScrollId) -> Result<(f32, f32), TreeError> {
+        let current = self.trees.scroll(id).ok_or(TreeError::InvalidNode)?.offset;
+        let snapped = self
+            .trees
+            .snap_offset(id, current)
+            .ok_or(TreeError::InvalidNode)?;
+        self.trees.set_scroll(id, snapped)?;
+        Ok(snapped)
     }
 }
 #[cfg(test)]
@@ -182,5 +193,51 @@ mod tests {
             }
         );
         assert_eq!(c.trees().scroll(scroll).unwrap().offset, (10., 5.));
+    }
+    #[test]
+    fn nested_scroller_hit_bubbles_at_edge_and_snaps() {
+        let mut trees = PropertyTrees::new();
+        let outer = trees
+            .add_scroll(
+                ScrollId(0),
+                (0., 30.),
+                Rect::new(0., 0., 100., 100.),
+                Rect::new(0., 0., 100., 300.),
+            )
+            .unwrap();
+        let inner = trees
+            .add_scroll(
+                outer,
+                (0., 40.),
+                Rect::new(0., 50., 80., 40.),
+                Rect::new(0., 50., 80., 80.),
+            )
+            .unwrap();
+        trees
+            .set_snap_points(outer, vec![], vec![0., 50., 100.])
+            .unwrap();
+        let chunk = PaintChunk {
+            items: 0..1,
+            state: PropertyTreeState {
+                scroll: inner,
+                ..Default::default()
+            },
+            bounds: Rect::new(0., 70., 40., 50.),
+            reasons: CompositingReasons::SCROLLER,
+        };
+        let mut c = Compositor::new(trees, vec![chunk], 1).unwrap();
+        let hit = c.hit_test(10., 30.).unwrap();
+        assert_eq!(hit.local, (10., 100.));
+        assert_eq!(hit.scroll, inner);
+        assert!(c.hit_test(10., 61.).is_none());
+        assert_eq!(
+            c.wheel_scroll(10., 30., 0., 10., false).unwrap(),
+            WheelResult::Scrolled {
+                node: outer,
+                offset: (0., 40.)
+            }
+        );
+        assert_eq!(c.settle_scroll(outer).unwrap(), (0., 50.));
+        assert_eq!(c.trees().scroll(inner).unwrap().accumulated, (0., 90.));
     }
 }
