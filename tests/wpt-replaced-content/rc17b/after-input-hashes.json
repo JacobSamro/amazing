@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "fixed_base": "ba83010663168cf959f2d02b20a3e3dcaadd790f",
+  "paint_commit": "94965da6da5111d23fa57720b2914ff40b54274a",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "files": {
+    "crates/amazing-paint/src/display_list.rs": "c9752766ed6a1545a19179f1b7575a51f7554ecbe8efcf1d9de0f462fa8668a5",
+    "crates/amazing-paint/src/display_list_view_tests.rs": "7af87a130726232c3da7923386e7760442eb0abff270463feb62a6015e9efda4",
+    "crates/amazing-paint/src/image.rs": "f8a3661c6706a8ac5affdf96a7f35b7dcefabbdeb518c9e2fc1a43040a76ae7e",
+    "crates/amazing-paint/src/paint.rs": "72385a5debee933a960447ff590d09639c1fad0558e0d77caca87dfe95524cb1",
+    "Cargo.lock": "5805cd2f1cfb89a839377662df59c2d78ab43633c9674ca0caf9a568b47892c9",
+    "crates/amazing-shell-gpui/Cargo.lock": "c143ed837533d960afb98f1308dc59e35efe5821f2d0e1b346714db1ebabaee8",
+    "tests/wpt-replaced-content/rc17b/generated-manifest.json": "86973f4cd6aa2ef8d73ad6315b95cc65b93863a5a80ef2852fd66b42a17b284e",
+    "css/css-content/pseudo-element-inline-box.html": "6239b99cb18fd0dd2fdd5ab6efa7ea4ae05796c17fe9db35f1a5407340ab6476",
+    "css/css-content/pseudo-element-inline-box-ref.html": "5bfdfeee2b46199b2c5e59d8ebe67d312663f362f1121b16c9157b37baa18886",
+    "css/css-pseudo/relative-box-order-of-pseudo-elements.html": "b8c5a1b6a747d7a8f8cd8291b7eb5ccb4ce016fa36bb06986f90aefe03a57572",
+    "css/css-pseudo/relative-box-order-of-pseudo-elements-ref.html": "c97d2e45cde621321eebd97dae8ab918dad0232307a2b864dbab113157df389b",
+    "css/css-pseudo/outside-marker-paint-order.html": "65fca181cfd11a8f8e0dba8d37ef83d19b67526d525b3e26a20876671fa2608a",
+    "css/css-pseudo/outside-marker-paint-order-ref.html": "751c893234d972568904db65400abb717751e031a234b287c3a0f0314f0b69f3",
+    "css/css-pseudo/marker-content-008.tentative.html": "7f4f3172fceba2fe62fa51917631e9bc5c24fa61ec1fc7d8e92cd931fdd8cf52",
+    "css/css-pseudo/marker-content-008-ref.html": "ad0a32dfc5ed6b6e735c87709c83b4a40b36d1c07d05baa97e28908d59f90e3f",
+    "css/css-pseudo/marker-and-other-pseudo-elements.html": "971fe3b6161888f6f68fd0b080bbf7d2b2d3adfc145d2e496fbc834c7cb16eff",
+    "css/css-pseudo/marker-and-other-pseudo-elements-ref.html": "7024e11a13705c4926176c563e55f818f3710dae8454ff7d32b91e386b603429",
+    "css/css-content/element-replacement.html": "4d80bfbaff4254d44fb424e66a441523b62dfa7e9add39a9773209bf4fedde86",
+    "css/css-content/element-replacement-ref.html": "a14e0da9143670b064b793d38fd7c195ed21c16d011610b7253b5a5c46f8cae5",
+    "css/css-content/element-replacement-image-alt.html": "0a92d3c8b4eb16f23dcd7a427fc64b3708d51db5fc16583596014b33dea7c59c",
+    "css/css-content/resources/rect.svg": "9f08a51b5cc4067e5c5fb2cfae3c94a84cd3209c4709b465b6caa9a4753c9af0"
+  }
+}
