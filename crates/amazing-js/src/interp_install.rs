@@ -202,6 +202,7 @@ impl Interpreter {
             }
         }
         self.define_global("Reflect", reflect);
+        self.install_std_reflect();
         self.define_global(
             "Array",
             Self::native("Array", native_array, &self.function_proto),
@@ -228,8 +229,6 @@ impl Interpreter {
                 Self::native("of", native_array_of, &self.function_proto),
             );
         }
-        self.define_global("Map", Self::native("Map", native_map, &self.function_proto));
-        self.define_global("Set", Self::native("Set", native_set, &self.function_proto));
         self.install_symbols();
         let date_ctor = Self::native("Date", native_date, &self.function_proto);
         if let JsValue::Object(object) = &date_ctor {
@@ -360,37 +359,8 @@ impl Interpreter {
                 Self::native(n, f, &self.function_proto),
             );
         }
-        for (n, f) in [
-            ("get", native_map_get as crate::value::NativeFn),
-            ("set", native_map_set as crate::value::NativeFn),
-            ("has", native_map_has as crate::value::NativeFn),
-            ("delete", native_map_delete as crate::value::NativeFn),
-            ("clear", native_map_clear as crate::value::NativeFn),
-            ("keys", native_map_keys as crate::value::NativeFn),
-            ("values", native_map_values as crate::value::NativeFn),
-            ("entries", native_map_entries as crate::value::NativeFn),
-        ] {
-            let _ = self.set_prop(
-                &JsValue::Object(self.map_proto.clone()),
-                n,
-                Self::native(n, f, &self.function_proto),
-            );
-        }
-        for (n, f) in [
-            ("add", native_set_add as crate::value::NativeFn),
-            ("has", native_set_has as crate::value::NativeFn),
-            ("delete", native_set_delete as crate::value::NativeFn),
-            ("clear", native_set_clear as crate::value::NativeFn),
-            ("keys", native_set_values as crate::value::NativeFn),
-            ("values", native_set_values as crate::value::NativeFn),
-            ("entries", native_set_entries as crate::value::NativeFn),
-        ] {
-            let _ = self.set_prop(
-                &JsValue::Object(self.set_proto.clone()),
-                n,
-                Self::native(n, f, &self.function_proto),
-            );
-        }
+        self.install_std_collections();
+        self.install_std_iterator_helpers();
         let math = self.object_value();
         for (n, f) in [
             ("abs", native_abs as crate::value::NativeFn),
