@@ -5,6 +5,7 @@
 mod font_display;
 mod font_matching;
 mod font_variations;
+mod line_break_objects;
 pub use font_display::FontDisplayPeriods;
 
 use amazing_text::{
@@ -1354,6 +1355,10 @@ fn line_breaks(text: &str, spans: &[amazing_text::TextSpan]) -> Vec<BreakOpportu
                 kind: BreakKind::Emergency,
             }),
     );
+    // ICU does not expose every contingent break around U+FFFC. Apply LB20
+    // after its higher-priority punctuation and glue rules at those seams.
+    opportunities.retain(|opportunity| line_break_objects::allows(text, opportunity.offset));
+    opportunities.extend(line_break_objects::opportunities(text, spans));
     opportunities.sort_by_key(|opportunity| (opportunity.offset, break_priority(opportunity.kind)));
     opportunities.dedup_by_key(|opportunity| opportunity.offset);
     opportunities

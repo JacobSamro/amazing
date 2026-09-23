@@ -232,3 +232,14 @@ were lost relative to the retained baselines. The vertical/ruby
 so the combined series must merge only after that fix. Evidence:
 `crates/amazing-text-provider/evidence/text8-gate-summary.json` at WPT revision
 `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+
+## TEXT-9: contingent object line breaks
+
+The provider supplements ICU's line opportunities at U+FFFC (the unresolved
+UAX #14 CB class), allowing breaks before and after atomic inline placeholders,
+including adjacent objects. Higher-priority OP, CL/CP/EX/IS/SY, QU, GL, WJ,
+ZWJ, space and mandatory-break rules still suppress their respective
+boundaries. The provider also filters any ICU opportunity that would violate
+those neighbor rules. `white-space: nowrap` remains authoritative. This is the
+provider seam needed by LAYOUT-14 item 0; its separate `split_atomic_units`
+rule must still stop inserting a break after `「`.
