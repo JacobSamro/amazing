@@ -2,7 +2,7 @@
 //!
 //! This is the Phase 6 execution milestone. It implements ordinary values,
 //! objects, arrays, functions, closures, control flow, coercion and a small
-//! set of ES built-ins using only `std`. Modules, generators, symbols and a
+//! set of ES built-ins using only `std`. Modules, generators and a
 //! real asynchronous job queue remain explicit later milestones.
 
 use std::cell::RefCell;
@@ -16,7 +16,9 @@ use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
     number_to_string, Exotic, FunctionBody, HostCallPolicy, HostFunctionId, HostHandle,
     JsFunction, JsObject, JsValue, LegacyIteratorKind, LegacyIteratorState, MapKey, MapState, Obj, PendingReaction, PromiseFate,
-    PromiseState, Property, SetState, Throw,
+    PromiseState, Property, PropertyKey, CollectionIteratorKind, CollectionIteratorState,
+    SequenceIteratorKind, SequenceIteratorState,
+    SetState, Throw, WellKnownSymbol, JsSymbol,
 };
 
 #[path = "vm/mod.rs"]
@@ -149,7 +151,7 @@ struct DomListener {
 
 enum Reference {
     Binding(String),
-    Property(JsValue, crate::value::JsString),
+    Property(JsValue, PropertyKey),
 }
 
 /// Host hooks for the small browser-facing DOM surface.
@@ -206,6 +208,7 @@ pub struct Interpreter {
     pub function_proto: Obj,
     pub array_proto: Obj,
     pub string_proto: Obj,
+    pub symbol_proto: Obj,
     pub map_proto: Obj,
     pub set_proto: Obj,
     pub date_proto: Obj,
@@ -219,6 +222,7 @@ pub struct Interpreter {
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
     legacy_hooks: HashMap<u64, LegacyPlatformHooks>,
     legacy_iterator_proto: Obj,
+    symbol_registry: HashMap<crate::value::JsString, JsSymbol>,
     random_state: u64,
     jobs: VecDeque<Job>,
     external_scheduling: Option<ExternalScheduling>,
@@ -253,6 +257,11 @@ impl Interpreter {
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
             o.set_own("[[StringData]]", JsValue::str(""));
+            o
+        })));
+        let symbol_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
             o
         })));
         let map_proto = Obj(Rc::new(RefCell::new({
@@ -299,6 +308,7 @@ impl Interpreter {
             function_proto,
             array_proto,
             string_proto,
+            symbol_proto,
             map_proto,
             set_proto,
             date_proto,
@@ -312,6 +322,7 @@ impl Interpreter {
             host_cache: HashMap::new(),
             legacy_hooks: HashMap::new(),
             legacy_iterator_proto,
+            symbol_registry: HashMap::new(),
             random_state: host_realm ^ 0xA076_1D64_78BD_642F,
             jobs: VecDeque::new(),
             external_scheduling: None,
@@ -1168,7 +1179,7 @@ impl Interpreter {
                         }
                         ast::BindingKey::Computed(expression) => {
                             let computed_value = self.eval_expr(expression, env)?;
-                            let computed = self.to_js_string(&computed_value)?;
+                            let computed = self.to_property_key(&computed_value)?;
                             used.push(computed.clone());
                             let item = self.get_prop(&source, &computed)?;
                             self.bind_pattern(property, item, kind, env)?;
@@ -1180,9 +1191,9 @@ impl Interpreter {
         Ok(())
     }
 
-    fn object_rest(&mut self, source: &JsValue, used: &[crate::value::JsString]) -> Result<JsValue, Throw> {
+    fn object_rest(&mut self, source: &JsValue, used: &[PropertyKey]) -> Result<JsValue, Throw> {
         let rest = self.object_value();
-        for key in self.enumerable_keys(source)? {
+        for key in self.enumerable_property_keys(source)? {
             if !used.iter().any(|used_key| used_key == &key) {
                 let value = self.get_prop(source, &key)?;
                 self.set_prop(&rest, &key, value)?;
@@ -1633,14 +1644,14 @@ impl Interpreter {
                     match x {
                         ast::ObjElem::Spread(y) => {
                             let src = self.eval_expr(y, env)?;
-                            for k in self.enumerable_keys(&src)? {
+                            for k in self.enumerable_property_keys(&src)? {
                                 let v = self.get_prop(&src, &k)?;
                                 self.set_prop(&o, &k, v)?;
                             }
                         }
                         ast::ObjElem::Prop(p) => {
                             let k = match &p.key_utf16 {
-                                Some(units) => crate::value::JsString::from_units(units.clone()),
+                                Some(units) => PropertyKey::String(crate::value::JsString::from_units(units.clone())),
                                 None => self.prop_key(&p.key, env)?,
                             };
                             let v = match &p.value {
@@ -1671,6 +1682,9 @@ impl Interpreter {
             ExprKind::Unary { op, operand } => self.unary(*op, operand, env),
             ExprKind::Update { op, prefix, target } => self.update(*op, *prefix, target, env),
             ExprKind::Binary { op, left, right } => {
+                if *op == ast::BinOp::Add {
+                    return self.eval_add_chain(e, env);
+                }
                 let a = self.eval_expr(left, env)?;
                 let b = self.eval_expr(right, env)?;
                 self.binary(*op, a, b)
@@ -1727,6 +1741,21 @@ impl Interpreter {
         }
     }
 
+    fn eval_add_chain(&mut self, expression: &ast::Expr, env: &EnvHandle) -> Result<JsValue, Throw> {
+        let mut rights = Vec::new();
+        let mut leftmost = expression;
+        while let ExprKind::Binary { op: ast::BinOp::Add, left, right } = &leftmost.kind {
+            rights.push(right.as_ref());
+            leftmost = left;
+        }
+        let mut value = self.eval_expr(leftmost, env)?;
+        while let Some(right) = rights.pop() {
+            let next = self.eval_expr(right, env)?;
+            value = self.binary(ast::BinOp::Add, value, next)?;
+        }
+        Ok(value)
+    }
+
     fn numeric(&self, n: &crate::tokens::Numeric) -> Result<JsValue, Throw> {
         if n.bigint {
             return Err(Throw::type_error("BigInt is not implemented"));
@@ -1775,7 +1804,10 @@ impl Interpreter {
                     let o = self.eval_expr(obj, env)?;
                     let k = self.member_key(prop, env)?;
                     if let JsValue::Object(o) = o {
-                        if let Some(deleted) = self.legacy_delete(&o, &k)? {
+                        if let Some(deleted) = match k.as_string() {
+                            Some(name) => self.legacy_delete(&o, name)?,
+                            None => None,
+                        } {
                             Ok(JsValue::Bool(deleted))
                         } else {
                             Ok(JsValue::Bool(o.borrow_mut().delete_own(&k)))
@@ -1892,7 +1924,10 @@ impl Interpreter {
             In => {
                 let k = self.to_property_key(&a)?;
                 match b {
-                    JsValue::Object(o) => Ok(JsValue::Bool(self.legacy_has_property(&o, &k)?)),
+                    JsValue::Object(o) => Ok(JsValue::Bool(match k.as_string() {
+                        Some(name) => self.legacy_has_property(&o, name)?,
+                        None => o.borrow().has_property(&k),
+                    })),
                     _ => Err(Throw::type_error("right operand of in is not an object")),
                 }
             }
@@ -2040,7 +2075,7 @@ impl Interpreter {
                                 "cannot access a property on nullish value",
                             ));
                         }
-                        self.to_js_string(&property_value)?
+                        self.to_property_key(&property_value)?
                     }
                 };
                 if base.is_null() || base.is_undefined() {
@@ -2219,7 +2254,7 @@ impl Interpreter {
         }
         Ok(out)
     }
-    fn member_key(&mut self, p: &MemberProp, e: &EnvHandle) -> Result<crate::value::JsString, Throw> {
+    fn member_key(&mut self, p: &MemberProp, e: &EnvHandle) -> Result<PropertyKey, Throw> {
         match p {
             MemberProp::Ident(i) => Ok(i.name.clone().into()),
             MemberProp::Private(_) => Err(Throw::type_error(
@@ -2227,11 +2262,11 @@ impl Interpreter {
             )),
             MemberProp::Computed(x) => {
                 let v = self.eval_expr(x, e)?;
-                self.to_js_string(&v)
+                self.to_property_key(&v)
             }
         }
     }
-    fn prop_key(&mut self, p: &PropKey, e: &EnvHandle) -> Result<crate::value::JsString, Throw> {
+    fn prop_key(&mut self, p: &PropKey, e: &EnvHandle) -> Result<PropertyKey, Throw> {
         match p {
             PropKey::Ident(i) => Ok(i.name.clone().into()),
             PropKey::Private(_) => Err(Throw::type_error(
@@ -2241,7 +2276,7 @@ impl Interpreter {
             PropKey::Num(n) => Ok(number_to_string(self.numeric(n)?.to_number()?).into()),
             PropKey::Computed(x) => {
                 let v = self.eval_expr(x, e)?;
-                self.to_js_string(&v)
+                self.to_property_key(&v)
             }
         }
     }
@@ -2549,7 +2584,7 @@ impl Interpreter {
                     if let ast::ClassMember::Method(x) = m {
                         if x.kind != ast::MethodKind::Constructor {
                             let k = match &x.key_utf16 {
-                                Some(units) => crate::value::JsString::from_units(units.clone()),
+                                Some(units) => PropertyKey::String(crate::value::JsString::from_units(units.clone())),
                                 None => self.prop_key(&x.key, e)?,
                             };
                             let method = self.method_value(x, e);
@@ -2953,20 +2988,21 @@ impl Interpreter {
         name
     }
 
-    fn get_prop(&mut self, v: &JsValue, k: impl Into<crate::value::JsString>) -> Result<JsValue, Throw> {
+    fn get_prop(&mut self, v: &JsValue, k: impl Into<PropertyKey>) -> Result<JsValue, Throw> {
         self.get_prop_receiver(v, &k.into(), v.clone())
     }
 
     fn get_prop_receiver(
         &mut self,
         v: &JsValue,
-        key: &crate::value::JsString,
+        key: &PropertyKey,
         receiver: JsValue,
     ) -> Result<JsValue, Throw> {
-        let text = key.to_utf8_lossy();
-        let k = text.as_str();
+        let text = key.as_string().map(|name| name.to_utf8_lossy());
+        let k = text.as_deref().unwrap_or("");
         match v {
             JsValue::Object(o) => {
+                if key.as_string().is_some() {
                 if let Some(node) = Self::dom_dataset_id(o) {
                     let name = Self::dataset_attribute_name(k);
                     return Ok(dom_host(self)?
@@ -3009,10 +3045,10 @@ impl Interpreter {
                         return Ok(JsValue::num(size as f64));
                     }
                 }
-                let property = if self.legacy_for(o).is_some() {
-                    self.legacy_own_property(o, key, false)?
-                } else {
-                    o.borrow().own_prop(key).cloned()
+                }
+                let property = match key.as_string() {
+                    Some(name) if self.legacy_for(o).is_some() => self.legacy_own_property(o, name, false)?,
+                    _ => o.borrow().own_prop(key).cloned(),
                 };
                 let prototype = o.borrow().proto.clone();
                 if let Some(property) = property {
@@ -3040,17 +3076,19 @@ impl Interpreter {
                     self.get_prop_receiver(&JsValue::Object(self.string_proto.clone()), key, receiver)
                 }
             }
+            JsValue::Symbol(_) => self.get_prop_receiver(&JsValue::Object(self.symbol_proto.clone()), key, receiver),
             _ => Ok(JsValue::Undefined),
         }
     }
-    fn set_prop(&mut self, v: &JsValue, key: impl Into<crate::value::JsString>, x: JsValue) -> Result<(), Throw> {
+    fn set_prop(&mut self, v: &JsValue, key: impl Into<PropertyKey>, x: JsValue) -> Result<(), Throw> {
         let key = key.into();
-        let text = key.to_utf8_lossy();
-        let k = text.as_str();
+        let text = key.as_string().map(|name| name.to_utf8_lossy());
+        let k = text.as_deref().unwrap_or("");
         let o = match v {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("cannot set property on primitive")),
         };
+        if let Some(name) = key.as_string() {
         if let Some(node) = Self::dom_style_id(&o) {
             let value = self.to_string(&x)?;
             dom_mutation(self, |host| host.set_style(node, k, &value))?;
@@ -3070,8 +3108,10 @@ impl Interpreter {
                 return Ok(());
             }
         }
-        if self.legacy_set(&o, &key, x.clone())? { return Ok(()); }
-        if self.legacy_for(&o).is_some() && o.borrow().own_prop(&key).is_none() {
+        if self.legacy_set(&o, name, x.clone())? { return Ok(()); }
+        }
+        if o.borrow().own_prop(&key).is_none()
+            && (matches!(&key, PropertyKey::Symbol(_)) || self.legacy_for(&o).is_some()) {
             let mut cursor = o.borrow().proto.clone();
             while let Some(prototype) = cursor {
                 let descriptor = prototype.borrow().own_prop(&key).cloned();
@@ -3133,6 +3173,35 @@ impl Interpreter {
             _ => Ok(Vec::new()),
         }
     }
+    fn own_property_keys(&mut self, v: &JsValue) -> Result<Vec<PropertyKey>, Throw> {
+        match v {
+            JsValue::Object(object) => {
+                let strings = self.legacy_own_keys(object, false)?
+                    .into_iter().map(PropertyKey::String);
+                let symbols = object.borrow().own_property_keys().into_iter()
+                    .filter(|key| matches!(key, PropertyKey::Symbol(_)));
+                Ok(strings.chain(symbols).collect())
+            }
+            JsValue::Str(value) => {
+                let mut keys: Vec<_> = (0..value.len())
+                    .map(|index| PropertyKey::from(index.to_string())).collect();
+                keys.push(PropertyKey::from("length"));
+                Ok(keys)
+            }
+            _ => Ok(Vec::new()),
+        }
+    }
+    fn enumerable_property_keys(&mut self, v: &JsValue) -> Result<Vec<PropertyKey>, Throw> {
+        let mut keys: Vec<_> = self.enumerable_keys(v)?.into_iter()
+            .map(PropertyKey::String).collect();
+        if let JsValue::Object(object) = v {
+            keys.extend(object.borrow().own_property_keys().into_iter().filter(|key| {
+                matches!(key, PropertyKey::Symbol(_))
+                    && object.borrow().own_prop(key).is_some_and(|property| property.enumerable)
+            }));
+        }
+        Ok(keys)
+    }
     fn array_length(&self, v: &JsValue) -> usize {
         match v {
             JsValue::Object(o) => match o.borrow().get_own("length") {
@@ -3153,7 +3222,7 @@ impl Interpreter {
                     .map(|n| self.get_prop(v, &n.to_string()))
                     .collect::<Result<_, _>>()?);
             }
-            let iterator_method = self.get_prop(v, "@@iterator")?;
+            let iterator_method = self.get_prop(v, WellKnownSymbol::Iterator.symbol())?;
             if callable_function(&iterator_method).is_some() {
                 let iterator = self.call_value(&iterator_method, v.clone(), Vec::new())?;
                 let same = matches!((v, &iterator), (JsValue::Object(left), JsValue::Object(right)) if Rc::ptr_eq(&left.0, &right.0));
@@ -3308,7 +3377,7 @@ impl Interpreter {
         if matches!(object.borrow().exotic, Exotic::Array) {
             return Ok(None);
         }
-        let method = self.get_prop(value, "@@iterator")?;
+        let method = self.get_prop(value, WellKnownSymbol::Iterator.symbol())?;
         if callable_function(&method).is_some() {
             let iterator = self.call_value(&method, value.clone(), Vec::new())?;
             let next = self.get_prop(&iterator, "next")?;
@@ -3333,6 +3402,7 @@ impl Interpreter {
             JsValue::Bool(_) => "boolean",
             JsValue::Num(_) => "number",
             JsValue::Str(_) => "string",
+            JsValue::Symbol(_) => "symbol",
             JsValue::Object(o) => {
                 if o.borrow().func.is_some() {
                     "function"
@@ -3349,6 +3419,16 @@ impl Interpreter {
         if !v.is_object() {
             return Ok(v);
         };
+        let exotic = self.get_prop(&v, WellKnownSymbol::ToPrimitive.symbol())?;
+        if !exotic.is_undefined() && !exotic.is_null() {
+            if callable_function(&exotic).is_none() {
+                return Err(Throw::type_error("@@toPrimitive is not callable"));
+            }
+            let hint = if string_hint { "string" } else { "default" };
+            let result = self.call_value(&exotic, v.clone(), vec![JsValue::str(hint)])?;
+            if result.is_object() { return Err(Throw::type_error("@@toPrimitive returned an object")); }
+            return Ok(result);
+        }
         if let JsValue::Object(object) = &v {
             for slot in ["[[BooleanData]]", "[[NumberData]]", "[[StringData]]"] {
                 if let Some(value) = object.borrow().get_own(slot) {
@@ -3386,12 +3466,17 @@ impl Interpreter {
         } else {
             match v {
                 JsValue::Str(s) => Ok(s.clone()),
+                JsValue::Symbol(_) => Err(Throw::type_error("cannot convert Symbol to string")),
                 _ => Ok(crate::value::JsString::from(crate::value::to_display_string(v))),
             }
         }
     }
-    fn to_property_key(&mut self, v: &JsValue) -> Result<crate::value::JsString, Throw> {
-        self.to_js_string(v)
+    fn to_property_key(&mut self, v: &JsValue) -> Result<PropertyKey, Throw> {
+        let primitive = self.primitive_with_hint(v.clone(), true)?;
+        match primitive {
+            JsValue::Symbol(symbol) => Ok(PropertyKey::Symbol(symbol)),
+            other => Ok(PropertyKey::String(self.to_js_string(&other)?)),
+        }
     }
     fn to_int32(&mut self, v: &JsValue) -> Result<i32, Throw> {
         let n = self.to_number(v)?;
@@ -3413,6 +3498,7 @@ impl Interpreter {
             (Undefined, Null) | (Null, Undefined) | (Undefined, Undefined) | (Null, Null) => true,
             (Num(x), Num(y)) => x == y,
             (Str(x), Str(y)) => x == y,
+            (Symbol(x), Symbol(y)) => x == y,
             (Bool(_), _) => {
                 let n = a.to_number()?;
                 self.loose_eq(&Num(n), b)?
@@ -3421,11 +3507,11 @@ impl Interpreter {
                 let n = b.to_number()?;
                 self.loose_eq(a, &Num(n))?
             }
-            (Num(_) | Str(_), Object(_)) => {
+            (Num(_) | Str(_) | Symbol(_), Object(_)) => {
                 let p = self.primitive(b.clone())?;
                 self.loose_eq(a, &p)?
             }
-            (Object(_), Num(_) | Str(_)) => {
+            (Object(_), Num(_) | Str(_) | Symbol(_)) => {
                 let p = self.primitive(a.clone())?;
                 self.loose_eq(&p, b)?
             }
@@ -3434,10 +3520,23 @@ impl Interpreter {
         })
     }
     fn instanceof(&mut self, a: &JsValue, b: &JsValue) -> Result<JsValue, Throw> {
-        let r = match b {
-            JsValue::Object(o) => o.clone(),
-            _ => return Err(Throw::type_error("right operand is not callable")),
-        };
+        if !b.is_object() { return Err(Throw::type_error("right operand is not callable")); }
+        let method = self.get_prop(b, WellKnownSymbol::HasInstance.symbol())?;
+        if !method.is_null() && !method.is_undefined() {
+            if callable_function(&method).is_none() {
+                return Err(Throw::type_error("@@hasInstance is not callable"));
+            }
+            let result = self.call_value(&method, b.clone(), vec![a.clone()])?;
+            return Ok(JsValue::Bool(result.to_boolean()));
+        }
+        if callable_function(b).is_none() {
+            return Err(Throw::type_error("right operand is not callable"));
+        }
+        self.ordinary_has_instance(a, b)
+    }
+    fn ordinary_has_instance(&mut self, a: &JsValue, b: &JsValue) -> Result<JsValue, Throw> {
+        let JsValue::Object(r) = b else { return Ok(JsValue::Bool(false)); };
+        if r.borrow().func.is_none() { return Ok(JsValue::Bool(false)); }
         let p = match r.borrow().get_own("prototype") {
             Some(JsValue::Object(p)) => p,
             _ => return Err(Throw::type_error("prototype is not an object")),
@@ -3468,7 +3567,7 @@ impl Interpreter {
 fn reference_name(reference: &Reference) -> Option<String> {
     match reference {
         Reference::Binding(name) => Some(name.clone()),
-        Reference::Property(_, key) => Some(key.to_utf8_lossy()),
+        Reference::Property(_, key) => key.as_string().map(|name| name.to_utf8_lossy()),
     }
 }
 
@@ -3506,6 +3605,7 @@ fn for_iteration_env(left: &ForLeft, env: &EnvHandle) -> EnvHandle {
 }
 
 include!("interp_install.rs");
+include!("interp_symbol.rs");
 include!("interp_builtins.rs");
 include!("interp_regexp.rs");
 include!("interp_tests.rs");

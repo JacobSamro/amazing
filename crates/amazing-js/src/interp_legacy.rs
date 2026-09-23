@@ -181,7 +181,7 @@ impl Interpreter {
         let for_each = self.array_proto.borrow().get_own("forEach")
             .ok_or_else(|| Throw::type_error("Array.prototype.forEach is missing"))?;
         for (name, function) in [
-            ("@@iterator", values.clone()), ("values", values),
+            ("values", values.clone()),
             ("keys", Self::native("keys", legacy_keys, &self.function_proto)),
             ("entries", Self::native("entries", legacy_entries, &self.function_proto)),
             ("forEach", for_each),
@@ -189,13 +189,15 @@ impl Interpreter {
             prototype.borrow_mut().define(name, Property { value: function, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
                 .map_err(|_| Throw::type_error("cannot install iterable method"))?;
         }
+        prototype.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property { value: values, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
+            .map_err(|_| Throw::type_error("cannot install iterable symbol"))?;
         let next = Self::native("next", legacy_iterator_next, &self.function_proto);
         self.legacy_iterator_proto.borrow_mut().define("next", Property { value: next, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
             .map_err(|_| Throw::type_error("cannot install iterator next"))?;
         let self_iterator = Self::native("[Symbol.iterator]", legacy_iterator_self, &self.function_proto);
-        self.legacy_iterator_proto.borrow_mut().define("@@iterator", Property { value: self_iterator, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
+        self.legacy_iterator_proto.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property { value: self_iterator, writable: true, enumerable: false, configurable: true, getter: None, setter: None })
             .map_err(|_| Throw::type_error("cannot install iterator symbol"))?;
-        self.legacy_iterator_proto.borrow_mut().define("@@toStringTag", Property { value: JsValue::str("Array Iterator"), writable: false, enumerable: false, configurable: true, getter: None, setter: None })
+        self.legacy_iterator_proto.borrow_mut().define(WellKnownSymbol::ToStringTag.symbol(), Property { value: JsValue::str("Array Iterator"), writable: false, enumerable: false, configurable: true, getter: None, setter: None })
             .map_err(|_| Throw::type_error("cannot install iterator tag"))?;
         Ok(())
     }
@@ -325,7 +327,7 @@ mod tests {
     fn iterator_and_for_each_read_live_indices() {
         let (mut i, object, prototype, values, _) = fixture(false, false);
         i.binding_define_iterable(7, &prototype).unwrap();
-        let method = i.binding_get_property(&object, "@@iterator").unwrap();
+        let method = i.get_prop(&object, WellKnownSymbol::Iterator.symbol()).unwrap();
         let iterator = i.binding_call(&method, object.clone(), Vec::new()).unwrap();
         let next = i.binding_get_property(&iterator, "next").unwrap();
         let first = i.binding_call(&next, iterator.clone(), Vec::new()).unwrap();

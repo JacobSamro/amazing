@@ -156,6 +156,29 @@ impl Interpreter {
         owner.borrow_mut().define(name, property).map_err(|_| Throw::type_error("could not define property"))
     }
 
+    /// Define a real symbol-keyed WebIDL data property without a string alias.
+    pub fn binding_define_symbol_data_property(
+        &mut self,
+        owner: &JsValue,
+        symbol: crate::value::JsSymbol,
+        value: JsValue,
+        flags: BindingPropertyFlags,
+    ) -> Result<(), Throw> {
+        let owner = Self::binding_owner(owner)?;
+        if owner.borrow().own_prop(&symbol).is_some_and(|prop| !prop.configurable) {
+            return Err(Throw::type_error("cannot redefine a non-configurable property"));
+        }
+        if owner.borrow().own_prop(&symbol).is_none() && !owner.borrow().extensible {
+            return Err(Throw::type_error("object is not extensible"));
+        }
+        let property = Property {
+            value, writable: flags.writable, enumerable: flags.enumerable,
+            configurable: flags.configurable, getter: None, setter: None,
+        };
+        owner.borrow_mut().define(symbol, property)
+            .map_err(|_| Throw::type_error("could not define symbol property"))
+    }
+
     /// Accessors are stored as runtime callables, independent of their body
     /// kind. A reentrant getter/setter runs after the object borrow is released.
     pub fn binding_define_accessor_property(
@@ -470,6 +493,24 @@ mod tests {
         ).is_err());
         let thrown = interpreter.binding_throw(object.clone());
         assert_eq!(thrown.0, object);
+    }
+
+    #[test]
+    fn symbol_binding_property_is_visible_by_identity_and_respects_flags() {
+        let mut interpreter = Interpreter::new();
+        let object = interpreter.binding_create_object(None).unwrap();
+        let tag = WellKnownSymbol::ToStringTag.symbol();
+        interpreter.binding_define_symbol_data_property(
+            &object, tag.clone(), JsValue::str("Bound"),
+            BindingPropertyFlags { writable: false, enumerable: false, configurable: false },
+        ).unwrap();
+        let JsValue::Object(owner) = &object else { unreachable!() };
+        assert_eq!(owner.borrow().get_own(&tag), Some(JsValue::str("Bound")));
+        assert!(owner.borrow().get_own("Symbol(Symbol.toStringTag)").is_none());
+        assert!(owner.borrow().own_keys_enumerable().is_empty());
+        assert!(interpreter.binding_define_symbol_data_property(
+            &object, tag, JsValue::str("Changed"), BindingPropertyFlags::METHOD,
+        ).is_err());
     }
 
     #[test]

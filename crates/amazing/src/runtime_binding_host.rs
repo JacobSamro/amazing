@@ -689,11 +689,17 @@ impl BindingHost for RuntimeBindingHost<'_> {
         let global = self.js.binding_global_object();
         self.define_data_property(&global, definition.name, constructor, true, false, true)
     }
-    fn install_interface_class_string(&mut self, _interface: Interface, _name: &'static str)
+    fn install_interface_class_string(&mut self, interface: Interface, name: &'static str)
         -> Result<OptionalHookInstall, Throw> {
-        // Known typed gap: JSRT-6 must provide Symbol keys before
-        // WebIDL's %Symbol.toStringTag% property can be installed correctly.
-        Ok(OptionalHookInstall::NotSupported)
+        let prototype = self.prototype(interface)
+            .ok_or_else(|| Throw::type_error("interface prototype missing"))?;
+        self.js.binding_define_symbol_data_property(
+            &prototype,
+            amazing_js::value::WellKnownSymbol::ToStringTag.symbol(),
+            JsValue::str(name),
+            BindingPropertyFlags { writable: false, enumerable: false, configurable: true },
+        )?;
+        Ok(OptionalHookInstall::Installed)
     }
     fn install_dom_exception_error_prototype(&mut self) -> Result<OptionalHookInstall, Throw> {
         let global = self.js.binding_global_object();
