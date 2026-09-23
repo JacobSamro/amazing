@@ -126,11 +126,20 @@ impl ScrollDrivenAnimation {
     }
 
     pub fn tick(&self, compositor: &mut Compositor) -> Result<AnimationFrameOutput, TreeError> {
-        // An inactive timeline or an unfilled phase removes the effect. The
-        // caller supplies computed underlying values for restoration.
-        let values = self
-            .sample(compositor.trees())
-            .unwrap_or_else(|| self.underlying.clone());
+        // An inactive timeline or an unfilled phase removes the effect. Only
+        // properties owned by its keyframes are restored from computed style.
+        let values = self.sample(compositor.trees()).unwrap_or_else(|| {
+            self.effect
+                .keyframes
+                .iter()
+                .flat_map(|frame| frame.values.keys())
+                .filter_map(|property| {
+                    self.underlying
+                        .get(property)
+                        .map(|value| (property.clone(), value.clone()))
+                })
+                .collect()
+        });
         let mut output = AnimationFrameOutput::default();
         for (property, value) in values {
             match (&*property, &value) {
@@ -279,7 +288,11 @@ mod tests {
                 composite: CompositeMode::Replace,
                 iteration_composite: IterationComposite::Replace,
             },
-            underlying: ComputedValues::from([("opacity".into(), AnimationValue::Opacity(0.25))]),
+            underlying: ComputedValues::from([
+                ("opacity".into(), AnimationValue::Opacity(0.25)),
+                ("left".into(), AnimationValue::LengthPx(12.)),
+                ("display".into(), AnimationValue::Discrete("block".into())),
+            ]),
             bindings: CompositorBindings {
                 opacity: Some(effect),
                 ..Default::default()
@@ -300,5 +313,11 @@ mod tests {
         let inactive = animation.tick(&mut compositor).unwrap();
         assert_eq!(inactive.compositor_updates, 1);
         assert_eq!(compositor.trees().effect(effect).unwrap().opacity, 0.25);
+        assert_eq!(inactive.main_thread_updates.len(), 1);
+        assert_eq!(inactive.main_thread_updates[0].property, "left");
+        assert_eq!(
+            inactive.main_thread_updates[0].value,
+            AnimationValue::LengthPx(12.)
+        );
     }
 }
