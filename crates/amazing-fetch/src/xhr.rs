@@ -865,7 +865,10 @@ fn body_length(body: &BodyInput) -> Option<u64> {
     match body {
         BodyInput::Bytes(v) => Some(v.len() as u64),
         BodyInput::String(v) => Some(usv_string(v).len() as u64),
-        BodyInput::UrlSearchParams(_) | BodyInput::Stream(_) | BodyInput::FormData => None,
+        BodyInput::UrlSearchParams(_)
+        | BodyInput::Stream(_)
+        | BodyInput::FormData(_)
+        | BodyInput::Blob(_) => None,
     }
 }
 fn valid_mime(mime: &str) -> bool {

@@ -1,6 +1,6 @@
 //! URL parsing, relative resolution, and percent-decoding.
 //!
-//! [`ParsedUrl`] is the immutable WHATWG basic-parser API (UTF-8; Unicode
+//! [`ParsedUrl`] is the WHATWG basic-parser and setter API (UTF-8; Unicode
 //! domains use bundled UTS #46 data). It is the live network transport
 //! and Fetch policy parser. The public-field [`Url`] below is the deprecated legacy
 //! API; the following implementation notes describe that legacy API only.
@@ -34,17 +34,22 @@
 //! Parsing never panics on malformed input; every failure is an
 //! [`UrlError`].
 
-// The immutable standards parser is live in transport and Fetch policy.
+// The standards parser is live in transport and Fetch policy.
 // The legacy public-field Url below is only an external-consumer shim.
 mod encoding;
 mod host;
 mod idna;
 mod parsed;
 mod parser;
+mod search_params;
+mod setters;
 pub use encoding::{percent_encode, PercentEncodeSet};
 pub use host::{AsciiOnly, Host, IdnaProvider};
 pub use idna::{domain_to_ascii, domain_to_unicode, punycode_decode, punycode_encode, Idna};
 pub use parsed::{ParseError, ParsedUrl, TupleOrigin, UrlOrigin};
+pub use search_params::{
+    parse_form_urlencoded, serialize_form_urlencoded, UrlSearchParams, UrlWithSearchParams,
+};
 
 use std::fmt;
 use std::path::PathBuf;
@@ -313,7 +318,8 @@ fn parse_port(s: &str, fallback: u16) -> Result<u16, UrlError> {
     if !s.bytes().all(|b| b.is_ascii_digit()) {
         return Err(UrlError::InvalidPort(s.to_string()));
     }
-    s.parse::<u16>().map_err(|_| UrlError::InvalidPort(s.to_string()))
+    s.parse::<u16>()
+        .map_err(|_| UrlError::InvalidPort(s.to_string()))
 }
 
 fn parse_file(after: &str, fragment: Option<String>) -> Result<Url, UrlError> {
@@ -368,7 +374,11 @@ fn resolve_relative(rest: &str, base: &Url, fragment: Option<String>) -> Result<
             host: base.host.clone(),
             port: base.port,
             path: base.path.clone(),
-            query: if q.is_empty() { None } else { Some(q.to_string()) },
+            query: if q.is_empty() {
+                None
+            } else {
+                Some(q.to_string())
+            },
             fragment,
         });
     }
@@ -427,7 +437,11 @@ fn split_path_query(s: &str) -> (String, Option<String>) {
         Some(i) => {
             let path = if s[..i].is_empty() { "/" } else { &s[..i] };
             let q = &s[i + 1..];
-            let query = if q.is_empty() { None } else { Some(q.to_string()) };
+            let query = if q.is_empty() {
+                None
+            } else {
+                Some(q.to_string())
+            };
             (path.to_string(), query)
         }
         None => {
@@ -574,7 +588,10 @@ mod tests {
         assert_eq!(url.scheme, "file");
         assert_eq!(url.host, "");
         assert_eq!(url.path, "/usr/share/page.html");
-        assert_eq!(url.to_file_path().unwrap(), PathBuf::from("/usr/share/page.html"));
+        assert_eq!(
+            url.to_file_path().unwrap(),
+            PathBuf::from("/usr/share/page.html")
+        );
     }
 
     #[test]
@@ -582,9 +599,15 @@ mod tests {
         let url = u("file:///C:/Users/x/page.html");
         // Platform-dependent mapping; both branches must parse cleanly.
         if cfg!(windows) {
-            assert_eq!(url.to_file_path().unwrap(), PathBuf::from("C:/Users/x/page.html"));
+            assert_eq!(
+                url.to_file_path().unwrap(),
+                PathBuf::from("C:/Users/x/page.html")
+            );
         } else {
-            assert_eq!(url.to_file_path().unwrap(), PathBuf::from("/C:/Users/x/page.html"));
+            assert_eq!(
+                url.to_file_path().unwrap(),
+                PathBuf::from("/C:/Users/x/page.html")
+            );
         }
     }
 
@@ -691,7 +714,10 @@ mod tests {
             "https://example.com:8443/a?b#c"
         );
         // Default port is elided, explicit non-default port is kept.
-        assert_eq!(u("http://example.com:80/x").to_string(), "http://example.com/x");
+        assert_eq!(
+            u("http://example.com:80/x").to_string(),
+            "http://example.com/x"
+        );
     }
 
     #[test]
@@ -717,7 +743,10 @@ mod tests {
         assert!(matches!(e("http://x:99999/"), UrlError::InvalidPort(_)));
         assert!(matches!(e("http://x:-1/"), UrlError::InvalidPort(_)));
         assert!(matches!(e("http://[::1/x"), UrlError::InvalidUrl(_)));
-        assert!(matches!(e("ftp://example.com/"), UrlError::UnsupportedScheme(_)));
+        assert!(matches!(
+            e("ftp://example.com/"),
+            UrlError::UnsupportedScheme(_)
+        ));
         assert!(matches!(e("gopher://x"), UrlError::UnsupportedScheme(_)));
         assert_eq!(err("1http://x"), UrlError::RelativeWithoutBase);
         assert_eq!(err("relative/thing"), UrlError::RelativeWithoutBase);

@@ -22,7 +22,7 @@ pub(super) enum Path {
     Segments(Vec<String>),
     Opaque(String),
 }
-/// Immutable URL with encoded components. `None` and an empty query/fragment
+/// URL with encoded components. `None` and an empty query/fragment
 /// remain distinct. Getter strings are not decoded. No unchecked constructor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedUrl {

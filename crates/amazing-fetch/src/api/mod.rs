@@ -1,11 +1,13 @@
 //! Native Fetch API objects. WebIDL and promise scheduling belong to bindings.
 //! Algorithms follow WHATWG Fetch 357bd98924d94b81fbe8608192a2ee1f123b82f4 §5.
 mod body;
+mod forms;
 mod headers;
 mod json;
 mod objects;
 
 pub use body::*;
+pub use forms::*;
 pub use headers::*;
 pub use json::*;
 pub use objects::*;
@@ -43,6 +45,7 @@ pub enum ApiError {
     InvalidJson,
     UnsupportedFormData,
     UnsupportedBlob,
+    InvalidFormData,
     InvalidStatus,
     InvalidStatusText,
     NullBodyStatus,
