@@ -1,0 +1,41 @@
+{
+  "cases": [
+    {
+      "actual_sha256": "ca6dc4f37d9ff05a4ed0ead53226cba8480a87e024b47338c6fcd3f6106ea9f6",
+      "blank_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "classification": "non-inert-pass",
+      "different_blank_pixels": 1024,
+      "different_reference_pixels": 0,
+      "id": "simple",
+      "reference_sha256": "ca6dc4f37d9ff05a4ed0ead53226cba8480a87e024b47338c6fcd3f6106ea9f6"
+    },
+    {
+      "actual_sha256": "9df5944c7559b169fe8f989b76fc19c012c3d5f5c7fb29232c6016fd6d2683f3",
+      "blank_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "classification": "non-inert-pass",
+      "different_blank_pixels": 1024,
+      "different_reference_pixels": 0,
+      "id": "concave",
+      "reference_sha256": "9df5944c7559b169fe8f989b76fc19c012c3d5f5c7fb29232c6016fd6d2683f3"
+    },
+    {
+      "actual_sha256": "381c7bf2e8fc8cf167572517908fc9f0cb91e7f37a13d8aed10c2a3e5d1be465",
+      "blank_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "classification": "non-inert-pass",
+      "different_blank_pixels": 576,
+      "different_reference_pixels": 0,
+      "id": "transformed-alpha",
+      "reference_sha256": "381c7bf2e8fc8cf167572517908fc9f0cb91e7f37a13d8aed10c2a3e5d1be465"
+    },
+    {
+      "actual_sha256": "ecd556546fa73c482eff84abeef2dcb3fa44651ef08bf8a199c0e70b1f3c5d6f",
+      "blank_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "classification": "non-inert-pass",
+      "different_blank_pixels": 528,
+      "different_reference_pixels": 0,
+      "id": "endpoint-closure",
+      "reference_sha256": "ecd556546fa73c482eff84abeef2dcb3fa44651ef08bf8a199c0e70b1f3c5d6f"
+    }
+  ],
+  "executable_sha256": "f1f34e07f92ff746cefe3d3b0eed7fac7084303b6594427ad18ec55bad60d98b"
+}

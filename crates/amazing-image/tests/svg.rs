@@ -346,7 +346,6 @@ fn polygons_reject_malformed_points_and_unsupported_features_whole_image() {
         r#"<polygon points="0,0 1,0 1,1" fill-rule="evenodd"/>"#,
         r#"<polygon points="0,0 1,0 1,1" fill-rule="nonzero"/>"#,
         r#"<polygon points="0,0 1,0 1,1" fill="url(#paint)"/>"#,
-        r#"<polyline points="0,0 1,0 1,1"/>"#,
     ] {
         let body = format!(r#"<rect width="8" height="8" fill="red"/>{polygon}"#);
         assert_eq!(
@@ -362,5 +361,79 @@ fn polygons_reject_malformed_points_and_unsupported_features_whole_image() {
     );
     let costly = "0 0 ".repeat(257);
     let large = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><polygon points="{costly}"/></svg>"#);
+    assert_eq!(decode(large.as_bytes(), Default::default()).unwrap_err(), DecodeError::AllocationLimit);
+}
+
+#[test]
+fn polylines_fill_open_simple_concave_and_transformed_outlines() {
+    let simple = svg("", r#"<polyline points="1,1 6,1 6,6 1,6" fill="red"/>"#);
+    assert_eq!(pixel(&simple, 2, 2), [255, 0, 0, 255]);
+    assert_eq!(pixel(&simple, 0, 2), [0; 4]);
+
+    let concave = svg("", r#"<polyline points="1 1,7 1,7 3,3 3,3 7,1 7" fill="lime"/>"#);
+    assert_eq!(pixel(&concave, 2, 5), [0, 255, 0, 255]);
+    assert_eq!(pixel(&concave, 5, 5), [0; 4]);
+
+    let transformed = svg("", r#"<g transform="translate(1 1)"><polyline points="1,1 4,1 4,4 1,4" style="fill: blue; fill-opacity: .5"/></g>"#);
+    assert_eq!(pixel(&transformed, 2, 2), [0, 0, 255, 128]);
+    assert_eq!(pixel(&transformed, 1, 1), [0; 4]);
+}
+
+#[test]
+fn polyline_fill_closes_endpoints_and_uses_nonzero_winding() {
+    let triangle = svg("", r#"<polyline points="1,1 6,1 6,6" fill="blue"/>"#);
+    assert_eq!(pixel(&triangle, 4, 2), [0, 0, 255, 255]);
+    assert_eq!(pixel(&triangle, 2, 5), [0; 4]);
+
+    let double = svg("", r#"<polyline points="1,1 6,1 6,6 1,6 1,1 6,1 6,6 1,6" fill="red"/>"#);
+    assert_eq!(pixel(&double, 2, 2), [255, 0, 0, 255]);
+}
+
+#[test]
+fn polylines_reject_malformed_points_and_unsupported_features_whole_image() {
+    for polyline in [
+        r#"<polyline/>"#,
+        r#"<polyline points=""/>"#,
+        r#"<polyline points="0,0 1,0"/>"#,
+        r#"<polyline points="0,0 1,0 1"/>"#,
+        r#"<polyline points=",0 1,0 1,1"/>"#,
+        r#"<polyline points="0,0 1,,0 1,1"/>"#,
+        r#"<polyline points="0,0 1,0 1,1,"/>"#,
+        r#"<polyline points="0,0 1,0 1px,1"/>"#,
+        r#"<polyline points="0,0 1e309,0 1,1"/>"#,
+        r#"<polyline points="0,0 1e,0 1,1"/>"#,
+        r#"<polyline points="0,0-1,0 1,1"/>"#,
+        r#"<polyline points="0,0 1,0 1,1" stroke="none"/>"#,
+        r#"<polyline points="0,0 1,0 1,1" style="stroke: red"/>"#,
+        r#"<polyline points="0,0 1,0 1,1" fill-rule="evenodd"/>"#,
+        r#"<polyline points="0,0 1,0 1,1" fill="url(#paint)"/>"#,
+        r#"<polyline points="0,0 1,0 1,1" href="other.svg"/>"#,
+    ] {
+        let body = format!(r#"<rect width="8" height="8" fill="red"/>{polyline}"#);
+        assert_eq!(
+            decode(&svg("", &body), Default::default()).unwrap_err(),
+            DecodeError::UnsupportedSvg,
+            "{polyline}"
+        );
+    }
+}
+
+#[test]
+fn polylines_obey_point_attribute_and_raster_work_limits() {
+    let at_limit = "0 0 ".repeat(512);
+    assert!(decode(&svg("", &format!(r#"<polyline points="{at_limit}"/>"#)), Default::default()).is_ok());
+
+    let over_limit = "0 0 ".repeat(513);
+    assert_eq!(
+        decode(&svg("", &format!(r#"<polyline points="{over_limit}"/>"#)), Default::default()).unwrap_err(),
+        DecodeError::AllocationLimit
+    );
+    let over_attribute = "0 0 ".repeat(1025);
+    assert_eq!(
+        decode(&svg("", &format!(r#"<polyline points="{over_attribute}"/>"#)), Default::default()).unwrap_err(),
+        DecodeError::AllocationLimit
+    );
+    let costly = "0 0 ".repeat(257);
+    let large = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><polyline points="{costly}"/></svg>"#);
     assert_eq!(decode(large.as_bytes(), Default::default()).unwrap_err(), DecodeError::AllocationLimit);
 }

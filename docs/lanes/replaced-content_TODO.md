@@ -567,3 +567,26 @@ hashes; colored pixels differ from blank at 1,024, 624, 576 and 1,024 pixels.
 The pinned CSS Images SVG resource selection has no `<polygon>` resource and
 remains **4/4 raw before and twice after** with stable pixel hashes. This is
 **zero new WPT polygon credit**. Evidence: `tests/wpt-replaced-content/rc8/`.
+
+## RC-9 — bounded SVG polyline fill
+
+Fixed dev base `03b26ec` (includes RC-8 merge). The strict static SVG image
+subset accepts `<polyline points="...">` only for fill. It reuses RC-8's
+bounded finite points parser (three to 512 vertices, comma/whitespace pairs,
+4,096-character attribute cap) and RC-7's default nonzero winding sampler.
+For fill, the closing edge from the final to first vertex is implicit. The
+raster work budget charges each vertex. No stroke is painted: any stroke,
+fill-rule, unsupported attribute, malformed points, reference or paint server
+rejects the entire SVG resource. Paths and polygons retain their behavior.
+
+The owned 64×64 HTML image corpus covers simple, concave, transformed/alpha,
+and three-vertex endpoint-closure cases, each with a literal shape-based SVG
+reference and a shared blank control. The fixed-base predecessor executable
+renders all four actuals exactly like blank, for **0/4 non-inert matches**.
+After implementation, all four actuals match their references and differ
+from blank by 1,024, 1,024, 576 and 528 pixels; both runs have identical
+classifications and per-page hashes. The pinned four-case CSS Images SVG
+resource selection contains no applicable polyline resource and remains
+**4/4 raw passes** before and twice after, with identical pixel hashes. It is
+a regression control with **zero new polyline WPT credit**. Final proof,
+hashes, and Windows gates are in `tests/wpt-replaced-content/rc9/`.

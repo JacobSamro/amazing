@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "RC-9 pinned CSS Images SVG resource control",
+    "note": "Retained four non-inert upstream resource controls; owned RC-9 fixtures prove new polyline fill pixels."
+  },
+  "sparse_paths": [
+    "css/css-images"
+  ],
+  "tests": [
+    {
+      "id": "object-fit-fill-svg-001i",
+      "test": "css/css-images/object-fit-fill-svg-001i.html"
+    },
+    {
+      "id": "object-fit-fill-svg-002i",
+      "test": "css/css-images/object-fit-fill-svg-002i.html"
+    },
+    {
+      "id": "object-fit-contain-svg-001i",
+      "test": "css/css-images/object-fit-contain-svg-001i.html"
+    },
+    {
+      "id": "object-fit-contain-svg-002i",
+      "test": "css/css-images/object-fit-contain-svg-002i.html"
+    }
+  ]
+}

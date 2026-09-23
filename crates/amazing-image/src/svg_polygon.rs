@@ -1,4 +1,4 @@
-//! Bounded SVG polygon points-list: finite coordinate pairs separated by comma or whitespace.
+//! Bounded SVG polygon/polyline points-list: finite coordinate pairs separated by comma or whitespace.
 use crate::DecodeError;
 
 pub(super) fn parse_points(data: &str, vertex_limit: usize) -> Result<Vec<(f64, f64)>, DecodeError> {
