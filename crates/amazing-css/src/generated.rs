@@ -209,6 +209,32 @@ fn parse_content(css: &str) -> Option<ContentValue> {
     })
 }
 
+/// A list marker accepts a CSS `<image>` value, not just `url()`.
+/// Keep non-URL images as CSS text for the generated-image consumer.
+pub(crate) fn image_function_name(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "linear-gradient" | "repeating-linear-gradient" | "radial-gradient"
+            | "repeating-radial-gradient" | "conic-gradient" | "repeating-conic-gradient"
+            | "image" | "image-set" | "cross-fade" | "element" | "paint"
+    )
+}
+
+fn list_style_image(css: &str, base: Option<&str>) -> Option<Item> {
+    let tokens = tokenize(css);
+    let significant = compact(&tokens);
+    let Token::Function(name) = significant.first()? else { return None; };
+    let (body, end) = function_body(&significant, 0)?;
+    if end != significant.len() || body.is_empty() { return None; }
+    if name.eq_ignore_ascii_case("url") {
+        let parsed = parse_content(css)?;
+        let [Item::Image(url)] = parsed.items.as_slice() else { return None; };
+        return Some(Item::Image(resolve_image_url(url, base)));
+    }
+    image_function_name(name)
+        .then(|| Item::Image(crate::syntax::serialize(&tokens).trim().to_owned()))
+}
+
 /// Resolve a CSS URL against the stylesheet that supplied its declaration.
 /// Absolute URLs already carry their own base; fragment and query references
 /// retain the stylesheet path.
@@ -629,13 +655,7 @@ fn resolve_pseudo(
     let css = style.get("content").unwrap_or("normal");
     let mut value = if css == "normal" && pseudo == PseudoElement::Marker {
         let image = style.get("list-style-image").unwrap_or("none");
-        let image_item = parse_content(image).and_then(|value| match value.items.as_slice() {
-            [Item::Image(url)] => Some(Item::Image(resolve_image_url(
-                url,
-                style.url_base("list-style-image"),
-            ))),
-            _ => None,
-        });
+        let image_item = list_style_image(image, style.url_base("list-style-image"));
         let list_style = style.get("list-style-type").unwrap_or("disc");
         let string_marker = match compact(&tokenize(list_style)).as_slice() {
             [Token::Str(text)] => Some(text.clone()),

@@ -388,6 +388,15 @@ pub fn serialize(tokens: &[Token]) -> String {
 
     let mut out = String::new();
     for (i, tok) in tokens.iter().enumerate() {
+        // Serialization must preserve token boundaries after comments vanish.
+        // rgb(10/**/175/**/10) has three numeric channels, not one.
+        if i > 0
+            && !out.ends_with(' ')
+            && matches!(tokens[i - 1], Token::Number(_) | Token::Percentage(_) | Token::Dimension(_, _))
+            && matches!(tok, Token::Number(_) | Token::Percentage(_) | Token::Dimension(_, _))
+        {
+            out.push(' ');
+        }
         match tok {
             Token::Ident(s) => out.push_str(s),
             // Hex colors arrive here from declaration values: keep the '#'.
@@ -467,6 +476,7 @@ mod tests {
             vec![Token::Ident("a".into()), Token::Ident("b".into())]
         );
         assert_eq!(tokenize("/* unterminated"), vec![]);
+        assert_eq!(serialize(&tokenize("rgb(10/**/175/**/10)")), "rgb(10 175 10)");
     }
 
     #[test]

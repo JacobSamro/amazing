@@ -1219,3 +1219,29 @@ shorthands reset omitted components and defer `var()` until substitution.
 parsing paths at WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
 The Rust parser tests use selected cases from that set; upstream CSSOM
 animation runtime conformance remains a downstream compositor/DOM gate.
+
+## CSS-14 follow-up — corpus consensus and image markers (base `c167fb3`)
+
+Commit `53e37b5` sends `list-style-image` gradient and other CSS `<image>`
+functions through `ContentRun::Image`; `url()` still resolves against the
+stylesheet URL. The `list-style` shorthand accepts the same image functions.
+A public-API regression checks direct and shorthand gradient markers and an
+invalid image fallback. Paint rasterization of generated gradients is RC-18.
+
+The pinned WPT broad selection (`css12-broad-manifest.json`, 259 cases,
+revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`) moved from
+**188 pass / 71 mismatch** to **198 pass / 61 mismatch**, with ten
+Chrome/Safari pass-consensus gains and zero losses, errors, timeouts or crashes.
+The gains cover `:required`, `:open`, no-namespace `[|attr]`, four `nth-child`
+`of` cases, comment-separated `rgb()`/`hsl()` channels, and the `InfoText`
+system-color alias. The 72-case cascade selection stayed **68/2/0/0/2**
+(pass/mismatch/error/timeout/unsupported), with identical per-case classes.
+Its two mismatches still need sampled animation of important declarations and
+private-use font matching, respectively. Twenty-seven broad consensus
+mismatches remain; the color-function, layout, text and dynamic-DOM clusters
+need separate ownership and gates.
+
+Windows final gate on `53e37b5`: CSS **239/239**, workspace **2000/2000**
+plus five skipped, doctests **2/2**. The base and final executable SHA256 values
+were `2fc0125276088103c127c86f2e4f3b6733d59e3b0f17fb538141e6a184a058a0`
+and `ad959094b81da24a6fb9e05407b2cbb5d44d86da10e9a1737c4278a15b78b559`.
