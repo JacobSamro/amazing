@@ -114,6 +114,12 @@ LANE_PATHS = {
     # ArrayBuffer, SharedArrayBuffer, DataView, %TypedArray% and the eleven
     # constructors, Atomics.
     "js-binary": ["crates/amazing-js/src/builtins_binary"],
+    # ADR 0005 (Stage 3): typed IPC and the process model, beside the engine.
+    "ipc": ["crates/amazing-ipc/", "crates/amazing-process/"],
+    # ADR 0006 (Stage 2): property trees, layerization, tiled raster cache.
+    "compositor": ["crates/amazing-compositor/"],
+    # Stage 2: Web Storage, IndexedDB and Cache API storage engines.
+    "storage": ["crates/amazing-storage/"],
     # Reflect, Map/Set/WeakMap/WeakSet/WeakRef/FinalizationRegistry, Set
     # methods, Iterator helpers, then Temporal.
     "js-stdlib": ["crates/amazing-js/src/builtins_std", "crates/amazing-js/src/builtins_temporal"],
