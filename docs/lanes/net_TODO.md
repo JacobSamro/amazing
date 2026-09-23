@@ -1271,3 +1271,31 @@ Once bindings install these classes and the fetch method, WPT
 `fetch/api/headers/`, `fetch/api/request/`, `fetch/api/response/` and
 `fetch/api/basic/` can be measured. The native assertion count and two-pass
 Windows gate results are recorded in `.agents/net/report.md` after gating.
+
+## NET-14 — native XMLHttpRequest model
+
+Fixed base: `5c92b4a`. The native XHR algorithms are pinned to
+[WHATWG XHR `c3476b46`](https://github.com/whatwg/xhr/blob/c3476b46f024cfc988f47d8d82118f3bcba562e9/xhr.bs).
+`amazing_fetch::xhr` exposes the five-state machine, typed exception variants
+with DOMException names, guarded author headers, request-body extraction through
+NET-13, timeout/credentials/responseType rules, response accessors, and typed
+request/upload event batches. `send()` initiates asynchronous work; the embedder
+calls `advance()` for the existing Fetch policy/transport path and
+`pull_response()` for bounded response-byte/event steps. `send_blocking()` is
+the explicit synchronous variant. Every event carries a generation so a DOM
+dispatcher can discard a stale tail after `open()` or `abort()` re-entry.
+
+The existing Fetch path currently returns a bounded complete body rather than
+a live pull response. XHR exposes that buffered body in pull steps so event
+ordering and re-entry can be bound now; live transport chunk callbacks and
+mid-exchange cancellation need a later network dispatcher seam. The embedder
+supplies a monotonic clock for timeout checks and implements `XhrTextDecoder`
+using the existing HTML charset bridge. The native layer never dispatches DOM
+events or installs JS objects. Document/Blob responses and FormData request
+bodies remain typed Unsupported until their owning DOM data models land.
+
+Pinned [WPT `xhr/` inventory](net14-wpt-inventory.md) lists every file at
+revision `2f7c70099b6ecc6a1f6a821217afd79b6ff81f28`: 47 source files
+contribute selected native assertions, while each excluded file has a reason.
+These are assertion ports, not WPT execution. Final assertion and Windows gate
+counts are recorded in `.agents/net/report.md`.

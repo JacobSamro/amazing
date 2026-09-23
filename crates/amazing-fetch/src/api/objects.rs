@@ -47,6 +47,8 @@ pub struct ApiRequestInit {
     pub duplex: Option<String>,
     pub priority: Option<String>,
     pub window_non_null: Option<bool>,
+    /// XHR permits URL userinfo; ordinary Request construction does not.
+    pub(crate) allow_url_credentials: bool,
 }
 impl ApiRequestInit {
     fn present(&self) -> bool {
@@ -89,6 +91,7 @@ pub struct ApiRequest {
     pub priority: ApiPriority,
     pub signal_aborted: bool,
     stream_body: bool,
+    force_preflight: bool,
     origin: Origin,
 }
 impl ApiRequest {
@@ -108,7 +111,7 @@ impl ApiRequest {
                 let url = base
                     .resolve(&usv_string(units))
                     .map_err(|_| ApiError::InvalidUrl)?;
-                if url.includes_credentials() {
+                if url.includes_credentials() && !init.allow_url_credentials {
                     return Err(ApiError::UrlCredentials);
                 }
                 Self {
@@ -127,6 +130,7 @@ impl ApiRequest {
                     priority: ApiPriority::Auto,
                     signal_aborted: false,
                     stream_body: false,
+                    force_preflight: false,
                     origin: origin.clone(),
                 }
             }
@@ -150,6 +154,7 @@ impl ApiRequest {
                     priority: other.priority,
                     signal_aborted: other.signal_aborted,
                     stream_body: other.stream_body,
+                    force_preflight: other.force_preflight,
                     origin: other.origin.clone(),
                 }
             }
@@ -295,6 +300,11 @@ impl ApiRequest {
     pub fn body_used(&self) -> bool {
         self.body.body_used()
     }
+    /// XHR upload listeners set Fetch's use-CORS-preflight flag even for a
+    /// safelisted method and header set.
+    pub fn set_use_cors_preflight(&mut self, value: bool) {
+        self.force_preflight = value;
+    }
     pub fn clone_request(&self) -> Result<Self, ApiError> {
         if self.body.is_unusable() {
             return Err(ApiError::BodyUsed);
@@ -315,6 +325,7 @@ impl ApiRequest {
             priority: self.priority,
             signal_aborted: self.signal_aborted,
             stream_body: self.stream_body,
+            force_preflight: self.force_preflight,
             origin: self.origin.clone(),
         })
     }
@@ -330,7 +341,7 @@ impl ApiRequest {
             Some(HttpUrl::parse(&self.referrer).map_err(|_| ApiError::InvalidReferrer)?)
         };
         out.headers = self.headers.to_header_list()?;
-        out.use_cors_preflight = self.stream_body;
+        out.use_cors_preflight = self.stream_body || self.force_preflight;
         let body = if self.body.shared_present() {
             Some(Body::Unreplayable)
         } else {
