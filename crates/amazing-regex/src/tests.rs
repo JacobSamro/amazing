@@ -262,7 +262,7 @@ fn syntax_errors_and_bounds() {
         ("[z-a]", ""),
         ("a{3,2}", ""),
         ("a", "gg"),
-        ("a", "v"),
+        ("a", "uv"),
         (r"\a", "u"),
         ("(?<x>a)", ""),
         (r"\p{Letter}", "u"),
@@ -279,6 +279,67 @@ fn syntax_errors_and_bounds() {
             .exec(&("a".repeat(28) + "!"), 0),
         Err(Error::Limit(_))
     ));
+}
+
+#[test]
+fn unicode_sets_operations_strings_and_properties() {
+    let accepts = [
+        (r"^[a-z--[aeiou]]+$", "bcdf"),
+        (r"^[[a-z]&&[def]]+$", "fed"),
+        (r"^[\q{ab|a}]+$", "aba"),
+        (r"^[\q{9\uFE0F\u20E3|9}]+$", "9\u{fe0f}\u{20e3}"),
+        (r"^\p{Emoji_Keycap_Sequence}$", "9\u{fe0f}\u{20e3}"),
+        (r"^[\p{ASCII_Hex_Digit}--[0-9]]+$", "ABcd"),
+        (r"^\p{RGI_Emoji}$", "👩‍💻"),
+        (r"^[\q{ab|a}]b$", "ab"),
+    ];
+    for (pattern, input) in accepts {
+        assert!(
+            Regex::new(pattern, "v")
+                .unwrap()
+                .exec(input, 0)
+                .unwrap()
+                .is_some(),
+            "{pattern}"
+        );
+    }
+    let rejects = [
+        (r"^[a-z--[aeiou]]+$", "abc"),
+        (r"^[[a-z]&&[def]]+$", "abc"),
+        (r"^[\q{ab|a}]+$", "ac"),
+        (r"^\p{Emoji_Keycap_Sequence}$", "9"),
+        (r"^[\p{ASCII_Hex_Digit}--[0-9]]+$", "9"),
+        (r"^[\q{ab}&&\P{ASCII_Hex_Digit}]$", "ab"),
+    ];
+    for (pattern, input) in rejects {
+        assert!(
+            Regex::new(pattern, "v")
+                .unwrap()
+                .exec(input, 0)
+                .unwrap()
+                .is_none(),
+            "{pattern}"
+        );
+    }
+    for pattern in [
+        r"[a&&]",
+        r"[a--]",
+        r"[ab&&c]",
+        r"[a&&b--c]",
+        r"[^\q{ab}]",
+        r"[a-b-c]",
+        r"[!!]",
+        r"[$$]",
+        r"[**]",
+        r"[++]",
+        r"[..]",
+        r"[::]",
+        r"[??]",
+        r"[^^^]",
+        r"[_^^]",
+    ] {
+        assert!(Regex::new(pattern, "v").is_err(), "{pattern}");
+    }
 }
 #[test]
 fn upstream_testharness_patterns() {

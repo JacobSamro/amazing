@@ -6,6 +6,7 @@ pub(crate) enum Node {
     Char(u32),
     Any,
     Class(Class),
+    Set(SetExpr),
     Start,
     End,
     Boundary(bool),
@@ -27,6 +28,30 @@ pub(crate) enum Member {
 pub(crate) struct Class {
     pub inverted: bool,
     pub members: Vec<Member>,
+}
+#[derive(Debug, Clone)]
+pub(crate) enum SetExpr {
+    Char(Member),
+    String(Vec<u32>),
+    Property(String, bool),
+    Union(Vec<SetExpr>),
+    Intersect(Vec<SetExpr>),
+    Subtract(Box<SetExpr>, Box<SetExpr>),
+    Complement(Box<SetExpr>),
+}
+impl SetExpr {
+    fn has_strings(&self) -> bool {
+        match self {
+            Self::String(s) => s.len() != 1,
+            Self::Property(name, _) => crate::unicode_sets::strings(name)
+                .iter()
+                .any(|s| s.len() != 1),
+            Self::Union(terms) | Self::Intersect(terms) => terms.iter().any(Self::has_strings),
+            Self::Subtract(left, right) => left.has_strings() || right.has_strings(),
+            Self::Complement(term) => term.has_strings(),
+            Self::Char(_) => false,
+        }
+    }
 }
 
 pub(crate) fn parse_utf16(pattern: &[u16], flags: Flags) -> Result<(Node, usize), Error> {
@@ -245,19 +270,14 @@ impl Parser {
         Ok((self.pos != start).then_some(n))
     }
     fn class(&mut self) -> Result<Node, Error> {
+        if self.flags.unicode_sets {
+            return Ok(Node::Set(self.set_class()?));
+        }
         let inverted = self.eat('^');
         let mut members = Vec::new();
         while self.peek() != Some(']' as u32) {
             if self.peek().is_none() {
                 return self.error("unterminated character class");
-            }
-            if self.flags.unicode_sets
-                && (self.peek() == Some('[' as u32)
-                    || self.chars.get(self.pos..self.pos + 2) == Some(&['&' as u32, '&' as u32])
-                    || self.chars.get(self.pos..self.pos + 2) == Some(&['-' as u32, '-' as u32])
-                    || self.chars.get(self.pos..self.pos + 2) == Some(&['\\' as u32, 'q' as u32]))
-            {
-                return self.error("Unicode set operations and strings are unsupported");
             }
             let a = self.class_atom()?;
             if self.peek() == Some('-' as u32)
@@ -277,6 +297,185 @@ impl Parser {
         }
         self.pos += 1;
         Ok(Node::Class(Class { inverted, members }))
+    }
+    fn pair(&self, first: char, second: char) -> bool {
+        self.chars.get(self.pos..self.pos + 2) == Some(&[first as u32, second as u32])
+    }
+    fn set_class(&mut self) -> Result<SetExpr, Error> {
+        self.depth += 1;
+        if self.depth > MAX_DEPTH {
+            return Err(Error::Limit("pattern nesting"));
+        }
+        let inverted = self.eat('^');
+        let mut terms = Vec::new();
+        let mut operator = None;
+        while self.peek() != Some(']' as u32) {
+            if self.peek().is_none() {
+                return self.error("unterminated character class");
+            }
+            let next = if self.pair('&', '&') {
+                Some('&')
+            } else if self.pair('-', '-') {
+                Some('-')
+            } else {
+                None
+            };
+            if let Some(next) = next {
+                if terms.is_empty() || operator.is_some_and(|op| op != next) {
+                    return self.error("invalid class set operator");
+                }
+                operator = Some(next);
+                self.pos += 2;
+                if self.peek() == Some(']' as u32) {
+                    return self.error("missing class set operand");
+                }
+            } else if operator.is_some() && !terms.is_empty() && terms.len() >= 2 {
+                return self.error("invalid class set expression");
+            }
+            let mut term = self.set_operand()?;
+            if operator.is_none() && self.peek() == Some('-' as u32) && !self.pair('-', '-') {
+                self.pos += 1;
+                let end = self.set_character()?;
+                term = match (term, end) {
+                    (SetExpr::Char(Member::Range(a, _)), SetExpr::Char(Member::Range(b, _)))
+                        if a <= b =>
+                    {
+                        SetExpr::Char(Member::Range(a, b))
+                    }
+                    _ => return self.error("invalid class set range"),
+                };
+            }
+            terms.push(term);
+            if operator.is_some()
+                && self.peek() != Some(']' as u32)
+                && !self.pair('&', '&')
+                && !self.pair('-', '-')
+            {
+                return self.error("invalid class set expression");
+            }
+            if operator.is_none()
+                && (self.pair('&', '&') || self.pair('-', '-'))
+                && terms.len() != 1
+            {
+                return self.error("class set operator requires one left operand");
+            }
+        }
+        self.pos += 1;
+        self.depth -= 1;
+        let expr = match operator {
+            Some('&') => SetExpr::Intersect(terms),
+            Some('-') => {
+                let mut terms = terms.into_iter();
+                let mut result = terms.next().unwrap();
+                for term in terms {
+                    result = SetExpr::Subtract(Box::new(result), Box::new(term));
+                }
+                result
+            }
+            _ => SetExpr::Union(terms),
+        };
+        if inverted {
+            if expr.has_strings() {
+                return self.error("cannot negate a class containing strings");
+            }
+            Ok(SetExpr::Complement(Box::new(expr)))
+        } else {
+            Ok(expr)
+        }
+    }
+    fn set_operand(&mut self) -> Result<SetExpr, Error> {
+        if self.eat('[') {
+            return self.set_class();
+        }
+        if self.pair('\\', 'q') {
+            self.pos += 2;
+            if !self.eat('{') {
+                return self.error("invalid class string disjunction");
+            }
+            let mut strings = Vec::new();
+            loop {
+                let mut string = Vec::new();
+                while self.peek() != Some('|' as u32) && self.peek() != Some('}' as u32) {
+                    let SetExpr::Char(Member::Range(c, _)) = self.set_character()? else {
+                        return self.error("invalid class string character");
+                    };
+                    string.push(c);
+                }
+                strings.push(SetExpr::String(string));
+                if self.eat('}') {
+                    break;
+                }
+                if !self.eat('|') {
+                    return self.error("unterminated class string disjunction");
+                }
+            }
+            return Ok(SetExpr::Union(strings));
+        }
+        if self.pair('\\', 'p') || self.pair('\\', 'P') {
+            self.pos += 1;
+            let inverse = self.take() == Some('P' as u32);
+            return self.property(inverse);
+        }
+        if self.peek() == Some('\\' as u32)
+            && self
+                .chars
+                .get(self.pos + 1)
+                .is_some_and(|c| "dDsSwW".chars().any(|ch| *c == ch as u32))
+        {
+            self.pos += 1;
+            let Node::Class(class) = self.escape(true)? else {
+                unreachable!()
+            };
+            return Ok(SetExpr::Char(class.members[0].clone()));
+        }
+        self.set_character()
+    }
+    fn set_character(&mut self) -> Result<SetExpr, Error> {
+        if self.eat('\\') {
+            let n = self.escape(true)?;
+            return match n {
+                Node::Char(c) => Ok(SetExpr::Char(Member::Range(c, c))),
+                _ => self.error("invalid class set character"),
+            };
+        }
+        let Some(c) = self.take() else {
+            return self.error("unterminated character class");
+        };
+        if "()[]{}\\/|-".chars().any(|ch| c == ch as u32)
+            || "&!#$%*+,.:;<=>?@^`~"
+                .chars()
+                .any(|ch| c == ch as u32 && self.peek() == Some(c))
+        {
+            return self.error("unescaped class set character");
+        }
+        Ok(SetExpr::Char(Member::Range(c, c)))
+    }
+    fn property(&mut self, inverse: bool) -> Result<SetExpr, Error> {
+        if !self.eat('{') {
+            return self.error("invalid Unicode property escape");
+        }
+        let start = self.pos;
+        while self.peek().is_some_and(|c| c != '}' as u32) {
+            self.pos += 1;
+        }
+        if !self.eat('}') {
+            return self.error("unterminated Unicode property escape");
+        }
+        let name: String = self.chars[start..self.pos - 1]
+            .iter()
+            .filter_map(|c| char::from_u32(*c))
+            .collect();
+        if !crate::unicode_sets::supported(&name) {
+            return self.error("unsupported Unicode property");
+        }
+        if inverse
+            && crate::unicode_sets::strings(&name)
+                .iter()
+                .any(|s| s.len() != 1)
+        {
+            return self.error("cannot negate a property of strings");
+        }
+        Ok(SetExpr::Property(name, inverse))
     }
     fn class_atom(&mut self) -> Result<Member, Error> {
         let n = if self.eat('\\') {
@@ -398,13 +597,17 @@ impl Parser {
                 }
                 Ok(Node::Char(n))
             }
+            Some('p' | 'P') if self.flags.unicode_mode() => {
+                Ok(Node::Set(self.property(c == 'P' as u32)?))
+            }
             Some('p' | 'P' | 'k') => {
                 self.error("Unicode properties/named references are unsupported")
             }
             Some(ch)
                 if self.flags.unicode_mode()
                     && !"^$\\.*+?()[]{}|/".contains(ch)
-                    && !(in_class && ch == '-') =>
+                    && !(in_class && ch == '-')
+                    && !(self.flags.unicode_sets && in_class && "&!#%,:;<=>@`~".contains(ch)) =>
             {
                 self.error("invalid identity escape in Unicode pattern")
             }

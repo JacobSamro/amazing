@@ -1183,3 +1183,46 @@ to `8f2695d` (Cargo.lock hash `BF3037D0`) and re-synced lane files; no later
 refresh changed it. The final drift check against local `origin/dev` at
 `582a6af` had no changes under `crates/amazing-js` or `crates/amazing-regex`,
 so this fixed-base gate stands and the integrator will gate the merged head.
+
+## JS-9 — RegExp UnicodeSets (`v`)
+
+Fixed base: `d8a228dc73eb5f83c9dd4bb95fd7c6b1b17cb79d` on `origin/dev`.
+The JS-8 parser split and lossless pattern commits were rebased onto this base
+as `e8a54df` and `bfd52a8`; they had not yet appeared on `origin/dev` when
+JS-9 began. The win-001 js-lang tree was refreshed to the fixed base and
+lane-owned files were re-synced before gating.
+
+`amazing-regex` now accepts `v` through both constructors and parses nested
+UnicodeSets classes, union, `&&`, `--`, character ranges and `\q{...}` class
+strings. The VM tries longer string members first and preserves backtracking
+when a later atom fails. The pinned Unicode 17.0 emoji data supplies all six
+properties of strings and their `RGI_Emoji` union; `ASCII_Hex_Digit` is also
+available. Regex input and pattern units remain lossless UTF-16.
+
+The focused pinned Test262 selection includes both `built-ins/RegExp/unicodeSets`
+and `built-ins/RegExp/prototype/unicodeSets`: 152 files. The frozen BEFORE host
+passed **29** and failed **123** in two identical runs, classification
+`1b992fe993d8ce61efdf5431f241ae2a4a5908d2449c9ca307b1825a6e09f0c6`.
+The frozen AFTER host passed **143** and failed **9** in two identical runs,
+classification
+`102e90a74ba00165cb2ab819ad7c24711a8f40fe2b2c63481dc1efbc56ba1d9e`.
+All 114 files in `built-ins/RegExp/unicodeSets` moved from fail to pass;
+there were zero passing file or variant losses. The nine remaining failures
+are in the runtime-owned `RegExp.prototype.unicodeSets` getter and constructor
+surface; the exact work is filed to js-runtime in the lane questions.
+
+The full Test262 BEFORE sweep used upstream pin
+`3655e7464de3d52643ecddd4b5f9f4f3e7f62398`, input hash
+`a2ef5e43ff95da279324b6df9a37740a505b9f8b6c7a11406408af70f453b075`
+and runner hash
+`bdb36351facc0475e661bea7ef928ebcc63e06e77d0a2740d897d77b3476d595`.
+Its frozen host hash was
+`b7aa1e7b82687f7f03d5343bbf93313c0147d6e4f5e47fbcdba24c2d610103eb`;
+it measured **10,965 pass / 32,636 fail / 16 timeout / 9,961 unsupported /
+294 fixture skips**, classification
+`bfdcb4a0cc96fa1eafe5ac14af911860d6c00b741be5426917a228d5ae0382c5`.
+
+The two owned crates passed **210/210** nextest tests on win-001. The separate
+doctest runs passed **1/1** for amazing-js and **0/0** for amazing-regex.
+The full AFTER sweep, workspace gate and final dev-drift audit follow in the
+lane report.
