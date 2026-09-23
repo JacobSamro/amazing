@@ -21,6 +21,14 @@ rather than a config limit. Ten lanes running concurrent `cargo`/`rustc` is the
 plausible cause. `IPQoS=none`, a pinned KEX, and `IdentitiesOnly` all fail
 identically, so it is not a client negotiation problem.
 
+**Correction, 2026-09-22.** The original diagnosis below guessed at process-
+creation or memory exhaustion. The evidence says otherwise: the box was never
+rebooted (194.9 h uptime), had ~49 GB RAM free, and sshd recovered on its own
+once lanes stopped retrying. That matches sshd's default `MaxStartups
+10:30:100`, which randomly drops connections before authentication under
+concurrent handshakes. Fixed by multiplexing all ssh/scp over one master and
+raising the limits to `MaxSessions 50` / `MaxStartups 50:30:100` -- see AGENTS.md.
+
 On the box, via RDP or console:
 
 1. `Restart-Service sshd`

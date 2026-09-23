@@ -28,17 +28,22 @@ authenticated master and every later `ssh`/`scp` runs as a channel inside it.
 Existing command forms (`ssh -i ~/.ssh/win001-build-key server@win-001 …`, `scp …
 server@win-001:…`) pick it up automatically; `ssh win-001 '…'` is the short form.
 
-Why: on 2026-09-21 ten lanes opening hundreds of short-lived connections wedged
-the box's sshd -- new connections reset before auth while existing ones stayed
-healthy, and all lanes stalled. Measured after the change: **0.16s per command
-multiplexed vs 0.68s** with a fresh connection, and no per-command sshd child.
+Why: on 2026-09-21 ten lanes opening hundreds of short-lived connections
+tripped sshd's default `MaxStartups 10:30:100`, which randomly drops
+connections *before authentication* once too many are mid-handshake. New
+connections reset before auth, established sessions stayed healthy, and it
+cleared by itself once the retries stopped -- the box was never rebooted and had
+~49 GB RAM free. Measured after multiplexing: **0.16s per command vs 0.68s** with
+a fresh connection.
 
-Limit: the server's `MaxSessions` is the default **10 channels per
-connection**. Past that, OpenSSH falls back to a fresh connection for the
-overflow (`Session open refused by peer`, then `disabling multiplexing`), so it
-degrades rather than fails. Do not open ssh in tight retry loops; if a command
-is refused, back off. `ssh -O check win-001` shows the master; `ssh -O exit
-win-001` closes it.
+Server limits were raised on 2026-09-22 to `MaxSessions 50` (channels per
+connection) and `MaxStartups 50:30:100`; the previous config is kept as
+`C:\ProgramData\ssh\sshd_config.bak-20260922202601`. Verified: 20 concurrent
+channels over one master, 20/20, none refused or fallen back (previously 3 of 13
+overflowed). Past 50, OpenSSH falls back to a fresh connection rather than
+failing. **A master opened before a limit change keeps the old limit** -- run
+`ssh -O exit win-001` after changing sshd config. Do not open ssh in tight retry
+loops; if a command is refused, back off. `ssh -O check win-001` shows the master.
 
 **Git lives on the Mac, not on the server.** win-001 has no GitHub credentials
 and the repo is private, so it can neither fetch nor push. It is a pure build
