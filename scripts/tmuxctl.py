@@ -185,6 +185,8 @@ LANE_GRANTS.setdefault("layout", []).append("crates/amazing/tests/phase5_flex_gr
 # in exactly these files. Granted for the MECHANICAL string-API migration only
 # (read the diff at merge); no behaviour changes.
 LANE_GRANTS.setdefault("js-runtime", []).extend([
+    # JSRT-6: install_interface_class_string in runtime_binding_host.rs, using
+    # the new binding_define_symbol_data_property facade. That method only.
     # JSRT-5 also: the two JsString compile fixes in runtime_binding_host.rs
     # plus switching string/string_units/to_dom_string to the lossless
     # binding_* facade (drops the lone-surrogate TypeError). Nothing else.
