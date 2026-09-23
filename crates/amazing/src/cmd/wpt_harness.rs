@@ -355,12 +355,12 @@ fn execute(options: &Options) -> Result<(), String> {
     let root = options.root.canonicalize().map_err(|e| e.to_string())?;
     let file = local_file(&root, &root, &options.test)?;
     let html = match file.extension().and_then(|s| s.to_str()) {
-        Some("html") => source(&root, &file, options.scaffold)?,
-        Some("js") if !options.scaffold && options.test.ends_with(".any.js") => {
+        Some("html" | "htm") => source(&root, &file, options.scaffold)?,
+        Some("js") if !options.scaffold && (options.test.ends_with(".any.js") || options.test.ends_with(".window.js")) => {
             let js = source(&root, &file, false)?;
             any_window_wrapper(&js, &options.test)?
         }
-        _ => return Err("unsupported: classic-script .html or window .any.js tests only".into()),
+        _ => return Err("unsupported: classic-script .html/.htm or window .any.js/.window.js tests only".into()),
     };
     let host = Rc::new(RefCell::new(crate::BrowserDomHost {
         dom: amazing_html::parse(&html),

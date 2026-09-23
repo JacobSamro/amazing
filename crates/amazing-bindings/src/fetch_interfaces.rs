@@ -182,6 +182,7 @@ pub trait FetchHost: BindingHost {
     ) -> Result<Self::Value, Self::Error>;
     fn fetch_promise_value(&mut self, value: Self::Value) -> Result<Self::Value, Self::Error>;
     fn fetch_array_buffer(&mut self, bytes: Vec<u8>) -> Result<Self::Value, Self::Error>;
+    fn fetch_uint8_array(&mut self, bytes: Vec<u8>) -> Result<Self::Value, Self::Error>;
     fn fetch_array_iterator(&mut self, values: Vec<Self::Value>) -> Result<Self::Value, Self::Error>;
     fn fetch_symbol_iterator(&mut self, prototype: &Self::Value, method: Self::Value) -> Result<(), Self::Error>;
     fn fetch_json_parse(&mut self, text: &str) -> Result<Self::Value, Self::Error>;
@@ -731,6 +732,8 @@ fn body<H: FetchHost>(
             Err(error) => return host.fetch_reject_throw(error),
         },
         Ok(BodyResult::Blob(value)) => host.blob_new(value)?,
+        Ok(BodyResult::Bytes(value)) if op == FetchOperation::BodyBytes =>
+            host.fetch_uint8_array(value)?,
         Ok(BodyResult::Bytes(value)) => host.fetch_array_buffer(value)?,
         Ok(BodyResult::FormData(value)) => host.form_data_new(value)?,
         Err(e) => return host.fetch_promise(Err(e)),
