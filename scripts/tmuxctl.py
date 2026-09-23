@@ -233,6 +233,8 @@ LANE_GRANTS.setdefault("js-binary", []).extend(["crates/amazing-js/src/interp.rs
 # binary_index_descriptor (and define/delete/has) at the top of the matching
 # interp.rs property paths; one Exotic variant (and forced match arms) in value.rs.
 LANE_GRANTS["js-binary"].append("crates/amazing-js/src/value.rs")
+# JSB-2 BigInt: operator/coercion paths in interp.rs (already granted) and a
+# JsValue::BigInt variant in value.rs (already granted). ADDED LINES ONLY.
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
