@@ -93,6 +93,11 @@ struct Parser {
     in_function: usize,
     in_generator: usize,
     in_async: usize,
+    in_formal_params: usize,
+    /// Class field initializers inherit this restriction through arrows.
+    in_class_field_initializer: usize,
+    /// Only a class constructor may contain a direct `super()` call.
+    super_call_allowed: bool,
     /// Depth of `${ … }` substitutions currently being parsed. A
     /// `TemplatePart` token seen at depth > 0 is the enclosing template's
     /// continuation (the lexer absorbed the closing `}` into it), not the
@@ -115,6 +120,9 @@ impl Parser {
             in_function: 0,
             in_generator: 0,
             in_async: 0,
+            in_formal_params: 0,
+            in_class_field_initializer: 0,
+            super_call_allowed: false,
             template_depth: 0,
             private_scopes: Vec::new(),
         }
@@ -216,6 +224,9 @@ impl Parser {
         let t = self.cur().clone();
         match t.kind {
             TokenKind::Ident(name) => {
+                if name == "await" && self.in_async > 0 {
+                    return Err(self.err_at(t.span.start, "await is reserved in async functions"));
+                }
                 self.bump();
                 Ok(Ident::new(name, t.span))
             }
@@ -360,6 +371,9 @@ impl Parser {
                 // requires the colon to follow; keep it simple and accept).
                 if matches!(self.cur().kind, TokenKind::Ident(_)) && self.nth_punct(1, Punct::Colon)
                 {
+                    if self.word("await") && self.in_async > 0 {
+                        return Err(self.err("await cannot be a label in an async function"));
+                    }
                     return self.parse_labeled_stmt();
                 }
                 let expr = self.parse_expression_no_in(false)?;
@@ -947,13 +961,29 @@ impl Parser {
         } else {
             None
         };
-        let params = self.parse_params()?;
+        let saved_async = self.in_async;
+        let saved_generator = self.in_generator;
+        self.in_async = usize::from(is_async);
+        self.in_generator = usize::from(is_generator);
+        let params = self.parse_params();
+        if params.is_err() {
+            self.in_async = saved_async;
+            self.in_generator = saved_generator;
+        }
+        let params = params?;
         self.in_function += 1;
-        self.in_generator += usize::from(is_generator);
-        self.in_async += usize::from(is_async);
+        let saved_field = self.in_class_field_initializer;
+        let saved_super = self.super_call_allowed;
+        let saved_formals = self.in_formal_params;
+        self.in_class_field_initializer = 0;
+        self.super_call_allowed = false;
+        self.in_formal_params = 0;
         let body = self.parse_block();
-        self.in_async -= usize::from(is_async);
-        self.in_generator -= usize::from(is_generator);
+        self.in_formal_params = saved_formals;
+        self.super_call_allowed = saved_super;
+        self.in_class_field_initializer = saved_field;
+        self.in_async = saved_async;
+        self.in_generator = saved_generator;
         self.in_function -= 1;
         Ok(FunctionItem {
             name,
@@ -965,6 +995,13 @@ impl Parser {
     }
 
     fn parse_params(&mut self) -> Result<Vec<Param>, SyntaxError> {
+        self.in_formal_params += 1;
+        let result = self.parse_params_inner();
+        self.in_formal_params -= 1;
+        result
+    }
+
+    fn parse_params_inner(&mut self) -> Result<Vec<Param>, SyntaxError> {
         self.expect_punct(Punct::LParen)?;
         let mut params = Vec::new();
         if !self.at_punct(Punct::RParen) {
@@ -1105,7 +1142,12 @@ impl Parser {
             self.parse_prop_key()?
         };
         if self.at_punct(Punct::LParen) {
-            let params = self.parse_params()?;
+            self.in_async += usize::from(is_async);
+            self.in_generator += usize::from(is_generator);
+            let params = self.parse_params();
+            self.in_generator -= usize::from(is_generator);
+            self.in_async -= usize::from(is_async);
+            let params = params?;
             let actual_kind = if kind == MethodKind::Method
                 && !is_static
                 && prop_key_name(&key) == Some("constructor")
@@ -1115,7 +1157,14 @@ impl Parser {
                 kind
             };
             self.declare_private(&key, actual_kind, is_static)?;
-            let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block())?;
+            let saved_field = self.in_class_field_initializer;
+            let saved_super = self.super_call_allowed;
+            self.in_class_field_initializer = 0;
+            self.super_call_allowed = actual_kind == MethodKind::Constructor;
+            let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block());
+            self.super_call_allowed = saved_super;
+            self.in_class_field_initializer = saved_field;
+            let body = body?;
             return Ok(ClassMember::Method(ClassMethod {
                 key,
                 kind: actual_kind,
@@ -1135,7 +1184,10 @@ impl Parser {
         }
         self.declare_private(&key, MethodKind::Method, is_static)?;
         let init = if self.eat_punct(Punct::Eq) {
-            Some(self.parse_assignment_expr()?)
+            self.in_class_field_initializer += 1;
+            let init = self.parse_assignment_expr();
+            self.in_class_field_initializer -= 1;
+            Some(init?)
         } else {
             None
         };
@@ -1459,6 +1511,12 @@ impl Parser {
                 prec + 1
             };
             let right = self.parse_binary(next_min)?;
+            if kind == BinKind::Arithmetic(BinOp::In)
+                && matches!(left.kind, ExprKind::PrivateName(_))
+                && matches!(right.kind, ExprKind::Arrow(_))
+            {
+                return Err(self.err("private brand `in` requires a shift-expression right operand"));
+            }
             // The flags above only see operators at the *current* precedence
             // level; `a ?? b || c` slips past them because the right-operand
             // recursion (min_prec 4) absorbs `||` silently. A logical op
@@ -1574,6 +1632,9 @@ impl Parser {
         };
         if let Some(op) = simple_unop {
             self.bump();
+            if self.in_generator > 0 && matches!(self.cur().kind, TokenKind::Keyword(K::Yield)) {
+                return Err(self.err("yield must be parenthesized in a unary operand"));
+            }
             let operand = self.parse_unary()?;
             if op == UnOp::Delete && is_private_reference(&operand) {
                 return Err(self.err_at(start, "cannot delete a private name"));
@@ -1588,6 +1649,9 @@ impl Parser {
         }
         // `await` (contextual: only inside async functions).
         if self.word("await") && self.in_async > 0 && !self.cur().newline_before {
+            if self.in_formal_params > 0 {
+                return Err(self.err("await is forbidden in async formal parameter defaults"));
+            }
             self.bump();
             let operand = self.parse_unary()?;
             return Ok(Expr::new(
@@ -1736,6 +1800,9 @@ impl Parser {
                     );
                 }
             } else if self.at_punct(Punct::LParen) && allow_calls {
+                if matches!(e.kind, ExprKind::Super) && !self.super_call_allowed {
+                    return Err(self.err("super() is only valid in a class constructor"));
+                }
                 let args = self.parse_args()?;
                 let span = Span::new(e.span.start, self.last_end);
                 e = Expr::new(
@@ -1916,6 +1983,9 @@ impl Parser {
         }
         // Plain identifier reference.
         let id = self.expect_ident()?;
+        if id.name == "arguments" && self.in_class_field_initializer > 0 {
+            return Err(self.err_at(id.span.start, "arguments is forbidden in a class field initializer"));
+        }
         Ok(Expr::new(ExprKind::Ident(id), self.span_from(start)))
     }
 
@@ -1987,6 +2057,9 @@ impl Parser {
 
     fn parse_yield_expr(&mut self) -> Result<Expr, SyntaxError> {
         let start = self.cur_loc();
+        if self.in_formal_params > 0 {
+            return Err(self.err("yield is forbidden in generator formal parameter defaults"));
+        }
         if self.in_generator == 0 {
             return Err(self.err("`yield` is only valid inside generator functions"));
         }
@@ -3459,5 +3532,26 @@ mod construct_tests {
         let e = err("let ok = 1;\nconst bad;");
         assert_eq!(e.line, 2);
         assert!(e.column > 1);
+    }
+
+    #[test]
+    fn private_class_early_errors_do_not_reach_runtime() {
+        for source in [
+            "class C { async *#m() { var await; } }",
+            "class C { async #m() { await: 1; } }",
+            "class C { *#m() { void yield; } }",
+            "class C { #x = () => arguments; }",
+            "class C { #x = super(); }",
+            "class C extends B { #m() { super(); } }",
+            "class C { #x; m() { #x in () => {}; } }",
+            "function* g(x = yield 1) {}",
+            "async function* g(x = await 1) {}",
+            "class A { *g() { (function yield() {}); } }",
+        ] {
+            assert!(parse_script(source).is_err(), "accepted {source}");
+        }
+        assert!(parse_script("class C extends B { constructor() { super(); } }").is_ok());
+        assert!(parse_script("class C { #x = () => 1; m() { return this.#x; } }").is_ok());
+        assert!(parse_script("async function outer() { function inner() { await(1); } }").is_ok());
     }
 }
