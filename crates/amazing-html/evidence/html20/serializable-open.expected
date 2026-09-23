@@ -1,0 +1,4 @@
+declarative	true
+root	yes
+serializable	true
+serialized	<template shadowrootmode="open" shadowrootserializable=""><p>shadow</p></template>light

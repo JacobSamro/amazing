@@ -1,0 +1,101 @@
+{
+  "revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "fixed_base": "c4653e66f08087bcb88d2ebd6d5f42a3479f643d",
+  "rationale": "Ported minimal parser inputs and expectations from the pinned declarative-shadow basic, attachment, serialization, and opt-in WPT resources. The selection probes DOM-owned flags, attachment reset, serialization, and inert controls; it does not run the unmodified WPT harness.",
+  "sources": [
+    {
+      "path": "shadow-dom/declarative/declarative-shadow-dom-basic.html",
+      "local": "declarative-shadow-dom-basic.html",
+      "sha256": "f4eb6d3e2a5459e08453f1ff25ffcbc9da0cfe696c76221d194f646532274bca"
+    },
+    {
+      "path": "shadow-dom/declarative/declarative-shadow-dom-attachment.html",
+      "local": "declarative-shadow-dom-attachment.html",
+      "sha256": "476db5f0c501d3b1c6d8ac7e634b405d4281a9264ec28306c1997c58a7de34d4"
+    },
+    {
+      "path": "shadow-dom/declarative/declarative-shadow-dom-serialization.html",
+      "local": "declarative-shadow-dom-serialization.html",
+      "sha256": "71f11a388b7248701518520744238a2e4ad29de474f7e828046af909374c79f5"
+    },
+    {
+      "path": "shadow-dom/declarative/declarative-shadow-dom-opt-in.html",
+      "local": "declarative-shadow-dom-opt-in.html",
+      "sha256": "d1b7e6157c3d01c37cf5db7fe46f4734152b3abf2234e7368bea6083268c67f6"
+    }
+  ],
+  "cases": [
+    {
+      "id": "basic-open",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-basic.html",
+      "input_sha256": "9b9ff135b328226ed11344a9e6e5f27fa81a365c4147f1d5d538f6e359694a59",
+      "expected_sha256": "6ec941718c991a8d13c1b8cff35f3fda30d461dbda7fe8fe85481b20bbde3355"
+    },
+    {
+      "id": "closed-root",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-basic.html",
+      "input_sha256": "45869bb10eb206588800bbac5d6a41500e00db4b432a649c4d1eb353b2b66750",
+      "expected_sha256": "faa38275a582cf9e1bf323814d91bb9bddac43f949f9e71ba615d1bbb7990567"
+    },
+    {
+      "id": "serializable-open",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-serialization.html",
+      "input_sha256": "91df20f5d306357d58cd556d6fac2dc190090c1f11b02ed4d21b86bf675a4155",
+      "expected_sha256": "2d05f132c18a9ff25036f7ed4cd3ffc284c15e670d50bc419dd686e7eef2c8a2"
+    },
+    {
+      "id": "serializable-nested",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-serialization.html",
+      "input_sha256": "d6f25ce3e23b8a65df6e73dfff4e7fb86a4efbf84c8706e7f6e69fb93d77d557",
+      "expected_sha256": "33c1796f386121a70ba52559f841121b6dfe45153f535792b8bb10dfbdee4232"
+    },
+    {
+      "id": "repeated-root",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-basic.html",
+      "input_sha256": "9de2245971bd4ca1ad91c946930fef9ab06ec18f73036675f59e50cbcf9f765c",
+      "expected_sha256": "c92c1a94b1133a9c6c8414c47d69e2cf352fc855463a2574c63f788744b081a2"
+    },
+    {
+      "id": "invalid-mode",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-basic.html",
+      "input_sha256": "7a2e01992a040727bc88df0eb1b34526d54a7451e23297fba76a3e7bd30a5e8e",
+      "expected_sha256": "07d9d4b526d8e9c2e11dfe482d2524397485f7833562a004c8fb6a7096eb0d02"
+    },
+    {
+      "id": "fragment-inert",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-opt-in.html",
+      "input_sha256": "bc961745e13934452284cd7d7323a98c35ac6ed8fcb3426e0ce960a75cd81fdb",
+      "expected_sha256": "c88d7bbffbf2338dd2c8ae985126b2fd6d4313824baeda3cd52794b9e10ae7c1"
+    },
+    {
+      "id": "eof-recovery",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-basic.html",
+      "input_sha256": "0ea8af16cf380835814feef5180314925b89c6dfdc698df238a8e20ab9d7c2be",
+      "expected_sha256": "f3f8761a1f1897ac12393d9226058d951cbfaa1eed46a1c6ad1ae3cd278f207f"
+    },
+    {
+      "id": "attach-open-same",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-attachment.html",
+      "input_sha256": "14ead11d9033a663ec166d7615c168252049fc1ee4bc1ffe49dfd04d896f2671",
+      "expected_sha256": "9673f0974a3987a938cf370da2e888a17167c53a93e9c0dc945f524a6e0d3d39"
+    },
+    {
+      "id": "attach-closed-same",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-attachment.html",
+      "input_sha256": "45869bb10eb206588800bbac5d6a41500e00db4b432a649c4d1eb353b2b66750",
+      "expected_sha256": "9673f0974a3987a938cf370da2e888a17167c53a93e9c0dc945f524a6e0d3d39"
+    },
+    {
+      "id": "attach-open-opposite",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-attachment.html",
+      "input_sha256": "14ead11d9033a663ec166d7615c168252049fc1ee4bc1ffe49dfd04d896f2671",
+      "expected_sha256": "ebda809e1b168d4a65b45807032f772e40286802fdd2ab5b8a182451152735cc"
+    },
+    {
+      "id": "delegates-focus",
+      "provenance": "shadow-dom/declarative/declarative-shadow-dom-basic.html",
+      "input_sha256": "ace7745441913eb4469c1abc8b228c6057a0b5f094a539180cb5ef7ce681f83a",
+      "expected_sha256": "bbd401dad6cd10f76b45a0e3ff84cc5b0eda638cc410e4146414c0c7cb0d5552"
+    }
+  ]
+}

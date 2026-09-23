@@ -15,6 +15,9 @@ fn declarative_template_attaches_to_host_and_keeps_light_dom_separate() {
     let dom = parse("<div id=host><template shadowrootmode=open><span>shadow</span></template><b>light</b></div>");
     let host = by_id(&dom, "host");
     let root = dom.shadow_root_of_host(host).unwrap();
+    let data = dom.shadow_data(root).unwrap();
+    assert!(data.declarative && data.available_to_element_internals);
+    assert!(!data.keep_custom_element_registry_null);
     assert_eq!(dom.shadow_data(root).unwrap().options.mode, ShadowMode::Open);
     assert_eq!(html(&dom, root), "<span>shadow</span>");
     assert_eq!(html(&dom, host), "<b>light</b>");
@@ -27,6 +30,7 @@ fn declarative_options_closed_root_and_nested_attachment() {
     let host = by_id(&dom, "host");
     let root = dom.shadow_root_of_host(host).unwrap();
     let options = dom.shadow_data(root).unwrap().options;
+    assert!(dom.shadow_data(root).unwrap().declarative);
     assert_eq!(options.mode, ShadowMode::Closed);
     assert_eq!(options.slot_assignment, SlotAssignment::Manual);
     assert!(options.delegates_focus && options.serializable && options.clonable);
@@ -68,4 +72,81 @@ fn declarative_shadow_recovers_at_eof_and_chunk_boundaries() {
     let streamed_root = streamed.shadow_root_of_host(by_id(&streamed, "host")).unwrap();
     assert_eq!(html(&expected, expected_root), "<span>split</span>");
     assert_eq!(html(&streamed, streamed_root), html(&expected, expected_root));
+}
+
+#[test]
+fn parser_sets_registry_null_and_dom_owned_shadow_flags() {
+    let source = "<div id=host><template shadowrootmode=open shadowrootcustomelementregistry shadowrootserializable shadowrootclonable shadowrootdelegatesfocus shadowrootslotassignment=manual><b>shadow</b></template><i>light</i></div>";
+    let dom = parse(source);
+    let host = by_id(&dom, "host");
+    let root = dom.shadow_root_of_host(host).unwrap();
+    let data = dom.shadow_data(root).unwrap();
+    assert!(data.declarative && data.available_to_element_internals);
+    assert!(data.keep_custom_element_registry_null);
+    assert_eq!(data.options.mode, ShadowMode::Open);
+    assert_eq!(data.options.slot_assignment, SlotAssignment::Manual);
+    assert!(data.options.delegates_focus && data.options.clonable && data.options.serializable);
+    assert_eq!(html(&dom, root), "<b>shadow</b>");
+    assert_eq!(html(&dom, host), "<i>light</i>");
+    let serialized = String::from_utf16(&dom.serialize_children_with_shadow(host, true, &[]).unwrap()).unwrap();
+    assert_eq!(serialized, "<template shadowrootmode=\"open\" shadowrootdelegatesfocus=\"\" shadowrootserializable=\"\" shadowrootslotassignment=\"manual\" shadowrootclonable=\"\" shadowrootcustomelementregistry=\"\"><b>shadow</b></template><i>light</i>");
+}
+
+#[test]
+fn closed_and_nonserializable_roots_use_dom_serialization_contract() {
+    let dom = parse("<div id=host><template shadowrootmode=closed shadowrootcustomelementregistry><b>hidden</b></template><i>light</i></div>");
+    let host = by_id(&dom, "host");
+    let root = dom.shadow_root_of_host(host).unwrap();
+    assert_eq!(dom.visible_shadow_root(host), None);
+    let data = dom.shadow_data(root).unwrap();
+    assert!(data.declarative && data.available_to_element_internals);
+    assert!(data.keep_custom_element_registry_null);
+    assert!(!data.options.serializable);
+    assert_eq!(String::from_utf16(&dom.serialize_children_with_shadow(host, true, &[]).unwrap()).unwrap(),
+        "<i>light</i>");
+    assert_eq!(String::from_utf16(&dom.serialize_children_with_shadow(host, false, &[root]).unwrap()).unwrap(),
+        "<template shadowrootmode=\"closed\" shadowrootcustomelementregistry=\"\"><b>hidden</b></template><i>light</i>");
+}
+
+#[test]
+fn nested_duplicate_and_fragment_registry_declarations_keep_their_places() {
+    let source = "<div id=host><template shadowrootmode=open><span id=inner><template shadowrootmode=closed shadowrootcustomelementregistry shadowrootserializable><b>deep</b></template></span></template><template shadowrootmode=open shadowrootcustomelementregistry><b>inert</b></template></div>";
+    let dom = parse(source);
+    let host = by_id(&dom, "host");
+    let outer = dom.shadow_root_of_host(host).unwrap();
+    let inner = by_id(&dom, "inner");
+    let nested = dom.shadow_root_of_host(inner).unwrap();
+    assert!(dom.shadow_data(outer).unwrap().declarative);
+    let nested_data = dom.shadow_data(nested).unwrap();
+    assert!(nested_data.declarative && nested_data.available_to_element_internals);
+    assert!(nested_data.keep_custom_element_registry_null);
+    assert_eq!(nested_data.options.mode, ShadowMode::Closed);
+    assert!(html(&dom, host).contains("<template shadowrootmode=\"open\" shadowrootcustomelementregistry=\"\"><b>inert</b></template>"));
+
+    let fragment = parse_fragment("div", "<div id=host><template shadowrootmode=open shadowrootcustomelementregistry><b>inert</b></template></div>").unwrap();
+    let fragment_host = by_id(&fragment, "host");
+    assert_eq!(fragment.shadow_root_of_host(fragment_host), None);
+    assert!(html(&fragment, fragment_host).contains("<template shadowrootmode=\"open\" shadowrootcustomelementregistry=\"\">"));
+}
+
+#[test]
+fn registry_null_attachment_survives_every_scalar_chunk_boundary_and_eof() {
+    let source = "<div id=host><template shadowrootmode=closed shadowrootcustomelementregistry shadowrootserializable><span>split</span>";
+    let expected = parse(source);
+    let expected_host = by_id(&expected, "host");
+    let expected_root = expected.shadow_root_of_host(expected_host).unwrap();
+    let expected_serialized = String::from_utf16(&expected.serialize_children_with_shadow(expected_host, true, &[]).unwrap()).unwrap();
+    assert!(expected.shadow_data(expected_root).unwrap().keep_custom_element_registry_null);
+    for split in source.char_indices().map(|(i, _)| i).chain([source.len()]) {
+        let mut parser = IncrementalParser::new();
+        parser.push_chunk(&source[..split]);
+        parser.push_chunk(&source[split..]);
+        let dom = parser.finish();
+        let host = by_id(&dom, "host");
+        let root = dom.shadow_root_of_host(host).unwrap();
+        assert!(dom.shadow_data(root).unwrap().declarative, "split at {split}");
+        assert!(dom.shadow_data(root).unwrap().keep_custom_element_registry_null, "split at {split}");
+        assert_eq!(String::from_utf16(&dom.serialize_children_with_shadow(host, true, &[]).unwrap()).unwrap(), expected_serialized,
+            "split at {split}");
+    }
 }
