@@ -626,6 +626,15 @@ fn collect_ruby_text(
             output.push((node, data[..end].to_owned()));
             *budget -= end;
         },
+        NodeKind::CDATASection { data } => {
+            *segment_budget -= 1;
+            let mut end = data.len().min(*budget);
+            while !data.is_char_boundary(end) {
+                end -= 1;
+            }
+            output.push((node, data[..end].to_owned()));
+            *budget -= end;
+        },
         NodeKind::Element { .. } => {
             for child in dom.children(node) {
                 collect_ruby_text(dom, styled, child, output, budget, segment_budget);
@@ -635,6 +644,7 @@ fn collect_ruby_text(
             }
         },
         NodeKind::DocumentFragment | NodeKind::DocumentType { .. } => {},
+        NodeKind::Attr { .. } => {},
         NodeKind::Comment { .. }
         | NodeKind::ProcessingInstruction { .. }
         | NodeKind::Document => {},
@@ -1132,7 +1142,16 @@ fn classify_children(
                         ));
                     }
                 }
+                NodeKind::CDATASection { data } => {
+                    if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
+                        run.push(inline_text(
+                            dom, entry.owner, child, data.clone(), &text_parent,
+                            entry.parent_font, false,
+                        ));
+                    }
+                }
                 NodeKind::DocumentFragment | NodeKind::DocumentType { .. } => {},
+                NodeKind::Attr { .. } => {},
                 NodeKind::Comment { .. }
                 | NodeKind::ProcessingInstruction { .. }
                 | NodeKind::Document => {}
@@ -1186,7 +1205,16 @@ fn classify_children(
                     ));
                 }
             }
+            NodeKind::CDATASection { data } => {
+                if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
+                    inlines.push(inline_text(
+                        dom, entry.owner, child, data.clone(), &text_parent,
+                        entry.parent_font, false,
+                    ));
+                }
+            }
             NodeKind::DocumentFragment | NodeKind::DocumentType { .. } => {},
+            NodeKind::Attr { .. } => {},
             NodeKind::Comment { .. }
             | NodeKind::ProcessingInstruction { .. }
             | NodeKind::Document => {}
@@ -1363,7 +1391,16 @@ fn flatten_inline(
                     ));
                 }
             }
+            NodeKind::CDATASection { data } => {
+                if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
+                    inlines.push(inline_text(
+                        dom, entry.owner, child, data.clone(), &text_parent,
+                        entry.parent_font, entry.owner == idx,
+                    ));
+                }
+            }
             NodeKind::DocumentFragment | NodeKind::DocumentType { .. } => {},
+            NodeKind::Attr { .. } => {},
             NodeKind::Comment { .. }
             | NodeKind::ProcessingInstruction { .. }
             | NodeKind::Document => {}

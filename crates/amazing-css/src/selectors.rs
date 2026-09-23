@@ -742,6 +742,7 @@ fn is_empty(dom: &Dom, el: NodeIdx) -> bool {
         amazing_dom::NodeKind::Comment { .. }
         | amazing_dom::NodeKind::ProcessingInstruction { .. } => true,
         amazing_dom::NodeKind::Text { data } => data.chars().all(char::is_whitespace),
+        amazing_dom::NodeKind::CDATASection { data } => data.chars().all(char::is_whitespace),
         _ => false,
     })
 }

@@ -2496,6 +2496,12 @@ mod tests {
                 out.push_str(data);
                 out.push('"');
             },
+            NodeKind::CDATASection { data } => {
+                out.push_str("<![CDATA[");
+                out.push_str(data);
+                out.push_str("]]>");
+            },
+            NodeKind::Attr { .. } => {},
             NodeKind::Comment { data } => {
                 out.push_str("<!");
                 out.push_str(data);

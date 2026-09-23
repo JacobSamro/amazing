@@ -40,6 +40,10 @@ impl BrowserDomHost {
                 out.push('>');
             }
             amazing_dom::NodeKind::Text { data } => out.push_str(data),
+            amazing_dom::NodeKind::CDATASection { data } => {
+                out.push_str("<![CDATA["); out.push_str(data); out.push_str("]]>");
+            }
+            amazing_dom::NodeKind::Attr { .. } => {},
             amazing_dom::NodeKind::Comment { data } => {
                 out.push_str("<!--");
                 out.push_str(data);
@@ -100,6 +104,10 @@ impl BrowserDomHost {
                 },
             ),
             amazing_dom::NodeKind::Text { data } => self.dom.create_text(parent, &data),
+            amazing_dom::NodeKind::CDATASection { data } => self.dom.append_child(
+                parent, amazing_dom::NodeKind::CDATASection { data },
+            ),
+            amazing_dom::NodeKind::Attr { .. } => return,
             amazing_dom::NodeKind::Comment { data } => self
                 .dom
                 .append_child(parent, amazing_dom::NodeKind::Comment { data }),
