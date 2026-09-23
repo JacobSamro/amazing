@@ -432,6 +432,17 @@ const FORM_CONTROL: &[Member] = &[
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
+const OUTPUT: &[Member] = &[
+    getter("htmlFor", O::OutputHtmlFor),
+    getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
+    getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
+    getter("validationMessage", O::ControlValidationMessage),
+    method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
+    method("setCustomValidity", O::ControlSetCustomValidity, 1),
+];
+const IFRAME: &[Member] = &[
+    getter("sandbox", O::IFrameSandbox),
+];
 const BUTTON: &[Member] = &[
     getter("type", O::ButtonType), setter("type", O::ButtonSetType),
     getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
@@ -502,6 +513,7 @@ const LINK: &[Member] = &[
     getter("href", O::ElementHref), setter("href", O::ElementSetHref),
     getter("rel", O::ElementRel), setter("rel", O::ElementSetRel),
     getter("relList", O::ElementRelList),
+    getter("sizes", O::LinkSizes),
     getter("media", O::LinkMedia), setter("media", O::LinkSetMedia),
     getter("type", O::ResourceType), setter("type", O::ResourceSetType),
     getter("disabled", O::ElementDisabled), setter("disabled", O::ElementSetDisabled),
@@ -613,7 +625,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLFieldSetElement, name: "HTMLFieldSetElement", parent: Some(I::HTMLElement), constructor: None, members: FORM_CONTROL },
     D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDataListElement, name: "HTMLDataListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: FORM_CONTROL },
+    D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: OUTPUT },
     D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLMeterElement, name: "HTMLMeterElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLMediaElement, name: "HTMLMediaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -625,7 +637,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: SCRIPT },
     D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[getter("content", O::TemplateContent)] },
     D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: SLOT },
-    D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: IFRAME },
     D { interface: I::HTMLEmbedElement, name: "HTMLEmbedElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLObjectElement, name: "HTMLObjectElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLParamElement, name: "HTMLParamElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },

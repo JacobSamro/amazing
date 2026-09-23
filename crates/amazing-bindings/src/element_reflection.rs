@@ -3,7 +3,7 @@ use crate::{host::{InterfaceBrand, Operation as O, UrlReflection}, html_reflecti
 use amazing_dom::{DomError, Namespace, NodeKind};
 
 #[derive(Clone, Copy)]
-enum Kind { String, Url, Boolean, Unsigned, Signed(i32), InputType, Loading, ColSpan, RowSpan, RelList }
+enum Kind { String, Url, Boolean, Unsigned, Signed(i32), InputType, Loading, ColSpan, RowSpan, TokenList }
 #[derive(Clone, Copy)]
 struct Spec { attribute: &'static str, tags: &'static [&'static str], kind: Kind, setter: bool }
 const HYPERLINK: &[&str] = &["a", "area"];
@@ -14,7 +14,10 @@ fn spec(op: O) -> Option<Spec> {
         O::ElementHref | O::ElementSetHref => ("href", REL, K::Url),
         O::ElementTarget | O::ElementSetTarget => ("target", HYPERLINK, K::String),
         O::ElementRel | O::ElementSetRel => ("rel", REL, K::String),
-        O::ElementRelList => ("rel", REL, K::RelList),
+        O::ElementRelList => ("rel", REL, K::TokenList),
+        O::OutputHtmlFor => ("for", &["output"], K::TokenList),
+        O::IFrameSandbox => ("sandbox", &["iframe"], K::TokenList),
+        O::LinkSizes => ("sizes", &["link"], K::TokenList),
         O::ElementDownload | O::ElementSetDownload => ("download", HYPERLINK, K::String),
         O::ElementSrc | O::ElementSetSrc => ("src", &["img", "script"], K::Url),
         O::ImageAlt | O::ImageSetAlt => ("alt", &["img"], K::String),
@@ -67,8 +70,8 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
             if spec.tags.contains(&dom.local_name(node).unwrap()) => Ok(()),
         _ => Err(DomError::TypeError),
     })?;
-    if matches!(spec.kind, Kind::RelList) {
-        let slot = host.with_dom(|dom| dom.token_list(node, "rel"))?;
+    if matches!(spec.kind, Kind::TokenList) {
+        let slot = host.with_dom(|dom| dom.token_list(node, spec.attribute))?;
         let mut key = host.node_platform_key(node);
         key.slot = slot as u64;
         return host.wrap_platform_object(key, InterfaceBrand::DOM_TOKEN_LIST);
@@ -118,6 +121,6 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         Kind::Loading => host.string(&html_reflection::keyword(value.as_deref().unwrap_or_default(),
             &["eager", "lazy"]).unwrap_or_else(|| "eager".encode_utf16().collect())),
         Kind::String => host.string(&value.unwrap_or_default()),
-        Kind::RelList => unreachable!(),
+        Kind::TokenList => unreachable!(),
     }
 }

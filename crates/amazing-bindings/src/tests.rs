@@ -1405,6 +1405,25 @@ fn element_specific_reflection_handles_urls_enums_numbers_and_rel_list() {
     assert_eq!(call(&mut h, O::ScriptAsync, V::Node(script), &[]), V::Bool(true));
 }
 
+#[test]
+fn wpt_html_token_list_attributes_are_live_and_canonical() {
+    let mut h = Host::default();
+    for (tag, operation, attribute) in [
+        ("output", O::OutputHtmlFor, "for"),
+        ("iframe", O::IFrameSandbox, "sandbox"),
+        ("link", O::LinkSizes, "sizes"),
+    ] {
+        let element = h.dom.create_element(NodeIdx(0), tag);
+        let receiver = V::Node(element);
+        let list = call(&mut h, operation, receiver.clone(), &[]);
+        assert_eq!(call(&mut h, operation, receiver, &[]), list);
+        call(&mut h, O::TokenListAdd, list.clone(), &[str_value("sample")]);
+        assert_eq!(h.dom.attribute_utf16(element, attribute),
+            Some("sample".encode_utf16().collect()));
+        assert_eq!(call(&mut h, O::TokenListValue, list, &[]), str_value("sample"));
+    }
+}
+
 // Pinned WPT custom-elements/CustomElementRegistry.html,
 // CustomElementRegistry-getName.html, attribute-changed-callback.html,
 // connected-callbacks.html, and custom-element-reaction-queue.html ports.
