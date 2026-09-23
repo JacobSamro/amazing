@@ -2591,23 +2591,42 @@ impl TreeBuilder {
 
     fn after_body(&mut self, tok: Token) {
         match tok {
+            Token::Characters(data) if data.chars().all(is_ws_char) => {
+                self.in_body(Token::Characters(data));
+            },
             Token::Comment(data) => {
                 if let Some(&html) = self.open.first() {
                     self.comment_into(html, &data);
                 }
             },
+            Token::Doctype { .. } | Token::Eof => {},
+            Token::StartTag { name, attrs, self_closing } if name == "html" => {
+                self.in_body(Token::StartTag { name, attrs, self_closing });
+            },
             Token::EndTag { ref name } if name == "html" => {
                 self.mode = Mode::AfterAfterBody;
             },
-            other => self.in_body(other), // deviation: non-ws reprocessed too
+            other => {
+                self.mode = Mode::InBody;
+                self.in_body(other);
+            },
         }
     }
 
     fn after_after_body(&mut self, tok: Token) {
         match tok {
+            Token::Characters(data) if data.chars().all(is_ws_char) => {
+                self.in_body(Token::Characters(data));
+            },
             Token::Comment(data) => self.comment_into(NodeIdx(0), &data),
-            Token::Doctype { .. } => {}
-            other => self.in_body(other),
+            Token::Doctype { .. } | Token::Eof => {},
+            Token::StartTag { name, attrs, self_closing } if name == "html" => {
+                self.in_body(Token::StartTag { name, attrs, self_closing });
+            },
+            other => {
+                self.mode = Mode::InBody;
+                self.in_body(other);
+            },
         }
     }
 }
