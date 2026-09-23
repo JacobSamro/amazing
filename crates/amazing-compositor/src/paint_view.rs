@@ -1,10 +1,8 @@
 //! Bridge from the painter's read-only display-list view.
 //!
-//! RC-16's range raster already applies its group transforms, clips and
-//! opacity. `baked_paint_view_compositor` therefore uses a neutral property
-//! state for presentation. `paint_view_metadata` preserves the source property
-//! IDs and compositing hints for inspection and hit-test integration. Moving
-//! those properties onto compositor quads requires RC-17's raw local raster.
+//! RC-17's raw local raster leaves transforms, clips and opacity to the
+//! property trees. Unsupported paint commands use RC-16's baked range raster
+//! with a neutral property state.
 
 use super::*;
 use amazing_paint::display_list_view::{DisplayListView, PaintBounds, RawRasterError};
@@ -134,8 +132,7 @@ impl PaintSource for DisplayListView<'_> {
     }
 }
 
-/// Converts the view's stable per-build property IDs and direct hints. The
-/// returned scene is metadata until raw uncomposited item pixels are exposed.
+/// Converts the view's stable per-build property IDs and direct hints.
 pub fn paint_view_metadata(
     view: &DisplayListView<'_>,
 ) -> Result<(PropertyTrees, Vec<PaintChunk>), SceneError> {
@@ -220,10 +217,9 @@ pub fn paint_view_metadata(
     Ok((trees, chunks))
 }
 
-/// Builds the pixel-exact RC-16 path. Its one paint range preserves the
-/// painter's group semantics, while its compositor state remains neutral to
-/// avoid applying those groups twice. Use `paint_view_metadata` separately for
-/// source item inspection. RC-17 will allow property-driven retained tiles.
+/// Builds the pixel-exact fallback for paint commands RC-17 cannot separate.
+/// Its one paint range preserves the painter's group semantics and neutral
+/// property state avoids applying those groups twice.
 pub fn baked_paint_view_compositor(
     view: &DisplayListView<'_>,
     width: u32,
