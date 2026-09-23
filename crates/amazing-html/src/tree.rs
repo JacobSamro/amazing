@@ -23,6 +23,7 @@
 //! appropriate end tag.
 
 use amazing_dom::{Dom, Namespace, NodeIdx, NodeKind};
+use amazing_dom::events::CallbackId;
 
 use crate::tokenizer::{Token, Tokenizer};
 
@@ -130,9 +131,31 @@ enum FmtEntry {
     },
 }
 
+/// A parser-created element whose definition existed when its start tag was
+/// processed. The element already has the token's attributes but is detached.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParserConstruction {
+    pub document: NodeIdx,
+    pub element: NodeIdx,
+    pub namespace: Namespace,
+    pub local_name: String,
+    pub definition: usize,
+    pub constructor: CallbackId,
+}
+
+/// Embedding callback for synchronous custom-element construction. The host
+/// calls `Dom::custom_element_super` when its constructor executes `super()`
+/// and returns true only if construction returned this same element. It may
+/// mutate the supplied DOM; the parser retains no borrow into the DOM across
+/// this call. Constructor exceptions are reported by the host and return false.
+pub trait ParserCustomElementHost {
+    fn construct(&mut self, dom: &mut Dom, request: ParserConstruction) -> bool;
+}
+
 /// Tree-construction state machine producing a [`Dom`].
 pub struct TreeBuilder {
     dom: Dom,
+    custom_element_host: Option<Box<dyn ParserCustomElementHost>>,
     mode: Mode,
     /// Return mode for "text" (the "original insertion mode").
     orig_mode: Mode,
@@ -164,6 +187,7 @@ impl TreeBuilder {
     pub fn new() -> Self {
         Self {
             dom: Dom::new(),
+            custom_element_host: None,
             mode: Mode::Initial,
             orig_mode: Mode::Initial,
             table_text_return_mode: Mode::Initial,
@@ -176,6 +200,14 @@ impl TreeBuilder {
             foster: false,
             fmt: Vec::new(),
         }
+    }
+
+    /// Starts a document parse with a preconfigured DOM registry and host.
+    pub fn with_custom_element_host(dom: Dom, host: Box<dyn ParserCustomElementHost>) -> Self {
+        let mut builder = Self::new();
+        builder.dom = dom;
+        builder.custom_element_host = Some(host);
+        builder
     }
 
     /// Processes ONE token.
@@ -720,9 +752,40 @@ impl TreeBuilder {
         name: &str,
         attrs: Vec<(String, String)>,
     ) -> NodeIdx {
-        let (parent, before) = self.insertion_place();
         let idx = self.alloc_element(name, attrs);
+        // The registry is owned by DOM. A missing host or definition keeps the
+        // ordinary parser path, leaving an undefined element upgradeable later.
+        let definition = if self.custom_element_host.is_some() {
+            let is_name = self.dom.get_attribute_ns(idx, None, "is").map(str::to_owned);
+            self.dom.custom_element_definitions(NodeIdx(0)).into_iter()
+                .find(|(_, definition)| definition.local_name == name
+                    && (definition.name == name || is_name.as_deref() == Some(definition.name.as_str())))
+                .map(|(id, _)| id)
+        } else {
+            None
+        };
+        let construction = definition.and_then(|definition| {
+            self.dom.begin_custom_element_upgrade(idx, definition).ok().map(|constructor| {
+                let request = ParserConstruction {
+                    document: NodeIdx(0), element: idx, namespace: Namespace::Html,
+                    local_name: name.to_owned(), definition, constructor,
+                };
+                let constructed = self.custom_element_host.as_mut().expect("host checked")
+                    .construct(&mut self.dom, request);
+                (definition, constructed)
+            })
+        });
+        let (parent, before) = self.insertion_place();
         self.dom.attach_before(parent, before, idx);
+        if let Some((definition, constructed)) = construction {
+            // Completion after attachment lets DOM-14 enqueue initial observed
+            // attributes and connectedCallback in their native order.
+            let _ = self.dom.finish_custom_element_upgrade(idx, definition, constructed);
+        } else {
+            // With no host, a preexisting definition remains eligible for a
+            // later DOM-14 upgrade. With no definition this is a no-op.
+            self.dom.queue_custom_element_upgrade(idx);
+        }
         idx
     }
 
@@ -2525,6 +2588,25 @@ pub fn build(src: &str) -> Dom {
         let tok = tokenizer.next_token();
         let eof = feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok);
         if eof {
+            break;
+        }
+    }
+    builder.into_dom()
+}
+
+/// Parses with definitions already installed on `dom`. The host receives each
+/// matching HTML element synchronously during tree construction. Reactions
+/// remain queued in the returned DOM for the embedding's parser-task boundary.
+pub fn build_with_custom_element_host(
+    src: &str,
+    dom: Dom,
+    host: Box<dyn ParserCustomElementHost>,
+) -> Dom {
+    let mut builder = TreeBuilder::with_custom_element_host(dom, host);
+    let mut tokenizer = Tokenizer::new(src.chars().collect());
+    loop {
+        let tok = tokenizer.next_token();
+        if feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok) {
             break;
         }
     }
