@@ -55,7 +55,7 @@ import base64
 s=r'''
 \$env:CARGO_TARGET_DIR = 'C:\Users\server\target\integrator-primary'
 Set-Location 'C:\Users\server\src\wt\integrator-primary'
-cargo nextest run --workspace --locked 2>&1 | Select-String -Pattern 'Summary','error\[','error:','FAIL ' | Out-String -Width 220
+cargo nextest run --workspace --locked --no-fail-fast 2>&1 | Select-String -CaseSensitive -Pattern 'Summary','error\[','error:','  FAIL \[','TIMEOUT \[','SIGSEGV','SIGABRT','LEAK' | Out-String -Width 220
 cargo test --workspace --locked --doc 2>&1 | Select-String -Pattern '^test result:','^error' | Out-String -Width 220
 '''
 print(base64.b64encode(s.encode('utf-16-le')).decode())")
@@ -77,7 +77,7 @@ New-Item -ItemType Directory -Force \$tree | Out-Null
 Set-Location \$tree
 tar -xf (\$env:USERPROFILE + '\gate.tar')
 \$env:CARGO_TARGET_DIR = \$env:USERPROFILE + '\target\integrator-primary'
-cargo nextest run --workspace --locked 2>&1 | Select-String -Pattern 'Summary','error\[','error:','FAIL ' | Out-String -Width 220
+cargo nextest run --workspace --locked --no-fail-fast 2>&1 | Select-String -CaseSensitive -Pattern 'Summary','error\[','error:','  FAIL \[','TIMEOUT \[','SIGSEGV','SIGABRT','LEAK' | Out-String -Width 220
 cargo test --workspace --locked --doc 2>&1 | Select-String -Pattern '^test result:','^error' | Out-String -Width 220
 '''
 print(base64.b64encode(s.encode('utf-16-le')).decode())")
