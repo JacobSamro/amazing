@@ -67,9 +67,93 @@ is `6aad91c7`. Windows amazing-js nextest passed 214 tests (one ignored) and
 its doctest passed 1/1. Under a Windows build slot, workspace nextest passed
 1,768 tests (five ignored) and the workspace doctests passed 2/2.
 
+## JSVM-3-TRY: exception handlers on resumable frames
+
+The VM now compiles `try`/`catch`/`finally` as control flow in the existing
+heap frame. Throwing operations, explicit throws, and returns unwind lexical
+scopes through the handler stack. A normal `finally` preserves the pending
+completion; an abrupt `finally` replaces it. Catch bindings have their own
+lexical environment. The handler stack survives instruction-boundary
+suspension and is tested with nested handlers, optional catch binding,
+runtime exceptions, return overrides, and loop re-entry. The compiler also
+checks unresolved compound-assignment bindings before evaluating the right
+side; full Test262 found the missing check when `try` became compilable.
+
+On the pinned Linux checkout, same-host tree-walker versus VM comparison found
+zero lost passing files or variants, 23 gained files and 28 gained variants.
+Compiled coverage rose from 18,501/34,493 eligible files (53.6370%) on
+JSVM-2 to 19,494/34,493 (56.5158%). The pinned Linux corpus input SHA-256
+was `91109b82`; the baseline and VM classification hashes were `b9d73ca4`
+and `cc08903c`. Final exact-commit Windows gates on win-002 passed: amazing-js
+nextest 216 tests (one ignored) and its doctest 1/1; workspace nextest 1,770
+tests (five ignored) and workspace doctests 2/2.
+
 ## Following tickets
 
-- JSVM-3: generator objects and async functions built on resumable frames.
-- Expand classes, complex bindings, exception handlers, and other remaining
-  compiler fallbacks with differential and Test262 evidence.
+## JSVM-3-GEN: generator frames and delegation
+
+Generator functions now create branded objects with suspended VM frames.
+`next`, `return`, and `throw` resume at yields or route abrupt completions
+through catch/finally handlers. `yield*` delegates to arrays or iterator
+methods and forwards normal, return, and throw completions. Generator calls
+are non-constructible; the frame is initialized on first `next`. The
+shared interpreter still owns values, calls, properties, and iterator methods.
+
+Pinned Linux Test262 (`3655e746`, input SHA-256 `91109b82`) compared the
+same-host tree walker with VM plus fallback: 10,967 versus 11,087 passing
+files, and 21,118 versus 21,334 passing variants. There were zero lost
+passes, 120 gained files, and 216 gained variants. The VM compiled
+19,685/34,493 eligible files (57.0696%), up from 19,494/34,493
+(56.5158%) at the try-handler gate. Classification hashes were `b9d73ca4`
+and `b1b5d146`. Linux and exact-commit win-002 amazing-js nextest passed
+218 tests (one skipped). Windows amazing-js doctest passed 1/1;
+workspace nextest passed 1,772 tests (five skipped), and workspace
+doctests passed 2/2.
+
+The current generator prototype is per function and has own method properties;
+shared `%GeneratorPrototype%` identity and full descriptor attributes remain
+for a later conformance pass. Arrays and user iterators are delegated, while
+other built-in iterable kinds still depend on the shared iterator model.
+
+## Following tickets
+
+## JSVM-4-ASYNC: await frames and Test262 async protocol
+
+Ordinary async declarations and arrows now compile. VM `await` suspends a
+boxed frame, registers fulfillment/rejection reactions, resumes through the
+interpreter's promise job queue, and routes rejection through catch/finally.
+Returned promises are adopted and thenables are resolved through the shared
+Promise callbacks. The Test262 host recognizes `doneprintHandle.js` markers,
+and the runner accepts an async-capable classic-script host while requiring
+the print capability. The primary granted the runner edit.
+
+An old/new runner replay on the same classic-only host and pinned input
+produced the identical classification SHA-256 `b9d73ca4` across 53,872 files
+(input SHA-256 `91109b82`). With async enabled, 5,624 previously excluded
+async-flagged files entered the corpus. On source commit `603f3e7`, the
+same-host tree walker passed 11,192 files / 21,526 variants; VM plus fallback
+passed 11,316 / 21,750 on exact commit `f173f23`. There were zero lost passes,
+124 gained files, and 224 gained variants. The VM compiled 20,331/37,818
+eligible files (53.7601%). Classification hashes were `f90dd209` and
+`007e7f27`; input SHA-256 was `91109b82`. These exact counts
+include the primary-requested shared operator routing: VM unary and update
+instructions call interpreter helpers, while binary/comparison already call
+the shared binary operator. JSB-2 BigInt helper integration and the Windows
+gate remain before this ticket is complete.
+
+On Linux, exact commit `603f3e7` passed 220 amazing-js nextest tests (one
+skipped), 1/1 amazing-js doctest, 1,771 workspace nextest tests (three
+skipped), and 2/2 workspace doctests. The scheduling fix at `f173f23` passed
+221 amazing-js tests (one skipped); a focused await replay gained four files
+with zero losses. Its exact-commit Linux workspace gate passed 1,772 nextest
+tests (three skipped) and 2/2 doctests. The full replay counts above include
+that fix.
+
+Async iteration syntax (`for await`) is not yet represented in the parser AST;
+that requires a js-lang ticket. Many async Test262 failures also depend on
+Promise/Array.fromAsync built-ins outside the VM lane.
+
+## Following tickets
+
+- JSVM-4 async iteration after parser support, then classes and complex bindings.
 - Add tracing GC roots after VM frames become resumable (ADR 0003).

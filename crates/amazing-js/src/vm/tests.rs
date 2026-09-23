@@ -130,11 +130,9 @@ fn bindings_branches_loops_and_completion_match() {
 #[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
-        "var changed = 1; function f() { try {} catch (e) {} }",
         "changed = 1; class A {}",
         "changed = 1; for (;;) { break; }",
         "changed = 1; while (true) { break; }",
-        "changed = 1; try {} catch (e) {}",
         "changed = 1; let [a] = [2];",
         "changed = 1; delete changed;",
         "changed = 1; 2n;",
@@ -222,6 +220,8 @@ fn heap_frame_suspends_and_resumes_at_instruction_boundaries() {
                 assert_eq!(value, JsValue::num(3.0));
                 break;
             }
+            FrameOutcome::Yielded(_) => panic!("ordinary frame yielded"),
+            FrameOutcome::Awaited(_) => panic!("ordinary frame awaited"),
         }
     }
     assert!(suspensions > 1);
@@ -236,6 +236,176 @@ fn heap_frame_suspends_and_resumes_at_instruction_boundaries() {
         code.resume_frame(&mut interpreter, &mut frame, 1).unwrap(),
         FrameOutcome::Completed(JsValue::Num(_))
     ));
+}
+
+#[test]
+fn try_catch_finally_matches_tree_walker() {
+    for source in [
+        "var x = 0; try { x = 1; } catch (e) { x = 7; } x",
+        "var x = 0; try { throw 3; } catch (e) { x = e + 4; } x",
+        "var x = 0; try { throw 3; } catch { x = 4; } x",
+        "var x = 0; try { x = 1; } finally { x += 2; } x",
+        "var x = 0; try { throw 3; } catch (e) { x = e; } finally { x += 2; } x",
+        "try { throw 'a'; } catch (e) { throw e + 'b'; }",
+        "try { missing; } catch (e) { 42; }",
+        "try { missing *= 1; } catch (e) { e instanceof ReferenceError; }",
+        "var side = 0; try { missing *= (side = 1); } catch (e) {} side",
+        "try { throw 1; } catch (e) {} typeof e",
+        "function f() { try { return 1; } finally { var x = 2; } } f()",
+        "function f() { try { return 1; } finally { return 2; } } f()",
+        "function f() { try { throw 1; } finally { return 2; } } f()",
+        "function f() { try { return 1; } catch (e) { return 2; } } f()",
+        "function f() { try { throw 1; } catch (e) { return e + 1; } finally { 3; } } f()",
+        "try { try { throw 1; } finally { 2; } } catch (e) { e; }",
+        "var x = 0; while (x < 3) { try { x++; if (x === 2) throw 5; } catch (e) { x += e; } finally { x++; } } x",
+    ] {
+        differential(source, &["x"]);
+    }
+}
+
+#[test]
+fn heap_frame_resumes_through_catch_and_finally() {
+    let code = compile(
+        &parse_script(
+            "var x = 0; try { x = 1; throw 7; } catch (e) { x += e; } finally { x++; } x",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut interpreter = Interpreter::new();
+    let env = interpreter.global_env.clone();
+    let mut frame = code.start_frame(&mut interpreter, env, 1000).unwrap();
+    let mut suspended_in_handler = false;
+    loop {
+        match code.resume_frame(&mut interpreter, &mut frame, 1).unwrap() {
+            FrameOutcome::Suspended => suspended_in_handler |= !frame.try_stack.is_empty(),
+            FrameOutcome::Completed(value) => {
+                assert_eq!(value, JsValue::num(9.0));
+                break;
+            }
+            FrameOutcome::Yielded(_) => panic!("ordinary frame yielded"),
+            FrameOutcome::Awaited(_) => panic!("ordinary frame awaited"),
+        }
+    }
+    assert!(suspended_in_handler);
+    assert!(frame.try_stack.is_empty());
+    assert!(frame.scopes.is_empty());
+    assert!(interpreter.global_env.resolve("e").is_none());
+}
+
+#[test]
+fn generator_resume_and_finally_observe_completion() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var log = '';
+        function* g() {
+            log += 'a';
+            try { var input = yield 3; log += input; }
+            finally { log += 'f'; yield 8; log += 'z'; }
+            return 9;
+        }
+        var it = g();
+        var before = log;
+        var first = it.next(99);
+        var second = it.next('b');
+        var third = it.next();
+        var fourth = it.next();
+        before + ':' + first.value + ':' + second.value + ':' + third.value + ':' + fourth.done + ':' + log;
+    ";
+    let result = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(result, JsValue::str(":3:8:9:true:abfz"));
+
+    let source = "
+        function* g() { try { yield 1; } finally { yield 2; } }
+        var it = g(); it.next();
+        var a = it.return(7); var b = it.next();
+        a.value + ':' + a.done + ':' + b.value + ':' + b.done;
+    ";
+    let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(result, JsValue::str("2:false:7:true"));
+}
+
+#[test]
+fn generator_delegation_forwards_values_and_returns() {
+    let source = "
+        function* inner() { var v = yield 1; return v + 2; }
+        function* outer() { return yield* inner(); }
+        var it = outer(); var a = it.next(); var b = it.next(40);
+        a.value + ':' + a.done + ':' + b.value + ':' + b.done;
+    ";
+    let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(result, JsValue::str("1:false:42:true"));
+}
+
+#[test]
+fn async_frame_resumes_from_pending_promise() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var resolve;
+        var pending = new Promise(function(r) { resolve = r; });
+        var log = '';
+        async function work() { log += 'a'; var value = await pending; log += 'b'; return value + 1; }
+        var result = 0;
+        var promise = work();
+        var before = log;
+        promise.then(function(value) { result = value; });
+        resolve(41);
+        before;
+    ";
+    let before = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(before, JsValue::str("a"));
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("ab")));
+    assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::num(42.0)));
+}
+
+#[test]
+fn async_await_rejection_runs_catch_and_finally() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var reject;
+        var pending = new Promise(function(resolve, fail) { reject = fail; });
+        var log = '';
+        async function work() {
+            try { await pending; return 0; }
+            catch (error) { log += error; return 7; }
+            finally { log += 'f'; }
+        }
+        var result = 0;
+        work().then(function(value) { result = value; });
+        reject('e');
+    ";
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("ef")));
+    assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::num(7.0)));
+}
+
+#[test]
+fn async_jobs_interleave_with_promise_reactions() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var log = [];
+        async function first(value) { log.push('await:' + value); }
+        async function both() { await first(1); await first(2); }
+        both();
+        new Promise(function(resolve) { log.push('promise:1'); resolve(); })
+          .then(function() { log.push('promise:2'); });
+    ";
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    let result = interpreter.run_script("log.join(',')").unwrap();
+    assert_eq!(result, JsValue::str("await:1,promise:1,await:2,promise:2"));
+
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var log = [];
+        var thenable = { then: function(resolve) { resolve(1); } };
+        async function work() { log.push('await:' + await thenable); }
+        work();
+        new Promise(function(resolve) { log.push('promise:1'); resolve(); })
+          .then(function() { log.push('promise:2'); });
+    ";
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    let result = interpreter.run_script("log.join(',')").unwrap();
+    assert_eq!(result, JsValue::str("promise:1,promise:2,await:1"));
 }
 
 #[test]

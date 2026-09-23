@@ -1839,8 +1839,8 @@ impl Interpreter {
                 Ok(JsValue::str(self.typeof_value(&v)))
             }
             ast::UnOp::Void => {
-                self.eval_expr(x, env)?;
-                Ok(JsValue::Undefined)
+                let value = self.eval_expr(x, env)?;
+                self.unary_value(op, value)
             }
             ast::UnOp::Delete => match &x.kind {
                 ExprKind::Member { obj, prop, .. } => {
@@ -1889,23 +1889,51 @@ impl Interpreter {
                     other => Ok(other),
                 }
             }
-            ast::UnOp::Not => Ok(JsValue::Bool(!self.eval_expr(x, env)?.to_boolean())),
+            ast::UnOp::Not => {
+                let value = self.eval_expr(x, env)?;
+                self.unary_value(op, value)
+            }
             ast::UnOp::BitNot => {
                 let v = self.eval_expr(x, env)?;
-                let primitive = self.primitive(v)?;
-                if let JsValue::BigInt(value) = &primitive { Ok(Self::bigint_value(value.bit_not())) }
-                else { Ok(JsValue::num((!self.to_int32(&primitive)?) as f64)) }
+                self.unary_value(op, v)
             }
             ast::UnOp::Neg => {
                 let v = self.eval_expr(x, env)?;
-                let primitive = self.primitive(v)?;
-                if let JsValue::BigInt(value) = &primitive { Ok(Self::bigint_value(value.negated())) }
-                else { Ok(JsValue::num(-self.to_number(&primitive)?)) }
+                self.unary_value(op, v)
             }
             ast::UnOp::Pos => {
                 let v = self.eval_expr(x, env)?;
-                Ok(JsValue::num(self.to_number(&v)?))
+                self.unary_value(op, v)
             }
+        }
+    }
+    fn unary_value(&mut self, op: ast::UnOp, value: JsValue) -> Result<JsValue, Throw> {
+        match op {
+            ast::UnOp::Neg => {
+                let primitive = self.primitive(value)?;
+                if let JsValue::BigInt(value) = &primitive { Ok(Self::bigint_value(value.negated())) }
+                else { Ok(JsValue::num(-self.to_number(&primitive)?)) }
+            },
+            ast::UnOp::Pos => Ok(JsValue::num(self.to_number(&value)?)),
+            ast::UnOp::Not => Ok(JsValue::Bool(!value.to_boolean())),
+            ast::UnOp::BitNot => {
+                let primitive = self.primitive(value)?;
+                if let JsValue::BigInt(value) = &primitive { Ok(Self::bigint_value(value.bit_not())) }
+                else { Ok(JsValue::num((!self.to_int32(&primitive)?) as f64)) }
+            },
+            ast::UnOp::Typeof => Ok(JsValue::str(self.typeof_value(&value))),
+            ast::UnOp::Void => Ok(JsValue::Undefined),
+            ast::UnOp::Delete | ast::UnOp::Await => Err(Throw::type_error("invalid unary value operation")),
+        }
+    }
+    fn update_value(&mut self, op: ast::UpdateOp, old: JsValue) -> Result<JsValue, Throw> {
+        let primitive = self.primitive(old)?;
+        if let JsValue::BigInt(value) = primitive {
+            Ok(Self::bigint_value(if op == ast::UpdateOp::Inc { value.add(&BinaryBigInt::one()) }
+                else { value.sub(&BinaryBigInt::one()) }))
+        } else {
+            let delta = if op == ast::UpdateOp::Inc { 1.0 } else { -1.0 };
+            Ok(JsValue::num(self.to_number(&primitive)? + delta))
         }
     }
     fn update(
@@ -1916,13 +1944,7 @@ impl Interpreter {
         env: &EnvHandle,
     ) -> Result<JsValue, Throw> {
         let (reference, old) = self.resolve_reference(x, env)?;
-        let primitive = self.primitive(old.clone())?;
-        let next = if let JsValue::BigInt(value) = primitive {
-            Self::bigint_value(if op == ast::UpdateOp::Inc { value.add(&BinaryBigInt::one()) }
-                else { value.sub(&BinaryBigInt::one()) })
-        } else {
-            JsValue::num(self.to_number(&primitive)? + if op == ast::UpdateOp::Inc { 1.0 } else { -1.0 })
-        };
+        let next = self.update_value(op, old.clone())?;
         self.put_reference(reference, next.clone(), env)?;
         Ok(if prefix { next } else { old })
     }
@@ -2369,6 +2391,7 @@ impl Interpreter {
         let derived_constructor = o.borrow().derived_constructor.clone();
         let lexical_super_constructor = o.borrow().lexical_super_constructor.clone();
         let lexical_new_target = o.borrow().lexical_new_target.clone();
+        let bytecode_async = fun.is_async && matches!(&fun.body, FunctionBody::Bytecode(_));
         if self.depth >= MAX_CALL_DEPTH {
             return Err(Throw::range_error("maximum call stack size exceeded"));
         }
@@ -2383,7 +2406,17 @@ impl Interpreter {
         self.completion = JsValue::Undefined;
         let r = (|| -> Result<JsValue, Throw> {
             match fun.body {
-                FunctionBody::Bytecode(code) => code.call(self, fun.env.clone(), fun.is_arrow, this, args),
+                FunctionBody::Bytecode(code) => {
+                    let generator_proto = if fun.is_generator {
+                        match o.borrow().get_own("prototype") {
+                            Some(JsValue::Object(proto)) => Some(proto),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
+                    code.call(self, fun.env.clone(), fun.is_arrow, this, args, generator_proto)
+                }
                 FunctionBody::Native(n) => {
                     self.native_stack.push(o.clone());
                     let result = n(self, this, args);
@@ -2455,7 +2488,12 @@ impl Interpreter {
         self.completion = previous_completion;
         self.frames.pop();
         self.depth -= 1;
-        if fun.is_async {
+        if bytecode_async {
+            match r {
+                Ok(value) => Ok(value),
+                Err(Throw(value)) => Ok(new_promise(self, PromiseFate::Rejected(value))),
+            }
+        } else if fun.is_async {
             match r {
                 Ok(value) => Ok(new_promise(self, PromiseFate::Fulfilled(value))),
                 Err(Throw(value)) => Ok(new_promise(self, PromiseFate::Rejected(value))),
