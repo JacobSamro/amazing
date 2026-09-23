@@ -13,8 +13,6 @@
 //! - `noscript` content is parsed as raw text regardless of scripting flag.
 //! - Foreign content implements namespace-aware SVG/MathML tree construction
 //!   and integration points, but not every foreign-attribute adjustment.
-//! - `plaintext` loses its tokenizer-level effect (no PLAINTEXT state); it
-//!   is inserted as an ordinary unknown element.
 //! - Scope terminator sets omit `template`.
 //! - Quirks-mode differences are not modelled; the no-quirks rules always
 //!   apply (e.g. `<table>` always closes an open `<p>`).
@@ -1536,7 +1534,6 @@ impl TreeBuilder {
                 self.insert_and_push(name, attrs);
             },
             "plaintext" => {
-                // deviation: no PLAINTEXT tokenizer state; ordinary element.
                 self.close_p_element();
                 self.insert_and_push(name, attrs);
             },
@@ -2370,7 +2367,7 @@ fn feed_with_tokenizer_feedback(
     };
     builder.feed(tok);
     if let Some(name) = start_name {
-        let inserted_html_text_element = builder.mode == Mode::Text
+        let inserted_html_text_element = (builder.mode == Mode::Text || name == "plaintext")
             && builder.current().is_some_and(|current| {
                 builder.dom.namespace(current) == Some(Namespace::Html)
                     && builder.dom.name(current) == Some(name.as_str())
@@ -2466,7 +2463,7 @@ pub fn build(src: &str) -> Dom {
 pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
     let mut builder = TreeBuilder::new();
     builder.insert_and_push("html", Vec::new());
-    let virtual_context = matches!(context, "textarea" | "title" | "style" | "script" | "select" | "option");
+    let virtual_context = matches!(context, "textarea" | "title" | "style" | "script" | "plaintext" | "select" | "option");
     if !virtual_context {
         builder.insert_and_push(context, Vec::new());
     }
@@ -2484,7 +2481,7 @@ pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
         }
     };
     let mut tokenizer = Tokenizer::new(src.chars().collect());
-    if matches!(context, "textarea" | "title" | "style" | "script") {
+    if matches!(context, "textarea" | "title" | "style" | "script" | "plaintext") {
         tokenizer.enter_fragment_text_context(context);
     }
     loop {

@@ -52,6 +52,15 @@ fn chunks_are_invariant_across_html_lexical_boundaries() {
 }
 
 #[test]
+fn plaintext_document_is_invariant_across_every_scalar_boundary() {
+    for src in [
+        "<plaintext>a<b>&amp;</plaintext><p>z",
+        "<p>lead</p><plaintext>one</plaintext><b>two",
+        "<plaintext>a\0b\r\nc<",
+    ] { assert_all_splits(src); }
+}
+
+#[test]
 fn script_data_is_invariant_across_every_scalar_boundary() {
     for src in [
         "<script><!-- x --> y </script><p>z",

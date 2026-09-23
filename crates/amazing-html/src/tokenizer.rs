@@ -43,6 +43,7 @@ pub enum Token {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum State {
     Data,
+    PlainText,
     EndTagOpen,
     TagName,
     BeforeAttrName,
@@ -299,6 +300,7 @@ impl Tokenizer {
     /// local name never call this hook.
     pub(crate) fn enter_text_element(&mut self, name: &str) {
         match name {
+            "plaintext" => self.state = State::PlainText,
             "textarea" | "title" => {
                 self.raw_end = name.to_owned();
                 self.state = State::RcData;
@@ -321,6 +323,7 @@ impl Tokenizer {
     pub(crate) fn enter_fragment_text_context(&mut self, name: &str) {
         self.raw_end.clear();
         self.state = match name {
+            "plaintext" => State::PlainText,
             "textarea" | "title" => State::RcData,
             "style" => State::RawText,
             "script" => State::ScriptData,
@@ -459,6 +462,12 @@ impl Tokenizer {
                         self.text_buf.push(c);
                     },
                     None => unreachable!("run() checked EOF"),
+                },
+
+                State::PlainText => match self.bump() {
+                    Some('\0') => self.text_buf.push('\u{FFFD}'),
+                    Some(c) => self.text_buf.push(c),
+                    None => {},
                 },
 
                 State::EndTagOpen => match self.peek() {
@@ -1475,7 +1484,7 @@ impl Tokenizer {
                 self.flush_text();
                 return;
             },
-            State::Data | State::RawText | State::RcData | State::ScriptData
+            State::Data | State::PlainText | State::RawText | State::RcData | State::ScriptData
             | State::ScriptEscaped | State::ScriptEscapedDash | State::ScriptEscapedDashDash
             | State::ScriptDoubleEscapeStart | State::ScriptDoubleEscaped
             | State::ScriptDoubleEscapedDash | State::ScriptDoubleEscapedDashDash
