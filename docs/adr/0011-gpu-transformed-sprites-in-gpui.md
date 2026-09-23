@@ -50,3 +50,7 @@ same viewport and device. Require zero unexplained pixel or ordering losses
 and no extra upload on property-only changes. Keep the existing GPUI
 presenter mode selectable as the parity oracle until the project accepts the
 new path.
+
+## Decision update (2026-09-24)
+
+Deferred (option C). The pinned GPUI revision only draws axis-aligned sprites, and a transformed primitive needs either a vendored GPUI patch or an upstream change. Neither is justified yet: scroll, translate and opacity already take the GPU path, and rotate/scale keep the CPU-composed fallback. Revisit when frame traces on real pages show rotate/scale cost matters, or when the user approves an upstream submission.
