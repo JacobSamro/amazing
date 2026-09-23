@@ -89,6 +89,29 @@ fn malformed_table_and_tail_tokens_keep_chunk_equivalence() {
 }
 
 #[test]
+fn eof_discards_partial_script_end_tags_after_the_name() {
+    for src in [
+        "<script></SCRIPT ",
+        "<script><!--</script ",
+        "<script><!--<script </script </script/",
+        "<script><!--<script --></script ",
+    ] {
+        let dump = parse(src).dump(NodeIdx(0));
+        assert!(dump.contains("<script>\n"), "{src:?}: {dump}");
+        assert!(!dump.contains("\"</script"), "{src:?}: {dump}");
+        assert_all_splits(src);
+    }
+}
+
+#[test]
+fn numeric_reference_without_digits_remains_literal() {
+    let src = "<p>&# &#X &#x</p>";
+    let dump = parse(src).dump(NodeIdx(0));
+    assert!(dump.contains("\"&# &#X &#x\""), "{dump}");
+    assert_all_splits(src);
+}
+
+#[test]
 fn plaintext_document_is_invariant_across_every_scalar_boundary() {
     for src in [
         "<plaintext>a<b>&amp;</plaintext><p>z",

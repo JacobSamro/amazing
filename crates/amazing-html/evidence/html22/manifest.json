@@ -1,0 +1,45 @@
+{
+  "revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "fixed_base": "e7628370a6b0b4599c01cb23dbf89ef81473f942",
+  "selection_rule": "All #data cases in five previously unselected complete .dat files, in the listed order: foreign-fragment, tests2, tests4, tests10, tests16. Frozen before parser edits; no case filtering.",
+  "normalization": "Same typed tree rows as HTML-21: drop exactly one section-delimiter LF from input, use parse API CRLF/CR handling, parse html5lib | indentation and separate sorted attribute rows mechanically; compare exact tree entries; ignore parse-error rows. Scripting-on mutation and scripting-off input modes, namespaced fragments and unsupported context names are unsupported; parser panics are crashes.",
+  "sources": [
+    {
+      "file": "foreign-fragment.dat",
+      "path": "html/syntax/parsing/resources/foreign-fragment.dat",
+      "sha256": "73e1785753c66420c067e5b29f89b17e7ebe1079687a512040ef19c6d42ac2c2",
+      "bytes": 9082,
+      "cases": 66
+    },
+    {
+      "file": "tests2.dat",
+      "path": "html/syntax/parsing/resources/tests2.dat",
+      "sha256": "9cf76b5f4890065c04fc82ae828379a55b85cbe76f584fb1ef23dcef0a77b86b",
+      "bytes": 13193,
+      "cases": 63
+    },
+    {
+      "file": "tests4.dat",
+      "path": "html/syntax/parsing/resources/tests4.dat",
+      "sha256": "e6003a52e1cbffc361eca7c739cdd4459074ac8c59766d1eb171b9c9eb42f517",
+      "bytes": 1041,
+      "cases": 9
+    },
+    {
+      "file": "tests10.dat",
+      "path": "html/syntax/parsing/resources/tests10.dat",
+      "sha256": "2d2624a819c323661e396d864ac23440053127b5ea7adb44a5904f5ceee5fa64",
+      "bytes": 16458,
+      "cases": 54
+    },
+    {
+      "file": "tests16.dat",
+      "path": "html/syntax/parsing/resources/tests16.dat",
+      "sha256": "3350be682713afc1f6dad37059f2551709497a3643c38c26e1fe36fd07d23745",
+      "bytes": 46454,
+      "cases": 197
+    }
+  ],
+  "total_cases": 389,
+  "retention": "All 501 HTML-21 cases via unchanged html21_probe selection."
+}
