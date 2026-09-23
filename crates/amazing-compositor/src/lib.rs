@@ -4,10 +4,14 @@
 #![forbid(unsafe_code)]
 mod animation;
 mod frame;
+mod hit;
 mod property;
+mod quad;
 use amazing_paint::Surface;
 pub use animation::*;
+pub use hit::*;
 pub use property::*;
+pub use quad::*;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
@@ -139,6 +143,11 @@ pub struct Compositor {
     previous_frame: Option<Surface>,
     previous_layers: Vec<frame::LayerSnapshot>,
     animations: Vec<CompositorAnimation>,
+    resources: ResourceTable,
+    tile_resource_ids: HashMap<TileKey, ResourceId>,
+    next_resource_id: u64,
+    previous_quad_layers: Vec<quad::QuadSnapshot>,
+    previous_quad_size: Option<(u32, u32)>,
 }
 impl Compositor {
     pub fn new(
@@ -188,6 +197,11 @@ impl Compositor {
             previous_frame: None,
             previous_layers: Vec::new(),
             animations: Vec::new(),
+            resources: ResourceTable::default(),
+            tile_resource_ids: HashMap::new(),
+            next_resource_id: 1,
+            previous_quad_layers: Vec::new(),
+            previous_quad_size: None,
         })
     }
     pub fn trees(&self) -> &PropertyTrees {
