@@ -30,9 +30,11 @@ echo "$$" > "$LOCK/pid"
 trap 'rm -rf "$LOCK"' EXIT INT TERM
 
 git fetch -q origin
-COMMIT="$(git rev-parse --short "$REF")"
+COMMIT="$(git rev-parse "$REF")"
 echo "primary-gate: $REF ($COMMIT)"
-REFRESH_REF="$REF" ./scripts/refresh-lane-trees.sh integrator-primary 2>&1 |
+# Pin the exact commit. Passing a symbolic ref like HEAD let a later local
+# merge slip into a gate that was queued for an earlier commit.
+REFRESH_REF="$COMMIT" ./scripts/refresh-lane-trees.sh integrator-primary 2>&1 |
   grep -E "refreshing|lock=|FAIL|SKIP"
 
 PS=$(python3 -c "

@@ -215,6 +215,13 @@ LANE_GRANTS.setdefault("html", []).append("Cargo.lock")
 # amazing-image -> amazing-svg edge to the shell's isolated lockfile. ADDITIONS
 # ONLY; no adapter-only fetch/net edges.
 LANE_GRANTS["replaced-content"].append("crates/amazing-shell-gpui/Cargo.lock")
+# IA-SVG: the driver's amazing-svg dependency. Exactly one line in
+# crates/amazing/Cargo.toml and one "amazing-svg" entry in the amazing
+# package's dependency list in the root Cargo.lock. ADDITIONS ONLY.
+LANE_GRANTS.setdefault("integrator-assist", [])
+# DOM-16: a --timeout-multiplier option (default 1) in the installed WPT runner,
+# recorded in the summary metadata; wptrunner practice for slow builds.
+LANE_GRANTS["dom-bindings"].append("crates/amazing/src/cmd/measure-wpt-dom.py")
 LANE_GRANTS["integrator-assist"] = [
     "crates/amazing-shell-gpui/src/session_state.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
@@ -283,7 +290,7 @@ LANE_GRANTS_REWRITE = {
 }
 # IA-CACHE adds exactly one line, `amazing-fetch = { path = "../amazing-fetch" }`,
 # to the shell manifest. Additive, verified at merge.
-LANE_GRANTS["integrator-assist"] += ["crates/amazing-shell-gpui/Cargo.toml", "crates/amazing-shell-gpui/Cargo.lock"]
+LANE_GRANTS["integrator-assist"] += ["crates/amazing-shell-gpui/Cargo.toml", "crates/amazing-shell-gpui/Cargo.lock", "Cargo.lock"]
 
 
 def grant_is_rewrite(lane: str, path: str) -> bool:
