@@ -1,0 +1,50 @@
+{
+  "revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "files": [
+    {
+      "path": "custom-elements/parser/parser-constructs-custom-elements.html",
+      "local": "parser-constructs-custom-elements.html",
+      "sha256": "77566126024b610f191ce0993c0d27dd0a0e396502fc412e131c60f852fafae7"
+    },
+    {
+      "path": "custom-elements/parser/parser-constructs-custom-element-synchronously.html",
+      "local": "parser-constructs-custom-element-synchronously.html",
+      "sha256": "1e6afa65d72f27aa109351f62f0062bdd5297147be477136cab4915a9f811413"
+    },
+    {
+      "path": "custom-elements/parser/parser-uses-registry-of-owner-document.html",
+      "local": "parser-uses-registry-of-owner-document.html",
+      "sha256": "50402ef949fb466ace37a70dc54454754b8df5afcc9f7d418c388376145234d5"
+    },
+    {
+      "path": "custom-elements/parser/parser-sets-attributes-and-children.html",
+      "local": "parser-sets-attributes-and-children.html",
+      "sha256": "3f8171cb5294a49765426282bde82233ff7455295e889ef271c74ad831ae49d1"
+    },
+    {
+      "path": "shadow-dom/declarative/declarative-shadow-dom-basic.html",
+      "local": "declarative-shadow-dom-basic.html",
+      "sha256": "f4eb6d3e2a5459e08453f1ff25ffcbc9da0cfe696c76221d194f646532274bca"
+    },
+    {
+      "path": "shadow-dom/declarative/declarative-shadow-dom-attachment.html",
+      "local": "declarative-shadow-dom-attachment.html",
+      "sha256": "476db5f0c501d3b1c6d8ac7e634b405d4281a9264ec28306c1997c58a7de34d4"
+    },
+    {
+      "path": "shadow-dom/declarative/declarative-shadow-dom-serialization.html",
+      "local": "declarative-shadow-dom-serialization.html",
+      "sha256": "71f11a388b7248701518520744238a2e4ad29de474f7e828046af909374c79f5"
+    },
+    {
+      "path": "html/semantics/scripting-1/the-template-element/template-element/template-content.html",
+      "local": "template-content.html",
+      "sha256": "dc9db30fcee3334ddcc5fe610082e68d0e89eb817062a60c3662c8c526f24ff0"
+    },
+    {
+      "path": "shadow-dom/declarative/declarative-shadow-dom-opt-in.html",
+      "local": "declarative-shadow-dom-opt-in.html",
+      "sha256": "d1b7e6157c3d01c37cf5db7fe46f4734152b3abf2234e7368bea6083268c67f6"
+    }
+  ]
+}

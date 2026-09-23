@@ -19,6 +19,7 @@ impl ParserCustomElementHost for MockHost {
         assert_eq!(dom.custom_element_state(request.element), CustomElementState::Precustomized);
         assert_eq!(dom.custom_element_definition_of(request.element), Some(request.definition));
         let attribute = dom.get_attribute_ns(request.element, None, "data-k").map(str::to_owned);
+        assert!(dom.children(request.element).next().is_none());
         let fail = self.0.borrow().fail.as_deref() == Some(request.local_name.as_str());
         self.0.borrow_mut().calls.push((request.local_name, request.element, attribute,
             dom.custom_element_state(request.element)));
@@ -58,8 +59,8 @@ fn defined_nested_elements_construct_before_children_with_attributes_and_reactio
     let card = element(&dom, "x-card");
     let leaf = element(&dom, "x-leaf");
     assert_eq!(trace.borrow().calls, vec![
-        ("x-card".into(), card, Some("outer".into()), CustomElementState::Precustomized),
-        ("x-leaf".into(), leaf, Some("inner".into()), CustomElementState::Precustomized),
+        ("x-card".into(), card, None, CustomElementState::Precustomized),
+        ("x-leaf".into(), leaf, None, CustomElementState::Precustomized),
     ]);
     assert_eq!(dom.custom_element_state(card), CustomElementState::Custom);
     assert_eq!(dom.custom_element_state(leaf), CustomElementState::Custom);
@@ -104,7 +105,7 @@ fn undefined_and_customized_built_in_paths_remain_distinct() {
     let button = element(&dom, "button");
     assert_eq!(dom.dump(NodeIdx(0)), before.dump(NodeIdx(0)));
     assert_eq!(trace.borrow().calls[0].0, "button");
-    assert_eq!(trace.borrow().calls[0].2.as_deref(), Some("v"));
+    assert_eq!(trace.borrow().calls[0].2.as_deref(), None);
     assert_eq!(dom.custom_element_state(button), CustomElementState::Custom);
     assert_eq!(dom.custom_element_definition_of(button), Some(fancy_id));
     assert!(!dom.take_custom_element_reactions().iter().any(|reaction|
@@ -170,4 +171,40 @@ fn host_can_mutate_dom_during_constructor_without_a_parser_borrow() {
     let edited = element(&dom, "x-edit");
     assert_eq!(dom.get_attribute_ns(edited, None, "constructed"), Some("yes"));
     assert_eq!(dom.custom_element_state(edited), CustomElementState::Custom);
+}
+
+#[test]
+fn template_contents_use_inert_owner_registry_and_delay_upgrade() {
+    let mut dom = Dom::new();
+    define(&mut dom, "x-card", "x-card", 40);
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    let dom = parse_with_custom_element_host(
+        "<template><x-card data-k=inert></x-card></template><x-card data-k=live></x-card>",
+        dom, host(&trace));
+    let cards: Vec<_> = (0..dom.node_count()).map(|n| NodeIdx(n as u32))
+        .filter(|&node| dom.name(node) == Some("x-card")).collect();
+    assert_eq!(cards.len(), 2);
+    assert_eq!(trace.borrow().calls.len(), 1);
+    assert_eq!(dom.custom_element_state(cards[0]), CustomElementState::Undefined);
+    assert_ne!(dom.owner_document(cards[0]), Some(NodeIdx(0)));
+    assert_eq!(dom.custom_element_state(cards[1]), CustomElementState::Custom);
+}
+
+#[test]
+fn streamed_constructor_runs_before_token_attributes_and_children() {
+    let mut dom = Dom::new();
+    define(&mut dom, "x-card", "x-card", 50);
+    let trace = Rc::new(RefCell::new(Trace::default()));
+    let mut parser = crate::IncrementalParser::with_custom_element_host(dom, host(&trace));
+    for chunk in ["<x-ca", "rd data-", "k=value", "><span>", "child</span></x-card>"] {
+        parser.push_chunk(chunk);
+    }
+    let mut dom = parser.finish();
+    let card = element(&dom, "x-card");
+    assert_eq!(trace.borrow().calls, vec![("x-card".into(), card, None,
+        CustomElementState::Precustomized)]);
+    assert_eq!(dom.get_attribute_ns(card, None, "data-k"), Some("value"));
+    assert!(dom.dump(NodeIdx(0)).contains("<span>"));
+    assert!(matches!(dom.take_custom_element_reactions().as_slice(),
+        [CustomElementReaction::AttributeChanged { .. }, CustomElementReaction::Connected { .. }]));
 }
