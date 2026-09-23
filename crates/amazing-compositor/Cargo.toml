@@ -10,5 +10,8 @@ rust-version.workspace = true
 amazing-paint = { path = "../amazing-paint" }
 
 [dev-dependencies]
+amazing-css = { path = "../amazing-css" }
+amazing-dom = { path = "../amazing-dom" }
+amazing-html = { path = "../amazing-html" }
 amazing-layout = { path = "../amazing-layout" }
 amazing-text = { path = "../amazing-text" }

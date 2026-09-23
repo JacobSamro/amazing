@@ -48,3 +48,23 @@ shell does not yet install CSS Animation/Transition DOM event or Web Animations
 bindings. Integrator-assist must connect the compositor's typed style and
 keyframe inputs to CSS-14, apply main-thread updates, and dispatch returned
 events and promise signals before the unmodified selections are measurable.
+
+## COMP-7 full mutation baseline
+
+`examples/mutation_trace.rs` alternates a class on a live parsed DOM, then
+runs full style/layout, constructs a paint view, builds a new compositor frame,
+and checks its pixels against the full painter. It measures from mutation to
+CPU-composed frame on two existing compositor fixtures, 20 frames each,
+512×512, fallback text, win-001 release build. Source was local `c167fb3`
+plus COMP-7 edits, transferred as archive SHA-256
+`73de3b76055b9e8efb12fd8fd0736e27fcfb47a07267114fc757d40ae68d4137`.
+
+| Fixture | Mutation→frame p50 / p95 | Style+layout p50 | View p50 | Frame p50 | Items / uploads per frame |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Article class | 37.546 / 40.501 ms | 7.103 ms | 0.518 ms | 29.826 ms | 16 / 4 |
+| Effects scroller class | 61.819 / 63.946 ms | 6.481 ms | 0.417 ms | 54.894 ms | 14 / 12 |
+
+The measurement includes a fresh tile raster and reference CPU presentation
+but excludes the separate parity paint, GPUI upload/presentation, network and
+JavaScript. Every measured frame matched full-painter RGBA pixels. The trace
+CSV and summary are under `crates/amazing-compositor/evidence/comp7/`.

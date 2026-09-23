@@ -1,9 +1,11 @@
 //! Stateless Web Animations timing and compositor-owned property animations.
 mod css;
+mod scroll;
 mod values;
 mod web;
 use crate::{Compositor, EffectId, Matrix4, TransformId, TreeError};
 pub use css::*;
+pub use scroll::*;
 pub use values::*;
 pub use web::*;
 

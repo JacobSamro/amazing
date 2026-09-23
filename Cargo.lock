@@ -117,6 +117,9 @@ version = "0.0.1"
 name = "amazing-compositor"
 version = "0.0.1"
 dependencies = [
+ "amazing-css",
+ "amazing-dom",
+ "amazing-html",
  "amazing-layout",
  "amazing-paint",
  "amazing-text",
