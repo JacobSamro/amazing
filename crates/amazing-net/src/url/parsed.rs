@@ -1,5 +1,6 @@
 //! Owned WHATWG URL record. All construction goes through the basic parser.
-use super::host::{AsciiOnly, Host, IdnaProvider};
+use super::host::{Host, IdnaProvider};
+use super::idna::Idna;
 use super::parser;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
@@ -39,7 +40,7 @@ impl ParsedUrl {
         Self::parse_with_base(input, None)
     }
     pub fn parse_with_base(input: &str, base: Option<&Self>) -> Result<Self, ParseError> {
-        Self::parse_with_idna(input, base, &AsciiOnly)
+        Self::parse_with_idna(input, base, &Idna)
     }
     pub fn parse_with_idna(
         input: &str,

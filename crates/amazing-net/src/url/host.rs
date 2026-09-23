@@ -1,13 +1,12 @@
 use super::encoding::{percent_decode, percent_encode, PercentEncodeSet};
 use super::parsed::ParseError;
 
-/// Trusted future Unicode adapter. Supply URL Standard domain-parser ToASCII
-/// (UTS #46, nontransitional, Bidi/Joiners checked); no adapter/data is bundled.
-/// The URL layer independently validates returned ASCII and forbidden points.
+/// URL Standard domain-parser ToASCII adapter. The default is bundled UTS #46;
+/// callers can supply another provider for tests and embedding.
 pub trait IdnaProvider {
     fn domain_to_ascii(&self, domain: &str) -> Result<String, ParseError>;
 }
-/// Default policy explicitly reports Unicode domain hosts as unsupported.
+/// Compatibility adapter that reports Unicode domain hosts as unsupported.
 pub struct AsciiOnly;
 impl IdnaProvider for AsciiOnly {
     fn domain_to_ascii(&self, _: &str) -> Result<String, ParseError> {

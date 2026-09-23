@@ -194,29 +194,28 @@ Sources: https://url.spec.whatwg.org/ (living standard dated 2026-09-10),
 especially basic URL parsing, host parsing, serialization, and origin sections.
 The parser does not select a PSL or introduce dependencies.
 
-### Deferred Unicode/IDNA seam
+### Unicode/IDNA seam (NET-18)
 
 `IdnaProvider::domain_to_ascii` receives the UTF-8-decoded, percent-decoded
-Unicode special host. `AsciiOnly`, the default provider, returns the distinct
-`ParseError::IdnaRequired`. This includes malformed UTF-8 decoded with replacement;
-such inputs are not misreported as proven URL failures by the corpus runner.
-Unicode characters in paths/query/fragments/userinfo, and opaque hosts, do not
-need IDNA and are processed normally. ASCII `xn--` labels are retained as ASCII:
-the current URL Standard's non-strict ASCII domain branch lowercases even when
-strict Unicode validation would diagnose a label. No punycode codec is bundled.
+Unicode special host. The bundled `Idna` is the default provider; `AsciiOnly`
+remains available to measure the old unsupported baseline. Unicode characters
+in paths/query/fragments/userinfo and opaque hosts do not need IDNA. ASCII
+`xn--` labels remain ASCII under the URL Standard's non-strict compatibility
+branch, even when strict Unicode validation would diagnose the label.
 
-A future provider must supply version-pinned UTS #46 Unicode mapping and ToASCII,
-nontransitional processing, CheckBidi/CheckJoiners true, IgnoreInvalidPunycode
-false, and non-strict CheckHyphens/UseSTD3ASCIIRules/VerifyDnsLength false. The
-full domain-parser diagnostic path also needs strict ToASCII results with those
-three flags true; the current API does not surface validation diagnostics.
-The provider must handle Unicode normalization/mapping, label separator mapping,
-punycode, invalid code points and empty output, not merely lowercase strings.
-The URL layer still checks ASCII output, forbidden domain code points and IP
-classification after the provider. Provider data/source licensing, Unicode
-revision, reproducible generation and update policy need project-level approval.
-No Unicode mapping tables, PSL, third-party core crate or provider implementation
-is included here. The unit-test provider is only a fixed stub proving the seam.
+The provider implements version-pinned Unicode 17.0 UTS #46 mapping, NFC,
+Punycode, label validation, CheckBidi and CheckJoiners. It uses nontransitional
+processing, with CheckHyphens, UseSTD3ASCIIRules and VerifyDnsLength false.
+The full domain-parser diagnostic path still needs strict ToASCII results with
+those three flags true; this API does not expose validation diagnostics.
+The URL layer checks ASCII output, forbidden domain code points and IP
+classification after the provider.
+
+Sources and hashes are in `crates/amazing-net/tests/wpt/idna/PROVENANCE.md`.
+Generated table source is 400,566 bytes across 2,702 lines, with 9,262
+binary-searched mapping spans. Unicode 18.0 assigned U+3E8AC, which the pinned
+WPT revision rejects; 17.0 is the fixed data version for this gate. No
+third-party core crate is used.
 
 ### Concrete adoption order for a future brief
 

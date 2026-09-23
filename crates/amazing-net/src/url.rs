@@ -1,7 +1,7 @@
 //! URL parsing, relative resolution, and percent-decoding.
 //!
 //! [`ParsedUrl`] is the immutable WHATWG basic-parser API (UTF-8; Unicode
-//! domains require an [`IdnaProvider`]). It is the live network transport
+//! domains use bundled UTS #46 data). It is the live network transport
 //! and Fetch policy parser. The public-field [`Url`] below is the deprecated legacy
 //! API; the following implementation notes describe that legacy API only.
 //!
@@ -38,10 +38,12 @@
 // The legacy public-field Url below is only an external-consumer shim.
 mod encoding;
 mod host;
+mod idna;
 mod parsed;
 mod parser;
 pub use encoding::{percent_encode, PercentEncodeSet};
 pub use host::{AsciiOnly, Host, IdnaProvider};
+pub use idna::{domain_to_ascii, domain_to_unicode, punycode_decode, punycode_encode, Idna};
 pub use parsed::{ParseError, ParsedUrl, TupleOrigin, UrlOrigin};
 
 use std::fmt;
