@@ -291,6 +291,9 @@ LANE_GRANTS["layout"].append("crates/amazing-paint/src/paint.rs")
 # STANDING: js-lang adds Unsupported fallback arms in vm/compiler.rs for new AST
 # variants (atomic fallback per ADR 0003). ADDED ARMS ONLY.
 LANE_GRANTS["js-lang"].append("crates/amazing-js/src/vm/compiler.rs")
+# DOM priority WebIDL fixes: [Global] this-coercion in the legacy Window EventTarget
+# natives (interp_builtins.rs) and a generic PutForwards facade (interp_bindings.rs).
+LANE_GRANTS.setdefault("dom-bindings", []).extend(["crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/interp_bindings.rs"])
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
