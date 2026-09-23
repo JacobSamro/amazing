@@ -598,3 +598,113 @@ aspect-ratio and sticky work remains outside LAYOUT-4. The measured source
 manifests, 40 normalized reports, hash audit, `summary.json`, and reviewed
 pixels are in [LAYOUT-4 evidence](../../crates/amazing-layout/evidence/layout4/README.md).
 No next ticket starts at this boundary.
+
+## LAYOUT-5 — Broad flex/grid convergence (in progress)
+
+Fixed source base: merged dev `bebca0f` (includes LAYOUT-4 and RC-4). First,
+per integrator direction, a freshly built Windows renderer remeasured broad
+geometry twice at pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`,
+800 × 600: **39/61** both times, with identical per-case classifications and
+actual/reference/diff hashes to LAYOUT-4's final geometry report. RC-4 did not
+change these pixels.
+
+The first two broad flex/grid runs on that same immutable renderer are **61/200**,
+139 mismatch, zero timeout/unsupported/crash, and identical per-case result and
+pixel hashes. The focused Level-1 corpus remains to be gated after changes.
+The broad manifest is deterministic but intentionally includes draft features
+and tests whose references use other unsupported capabilities. Counts below
+are affected failing cases in the current 200-case sample, **not promised pass
+gains**; feature sets overlap.
+
+| Feature signature in failing fixture | Raw affected | Blink/WebKit both pass at pin | Dependency / priority |
+| --- | ---: | ---: | --- |
+| Grid Lanes path (Grid Level 3 draft) | 61 | 17 | CSS currently rejects `display: grid-lanes`; routed, not the sole compatibility priority |
+| Subgrid path | 19 | 8 | 17 also Grid Lanes; only 2 independent subgrid fixtures, both consensus; CSS rejects `subgrid` track value |
+| Baseline alignment declaration | 15 | 6 | Layout-owned; includes Grid Lanes and outer inline/abspos dependencies |
+| Outer `inline-flex`/`inline-grid` declaration | 10 | 6 | Layout-owned atomic inline subtree boundary; overlaps baseline and Grid Lanes |
+| Aspect-ratio declaration | 3 | 0 | Two also Grid Lanes; no current consensus yield |
+| `grid-template-areas` declaration | 0 | 0 | No sampled failure to credit |
+| `repeat(auto-fit, …)` declaration | 0 | 0 | No sampled failure to credit |
+
+Exact-revision oracles use wpt.fyi Chrome 154 run `5182906107691008` and
+Safari 26.6 run `5141363439173632`, both reporting the full pinned WPT hash.
+Among 139 raw mismatches, 88 pass in both engines. Grid Lanes is split 17
+both-pass, 41 Chrome-pass/Safari-fail, one Chrome-fail/Safari-pass and two
+both-fail. Subgrid is split 8 both-pass, nine Chrome-pass/Safari-fail, one
+Chrome-fail/Safari-pass and one both-fail. This re-ranks compatibility work:
+the 61 raw Grid Lanes mismatches are not a 61-case cross-engine gap. Source
+signatures and every browser result are retained in `evidence/layout5/`.
+
+The CSS prerequisites are recorded in `.agents/layout/questions.md` for
+integrator routing. Layout will not edit another lane's crate or treat invalid
+author CSS as supported. The first self-contained implementation candidate is
+baseline alignment; after that, outer inline participation has the same six
+consensus-affected fixtures but a wider interface change. Aspect ratio,
+template areas and auto-fit are currently below the measured threshold.
+
+### LAYOUT-5 context checkpoint
+
+The first layout-owned slice implements first-baseline cross-axis sharing for
+row flex items. It measures each participating item's in-flow line baseline
+(or synthesizes a border-end baseline), expands a flex line by the maximum
+group ascent plus maximum group descent, and positions the items on that shared
+baseline. Two public layout tests cover mixed font sizes and `align-self`.
+Windows layout nextest is **203/203 passed** and separate layout doctests are
+**0 tests, 0 failures**. The first test compile failed only because the new
+test assertions omitted borrows; the corrected run passed. No after-render WPT
+run exists yet, so this checkpoint claims no broad or focused pass gain and no
+regression result for the code change. `lane/layout` stops for restart here.
+
+The consensus-weighted ranking is more useful than the raw Grid Lanes count:
+Grid Lanes has 17 cross-engine passing fixtures among 61 raw failures, while
+41 are Chrome-pass/Safari-fail; subgrid has eight consensus cases among 19 raw
+failures, six of those eight overlapping Grid Lanes, leaving two independent
+consensus cases. Baseline alignment and outer inline display each appear in six
+consensus failures (overlapping other features); aspect-ratio declarations
+appear in three raw failures but zero dual-engine passes, and this sampled
+manifest has no failing `grid-template-areas` or `auto-fit` declaration.
+`browser-oracles.json` records both exact-revision runs and statuses for all
+200 cases. These are source-signature affected counts, not isolated algorithm
+pass guarantees. Intrinsic spanning distribution has no isolated case in this
+sample; span syntax is mostly nested under Grid Lanes/subgrid, so it is not
+assigned independent pass credit.
+
+### LAYOUT-5 completion gate on fixed `bebca0f`
+
+The first-baseline flex slice was proven on a fresh pinned renderer: broad
+flex/grid **61/200 twice**, unchanged from the original 61/200, with no
+classification movement. It changed four pixel outputs, none in a dual-engine
+consensus case. The successor added atomic outer participation for
+non-replaced `inline-flex` and `inline-grid`: the parent line now sizes and
+places their existing flex/grid subtrees, preserves them for paint traversal,
+and repositions them after shaped text establishes the final line baseline.
+Two additional Windows layout tests cover shared-line geometry and the first
+flex-item baseline in both fallback and shaped text paths.
+
+The combined implementation remains **61/200 twice** on the broad selection,
+with identical per-case classification and image hashes within each pair.
+It gains the two dual-engine-consensus `gap-006-rtl/lr` cases and loses two
+consensus Grid Lanes/subgrid cases, for **raw +2/−2, consensus +2/−2, net 0**.
+The lost tests use `display:inline-grid-lanes` and `subgrid`, which CSS does
+not parse yet, while their references use newly supported `inline-grid`.
+Their old matches were exposed by changing the reference's layout, not evidence
+of Grid Lanes/subgrid support. The two baseline multi-item cases remain
+mismatches because their shared reference requires non-replaced `inline-block`.
+No broader pass gain is claimed.
+
+The focused flex/grid gate is **24/24 twice**. Against LAYOUT-4's final reports,
+there are zero per-case pass losses in geometry **39/61**, tables **9/12**,
+floats **6/8**, block collapse **9/9**, position **12/12**, text flow **14/16**,
+contents **6/6**, paint **24/24**, and CSS Images **12/12**; every selection
+was repeated with stable classifications and actual/reference/diff hashes.
+Windows layout nextest passed **205/205**, layout doctests ran **0**; workspace
+nextest passed **1,313** with **3 skipped** twice, and separate workspace
+doctests passed **2/2** twice. The final source manifest, renderer, image
+adapter, logs, oracles, 26 after-render reports, and normalized comparison are
+retained in `crates/amazing-layout/evidence/layout5/`. The source base stayed
+fixed; later `origin/dev` drift did not touch `crates/amazing-layout`.
+
+**Next ticket, not started:** LAYOUT-6 adds Grid Lanes and subgrid algorithms
+after CSS-6 supplies `display:grid-lanes`/`inline-grid-lanes` and `subgrid`
+track grammar. The old accidental broad passes must not be credited as
+implemented capability before that dependency is satisfied.

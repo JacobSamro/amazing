@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "layout5-outer-inline-diagnostic"
+  },
+  "sparse_paths": [
+    "css/css-flexbox",
+    "css/css-grid"
+  ],
+  "tests": [
+    {
+      "id": "css-flexbox__flexbox_justifycontent-end.html",
+      "test": "css/css-flexbox/flexbox_justifycontent-end.html"
+    },
+    {
+      "id": "css-flexbox__flexbox-baseline-multi-item-horiz-001a.html",
+      "test": "css/css-flexbox/flexbox-baseline-multi-item-horiz-001a.html"
+    },
+    {
+      "id": "css-flexbox__flexbox-baseline-multi-item-horiz-001b.html",
+      "test": "css/css-flexbox/flexbox-baseline-multi-item-horiz-001b.html"
+    },
+    {
+      "id": "css-flexbox__gap-006-rtl.html",
+      "test": "css/css-flexbox/gap-006-rtl.html"
+    },
+    {
+      "id": "css-flexbox__gap-006-lr.html",
+      "test": "css/css-flexbox/gap-006-lr.html"
+    }
+  ]
+}

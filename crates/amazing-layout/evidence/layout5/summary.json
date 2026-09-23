@@ -1,0 +1,303 @@
+{
+  "counts": {
+    "baseline": {
+      "pass": 61,
+      "mismatch": 139,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "baseline_alignment": {
+      "pass": 61,
+      "mismatch": 139,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "combined": {
+      "pass": 61,
+      "mismatch": 139,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    }
+  },
+  "baseline_alignment": {
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_pixels_or_classification": [
+      "css-flexbox__flex-order-wrap-reverse-baseline.html",
+      "css-flexbox__flexbox-collapsed-item-baseline-001.html",
+      "css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-002b.html",
+      "css-grid__grid-lanes__alignment__column-fill-reverse-justify-items-003.html"
+    ]
+  },
+  "outer_inline_increment": {
+    "raw_gains": [
+      "css-flexbox__gap-006-rtl.html",
+      "css-flexbox__gap-006-lr.html"
+    ],
+    "raw_losses": [
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-larger-002.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-orthogonal-writing-mode-004.html"
+    ],
+    "consensus_gains": [
+      "css-flexbox__gap-006-rtl.html",
+      "css-flexbox__gap-006-lr.html"
+    ],
+    "consensus_losses": [
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-larger-002.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-orthogonal-writing-mode-004.html"
+    ],
+    "changed_pixels_or_classification": [
+      "css-flexbox__gap-005-rl.html",
+      "css-flexbox__gap-004-rtl.html",
+      "css-flexbox__flexbox-baseline-multi-item-horiz-001a.html",
+      "css-flexbox__flexbox-baseline-multi-item-horiz-001b.html",
+      "css-flexbox__gap-006-rtl.html",
+      "css-flexbox__gap-005-lr.html",
+      "css-flexbox__gap-006-lr.html",
+      "css-grid__grid-lanes__gap__grid-lanes-gap-002.html",
+      "css-grid__grid-lanes__items__column-item-percentage-sizes-002.html",
+      "css-grid__grid-lanes__track-sizing__auto-repeat__row-auto-repeat-014.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-larger-002.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__auto-track-sizing-001.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-orthogonal-writing-mode-004.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-014.html",
+      "css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid-lanes__track-sizing__grid-lanes-subgrid-intrinsic-sizing.html",
+      "css-grid__grid-lanes__item-placement__grid-lanes-item-placement-003.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-002a.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__row-subgrid-extra-margin-001.html",
+      "css-grid__grid-lanes__item-placement__grid-lanes-item-placement-002.html",
+      "css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid-lanes__track-sizing__grid-lanes-subgrid.html"
+    ]
+  },
+  "overall": {
+    "raw_gains": [
+      "css-flexbox__gap-006-rtl.html",
+      "css-flexbox__gap-006-lr.html"
+    ],
+    "raw_losses": [
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-larger-002.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-orthogonal-writing-mode-004.html"
+    ],
+    "consensus_gains": [
+      "css-flexbox__gap-006-rtl.html",
+      "css-flexbox__gap-006-lr.html"
+    ],
+    "consensus_losses": [
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-larger-002.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-orthogonal-writing-mode-004.html"
+    ],
+    "changed_pixels_or_classification": [
+      "css-flexbox__gap-005-rl.html",
+      "css-flexbox__gap-004-rtl.html",
+      "css-flexbox__flex-order-wrap-reverse-baseline.html",
+      "css-flexbox__flexbox-collapsed-item-baseline-001.html",
+      "css-flexbox__flexbox-baseline-multi-item-horiz-001a.html",
+      "css-flexbox__flexbox-baseline-multi-item-horiz-001b.html",
+      "css-flexbox__gap-006-rtl.html",
+      "css-flexbox__gap-005-lr.html",
+      "css-flexbox__gap-006-lr.html",
+      "css-grid__grid-lanes__gap__grid-lanes-gap-002.html",
+      "css-grid__grid-lanes__items__column-item-percentage-sizes-002.html",
+      "css-grid__grid-lanes__track-sizing__auto-repeat__row-auto-repeat-014.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-larger-002.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__auto-track-sizing-001.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-subgrid-orthogonal-writing-mode-004.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__gap__column-subgrid-grid-gap-014.html",
+      "css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid-lanes__track-sizing__grid-lanes-subgrid-intrinsic-sizing.html",
+      "css-grid__grid-lanes__item-placement__grid-lanes-item-placement-003.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__grid-lanes-subgrid-002a.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__track-sizing__row-subgrid-extra-margin-001.html",
+      "css-grid__grid-lanes__baseline__column-grid-lanes-container-baseline-002b.html",
+      "css-grid__grid-lanes__item-placement__grid-lanes-item-placement-002.html",
+      "css-grid__grid-lanes__alignment__column-fill-reverse-justify-items-003.html",
+      "css-grid__grid-lanes__subgrid__grid-lanes-subgridded-to-grid-lanes__track-sizing__grid-lanes-subgrid.html"
+    ]
+  },
+  "regressions": {
+    "flex-grid": {
+      "previous_counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    },
+    "geometry": {
+      "previous_counts": {
+        "pass": 39,
+        "mismatch": 22,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_counts": {
+        "pass": 39,
+        "mismatch": 22,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    },
+    "tables": {
+      "previous_counts": {
+        "pass": 9,
+        "mismatch": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_counts": {
+        "pass": 9,
+        "mismatch": 3,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    },
+    "floats": {
+      "previous_counts": {
+        "pass": 6,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_counts": {
+        "pass": 6,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    },
+    "block-collapse": {
+      "previous_counts": {
+        "pass": 9,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_counts": {
+        "pass": 9,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    },
+    "position": {
+      "previous_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    },
+    "text-flow": {
+      "previous_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    },
+    "contents": {
+      "previous_counts": {
+        "pass": 6,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_counts": {
+        "pass": 6,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    },
+    "paint-compositing": {
+      "previous_counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    },
+    "images": {
+      "previous_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    }
+  }
+}

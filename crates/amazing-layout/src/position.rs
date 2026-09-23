@@ -90,6 +90,10 @@ fn position_subtree(
         .collect();
     let mut positioned = std::mem::take(&mut box_.positioned);
     for (child, static_anchor) in positioned.iter_mut().zip(anchors) {
+        if child.inline_atomic {
+            position_subtree(child, viewport, own_padding_box, descendant_positioned_cb, fonts);
+            continue;
+        }
         let containing_block = if position_kind(child) == PositionKind::Fixed {
             viewport
         } else {

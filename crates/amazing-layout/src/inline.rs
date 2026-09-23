@@ -103,7 +103,7 @@ pub(crate) fn tokenize(items: &[InlineNode]) -> Vec<Token> {
                     pending_space = false;
                 }
             }
-            InlineNode::Replaced { node, size, .. } => {
+            InlineNode::Replaced { node, size, .. } | InlineNode::Atomic { node, size } => {
                 tokens.push(Token::Replaced {
                     node: *node,
                     size: *size,
@@ -1620,7 +1620,7 @@ fn shape_chunk(
                 previous_after = ShapingBoundary::Hard;
                 continue;
             }
-            InlineNode::Replaced { node, size, .. } => {
+            InlineNode::Replaced { node, size, .. } | InlineNode::Atomic { node, size } => {
                 let (_, style) = previous_style
                     .clone()
                     .or_else(|| following_styles[item_index].clone())

@@ -260,6 +260,30 @@ fn is_out_of_flow(style: &ComputedStyle) -> bool {
     })
 }
 
+fn is_atomic_inline_container(style: &ComputedStyle) -> bool {
+    matches!(style.get("display"), Some("inline-flex" | "inline-grid"))
+        && crate::floats::side(style).is_none()
+}
+
+fn push_atomic_inline(
+    dom: &Dom,
+    styled: &StyledDom,
+    child: NodeIdx,
+    parent_font: f32,
+    fonts: &FontSource,
+    replaced: &dyn ReplacedElementProvider,
+    inlines: &mut Vec<InlineNode>,
+    positioned: &mut Vec<LayoutBox>,
+) {
+    let mut box_ = build_element(dom, styled, child, parent_font, fonts, replaced);
+    box_.inline_atomic = true;
+    positioned.push(box_);
+    inlines.push(InlineNode::Atomic {
+        node: child,
+        size: crate::IntrinsicSize { width: 0.0, height: 0.0 },
+    });
+}
+
 struct ClassifiedChildren {
     flow: Flow,
     positioned: Vec<LayoutBox>,
@@ -1191,6 +1215,10 @@ fn classify_children(
                             inlines.push(item);
                         }
                     }
+                    _ if is_atomic_inline_container(&child_style) => {
+                        push_atomic_inline(dom, styled, child, entry.parent_font, fonts,
+                            replaced, &mut inlines, &mut positioned);
+                    }
                     _ if matches!(
                         parse_display(&child_style),
                         Display::Block | Display::Flex | Display::Grid
@@ -1288,7 +1316,8 @@ fn has_renderable_inline_content(inlines: &[InlineNode]) -> bool {
                         | amazing_text::WhiteSpace::BreakSpaces
                 )
         }
-        InlineNode::Break | InlineNode::Replaced { .. } | InlineNode::Ruby { .. } => true,
+        InlineNode::Break | InlineNode::Replaced { .. } | InlineNode::Atomic { .. }
+        | InlineNode::Ruby { .. } => true,
         InlineNode::BidiStart { .. } | InlineNode::BidiEnd => false,
     })
 }
@@ -1365,6 +1394,10 @@ fn flatten_inline(
                         {
                             inlines.push(item);
                         }
+                    }
+                    _ if is_atomic_inline_container(&cs) => {
+                        push_atomic_inline(dom, styled, child, entry.parent_font, fonts,
+                            replaced, inlines, positioned_out);
                     }
                     _ if matches!(
                         parse_display(&cs),
@@ -1551,6 +1584,7 @@ mod tests {
                 InlineNode::BidiEnd => ("<bidi-end>", 0.0),
                 InlineNode::Break => ("<br>", 0.0),
                 InlineNode::Replaced { .. } => ("<replaced>", 0.0),
+                InlineNode::Atomic { .. } => ("<atomic>", 0.0),
                 InlineNode::Ruby { .. } => ("<ruby>", 0.0),
             }
         }

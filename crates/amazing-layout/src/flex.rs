@@ -13,12 +13,11 @@
 //!   scaled shrink factors, automatic minimums, and intrinsic keywords
 //! - order (stable sort), gap / row-gap / column-gap
 //! - justify-content: flex-start/end, center, space-between/around/evenly
-//! - align-items / align-self: stretch, flex-start/end, center
+//! - align-items / align-self: stretch, flex-start/end, center, first baseline
 //! - physical/logical margins and negative outer sizes; main-axis auto
 //!   margins absorb free space before justify-content
 //!
 //! Deviations (documented):
-//! - baseline alignment behaves like flex-start
 //! - column mode is single-line; wrap-reverse does not reverse cross-start
 //! - cross-axis auto margins count as zero
 //! - transferred aspect-ratio suggestions and inline outer display are
@@ -76,6 +75,7 @@ enum Pack {
     Start,
     End,
     Center,
+    Baseline,
     SpaceBetween,
     SpaceAround,
     SpaceEvenly,
@@ -163,9 +163,9 @@ fn parse_pack(v: Option<&str>, default: Pack) -> Pack {
     }
 }
 
-/// Alignment keywords; baseline ≈ flex-start (documented).
 fn parse_align(v: Option<&str>, default: Pack) -> Pack {
     match v {
+        Some(v) if v.eq_ignore_ascii_case("baseline") || v.eq_ignore_ascii_case("first baseline") => Pack::Baseline,
         Some(v) if v.eq_ignore_ascii_case("flex-start") || v.eq_ignore_ascii_case("start") => {
             Pack::Start
         },
@@ -393,6 +393,22 @@ fn outer_cross(items: &[LayoutBox], i: usize) -> f32 {
         + items[i].margin.bottom.unwrap_or(0.0)
 }
 
+/// The first in-flow line supplies the alignment baseline. A box without a
+/// usable line synthesizes one at its border-box block end.
+pub(crate) fn first_baseline(item: &LayoutBox) -> f32 {
+    if let Some(line) = item.lines.first() {
+        return line.baseline;
+    }
+    let children = match &item.flow {
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children,
+        _ => return item.border_box.y + item.border_box.h,
+    };
+    children
+        .first()
+        .map(first_baseline)
+        .unwrap_or(item.border_box.y + item.border_box.h)
+}
+
 fn resolve_model(it: &mut LayoutBox, cbw: f32) {
     it.margin = values::resolve_margins(&it.style, it.font_size, cbw);
     it.padding = values::resolve_padding(&it.style, it.font_size, cbw);
@@ -611,6 +627,30 @@ fn layout_row(
         // Line cross size, then stretch items whose cross size is auto.
         let mut line_cross =
             line.iter().map(|&i| outer_cross(items, i)).fold(0.0f32, f32::max);
+        // A baseline-sharing group contributes its largest ascent plus its
+        // largest descent to the line cross size. Those extrema can belong to
+        // different items, so the tallest single item is not sufficient.
+        let baseline_metrics = line
+            .iter()
+            .filter(|&&i| props[i].align_self.unwrap_or(spec.align_items) == Pack::Baseline)
+            .filter(|&&i| {
+                !margin_is_auto(&items[i].style, "top")
+                    && !margin_is_auto(&items[i].style, "bottom")
+            })
+            .map(|&i| {
+                let baseline = first_baseline(&items[i]) - items[i].border_box.y;
+                let ascent = items[i].margin.top.unwrap_or(0.0) + baseline;
+                (ascent, outer_cross(items, i) - ascent)
+            })
+            .fold(None, |acc: Option<(f32, f32)>, (ascent, descent)| {
+                Some(match acc {
+                    Some((a, d)) => (a.max(ascent), d.max(descent)),
+                    None => (ascent, descent),
+                })
+            });
+        if let Some((ascent, descent)) = baseline_metrics {
+            line_cross = line_cross.max(ascent + descent);
+        }
         // A single line under default `align-content: stretch` first
         // grows to the container's definite cross size; items then
         // stretch into the grown line below.
@@ -690,13 +730,21 @@ fn layout_row(
             let align = props[i].align_self.unwrap_or(spec.align_items);
             let bh = it.border_box.h;
             let vc = v_chrome(it);
-            let by = line_top
-                + it.margin.top.unwrap_or(0.0)
-                + match align {
-                    Pack::End => line_cross - bh - vc,
-                    Pack::Center => (line_cross - bh - vc) / 2.0,
-                    _ => 0.0,
-                };
+            let by = if align == Pack::Baseline {
+                if let Some((ascent, _)) = baseline_metrics {
+                    line_top + ascent - (first_baseline(it) - it.border_box.y)
+                } else {
+                    line_top + it.margin.top.unwrap_or(0.0)
+                }
+            } else {
+                line_top
+                    + it.margin.top.unwrap_or(0.0)
+                    + match align {
+                        Pack::End => line_cross - bh - vc,
+                        Pack::Center => (line_cross - bh - vc) / 2.0,
+                        _ => 0.0,
+                    }
+            };
             translate(it, bx - it.border_box.x, by - it.border_box.y);
             if reverse {
                 cursor -= finals[pos];
@@ -1035,6 +1083,11 @@ pub(crate) fn translate(b: &mut LayoutBox, dx: f32, dy: f32) {
         },
         Flow::Inlines(_) | Flow::Empty => {},
     }
+    for child in &mut b.positioned {
+        if child.inline_atomic {
+            translate(child, dx, dy);
+        }
+    }
 }
 
 fn shift(r: Rect, dx: f32, dy: f32) -> Rect {
@@ -1305,6 +1358,30 @@ mod tests {
         );
         let k = kids(&root);
         assert!(close(k[0].border_box.y - 8.0, 30.0), "y={}", k[0].border_box.y);
+    }
+
+    #[test]
+    fn baseline_aligned_flex_items_share_their_text_baseline() {
+        let root = lay(
+            "<body><div style=\"display:flex;align-items:baseline\"><div style=\"font-size:12px\">small</div><div style=\"font-size:30px\">large</div></div></body>",
+            "",
+            800.0,
+        );
+        let k = kids(&root);
+        assert_eq!(k.len(), 2);
+        assert!(close(first_baseline(&k[0]), first_baseline(&k[1])));
+        assert!(k[0].border_box.y > k[1].border_box.y);
+    }
+
+    #[test]
+    fn align_self_baseline_uses_the_same_group_as_align_items() {
+        let root = lay(
+            "<body><div style=\"display:flex;align-items:baseline\"><div style=\"font-size:12px\">small</div><div style=\"font-size:30px;align-self:first baseline\">large</div></div></body>",
+            "",
+            800.0,
+        );
+        let k = kids(&root);
+        assert!(close(first_baseline(&k[0]), first_baseline(&k[1])));
     }
 
     #[test]

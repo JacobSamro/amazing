@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "branch": "lane/layout",
+  "fixed_base": "bebca0f",
+  "implementation_checkpoint": "a2f72b4",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "browser_oracle_runs": {
+    "chrome": 5182906107691008,
+    "safari": 5141363439173632
+  },
+  "source_files_verified": 218,
+  "source_manifest_sha256": "5e0dcc46816f7e9f81895f4177bd20d47862d0a15a8c9ba12a8d1aabed6ede51",
+  "renderer_sha256": "aa25a61260279f2743704efc4a460d877145fa9400b977c3cbd007edc06492ab",
+  "image_adapter_sha256": "115339067773199b0cdbc2985d98ee5d09ec56258c42abb40a6db2ad0b59533b",
+  "layout_nextest": {
+    "passed": 205,
+    "skipped": 0
+  },
+  "layout_doctests": {
+    "passed": 0,
+    "failed": 0
+  },
+  "workspace_nextest": [
+    {
+      "passed": 1313,
+      "skipped": 3
+    },
+    {
+      "passed": 1313,
+      "skipped": 3
+    }
+  ],
+  "workspace_doctests": [
+    {
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "passed": 2,
+      "failed": 0
+    }
+  ],
+  "workspace_log_sha256": {
+    "layout5-workspace-nextest-2.log": "b04adda711d6ce952dcc49f72ef6ec851ab4d062cd5142b38c17ce06939f2bb3",
+    "layout5-workspace-nextest-1.log": "089fde7ae9f9d1e0be1c541fd63d4c81c87afba23ac34aed4ac66dd783b6f588",
+    "layout5-workspace-doc-2.log": "391a986d5220b625d5c1df15558396e62f7bce5c55fd9b29cdcfe2e53ef46fde",
+    "layout5-workspace-doc-1.log": "c494837679748c95640044d8a4606274cb94fe4916f1897bfefefdc4b5813552"
+  },
+  "broad_flex_grid": {
+    "baseline": {
+      "pass": 61,
+      "total": 200
+    },
+    "baseline_alignment": {
+      "pass": 61,
+      "total": 200
+    },
+    "final": {
+      "pass": 61,
+      "total": 200
+    },
+    "raw_gains": 2,
+    "raw_losses": 2,
+    "consensus_gains": 2,
+    "consensus_losses": 2
+  },
+  "paired_reports_stable": true,
+  "regression_pass_losses": 0,
+  "collected_utc": "2026-09-23T05:31:50.3290161Z"
+}
