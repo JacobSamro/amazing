@@ -211,6 +211,13 @@ LANE_GRANTS.setdefault("text", []).append("crates/amazing/src/page.rs")
 # land in the same commit as the manifest change, or --locked breaks.
 # ADDITIONS ONLY: the one dependency line.
 LANE_GRANTS.setdefault("html", []).append("Cargo.lock")
+# DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
+# wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
+# global/script/timeout/title honoured). ADDITIVE; read the diff at merge.
+LANE_GRANTS.setdefault("dom-bindings", []).append("crates/amazing/src/cmd/wpt_harness.rs")
+# DOM-17: interface_for arms, wrapper caching and host-hook installs for URL,
+# URLSearchParams, Blob, File, FormData and FontFaceSet. ADDED LINES ONLY.
+LANE_GRANTS["dom-bindings"].append("crates/amazing/src/runtime_binding_host.rs")
 # RC-13: the amazing-svg move adds exactly an amazing-svg package entry and one
 # amazing-image -> amazing-svg edge to the shell's isolated lockfile. ADDITIONS
 # ONLY; no adapter-only fetch/net edges.
