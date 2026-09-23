@@ -254,7 +254,11 @@ LANE_GRANTS["js-binary"].append("crates/amazing-js/src/interp_install.rs")
 LANE_GRANTS.setdefault("ipc", []).append("Cargo.lock")
 LANE_GRANTS.setdefault("compositor", []).append("Cargo.lock")
 LANE_GRANTS.setdefault("storage", []).append("Cargo.lock")
-LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
+# STANDING (2026-09-24): js-binary and js-stdlib may fix shared built-in or
+# coercion gaps that block their Test262 directories in interp_builtins.rs,
+# interp.rs and value.rs: spec-exact, minimal, each listed in the report.
+LANE_GRANTS["js-binary"].append("crates/amazing-js/src/interp_builtins.rs")
+LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
 # global/script/timeout/title honoured). ADDITIVE; read the diff at merge.
