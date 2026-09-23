@@ -1,0 +1,44 @@
+{
+  "base": "76c7c4e96da02e83d19b89769388998cd821e5dd",
+  "candidate": "c10295d19137dd0ef34638b9648162051297381b",
+  "selection_source_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "run_revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "cases": 54,
+  "base_executable_sha256": "CB45482FFF051D11C0E1608B45B19A9926EF0D72A29E7F2DA96233DF33396F86",
+  "candidate_executable_sha256": "99CD3EEA6F64CEF2AF125C646A2FF22D7BCC87A9554130F5732AD5D1C654C561",
+  "counts": {
+    "base": {
+      "pass": 25,
+      "mismatch": 21,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 8
+    },
+    "candidate": {
+      "pass": 25,
+      "mismatch": 26,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 3
+    }
+  },
+  "projection_sha256": {
+    "base": "ec831ae24fa240996ad5c4a50954dd74022e852288fdc569f6f496727560b832",
+    "candidate": "fd357727d811e2521c8cd09a4f9d6c6b5d9d167b954987b54751abb82186aa8e"
+  },
+  "pass_losses": [],
+  "crash_fixes": [
+    "css__css-lists__counter-increment-inside-display-contents.html",
+    "css__css-lists__counter-reset-increment-set-display-none.html",
+    "css__css-lists__counter-reset-inside-display-contents.html",
+    "css__css-lists__counter-reset-reversed-list-item-start.html",
+    "css__css-lists__foo-counter-reversed-006e.html"
+  ],
+  "remaining_crashes": [
+    "css__css-lists__list-style-image-gradients-dynamic.html",
+    "css__css-lists__list-style-image-zoom-dynamic.html",
+    "css__css-lists__list-style-type-string-004.html"
+  ]
+}

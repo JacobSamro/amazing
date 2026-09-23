@@ -143,6 +143,8 @@ pub enum Pseudo {
         a: i32,
         b: i32,
     },
+    NthOfType { a: i32, b: i32 },
+    NthLastOfType { a: i32, b: i32 },
     /// Matches `a`/`area` elements with an `href` attribute (unvisited).
     Link,
     /// Privacy: never matches anything in this engine.
@@ -596,6 +598,8 @@ impl<'t> SelParser<'t> {
         match name.as_str() {
             "nth-child" => self.nth_args(false),
             "nth-last-child" => self.nth_args(true),
+            "nth-of-type" => self.anb().map(|(a, b)| Simple::Pseudo(Pseudo::NthOfType { a, b })),
+            "nth-last-of-type" => self.anb().map(|(a, b)| Simple::Pseudo(Pseudo::NthLastOfType { a, b })),
             "lang" => {
                 let mut ranges = Vec::new();
                 loop {
@@ -1151,6 +1155,12 @@ fn matches_pseudo(dom: &Dom, el: NodeIdx, p: Pseudo) -> bool {
         }
         Pseudo::NthLastChild { a, b } => {
             nth_index(dom, el, true).is_some_and(|i| anb_matches(a, b, i))
+        }
+        Pseudo::NthOfType { a, b } => {
+            type_position(dom, el, false).is_some_and(|i| anb_matches(a, b, i))
+        }
+        Pseudo::NthLastOfType { a, b } => {
+            type_position(dom, el, true).is_some_and(|i| anb_matches(a, b, i))
         }
         Pseudo::Link => {
             matches!(dom.name(el), Some("a") | Some("area")) && attr_of(dom, el, "href").is_some()

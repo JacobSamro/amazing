@@ -1,0 +1,235 @@
+{
+  "schema": 1,
+  "revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "selection": {
+    "kind": "layout13-css-lists-subset",
+    "source": "crates/amazing-layout/evidence/layout13/generated-manifest.json",
+    "count": 54,
+    "source_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "run_revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12"
+  },
+  "sparse_paths": [
+    "css/css-pseudo",
+    "css/css-lists",
+    "css/css-flexbox",
+    "css/reference"
+  ],
+  "tests": [
+    {
+      "id": "css__css-lists__change-list-style-position-002.html",
+      "test": "css/css-lists/change-list-style-position-002.html"
+    },
+    {
+      "id": "css__css-lists__change-list-style-position-003.html",
+      "test": "css/css-lists/change-list-style-position-003.html"
+    },
+    {
+      "id": "css__css-lists__change-list-style-type-001.html",
+      "test": "css/css-lists/change-list-style-type-001.html"
+    },
+    {
+      "id": "css__css-lists__change-list-style-type-002.html",
+      "test": "css/css-lists/change-list-style-type-002.html"
+    },
+    {
+      "id": "css__css-lists__counter-002.html",
+      "test": "css/css-lists/counter-002.html"
+    },
+    {
+      "id": "css__css-lists__counter-003.html",
+      "test": "css/css-lists/counter-003.html"
+    },
+    {
+      "id": "css__css-lists__counter-increment-inside-display-contents.html",
+      "test": "css/css-lists/counter-increment-inside-display-contents.html"
+    },
+    {
+      "id": "css__css-lists__counter-list-item.html",
+      "test": "css/css-lists/counter-list-item.html"
+    },
+    {
+      "id": "css__css-lists__counter-reset-increment-set-display-none.html",
+      "test": "css/css-lists/counter-reset-increment-set-display-none.html"
+    },
+    {
+      "id": "css__css-lists__counter-reset-inside-display-contents.html",
+      "test": "css/css-lists/counter-reset-inside-display-contents.html"
+    },
+    {
+      "id": "css__css-lists__counter-reset-reversed-display-none.html",
+      "test": "css/css-lists/counter-reset-reversed-display-none.html"
+    },
+    {
+      "id": "css__css-lists__counter-reset-reversed-list-item-start.html",
+      "test": "css/css-lists/counter-reset-reversed-list-item-start.html"
+    },
+    {
+      "id": "css__css-lists__counter-reset-reversed-not-list-item-start.html",
+      "test": "css/css-lists/counter-reset-reversed-not-list-item-start.html"
+    },
+    {
+      "id": "css__css-lists__counter-reset-reversed-pseudo-002.html",
+      "test": "css/css-lists/counter-reset-reversed-pseudo-002.html"
+    },
+    {
+      "id": "css__css-lists__counter-reset-reversed-siblings-002.html",
+      "test": "css/css-lists/counter-reset-reversed-siblings-002.html"
+    },
+    {
+      "id": "css__css-lists__counter-reset-reversed-with-regular.html",
+      "test": "css/css-lists/counter-reset-reversed-with-regular.html"
+    },
+    {
+      "id": "css__css-lists__counter-set-001.html",
+      "test": "css/css-lists/counter-set-001.html"
+    },
+    {
+      "id": "css__css-lists__counter-slot-order.html",
+      "test": "css/css-lists/counter-slot-order.html"
+    },
+    {
+      "id": "css__css-lists__counters-001.html",
+      "test": "css/css-lists/counters-001.html"
+    },
+    {
+      "id": "css__css-lists__counters-002.html",
+      "test": "css/css-lists/counters-002.html"
+    },
+    {
+      "id": "css__css-lists__counters-scope-001.html",
+      "test": "css/css-lists/counters-scope-001.html"
+    },
+    {
+      "id": "css__css-lists__foo-counter-reversed-006a.html",
+      "test": "css/css-lists/foo-counter-reversed-006a.html"
+    },
+    {
+      "id": "css__css-lists__foo-counter-reversed-006e.html",
+      "test": "css/css-lists/foo-counter-reversed-006e.html"
+    },
+    {
+      "id": "css__css-lists__inline-block-list-marker.html",
+      "test": "css/css-lists/inline-block-list-marker.html"
+    },
+    {
+      "id": "css__css-lists__inline-list-marker.html",
+      "test": "css/css-lists/inline-list-marker.html"
+    },
+    {
+      "id": "css__css-lists__li-value-counter-reset-001.html",
+      "test": "css/css-lists/li-value-counter-reset-001.html"
+    },
+    {
+      "id": "css__css-lists__list-marker-alignment.html",
+      "test": "css/css-lists/list-marker-alignment.html"
+    },
+    {
+      "id": "css__css-lists__list-marker-symbol-bidi.html",
+      "test": "css/css-lists/list-marker-symbol-bidi.html"
+    },
+    {
+      "id": "css__css-lists__list-style-image-gradients-dynamic.html",
+      "test": "css/css-lists/list-style-image-gradients-dynamic.html"
+    },
+    {
+      "id": "css__css-lists__list-style-image-gradients.html",
+      "test": "css/css-lists/list-style-image-gradients.html"
+    },
+    {
+      "id": "css__css-lists__list-style-image-zoom-dynamic.html",
+      "test": "css/css-lists/list-style-image-zoom-dynamic.html"
+    },
+    {
+      "id": "css__css-lists__list-style-position-001.html",
+      "test": "css/css-lists/list-style-position-001.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-decimal-line-height.html",
+      "test": "css/css-lists/list-style-type-decimal-line-height.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-decimal-vertical-lr.html",
+      "test": "css/css-lists/list-style-type-decimal-vertical-lr.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-decimal-vertical-rl.html",
+      "test": "css/css-lists/list-style-type-decimal-vertical-rl.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-001a.html",
+      "test": "css/css-lists/list-style-type-string-001a.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-001b.html",
+      "test": "css/css-lists/list-style-type-string-001b.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-002.html",
+      "test": "css/css-lists/list-style-type-string-002.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-003.html",
+      "test": "css/css-lists/list-style-type-string-003.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-004.html",
+      "test": "css/css-lists/list-style-type-string-004.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-005a.html",
+      "test": "css/css-lists/list-style-type-string-005a.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-005b.html",
+      "test": "css/css-lists/list-style-type-string-005b.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-006.html",
+      "test": "css/css-lists/list-style-type-string-006.html"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-007.html",
+      "test": "css/css-lists/list-style-type-string-007.html"
+    },
+    {
+      "id": "css__css-lists__marker-counter.html",
+      "test": "css/css-lists/marker-counter.html"
+    },
+    {
+      "id": "css__css-lists__marker-dynamic-content-change.html",
+      "test": "css/css-lists/marker-dynamic-content-change.html"
+    },
+    {
+      "id": "css__css-lists__marker-quotes.html",
+      "test": "css/css-lists/marker-quotes.html"
+    },
+    {
+      "id": "css__css-lists__marker-webkit-text-fill-color.html",
+      "test": "css/css-lists/marker-webkit-text-fill-color.html"
+    },
+    {
+      "id": "css__css-lists__nested-marker-dynamic.html",
+      "test": "css/css-lists/nested-marker-dynamic.html"
+    },
+    {
+      "id": "css__css-lists__nested-marker-styling.html",
+      "test": "css/css-lists/nested-marker-styling.html"
+    },
+    {
+      "id": "css__css-lists__nested-marker.html",
+      "test": "css/css-lists/nested-marker.html"
+    },
+    {
+      "id": "css__css-lists__outside-marker-covered-by-relpos-block-link.html",
+      "test": "css/css-lists/outside-marker-covered-by-relpos-block-link.html"
+    },
+    {
+      "id": "css__css-lists__outside-marker-in-multicol-relpos-content.html",
+      "test": "css/css-lists/outside-marker-in-multicol-relpos-content.html"
+    },
+    {
+      "id": "css__css-lists__outside-marker-with-relpos-block-content.html",
+      "test": "css/css-lists/outside-marker-with-relpos-block-content.html"
+    }
+  ]
+}

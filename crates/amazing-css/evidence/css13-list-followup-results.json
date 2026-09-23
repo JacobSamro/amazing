@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "wpt_revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "selection": "css13-lists-run53bc.json",
+  "cases": 54,
+  "base_commit": "c10295d19137dd0ef34638b9648162051297381b",
+  "candidate_commit": "37cd090ae95468ba67f33ab3e69509a415018694",
+  "base_executable_sha256": "99CD3EEA6F64CEF2AF125C646A2FF22D7BCC87A9554130F5732AD5D1C654C561",
+  "candidate_executable_sha256": "67BCF6D081680E3C07D7C8855060CE58FDD1F53C531230E0C0A168D8DB9095E6",
+  "base_counts": {
+    "pass": 25,
+    "mismatch": 26,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 3
+  },
+  "candidate_counts": {
+    "pass": 25,
+    "mismatch": 26,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 3
+  },
+  "pass_losses": [],
+  "classification_changes": [],
+  "projection_changes": []
+}
