@@ -52,8 +52,8 @@
       "changed_test_records": [],
       "pass_losses": [],
       "report_sha256": {
-        "before": "970fd6bde4e7f44071b3db7fdfe0388f7e76008995c6bf281c6a0306031e394e",
-        "after": "0149260d924eeca9c2f7dc6474bad16b06713300fc2f5e02949f6246b9b75cfc"
+        "before": "2306bd232b55ded074d45bb46eab3f60335848172ae05ee04fe84d32309bb916",
+        "after": "4431ba0bc3580c312b9683dde9c7b3e241ec1b1072de757d03c68c0fe5cb47cd"
       }
     },
     "svg": {
@@ -77,8 +77,8 @@
       "changed_test_records": [],
       "pass_losses": [],
       "report_sha256": {
-        "before": "60c32f9a6c0b0d479728ec2609a074cfc888b2ee9a6490e6ab003a8d75c56d62",
-        "after": "a0347990f24b212601ee461852e9ea801f8be1cf11095e80be41faa389439a12"
+        "before": "e1866073ff5076cca75262aca1cb60211410145ca9f6e24ab9456f9499ad565f",
+        "after": "1557909680e426cef0e0fef38884ab078c494e198a9a7881dfdb5e809763bc65"
       }
     }
   },
