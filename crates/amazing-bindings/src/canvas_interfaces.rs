@@ -91,6 +91,20 @@ pub const CONTEXT: &[Member] = &[
     setter("shadowOffsetY"),
     getter("font"),
     setter("font"),
+    getter("lang"),
+    setter("lang"),
+    getter("letterSpacing"),
+    setter("letterSpacing"),
+    getter("fontKerning"),
+    setter("fontKerning"),
+    getter("fontStretch"),
+    setter("fontStretch"),
+    getter("fontVariantCaps"),
+    setter("fontVariantCaps"),
+    getter("textRendering"),
+    setter("textRendering"),
+    getter("wordSpacing"),
+    setter("wordSpacing"),
     getter("textAlign"),
     setter("textAlign"),
     getter("textBaseline"),
@@ -106,6 +120,7 @@ pub const CONTEXT: &[Member] = &[
     method("save", 0),
     method("restore", 0),
     method("reset", 0),
+    method("isContextLost", 0),
     method("getContextAttributes", 0),
     method("scale", 2),
     method("rotate", 1),
@@ -143,6 +158,7 @@ pub const CONTEXT: &[Member] = &[
     method("strokeText", 3),
     method("measureText", 1),
     method("drawImage", 3),
+    method("drawFocusIfNeeded", 1),
     method("createImageData", 2),
     method("getImageData", 4),
     method("putImageData", 3),
@@ -163,6 +179,7 @@ pub const PATH: &[Member] = &[
 ];
 
 pub const GRADIENT: &[Member] = &[method("addColorStop", 2)];
+pub const PATTERN: &[Member] = &[method("setTransform", 0)];
 pub const IMAGE_DATA: &[Member] = &[
     getter("width"),
     getter("height"),
@@ -195,15 +212,17 @@ pub struct CanvasSlot {
 
 impl CanvasSlot {
     pub fn new(node: NodeIdx, width: u32, height: u32) -> Self {
+        let mut context = Canvas2D::new(width, height);
+        context.state.text_style.size = 10.;
+        context.state.text_style.families = vec!["sans-serif".into()];
         Self {
             node,
-            context: Canvas2D::new(width, height),
+            context,
             origin_clean: true,
         }
     }
     pub fn reset(&mut self, width: u32, height: u32) {
-        self.context = Canvas2D::new(width, height);
-        self.origin_clean = true;
+        *self = Self::new(self.node, width, height);
     }
 }
 

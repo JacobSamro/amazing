@@ -99,12 +99,15 @@ enum StoreResult {
 }
 
 #[derive(Clone, Copy)]
-enum CanvasTarget { Element, Context, Path, Gradient, ImageData, TextMetrics }
+enum CanvasTarget { Element, Context, Path, Gradient, Pattern, ImageData, TextMetrics }
+
+#[derive(Clone, Copy)]
+enum CanvasGradientKind { Linear, Radial, Conic }
 
 enum CanvasObject {
     Context(NodeIdx, JsValue),
     Path(Path2D),
-    Gradient(canvas::Gradient),
+    Gradient(canvas::Gradient, CanvasGradientKind),
     Pattern(canvas::Pattern, bool),
     ImageData(u32, u32, JsValue),
     TextMetrics(canvas::TextMetrics),
@@ -2791,7 +2794,7 @@ impl RuntimeBindingHost<'_> {
             ("CanvasRenderingContext2D", CanvasTarget::Context, canvas_interfaces::CONTEXT, 0),
             ("Path2D", CanvasTarget::Path, canvas_interfaces::PATH, 0),
             ("CanvasGradient", CanvasTarget::Gradient, canvas_interfaces::GRADIENT, 0),
-            ("CanvasPattern", CanvasTarget::Gradient, &[][..], 0),
+            ("CanvasPattern", CanvasTarget::Pattern, canvas_interfaces::PATTERN, 0),
             ("ImageData", CanvasTarget::ImageData, canvas_interfaces::IMAGE_DATA, 2),
             ("TextMetrics", CanvasTarget::TextMetrics, canvas_interfaces::TEXT_METRICS, 0),
         ] {
@@ -2918,6 +2921,7 @@ impl RuntimeBindingHost<'_> {
             CanvasTarget::Context => self.canvas_context_call(member, receiver, args),
             CanvasTarget::Path => self.canvas_path_call(member, receiver, args),
             CanvasTarget::Gradient => self.canvas_gradient_call(member, receiver, args),
+            CanvasTarget::Pattern => self.canvas_pattern_call(member, receiver, args),
             CanvasTarget::ImageData => self.canvas_image_data_call(member, receiver),
             CanvasTarget::TextMetrics => self.canvas_metrics_call(member, receiver),
         }
@@ -3079,10 +3083,10 @@ impl RuntimeBindingHost<'_> {
             let Some(value) = value else { continue };
             let Some(index) = self.canvas_object_index(&value) else { continue };
             let (style, tainted) = match &self.state.borrow().canvas_objects[index].1 {
-                CanvasObject::Gradient(g) => (Some(match (g.start_radius, g.end_radius) {
-                    (0., 0.) if g.start == g.end => PaintStyle::ConicGradient(g.clone()),
-                    (0., 0.) => PaintStyle::LinearGradient(g.clone()),
-                    _ => PaintStyle::RadialGradient(g.clone()),
+                CanvasObject::Gradient(g, kind) => (Some(match kind {
+                    CanvasGradientKind::Linear => PaintStyle::LinearGradient(g.clone()),
+                    CanvasGradientKind::Radial => PaintStyle::RadialGradient(g.clone()),
+                    CanvasGradientKind::Conic => PaintStyle::ConicGradient(g.clone()),
                 }), false),
                 CanvasObject::Pattern(p, tainted) => (Some(PaintStyle::Pattern(p.clone())), *tainted),
                 _ => (None, false),
@@ -3106,6 +3110,11 @@ impl RuntimeBindingHost<'_> {
         }; }
         if matches!(member.kind, CanvasMemberKind::Getter | CanvasMemberKind::Setter) {
             return self.canvas_context_attribute(node, member, args);
+        }
+        if name == "isContextLost" { return Ok(JsValue::Bool(false)); }
+        if name == "drawFocusIfNeeded" {
+            if args.is_empty() { return Err(Throw::type_error("Missing focus target")); }
+            return Ok(JsValue::Undefined);
         }
         if name == "getContextAttributes" {
             let object = self.js.binding_create_object(Some(&self.js.binding_object_prototype()))?;
@@ -3163,15 +3172,15 @@ impl RuntimeBindingHost<'_> {
         if matches!(name, "createLinearGradient" | "createRadialGradient" | "createConicGradient") {
             let count = match name { "createLinearGradient" => 4, "createRadialGradient" => 6, _ => 3 };
             let Some(v) = self.canvas_numbers(args, count)? else { return Err(Throw::type_error("Non-finite gradient coordinate")); };
-            let gradient = match name {
-                "createLinearGradient" => canvas::Gradient::linear(v[0], v[1], v[2], v[3]),
+            let (gradient, kind) = match name {
+                "createLinearGradient" => (canvas::Gradient::linear(v[0], v[1], v[2], v[3]), CanvasGradientKind::Linear),
                 "createRadialGradient" => {
                     if v[2] < 0. || v[5] < 0. { return Err(self.canvas_exception("IndexSizeError")); }
-                    canvas::Gradient::radial(v[0], v[1], v[2], v[3], v[4], v[5])
+                    (canvas::Gradient::radial(v[0], v[1], v[2], v[3], v[4], v[5]), CanvasGradientKind::Radial)
                 }
-                _ => canvas::Gradient::conic(v[0], v[1], v[2]),
+                _ => (canvas::Gradient::conic(v[0], v[1], v[2]), CanvasGradientKind::Conic),
             };
-            return self.canvas_new_object("CanvasGradient", CanvasObject::Gradient(gradient));
+            return self.canvas_new_object("CanvasGradient", CanvasObject::Gradient(gradient, kind));
         }
         if name == "createPattern" {
             let source = args.first().ok_or_else(|| Throw::type_error("Missing pattern source"))?;
@@ -3311,10 +3320,12 @@ impl RuntimeBindingHost<'_> {
             "setTransform" => 6,
             "clearRect" | "fillRect" | "strokeRect" | "rect" | "quadraticCurveTo" => 4,
             "bezierCurveTo" | "ellipse" => if name == "ellipse" { 7 } else { 6 },
-            "arcTo" | "arc" | "roundRect" => 5,
+            "arcTo" | "arc" => 5,
+            "roundRect" => 4,
             _ => 0,
         };
         let Some(v) = self.canvas_numbers(args, count)? else { return Ok(JsValue::Undefined); };
+        let radii = if name == "roundRect" { self.canvas_round_radii(args.get(4))? } else { [0.; 4] };
         if matches!(name, "fillRect" | "strokeRect") { self.canvas_refresh_styles(node); }
         if (name == "arc" && v[2] < 0.) || (name == "arcTo" && v[4] < 0.) ||
             (name == "ellipse" && (v[2] < 0. || v[3] < 0.)) {
@@ -3338,7 +3349,7 @@ impl RuntimeBindingHost<'_> {
             "arc" => context.arc(v[0], v[1], v[2], v[3], v[4], args.get(5).is_some_and(|v| self.js.binding_to_boolean(v))),
             "arcTo" => context.arc_to(v[0], v[1], v[2], v[3], v[4]),
             "ellipse" => context.ellipse(v[0], v[1], v[2], v[3], v[4], v[5], v[6], args.get(7).is_some_and(|v| self.js.binding_to_boolean(v))),
-            "roundRect" => context.round_rect(v[0], v[1], v[2], v[3], [v[4]; 4]),
+            "roundRect" => context.round_rect(v[0], v[1], v[2], v[3], radii),
             "clearRect" => context.clear_rect(v[0], v[1], v[2], v[3]),
             "fillRect" => context.fill_rect(v[0], v[1], v[2], v[3]),
             "strokeRect" => context.stroke_rect(v[0], v[1], v[2], v[3]),
@@ -3359,27 +3370,32 @@ impl RuntimeBindingHost<'_> {
             if name == "fillStyle" || name == "strokeStyle" {
                 let style = if let Some(index) = self.canvas_object_index(&value) {
                     match &self.state.borrow().canvas_objects[index].1 {
-                        CanvasObject::Gradient(g) => Some(match (g.start_radius, g.end_radius) {
-                            (0., 0.) if g.start == g.end => PaintStyle::ConicGradient(g.clone()),
-                            (0., 0.) => PaintStyle::LinearGradient(g.clone()),
-                            _ => PaintStyle::RadialGradient(g.clone()),
+                        CanvasObject::Gradient(g, kind) => Some(match kind {
+                            CanvasGradientKind::Linear => PaintStyle::LinearGradient(g.clone()),
+                            CanvasGradientKind::Radial => PaintStyle::RadialGradient(g.clone()),
+                            CanvasGradientKind::Conic => PaintStyle::ConicGradient(g.clone()),
                         }),
                         CanvasObject::Pattern(p, _) => Some(PaintStyle::Pattern(p.clone())),
                         _ => None,
                     }
                 } else { PaintStyle::from_css_color(&self.canvas_string(Some(&value))?) };
                 if let Some(style) = style {
+                    let reflected = match &style {
+                        PaintStyle::Color(color) => JsValue::str(canvas_color_text(*color)),
+                        _ => value,
+                    };
                     let mut state = self.state.borrow_mut();
                     let ctx = &mut state.canvas_slots.get_mut(&node).unwrap().context;
                     if name == "fillStyle" { ctx.state.fill_style = style; } else { ctx.state.stroke_style = style; }
-                    state.canvas_style_values.insert((node, name), value);
+                    state.canvas_style_values.insert((node, name), reflected);
                 }
                 return Ok(JsValue::Undefined);
             }
-            if matches!(name, "lineCap" | "lineJoin" | "globalCompositeOperation" | "textAlign" | "textBaseline" | "filter" | "imageSmoothingQuality" | "direction" | "font" | "shadowColor") {
+            if matches!(name, "lineCap" | "lineJoin" | "globalCompositeOperation" | "textAlign" | "textBaseline" | "filter" | "imageSmoothingQuality" | "direction" | "font" | "shadowColor" | "lang" | "letterSpacing" | "fontKerning" | "fontStretch" | "fontVariantCaps" | "textRendering" | "wordSpacing") {
                 let value = self.canvas_string(Some(&value))?;
                 let mut state = self.state.borrow_mut();
                 let ctx = &mut state.canvas_slots.get_mut(&node).unwrap().context;
+                let mut store = false;
                 match name {
                     "lineCap" => if let Some(cap) = match value.as_str() { "butt" => Some(canvas::LineCap::Butt), "round" => Some(canvas::LineCap::Round), "square" => Some(canvas::LineCap::Square), _ => None } { ctx.state.line_cap = cap; },
                     "lineJoin" => if let Some(join) = match value.as_str() { "miter" => Some(canvas::LineJoin::Miter), "round" => Some(canvas::LineJoin::Round), "bevel" => Some(canvas::LineJoin::Bevel), _ => None } { ctx.state.line_join = join; },
@@ -3387,10 +3403,32 @@ impl RuntimeBindingHost<'_> {
                     "textAlign" => if let Some(align) = match value.as_str() { "start" => Some(canvas::TextAlign::Start), "end" => Some(canvas::TextAlign::End), "left" => Some(canvas::TextAlign::Left), "right" => Some(canvas::TextAlign::Right), "center" => Some(canvas::TextAlign::Center), _ => None } { ctx.state.text_align = align; },
                     "textBaseline" => if let Some(base) = match value.as_str() { "top" => Some(canvas::TextBaseline::Top), "hanging" => Some(canvas::TextBaseline::Hanging), "middle" => Some(canvas::TextBaseline::Middle), "alphabetic" => Some(canvas::TextBaseline::Alphabetic), "ideographic" => Some(canvas::TextBaseline::Ideographic), "bottom" => Some(canvas::TextBaseline::Bottom), _ => None } { ctx.state.text_baseline = base; },
                     "filter" => { ctx.set_filter(&value); },
-                    "shadowColor" => if let Some(PaintStyle::Color(color)) = PaintStyle::from_css_color(&value) { ctx.state.shadow_color = color; },
-                    "font" | "direction" | "imageSmoothingQuality" => {},
+                    "shadowColor" => if let Some(PaintStyle::Color(color)) = PaintStyle::from_css_color(&value) {
+                        ctx.state.shadow_color = color;
+                        store = true;
+                    },
+                    "font" => {
+                        if let Some(size) = value.split_whitespace().find_map(|part| part.strip_suffix("px").and_then(|s| s.parse::<f32>().ok())) {
+                            if size.is_finite() && size > 0. {
+                                ctx.state.text_style.size = size;
+                                store = true;
+                            }
+                        }
+                    },
+                    "direction" => if matches!(value.as_str(), "ltr" | "rtl" | "inherit") {
+                        ctx.state.text_style.direction = if value == "rtl" { amazing_text::Direction::RightToLeft }
+                            else { amazing_text::Direction::LeftToRight };
+                        store = true;
+                    },
+                    "imageSmoothingQuality" => store = matches!(value.as_str(), "low" | "medium" | "high"),
+                    "fontKerning" => store = matches!(value.as_str(), "auto" | "normal" | "none"),
+                    "fontStretch" => store = matches!(value.as_str(), "ultra-condensed" | "extra-condensed" | "condensed" | "semi-condensed" | "normal" | "semi-expanded" | "expanded" | "extra-expanded" | "ultra-expanded"),
+                    "fontVariantCaps" => store = matches!(value.as_str(), "normal" | "small-caps" | "all-small-caps" | "petite-caps" | "all-petite-caps" | "unicase" | "titling-caps"),
+                    "textRendering" => store = matches!(value.as_str(), "auto" | "optimizeSpeed" | "optimizeLegibility" | "geometricPrecision"),
+                    "lang" | "letterSpacing" | "wordSpacing" => store = true,
                     _ => unreachable!(),
                 }
+                if store { state.canvas_style_values.insert((node, name), JsValue::str(value)); }
                 return Ok(JsValue::Undefined);
             }
             if name == "imageSmoothingEnabled" {
@@ -3418,7 +3456,10 @@ impl RuntimeBindingHost<'_> {
         let style = if name == "fillStyle" { Some(&ctx.state.fill_style) } else if name == "strokeStyle" { Some(&ctx.state.stroke_style) } else { None };
         if let Some(style) = style {
             if let Some(value) = state.canvas_style_values.get(&(node, name)) { return Ok(value.clone()); }
-            return Ok(JsValue::str(match style { PaintStyle::Color(color) => format!("#{:02x}{:02x}{:02x}", color[0], color[1], color[2]), _ => String::new() }));
+            return Ok(JsValue::str(match style { PaintStyle::Color(color) => canvas_color_text(*color), _ => String::new() }));
+        }
+        if let Some(value) = state.canvas_style_values.get(&(node, name)) {
+            return Ok(value.clone());
         }
         Ok(match name {
             "globalAlpha" => JsValue::num(ctx.state.global_alpha),
@@ -3435,6 +3476,10 @@ impl RuntimeBindingHost<'_> {
             "imageSmoothingQuality" => JsValue::str("low"),
             "filter" => JsValue::str(ctx.state.filter.clone()),
             "font" => JsValue::str("10px sans-serif"),
+            "lang" => JsValue::str("inherit"),
+            "letterSpacing" | "wordSpacing" => JsValue::str("0px"),
+            "fontKerning" | "textRendering" => JsValue::str("auto"),
+            "fontStretch" | "fontVariantCaps" => JsValue::str("normal"),
             "direction" => JsValue::str("inherit"),
             "textAlign" => JsValue::str(match ctx.state.text_align { canvas::TextAlign::Start => "start", canvas::TextAlign::End => "end", canvas::TextAlign::Left => "left", canvas::TextAlign::Right => "right", canvas::TextAlign::Center => "center" }),
             "textBaseline" => JsValue::str(match ctx.state.text_baseline { canvas::TextBaseline::Top => "top", canvas::TextBaseline::Hanging => "hanging", canvas::TextBaseline::Middle => "middle", canvas::TextBaseline::Alphabetic => "alphabetic", canvas::TextBaseline::Ideographic => "ideographic", canvas::TextBaseline::Bottom => "bottom" }),
@@ -3466,18 +3511,28 @@ impl RuntimeBindingHost<'_> {
             let source = args.first().and_then(|value| self.canvas_object_index(value))
                 .and_then(|index| match &self.state.borrow().canvas_objects[index].1 { CanvasObject::Path(path) => Some(path.clone()), _ => None })
                 .ok_or_else(|| Throw::type_error("Expected Path2D"))?;
+            let mut matrix = Transform::IDENTITY;
+            if let Some(object) = args.get(1) {
+                for (name, slot) in [("a", &mut matrix.a), ("b", &mut matrix.b),
+                    ("c", &mut matrix.c), ("d", &mut matrix.d),
+                    ("e", &mut matrix.e), ("f", &mut matrix.f)] {
+                    let value = self.js.binding_get_property(object, name)?;
+                    if !matches!(value, JsValue::Undefined) { *slot = self.js.binding_to_number(&value)?; }
+                }
+            }
             if let CanvasObject::Path(path) = &mut self.state.borrow_mut().canvas_objects[index].1 {
-                path.add_path(&source, Transform::IDENTITY);
+                path.add_path(&source, matrix);
             }
             return Ok(JsValue::Undefined);
         }
         let count = match member.name {
             "closePath" => 0, "moveTo" | "lineTo" => 2,
             "quadraticCurveTo" | "rect" => 4, "bezierCurveTo" => 6,
-            "arcTo" | "arc" | "roundRect" => 5, "ellipse" => 7,
+            "arcTo" | "arc" => 5, "roundRect" => 4, "ellipse" => 7,
             _ => return Err(Throw::type_error("Unknown Path2D member")),
         };
         let Some(v) = self.canvas_numbers(args, count)? else { return Ok(JsValue::Undefined); };
+        let radii = if member.name == "roundRect" { self.canvas_round_radii(args.get(4))? } else { [0.; 4] };
         if (member.name == "arc" && v[2] < 0.) || (member.name == "arcTo" && v[4] < 0.) ||
             (member.name == "ellipse" && (v[2] < 0. || v[3] < 0.)) {
             return Err(self.canvas_exception("IndexSizeError"));
@@ -3492,7 +3547,7 @@ impl RuntimeBindingHost<'_> {
             "bezierCurveTo" => path.bezier_curve_to(v[0], v[1], v[2], v[3], v[4], v[5]),
             "arcTo" => path.arc_to(v[0], v[1], v[2], v[3], v[4]),
             "rect" => path.rect(v[0], v[1], v[2], v[3]),
-            "roundRect" => path.round_rect(v[0], v[1], v[2], v[3], [v[4]; 4]),
+            "roundRect" => path.round_rect(v[0], v[1], v[2], v[3], radii),
             "arc" => path.arc(v[0], v[1], v[2], v[3], v[4], ccw),
             "ellipse" => path.ellipse(v[0], v[1], v[2], v[3], v[4], v[5], v[6], ccw),
             _ => unreachable!(),
@@ -3506,7 +3561,7 @@ impl RuntimeBindingHost<'_> {
         let color = self.canvas_string(args.get(1))?;
         let result = {
             let mut state = self.state.borrow_mut();
-            let CanvasObject::Gradient(gradient) = &mut state.canvas_objects[index].1 else { return Err(Throw::type_error("Expected CanvasGradient")); };
+            let CanvasObject::Gradient(gradient, _) = &mut state.canvas_objects[index].1 else { return Err(Throw::type_error("Expected CanvasGradient")); };
             gradient.add_color_stop(v[0], &color)
         };
         match result {
@@ -3620,5 +3675,70 @@ impl amazing_text::TextSystem for CanvasTextSystem {
     }
     fn rasterize(&self, request: amazing_text::GlyphRasterRequest<'_>) -> Result<Option<amazing_text::GlyphImage>, amazing_text::TextError> {
         self.0.rasterize(request)
+    }
+}
+
+impl RuntimeBindingHost<'_> {
+    fn canvas_pattern_call(&mut self, member: Member, receiver: JsValue, args: &[JsValue]) -> Result<JsValue, Throw> {
+        if member.name != "setTransform" { return Err(Throw::type_error("Unknown CanvasPattern member")); }
+        let index = self.canvas_object_index(&receiver).ok_or_else(|| Throw::type_error("Expected CanvasPattern"))?;
+        let mut offset = [0., 0.];
+        if let Some(object) = args.first() {
+            for (index, name) in ["e", "f"].iter().enumerate() {
+                let value = self.js.binding_get_property(object, name)?;
+                if !matches!(value, JsValue::Undefined) {
+                    offset[index] = self.js.binding_to_number(&value)?;
+                }
+            }
+        }
+        if offset.iter().all(|n| n.is_finite()) {
+            let mut state = self.state.borrow_mut();
+            let CanvasObject::Pattern(pattern, _) = &mut state.canvas_objects[index].1 else {
+                return Err(Throw::type_error("Expected CanvasPattern"));
+            };
+            pattern.offset = canvas::Point::new(offset[0], offset[1]);
+        }
+        Ok(JsValue::Undefined)
+    }
+}
+
+impl RuntimeBindingHost<'_> {
+    fn canvas_round_radii(&mut self, value: Option<&JsValue>) -> Result<[f64; 4], Throw> {
+        let Some(value) = value else { return Ok([0.; 4]); };
+        let values = if matches!(value, JsValue::Object(_)) {
+            let length = self.js.binding_get_property(value, "length")?;
+            if !matches!(length, JsValue::Undefined) {
+                let length = self.js.binding_to_number(&length)? as usize;
+                if !(1..=4).contains(&length) { return Err(Throw::range_error("roundRect radii length")); }
+                let mut radii = Vec::with_capacity(length);
+                for i in 0..length {
+                    let item = self.js.binding_get_property(value, &i.to_string())?;
+                    radii.push(self.js.binding_to_number(&item)?);
+                }
+                radii
+            } else {
+                let x = self.js.binding_get_property(value, "x")?;
+                vec![if matches!(x, JsValue::Undefined) { 0. } else { self.js.binding_to_number(&x)? }]
+            }
+        } else { vec![self.js.binding_to_number(value)?] };
+        if values.iter().any(|v| !v.is_finite() || *v < 0.) {
+            return Err(Throw::range_error("Invalid roundRect radius"));
+        }
+        Ok(match values.as_slice() {
+            [a] => [*a; 4],
+            [a, b] => [*a, *b, *a, *b],
+            [a, b, c] => [*a, *b, *c, *b],
+            [a, b, c, d] => [*a, *b, *c, *d],
+            _ => unreachable!(),
+        })
+    }
+}
+
+fn canvas_color_text(color: [u8; 4]) -> String {
+    if color[3] == 255 {
+        format!("#{:02x}{:02x}{:02x}", color[0], color[1], color[2])
+    } else {
+        let alpha = (f64::from(color[3]) / 255.).to_string();
+        format!("rgba({}, {}, {}, {})", color[0], color[1], color[2], alpha)
     }
 }
