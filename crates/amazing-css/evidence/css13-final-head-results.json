@@ -1,0 +1,71 @@
+{
+  "fixed_base": "3fae5597c2935de51ff5295a5d5aee47a7b7eb3e",
+  "final_head": "76c7c4e96da02e83d19b89769388998cd821e5dd",
+  "final_head_base": "5177362",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "final_executable_sha256": "CB45482FFF051D11C0E1608B45B19A9926EF0D72A29E7F2DA96233DF33396F86",
+  "selections": {
+    "pseudo-content": {
+      "base": {
+        "pass": 18,
+        "mismatch": 60,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_head": {
+        "pass": 18,
+        "mismatch": 60,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    },
+    "cascade": {
+      "base": {
+        "pass": 67,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 2,
+        "crash": 0
+      },
+      "final_head": {
+        "pass": 68,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 2,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [
+        "css-fonts__font-variant-ligatures-11.optional.html"
+      ]
+    },
+    "broad": {
+      "base": {
+        "pass": 187,
+        "mismatch": 72,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "final_head": {
+        "pass": 187,
+        "mismatch": 72,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": []
+    }
+  }
+}
