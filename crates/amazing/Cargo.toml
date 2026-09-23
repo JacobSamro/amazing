@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 amazing-bindings = { path = "../amazing-bindings" }
 amazing-common = { path = "../amazing-common" }
+amazing-compositor = { path = "../amazing-compositor" }
 amazing-dom = { path = "../amazing-dom" }
 amazing-html = { path = "../amazing-html" }
 amazing-css = { path = "../amazing-css" }

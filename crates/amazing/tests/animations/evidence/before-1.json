@@ -1,0 +1,68 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "manifest":  "C:\\Users\\server\\ia-animations-selection.json",
+    "viewport":  {
+                     "width":  800,
+                     "height":  600,
+                     "device_scale":  1
+                 },
+    "font_set":  "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+    "run_directory":  "C:\\Users\\server\\target\\integrator-assist\\ia-animations-before-3case\\run-20260923T225823627Z-288452",
+    "counts":  {
+                   "pass":  2,
+                   "mismatch":  1,
+                   "error":  0,
+                   "timeout":  0,
+                   "unsupported":  0,
+                   "crash":  0
+               },
+    "unexpected":  0,
+    "tests":  [
+                  {
+                      "id":  "animation-duration-infinite",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "animation-duration-infinite-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "34343670eba7757e2491a16f7dea3cb7851c74338aedf2e406a09c5ce302cc78",
+                      "reference_sha256":  "34343670eba7757e2491a16f7dea3cb7851c74338aedf2e406a09c5ce302cc78",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "animation-important-002",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "animation-important-002-ref.html",
+                      "differing_pixels":  1823,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "863de4935cc2db0ebf4e8ac3ea7f6c6f11ea0bc34b86422fd6565c296b72163d",
+                      "reference_sha256":  "d7c6a8869e8f5d5d2a676d37db14fa28424e40e0b18c1a08368e6fa0157a7805",
+                      "diff_sha256":  "e7e66f900af044bdf07ade4cdd1da6169e20cb6d89f525b7e538461c0e4bfb64",
+                      "detail":  "maxDifference=255/0; totalPixels=1823/0"
+                  },
+                  {
+                      "id":  "background-color-animation-in-body",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "background-color-animation-in-body-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "reference_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  }
+              ]
+}

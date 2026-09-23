@@ -700,3 +700,30 @@ package has no library target, so its separate doctest command is N/A. The
 five changed Rust source/test files, frozen selection, and unchanged root
 `Cargo.lock` matched Mac SHA-256 before and after the final gate; the audit
 is in `evidence/gate-summary.json`.
+
+
+## IA-ANIMATIONS — driver sampling and event dispatch (2026-09-24)
+
+On fixed base `ba83010663168cf959f2d02b20a3e3dcaadd790f`, the driver now
+feeds CSS computed animation and transition longhands and parsed keyframes to
+`CssAnimationEngine`, retains its timeline in the GUI and WPT renderer, samples
+at each frame, applies supported width, color, and opacity values before paint,
+and dispatches animation/transition events into the DOM scheduler. The root
+`Cargo.lock` has the cargo-generated compositor dependency addition. Owned
+fixtures cover sampled opacity, a width transition, animation/transition end
+events, and final width/color/opacity pixels. CSS animation-origin cascade
+integration is routed to CSS-16; styled document relayout is routed to layout.
+
+The pinned three-pair WPT selection (upstream
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, 800×600) was stable across
+two BEFORE and two AFTER runs: **2 pass / 1 mismatch / 0 errors, timeouts,
+unsupported, or crashes**. All actual image hashes were unchanged, so there is
+no WPT gain. The `background-color-animation-in-body` pass has white-only
+actual and reference images and receives no conformance credit. Selection,
+source hashes, per-case hashes, and comparisons are in
+`crates/amazing/tests/animations/evidence/`.
+
+The locked win-002 nextest gates passed on the fixed base: `amazing` **153
+passed / 3 skipped** and workspace **2,026 passed / 5 skipped**. The driver
+package has no library target, so its separate doctest command is N/A.
+Workspace doctests passed **2/2** on win-002.

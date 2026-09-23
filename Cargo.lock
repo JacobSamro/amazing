@@ -82,6 +82,7 @@ version = "0.0.1"
 dependencies = [
  "amazing-bindings",
  "amazing-common",
+ "amazing-compositor",
  "amazing-css",
  "amazing-dom",
  "amazing-fetch",

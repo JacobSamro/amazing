@@ -2,6 +2,7 @@
 use std::process::ExitCode;
 
 mod browser_peer;
+mod animation_scene;
 mod cmd;
 mod dom_host;
 mod document;
