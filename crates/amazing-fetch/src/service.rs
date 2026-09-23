@@ -75,6 +75,9 @@ impl Default for ClientContext {
 
 #[derive(Debug)]
 pub enum ServiceEvent {
+    /// Dispatcher event for an embedding-owned consumer such as `Xhr`.
+    /// The consumer advances its pending handle with `on_dispatch_event`.
+    ExternalNetwork(NetEvent),
     WebSocket {
         id: ServiceId,
         event: WebSocketEvent,
@@ -388,10 +391,11 @@ impl NetworkService {
         // A close event can precede the nonblocking write of its reply. Keep
         // stepping dispatcher-owned sockets after removing the service id.
         let wire_websockets = self.dispatcher.websockets_in_flight() != 0;
-        let both = wire_websockets && !self.active.is_empty();
+        let has_http = self.dispatcher.in_flight() != 0;
+        let both = wire_websockets && has_http;
         let http_budget = if !wire_websockets {
             budget
-        } else if self.active.is_empty() {
+        } else if !has_http {
             0
         } else if budget == 1 {
             usize::from(!self.prefer_websocket)
@@ -414,6 +418,9 @@ impl NetworkService {
                 .iter()
                 .find_map(|(id, task)| (task.pending.id() == wire_id).then_some(*id))
             else {
+                if !matches!(event, NetEvent::Aborted { .. }) {
+                    result.push(ServiceEvent::ExternalNetwork(event));
+                }
                 continue;
             };
             let mut finished = None;

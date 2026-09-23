@@ -256,7 +256,7 @@ impl ApiRequest {
             let source = init.headers.unwrap_or_else(|| request.headers.clone());
             let mut headers = ApiHeaders::new(request.headers.guard());
             for (name, value) in source.raw_entries() {
-                headers.append_string(name, value)?;
+                headers.append_existing(source.wire_name(name), value)?;
             }
             request.headers = headers;
         }
@@ -282,7 +282,7 @@ impl ApiRequest {
             let extracted = ApiBody::from_input(body)?;
             if let Some(mime) = extracted.mime_type() {
                 if !request.headers.has_string("content-type")? {
-                    request.headers.append_string("content-type", mime)?;
+                    request.headers.append_string("Content-Type", mime)?;
                 }
             }
             request.body = extracted;
@@ -450,7 +450,7 @@ impl ApiResponse {
         let mut headers = ApiHeaders::new(HeaderGuard::Response);
         if let Some(source) = init.headers {
             for (n, v) in source.raw_entries() {
-                headers.append_string(n, v)?;
+                headers.append_existing(source.wire_name(n), v)?;
             }
         }
         let mut body = match input {
@@ -997,10 +997,10 @@ fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::C
     options.method = request.method().to_owned();
     options.request_headers = request
         .headers
-        .iter()
+        .wire_iter()
         .map(|(n, v)| (n.to_owned(), v.to_owned()))
         .collect();
-    if plan.taint == ResponseType::Cors || request.method() == "OPTIONS" {
+    if plan.taint == ResponseType::Cors || !matches!(request.method(), "GET" | "HEAD") {
         options
             .request_headers
             .push(("origin".into(), request.origin.serialize()));
@@ -1024,6 +1024,17 @@ fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::C
     }
     if let Some(Body::Bytes(bytes)) = request.body() {
         options.body = bytes.clone();
+    }
+    if matches!(request.method(), "POST" | "PUT")
+        && options.body.is_empty()
+        && !options
+            .request_headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+    {
+        options
+            .request_headers
+            .push(("content-length".into(), "0".into()));
     }
     dispatcher
         .submit(&request.url().serialize(), options, now)

@@ -342,10 +342,15 @@ impl Xhr {
             .last()
             .map(|(_, v)| v.as_str())
             .unwrap_or("");
-        let combined = old.map_or_else(|| normalized.to_owned(), |v| format!("{v}, {normalized}"));
-        self.request_headers
-            .set_string(&name, &combined)
-            .map_err(map_header_error)
+        if let Some(old) = old {
+            self.request_headers
+                .replace_combined_string(&name, format!("{old}, {normalized}"))
+                .map_err(map_header_error)
+        } else {
+            self.request_headers
+                .set_string(&name, normalized)
+                .map_err(map_header_error)
+        }
     }
     pub fn set_timeout(&mut self, millis: u32) -> Result<(), XhrError> {
         if !self.asynchronous && self.context.window {

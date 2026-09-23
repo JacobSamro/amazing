@@ -77,18 +77,32 @@ pub(crate) fn request_bytes(url: &ParsedUrl, options: &FetchOptions) -> Result<V
         return Err(NetError::UnsupportedMethod(method));
     }
     let mut request = format!(
-        "{} {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: */*\r\nAccept-Encoding: gzip, deflate, br\r\nConnection: close\r\n",
+        "{} {} HTTP/1.1\r\nHost: {}\r\n",
         method,
         url.http_request_target()?,
         url.host_and_port(),
-        USER_AGENT,
     );
+    if !options
+        .request_headers
+        .iter()
+        .any(|(name, _)| name.eq_ignore_ascii_case("user-agent"))
+    {
+        request.push_str(&format!("User-Agent: {USER_AGENT}\r\n"));
+    }
+    if !options
+        .request_headers
+        .iter()
+        .any(|(name, _)| name.eq_ignore_ascii_case("accept"))
+    {
+        request.push_str("Accept: */*\r\n");
+    }
+    request.push_str("Accept-Encoding: gzip, deflate, br\r\nConnection: close\r\n");
     for (name, value) in &options.request_headers {
         if !name.eq_ignore_ascii_case("accept-encoding")
             && !name.is_empty()
             && name
                 .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
             && !value.bytes().any(|byte| matches!(byte, b'\r' | b'\n' | 0))
         {
             request.push_str(name);

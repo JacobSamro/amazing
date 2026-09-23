@@ -1,0 +1,19 @@
+{
+  "revision": "c48d58747e1f211527fb695fd60548a997fae617",
+  "files": {
+    "xhr/resources/echo-headers.py": "3c89b262603b0a4370a7f3d410f49597cf01970c0e5c9e952944c148eabe1c7b",
+    "xhr/resources/inspect-headers.py": "8f141650c15f346dc5e5a006ff3cd5318e33c3431d996bae822586d7a01adc63",
+    "xhr/setrequestheader-after-send.htm": "c3bb06e779e47499a904441bae01b5306d5177a79074e27480380299767be264",
+    "xhr/setrequestheader-allow-empty-value.htm": "d93ef706e83ed425b3af5e0a66ebd3c5b4b886badda21d5d723da2c42a77b18c",
+    "xhr/setrequestheader-allow-whitespace-in-value.htm": "5681ec7390d945e6bf0aab136bce01f920e212bda9b36eb9b14a748a47027881",
+    "xhr/setrequestheader-before-open.htm": "d7c079aabb536edc3fba8756a6e12529ed07da5d15b84f0a3f48b051cb33c582",
+    "xhr/setrequestheader-bogus-name.htm": "a57fe5f0dbd2f5711fe9709fbb6da3db612b853e54be36ad1a031669adab5e60",
+    "xhr/setrequestheader-bogus-value.htm": "fd1a14f6f3d72b571ec5a655dbc0a9d5110e29216e84dda94f7876a8859d5cf1",
+    "xhr/setrequestheader-case-insensitive.htm": "43449fad3100eca20d79f13747e2dee567a109f183b9ea2ce180b8738d4db422",
+    "xhr/setrequestheader-combining.window.js": "0e47ec5708e561a6ac1030723e0d2adae89469166cf2456d0da0b0d7230a61a9",
+    "xhr/setrequestheader-content-type.htm": "6f9411bbd34eda4d76f1c74e3fc6b319980cbf6e4dd5120e3ea6c32e634d547f",
+    "xhr/setrequestheader-header-allowed.htm": "199462468c41a2d635f8ac9cd28325897460f592a02a7c2b0970e94d4d614d8d",
+    "xhr/setrequestheader-header-forbidden.htm": "d8a9c4a79d98478785004b89d14a2a75979e0ddf37d928b2820322ed80c43c43",
+    "xhr/setrequestheader-open-setrequestheader.htm": "a435abf2f7559b36de50d94f34d61f54cdeac0a21362578209605e0fafeb1fb4"
+  }
+}
