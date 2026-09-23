@@ -159,6 +159,49 @@ pub fn font_match_score(request: FontAttributes, candidate: FontAttributes) -> u
     slant + stretch + weight
 }
 
+/// CSS Fonts 4 matches width, then style, then weight within a single family.
+/// The tuple is ordered so callers can select the least matching face without
+/// allowing any attribute difference to reorder the requested family list.
+pub fn font_match_rank(
+    request: FontAttributes,
+    candidate: FontAttributes,
+) -> (u8, u16, u8, u8, u16) {
+    let width_side = if request.stretch <= 100 {
+        u8::from(candidate.stretch > request.stretch)
+    } else {
+        u8::from(candidate.stretch < request.stretch)
+    };
+    let style = match (request.slant, candidate.slant) {
+        (FontSlant::Normal, FontSlant::Normal)
+        | (FontSlant::Italic, FontSlant::Italic)
+        | (FontSlant::Oblique, FontSlant::Oblique) => 0,
+        (FontSlant::Normal, FontSlant::Oblique)
+        | (FontSlant::Italic, FontSlant::Oblique)
+        | (FontSlant::Oblique, FontSlant::Italic) => 1,
+        _ => 2,
+    };
+    let weight_side = if (400..=500).contains(&request.weight) {
+        if candidate.weight >= request.weight && candidate.weight <= 500 {
+            0
+        } else if candidate.weight < request.weight {
+            1
+        } else {
+            2
+        }
+    } else if request.weight < 400 {
+        u8::from(candidate.weight > request.weight)
+    } else {
+        u8::from(candidate.weight < request.weight)
+    };
+    (
+        width_side,
+        request.stretch.abs_diff(candidate.stretch),
+        style,
+        weight_side,
+        request.weight.abs_diff(candidate.weight),
+    )
+}
+
 pub fn resolve_synthesis(
     request: FontAttributes,
     candidate: FontAttributes,
@@ -1026,6 +1069,24 @@ mod tests {
                 }
             )
         );
+    }
+
+    #[test]
+    fn font_matching_uses_width_style_then_css_weight_direction() {
+        let request = FontAttributes {
+            weight: 400,
+            stretch: 100,
+            slant: FontSlant::Italic,
+        };
+        let face = |weight, stretch, slant| FontAttributes { weight, stretch, slant };
+        assert!(font_match_rank(request, face(900, 100, FontSlant::Italic))
+            < font_match_rank(request, face(400, 90, FontSlant::Italic)));
+        assert!(font_match_rank(request, face(900, 100, FontSlant::Italic))
+            < font_match_rank(request, face(400, 100, FontSlant::Normal)));
+        assert!(font_match_rank(request, face(500, 100, FontSlant::Italic))
+            < font_match_rank(request, face(300, 100, FontSlant::Italic)));
+        assert!(font_match_rank(request, face(300, 100, FontSlant::Italic))
+            < font_match_rank(request, face(600, 100, FontSlant::Italic)));
     }
 
     #[test]

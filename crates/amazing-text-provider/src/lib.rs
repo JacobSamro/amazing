@@ -7,7 +7,7 @@ use amazing_text::{
     FontMetrics, FontSlant, GlyphCacheKey, GlyphContent, GlyphFlags, GlyphId, GlyphImage,
     GlyphOrientation, GlyphRasterRequest, LineRequest, Paragraph, ShapedGlyph, ShapedLine,
     ShapedParagraph, ShapedRun, ShapingBoundary, TextError, TextOrientation, TextStyle, TextSystem,
-    WritingMode, font_match_score, resolve_synthesis,
+    WritingMode, font_match_rank, resolve_synthesis,
 };
 use harfrust::{
     BufferFlags, Feature, FontRef as HarfFontRef, ShapeOptions, ShaperData, ShaperInstance, Tag,
@@ -155,18 +155,18 @@ impl TextProvider {
     }
 
     fn matching_font(&self, style: &TextStyle, text: Option<&str>) -> Option<usize> {
-        let mut best: Option<(usize, u32)> = None;
-        for (family_order, family) in style.families.iter().enumerate() {
+        let private_use = text.is_some_and(|value| value.chars().any(is_private_use));
+        for family in &style.families {
+            if private_use && is_generic_family(family) {
+                continue;
+            }
             let family = unquote_family(family);
+            let mut best = None;
             for (index, font) in self.fonts.iter().enumerate() {
                 if !font.family.eq_ignore_ascii_case(family) {
                     continue;
                 }
-                if text.is_some_and(|value| !font_covers(font, value)) {
-                    continue;
-                }
-                let score = family_order as u32 * 1_000_000
-                    + font_match_score(
+                let rank = font_match_rank(
                         FontAttributes {
                             weight: style.weight,
                             stretch: style.stretch,
@@ -178,15 +178,30 @@ impl TextProvider {
                             slant: font.slant,
                         },
                     );
-                if best.is_none_or(|(_, current)| score < current) {
-                    best = Some((index, score));
+                if best.is_none_or(|(_, current)| rank < current) {
+                    best = Some((index, rank));
                 }
             }
-            if best.is_some_and(|(_, score)| score / 1_000_000 == family_order as u32) {
-                break;
+            if let Some((index, _)) = best {
+                if text.is_none_or(|value| font_covers(&self.fonts[index], value)) {
+                    return Some(index);
+                }
             }
         }
-        best.map(|(index, _)| index)
+        if private_use {
+            return None;
+        }
+        // The driver registers its platform faces under these generic aliases.
+        // Once the author list is exhausted, use an installed face that covers
+        // the cluster before the deterministic missing-glyph renderer.
+        ["serif", "sans-serif", "system-ui", "monospace"]
+            .iter()
+            .find_map(|family| {
+                self.fonts.iter().position(|font| {
+                    font.family == *family
+                        && text.is_none_or(|value| font_covers(font, value))
+                })
+            })
     }
 
     fn itemize_font_spans(
@@ -631,6 +646,21 @@ fn unquote_family(family: &str) -> &str {
     } else {
         trimmed
     }
+}
+
+fn is_generic_family(family: &str) -> bool {
+    let family = family.trim();
+    [
+        "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui",
+        "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded", "emoji",
+        "math", "fangsong",
+    ]
+    .iter()
+    .any(|generic| family.eq_ignore_ascii_case(generic))
+}
+
+fn is_private_use(ch: char) -> bool {
+    matches!(ch as u32, 0xE000..=0xF8FF | 0xF0000..=0xFFFFD | 0x100000..=0x10FFFD)
 }
 
 fn font_covers(font: &FontRecord, text: &str) -> bool {
@@ -1692,6 +1722,28 @@ mod tests {
     }
 
     #[test]
+    fn synthetic_oblique_changes_the_registered_face_outline() {
+        let mut provider = TextProvider::new();
+        let font = provider.register_web_font(WebFont {
+            family: "Regular only".into(), weight: 400, stretch: 100,
+            slant: FontSlant::Normal, format: FontFormat::OpenType,
+            bytes: synthetic_font('A'),
+        }).unwrap();
+        let key = GlyphCacheKey::new(provider.generation(), font, GlyphId(1), 30.0, 0, 0).unwrap();
+        let normal = provider.rasterize(GlyphRasterRequest {
+            key, variations: &[],
+            synthesis: amazing_text::FontSynthesis { weight: false, style: false },
+        }).unwrap().unwrap();
+        let oblique = provider.rasterize(GlyphRasterRequest {
+            key: key.with_style(&[], amazing_text::FontSynthesis { weight: false, style: true }),
+            variations: &[],
+            synthesis: amazing_text::FontSynthesis { weight: false, style: true },
+        }).unwrap().unwrap();
+        assert_ne!((normal.width, normal.bearing_x, normal.data),
+                   (oblique.width, oblique.bearing_x, oblique.data));
+    }
+
+    #[test]
     fn fallback_selects_a_covering_face_per_grapheme_cluster() {
         let mut provider = TextProvider::new();
         let primary = provider
@@ -1741,6 +1793,97 @@ mod tests {
         assert_eq!(shaped.runs[1].font, secondary);
         assert_eq!(shaped.runs[1].glyphs[0].cluster, 1..2);
         assert!(shaped.runs.iter().all(|run| run.glyphs[0].id == GlyphId(1)));
+    }
+
+    #[test]
+    fn earlier_named_family_beats_later_face_regardless_of_attribute_distance() {
+        let mut provider = TextProvider::new();
+        let first = provider.register_web_font(WebFont {
+            family: "CSSTest Multi Word".into(),
+            weight: 1000,
+            stretch: 1000,
+            slant: FontSlant::Normal,
+            format: FontFormat::OpenType,
+            bytes: synthetic_font('A'),
+        }).unwrap();
+        provider.register_web_font(WebFont {
+            family: "second".into(),
+            weight: 400,
+            stretch: 100,
+            slant: FontSlant::Normal,
+            format: FontFormat::OpenType,
+            bytes: synthetic_font('A'),
+        }).unwrap();
+        let style = TextStyle {
+            families: vec!["'csstest multi word'".into(), "second".into()],
+            ..TextStyle::default()
+        };
+        assert_eq!(provider.fonts[provider.matching_font(&style, Some("A")).unwrap()].key, first);
+    }
+
+    #[test]
+    fn missing_glyph_in_selected_face_advances_to_next_family() {
+        let mut provider = TextProvider::new();
+        for (family, slant, glyph) in [
+            ("primary", FontSlant::Normal, 'A'),
+            ("primary", FontSlant::Italic, 'B'),
+            ("secondary", FontSlant::Normal, 'B'),
+        ] {
+            provider.register_web_font(WebFont {
+                family: family.into(), weight: 400, stretch: 100, slant,
+                format: FontFormat::OpenType, bytes: synthetic_font(glyph),
+            }).unwrap();
+        }
+        let style = TextStyle {
+            families: vec!["primary".into(), "secondary".into()],
+            ..TextStyle::default()
+        };
+        let selected = provider.matching_font(&style, Some("B")).unwrap();
+        assert_eq!(provider.fonts[selected].family, "secondary");
+    }
+
+    #[test]
+    fn missing_author_family_uses_covering_installed_fallback() {
+        let mut provider = TextProvider::new();
+        let serif = provider.register_web_font(WebFont {
+            family: "serif".into(), weight: 400, stretch: 100,
+            slant: FontSlant::Normal, format: FontFormat::OpenType,
+            bytes: synthetic_font('A'),
+        }).unwrap();
+        let style = TextStyle {
+            families: vec!["'Uninstalled Family'".into()],
+            ..TextStyle::default()
+        };
+        assert_eq!(provider.fonts[provider.matching_font(&style, Some("A")).unwrap()].key, serif);
+        assert_eq!(provider.matching_font(&style, Some("B")), None);
+    }
+
+    #[test]
+    fn private_use_ignores_generic_faces_but_uses_named_faces() {
+        let mut provider = TextProvider::new();
+        provider.register_web_font(WebFont {
+            family: "serif".into(),
+            weight: 400,
+            stretch: 100,
+            slant: FontSlant::Normal,
+            format: FontFormat::OpenType,
+            bytes: synthetic_font('\u{E000}'),
+        }).unwrap();
+        let style = TextStyle { families: vec!["serif".into()], ..TextStyle::default() };
+        assert_eq!(provider.matching_font(&style, Some("\u{E000}")), None);
+        assert!(provider.matching_font(&style, Some("A")).is_none());
+        let quoted = TextStyle { families: vec!["'serif'".into()], ..TextStyle::default() };
+        assert!(provider.matching_font(&quoted, Some("\u{E000}")).is_some());
+        provider.register_web_font(WebFont {
+            family: "PUA fixture".into(),
+            weight: 400,
+            stretch: 100,
+            slant: FontSlant::Normal,
+            format: FontFormat::OpenType,
+            bytes: synthetic_font('\u{E000}'),
+        }).unwrap();
+        let style = TextStyle { families: vec!["serif".into(), "PUA fixture".into()], ..TextStyle::default() };
+        assert!(provider.matching_font(&style, Some("\u{E000}")).is_some());
     }
 
     #[test]
