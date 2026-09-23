@@ -44,6 +44,34 @@ fn drain(r: &mut EventTargets, dispatch: &mut Dispatch) -> Vec<EventInvocation> 
     out
 }
 #[test]
+fn wpt_stop_immediate_sets_cancel_bubble_and_suppresses_second_listener() {
+    // dom/events/Event-stopImmediatePropagation.html at WPT c2a2fce.
+    let (d, mut registry, targets) = fixture();
+    add(&mut registry, &d, targets[2], 1, false);
+    add(&mut registry, &d, targets[2], 2, false);
+    let id = event(&mut registry, false, false);
+    let mut dispatch = registry.begin_dispatch(&d, targets[2], id, DispatchOrigin::Script).unwrap();
+    assert_eq!(registry.next_listener(&mut dispatch).unwrap().callback, CallbackId(1));
+    registry.event_mut(id).stop_immediate_propagation();
+    assert!(registry.event(id).cancel_bubble());
+    assert!(registry.next_listener(&mut dispatch).is_none());
+}
+
+#[test]
+fn wpt_once_listener_is_removed_before_nested_dispatch() {
+    // dom/events/AddEventListenerOptions-once.any.js, nested dispatch site.
+    let (d, mut registry, targets) = fixture();
+    registry.add_listener(&d, targets[2], "test", Some(CallbackId(1)),
+        ListenerOptions { once: true, ..Default::default() });
+    let first = event(&mut registry, false, false);
+    let mut outer = registry.begin_dispatch(&d, targets[2], first, DispatchOrigin::Script).unwrap();
+    assert_eq!(registry.next_listener(&mut outer).unwrap().callback, CallbackId(1));
+    let nested = event(&mut registry, false, false);
+    let mut inner = registry.begin_dispatch(&d, targets[2], nested, DispatchOrigin::Script).unwrap();
+    assert!(registry.next_listener(&mut inner).is_none());
+    assert!(registry.next_listener(&mut outer).is_none());
+}
+#[test]
 fn capture_target_and_bubble_order_and_cleanup() {
     let (d, mut r, t) = fixture();
     for (i, n) in t.iter().enumerate() {

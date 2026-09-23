@@ -942,6 +942,27 @@ fn markup_and_selector_seams_are_live_and_run_after_dom_borrow() {
 }
 
 #[test]
+fn wpt_closest_walks_inclusive_ancestors_through_selector_host() {
+    // dom/nodes/Element-closest.html at WPT c2a2fce: the select,
+    // fieldset, div, and absent-ancestor result sites, using tag selectors
+    // supported by this deliberately small mock SelectorEngine.
+    let mut host = Host::default();
+    let body = host.dom.create_element(NodeIdx(0), "body");
+    let div = host.dom.create_element(body, "div");
+    let fieldset = host.dom.create_element(div, "fieldset");
+    let select = host.dom.create_element(fieldset, "select");
+    let option = host.dom.create_element(select, "option");
+    for (selector, expected) in [("select", Some(select)), ("fieldset", Some(fieldset)),
+        ("div", Some(div)), ("body", Some(body)), ("form", None)] {
+        let actual = call(&mut host, O::ElementClosest, V::Node(option), &[str_value(selector)]);
+        assert_eq!(actual, expected.map(V::Node).unwrap_or(V::Null));
+    }
+    assert_eq!(call(&mut host, O::ElementMatches, V::Node(option), &[str_value("option")]), V::Bool(true));
+    assert_eq!(call(&mut host, O::ElementMatches, V::Node(option), &[str_value("select")]), V::Bool(false));
+    assert_eq!(invoke(&mut host, O::ElementMatches, V::Node(option), &[str_value("?")]), Err("SyntaxError".into()));
+}
+
+#[test]
 fn adjacent_html_positions_and_inner_text_approximation() {
     let mut h = Host::default();
     let root = h.dom.create_element(NodeIdx(0), "div");

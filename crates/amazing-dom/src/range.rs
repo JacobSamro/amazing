@@ -314,15 +314,17 @@ impl Dom {
     }
     pub fn range_is_point_in_range(&self, id: Range, point: BoundaryPoint) -> Result<bool, DomError> {
         let range = self.range(id)?;
-        self.check_boundary(point)?;
+        self.check_node(point.node)?;
         if self.root(point.node) != self.root(range.start.node) { return Ok(false); }
+        self.check_boundary(point)?;
         Ok(self.compare_boundary_points(range.start, point)? != Ordering::Greater
             && self.compare_boundary_points(point, range.end)? != Ordering::Greater)
     }
     pub fn range_compare_point(&self, id: Range, point: BoundaryPoint) -> Result<i16, DomError> {
         let range = self.range(id)?;
-        self.check_boundary(point)?;
+        self.check_node(point.node)?;
         if self.root(point.node) != self.root(range.start.node) { return Err(DomError::WrongDocumentError); }
+        self.check_boundary(point)?;
         Ok(if self.compare_boundary_points(point, range.start)? == Ordering::Less { -1 }
             else if self.compare_boundary_points(point, range.end)? == Ordering::Greater { 1 }
             else { 0 })

@@ -1458,3 +1458,22 @@ Integrator installation steps:
 4. Retain JS roots for signal reasons and onabort handlers until the runtime collector can trace/release the native signal graph. Wire timeout task cancellation when the signal is no longer observable.
 
 Mock-host coverage includes source/dependent abort algorithm and event order, default/explicit reasons, timeout fire idempotence, HTML/SVG Document behavior, live named NodeList/collections, invalid enums, negative unsigned long, URL seam resolution, relList mutation and supported-token lookup, and cell clamping. Production driver adoption and WPT `html/dom/reflection-*` measurement are deferred; no WPT credit is claimed for mock tests.
+
+
+## DOM-11 pinned WPT native assertion ports (2026-09-23)
+
+Pinned WPT checkout was verified at `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` on win-001. These are native Rust assertion ports, **not WPT execution**. Each source below contributes one or more concrete expected results or error-order assertions to `crates/amazing-dom/tests/wpt_assertion_ports.rs`, `src/events_tests.rs`, or the bindings mock tests.
+
+| Directory | Ported source sites | Source files |
+|---|---:|---|
+| `dom/ranges/` | 9 | `Range-comparePoint.html`, `Range-isPointInRange.html`, `Range-set.html`, `Range-cloneContents.html`, `Range-extractContents.html`, `Range-deleteContents.html`, `Range-surroundContents.html`, `Range-mutations-splitText.html`, `Range-mutations.js` |
+| `dom/nodes/` | 6 | `pre-insertion-validation-notfound.js`, `Node-compareDocumentPosition.html`, `Node-normalize.html`, `Node-cloneNode.html`, `Element-closest.html`, `Element-matches.js` |
+| `dom/traversal/` | 2 | `NodeIterator-removal.html`, `TreeWalker-acceptNode-filter.html` |
+| `dom/events/` | 2 | `Event-stopImmediatePropagation.html`, `AddEventListenerOptions-once.any.js` |
+| **Total** | **19** | Native expected-pass candidates only |
+
+One defect was found and fixed: `range_is_point_in_range` and `range_compare_point` called `check_boundary` before comparing roots. On a foreign-root doctype or out-of-range offset, they returned `InvalidNodeTypeError` or `IndexSizeError`; pinned WPT expects `false` or `WrongDocumentError` first. DOM Standard §5.5 `isPointInRange` step 1 and `comparePoint` step 1 require root comparison before doctype and offset checks. The implementation now validates the node handle, compares roots, then validates the boundary. The native regression test includes both foreign-root offset 99 and a foreign doctype.
+
+No defect was found in the ported pre-insert, clone, normalization, splitText live-range, surround partial-node, iterator fix-up, TreeWalker filter cleanup, or event once/immediate-stop cases. The `Element-closest` and `matches` ports use only tag selectors because the mock selector seam intentionally supports tag names; CSS selector conformance and driver installation remain separate. Broader WPT parameter matrices, Shadow DOM, iframe unload mutation, and full event retargeting are not claimed by this native selection.
+
+The host-contract rule in `.agents/dom-bindings/decision-dom7-host.md` applies from DOM-11 onward: new `BindingHost` methods and seam traits need typed Unsupported defaults so the production driver keeps compiling. DOM-11 adds no host methods or seam traits. The decision explicitly leaves existing required methods unchanged.
