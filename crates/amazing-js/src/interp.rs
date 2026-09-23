@@ -400,6 +400,7 @@ impl Interpreter {
             .borrow_mut()
             .set_own("globalThis", JsValue::Object(i.global_obj.clone()));
         let global_this = JsValue::Object(i.global_obj.clone());
+        i.global_env.bind_this(global_this.clone());
         let _ = i.global_env.declare_var("globalThis", global_this);
         let window = JsValue::Object(i.global_obj.clone());
         i.global_obj.borrow_mut().set_own("window", window.clone());
@@ -2314,6 +2315,13 @@ impl Interpreter {
                     return self.set_prop(&base, &key, value);
                 };
                 if self.set_with_receiver(object, &key, value, base.clone())? {
+                    Ok(())
+                } else if matches!(object.borrow().exotic, Exotic::Array)
+                    && key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length")
+                    && object.borrow().own_prop("length").is_some_and(|property| property.writable)
+                {
+                    // A failed shrink leaves the first undeletable element in place.
+                    // Sloppy assignment ignores the unsuccessful [[Set]].
                     Ok(())
                 } else {
                     Err(Throw::type_error("cannot assign to property"))

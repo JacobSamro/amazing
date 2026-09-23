@@ -60,7 +60,13 @@ fn std_reflect_construct(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) ->
         }
     }
     let list = i.create_list_from_array_like(&std_reflect_arg(&args, 1))?;
-    i.construct_with_new_target(&target, list, new_target)
+    let prototype = i.get_prop(&new_target, "prototype")?;
+    let mut instance = JsObject::ordinary();
+    instance.proto = match prototype { JsValue::Object(object) => Some(object), _ => Some(i.object_proto.clone()) };
+    instance.constructed = true;
+    let instance = JsValue::object(instance);
+    let result = i.call_value_with_new_target(&target, instance.clone(), list, Some(new_target))?;
+    Ok(if result.is_object() { result } else { instance })
 }
 
 fn std_reflect_define_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {

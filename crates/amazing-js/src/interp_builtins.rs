@@ -3,26 +3,26 @@ fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsV
         Some(value @ JsValue::Object(_)) => value,
         Some(JsValue::Num(number)) => {
             let mut object = JsObject::ordinary();
-            object.proto = Some(i.number_proto.clone());
-            object.set_own("[[NumberData]]", JsValue::Num(number));
+object.proto = Some(i.number_proto.clone());
+            object.define("[[NumberData]]", symbol_data(JsValue::Num(number), true, true)).unwrap();
             JsValue::object(object)
         }
         Some(JsValue::Bool(boolean)) => {
             let mut object = JsObject::ordinary();
-            object.proto = Some(i.boolean_proto.clone());
-            object.set_own("[[BooleanData]]", JsValue::Bool(boolean));
+object.proto = Some(i.boolean_proto.clone());
+            object.define("[[BooleanData]]", symbol_data(JsValue::Bool(boolean), true, true)).unwrap();
             JsValue::object(object)
         }
         Some(JsValue::Str(string)) => {
             let mut object = JsObject::ordinary();
             object.proto = Some(i.string_proto.clone());
-            object.set_own("[[StringData]]", JsValue::Str(string));
+            object.define("[[StringData]]", symbol_data(JsValue::Str(string), true, true)).unwrap();
             JsValue::object(object)
         }
         Some(JsValue::BigInt(value)) => {
             let mut object = JsObject::ordinary();
-            object.proto = Some(i.bigint_proto.clone());
-            object.set_own("[[BigIntData]]", JsValue::BigInt(value));
+object.proto = Some(i.bigint_proto.clone());
+            object.define("[[BigIntData]]", symbol_data(JsValue::BigInt(value), true, true)).unwrap();
             JsValue::object(object)
         }
         Some(JsValue::Symbol(symbol)) => {
@@ -1221,7 +1221,7 @@ fn native_date(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result
         let value = i.to_number(args.first().unwrap_or(&JsValue::num(0.0)))?;
         object
             .borrow_mut()
-            .set_own("[[DateValue]]", JsValue::Num(value));
+            .define("[[DateValue]]", symbol_data(JsValue::Num(value), true, true)).unwrap();
         Ok(this)
     } else {
         Ok(JsValue::str(""))
@@ -2264,6 +2264,11 @@ fn native_object_assign(
     for source in args.iter().skip(1) {
         for key in i.enumerable_property_keys(source)? {
             let value = i.get_prop(source, &key)?;
+            if object.borrow().get_own("[[StringData]]").and_then(|data| match data {
+                JsValue::Str(string) => Some(string.len()), _ => None,
+            }).is_some_and(|length| array_index_key(&key).is_some_and(|index| (index as usize) < length)) {
+                return Err(Throw::type_error("Object.assign cannot write a String index"));
+            }
             if !i.set_with_receiver(object, &key, value, target.clone())? {
                 return Err(Throw::type_error("Object.assign could not set property"));
             }
@@ -2651,7 +2656,7 @@ fn native_number(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
     } else { 0.0 };
     let value = JsValue::num(number);
     if let JsValue::Object(object) = &this {
-        object.borrow_mut().set_own("[[NumberData]]", value);
+        object.borrow_mut().define("[[NumberData]]", symbol_data(value, true, true)).unwrap();
         Ok(this)
     } else {
         Ok(value)
@@ -2682,7 +2687,7 @@ fn native_string(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<
         Some(value) => JsValue::str(i.to_js_string(value)?),
     };
     if let JsValue::Object(object) = &this {
-        object.borrow_mut().set_own("[[StringData]]", value);
+        object.borrow_mut().define("[[StringData]]", symbol_data(value, true, true)).unwrap();
         Ok(this)
     } else {
         Ok(value)

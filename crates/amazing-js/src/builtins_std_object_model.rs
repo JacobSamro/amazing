@@ -181,6 +181,14 @@ impl Interpreter {
         if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
             return Ok(false);
         }
+        if let JsValue::Object(object) = &receiver {
+            if Rc::ptr_eq(&object.0, &target.0) {
+                if let Some(result) = binary_set_index(self, target, key, value.clone()) {
+                    result?;
+                    return Ok(true);
+                }
+            }
+        }
         let mut cursor = Some(target.clone());
         while let Some(object) = cursor {
             let property = if let Some(name) = key.as_string() {

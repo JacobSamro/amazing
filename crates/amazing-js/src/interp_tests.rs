@@ -835,6 +835,8 @@ mod tests {
         for source in [
             "var x={}; Object.defineProperty(x,'a',{value:1,writable:true,configurable:true}); Object.defineProperty(x,'a',{value:2}); var d=Object.getOwnPropertyDescriptor(x,'a'); d.value===2 && d.writable===true && d.enumerable===false && d.configurable===true",
             "var p={x:{value:3,enumerable:false},y:{value:4,enumerable:true}}; var x=Object.create(null,p); Object.keys(x).join(',')==='y' && x.x===3 && Object.getPrototypeOf(x)===null",
+            "var x=Object.create({}, {prop:{configurable:this}}); delete x.prop; !Object.hasOwn(x,'prop')",
+            "var x=Object.create({}, {prop:{enumerable:this}}); Object.keys(x).join(',')==='prop'",
             "var x=Object.preventExtensions({}); Reflect.defineProperty(x,'a',{value:1})===false && !(('a') in x)",
             "var x=Object.preventExtensions({}); try {Object.defineProperty(x,'a',{value:1}); false} catch(e) {e instanceof TypeError}",
             "var p={x:1}, r={}; Reflect.set(p,'x',2,r)===true && p.x===1 && r.x===2",
