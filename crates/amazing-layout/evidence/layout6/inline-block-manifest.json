@@ -1,0 +1,183 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "layout6-inline-block",
+    "case_count": 41,
+    "fixed_base": "d29e1ff",
+    "scope": "CSS2 non-replaced inline-block width, height, baseline, positioning, vertical alignment and paint; css-display inline-block; two LAYOUT-5 flex reference cases"
+  },
+  "sparse_paths": [
+    "css/CSS2",
+    "css/css-display",
+    "css/css-flexbox",
+    "css/reference",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "css__CSS2__abspos__static-inside-inline-block.html",
+      "test": "css/CSS2/abspos/static-inside-inline-block.html"
+    },
+    {
+      "id": "css__CSS2__box-display__inline-block-after-block-in-inline-with-intervening-float.html",
+      "test": "css/CSS2/box-display/inline-block-after-block-in-inline-with-intervening-float.html"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-000.xht",
+      "test": "css/CSS2/normal-flow/inline-block-000.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-height-001.xht",
+      "test": "css/CSS2/normal-flow/inline-block-height-001.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-height-002.xht",
+      "test": "css/CSS2/normal-flow/inline-block-height-002.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-height-001.xht",
+      "test": "css/CSS2/normal-flow/inline-block-non-replaced-height-001.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-height-002.xht",
+      "test": "css/CSS2/normal-flow/inline-block-non-replaced-height-002.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-width-001.xht",
+      "test": "css/CSS2/normal-flow/inline-block-non-replaced-width-001.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-width-002.xht",
+      "test": "css/CSS2/normal-flow/inline-block-non-replaced-width-002.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-width-003.xht",
+      "test": "css/CSS2/normal-flow/inline-block-non-replaced-width-003.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-width-004.xht",
+      "test": "css/CSS2/normal-flow/inline-block-non-replaced-width-004.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-valign-001.xht",
+      "test": "css/CSS2/normal-flow/inline-block-valign-001.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-valign-002.xht",
+      "test": "css/CSS2/normal-flow/inline-block-valign-002.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-width-001a.xht",
+      "test": "css/CSS2/normal-flow/inline-block-width-001a.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-width-001b.xht",
+      "test": "css/CSS2/normal-flow/inline-block-width-001b.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-width-002a.xht",
+      "test": "css/CSS2/normal-flow/inline-block-width-002a.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-width-002b.xht",
+      "test": "css/CSS2/normal-flow/inline-block-width-002b.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-zorder-001.xht",
+      "test": "css/CSS2/normal-flow/inline-block-zorder-001.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-zorder-002.xht",
+      "test": "css/CSS2/normal-flow/inline-block-zorder-002.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-zorder-003.xht",
+      "test": "css/CSS2/normal-flow/inline-block-zorder-003.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-zorder-004.xht",
+      "test": "css/CSS2/normal-flow/inline-block-zorder-004.xht"
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-zorder-005.xht",
+      "test": "css/CSS2/normal-flow/inline-block-zorder-005.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-001.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-001.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-002.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-002.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-003.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-003.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-004.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-004.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-005.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-005.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-006.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-006.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-010.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-010.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-011.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-011.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-012.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-012.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-013.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-013.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-014.xht",
+      "test": "css/CSS2/visudet/inline-block-baseline-014.xht"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-015.html",
+      "test": "css/CSS2/visudet/inline-block-baseline-015.html"
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-016.html",
+      "test": "css/CSS2/visudet/inline-block-baseline-016.html"
+    },
+    {
+      "id": "css__css-display__run-in__run-in-contains-inline-block-001.xht",
+      "test": "css/css-display/run-in/run-in-contains-inline-block-001.xht"
+    },
+    {
+      "id": "css__css-display__run-in__run-in-inline-block-between-001.xht",
+      "test": "css/css-display/run-in/run-in-inline-block-between-001.xht"
+    },
+    {
+      "id": "css__css-display__run-in__run-in-inline-block-between-002.xht",
+      "test": "css/css-display/run-in/run-in-inline-block-between-002.xht"
+    },
+    {
+      "id": "css__css-display__run-in__run-in-inline-block-between-003.xht",
+      "test": "css/css-display/run-in/run-in-inline-block-between-003.xht"
+    },
+    {
+      "id": "css__css-flexbox__flexbox-baseline-multi-item-horiz-001a.html",
+      "test": "css/css-flexbox/flexbox-baseline-multi-item-horiz-001a.html"
+    },
+    {
+      "id": "css__css-flexbox__flexbox-baseline-multi-item-horiz-001b.html",
+      "test": "css/css-flexbox/flexbox-baseline-multi-item-horiz-001b.html"
+    }
+  ]
+}

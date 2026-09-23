@@ -463,6 +463,29 @@ mod tests {
     }
 
     #[test]
+    fn static_absolute_child_uses_inline_block_content_origin() {
+        let (dom, root) = layout(
+            "<body><p>Test passes if there is a filled green square and <strong>no red</strong>.</p><div style='display:inline-block;width:100px;height:100px'></div> <div id=parent style='display:inline-block;width:100px;height:100px;background:red'><div id=absolute style='position:absolute;width:100px;height:100px;background:green'></div></div> <div style='display:inline-block;width:100px;height:100px'></div></body>",
+            "",
+            800.0,
+            600.0,
+        );
+        let parent = find_id(&root, &dom, "parent").unwrap();
+        let absolute = find_id(&root, &dom, "absolute").unwrap();
+        assert!((parent.border_box.x - parent.content_box.x).abs() < 0.001,
+            "inline-block border x={}, content x={}", parent.border_box.x, parent.content_box.x);
+        assert!((absolute.border_box.x - parent.content_box.x).abs() < 0.001,
+            "absolute x={}, inline-block content x={}", absolute.border_box.x, parent.content_box.x);
+        let text = amazing_text::FallbackTextSystem::new();
+        let shaped = crate::layout_dom_document_with_text_and_replaced_in_viewport(
+            &dom, "", 800.0, Some(600.0), &text, &crate::NoReplacedElements,
+        );
+        let parent = find_id(&shaped, &dom, "parent").unwrap();
+        let absolute = find_id(&shaped, &dom, "absolute").unwrap();
+        assert!((absolute.border_box.x - parent.border_box.x).abs() < 0.001);
+    }
+
+    #[test]
     fn percentage_relative_and_absolute_insets_use_containing_block_axes() {
         let (dom, root) = layout(
             "<body><div id=relative><div id=absolute></div></div></body>",

@@ -103,7 +103,7 @@ pub(crate) fn tokenize(items: &[InlineNode]) -> Vec<Token> {
                     pending_space = false;
                 }
             }
-            InlineNode::Replaced { node, size, .. } | InlineNode::Atomic { node, size } => {
+            InlineNode::Replaced { node, size, .. } | InlineNode::Atomic { node, size, .. } => {
                 tokens.push(Token::Replaced {
                     node: *node,
                     size: *size,
@@ -114,6 +114,86 @@ pub(crate) fn tokenize(items: &[InlineNode]) -> Vec<Token> {
         }
     }
     tokens
+}
+
+struct AtomicLineStyle {
+    baseline_offset: f32,
+    vertical_align: String,
+}
+
+fn atomic_baselines(items: &[InlineNode]) -> HashMap<u32, AtomicLineStyle> {
+    items.iter().filter_map(|item| match item {
+        InlineNode::Atomic { node, baseline_offset, vertical_align, .. } => Some((node.0, AtomicLineStyle {
+            baseline_offset: *baseline_offset,
+            vertical_align: vertical_align.clone(),
+        })),
+        _ => None,
+    }).collect()
+}
+
+fn atomic_baseline_offset(style: &AtomicLineStyle, height: f32, strut: &Strut) -> Option<f32> {
+    let half_leading = (strut.line_height - (strut.ascent + strut.descent)) / 2.0;
+    let text_ascent = half_leading + strut.ascent;
+    let text_descent = strut.line_height - text_ascent;
+    match style.vertical_align.as_str() {
+        "top" | "bottom" => None,
+        "middle" => Some(height * 0.5 + strut.font_size * 0.25),
+        "text-top" => Some(text_ascent),
+        "text-bottom" => Some(height - text_descent),
+        "sub" => Some(style.baseline_offset - strut.font_size * 0.2),
+        "super" => Some(style.baseline_offset + strut.font_size * 0.2),
+        _ => Some(style.baseline_offset),
+    }
+}
+
+fn line_metrics(
+    fragments: &[ReplacedFrag],
+    atomic_baselines: &HashMap<u32, AtomicLineStyle>,
+    strut: &Strut,
+    ruby_over: f32,
+) -> (f32, f32) {
+    let half_leading = (strut.line_height - (strut.ascent + strut.descent)) / 2.0;
+    let text_ascent = half_leading + strut.ascent + ruby_over;
+    let tallest = fragments.iter().map(|fragment| fragment.height).fold(0.0, f32::max);
+    if !fragments.iter().any(|fragment| {
+        atomic_baselines.get(&fragment.node.0).is_some_and(|style| {
+            style.vertical_align != "baseline" || style.baseline_offset < fragment.height - 0.001
+        })
+    }) {
+        return ((strut.line_height + ruby_over).max(tallest), text_ascent.max(tallest));
+    }
+    let ascent = fragments.iter().fold(text_ascent, |ascent, fragment| {
+        let offset = atomic_baselines.get(&fragment.node.0)
+            .and_then(|style| atomic_baseline_offset(style, fragment.height, strut));
+        ascent.max(offset.unwrap_or(0.0))
+    });
+    let descent = fragments.iter().fold(strut.line_height - half_leading - strut.ascent, |descent, fragment| {
+        let offset = atomic_baselines.get(&fragment.node.0)
+            .and_then(|style| atomic_baseline_offset(style, fragment.height, strut));
+        descent.max(offset.map_or(0.0, |offset| fragment.height - offset))
+    });
+    (fragments.iter().filter(|fragment| {
+        atomic_baselines.get(&fragment.node.0).is_some_and(|style| {
+            matches!(style.vertical_align.as_str(), "top" | "bottom")
+        })
+    }).fold(ascent + descent, |height, fragment| height.max(fragment.height)), ascent)
+}
+
+fn atomic_fragment_y(
+    fragment: &ReplacedFrag,
+    styles: &HashMap<u32, AtomicLineStyle>,
+    strut: &Strut,
+    y_top: f32,
+    height: f32,
+    baseline: f32,
+) -> f32 {
+    match styles.get(&fragment.node.0) {
+        Some(style) if style.vertical_align == "top" => y_top,
+        Some(style) if style.vertical_align == "bottom" => y_top + height - fragment.height,
+        Some(style) => baseline - atomic_baseline_offset(style, fragment.height, strut)
+            .unwrap_or(fragment.height),
+        None => baseline - fragment.height,
+    }
 }
 
 /// Lays out inline content inside a content box starting at
@@ -143,8 +223,8 @@ pub(crate) fn layout_lines_with_floats(
     floats: &crate::floats::FloatContext,
 ) -> Vec<LineBox> {
     let tokens = tokenize(items);
+    let atomic_baselines = atomic_baselines(items);
 
-    let half_leading = (strut.line_height - (strut.ascent + strut.descent)) / 2.0;
     let line_y = std::cell::Cell::new(content_y);
     let line_left = std::cell::Cell::new(content_x);
     let right_edge = std::cell::Cell::new(content_x + content_width);
@@ -161,16 +241,11 @@ pub(crate) fn layout_lines_with_floats(
         if words.is_empty() && replaced.is_empty() {
             return;
         }
-        let image_height = replaced
-            .iter()
-            .map(|image| image.height)
-            .fold(0.0, f32::max);
-        let height = strut.line_height.max(image_height);
+        let (height, baseline_offset) = line_metrics(replaced, &atomic_baselines, strut, 0.0);
         let y_top = line_y.get();
-        let text_baseline = y_top + half_leading + strut.ascent;
-        let baseline = text_baseline.max(y_top + image_height);
+        let baseline = y_top + baseline_offset;
         for image in replaced.iter_mut() {
-            image.y = baseline - image.height;
+            image.y = atomic_fragment_y(image, &atomic_baselines, strut, y_top, height, baseline);
         }
         lines.push(LineBox {
             y_top,
@@ -388,7 +463,7 @@ pub(crate) fn layout_lines_shaped(
         .unwrap_or(amazing_text::WritingMode::HorizontalTb);
     let vertical_flow = writing_mode.is_vertical_flow();
 
-    let half_leading = (strut.line_height - (strut.ascent + strut.descent)) / 2.0;
+    let atomic_baselines = atomic_baselines(items);
     let right_edge = content_x + content_width;
     let inline_start = if vertical_flow { content_y } else { content_x };
     let inline_size = if vertical_flow && content_height > 0.0 {
@@ -426,20 +501,20 @@ pub(crate) fn layout_lines_shaped(
             .iter()
             .map(|image| image.height)
             .fold(0.0, f32::max);
+        let (atomic_height, baseline_offset) = line_metrics(replaced, &atomic_baselines, strut, *ruby_line_over);
         let height = if vertical_flow {
             (*cursor - inline_start).max(strut.line_height).max(image_height)
         } else {
-            (strut.line_height + *ruby_line_over).max(image_height)
+            atomic_height
         };
         let y_top = if vertical_flow {
             content_y
         } else {
             line_y.get()
         };
-        let text_baseline = y_top + half_leading + strut.ascent + *ruby_line_over;
-        let baseline = text_baseline.max(y_top + image_height);
+        let baseline = y_top + baseline_offset;
         for image in replaced.iter_mut() {
-            image.y = baseline - image.height;
+            image.y = atomic_fragment_y(image, &atomic_baselines, strut, y_top, height, baseline);
         }
         for decoration in decorations.iter_mut() {
             decoration.y += baseline;
@@ -1620,7 +1695,7 @@ fn shape_chunk(
                 previous_after = ShapingBoundary::Hard;
                 continue;
             }
-            InlineNode::Replaced { node, size, .. } | InlineNode::Atomic { node, size } => {
+            InlineNode::Replaced { node, size, .. } | InlineNode::Atomic { node, size, .. } => {
                 let (_, style) = previous_style
                     .clone()
                     .or_else(|| following_styles[item_index].clone())

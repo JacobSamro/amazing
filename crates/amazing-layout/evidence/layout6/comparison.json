@@ -1,0 +1,363 @@
+{
+  "inline_block": {
+    "before_counts": {
+      "pass": 10,
+      "mismatch": 26,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 5,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 11,
+      "mismatch": 25,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 5,
+      "crash": 0
+    },
+    "raw_gains": [
+      "css__CSS2__normal-flow__inline-block-width-002a.xht"
+    ],
+    "raw_losses": [],
+    "consensus_gains": [
+      "css__CSS2__normal-flow__inline-block-width-002a.xht"
+    ],
+    "consensus_losses": [],
+    "changed_pixels_or_classification": [
+      "css__CSS2__abspos__static-inside-inline-block.html",
+      "css__CSS2__normal-flow__inline-block-000.xht",
+      "css__CSS2__normal-flow__inline-block-non-replaced-height-001.xht",
+      "css__CSS2__normal-flow__inline-block-non-replaced-height-002.xht",
+      "css__CSS2__normal-flow__inline-block-non-replaced-width-001.xht",
+      "css__CSS2__normal-flow__inline-block-non-replaced-width-002.xht",
+      "css__CSS2__normal-flow__inline-block-non-replaced-width-003.xht",
+      "css__CSS2__normal-flow__inline-block-non-replaced-width-004.xht",
+      "css__CSS2__normal-flow__inline-block-valign-001.xht",
+      "css__CSS2__normal-flow__inline-block-valign-002.xht",
+      "css__CSS2__normal-flow__inline-block-width-002a.xht",
+      "css__CSS2__normal-flow__inline-block-zorder-003.xht",
+      "css__CSS2__normal-flow__inline-block-zorder-004.xht",
+      "css__CSS2__normal-flow__inline-block-zorder-005.xht",
+      "css__CSS2__visudet__inline-block-baseline-001.xht",
+      "css__CSS2__visudet__inline-block-baseline-003.xht",
+      "css__CSS2__visudet__inline-block-baseline-004.xht",
+      "css__CSS2__visudet__inline-block-baseline-010.xht",
+      "css__CSS2__visudet__inline-block-baseline-011.xht",
+      "css__CSS2__visudet__inline-block-baseline-012.xht",
+      "css__CSS2__visudet__inline-block-baseline-013.xht",
+      "css__CSS2__visudet__inline-block-baseline-014.xht",
+      "css__CSS2__visudet__inline-block-baseline-015.html",
+      "css__CSS2__visudet__inline-block-baseline-016.html",
+      "css__css-display__run-in__run-in-contains-inline-block-001.xht",
+      "css__css-flexbox__flexbox-baseline-multi-item-horiz-001a.html",
+      "css__css-flexbox__flexbox-baseline-multi-item-horiz-001b.html"
+    ]
+  },
+  "retained": {
+    "flex-grid-broad": {
+      "before_counts": {
+        "pass": 62,
+        "mismatch": 138,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 77,
+        "mismatch": 123,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [
+        "css-flexbox__gap-006-rtl.html",
+        "css-flexbox__gap-006-lr.html",
+        "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-scrollbar-gutter-001.html"
+      ],
+      "pass_gains": [
+        "css-flexbox__flexbox_flex-1-N-auto.html",
+        "css-flexbox__flexbox_flex-1-N.html",
+        "css-flexbox__flexbox_flex-N-N-Npercent.html",
+        "css-flexbox__flexbox_box-clear.html",
+        "css-flexbox__layout-algorithm_algo-cross-line-001.html",
+        "css-flexbox__flexbox_flex-0-0-N.html",
+        "css-flexbox__flexbox_flex-N-N-Npercent-shrink.html",
+        "css-flexbox__flexbox_flex-N-1-auto-shrink.html",
+        "css-flexbox__flexbox_flex-1-0-Npercent.html",
+        "css-flexbox__flexbox_flex-0-N-N.html",
+        "css-flexbox__flexbox_flex-N-N-auto-shrink.html",
+        "css-flexbox__flexbox_flex-N-1-Npercent.html",
+        "css-flexbox__flexbox-flex-direction-default.htm",
+        "css-flexbox__flexbox_flex-N-1-Npercent-shrink.html",
+        "css-flexbox__flexbox_flex-0-0-0-unitless.html",
+        "css-flexbox__flexbox_flex-N-0-0.html",
+        "css-flexbox__flexbox_flex-1-1-N.html",
+        "css-flexbox__flexbox_flex-N-1-N.html"
+      ],
+      "changed_pixels_or_classification": [
+        "css-flexbox__flexbox_flex-1-N-auto.html",
+        "css-flexbox__flexbox_flex-1-N.html",
+        "css-flexbox__flexbox_flex-0-0-N-shrink.html",
+        "css-flexbox__flexbox_flex-N-0-N-shrink.html",
+        "css-flexbox__flexbox_flex-N-N-Npercent.html",
+        "css-flexbox__flexbox_box-clear.html",
+        "css-flexbox__layout-algorithm_algo-cross-line-001.html",
+        "css-flexbox__flexbox_flex-0-0-N.html",
+        "css-flexbox__flexbox_flex-N-N-Npercent-shrink.html",
+        "css-flexbox__flexbox_flex-N-1-auto-shrink.html",
+        "css-flexbox__gap-005-rl.html",
+        "css-flexbox__flexbox_flex-1-0-Npercent.html",
+        "css-flexbox__gap-004-rtl.html",
+        "css-flexbox__flexbox_flex-0-N-N.html",
+        "css-flexbox__flexbox_flex-N-N-auto-shrink.html",
+        "css-flexbox__flexbox_flex-N-1-Npercent.html",
+        "css-flexbox__flexbox-flex-direction-default.htm",
+        "css-flexbox__css-flexbox-row-reverse.html",
+        "css-flexbox__css-flexbox-row.html",
+        "css-flexbox__flexbox_flex-N-1-Npercent-shrink.html",
+        "css-flexbox__flexbox_flex-0-0-auto-shrink.html",
+        "css-flexbox__flexbox-baseline-multi-item-horiz-001a.html",
+        "css-flexbox__flexbox_margin-left-ex.html",
+        "css-flexbox__fieldset-baseline-alignment.html",
+        "css-flexbox__flexbox-baseline-multi-item-horiz-001b.html",
+        "css-flexbox__gap-006-rtl.html",
+        "css-flexbox__flexbox_flex-N-0-Npercent-shrink.html",
+        "css-flexbox__gap-005-lr.html",
+        "css-flexbox__flexbox_flex-0-0-0-unitless.html",
+        "css-flexbox__flexbox_flex-N-0-0.html",
+        "css-flexbox__flexbox_flex-1-1-N.html",
+        "css-flexbox__gap-006-lr.html",
+        "css-flexbox__flexbox_flex-N-1-N.html",
+        "css-grid__grid-lanes__tentative__item-placement__row-fill-reverse-out-of-flow-definite-size-001.html",
+        "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-scrollbar-gutter-001.html",
+        "css-grid__grid-lanes__item-placement__row-negative-margin-002.html",
+        "css-grid__grid-lanes__items__column-item-percentage-sizes-002.html",
+        "css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-003.html",
+        "css-grid__grid-lanes__alignment__grid-lanes-align-content-001.html",
+        "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column__independent-formatting-context.html",
+        "css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-002.html",
+        "css-grid__grid-lanes__item-placement__dense-packing__row-dense-packing-001.html",
+        "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__alignment__row-subgrid-stretch-001.html"
+      ]
+    },
+    "flex-grid": {
+      "before_counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [],
+      "changed_pixels_or_classification": [
+        "flex__gap-rtl"
+      ]
+    },
+    "geometry": {
+      "before_counts": {
+        "pass": 41,
+        "mismatch": 20,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 41,
+        "mismatch": 20,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [],
+      "changed_pixels_or_classification": [
+        "css-position__position-absolute-semi-replaced-stretch-button.html"
+      ]
+    },
+    "tables": {
+      "before_counts": {
+        "pass": 9,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 9,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [],
+      "changed_pixels_or_classification": []
+    },
+    "floats": {
+      "before_counts": {
+        "pass": 6,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 6,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [],
+      "changed_pixels_or_classification": []
+    },
+    "block-collapse": {
+      "before_counts": {
+        "pass": 9,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 9,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [],
+      "changed_pixels_or_classification": []
+    },
+    "position": {
+      "before_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [],
+      "changed_pixels_or_classification": [
+        "css-position__position-absolute-semi-replaced-stretch-button.html"
+      ]
+    },
+    "text-flow": {
+      "before_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [],
+      "changed_pixels_or_classification": []
+    },
+    "contents": {
+      "before_counts": {
+        "pass": 6,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 6,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [],
+      "changed_pixels_or_classification": []
+    },
+    "paint-compositing": {
+      "before_counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [],
+      "changed_pixels_or_classification": []
+    },
+    "images": {
+      "before_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "pass_losses": [],
+      "pass_gains": [],
+      "changed_pixels_or_classification": []
+    }
+  }
+}

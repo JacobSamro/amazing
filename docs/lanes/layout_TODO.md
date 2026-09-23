@@ -704,7 +704,63 @@ adapter, logs, oracles, 26 after-render reports, and normalized comparison are
 retained in `crates/amazing-layout/evidence/layout5/`. The source base stayed
 fixed; later `origin/dev` drift did not touch `crates/amazing-layout`.
 
-**Next ticket, not started:** LAYOUT-6 adds Grid Lanes and subgrid algorithms
-after CSS-6 supplies `display:grid-lanes`/`inline-grid-lanes` and `subgrid`
-track grammar. The old accidental broad passes must not be credited as
-implemented capability before that dependency is satisfied.
+**Next ticket:** LAYOUT-6 adds non-replaced inline-block as an atomic inline.
+Grid Lanes and subgrid move to LAYOUT-7 after CSS-6. The old accidental broad
+passes must not be credited as implemented capability before layout has those
+algorithms.
+
+### LAYOUT-6 implementation on fixed `d29e1ff`
+
+Non-replaced `inline-block` now uses the existing atomic inline representation
+and establishes its own block formatting context. Auto width uses shrink-to-fit;
+auto height includes its in-flow contents and contained floats. The outer line
+uses the last in-flow line baseline when overflow is visible, otherwise the
+bottom margin edge. The supported `vertical-align` keyword set applies to the
+atomic fragment, which stays unbreakable in the parent line.
+
+An inline run between block siblings belongs to an anonymous block. When that
+run contains atomic placeholders, `flush_anonymous_into` moves their layout
+subtrees into the anonymous block too. This repairs both layout and paint
+traversal for mixed block/inline content; `amazing-paint` already traverses the
+layout tree correctly. After shaped text moves an atomic box, absolute
+descendants must follow it while fixed descendants remain viewport anchored.
+The `static-inside-inline-block` test and its reference now have identical
+800×600 PPM hashes in a targeted Windows render.
+
+That tree repair exposes formerly unpainted atomic subtrees in the retained
+flex/grid selection. Flex row max-content width now includes every item's
+outer width and the intervening column gaps. A targeted Windows render of
+`gap-004-rtl.html` matches its reference byte for byte.
+
+The frozen 41-case inline-block selection moved from **10/41** to **11/41**
+twice, with one raw and dual-browser-consensus gain and no pass losses.
+`static-inside-inline-block` retained its pass after the anonymous-wrapper
+repair. The focused flex/grid selection remained **24/24** twice. Geometry
+**41/61**, tables **9/12**, floats **6/8**, block collapse **9/9**, position
+**12/12**, text flow **14/16**, contents **6/6**, paint **24/24**, and CSS
+Images **12/12** each remained stable twice, with zero per-case losses.
+
+The broad flex/grid selection moved from **62/200** on the fixed base to
+**77/200** twice: 18 gains and three pass losses, all among dual-browser
+consensus cases. The losses are `gap-006-rtl.html`, `gap-006-lr.html`, and
+`grid-lanes/subgrid/grid-subgridded-to-grid-lanes/column-scrollbar-gutter-001.html`.
+The first two use logical `inline-size` and `block-size`, absent from the
+fixed-base CSS computed property set; previously the atomic subtree was not
+painted. CSS-9 owns those logical sizes. The third uses Grid Lanes and subgrid,
+assigned to LAYOUT-7, and was also an accidental old match. The integrator
+accepted these three explicit exceptions, as in LAYOUT-5; every other retained
+selection has zero pass losses. The exact paired classifications and hashes
+are in `evidence/layout6/comparison.json`.
+
+Windows layout nextest passed **213/213** and layout doctests ran **0 tests**.
+The full workspace nextest passed **1,421** with **3 skipped** twice, and
+workspace doctests passed **2/2** twice. The final source manifest, immutable
+renderer and image adapter hashes, browser oracles, and paired WPT reports are
+retained in `evidence/layout6/`. The gate ran on fixed `d29e1ff` with
+`REFRESH-HOLD` and an exact source guard; no code was changed after the final
+build.
+
+The fixed base predates CSS-7. `display: inline flow-root` parsing was added
+to `dev` later in CSS-7 at `945ca38`; this LAYOUT-6 gate keeps the pinned base
+and measures `inline-block` author syntax. Grid Lanes and subgrid stay in
+LAYOUT-7.
