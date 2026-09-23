@@ -123,6 +123,12 @@ fn object_integrity(
     if i.legacy_for(object).is_some() {
         return Err(Throw::type_error("cannot seal a legacy platform object"));
     }
+    if freeze && matches!(object.borrow().exotic, Exotic::TypedArray) {
+        let view = binary_view(&target)?;
+        if binary_length(&view) != 0 || view.buffer.borrow().resizable {
+            return Err(Throw::type_error("cannot freeze a TypedArray with indexed elements"));
+        }
+    }
     object.borrow_mut().extensible = false;
     for key in i.own_property_keys(&target)? {
         let existing = object.borrow().own_prop(&key).cloned();

@@ -2848,7 +2848,7 @@ impl Interpreter {
             }
             let prototype = o.borrow().get_own("prototype");
             if let Some(JsValue::Object(p)) = prototype {
-                p.borrow_mut().set_own("constructor", f.clone());
+                p.borrow_mut().define("constructor", symbol_data(f.clone(), true, true)).unwrap();
                 if let Some(super_class) = &c.super_class {
                     let super_value = self.eval_expr(super_class, e)?;
                     let super_prototype = match &super_value {
@@ -2915,7 +2915,7 @@ impl Interpreter {
                                     Throw::type_error("could not define class accessor")
                                 })?;
                             } else {
-                                self.set_prop(&JsValue::Object(p.clone()), &k, method)?;
+                                p.borrow_mut().define(k, symbol_data(method, true, true)).unwrap();
                             }
                         }
                     }

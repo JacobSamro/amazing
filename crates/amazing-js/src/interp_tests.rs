@@ -763,6 +763,8 @@ mod tests {
         let mut i = Interpreter::new();
         let source = "var a=[1,2], keys=''; for (var key in a) keys+=key; keys==='01'";
         assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
+        let source = "class MyUint8Array extends Uint8Array {} var rab=new ArrayBuffer(100,{maxByteLength:200}),ta=new MyUint8Array(rab,0,3),keys=''; for(var key in ta) keys+=key; keys==='012' && Object.getOwnPropertyDescriptor(MyUint8Array.prototype,'constructor').enumerable===false";
+        assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
         let source = "var p={x:1,y:2}, o=Object.create(p); Object.defineProperty(o,'x',{value:3,enumerable:false}); o.z=4; var keys=''; for(var key in o) keys+=key; keys==='zy'";
         assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
         let source = "var o={a:1,b:2,c:3}, keys=''; for(var key in o){ keys+=key; if(key==='a') delete o.b; } keys==='ac'";
@@ -812,6 +814,7 @@ mod tests {
             "var a=[0,1]; Object.defineProperty(a,'1',{get(){return 1},configurable:false}); try { Object.defineProperties(a,{length:{value:1}}); false } catch(e) { e instanceof TypeError && a.length===2 }",
             "var A=function(){Object.preventExtensions(this)}; var a=[1]; a.constructor={}; a.constructor[Symbol.species]=A; try {a.flat(); false} catch(e) {e instanceof TypeError}",
             "try {Object.freeze([]).pop(); false} catch(e) {e instanceof TypeError}",
+            "var rab=new ArrayBuffer(4,{maxByteLength:8}); try {Object.freeze(new Uint8Array(rab,0,4)); false} catch(e) {e instanceof TypeError}",
             "function f(){return delete arguments.length}; f()===true",
             "function f(){}; Object.setPrototypeOf(f,{length:42}); delete f.length; Function.prototype.bind.call(f,null,1).length===0",
             "var x={length:2**53-1}; try {Array.prototype.unshift.call(x,null); false} catch(e) {e instanceof TypeError}",
