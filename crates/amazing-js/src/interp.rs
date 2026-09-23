@@ -203,6 +203,7 @@ pub struct Interpreter {
     host_native_dispatch: Option<Rc<HostNativeDispatch>>,
     host_realm: u64,
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
+    random_state: u64,
     jobs: VecDeque<Job>,
     external_scheduling: Option<ExternalScheduling>,
     completion: JsValue,
@@ -263,6 +264,7 @@ impl Interpreter {
             o
         })));
         let global_env = EnvHandle::new(EnvKind::Global, None);
+        let host_realm = NEXT_HOST_REALM.fetch_add(1, Ordering::Relaxed);
         let mut i = Self {
             global_env,
             global_obj,
@@ -278,8 +280,9 @@ impl Interpreter {
             depth: 0,
             native_stack: Vec::new(),
             host_native_dispatch: None,
-            host_realm: NEXT_HOST_REALM.fetch_add(1, Ordering::Relaxed),
+            host_realm,
             host_cache: HashMap::new(),
+            random_state: host_realm ^ 0xA076_1D64_78BD_642F,
             jobs: VecDeque::new(),
             external_scheduling: None,
             completion: JsValue::Undefined,
@@ -309,6 +312,11 @@ impl Interpreter {
         i.install_history();
         i.install_storage();
         i
+    }
+
+    /// Set the per-interpreter Math.random sequence for repeatable host gates.
+    pub fn set_random_seed(&mut self, seed: u64) {
+        self.random_state = seed;
     }
 
     fn install_storage(&mut self) {
@@ -3259,6 +3267,9 @@ impl Interpreter {
         }
     }
     fn primitive(&mut self, v: JsValue) -> Result<JsValue, Throw> {
+        self.primitive_with_hint(v, false)
+    }
+    fn primitive_with_hint(&mut self, v: JsValue, string_hint: bool) -> Result<JsValue, Throw> {
         if !v.is_object() {
             return Ok(v);
         };
@@ -3269,7 +3280,8 @@ impl Interpreter {
                 }
             }
         }
-        for n in ["valueOf", "toString"] {
+        let names = if string_hint { ["toString", "valueOf"] } else { ["valueOf", "toString"] };
+        for n in names {
             let f = self.get_prop(&v, n)?;
             if matches!(f,JsValue::Object(ref o)if o.borrow().func.is_some()) {
                 let x = self.call_value(&f, v.clone(), Vec::new())?;
@@ -3290,7 +3302,7 @@ impl Interpreter {
     }
     fn to_string(&mut self, v: &JsValue) -> Result<String, Throw> {
         if v.is_object() {
-            let p = self.primitive(v.clone())?;
+            let p = self.primitive_with_hint(v.clone(), true)?;
             self.to_string(&p)
         } else {
             Ok(crate::value::to_display_string(v))
@@ -3437,30 +3449,41 @@ impl Interpreter {
             "queueMicrotask",
             Self::native("queueMicrotask", native_queue_microtask, &self.function_proto),
         );
-        self.define_global(
-            "Error",
-            Self::native("Error", native_error, &self.function_proto),
-        );
-        self.define_global(
-            "TypeError",
-            Self::native("TypeError", native_type_error, &self.function_proto),
-        );
-        self.define_global(
-            "RangeError",
-            Self::native("RangeError", native_range_error, &self.function_proto),
-        );
-        self.define_global(
-            "ReferenceError",
-            Self::native(
-                "ReferenceError",
-                native_reference_error,
-                &self.function_proto,
-            ),
-        );
-        self.define_global(
-            "SyntaxError",
-            Self::native("SyntaxError", native_syntax_error, &self.function_proto),
-        );
+        let error_constructor = Self::native("Error", native_error, &self.function_proto);
+        let error_prototype = match &error_constructor {
+            JsValue::Object(function) => match function.borrow().get_own("prototype") {
+                Some(JsValue::Object(prototype)) => prototype,
+                _ => unreachable!("native function has a prototype"),
+            },
+            _ => unreachable!("native function is an object"),
+        };
+        {
+            let mut prototype = error_prototype.borrow_mut();
+            prototype.proto = Some(self.object_proto.clone());
+            prototype.set_own("name", JsValue::str("Error"));
+            prototype.set_own("message", JsValue::str(""));
+            prototype.set_own("toString", Self::native("toString", native_error_to_string, &self.function_proto));
+            prototype.set_own("constructor", error_constructor.clone());
+        }
+        self.define_global("Error", error_constructor);
+        for (name, native) in [
+            ("TypeError", native_type_error as crate::value::NativeFn),
+            ("RangeError", native_range_error as crate::value::NativeFn),
+            ("ReferenceError", native_reference_error as crate::value::NativeFn),
+            ("SyntaxError", native_syntax_error as crate::value::NativeFn),
+        ] {
+            let constructor = Self::native(name, native, &self.function_proto);
+            if let JsValue::Object(function) = &constructor {
+                if let Some(JsValue::Object(prototype)) = function.borrow().get_own("prototype") {
+                    let mut prototype = prototype.borrow_mut();
+                    prototype.proto = Some(error_prototype.clone());
+                    prototype.set_own("name", JsValue::str(name));
+                    prototype.set_own("message", JsValue::str(""));
+                    prototype.set_own("constructor", constructor.clone());
+                }
+            }
+            self.define_global(name, constructor);
+        }
         let function_ctor = Self::native(
             "Function",
             native_function_constructor,
@@ -3673,6 +3696,7 @@ impl Interpreter {
             );
         }
         for (n, f) in [
+            ("toString", native_array_to_string as crate::value::NativeFn),
             ("push", native_array_push as crate::value::NativeFn),
             ("pop", native_array_pop as crate::value::NativeFn),
             ("join", native_array_join as crate::value::NativeFn),
@@ -3746,6 +3770,7 @@ impl Interpreter {
             ("pow", native_math_pow as crate::value::NativeFn),
             ("trunc", native_math_trunc as crate::value::NativeFn),
             ("sign", native_math_sign as crate::value::NativeFn),
+            ("random", native_math_random as crate::value::NativeFn),
         ] {
             let _ = self.set_prop(&math, n, Self::native(n, f, &self.function_proto));
         }

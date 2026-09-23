@@ -1168,13 +1168,17 @@ fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<Js
     i.run_program(&program)
 }
 
-fn native_error_value(i: &mut Interpreter, name: &str, args: Vec<JsValue>) -> JsValue {
-    let message = args
-        .first()
-        .map(|value| i.to_string(value).unwrap_or_default())
-        .unwrap_or_default();
+fn native_error_value(i: &mut Interpreter, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let message = match args.first() {
+        Some(JsValue::Undefined) | None => None,
+        Some(value) => Some(i.to_string(value)?),
+    };
     let object = Obj(Rc::new(RefCell::new({
-        let mut object = JsObject::error_obj(name, JsValue::str(message));
+        let mut object = JsObject::ordinary();
+        object.exotic = Exotic::Error;
+        if let Some(message) = message {
+            object.set_own("message", JsValue::str(message));
+        }
         if let Some(function) = i.native_stack.last() {
             if let Some(JsValue::Object(proto)) = function.borrow().get_own("prototype") {
                 object.proto = Some(proto);
@@ -1182,11 +1186,11 @@ fn native_error_value(i: &mut Interpreter, name: &str, args: Vec<JsValue>) -> Js
         }
         object
     })));
-    JsValue::Object(object)
+    Ok(JsValue::Object(object))
 }
 
 fn native_error(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Ok(native_error_value(i, "Error", args))
+    native_error_value(i, args)
 }
 
 fn native_type_error(
@@ -1194,7 +1198,7 @@ fn native_type_error(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    Ok(native_error_value(i, "TypeError", args))
+    native_error_value(i, args)
 }
 
 fn native_range_error(
@@ -1202,7 +1206,7 @@ fn native_range_error(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    Ok(native_error_value(i, "RangeError", args))
+    native_error_value(i, args)
 }
 
 fn native_reference_error(
@@ -1210,7 +1214,7 @@ fn native_reference_error(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    Ok(native_error_value(i, "ReferenceError", args))
+    native_error_value(i, args)
 }
 
 fn native_syntax_error(
@@ -1218,7 +1222,21 @@ fn native_syntax_error(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    Ok(native_error_value(i, "SyntaxError", args))
+    native_error_value(i, args)
+}
+
+fn native_error_to_string(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if !this.is_object() {
+        return Err(Throw::type_error("Error.prototype.toString called on non-object"));
+    }
+    let name = i.get_prop(&this, "name")?;
+    let name = if name.is_undefined() { "Error".to_string() } else { i.to_string(&name)? };
+    let message = i.get_prop(&this, "message")?;
+    let message = if message.is_undefined() { String::new() } else { i.to_string(&message)? };
+    let result = if name.is_empty() { message } else if message.is_empty() { name } else {
+        format!("{name}: {message}")
+    };
+    Ok(JsValue::str(result))
 }
 
 fn new_promise(i: &Interpreter, state: PromiseFate) -> JsValue {
@@ -2429,13 +2447,21 @@ fn native_array_join(
     this: JsValue,
     a: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let sep = if let Some(v) = a.first() {
+    if this.is_null() || this.is_undefined() {
+        return Err(Throw::type_error("Array.prototype.join called on null or undefined"));
+    }
+    let length = i.get_prop(&this, "length")?;
+    let length = i.to_number(&length)?;
+    let length = if length.is_nan() || length <= 0.0 { 0 } else {
+        length.floor().min(9_007_199_254_740_991.0) as usize
+    };
+    let sep = if let Some(v) = a.first().filter(|v| !v.is_undefined()) {
         i.to_string(v)?
     } else {
-        " ,".trim().to_string()
+        ",".to_string()
     };
     let mut out = String::new();
-    for n in 0..i.array_length(&this) {
+    for n in 0..length {
         if n > 0 {
             out.push_str(&sep)
         }
@@ -2445,6 +2471,17 @@ fn native_array_join(
         }
     }
     Ok(JsValue::str(out))
+}
+fn native_array_to_string(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    if this.is_null() || this.is_undefined() {
+        return Err(Throw::type_error("Array.prototype.toString called on null or undefined"));
+    }
+    let join = i.get_prop(&this, "join")?;
+    if matches!(&join, JsValue::Object(object) if object.borrow().func.is_some()) {
+        i.call_value(&join, this, Vec::new())
+    } else {
+        native_object_to_string(i, this, Vec::new())
+    }
 }
 fn native_array(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let v = JsValue::object({
@@ -2513,6 +2550,15 @@ fn native_math_sign(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Resu
     } else {
         1.0
     }))
+}
+fn native_math_random(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    // SplitMix64 gives each interpreter a reproducible sequence with a full-width seed.
+    i.random_state = i.random_state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut bits = i.random_state;
+    bits = (bits ^ (bits >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    bits = (bits ^ (bits >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    bits ^= bits >> 31;
+    Ok(JsValue::num(((bits >> 11) as f64) * (1.0 / 9_007_199_254_740_992.0)))
 }
 fn native_max(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let mut n = f64::NEG_INFINITY;

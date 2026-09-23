@@ -326,6 +326,41 @@ mod tests {
     }
 
     #[test]
+    fn error_object_converts_to_name_and_message_in_scaffolding() {
+        let mut interpreter = Interpreter::new();
+        let value = interpreter.run_script("String(new Error('sentinel'))").unwrap();
+        assert_eq!(interpreter.to_string(&value).unwrap(), "Error: sentinel");
+    }
+
+    #[test]
+    fn array_stringification_uses_join_and_empty_nullish_elements() {
+        let mut interpreter = Interpreter::new();
+        let value = interpreter.run_script("String([1,null,undefined,[2,3]])").unwrap();
+        assert_eq!(interpreter.to_string(&value).unwrap(), "1,,,2,3");
+    }
+
+    #[test]
+    fn math_random_is_a_callable_builtin_with_unit_interval_result() {
+        let mut interpreter = Interpreter::new();
+        let value = interpreter.run_script("Math.random()").unwrap();
+        let JsValue::Num(number) = value else { panic!("Math.random must return Number") };
+        assert!((0.0..1.0).contains(&number));
+    }
+
+    #[test]
+    fn math_random_seed_repeats_per_interpreter() {
+        let mut first = Interpreter::new();
+        let mut second = Interpreter::new();
+        first.set_random_seed(42);
+        second.set_random_seed(42);
+        for _ in 0..4 {
+            let left = first.run_script("Math.random()").unwrap();
+            let right = second.run_script("Math.random()").unwrap();
+            assert!(matches!((&left, &right), (JsValue::Num(a), JsValue::Num(b)) if a == b));
+        }
+    }
+
+    #[test]
     fn object_keys_result_inherits_array_methods() {
         let mut interpreter = Interpreter::new();
         let value = interpreter
