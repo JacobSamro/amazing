@@ -279,6 +279,11 @@ fn source_over(source: [u8; 4], destination: [u8; 4], opacity: f32) -> [u8; 4] {
 /// Seam through which the painter obtains decoded pixels for replaced nodes.
 pub trait ImageProvider {
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image>;
+    /// Resolved URL lookup for generated `content: url(...)` fragments, which
+    /// have geometry but no distinct DOM image node.
+    fn image_by_url(&self, _url: &str) -> Option<&amazing_media::Image> {
+        None
+    }
     /// Rasterize an inline SVG root for this content viewport. The embedding
     /// adapter owns DOM/style access; paint only receives bounded RGBA pixels.
     fn svg(
@@ -1037,37 +1042,34 @@ fn paint_shaped_lines(
 ) {
     for line in &box_.lines {
         for replaced in &line.replaced {
+            let rect = amazing_layout::Rect {
+                x: replaced.x,
+                y: replaced.y,
+                w: replaced.width,
+                h: replaced.height,
+            };
+            if let Some((url, presentation)) = generated_image_url(box_, replaced) {
+                if let Some(image) = resolved_replaced_image(images, replaced.node, Some(&url)) {
+                    paint_image(surface, &rect, image, presentation, clip);
+                }
+                continue;
+            }
             if let Some(svg) = svg_for_rect(
                 images,
                 replaced.node,
-                &amazing_layout::Rect {
-                    x: replaced.x,
-                    y: replaced.y,
-                    w: replaced.width,
-                    h: replaced.height,
-                },
+                &rect,
             ) {
                 paint_image(
                     surface,
-                    &amazing_layout::Rect {
-                        x: replaced.x,
-                        y: replaced.y,
-                        w: replaced.width,
-                        h: replaced.height,
-                    },
+                    &rect,
                     &svg,
                     ImagePresentation::default(),
                     clip,
                 );
-            } else if let Some(image) = images.image(replaced.node) {
+            } else if let Some(image) = resolved_replaced_image(images, replaced.node, None) {
                 paint_image(
                     surface,
-                    &amazing_layout::Rect {
-                        x: replaced.x,
-                        y: replaced.y,
-                        w: replaced.width,
-                        h: replaced.height,
-                    },
+                    &rect,
                     image,
                     images.presentation(replaced.node),
                     clip,
@@ -1075,6 +1077,33 @@ fn paint_shaped_lines(
             }
         }
         paint_line_glyphs(surface, line, text, clip);
+    }
+}
+
+fn generated_image_url(
+    box_: &LayoutBox,
+    replaced: &amazing_layout::ReplacedFrag,
+) -> Option<(String, ImagePresentation)> {
+    box_.styled_replaced_fragments().find_map(|fragment| {
+        (fragment.node == replaced.node
+            && fragment.source_order == replaced.source_order)
+            .then(|| {
+                fragment.generated_url.map(|url| {
+                    (url, ImagePresentation::from_style(fragment.style))
+                })
+            })
+            .flatten()
+    })
+}
+
+fn resolved_replaced_image<'a>(
+    images: &'a dyn ImageProvider,
+    node: amazing_dom::NodeIdx,
+    generated_url: Option<&str>,
+) -> Option<&'a amazing_media::Image> {
+    match generated_url {
+        Some(url) => images.image_by_url(url),
+        None => images.image(node),
     }
 }
 
@@ -1648,37 +1677,34 @@ fn paint_lines(
 ) {
     for line in &b.lines {
         for replaced in &line.replaced {
+            let rect = amazing_layout::Rect {
+                x: replaced.x,
+                y: replaced.y,
+                w: replaced.width,
+                h: replaced.height,
+            };
+            if let Some((url, presentation)) = generated_image_url(b, replaced) {
+                if let Some(image) = resolved_replaced_image(images, replaced.node, Some(&url)) {
+                    paint_image(surface, &rect, image, presentation, clip);
+                }
+                continue;
+            }
             if let Some(svg) = svg_for_rect(
                 images,
                 replaced.node,
-                &amazing_layout::Rect {
-                    x: replaced.x,
-                    y: replaced.y,
-                    w: replaced.width,
-                    h: replaced.height,
-                },
+                &rect,
             ) {
                 paint_image(
                     surface,
-                    &amazing_layout::Rect {
-                        x: replaced.x,
-                        y: replaced.y,
-                        w: replaced.width,
-                        h: replaced.height,
-                    },
+                    &rect,
                     &svg,
                     ImagePresentation::default(),
                     clip,
                 );
-            } else if let Some(image) = images.image(replaced.node) {
+            } else if let Some(image) = resolved_replaced_image(images, replaced.node, None) {
                 paint_image(
                     surface,
-                    &amazing_layout::Rect {
-                        x: replaced.x,
-                        y: replaced.y,
-                        w: replaced.width,
-                        h: replaced.height,
-                    },
+                    &rect,
                     image,
                     images.presentation(replaced.node),
                     clip,
@@ -1788,6 +1814,69 @@ fn paint_image(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn generated_url_image_does_not_fall_back_to_originating_dom_image() {
+        struct Both {
+            node_image: amazing_media::Image,
+            url_image: amazing_media::Image,
+        }
+        impl ImageProvider for Both {
+            fn image(&self, _: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
+                Some(&self.node_image)
+            }
+            fn image_by_url(&self, url: &str) -> Option<&amazing_media::Image> {
+                (url == "https://example.test/generated.png").then_some(&self.url_image)
+            }
+        }
+        let provider = Both {
+            node_image: amazing_media::Image { width: 1, height: 1, pixels: vec![0, 0, 255, 255] },
+            url_image: amazing_media::Image { width: 1, height: 1, pixels: vec![255, 0, 0, 255] },
+        };
+        let node = amazing_dom::NodeIdx(1);
+        assert_eq!(resolved_replaced_image(&provider, node, Some("https://example.test/generated.png")).unwrap().pixels, provider.url_image.pixels);
+        assert!(resolved_replaced_image(&provider, node, Some("https://example.test/missing.png")).is_none());
+        assert_eq!(resolved_replaced_image(&provider, node, None).unwrap().pixels, provider.node_image.pixels);
+    }
+
+    #[test]
+    fn two_generated_images_on_one_node_paint_by_distinct_url_keys() {
+        struct TwoUrls {
+            red: amazing_media::Image,
+            blue: amazing_media::Image,
+        }
+        impl ImageProvider for TwoUrls {
+            fn image(&self, _: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> { None }
+            fn image_by_url(&self, url: &str) -> Option<&amazing_media::Image> {
+                match url {
+                    "https://example.test/a.png" => Some(&self.red),
+                    "https://example.test/b.png" => Some(&self.blue),
+                    _ => None,
+                }
+            }
+        }
+        let text = amazing_text::FallbackTextSystem::new();
+        let root = amazing_layout::layout_document_with_text(
+            "<body></body>",
+            "body{margin:0}body::before{content:url(https://example.test/a.png) url(https://example.test/b.png)}",
+            700.0,
+            &text,
+        );
+        let fragments: Vec<_> = root.styled_replaced_fragments().collect();
+        assert_eq!(fragments.len(), 2);
+        assert_ne!(fragments[0].source_order, fragments[1].source_order);
+        let provider = TwoUrls {
+            red: amazing_media::Image { width: 1, height: 1, pixels: vec![255, 0, 0, 255] },
+            blue: amazing_media::Image { width: 1, height: 1, pixels: vec![0, 0, 255, 255] },
+        };
+        let surface = paint_document_with_text_resources(&root, 700, 200, &text, &provider);
+        let pixel = |index: usize| {
+            let rect = fragments[index].content_box;
+            surface.get_pixel((rect.x + 1.0) as u32, (rect.y + 1.0) as u32)
+        };
+        assert_eq!(pixel(0), Some([255, 0, 0, 255]));
+        assert_eq!(pixel(1), Some([0, 0, 255, 255]));
+    }
     use crate::text::{draw_fragment, RectInkProvider};
     use amazing_layout::{Flow, Rect};
 
