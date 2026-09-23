@@ -312,7 +312,7 @@ pub(crate) fn search(
     }
     // Unicode RegExpBuiltinExec interprets a lastIndex inside a surrogate pair
     // at that code point's start (GetStringIndex/StringToCodePoints).
-    if flags.unicode
+    if flags.unicode_mode()
         && start > 0
         && input
             .get(start)
@@ -347,7 +347,7 @@ pub(crate) fn search(
         if flags.sticky || start == input.len() {
             return Ok(None);
         }
-        start = advance_index(input, start, flags.unicode);
+        start = advance_index(input, start, flags.unicode_mode());
     }
 }
 fn run(
@@ -375,7 +375,7 @@ fn run(
                 return Ok(Some(state));
             }
             Op::Char(c) => {
-                if let Some((next, end)) = point(input, state.pos, flags.unicode) {
+                if let Some((next, end)) = point(input, state.pos, flags.unicode_mode()) {
                     if canonical(*c, flags) == canonical(next, flags) {
                         state.pos = end;
                     } else {
@@ -386,7 +386,7 @@ fn run(
                 }
             }
             Op::Any => {
-                if let Some((c, end)) = point(input, state.pos, flags.unicode) {
+                if let Some((c, end)) = point(input, state.pos, flags.unicode_mode()) {
                     if flags.dot_all || !line(c) {
                         state.pos = end;
                     } else {
@@ -397,7 +397,7 @@ fn run(
                 }
             }
             Op::Class(c) => {
-                if let Some((next, end)) = point(input, state.pos, flags.unicode) {
+                if let Some((next, end)) = point(input, state.pos, flags.unicode_mode()) {
                     if c.contains(next, flags) {
                         state.pos = end;
                     } else {
@@ -418,7 +418,7 @@ fn run(
                 let left = if state.pos == 0 {
                     false
                 } else {
-                    let previous = if flags.unicode
+                    let previous = if flags.unicode_mode()
                         && state.pos >= 2
                         && (0xDC00..=0xDFFF).contains(&input[state.pos - 1])
                         && (0xD800..=0xDBFF).contains(&input[state.pos - 2])
@@ -427,10 +427,11 @@ fn run(
                     } else {
                         state.pos - 1
                     };
-                    point(input, previous, flags.unicode).is_some_and(|(c, _)| word(c, flags))
+                    point(input, previous, flags.unicode_mode())
+                        .is_some_and(|(c, _)| word(c, flags))
                 };
-                let right =
-                    point(input, state.pos, flags.unicode).is_some_and(|(c, _)| word(c, flags));
+                let right = point(input, state.pos, flags.unicode_mode())
+                    .is_some_and(|(c, _)| word(c, flags));
                 success = (left != right) == *positive;
             }
             Op::Split(a, b) => {
@@ -472,8 +473,8 @@ fn run(
                     let mut pos = state.pos;
                     while a < b {
                         budget.step()?;
-                        let left = point(input, a, flags.unicode);
-                        let right = point(input, pos, flags.unicode);
+                        let left = point(input, a, flags.unicode_mode());
+                        let right = point(input, pos, flags.unicode_mode());
                         match (left, right) {
                             (Some((c, next)), Some((d, end)))
                                 if canonical(c, flags) == canonical(d, flags) =>

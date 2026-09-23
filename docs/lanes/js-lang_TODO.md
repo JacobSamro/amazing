@@ -1122,3 +1122,64 @@ The final-base Windows workspace gate passed `cargo nextest run --workspace
 --workspace --locked --doc` completed 19 doctest suites with **2 passed and
 none failed**. The win-001 build tree was refreshed once to `bc8aa45`, then
 the parser was re-synced; no subsequent refresh altered the gate tree.
+
+## JS-8 — parser split and lossless RegExp pattern input
+
+Initial fixed base: `6de1d9348b8048336b2d3d8b5204398d4dca0123` on
+`origin/dev`. The final re-gate base is
+`8f2695d92b31962982bb9c389f4d3b4a784ba13a`, selected because dev
+drift since the initial base touched `amazing-js`. The mechanical parser
+split is rebased commit `c4360a0`. It moved unchanged method
+bodies out of `parser.rs` into `parser_statements.rs`, `parser_functions.rs`,
+and `parser_expressions.rs`; the parser and each new module remain below 4,000
+lines. The frozen split host completed two full Test262 sweeps with identical
+classification `5d9e472f8f37b3c1063f50e8dbfdceb0524a8caff7c8cb78e3fba7894a17c113`.
+A fixed-base frozen before-host rerun produced the same classification,
+confirming direct equality. The first before sweep had one deadline-sensitive
+strict variant and is retained as a diagnostic artifact.
+
+`amazing-regex` now offers `Regex::new_utf16(pattern: &[u16], flags: &str)` and
+`Regex::pattern_utf16()`. A pattern's exact units are retained for matching and
+equality. In non-Unicode mode, each unit is a separate atom; in `u` or `v`
+mode, paired surrogates combine into a code point and lone surrogates remain
+literal units. The older `Regex::new(&str, &str)` and `Flags::parse` continue to
+reject `v`, preserving the JS binding's parse-error behavior until full Unicode
+sets are implemented. The new UTF-16 constructor accepts `v` for ordinary
+patterns and rejects unsupported set operations and string properties.
+
+The pinned Test262 `built-ins/RegExp` pair selected 1,962 files. Before and
+corrected after each repeated twice with the same classification:
+**691 pass / 1,261 fail / 10 unsupported**, hash
+`67daa8e1189616f6694a7a0853073ef2805dc31bc0d3e360e62ed00b356abc93`.
+The regex crate passed **12/12** nextest tests with **0** doctests, and the JS
+crate passed **194/194** nextest tests with **1/1** doctest on win-001.
+
+On final fixed base `8f2695d`, the `built-ins/RegExp` before and after pairs
+each repeated twice with **693 pass / 1,259 fail / 10 unsupported** across
+1,962 selected files and identical classification hash
+`c440abf372a2f1abd18aca90e59763d0729cf49769d173d4e6632675bfc6e9b5`.
+There were no passing file or variant losses. The two owned crates passed
+**209/209** combined nextest tests (197 JS, 12 regex), with **1/1** JS
+doctest and zero regex doctests. The lossless regex change is in the
+separate second JS-8 commit.
+
+The final-base full Test262 before and after sweeps used upstream pin
+`3655e7464de3d52643ecddd4b5f9f4f3e7f62398`, the same 53,872-file input
+hash `a2ef5e43ff95da279324b6df9a37740a505b9f8b6c7a11406408af70f453b075`,
+and runner hash `bdb36351facc0475e661bea7ef928ebcc63e06e77d0a2740d897d77b3476d595`.
+Both completed with **10,965 pass / 32,636 fail / 16 timeout / 9,961
+unsupported / 294 fixture skips**, and **21,114 passing variants**. Their
+classification hash was identical,
+`bfdcb4a0cc96fa1eafe5ac14af911860d6c00b741be5426917a228d5ae0382c5`;
+every file and variant classification matched, with no pass losses. The
+complete JSONs are in the lane's `.agents/js-lang/` scratch area as
+`js8-newbase-full-before.json` and `js8-newbase-full-after.json`.
+
+The final fixed-base Windows workspace gate passed `cargo nextest run
+--workspace --locked`: **1,709 passed, 3 skipped, none failed**. A separate
+`cargo test --workspace --locked --doc` completed **21 doctest suites**, with
+**2 passed and none failed**. The re-gate used the js-lang build tree refreshed
+to `8f2695d` (Cargo.lock hash `BF3037D0`) and re-synced lane files; no later
+refresh changed it. The final drift check against local `origin/dev` at
+`582a6af` had no changes under `crates/amazing-js` or `crates/amazing-regex`,
+so this fixed-base gate stands and the integrator will gate the merged head.

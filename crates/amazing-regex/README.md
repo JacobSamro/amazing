@@ -7,7 +7,9 @@ operation. The JavaScript interpreter owns RegExp objects and `lastIndex`.
 
 ## Supported surface
 
-- Flags `g`, `i`, `m`, `s`, `u`, `y`; duplicate and unknown flags are rejected.
+- Flags `g`, `i`, `m`, `s`, `u`, `y` on the existing `new` API. The lossless
+  `new_utf16` API also accepts `v` for the supported simple-pattern subset;
+  duplicate, unknown, and combined `u`/`v` flags are rejected.
 - Literals, dot, character classes, negation, ranges, digit/word/space escapes,
   hexadecimal and Unicode escapes, control escapes and word boundaries.
 - Alternation, capturing and noncapturing groups, decimal backreferences,
@@ -15,13 +17,16 @@ operation. The JavaScript interpreter owns RegExp objects and `lastIndex`.
 - Greedy and lazy `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}`. Repetition clears
   nested captures and rejects optional zero-progress iterations. Lookahead
   captures propagate on success and cannot be revisited by outer backtracking.
-- UTF-16 code-unit indices; Unicode mode consumes code points. `exec_utf16`
-  accepts lone surrogates without converting or replacing them.
+- UTF-16 code-unit indices; `u` and `v` modes consume code points. `new_utf16`
+  parses exact pattern code units and `exec_utf16` accepts exact input code
+  units, including lone surrogates. `pattern_utf16` retrieves the original
+  pattern losslessly; the older `pattern` accessor is lossy for such patterns.
 - Unicode `i` canonicalization uses the C/S mappings from Unicode 17.0.0.
   Legacy `i` uses Rust's single-character uppercase mapping with ECMAScript's
   non-ASCII-to-ASCII restriction.
 
-`Regex::exec` is a convenience search over a Rust string. `exec_utf16` searches
+`Regex::new` remains a convenience constructor for Rust strings; `new_utf16`
+accepts JS strings with unpaired surrogates. `Regex::exec` searches
 losslessly; `matcher_utf16` shares one work budget across repeated searches.
 The `g` flag is metadata here; the host must implement global iteration and
 advance empty matches using `advance_index`. Sticky matching is enforced by
@@ -48,7 +53,8 @@ This is not full ECMAScript conformance. Unsupported pattern forms produce an
 error rather than being silently interpreted as a different regex:
 
 - Named captures/references, lookbehind, inline flag modifiers, Unicode property
-  escapes, `d` indices, `v` Unicode sets/string properties.
+  escapes, `d` indices, `v` set operations/string properties. Simple `v`
+  patterns use Unicode code-point semantics; unsupported set syntax is rejected.
 - Annex B octal/decimal escape fallbacks, incomplete hex/Unicode escapes,
   quantified lookahead and legacy class-range escape exceptions. Some otherwise
   valid legacy identity escapes (`\p`, `\P`, `\k`) are conservatively rejected.
@@ -56,15 +62,16 @@ error rather than being silently interpreted as a different regex:
   dispatch in String methods, species/subclass construction, regex-aware
   `String.split`, `matchAll`, `replaceAll`, `RegExp.escape`, legacy static capture
   properties or `compile`. `RegExp.prototype.test` does dispatch overridden exec.
-- Existing JS strings use Rust `str`, so captures/replacements containing a lone
-  surrogate throw a TypeError in the binding. Core UTF-16 matching supports them.
-  This includes non-Unicode dot matching half an astral character.
+- The JS binding must pass its lossless string units to `new_utf16` and
+  `exec_utf16` for end-to-end surrogate preservation. This includes
+  non-Unicode dot matching half an astral character.
 - Broader interpreter gaps (strict mode, descriptors, built-in prototypes,
   Symbols, and Test262 helper loading) still affect integration conformance.
 
 ## Resource bounds
 
-Patterns are capped at 16,384 UTF-8 bytes, 64 nested groups and 128 captures.
+Patterns are capped at 16,384 UTF-8 bytes via `new` or 16,384 UTF-16 code
+units via `new_utf16`, 64 nested groups and 128 captures.
 Compilation has a 32,768-unit instruction/work budget, including expanded
 quantifiers. Matching allows 1,048,576 UTF-16 units and 1,000,000 execution steps
 shared across search positions, lookahead and global iteration. Backtracking

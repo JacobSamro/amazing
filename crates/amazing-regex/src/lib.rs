@@ -1,6 +1,6 @@
 //! Bounded, std-only ECMA-262 RegExp matching (§22.2).
 //!
-//! Supports g/i/m/s/u/y, UTF-16 indices, classes, captures, backreferences,
+//! Supports g/i/m/s/u/v/y, UTF-16 indices, classes, captures, backreferences,
 //! greedy/lazy repetition, alternatives, boundaries and lookahead. The matcher
 //! uses an explicit backtracking stack and a shared work budget, including
 //! lookaheads and search attempts. Unsupported syntax is rejected explicitly.
@@ -44,10 +44,17 @@ pub struct Flags {
     pub multiline: bool,
     pub dot_all: bool,
     pub unicode: bool,
+    pub unicode_sets: bool,
     pub sticky: bool,
 }
 impl Flags {
     pub fn parse(text: &str) -> Result<Self, Error> {
+        Self::parse_inner(text, false)
+    }
+    fn parse_utf16(text: &str) -> Result<Self, Error> {
+        Self::parse_inner(text, true)
+    }
+    fn parse_inner(text: &str, allow_unicode_sets: bool) -> Result<Self, Error> {
         let mut f = Self::default();
         for c in text.chars() {
             let slot = match c {
@@ -56,6 +63,7 @@ impl Flags {
                 'm' => &mut f.multiline,
                 's' => &mut f.dot_all,
                 'u' => &mut f.unicode,
+                'v' if allow_unicode_sets => &mut f.unicode_sets,
                 'y' => &mut f.sticky,
                 _ => return Err(Error::Syntax(format!("unsupported RegExp flag {c:?}"))),
             };
@@ -64,7 +72,15 @@ impl Flags {
             }
             *slot = true;
         }
+        if f.unicode && f.unicode_sets {
+            return Err(Error::Syntax(
+                "RegExp flags u and v cannot be combined".into(),
+            ));
+        }
         Ok(f)
+    }
+    fn unicode_mode(self) -> bool {
+        self.unicode || self.unicode_sets
     }
     pub fn as_string(self) -> String {
         [
@@ -73,6 +89,7 @@ impl Flags {
             (self.multiline, 'm'),
             (self.dot_all, 's'),
             (self.unicode, 'u'),
+            (self.unicode_sets, 'v'),
             (self.sticky, 'y'),
         ]
         .into_iter()
@@ -84,13 +101,14 @@ impl Flags {
 #[derive(Debug, Clone)]
 pub struct Regex {
     pattern: String,
+    pattern_utf16: Box<[u16]>,
     flags: Flags,
     program: vm::Program,
     captures: usize,
 }
 impl PartialEq for Regex {
     fn eq(&self, other: &Self) -> bool {
-        self.pattern == other.pattern && self.flags == other.flags
+        self.pattern_utf16 == other.pattern_utf16 && self.flags == other.flags
     }
 }
 impl Eq for Regex {}
@@ -107,11 +125,22 @@ impl Regex {
         if pattern.len() > MAX_PATTERN {
             return Err(Error::Limit("pattern bytes"));
         }
-        let flags = Flags::parse(flags)?;
-        let (ast, captures) = parser::parse(pattern, flags)?;
+        let units: Vec<u16> = pattern.encode_utf16().collect();
+        Self::compile_utf16(&units, Flags::parse(flags)?)
+    }
+    /// Compile a pattern from its exact UTF-16 code units, including lone surrogates.
+    pub fn new_utf16(pattern: &[u16], flags: &str) -> Result<Self, Error> {
+        if pattern.len() > MAX_PATTERN {
+            return Err(Error::Limit("pattern code units"));
+        }
+        Self::compile_utf16(pattern, Flags::parse_utf16(flags)?)
+    }
+    fn compile_utf16(pattern: &[u16], flags: Flags) -> Result<Self, Error> {
+        let (ast, captures) = parser::parse_utf16(pattern, flags)?;
         let program = vm::compile(&ast, captures, flags)?;
         Ok(Self {
-            pattern: pattern.into(),
+            pattern: String::from_utf16_lossy(pattern),
+            pattern_utf16: pattern.into(),
             flags,
             program,
             captures,
@@ -122,6 +151,10 @@ impl Regex {
     }
     pub fn pattern(&self) -> &str {
         &self.pattern
+    }
+    /// The exact pattern. Use this when it may contain lone UTF-16 surrogates.
+    pub fn pattern_utf16(&self) -> &[u16] {
+        &self.pattern_utf16
     }
     pub fn capture_count(&self) -> usize {
         self.captures
@@ -218,7 +251,7 @@ fn canonical(c: u32, flags: Flags) -> u32 {
     if !flags.ignore_case {
         return c;
     }
-    if flags.unicode {
+    if flags.unicode_mode() {
         return unicode_casefold::PAIRS
             .binary_search_by_key(&c, |p| p.0)
             .map(|i| unicode_casefold::PAIRS[i].1)
@@ -236,7 +269,7 @@ fn canonical(c: u32, flags: Flags) -> u32 {
     }
 }
 fn word(c: u32, flags: Flags) -> bool {
-    let c = if flags.unicode && flags.ignore_case {
+    let c = if flags.unicode_mode() && flags.ignore_case {
         canonical(c, flags)
     } else {
         c

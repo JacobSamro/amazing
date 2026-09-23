@@ -29,11 +29,16 @@ pub(crate) struct Class {
     pub members: Vec<Member>,
 }
 
-pub(crate) fn parse(pattern: &str, flags: Flags) -> Result<(Node, usize), Error> {
-    let chars = if flags.unicode {
-        pattern.chars().map(|c| c as u32).collect()
+pub(crate) fn parse_utf16(pattern: &[u16], flags: Flags) -> Result<(Node, usize), Error> {
+    let chars = if flags.unicode_mode() {
+        char::decode_utf16(pattern.iter().copied())
+            .map(|point| match point {
+                Ok(ch) => ch as u32,
+                Err(unpaired) => u32::from(unpaired.unpaired_surrogate()),
+            })
+            .collect()
     } else {
-        pattern.encode_utf16().map(u32::from).collect()
+        pattern.iter().copied().map(u32::from).collect()
     };
     let mut p = Parser {
         chars,
@@ -161,7 +166,7 @@ impl Parser {
             }
             Some('*' | '+' | '?') => self.error("nothing to repeat"),
             Some('{') => {
-                if self.flags.unicode {
+                if self.flags.unicode_mode() {
                     return self.error("unescaped syntax character");
                 }
                 let save = self.pos;
@@ -176,7 +181,9 @@ impl Parser {
                 self.pos = save;
                 Ok(Node::Char(c))
             }
-            Some('}' | ']') if self.flags.unicode => self.error("unescaped syntax character"),
+            Some('}' | ']') if self.flags.unicode_mode() => {
+                self.error("unescaped syntax character")
+            }
             _ => Ok(Node::Char(c)),
         }
     }
@@ -243,6 +250,14 @@ impl Parser {
         while self.peek() != Some(']' as u32) {
             if self.peek().is_none() {
                 return self.error("unterminated character class");
+            }
+            if self.flags.unicode_sets
+                && (self.peek() == Some('[' as u32)
+                    || self.chars.get(self.pos..self.pos + 2) == Some(&['&' as u32, '&' as u32])
+                    || self.chars.get(self.pos..self.pos + 2) == Some(&['-' as u32, '-' as u32])
+                    || self.chars.get(self.pos..self.pos + 2) == Some(&['\\' as u32, 'q' as u32]))
+            {
+                return self.error("Unicode set operations and strings are unsupported");
             }
             let a = self.class_atom()?;
             if self.peek() == Some('-' as u32)
@@ -342,7 +357,7 @@ impl Parser {
             }
             Some('x') => Ok(Node::Char(self.hex(2)?)),
             Some('u') => {
-                let braced = self.flags.unicode && self.eat('{');
+                let braced = self.flags.unicode_mode() && self.eat('{');
                 let mut n = if braced {
                     let mut n = 0u32;
                     let start = self.pos;
@@ -368,7 +383,7 @@ impl Parser {
                 } else {
                     self.hex(4)?
                 };
-                if self.flags.unicode
+                if self.flags.unicode_mode()
                     && !braced
                     && (0xD800..=0xDBFF).contains(&n)
                     && self.chars.get(self.pos..self.pos + 2) == Some(&['\\' as u32, 'u' as u32])
@@ -387,7 +402,7 @@ impl Parser {
                 self.error("Unicode properties/named references are unsupported")
             }
             Some(ch)
-                if self.flags.unicode
+                if self.flags.unicode_mode()
                     && !"^$\\.*+?()[]{}|/".contains(ch)
                     && !(in_class && ch == '-') =>
             {
