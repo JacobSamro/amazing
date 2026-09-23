@@ -1,0 +1,142 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-9",
+  "implementation_base": "86ce84b",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selections": {
+    "font-face": {
+      "before": "text8-font-face.json",
+      "after": "text9-font-face.json",
+      "before_counts": {
+        "pass": 4,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 4,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    },
+    "fonts": {
+      "before": "text8-fonts.json",
+      "after": "text9-fonts.json",
+      "before_counts": {
+        "pass": 13,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 13,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    },
+    "vertical": {
+      "before": "text8-vertical.json",
+      "after": "text9-vertical.json",
+      "before_counts": {
+        "pass": 5,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 5,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    },
+    "vertical-ruby": {
+      "before": "text8-vertical-ruby.json",
+      "after": "text9-vertical-ruby.json",
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    },
+    "flow": {
+      "before": "text8-flow.json",
+      "after": "text9-flow.json",
+      "before_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    },
+    "shaping": {
+      "before": "text8-shaping.json",
+      "after": "text9-shaping.json",
+      "before_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    }
+  },
+  "classification_losses": 0,
+  "note": "TEXT-7 inherited tcy line-break loss remains pending LAYOUT-14 item 0; this gate compares TEXT-9 against TEXT-8."
+}
