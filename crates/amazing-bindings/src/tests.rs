@@ -6,6 +6,7 @@ use amazing_net::url::{UrlSearchParams, UrlWithSearchParams};
 
 #[derive(Clone)]
 enum WebMock {
+    DomParser,
     Url(UrlWithSearchParams, Option<usize>), Params(UrlSearchParams),
     Blob(Blob), File(File), FormData(FormData), FontFaceSet,
 }
@@ -72,6 +73,20 @@ impl Host {
 impl BindingHost for Host {
     type Value = V;
     type Error = String;
+    fn dom_parser_new(&mut self) -> Result<V, String> {
+        Ok(self.web_push(WebMock::DomParser, InterfaceBrand::DOM_PARSER))
+    }
+    fn create_inert_document(&mut self, bytes: &[u8], content_type: &str,
+        url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        if bytes == b"<bad" { return Err(DomError::SyntaxError); }
+        let mut parsed = Dom::new();
+        let html = content_type == "text/html";
+        let name = if bytes.starts_with(b"<parsererror") { "parsererror" }
+            else if html { "html" } else { "root" };
+        parsed.create_element_ns(NodeIdx(0),
+            Some(if html { "http://www.w3.org/1999/xhtml" } else { "urn:test" }), name)?;
+        self.dom.import_inert_document(&parsed, url, content_type, charset.unwrap_or("UTF-8"))
+    }
     fn global_object(&mut self) -> Result<V, String> {
         Err("installation capability unused by this invocation mock".into())
     }
@@ -386,7 +401,8 @@ impl BindingHost for Host {
         result
     }
     fn is_html_document(&self, n: NodeIdx) -> bool {
-        n == NodeIdx(0)
+        n == NodeIdx(0) || self.dom.document_metadata(n).ok().flatten()
+            .is_some_and(|data| data.content_type == "text/html")
     }
     fn undefined(&self) -> V {
         V::Undefined
@@ -453,8 +469,18 @@ impl AbortHost for Host {
     }
 }
 impl DocumentHost for Host {
-    fn document_field(&mut self, _document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, String> {
+    fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, String> {
         assert!(!self.arena_borrowed);
+        if let Some(data) = self.dom.document_metadata(document).map_err(|error| error.to_string())? {
+            let value = match field {
+                DocumentField::URL | DocumentField::DocumentURI => data.url.as_str(),
+                DocumentField::CharacterSet => data.character_set.as_str(),
+                DocumentField::ContentType => data.content_type.as_str(),
+                DocumentField::CompatMode => "CSS1Compat",
+                DocumentField::Referrer => "",
+            };
+            return Ok(value.encode_utf16().collect());
+        }
         let value = match field {
             DocumentField::URL | DocumentField::DocumentURI => "https://example.test/page",
             DocumentField::CharacterSet => "UTF-8",
@@ -881,6 +907,30 @@ fn attribute_names_and_named_node_map_share_cross_namespace_insertion_order() {
         let attr = call(&mut h, O::NamedNodeMapItem, map.clone(), &[V::Number(index as f64)]);
         assert_eq!(call(&mut h, O::AttrName, attr, &[]), str_value(name));
     }
+}
+
+#[test]
+fn dom_parser_creates_inert_documents_and_xml_error_document() {
+    let mut h = Host::default();
+    assert!(INTERFACES.iter().any(|definition| definition.interface == Interface::XMLDocument
+        && definition.parent == Some(Interface::Document)));
+    let parser = call(&mut h, O::DOMParserConstructor, V::Undefined, &[]);
+    let html = call(&mut h, O::DOMParserParseFromString, parser.clone(),
+        &[str_value("<p>hello</p>"), str_value("text/html")]);
+    let document = node(html);
+    let metadata = h.dom.document_metadata(document).unwrap().unwrap();
+    assert_eq!(metadata.url, "https://example.test/page");
+    assert_eq!(metadata.content_type, "text/html");
+    assert_eq!(metadata.character_set, "UTF-8");
+    assert_eq!(call(&mut h, O::DocumentURL, V::Node(document), &[]), str_value("https://example.test/page"));
+    assert_eq!(call(&mut h, O::DocumentContentType, V::Node(document), &[]), str_value("text/html"));
+    assert_eq!(h.dom.document_ready_state(document).unwrap().as_str(), "complete");
+    assert_eq!(h.dom.local_name(h.dom.document_element(document).unwrap().unwrap()), Some("html"));
+    let xml_error = node(call(&mut h, O::DOMParserParseFromString, parser.clone(),
+        &[str_value("<bad"), str_value("application/xml")]));
+    assert_eq!(h.dom.local_name(h.dom.document_element(xml_error).unwrap().unwrap()), Some("parsererror"));
+    assert_eq!(invoke(&mut h, O::DOMParserParseFromString, parser,
+        &[str_value("x"), str_value("text/plain")]), Err("TypeError: Unsupported DOMParser content type".into()));
 }
 
 #[test]

@@ -5,6 +5,54 @@ use amazing_text::TextSystem;
 use std::{cell::RefCell, rc::Rc};
 
 #[test]
+fn dom_parser_documents_share_the_arena_without_running_scripts() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    scheduler.set_location_url("https://example.test/page");
+    for (label, script) in [
+        ("constructor", "var parser = new DOMParser();"),
+        ("HTML", "var html = parser.parseFromString('<title>inert</title><script>window.ran = true</script><p id=inside>ok</p>', 'text/html');"),
+        ("XML", "var xml = parser.parseFromString('<root xmlns=\"urn:x\"><child/></root>', 'application/xml');"),
+        ("XML error", "var bad = parser.parseFromString('<root>', 'application/xml');"),
+    ] {
+        scheduler.run_script(script).unwrap_or_else(|error| panic!("DOMParser {label}: {}", error.describe()));
+    }
+    assert_eq!(scheduler.run_script(
+        "let rejected = false; try { parser.parseFromString('x', 'text/plain'); } catch (error) { rejected = true; } \
+         html !== document && html.URL === 'https://example.test/page' && html.contentType === 'text/html' && \
+         html.characterSet === 'UTF-8' && html.readyState === 'complete' && html.getElementById('inside').textContent === 'ok' && \
+         window.ran === undefined && xml.contentType === 'application/xml' && xml.documentElement.namespaceURI === 'urn:x' && \
+         bad.documentElement.localName === 'parsererror' && rejected"
+    ).unwrap_or_else(|error| panic!("DOMParser script: {}", error.describe())), amazing_js::value::JsValue::Bool(true));
+}
+
+#[test]
+fn xhr_inert_document_hook_decodes_xml_and_reports_parse_failure() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"),
+        native_forwarded: false,
+    }));
+    let mut js = amazing_js::Interpreter::new();
+    js.set_dom_host(host.clone());
+    let bindings = crate::runtime_binding_host::install(&mut js, host.clone()).unwrap();
+    let document = bindings.create_inert_document(&mut js, b"<root>caf\xe9</root>",
+        "application/xml", "https://example.test/response", Some("windows-1252")).unwrap();
+    let borrowed = host.borrow();
+    let dom = &borrowed.dom;
+    assert_eq!(dom.document_metadata(document).unwrap().unwrap().character_set, "windows-1252");
+    assert_eq!(dom.document_metadata(document).unwrap().unwrap().url, "https://example.test/response");
+    let root = dom.document_element(document).unwrap().unwrap();
+    assert_eq!(dom.local_name(root), Some("root"));
+    assert_eq!(dom.character_data(dom.children(root).next().unwrap()).as_deref(), Some("café"));
+    drop(borrowed);
+    assert_eq!(bindings.create_inert_document(&mut js, b"<root>", "application/xml",
+        "https://example.test/response", None), Err(amazing_dom::DomError::SyntaxError));
+}
+
+#[test]
 fn put_forwards_assignments_keep_live_token_lists_and_location() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse("<body><a id='a'></a><form id='f'></form><output id='o'></output><iframe id='i'></iframe><link id='l'></body>"),

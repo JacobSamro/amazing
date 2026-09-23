@@ -252,6 +252,9 @@ const FORM_DATA: &[Member] = &[
 const FONT_FACE_SET: &[Member] = &[
     getter("status", O::FontFaceSetStatus), getter("ready", O::FontFaceSetReady),
 ];
+const DOM_PARSER: &[Member] = &[
+    method("parseFromString", O::DOMParserParseFromString, 2),
+];
 const DOM_IMPLEMENTATION: &[Member] = &[
     method("createDocumentType", O::ImplementationCreateDocumentType, 3),
     method("createDocument", O::ImplementationCreateDocument, 3),
@@ -666,6 +669,8 @@ const OLIST: &[Member] = &[
 ];
 const LI: &[Member] = &[getter("value", O::LIValue), setter("value", O::LISetValue)];
 pub static INTERFACES: &[D] = &[
+    D { interface: I::DOMParser, name: "DOMParser", parent: None,
+        constructor: Some(O::DOMParserConstructor), members: DOM_PARSER },
     D { interface: I::URL, name: "URL", parent: None, constructor: Some(O::URLConstructor), members: URL },
     D { interface: I::URLSearchParams, name: "URLSearchParams", parent: None,
         constructor: Some(O::URLSearchParamsConstructor), members: URL_SEARCH_PARAMS },
@@ -699,6 +704,8 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::DocumentConstructor),
         members: DOCUMENT,
     },
+    D { interface: I::XMLDocument, name: "XMLDocument", parent: Some(I::Document),
+        constructor: None, members: &[] },
     D {
         interface: I::DocumentFragment,
         name: "DocumentFragment",

@@ -45,6 +45,26 @@ fn parser_arena_import_preserves_namespace_and_tree_order() {
 }
 
 #[test]
+fn inert_document_import_preserves_own_tree_and_metadata() {
+    let mut parsed = Dom::new();
+    let root = parsed.create_element_ns(NodeIdx(0), Some("urn:test"), "p:root").unwrap();
+    parsed.set_attribute_qualified_ns(root, Some("urn:attr"), "a:id", "one").unwrap();
+    parsed.create_element_ns(root, Some("urn:test"), "child").unwrap();
+    let mut dom = Dom::new();
+    let inert = dom.import_inert_document(&parsed, "https://example.test/data.xml",
+        "application/xml", "UTF-8").unwrap();
+    let imported = dom.document_element(inert).unwrap().unwrap();
+    assert_eq!(dom.owner_document(imported), Some(inert));
+    assert_eq!(dom.namespace_uri(imported), Some("urn:test"));
+    assert_eq!(dom.attribute_ns(imported, Some("urn:attr"), "id").unwrap().value, "one");
+    assert_eq!(dom.document_metadata(inert).unwrap().unwrap().url, "https://example.test/data.xml");
+    assert_eq!(dom.document_metadata(inert).unwrap().unwrap().content_type, "application/xml");
+    assert_eq!(dom.document_metadata(inert).unwrap().unwrap().character_set, "UTF-8");
+    assert_eq!(dom.document_ready_state(inert).unwrap().as_str(), "complete");
+    assert!(dom.document_metadata(NodeIdx(0)).unwrap().is_none());
+}
+
+#[test]
 fn serialization_preserves_utf16_text_units() {
     let mut dom = Dom::new();
     let root = dom.create_element(NodeIdx(0), "div");

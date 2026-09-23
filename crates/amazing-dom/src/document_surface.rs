@@ -3,6 +3,12 @@ use crate::{Dom, DomError, Namespace, NodeIdx, NodeKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReadyState { Loading, Interactive, Complete }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DocumentMetadata {
+    pub url: String,
+    pub content_type: String,
+    pub character_set: String,
+}
 impl ReadyState {
     pub fn as_str(self) -> &'static str {
         match self { Self::Loading => "loading", Self::Interactive => "interactive", Self::Complete => "complete" }
@@ -19,6 +25,17 @@ fn collapsed(value: &[u16]) -> Vec<u16> {
     result
 }
 impl Dom {
+    pub fn document_metadata(&self, document: NodeIdx) -> Result<Option<&DocumentMetadata>, DomError> {
+        self.document_checked(document)?;
+        Ok(self.document_metadata.iter().find(|(node, _)| *node == document).map(|(_, data)| data))
+    }
+    pub fn set_document_metadata(&mut self, document: NodeIdx, data: DocumentMetadata) -> Result<(), DomError> {
+        self.document_checked(document)?;
+        if let Some((_, current)) = self.document_metadata.iter_mut().find(|(node, _)| *node == document) {
+            *current = data;
+        } else { self.document_metadata.push((document, data)); }
+        Ok(())
+    }
     fn document_checked(&self, document: NodeIdx) -> Result<(), DomError> {
         self.check_node(document)?;
         if matches!(self.get(document).kind, NodeKind::Document) { Ok(()) }

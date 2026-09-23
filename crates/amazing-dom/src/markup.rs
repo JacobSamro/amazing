@@ -161,6 +161,20 @@ impl Dom {
         Ok(fragment)
     }
 
+    /// Imports a parser's document into this arena without a browsing context or script execution.
+    pub fn import_inert_document(&mut self, source: &Dom, url: &str, content_type: &str,
+        character_set: &str) -> Result<NodeIdx, DomError> {
+        let document = self.create_document();
+        for child in source.children(NodeIdx(0)) {
+            self.import_node_into(source, child, document, document)?;
+        }
+        self.set_document_metadata(document, crate::document_surface::DocumentMetadata {
+            url: url.into(), content_type: content_type.into(), character_set: character_set.into(),
+        })?;
+        self.set_document_ready_state(document, crate::document_surface::ReadyState::Complete)?;
+        Ok(document)
+    }
+
     fn import_node_into(&mut self, source: &Dom, node: NodeIdx, document: NodeIdx, parent: NodeIdx)
         -> Result<(), DomError> {
         let created = match &source.get(node).kind {

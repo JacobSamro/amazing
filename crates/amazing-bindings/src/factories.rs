@@ -140,6 +140,11 @@ pub(crate) fn invoke<H: BindingHost>(
                     if !matches!(dom.get(node).kind, NodeKind::DocumentType { .. }) { return Err(DomError::TypeError); }
                 }
                 let doc = dom.create_document();
+                dom.set_document_metadata(doc, amazing_dom::document_surface::DocumentMetadata {
+                    url: "about:blank".into(), content_type: "application/xml".into(),
+                    character_set: "UTF-8".into(),
+                })?;
+                dom.set_document_ready_state(doc, amazing_dom::document_surface::ReadyState::Complete)?;
                 if let Some(node) = doctype { dom.pre_insert(node, doc, None)?; }
                 if !qualified.is_empty() {
                     let root = dom.create_element_ns_in(doc, uri.as_deref(), &qualified)?;
@@ -153,6 +158,11 @@ pub(crate) fn invoke<H: BindingHost>(
             let title = if let Some(value) = args.first() { Some(host.to_dom_string(value)?) } else { None };
             let new_doc = host.with_dom(|dom| {
                 let doc = dom.create_document();
+                dom.set_document_metadata(doc, amazing_dom::document_surface::DocumentMetadata {
+                    url: "about:blank".into(), content_type: "text/html".into(),
+                    character_set: "UTF-8".into(),
+                })?;
+                dom.set_document_ready_state(doc, amazing_dom::document_surface::ReadyState::Complete)?;
                 let doctype = dom.create_document_type_in(doc, "html", "", "")?;
                 dom.pre_insert(doctype, doc, None)?;
                 let html = dom.create_element_ns_in(doc, Some("http://www.w3.org/1999/xhtml"), "html")?;

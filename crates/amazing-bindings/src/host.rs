@@ -59,6 +59,7 @@ impl InterfaceBrand {
     pub const FILE: Self = Self(30);
     pub const FORM_DATA: Self = Self(31);
     pub const FONT_FACE_SET: Self = Self(32);
+    pub const DOM_PARSER: Self = Self(33);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -70,6 +71,7 @@ pub enum Interface {
     NamedNodeMap,
     DOMTokenList,
     Document,
+    XMLDocument,
     DocumentFragment,
     ShadowRoot,
     DocumentType,
@@ -170,6 +172,7 @@ pub enum Interface {
     File,
     FormData,
     FontFaceSet,
+    DOMParser,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -201,6 +204,7 @@ pub enum Operation {
     FormDataConstructor, FormDataAppend, FormDataDelete, FormDataGet,
     FormDataGetAll, FormDataHas, FormDataSet, FormDataForEach,
     DocumentFonts, FontFaceSetStatus, FontFaceSetReady,
+    DOMParserConstructor, DOMParserParseFromString,
     FormElements, FormLength, FormReset, FormCheckValidity, FormReportValidity,
     FormControlForm, FormControlName, FormControlSetName,
     InputValue, InputSetValue, InputDefaultValue, InputSetDefaultValue,
@@ -925,6 +929,16 @@ pub trait BindingHost: Sized {
     ) -> Result<(), Self::Error>;
     fn install_static_method(&mut self, interface: Interface, name: &'static str,
         operation: Operation, length: u8) -> Result<(), Self::Error>;
+    fn dom_parser_new(&mut self) -> Result<Self::Value, Self::Error> {
+        self.with_dom(|_| Err(DomError::NotSupportedError))
+    }
+    /// Parses without script execution and imports into the active shared arena.
+    /// SyntaxError means XML parsing failed; XHR returns null, while DOMParser
+    /// turns that failure into an XML error document.
+    fn create_inert_document(&mut self, _bytes: &[u8], _content_type: &str,
+        _url: &str, _charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        Err(DomError::NotSupportedError)
+    }
     fn current_document(&self) -> NodeIdx;
     fn with_dom<R>(
         &mut self,

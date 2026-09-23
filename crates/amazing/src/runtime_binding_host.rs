@@ -36,6 +36,7 @@ enum NativeEntry {
 }
 
 enum WebObject {
+    DomParser,
     Url(UrlWithSearchParams, Option<u64>),
     Params(UrlSearchParams),
     Blob(Blob),
@@ -75,6 +76,12 @@ pub(crate) struct RuntimeBindings {
 }
 
 impl RuntimeBindings {
+    pub(crate) fn create_inert_document(&self, js: &mut Interpreter, bytes: &[u8],
+        content_type: &str, url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        adapter.create_inert_document(bytes, content_type, url, charset)
+    }
+
     pub(crate) fn set_document_url(&self, url: &str) {
         self.state.borrow_mut().document_url = Some(url.to_owned());
     }
@@ -288,6 +295,8 @@ impl RuntimeBindingHost<'_> {
             let host = self.state.borrow().host.clone();
             let host = host.borrow();
             return Ok(match &host.dom.get(node).kind {
+                NodeKind::Document if host.dom.document_metadata(node).ok().flatten()
+                    .is_some_and(|metadata| metadata.content_type != "text/html") => Interface::XMLDocument,
                 NodeKind::Document => Interface::Document,
                 NodeKind::DocumentFragment if host.dom.is_shadow_root(node) => Interface::ShadowRoot,
                 NodeKind::DocumentFragment => Interface::DocumentFragment,
@@ -336,6 +345,7 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::FILE => Interface::File,
             InterfaceBrand::FORM_DATA => Interface::FormData,
             InterfaceBrand::FONT_FACE_SET => Interface::FontFaceSet,
+            InterfaceBrand::DOM_PARSER => Interface::DOMParser,
             _ => return Err(Throw::type_error("Unknown platform brand")),
         })
     }
@@ -443,6 +453,43 @@ impl RuntimeBindingHost<'_> {
 impl BindingHost for RuntimeBindingHost<'_> {
     type Value = JsValue;
     type Error = Throw;
+
+    fn dom_parser_new(&mut self) -> Result<JsValue, Throw> {
+        self.web_allocate(WebObject::DomParser, InterfaceBrand::DOM_PARSER)
+    }
+    fn create_inert_document(&mut self, bytes: &[u8], content_type: &str,
+        url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        let mime = content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+        let (parsed, detected_encoding) = if mime == "text/html" {
+            let decoded = amazing_html::encoding::decode(bytes, charset);
+            (amazing_html::parse_bytes(bytes, charset), decoded.encoding)
+        } else if matches!(mime.as_str(), "text/xml" | "application/xml" | "application/xhtml+xml" | "image/svg+xml")
+            || mime.ends_with("+xml") {
+            let (source, encoding) = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                (String::from_utf8(bytes[3..].to_vec()).map_err(|_| DomError::SyntaxError)?,
+                    amazing_html::encoding::Encoding::Utf8)
+            } else if !bytes.starts_with(&[0xFE, 0xFF]) && !bytes.starts_with(&[0xFF, 0xFE])
+                && charset.is_none_or(|label| label.eq_ignore_ascii_case("UTF-8")) {
+                (String::from_utf8(bytes.to_vec()).map_err(|_| DomError::SyntaxError)?,
+                    amazing_html::encoding::Encoding::Utf8)
+            } else {
+                let decoded = amazing_html::encoding::decode(bytes, charset);
+                if charset.is_some() && !matches!(decoded.source,
+                    amazing_html::encoding::Source::Transport | amazing_html::encoding::Source::Bom) {
+                    return Err(DomError::SyntaxError);
+                }
+                (decoded.text, decoded.encoding)
+            };
+            (amazing_html::parse_xml(&source).map_err(|_| DomError::SyntaxError)?, encoding)
+        } else { return Err(DomError::NotSupportedError); };
+        let character_set = if detected_encoding == amazing_html::encoding::Encoding::Utf8 {
+            "UTF-8"
+        } else { detected_encoding.name() };
+        let host = self.state.borrow().host.clone();
+        let result = host.borrow_mut().dom.import_inert_document(&parsed, url, &mime,
+            character_set);
+        result
+    }
 
     fn global_object(&mut self) -> Result<JsValue, Throw> {
         Ok(self.js.binding_global_object())
@@ -1199,6 +1246,11 @@ impl BindingHost for RuntimeBindingHost<'_> {
         result.map_err(|error| throw_dom_error(self, error))
     }
     fn is_html_document(&self, document: NodeIdx) -> bool {
+        if document != NodeIdx(0) {
+            let host = self.state.borrow().host.clone();
+            return host.borrow().dom.document_metadata(document).ok().flatten()
+                .is_some_and(|metadata| metadata.content_type == "text/html");
+        }
         document == NodeIdx(0)
     }
     fn undefined(&self) -> JsValue {
@@ -1304,6 +1356,19 @@ impl AbortHost for RuntimeBindingHost<'_> {
 
 impl DocumentHost for RuntimeBindingHost<'_> {
     fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, Throw> {
+        if document != NodeIdx(0) {
+            let host = self.state.borrow().host.clone();
+            let metadata = host.borrow().dom.document_metadata(document).ok().flatten().cloned()
+                .ok_or_else(|| throw_dom_error(self, DomError::NotSupportedError))?;
+            let value = match field {
+                DocumentField::URL | DocumentField::DocumentURI => metadata.url,
+                DocumentField::CharacterSet => metadata.character_set,
+                DocumentField::ContentType => metadata.content_type,
+                DocumentField::CompatMode => "CSS1Compat".into(),
+                DocumentField::Referrer => String::new(),
+            };
+            return Ok(value.encode_utf16().collect());
+        }
         if document != NodeIdx(0) { return Err(throw_dom_error(self, DomError::NotSupportedError)); }
         let value = match field {
             DocumentField::URL | DocumentField::DocumentURI => self.state.borrow().document_url.clone(),
@@ -1315,9 +1380,11 @@ impl DocumentHost for RuntimeBindingHost<'_> {
         Ok(value.encode_utf16().collect())
     }
     fn active_element(&mut self, _document: NodeIdx) -> Result<Option<NodeIdx>, Throw> {
+        if _document != NodeIdx(0) { return Ok(None); }
         Err(throw_dom_error(self, DomError::NotSupportedError))
     }
     fn has_focus(&mut self, _document: NodeIdx) -> Result<bool, Throw> {
+        if _document != NodeIdx(0) { return Ok(false); }
         Err(throw_dom_error(self, DomError::NotSupportedError))
     }
 }

@@ -30,6 +30,7 @@ mod traversal_bindings;
 mod event_bindings;
 mod abort_bindings;
 mod document_bindings;
+mod parser_bindings;
 mod element_reflection;
 pub use abort_bindings::fire_abort_timeout;
 mod mutation_bindings;
