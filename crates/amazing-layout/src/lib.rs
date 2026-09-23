@@ -166,6 +166,8 @@ pub struct LayoutBox {
     pub(crate) table_rowspan: usize,
     /// Definite containing-block height, distinct from content-derived height.
     pub(crate) containing_block_height: Option<f32>,
+    /// Parent grid tracks inherited by a subgrid in either axis.
+    pub(crate) grid_subgrid: Option<grid::SubgridContext>,
 
     // --- box model, resolved at layout time ---
     pub margin: values::SidesM,
@@ -205,6 +207,7 @@ impl LayoutBox {
             table_colspan: 1,
             table_rowspan: 1,
             containing_block_height: None,
+            grid_subgrid: None,
             margin: values::SidesM::default(),
             padding: values::Sides::default(),
             border: values::Sides::default(),

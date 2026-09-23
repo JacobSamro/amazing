@@ -764,3 +764,80 @@ The fixed base predates CSS-7. `display: inline flow-root` parsing was added
 to `dev` later in CSS-7 at `945ca38`; this LAYOUT-6 gate keeps the pinned base
 and measures `inline-block` author syntax. Grid Lanes and subgrid stay in
 LAYOUT-7.
+
+## LAYOUT-7 — Subgrid and Grid Lanes (complete on fixed base)
+
+Fixed base: `5c92b4a84361e92afba252c47c02b2958a16353c`. CSS-7 at
+`945ca38` is already included; its `grid` shorthand expansion carries
+subgrid to both typed template longhands. The pinned CSS reach result is
+19/19, superseding the older CSS-6 12/19 observation.
+
+`amazing-layout` keeps both formatting modes in the existing `Flow::Grid`
+tree, so paint and positioned-descendant traversal use the same structure.
+Subgridded axes carry the parent track sizes and inherited line names over
+the item's span. Local line names merge with inherited names. The parent
+sizes intrinsic tracks using child contributions across a subgrid, including
+its margin, border, padding, and gap difference; the other axis retains the
+ordinary Grid algorithm. Once parent row sizes are known, row subgrids are
+laid out again with those sizes.
+
+Grid Lanes uses the ordinary Grid track model in its grid axis and one running
+position per lane in its stacking axis. Auto placement picks the shortest
+eligible span, with the Grid 3 default tolerance of 1em and a cursor to
+resolve near ties. Definite placements, spans, order, and row-oriented lanes
+are included. CSS does not yet expose `flow-tolerance`, so the default is the
+currently testable path; the layout parser is ready to consume it if CSS adds
+the property.
+
+`inline-grid-lanes` takes intrinsic width from the combined grid-axis tracks.
+Both Grid and Grid Lanes establish block formatting contexts and stretch auto
+columns in a definite-width container. Shared Grid intrinsic sizing removes
+internal gaps and fixed-track bases before distributing a spanning item's
+contribution; this restores the ordinary Grid reference for a row-track case
+and the `grid-gap-normal-001` subgrid case. The LAYOUT-6
+`column-scrollbar-gutter-001` exception is an exact pixel match in the
+targeted LAYOUT-7 Windows probe.
+
+References: [CSS Grid 2 subgrids](https://www.w3.org/TR/css-grid-2/#subgrids),
+[pinned CSS Grid 3 WD](https://www.w3.org/TR/2026/WD-css-grid-3-20260121/).
+
+Pinned WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, viewport
+800×600, fixed base `5c92b4a`. The broad selection moved **73/200 → 83/200**
+twice, with identical per-case classifications and image hashes: raw
+**+11/−1**, Chrome/Safari consensus **+10/−1**. The frozen 79-case subgrid and
+Grid Lanes selection moved **9/79 → 20/79** twice: raw **+11/−0**, consensus
+**+10/−0**. The historical LAYOUT-6 77/200 predates CSS-7; the fixed-base
+73/200 is the reproducible before value after CSS-7 made Grid Lanes and
+subgrid declarations reachable. All 19 typed subgrid fixtures reached layout.
+
+The one broad loss is
+`css-grid/abspos/positioned-grid-items-negative-indices-003.html`: the baseline
+renderer painted neither test nor reference (equal empty images). With Grid
+layout now painting, the test/reference differ (48,750 pixels). This fixture
+also needs negative-index absolute-positioned Grid placement and a correct
+ordinary Grid reference; the pass was accidental. It is outside the focused
+subgrid/Grid Lanes selection. The previous LAYOUT-6
+`column-scrollbar-gutter-001` exception is now an exact pixel match.
+
+The ten retained selections were each repeated twice, with stable per-case
+classification and image hashes and zero pass losses: flex/grid 24/24,
+geometry 41/61, tables 9/12, floats 6/8, block collapse 9/9, position 12/12,
+text flow 14/16, contents 6/6, paint compositing 24/24, images 12/12.
+Two retained passing cases changed both test and reference images together,
+and remained exact matches: `grid__auto-repeat-named-lines-4` and
+`css-display__display-contents-alignment-002.html`.
+
+On win-001, layout nextest passed 224/224 and layout doctests 0/0. Workspace
+doctests passed 2/2. Workspace nextest on the fixed base failed one
+integrator-authorized 100px assertion because fixed-base CSS accepted
+`grid-column:default`; excluding that CSS-owned test, workspace nextest passed
+1498/1498 with four skipped. CSS Values 4 §4.2 reserves `default` for
+`<custom-ident>`; the CSS parser fix merged on `dev` as `6fcb990` and will be
+present when LAYOUT-7 is merged. The raw paired reports, exact-revision oracle,
+source hashes, Windows logs, and gate metadata are in
+`crates/amazing-layout/evidence/layout7/`.
+
+Remaining Grid 3 coverage gaps include CSS exposure of nondefault
+`flow-tolerance`, dense/reverse lane placement, and fuller intrinsic row
+subgrid sizing. The current implementation covers the default 1em tolerance,
+shortest lane selection, definite placement, spans, and inline-grid-lanes.

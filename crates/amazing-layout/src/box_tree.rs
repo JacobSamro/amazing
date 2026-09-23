@@ -154,7 +154,9 @@ fn parse_display(style: &ComputedStyle) -> Display {
         {
             Display::Flex
         }
-        Some(v) if v.eq_ignore_ascii_case("grid") || v.eq_ignore_ascii_case("inline-grid") => {
+        Some(v) if v.eq_ignore_ascii_case("grid") || v.eq_ignore_ascii_case("inline-grid")
+            || v.eq_ignore_ascii_case("grid-lanes")
+            || v.eq_ignore_ascii_case("inline-grid-lanes") => {
             Display::Grid
         }
         _ if crate::floats::side(style).is_some() => Display::Block,
@@ -261,7 +263,7 @@ fn is_out_of_flow(style: &ComputedStyle) -> bool {
 }
 
 fn is_atomic_inline_container(style: &ComputedStyle) -> bool {
-    matches!(style.get("display"), Some("inline-flex" | "inline-grid" | "inline-block" | "inline flow-root"))
+    matches!(style.get("display"), Some("inline-flex" | "inline-grid" | "inline-grid-lanes" | "inline-block" | "inline flow-root"))
         && crate::floats::side(style).is_none()
 }
 
