@@ -392,3 +392,36 @@ manifest or lockfile sources were edited. The four-decoder HTML-2 limit remains.
 RuntimeBindingHost is the next separate driver ticket after both DOM-7 and
 JSRT-3 land with the final accepted trait text. It was not started in
 IA-STREAM.
+
+## IA-CACHE — GPUI shell adoption of NET-10 cache policy
+
+Fixed base `a858fd08b66c34ec3d9ef47f06be115680ae3d77` includes the
+validated public `amazing_net::Headers::append` needed to return cached Age
+and merged 304 headers. The shell now delegates freshness, Vary, validation,
+304 merge, and unsafe-method invalidation to the private `amazing_fetch`
+`CacheStore`. It keeps the existing request-plus-Cookie key, final response URL
+and reason, and hit promotion. Limits are 64 entries, 16 MiB aggregate, and
+8 MiB per body; NET-10 also charges metadata against the aggregate limit, so
+effective capacity is slightly stricter. Cache entries remain memory-only.
+`session-state-v1` retains exact `C/L/H/B/D` records.
+
+Before the adapter, shell nextest passed **43/43** but the controlled ETag/304
+proof failed **0/1**: a stale `no-cache` response was reused without sending
+`If-None-Match`. After the adapter, shell nextest passed **46/46**. The four
+focused cache and persistence tests then passed **4/4 twice**, and the
+controlled 304 proof passed **1/1 twice**: it observed the conditional request,
+original body and status, merged `Cache-Control: max-age=60`, and a third fresh
+hit without a connection. A repeated run exposed an overly strict `Age: 0`
+assertion; it now accepts a fresh age below the 60-second lifetime. This was a
+test timing correction, not a cache policy change.
+
+On win-001, the locked standalone shell workspace nextest passed **65/65**,
+0 skipped; its separate doctest command passed with **0 doctests**. The locked
+root workspace nextest passed **1448/1448**, 3 skipped; separate root doctests
+passed **2/2**. Both workspace gates ran under the shared build slot with
+`REFRESH-HOLD`. All **1192/1192** tracked file SHA-256 hashes matched the
+Windows lane tree before and after the gates. The generated shell lockfile
+adds only `amazing-fetch` and its shell dependency edge. Logs and the pinned
+manifest are in `C:/Users/server/target/integrator-assist/diagnostics/ia-cache/`.
+These fixed-base gates are lane evidence; merged-head preflight belongs to the
+integrator. No WPT result is claimed for this shell-only change.

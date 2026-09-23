@@ -777,7 +777,8 @@ mod tests {
         assert_eq!(first.url, second.url);
         assert_eq!(first.status, second.status);
         assert_eq!(first.body, second.body);
-        assert_eq!(second.headers.get("age"), Some("0"));
+        let age = second.headers.get("age").unwrap().parse::<u64>().unwrap();
+        assert!(age < 60, "fresh cache hit has age {age}");
         server.join().unwrap();
     }
 
