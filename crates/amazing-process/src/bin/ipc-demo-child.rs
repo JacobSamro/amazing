@@ -17,9 +17,31 @@ impl SandboxProbe for SandboxProbeHandler {
         let result = if let Some(path) = message.strip_prefix("open:") {
             std::fs::File::open(path).map(|_| ())
         } else if let Some(address) = message.strip_prefix("connect:") {
-            std::net::TcpStream::connect(address).map(|_| ())
+            let address = address
+                .parse()
+                .map_err(|_| amazing_ipc::Error::Remote("address".into()))?;
+            std::net::TcpStream::connect_timeout(&address, Duration::from_millis(300)).map(|_| ())
+        } else if let Some(pid) = message.strip_prefix("open-process:") {
+            #[cfg(windows)]
+            {
+                let pid = pid
+                    .parse()
+                    .map_err(|_| amazing_ipc::Error::Remote("pid".into()))?;
+                amazing_ipc_platform::probe_open_process(pid)
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = pid;
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Windows only",
+                ))
+            }
         } else if message == "spawn" {
-            std::process::Command::new("/bin/true").status().map(|_| ())
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .arg("--probe-noop")
+                .status()
+                .map(|_| ())
         } else {
             return Err(amazing_ipc::Error::Remote("unknown probe".into()));
         };
@@ -90,6 +112,9 @@ impl Echo for EchoHandler {
     }
 }
 fn main() {
+    if std::env::args().any(|arg| arg == "--probe-noop") {
+        return;
+    }
     if let Some(phase) =
         std::env::args().find_map(|s| s.strip_prefix("--browser-crash-probe=").map(str::to_owned))
     {
@@ -99,6 +124,10 @@ fn main() {
     else {
         return;
     };
+    if role == Role::Network {
+        amazing_process::network::run_network_child().unwrap();
+        return;
+    }
     let caps = Capabilities(BTreeMap::from([
         ("echo".into(), "1".into()),
         ("renderer".into(), "1".into()),

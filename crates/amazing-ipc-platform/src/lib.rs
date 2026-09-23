@@ -167,6 +167,8 @@ pub use linux::{FrameHandle, FrameView, HandleChannel};
 mod windows;
 #[cfg(windows)]
 pub use windows::{FrameHandle, FrameView, HandleChannel};
+#[cfg(windows)]
+pub use windows_sandbox::{probe_open_process, spawn_renderer_appcontainer, WindowsSandboxChild};
 #[cfg(not(any(target_os = "linux", windows)))]
 mod unsupported;
 #[cfg(not(any(target_os = "linux", windows)))]
@@ -175,6 +177,9 @@ pub use unsupported::{FrameHandle, FrameView, HandleChannel};
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[allow(unsafe_code)]
 mod linux_sandbox;
+#[cfg(windows)]
+#[allow(unsafe_code)]
+mod windows_sandbox;
 /// Enter the reviewed Linux renderer profile before processing document input.
 /// A caller must abort child bootstrap if this returns an error.
 pub fn enter_renderer_sandbox(frame_fd: i32) -> Result<(), Error> {
@@ -182,7 +187,12 @@ pub fn enter_renderer_sandbox(frame_fd: i32) -> Result<(), Error> {
     {
         return linux_sandbox::enter(frame_fd).map_err(Error::Io);
     }
-    #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+    #[cfg(windows)]
+    {
+        let _ = frame_fd;
+        return windows_sandbox::verify_current_appcontainer().map_err(Error::Io);
+    }
+    #[cfg(not(any(all(target_os = "linux", target_arch = "x86_64"), windows)))]
     {
         let _ = frame_fd;
         Err(Error::Unsupported)
