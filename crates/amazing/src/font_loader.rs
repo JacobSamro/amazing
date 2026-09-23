@@ -322,6 +322,16 @@ pub(super) struct PageFontLoader<'a> {
     pub warnings: Vec<String>,
 }
 
+pub(super) fn font_source_label(source: &str) -> String {
+    if source.get(..5).is_some_and(|prefix| prefix.eq_ignore_ascii_case("data:")) {
+        format!("data:… ({} bytes)", source.len())
+    } else if source.len() > 160 {
+        format!("{}… ({} bytes)", &source[..source.floor_char_boundary(160)], source.len())
+    } else {
+        source.to_owned()
+    }
+}
+
 impl PageFontLoader<'_> {
     fn read_url(&mut self, source: &str, max_bytes: usize) -> Option<Vec<u8>> {
         let resolved = super::resolve_font_url(self.stylesheet_url, source);
@@ -333,8 +343,11 @@ impl PageFontLoader<'_> {
         match result {
             Ok(bytes) => Some(bytes),
             Err(error) => {
-                self.warnings
-                    .push(format!("font {source:?} ({resolved}): {error}"));
+                self.warnings.push(format!(
+                    "font {:?} ({}): {error}",
+                    font_source_label(source),
+                    font_source_label(&resolved)
+                ));
                 None
             }
         }
