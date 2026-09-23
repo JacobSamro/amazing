@@ -1,0 +1,176 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "text12-expanded-font-shaping-and-orientation",
+    "case_count": 40,
+    "scope": "Pinned reftests with font feature, kerning, variation descriptor, unicode range or text orientation surfaces; excludes reference pages and parsing-only tests"
+  },
+  "sparse_paths": [
+    "css/css-fonts",
+    "css/css-writing-modes",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "css-fonts__font-face-unicode-range-2.html",
+      "test": "css/css-fonts/font-face-unicode-range-2.html"
+    },
+    {
+      "id": "css-fonts__font-face-unicode-range-nbsp.html",
+      "test": "css/css-fonts/font-face-unicode-range-nbsp.html"
+    },
+    {
+      "id": "css-fonts__font-feature-resolution-001.html",
+      "test": "css/css-fonts/font-feature-resolution-001.html"
+    },
+    {
+      "id": "css-fonts__font-feature-resolution-002.html",
+      "test": "css/css-fonts/font-feature-resolution-002.html"
+    },
+    {
+      "id": "css-fonts__font-feature-settings-descriptor-01.html",
+      "test": "css/css-fonts/font-feature-settings-descriptor-01.html"
+    },
+    {
+      "id": "css-fonts__font-feature-settings-descriptor-02.html",
+      "test": "css/css-fonts/font-feature-settings-descriptor-02.html"
+    },
+    {
+      "id": "css-fonts__font-feature-settings-descriptor-binary.html",
+      "test": "css/css-fonts/font-feature-settings-descriptor-binary.html"
+    },
+    {
+      "id": "css-fonts__font-feature-settings-tibetan.html",
+      "test": "css/css-fonts/font-feature-settings-tibetan.html"
+    },
+    {
+      "id": "css-fonts__font-features-across-space-1.html",
+      "test": "css/css-fonts/font-features-across-space-1.html"
+    },
+    {
+      "id": "css-fonts__font-features-across-space-2.html",
+      "test": "css/css-fonts/font-features-across-space-2.html"
+    },
+    {
+      "id": "css-fonts__font-features-across-space-3.html",
+      "test": "css/css-fonts/font-features-across-space-3.html"
+    },
+    {
+      "id": "css-fonts__font-kerning-01.html",
+      "test": "css/css-fonts/font-kerning-01.html"
+    },
+    {
+      "id": "css-fonts__font-kerning-02.html",
+      "test": "css/css-fonts/font-kerning-02.html"
+    },
+    {
+      "id": "css-fonts__font-kerning-03.html",
+      "test": "css/css-fonts/font-kerning-03.html"
+    },
+    {
+      "id": "css-fonts__font-kerning-04.html",
+      "test": "css/css-fonts/font-kerning-04.html"
+    },
+    {
+      "id": "css-fonts__font-kerning-05.html",
+      "test": "css/css-fonts/font-kerning-05.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-01.html",
+      "test": "css/css-fonts/font-variant-ligatures-01.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-02.html",
+      "test": "css/css-fonts/font-variant-ligatures-02.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-03.html",
+      "test": "css/css-fonts/font-variant-ligatures-03.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-04.html",
+      "test": "css/css-fonts/font-variant-ligatures-04.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-05.html",
+      "test": "css/css-fonts/font-variant-ligatures-05.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-06.html",
+      "test": "css/css-fonts/font-variant-ligatures-06.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-07.html",
+      "test": "css/css-fonts/font-variant-ligatures-07.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-08.html",
+      "test": "css/css-fonts/font-variant-ligatures-08.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-09.html",
+      "test": "css/css-fonts/font-variant-ligatures-09.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures-10.html",
+      "test": "css/css-fonts/font-variant-ligatures-10.html"
+    },
+    {
+      "id": "css-fonts__font-variant-ligatures.html",
+      "test": "css/css-fonts/font-variant-ligatures.html"
+    },
+    {
+      "id": "css-fonts__font-variation-settings-descriptor-01.html",
+      "test": "css/css-fonts/font-variation-settings-descriptor-01.html"
+    },
+    {
+      "id": "css-fonts__font-variation-settings-descriptor-02.html",
+      "test": "css/css-fonts/font-variation-settings-descriptor-02.html"
+    },
+    {
+      "id": "css-fonts__font-variation-settings-descriptor-03.html",
+      "test": "css/css-fonts/font-variation-settings-descriptor-03.html"
+    },
+    {
+      "id": "css-fonts__font-variation-settings-descriptor-04.html",
+      "test": "css/css-fonts/font-variation-settings-descriptor-04.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-mixed-srl-016.xht",
+      "test": "css/css-writing-modes/text-orientation-mixed-srl-016.xht"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-mixed-vlr-100.html",
+      "test": "css/css-writing-modes/text-orientation-mixed-vlr-100.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-mixed-vrl-100.html",
+      "test": "css/css-writing-modes/text-orientation-mixed-vrl-100.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-sideways-vlr-100.html",
+      "test": "css/css-writing-modes/text-orientation-sideways-vlr-100.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-sideways-vrl-100.html",
+      "test": "css/css-writing-modes/text-orientation-sideways-vrl-100.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-upright-directionality-001.html",
+      "test": "css/css-writing-modes/text-orientation-upright-directionality-001.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-upright-srl-018.xht",
+      "test": "css/css-writing-modes/text-orientation-upright-srl-018.xht"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-upright-vlr-100.html",
+      "test": "css/css-writing-modes/text-orientation-upright-vlr-100.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-upright-vrl-100.html",
+      "test": "css/css-writing-modes/text-orientation-upright-vrl-100.html"
+    }
+  ]
+}
