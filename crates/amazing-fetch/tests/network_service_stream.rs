@@ -81,6 +81,40 @@ fn credit_starvation_and_buffered_parity() {
 }
 
 #[test]
+fn zero_initial_credit_waits_for_explicit_grant() {
+    let base = HttpUrl::parse("https://example.test/").unwrap();
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let id = service
+        .start_stream_with_credit(
+            request("data:text/plain,hello", &base),
+            ClientContext::default(),
+            0,
+        )
+        .unwrap();
+    let first = service.step(8192, Instant::now());
+    assert!(first.iter().any(|event| matches!(event,
+        ServiceEvent::ResponseHead { id: found, .. } if *found == id)));
+    assert!(!first
+        .iter()
+        .any(|event| matches!(event, ServiceEvent::BodyChunk { .. })));
+    assert!(service.grant_credit(id, 2));
+    let second = service.step(8192, Instant::now());
+    let bytes: Vec<_> = second
+        .into_iter()
+        .filter_map(|event| match event {
+            ServiceEvent::BodyChunk { id: found, bytes } if found == id => Some(bytes),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert_eq!(bytes, b"he");
+    assert!(service.cancel(id));
+    let last = service.step(8192, Instant::now());
+    assert!(last.iter().any(|event| matches!(event,
+        ServiceEvent::StreamFailed { id: found, error: ApiError::Aborted } if *found == id)));
+}
+
+#[test]
 fn head_before_slow_body_and_cancel_mid_body() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!(
@@ -323,5 +357,63 @@ fn opaque_head_waits_for_bounded_sniff_prefix() {
         thread::sleep(Duration::from_millis(1));
     }
     assert!(done);
+    server.join().unwrap();
+}
+
+#[test]
+fn final_head_marks_followed_redirect() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let root = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+    let server = thread::spawn(move || {
+        for response in [
+            b"HTTP/1.1 302 Found\r\nLocation: /final\r\nConnection: close\r\nContent-Length: 0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok".as_slice(),
+        ] {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+            let mut request = Vec::new();
+            while !request.ends_with(b"\r\n\r\n") {
+                let mut byte = [0];
+                socket.read_exact(&mut byte).unwrap();
+                request.push(byte[0]);
+            }
+            socket.write_all(response).unwrap();
+        }
+    });
+    let initial = format!("{root}/start");
+    let base = HttpUrl::parse(&initial).unwrap();
+    let mut service = NetworkService::new(DispatchLimits::default());
+    let id = service
+        .start_stream(request(&initial, &base), ClientContext::default())
+        .unwrap();
+    let start = Instant::now();
+    let mut head = None;
+    let mut done = false;
+    for tick in 0..2000 {
+        for event in service.step(8192, start + Duration::from_millis(tick)) {
+            match event {
+                ServiceEvent::ResponseHead {
+                    id: found,
+                    head: value,
+                } if found == id => {
+                    assert!(head.is_none());
+                    head = Some(value);
+                }
+                ServiceEvent::StreamFinished { id: found } if found == id => done = true,
+                ServiceEvent::StreamFailed { id: found, error } if found == id => {
+                    panic!("{error:?}")
+                }
+                _ => {}
+            }
+        }
+        if done {
+            break;
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
+    assert!(done);
+    let head = head.unwrap();
+    assert!(head.redirected);
+    assert_eq!(head.final_url, format!("{root}/final"));
     server.join().unwrap();
 }

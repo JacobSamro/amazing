@@ -23,6 +23,7 @@ pub struct ApiResponseHead {
     pub headers: Vec<(String, String)>,
     pub final_url: String,
     pub response_type: crate::api::ApiResponseType,
+    pub redirected: bool,
 }
 impl ApiResponseHead {
     fn from_response(response: &ApiResponse) -> Self {
@@ -32,6 +33,7 @@ impl ApiResponseHead {
             headers: response.headers.raw_entries().to_vec(),
             final_url: response.url.clone(),
             response_type: response.response_type,
+            redirected: response.redirected,
         }
     }
 }
@@ -132,7 +134,7 @@ struct Task {
     body: Vec<u8>,
 }
 
-const INITIAL_STREAM_CREDIT: usize = 64 * 1024;
+pub const INITIAL_STREAM_CREDIT: usize = 64 * 1024;
 struct StreamTask {
     credit: usize,
     head_emitted: bool,
@@ -143,8 +145,8 @@ struct StreamTask {
     terminal: Option<Result<(), ApiError>>,
 }
 impl StreamTask {
-    fn new() -> Self {
-        Self { credit: INITIAL_STREAM_CREDIT, head_emitted: false, body_visible: true,
+    fn new(credit: usize) -> Self {
+        Self { credit, head_emitted: false, body_visible: true,
             sniff_prefix: Vec::new(), deferred_head: None,
             chunks: VecDeque::new(), terminal: None }
     }
@@ -337,12 +339,24 @@ impl NetworkService {
     /// contract remains available to existing consumers.
     pub fn start_stream(&mut self, request: ApiRequest, context: ClientContext)
         -> Result<ServiceId, ApiError> {
-        self.start_stream_at(request, context, Instant::now())
+        self.start_stream_with_credit(request, context, INITIAL_STREAM_CREDIT as u64)
+    }
+    /// Initial credit may be zero; response metadata and the terminal event
+    /// remain visible, while body chunks wait for `grant_credit`.
+    pub fn start_stream_with_credit(&mut self, request: ApiRequest,
+        context: ClientContext, initial_credit: u64) -> Result<ServiceId, ApiError> {
+        self.start_stream_with_credit_at(request, context, initial_credit, Instant::now())
     }
     pub fn start_stream_at(&mut self, request: ApiRequest, context: ClientContext,
         now: Instant) -> Result<ServiceId, ApiError> {
+        self.start_stream_with_credit_at(request, context, INITIAL_STREAM_CREDIT as u64, now)
+    }
+    pub fn start_stream_with_credit_at(&mut self, request: ApiRequest, context: ClientContext,
+        initial_credit: u64, now: Instant) -> Result<ServiceId, ApiError> {
+        let credit = usize::try_from(initial_credit)
+            .map_err(|_| ApiError::Network(FetchError::ResponseTooLarge))?;
         let id = self.start_at(request, context, now)?;
-        self.streams.insert(id, StreamTask::new());
+        self.streams.insert(id, StreamTask::new(credit));
         Ok(id)
     }
     pub fn grant_credit(&mut self, id: ServiceId, bytes: usize) -> bool {
@@ -397,9 +411,13 @@ impl NetworkService {
     pub fn start_at(
         &mut self,
         mut request: ApiRequest,
-        context: ClientContext,
+        mut context: ClientContext,
         now: Instant,
     ) -> Result<ServiceId, ApiError> {
+        if request.mode == crate::RequestMode::Navigate {
+            context.security.destination = Destination::Document;
+            context.security.top_level_navigation = true;
+        }
         if request.signal_aborted {
             return Err(ApiError::Aborted);
         }
