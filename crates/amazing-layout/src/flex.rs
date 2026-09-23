@@ -1132,7 +1132,7 @@ pub(crate) fn max_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
         MaybeLen::Px(width) => width.max(0.0),
         MaybeLen::Auto => max_content_inner_width(b, fonts),
     };
-    chrome + inner
+    chrome + intrinsic_width_constraints(b, inner)
 }
 
 /// Approximate min-content width: the widest unbreakable inline token or
@@ -1148,7 +1148,22 @@ pub(crate) fn min_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
         MaybeLen::Px(width) => width.max(0.0),
         MaybeLen::Auto => min_content_inner_width(b, fonts),
     };
-    chrome + inner
+    chrome + intrinsic_width_constraints(b, inner)
+}
+
+fn intrinsic_width_constraints(b: &LayoutBox, inner: f32) -> f32 {
+    // CSS Sizing 3 §5.2.1: a cyclic percentage in a min size contributes
+    // zero during intrinsic sizing. The definite length term still counts.
+    let min = b.style.get("min-width")
+        .and_then(|value| values::parse_length_percentage(value, b.font_size, b.font_size * 0.6))
+        .and_then(|value| value.resolve(Some(0.0)))
+        .unwrap_or(0.0).max(0.0);
+    // Cyclic percentages in a maximum size behave as the initial `none`.
+    let max = b.style.get("max-width")
+        .and_then(|value| values::parse_length_percentage(value, b.font_size, b.font_size * 0.6))
+        .filter(|value| !value.has_percentage)
+        .and_then(|value| value.resolve(None));
+    max.map_or(inner, |maximum| inner.min(maximum.max(0.0))).max(min)
 }
 
 pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
@@ -1240,6 +1255,27 @@ fn inline_run_width(items: &[crate::InlineNode], fonts: &FontSource) -> f32 {
 mod tests {
     use super::*;
     use crate::block;
+
+    #[test]
+    fn cyclic_percent_min_width_contributes_only_its_length_to_intrinsic_size() {
+        let fonts = FontSource::fallback();
+        for (value, expected) in [
+            ("calc(50% - 3px)", 1.0),
+            ("calc(5em - 3px)", 47.0),
+            ("calc(5em - 0%)", 50.0),
+            ("calc(50%)", 1.0),
+            ("calc(50px)", 50.0),
+            ("calc(25% + 25%)", 1.0),
+        ] {
+            let style: amazing_css::ComputedStyle = [
+                ("width".to_owned(), "1px".to_owned()),
+                ("min-width".to_owned(), value.to_owned()),
+            ].into_iter().collect();
+            let box_ = LayoutBox::new(None, crate::Display::Block, style, 10.0, 12.0);
+            assert_eq!(max_content_width(&box_, &fonts), expected, "{value}");
+            assert_eq!(min_content_width(&box_, &fonts), expected, "{value}");
+        }
+    }
 
     /// Full pipeline: html+css → laid-out root at `width` px.
     fn lay(html: &str, css: &str, width: f32) -> LayoutBox {

@@ -1,0 +1,2552 @@
+[
+  {
+    "query": "/css/css-values/calc-",
+    "response": {
+      "runs": [
+        {
+          "id": 5182906107691008,
+          "browser_name": "chrome",
+          "browser_version": "154.0.8016.0",
+          "os_name": "linux",
+          "os_version": "22.04",
+          "revision": "c2a2fce69e",
+          "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+          "results_url": "https://storage.googleapis.com/wptd/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/chrome-154.0.8016.0-linux-22.04-ccb165b474-summary_v2.json.gz",
+          "created_at": "2026-08-23T21:44:31.026652Z",
+          "time_start": "2026-08-23T19:36:45.68Z",
+          "time_end": "2026-08-23T21:22:02.168Z",
+          "raw_results_url": "https://storage.googleapis.com/wptd-results/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/chrome-154.0.8016.0-linux-22.04-ccb165b474/report.json",
+          "labels": [
+            "canary",
+            "chrome",
+            "experimental",
+            "master",
+            "taskcluster",
+            "user:chromium-wpt-export-bot"
+          ]
+        },
+        {
+          "id": 5141363439173632,
+          "browser_name": "safari",
+          "browser_version": "26.6 (21624.4.5.11.5)",
+          "os_name": "mac",
+          "os_version": "26.6",
+          "revision": "c2a2fce69e",
+          "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+          "results_url": "https://storage.googleapis.com/wptd/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/safari-26.6__21624.4.5.11.5_-mac-26.6-9035373df3-summary_v2.json.gz",
+          "created_at": "2026-08-24T05:00:15.42759Z",
+          "time_start": "2026-08-24T01:56:23.584Z",
+          "time_end": "2026-08-24T04:34:43.905Z",
+          "raw_results_url": "https://storage.googleapis.com/wptd-results/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/safari-26.6__21624.4.5.11.5_-mac-26.6-9035373df3/report.json",
+          "labels": [
+            "github-actions",
+            "master",
+            "safari",
+            "stable"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "test": "/css/css-values/calc-angle-values.html",
+          "legacy_status": [
+            {
+              "passes": 27,
+              "total": 27,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 27,
+              "total": 27,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-background-image-gradient-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-background-linear-gradient-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-background-position-002.html",
+          "legacy_status": [
+            {
+              "passes": 6,
+              "total": 6,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 6,
+              "total": 6,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-background-position-003.html",
+          "legacy_status": [
+            {
+              "passes": 6,
+              "total": 6,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 6,
+              "total": 6,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-background-position-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-background-size-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-border-radius-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-catch-divide-by-0.html",
+          "legacy_status": [
+            {
+              "passes": 21,
+              "total": 21,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 21,
+              "total": 21,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-ch-ex-lang.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-complex-sign-function-crash.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-complex-unresolved-serialize.html",
+          "legacy_status": [
+            {
+              "passes": 12,
+              "total": 12,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 6,
+              "total": 12,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-dimension-serialization-order.html",
+          "legacy_status": [
+            {
+              "passes": 44,
+              "total": 44,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 42,
+              "total": 44,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-height-block-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-height-table-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-in-calc.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-in-color-001.html",
+          "legacy_status": [
+            {
+              "passes": 1,
+              "total": 1,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 1,
+              "total": 1,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-in-counter-001.xhtml",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-in-font-feature-settings.html",
+          "legacy_status": [
+            {
+              "passes": 1,
+              "total": 1,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 1,
+              "total": 1,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-in-max.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-in-media-queries-001.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-in-media-queries-002.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-in-media-queries-with-mixed-units.html",
+          "legacy_status": [
+            {
+              "passes": 12,
+              "total": 12,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 12,
+              "total": 12,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-infinity-nan-computed.html",
+          "legacy_status": [
+            {
+              "passes": 65,
+              "total": 65,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 63,
+              "total": 65,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-infinity-nan-serialize-angle.html",
+          "legacy_status": [
+            {
+              "passes": 30,
+              "total": 30,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 30,
+              "total": 30,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-infinity-nan-serialize-length.html",
+          "legacy_status": [
+            {
+              "passes": 39,
+              "total": 41,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 41,
+              "total": 41,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-infinity-nan-serialize-number.html",
+          "legacy_status": [
+            {
+              "passes": 31,
+              "total": 31,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 31,
+              "total": 31,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-infinity-nan-serialize-resolution.html",
+          "legacy_status": [
+            {
+              "passes": 29,
+              "total": 29,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 29,
+              "total": 29,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-infinity-nan-serialize-time.html",
+          "legacy_status": [
+            {
+              "passes": 29,
+              "total": 29,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 29,
+              "total": 29,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-integer.html",
+          "legacy_status": [
+            {
+              "passes": 7,
+              "total": 7,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 7,
+              "total": 7,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-invalid-parsing.html",
+          "legacy_status": [
+            {
+              "passes": 6,
+              "total": 6,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 6,
+              "total": 6,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-invalid-range-clamping.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-letter-spacing.html",
+          "legacy_status": [
+            {
+              "passes": 6,
+              "total": 6,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 6,
+              "total": 6,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-linear-radial-conic-gradient-001.html",
+          "legacy_status": [
+            {
+              "passes": 8,
+              "total": 8,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 8,
+              "total": 8,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-margin-block-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-max-height-block-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-max-width-block-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-max-width-block-intrinsic-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-min-height-block-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-min-height.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-min-width-block-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-min-width-block-intrinsic-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-mix-computed.tentative.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 53,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 53,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-mix-invalid.tentative.html",
+          "legacy_status": [
+            {
+              "passes": 18,
+              "total": 18,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 18,
+              "total": 18,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-mix-serialize.tentative.html",
+          "legacy_status": [
+            {
+              "passes": 5,
+              "total": 128,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 5,
+              "total": 128,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-nesting-002.html",
+          "legacy_status": [
+            {
+              "passes": 11,
+              "total": 12,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 12,
+              "total": 12,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-nesting.html",
+          "legacy_status": [
+            {
+              "passes": 8,
+              "total": 8,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 8,
+              "total": 8,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-numbers.html",
+          "legacy_status": [
+            {
+              "passes": 12,
+              "total": 12,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 12,
+              "total": 12,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-offsets-absolute-bottom-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-offsets-absolute-left-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-offsets-absolute-right-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-offsets-absolute-top-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-offsets-relative-bottom-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-offsets-relative-left-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-offsets-relative-right-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-offsets-relative-top-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-padding-block-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-parenthesis-stack.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-positive-fraction-001.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-rem-lang.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-rgb-percent-001.html",
+          "legacy_status": [
+            {
+              "passes": 1,
+              "total": 1,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 1,
+              "total": 1,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-rounding-001.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-rounding-002.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-rounding-003.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-rounds-to-integer.html",
+          "legacy_status": [
+            {
+              "passes": 112,
+              "total": 112,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 96,
+              "total": 96,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-serialization-002.html",
+          "legacy_status": [
+            {
+              "passes": 24,
+              "total": 24,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 24,
+              "total": 24,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-serialization.html",
+          "legacy_status": [
+            {
+              "passes": 1,
+              "total": 1,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 1,
+              "total": 1,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/calc-size-height-interpolation.html",
+          "legacy_status": [
+            {
+              "passes": 1266,
+              "total": 1266,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 1266,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/calc-size-interpolation-expansion.html",
+          "legacy_status": [
+            {
+              "passes": 10,
+              "total": 11,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 11,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/calc-size-width-interpolation.html",
+          "legacy_status": [
+            {
+              "passes": 842,
+              "total": 842,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 842,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-height-composition.html",
+          "legacy_status": [
+            {
+              "passes": 20,
+              "total": 20,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 4,
+              "total": 20,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-height-interpolation.html",
+          "legacy_status": [
+            {
+              "passes": 318,
+              "total": 318,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 134,
+              "total": 318,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-interpolation.html",
+          "legacy_status": [
+            {
+              "passes": 84,
+              "total": 84,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 84,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-logical-properties-interpolation.html",
+          "legacy_status": [
+            {
+              "passes": 144,
+              "total": 144,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 24,
+              "total": 144,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-max-height-composition.html",
+          "legacy_status": [
+            {
+              "passes": 20,
+              "total": 20,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 4,
+              "total": 20,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-max-height-interpolation.html",
+          "legacy_status": [
+            {
+              "passes": 282,
+              "total": 282,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 192,
+              "total": 282,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-max-width-composition.html",
+          "legacy_status": [
+            {
+              "passes": 30,
+              "total": 30,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 6,
+              "total": 30,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-max-width-interpolation.html",
+          "legacy_status": [
+            {
+              "passes": 282,
+              "total": 282,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 192,
+              "total": 282,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-min-height-composition.html",
+          "legacy_status": [
+            {
+              "passes": 20,
+              "total": 20,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 6,
+              "total": 20,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-min-height-interpolation.html",
+          "legacy_status": [
+            {
+              "passes": 228,
+              "total": 228,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 66,
+              "total": 228,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-min-width-composition.html",
+          "legacy_status": [
+            {
+              "passes": 30,
+              "total": 30,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 16,
+              "total": 30,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-min-width-interpolation.html",
+          "legacy_status": [
+            {
+              "passes": 228,
+              "total": 228,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 108,
+              "total": 228,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-which-value.html",
+          "legacy_status": [
+            {
+              "passes": 8,
+              "total": 8,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 4,
+              "total": 8,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-width-composition.html",
+          "legacy_status": [
+            {
+              "passes": 30,
+              "total": 30,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 8,
+              "total": 30,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/animation/interpolate-size-width-interpolation.html",
+          "legacy_status": [
+            {
+              "passes": 270,
+              "total": 270,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 120,
+              "total": 270,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-aspect-ratio-001.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-aspect-ratio-002.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-aspect-ratio-003.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-aspect-ratio-004.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-aspect-ratio-005.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-001.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-002.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-003.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-004.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-005.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-006.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-007.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-008.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-009.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-basis-on-column.html",
+          "legacy_status": [
+            {
+              "passes": 33,
+              "total": 33,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 7,
+              "total": 33,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-flex-basis-on-row.html",
+          "legacy_status": [
+            {
+              "passes": 33,
+              "total": 33,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 7,
+              "total": 33,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-grid-repeat.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-height-box-sizing.html",
+          "legacy_status": [
+            {
+              "passes": 15,
+              "total": 15,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 4,
+              "total": 15,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-height.html",
+          "legacy_status": [
+            {
+              "passes": 37,
+              "total": 37,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 4,
+              "total": 37,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-min-max-sizes-001.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-min-max-sizes-002.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-min-max-sizes-003.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-min-max-sizes-004.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-min-max-sizes-005.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-min-max-sizes-006.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-no-body-height-quirk-001.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-parsing.html",
+          "legacy_status": [
+            {
+              "passes": 94,
+              "total": 94,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 56,
+              "total": 94,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-svg-001-crash.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-typed-om.html",
+          "legacy_status": [
+            {
+              "passes": 18,
+              "total": 19,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 19,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-width-box-sizing.html",
+          "legacy_status": [
+            {
+              "passes": 15,
+              "total": 15,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 4,
+              "total": 15,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/calc-size-width.html",
+          "legacy_status": [
+            {
+              "passes": 20,
+              "total": 20,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 1,
+              "total": 20,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/interpolate-size-computed.html",
+          "legacy_status": [
+            {
+              "passes": 2,
+              "total": 2,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 2,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-size/interpolate-size-parsing.html",
+          "legacy_status": [
+            {
+              "passes": 5,
+              "total": 5,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 3,
+              "total": 5,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-text-indent-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-text-indent-intrinsic-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-time-values.html",
+          "legacy_status": [
+            {
+              "passes": 10,
+              "total": 10,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 10,
+              "total": 10,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-transform-origin-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-unit-analysis.html",
+          "legacy_status": [
+            {
+              "passes": 10,
+              "total": 10,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 10,
+              "total": 10,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-vertical-align-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-width-block-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-width-block-intrinsic-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-width-table-auto-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-width-table-fixed-1.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-z-index-fractions-001.html",
+          "legacy_status": [
+            {
+              "passes": 6,
+              "total": 6,
+              "status": "O",
+              "newAggProcess": true
+            },
+            {
+              "passes": 6,
+              "total": 6,
+              "status": "O",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-values/calc-zero-percent-height.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "/css/css-sizing/calc-",
+    "response": {
+      "runs": [
+        {
+          "id": 5182906107691008,
+          "browser_name": "chrome",
+          "browser_version": "154.0.8016.0",
+          "os_name": "linux",
+          "os_version": "22.04",
+          "revision": "c2a2fce69e",
+          "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+          "results_url": "https://storage.googleapis.com/wptd/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/chrome-154.0.8016.0-linux-22.04-ccb165b474-summary_v2.json.gz",
+          "created_at": "2026-08-23T21:44:31.026652Z",
+          "time_start": "2026-08-23T19:36:45.68Z",
+          "time_end": "2026-08-23T21:22:02.168Z",
+          "raw_results_url": "https://storage.googleapis.com/wptd-results/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/chrome-154.0.8016.0-linux-22.04-ccb165b474/report.json",
+          "labels": [
+            "canary",
+            "chrome",
+            "experimental",
+            "master",
+            "taskcluster",
+            "user:chromium-wpt-export-bot"
+          ]
+        },
+        {
+          "id": 5141363439173632,
+          "browser_name": "safari",
+          "browser_version": "26.6 (21624.4.5.11.5)",
+          "os_name": "mac",
+          "os_version": "26.6",
+          "revision": "c2a2fce69e",
+          "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+          "results_url": "https://storage.googleapis.com/wptd/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/safari-26.6__21624.4.5.11.5_-mac-26.6-9035373df3-summary_v2.json.gz",
+          "created_at": "2026-08-24T05:00:15.42759Z",
+          "time_start": "2026-08-24T01:56:23.584Z",
+          "time_end": "2026-08-24T04:34:43.905Z",
+          "raw_results_url": "https://storage.googleapis.com/wptd-results/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/safari-26.6__21624.4.5.11.5_-mac-26.6-9035373df3/report.json",
+          "labels": [
+            "github-actions",
+            "master",
+            "safari",
+            "stable"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "test": "/css/css-sizing/calc-margins-block.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-sizing/calc-margins-fieldset-content.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-sizing/calc-margins-fieldset-legend.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-sizing/calc-margins-flex.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-sizing/calc-margins-percent-flex.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        },
+        {
+          "test": "/css/css-sizing/calc-margins-table-caption.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "F",
+              "newAggProcess": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "/css/css-cascade/all-prop-002.html",
+    "response": {
+      "runs": [
+        {
+          "id": 5182906107691008,
+          "browser_name": "chrome",
+          "browser_version": "154.0.8016.0",
+          "os_name": "linux",
+          "os_version": "22.04",
+          "revision": "c2a2fce69e",
+          "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+          "results_url": "https://storage.googleapis.com/wptd/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/chrome-154.0.8016.0-linux-22.04-ccb165b474-summary_v2.json.gz",
+          "created_at": "2026-08-23T21:44:31.026652Z",
+          "time_start": "2026-08-23T19:36:45.68Z",
+          "time_end": "2026-08-23T21:22:02.168Z",
+          "raw_results_url": "https://storage.googleapis.com/wptd-results/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/chrome-154.0.8016.0-linux-22.04-ccb165b474/report.json",
+          "labels": [
+            "canary",
+            "chrome",
+            "experimental",
+            "master",
+            "taskcluster",
+            "user:chromium-wpt-export-bot"
+          ]
+        },
+        {
+          "id": 5141363439173632,
+          "browser_name": "safari",
+          "browser_version": "26.6 (21624.4.5.11.5)",
+          "os_name": "mac",
+          "os_version": "26.6",
+          "revision": "c2a2fce69e",
+          "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+          "results_url": "https://storage.googleapis.com/wptd/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/safari-26.6__21624.4.5.11.5_-mac-26.6-9035373df3-summary_v2.json.gz",
+          "created_at": "2026-08-24T05:00:15.42759Z",
+          "time_start": "2026-08-24T01:56:23.584Z",
+          "time_end": "2026-08-24T04:34:43.905Z",
+          "raw_results_url": "https://storage.googleapis.com/wptd-results/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/safari-26.6__21624.4.5.11.5_-mac-26.6-9035373df3/report.json",
+          "labels": [
+            "github-actions",
+            "master",
+            "safari",
+            "stable"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "test": "/css/css-cascade/all-prop-002.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "query": "/css/css-values/ch-unit-008.html",
+    "response": {
+      "runs": [
+        {
+          "id": 5182906107691008,
+          "browser_name": "chrome",
+          "browser_version": "154.0.8016.0",
+          "os_name": "linux",
+          "os_version": "22.04",
+          "revision": "c2a2fce69e",
+          "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+          "results_url": "https://storage.googleapis.com/wptd/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/chrome-154.0.8016.0-linux-22.04-ccb165b474-summary_v2.json.gz",
+          "created_at": "2026-08-23T21:44:31.026652Z",
+          "time_start": "2026-08-23T19:36:45.68Z",
+          "time_end": "2026-08-23T21:22:02.168Z",
+          "raw_results_url": "https://storage.googleapis.com/wptd-results/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/chrome-154.0.8016.0-linux-22.04-ccb165b474/report.json",
+          "labels": [
+            "canary",
+            "chrome",
+            "experimental",
+            "master",
+            "taskcluster",
+            "user:chromium-wpt-export-bot"
+          ]
+        },
+        {
+          "id": 5141363439173632,
+          "browser_name": "safari",
+          "browser_version": "26.6 (21624.4.5.11.5)",
+          "os_name": "mac",
+          "os_version": "26.6",
+          "revision": "c2a2fce69e",
+          "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+          "results_url": "https://storage.googleapis.com/wptd/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/safari-26.6__21624.4.5.11.5_-mac-26.6-9035373df3-summary_v2.json.gz",
+          "created_at": "2026-08-24T05:00:15.42759Z",
+          "time_start": "2026-08-24T01:56:23.584Z",
+          "time_end": "2026-08-24T04:34:43.905Z",
+          "raw_results_url": "https://storage.googleapis.com/wptd-results/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/safari-26.6__21624.4.5.11.5_-mac-26.6-9035373df3/report.json",
+          "labels": [
+            "github-actions",
+            "master",
+            "safari",
+            "stable"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "test": "/css/css-values/ch-unit-008.html",
+          "legacy_status": [
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            },
+            {
+              "passes": 0,
+              "total": 0,
+              "status": "P",
+              "newAggProcess": true
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

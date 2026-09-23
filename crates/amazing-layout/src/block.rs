@@ -189,8 +189,8 @@ fn layout_block_in_context(
     let pr = b.padding.right;
 
     // --- §10.3.3 horizontal constraint ---------------------------------
-    let content_w;
-    match values::resolve_extent(&b.style, "width", font_px, cbw) {
+    let mut content_w;
+    match values::resolve_extent_with_ch(&b.style, "width", font_px, fonts.measure("0", font_px), Some(cbw)) {
         MaybeLen::Px(w) => {
             let fixed = bl + pl + w + pr + br_;
             if floating || b.inline_atomic {
@@ -251,6 +251,9 @@ fn layout_block_in_context(
             }
         }
     }
+    let min_width = values::parse_len(b.style.get("min-width").unwrap_or("0"), font_px, cbw).unwrap_or(0.0).max(0.0);
+    let max_width = b.style.get("max-width").and_then(|v| values::parse_len(v, font_px, cbw));
+    content_w = max_width.map_or(content_w, |maximum| content_w.min(maximum.max(0.0))).max(min_width);
 
     // Margin edges: the box's border box starts after its own margins.
     let mt = b.margin.top.unwrap_or(0.0);
@@ -528,26 +531,18 @@ fn pb(b: &LayoutBox) -> f32 {
 /// containing block's definite height; content-derived heights stay auto.
 fn specified_height(b: &LayoutBox, font_px: f32) -> Option<f32> {
     let v = b.style.get("height")?;
-    if v.trim_end().ends_with('%') && b.containing_block_height.is_none() {
-        return None;
-    }
-    match MaybeLen::parse(v, font_px, b.containing_block_height.unwrap_or(0.0)) {
-        Some(MaybeLen::Px(h)) => Some(h),
-        _ => None,
-    }
+    values::parse_length_percentage(v, font_px, font_px * 0.6)?
+        .resolve(b.containing_block_height)
 }
 
 fn size_constraint(b: &LayoutBox, property: &str, font_px: f32) -> Option<f32> {
     let value = b.style.get(property)?.trim();
-    if value.eq_ignore_ascii_case("none")
-        || (value.ends_with('%') && b.containing_block_height.is_none())
-    {
+    if value.eq_ignore_ascii_case("none") {
         return None;
     }
-    match MaybeLen::parse(value, font_px, b.containing_block_height.unwrap_or(0.0)) {
-        Some(MaybeLen::Px(size)) => Some(size.max(0.0)),
-        _ => None,
-    }
+    values::parse_length_percentage(value, font_px, font_px * 0.6)?
+        .resolve(b.containing_block_height)
+        .map(|size| size.max(0.0))
 }
 
 fn constrain_height(tentative: f32, min_height: f32, max_height: Option<f32>) -> f32 {
@@ -742,6 +737,22 @@ mod tests {
     use super::*;
     use crate::font::FontSource;
     use amazing_dom::Dom;
+
+    #[test]
+    fn calc_height_constraint_needs_a_definite_percentage_basis() {
+        // Construct the post-CSS style directly while CSS-9 owns calc
+        // validation and preservation in the cascade.
+        let style: amazing_css::ComputedStyle = [
+            ("max-height".to_owned(), "calc(25px + 50%)".to_owned()),
+            ("height".to_owned(), "calc(150% / 2 - 30px)".to_owned()),
+        ].into_iter().collect();
+        let mut box_ = LayoutBox::new(None, crate::Display::Block, style, 16.0, 19.2);
+        assert_eq!(size_constraint(&box_, "max-height", 16.0), None);
+        assert_eq!(specified_height(&box_, 16.0), None);
+        box_.containing_block_height = Some(100.0);
+        assert_eq!(size_constraint(&box_, "max-height", 16.0), Some(75.0));
+        assert_eq!(specified_height(&box_, 16.0), Some(45.0));
+    }
 
     fn layout(html: &str, css: &str) -> (Dom, LayoutBox) {
         let dom = amazing_html::parse(html);

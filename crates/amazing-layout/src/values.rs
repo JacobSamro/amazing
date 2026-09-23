@@ -3,7 +3,7 @@
 //!
 //! Phase 3 subset — implemented:
 //! - absolute lengths: px, pt, pc, in, cm, mm (96dpi device model)
-//! - font-relative lengths: em, rem, ch (the current 0-glyph approximation);
+//! - font-relative lengths: em, rem, ch;
 //!   percentages against a caller-supplied
 //!   base (containing-block width for margins/padding/width, parent font for
 //!   font-size)
@@ -14,7 +14,7 @@
 //! - font-size keywords (medium = 16px ladder), unitless line-height numbers
 //!
 //! Deferred/deviations:
-//! - calc(), ex units, vmin/vmax, `smaller`/`larger` are not resolved
+//! - ex units, vmin/vmax, `smaller`/`larger` are not resolved
 //! - border-width keywords map thin/medium/thick → 1/3/5px regardless of the
 //!   computed font-size scaling browsers apply to them
 
@@ -38,6 +38,170 @@ pub struct Sides {
 
 const PX_PER_IN: f32 = 96.0;
 
+/// A computed length before its percentage has a used-value basis. Keeping
+/// the two terms separate lets callers handle an indefinite containing block
+/// or the cyclic-percentage rule for intrinsic sizing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LengthPercentage {
+    pub px: f32,
+    pub percentage: f32,
+    pub has_percentage: bool,
+}
+
+impl LengthPercentage {
+    pub fn resolve(self, basis: Option<f32>) -> Option<f32> {
+        if self.has_percentage {
+            Some(self.px + self.percentage * basis? / 100.0)
+        } else {
+            Some(self.px)
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum CalcValue {
+    Number(f32),
+    Length(LengthPercentage),
+}
+
+struct CalcParser<'a> {
+    input: &'a str,
+    pos: usize,
+    em: f32,
+    ch: f32,
+}
+
+impl<'a> CalcParser<'a> {
+    fn skip_ws(&mut self) {
+        while self.input.as_bytes().get(self.pos).is_some_and(u8::is_ascii_whitespace) {
+            self.pos += 1;
+        }
+    }
+
+    fn eat(&mut self, byte: u8) -> bool {
+        self.skip_ws();
+        if self.input.as_bytes().get(self.pos) == Some(&byte) {
+            self.pos += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn sum(&mut self) -> Option<CalcValue> {
+        let mut lhs = self.product()?;
+        loop {
+            self.skip_ws();
+            let op = match self.input.as_bytes().get(self.pos) {
+                Some(b'+') => 1.0,
+                Some(b'-') => -1.0,
+                _ => break,
+            };
+            self.pos += 1;
+            let rhs = self.product()?;
+            lhs = match (lhs, rhs) {
+                (CalcValue::Number(a), CalcValue::Number(b)) => CalcValue::Number(a + op * b),
+                (CalcValue::Length(a), CalcValue::Length(b)) => CalcValue::Length(LengthPercentage {
+                    px: a.px + op * b.px,
+                    percentage: a.percentage + op * b.percentage,
+                    has_percentage: a.has_percentage || b.has_percentage,
+                }),
+                _ => return None,
+            };
+        }
+        Some(lhs)
+    }
+
+    fn product(&mut self) -> Option<CalcValue> {
+        let mut lhs = self.atom()?;
+        loop {
+            self.skip_ws();
+            let divide = match self.input.as_bytes().get(self.pos) {
+                Some(b'*') => false,
+                Some(b'/') => true,
+                _ => break,
+            };
+            self.pos += 1;
+            let rhs = self.atom()?;
+            lhs = match (lhs, rhs, divide) {
+                (CalcValue::Number(a), CalcValue::Number(b), false) => CalcValue::Number(a * b),
+                (CalcValue::Number(a), CalcValue::Number(b), true) if b != 0.0 => CalcValue::Number(a / b),
+                (CalcValue::Length(a), CalcValue::Number(b), false) => CalcValue::Length(scale(a, b)),
+                (CalcValue::Number(a), CalcValue::Length(b), false) => CalcValue::Length(scale(b, a)),
+                (CalcValue::Length(a), CalcValue::Number(b), true) if b != 0.0 => CalcValue::Length(scale(a, 1.0 / b)),
+                _ => return None,
+            };
+        }
+        Some(lhs)
+    }
+
+    fn atom(&mut self) -> Option<CalcValue> {
+        self.skip_ws();
+        if self.eat(b'(') {
+            let value = self.sum()?;
+            return self.eat(b')').then_some(value);
+        }
+        if self.input[self.pos..].get(..5).is_some_and(|s| s.eq_ignore_ascii_case("calc(")) {
+            self.pos += 5;
+            let value = self.sum()?;
+            return self.eat(b')').then_some(value);
+        }
+        let start = self.pos;
+        if matches!(self.input.as_bytes().get(self.pos), Some(b'+' | b'-')) {
+            self.pos += 1;
+        }
+        while self.input.as_bytes().get(self.pos).is_some_and(|b| b.is_ascii_digit() || *b == b'.') {
+            self.pos += 1;
+        }
+        let number: f32 = self.input[start..self.pos].parse().ok()?;
+        let unit_start = self.pos;
+        while self.input.as_bytes().get(self.pos).is_some_and(|b| b.is_ascii_alphabetic() || *b == b'%') {
+            self.pos += 1;
+        }
+        let unit = &self.input[unit_start..self.pos];
+        let length = match unit.to_ascii_lowercase().as_str() {
+            "px" => Some(number),
+            "pt" => Some(number * PX_PER_IN / 72.0),
+            "pc" => Some(number * PX_PER_IN / 6.0),
+            "in" => Some(number * PX_PER_IN),
+            "cm" => Some(number * PX_PER_IN / 2.54),
+            "mm" => Some(number * PX_PER_IN / 25.4),
+            "em" => Some(number * self.em),
+            "rem" => Some(number * ROOT_FONT_SIZE),
+            "ch" => Some(number * self.ch),
+            _ => None,
+        };
+        if unit == "%" {
+            Some(CalcValue::Length(LengthPercentage { px: 0.0, percentage: number, has_percentage: true }))
+        } else if let Some(px) = length {
+            Some(CalcValue::Length(LengthPercentage { px, percentage: 0.0, has_percentage: false }))
+        } else if unit.is_empty() {
+            Some(CalcValue::Number(number))
+        } else {
+            None
+        }
+    }
+}
+
+fn scale(value: LengthPercentage, factor: f32) -> LengthPercentage {
+    LengthPercentage { px: value.px * factor, percentage: value.percentage * factor, has_percentage: value.has_percentage }
+}
+
+/// Parse a `<length-percentage>` including nested `calc()` arithmetic. `ch`
+/// comes from the selected font's zero-glyph advance at the computed size.
+pub fn parse_length_percentage(s: &str, em: f32, ch: f32) -> Option<LengthPercentage> {
+    let mut parser = CalcParser { input: s.trim(), pos: 0, em, ch };
+    let value = parser.sum()?;
+    parser.skip_ws();
+    if parser.pos != parser.input.len() { return None; }
+    let result = match value {
+        CalcValue::Length(length) => length,
+        CalcValue::Number(0.0) => LengthPercentage { px: 0.0, percentage: 0.0, has_percentage: false },
+        _ => return None,
+    };
+    (result.px.is_finite() && result.percentage.is_finite()).then_some(result)
+}
+
 /// Parses one `<length>` / `<percentage>` string. `em_base` is the element's
 /// computed font-size; `percent_base` depends on the property being parsed.
 /// A bare `0` is valid without a unit (CSS2.1 §4.3.2); other bare numbers
@@ -60,28 +224,7 @@ impl MaybeLen {
         if s.eq_ignore_ascii_case("auto") {
             return Some(MaybeLen::Auto);
         }
-        // Split numeric prefix from unit suffix; a string that is entirely
-        // numeric has an empty unit (only valid for zero).
-        let split = s.find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+'));
-        let (num, unit) = match split {
-            Some(i) => s.split_at(i),
-            None => (s, ""),
-        };
-        let n: f32 = num.parse().ok()?;
-        Some(match unit.to_ascii_lowercase().as_str() {
-            "px" => MaybeLen::Px(n),
-            "pt" => MaybeLen::Px(n * PX_PER_IN / 72.0),
-            "pc" => MaybeLen::Px(n * PX_PER_IN / 6.0),
-            "in" => MaybeLen::Px(n * PX_PER_IN),
-            "cm" => MaybeLen::Px(n * PX_PER_IN / 2.54),
-            "mm" => MaybeLen::Px(n * PX_PER_IN / 25.4),
-            "em" => MaybeLen::Px(n * em_base),
-            "rem" => MaybeLen::Px(n * ROOT_FONT_SIZE),
-            "ch" => MaybeLen::Px(n * em_base * 0.6),
-            "%" => MaybeLen::Px(n * percent_base / 100.0),
-            "" if n == 0.0 => MaybeLen::Px(0.0),
-            _ => return None,
-        })
+        Some(MaybeLen::Px(parse_length_percentage(s, em_base, em_base * 0.6)?.resolve(Some(percent_base))?))
     }
 
     pub fn unwrap_or(self, default: f32) -> f32 {
@@ -357,6 +500,87 @@ pub fn resolve_extent(style: &ComputedStyle, prop: &str, em_base: f32, cbw: f32)
     }
 }
 
+/// Resolve an extent with the selected font's actual zero-glyph advance.
+pub fn resolve_extent_with_ch(
+    style: &ComputedStyle, prop: &str, em_base: f32, ch_advance: f32, basis: Option<f32>,
+) -> MaybeLen {
+    style.get(prop)
+        .and_then(|v| parse_length_percentage(v, em_base, ch_advance))
+        .and_then(|value| value.resolve(basis))
+        .map_or(MaybeLen::Auto, MaybeLen::Px)
+}
+
+/// Resolve all four border corner radii in top-left, top-right,
+/// bottom-right, bottom-left order. Horizontal percentages use the border-box
+/// width and vertical percentages use its height. Paint applies the common
+/// overlap normalization after consuming these used values.
+pub fn resolve_corner_radii(
+    style: &ComputedStyle, em: f32, ch: f32, width: f32, height: f32,
+) -> [(f32, f32); 4] {
+    let longhands = [
+        "border-top-left-radius", "border-top-right-radius",
+        "border-bottom-right-radius", "border-bottom-left-radius",
+    ];
+    if longhands.iter().all(|name| style.get(name).is_some()) {
+        return longhands.map(|name| radius_pair(style.get(name).unwrap_or(""), em, ch, width, height));
+    }
+    let Some(shorthand) = style.get("border-radius") else { return [(0.0, 0.0); 4] };
+    let slash = shorthand.char_indices().scan(0i32, |depth, (i, c)| {
+        match c { '(' => *depth += 1, ')' => *depth -= 1, _ => {} }
+        Some((i, c, *depth))
+    }).find(|(_, c, depth)| *c == '/' && *depth == 0).map(|(i, _, _)| i);
+    let (horizontal, vertical) = slash.map_or((shorthand, None), |i| (&shorthand[..i], Some(&shorthand[i + 1..])));
+    let horizontal = expand_radii(horizontal, em, ch, width);
+    let vertical = vertical.map(|value| expand_radii(value, em, ch, height)).unwrap_or_else(|| expand_radii(horizontal_source(shorthand, slash), em, ch, height));
+    std::array::from_fn(|i| (horizontal[i], vertical[i]))
+}
+
+fn horizontal_source<'a>(shorthand: &'a str, slash: Option<usize>) -> &'a str {
+    slash.map_or(shorthand, |i| &shorthand[..i])
+}
+
+fn radius_pair(value: &str, em: f32, ch: f32, width: f32, height: f32) -> (f32, f32) {
+    let values = radius_tokens(value);
+    match values.as_slice() {
+        [both] => (radius_value(both, em, ch, width), radius_value(both, em, ch, height)),
+        [x, y] => (radius_value(x, em, ch, width), radius_value(y, em, ch, height)),
+        _ => (0.0, 0.0),
+    }
+}
+
+fn expand_radii(value: &str, em: f32, ch: f32, basis: f32) -> [f32; 4] {
+    let numbers = radius_tokens(value).into_iter().map(|token| radius_value(token, em, ch, basis)).collect::<Vec<_>>();
+    match numbers.as_slice() {
+        [one] => [*one; 4],
+        [top_left, top_right] => [*top_left, *top_right, *top_left, *top_right],
+        [top_left, other, bottom_right] => [*top_left, *other, *bottom_right, *other],
+        [top_left, top_right, bottom_right, bottom_left] => [*top_left, *top_right, *bottom_right, *bottom_left],
+        _ => [0.0; 4],
+    }
+}
+
+fn radius_value(value: &str, em: f32, ch: f32, basis: f32) -> f32 {
+    parse_length_percentage(value, em, ch)
+        .and_then(|value| value.resolve(Some(basis)))
+        .unwrap_or(0.0).max(0.0)
+}
+
+fn radius_tokens(value: &str) -> Vec<&str> {
+    let mut tokens = Vec::new();
+    let mut depth = 0i32;
+    let mut start = None;
+    for (i, c) in value.char_indices() {
+        if c.is_ascii_whitespace() && depth == 0 {
+            if let Some(begin) = start.take() { tokens.push(&value[begin..i]); }
+            continue;
+        }
+        start.get_or_insert(i);
+        match c { '(' => depth += 1, ')' => depth -= 1, _ => {} }
+    }
+    if let Some(begin) = start { tokens.push(&value[begin..]); }
+    tokens
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -372,6 +596,25 @@ mod tests {
         assert_eq!(parse_len("16ch", 32.0, 100.0), Some(307.2));
         assert_eq!(parse_len("bogus", 16.0, 100.0), None);
         assert_eq!(parse_len("14", 16.0, 100.0), None); // bare nonzero number
+    }
+
+    #[test]
+    fn calc_keeps_length_and_percentage_until_the_used_basis_is_known() {
+        let value = parse_length_percentage("calc(150% / 2 - 30px)", 16.0, 8.0).unwrap();
+        assert_eq!(value.resolve(Some(100.0)), Some(45.0));
+        assert_eq!(value.resolve(None), None);
+        assert_eq!(parse_length_percentage("calc(5em - 0%)", 10.0, 5.0).unwrap().resolve(Some(0.0)), Some(50.0));
+        let rounded = parse_length_percentage("calc(50% - 2 * 4.009px)", 16.0, 8.0).unwrap().resolve(Some(100.0)).unwrap();
+        assert!((rounded - 41.982).abs() < 0.0001);
+        assert_eq!(parse_length_percentage("5ch", 80.0, 43.0).unwrap().resolve(None), Some(215.0));
+        assert!(parse_length_percentage("calc(1px * 2px)", 16.0, 8.0).is_none());
+        assert!(parse_length_percentage("calc(1px / 0)", 16.0, 8.0).is_none());
+    }
+
+    #[test]
+    fn border_radius_calc_uses_its_own_axis_and_keeps_function_whitespace() {
+        let style = style_of(&[("border-radius", "calc((1/32 * 100%) + 5px) calc((1/64 * 100%) - 2px) calc(10px + (1/256 * 100%)) calc((1/16 * 100%) - 3px) / calc((1/32 * 100%) - (1px + (1/128 * 100%))) calc(1/16 * 100%) calc(10px) 3px")]);
+        assert_eq!(resolve_corner_radii(&style, 16.0, 8.0, 512.0, 256.0), [(21.0, 5.0), (6.0, 16.0), (12.0, 10.0), (29.0, 3.0)]);
     }
 
     #[test]

@@ -1,0 +1,25 @@
+   Compiling amazing-net-brotli v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-net-brotli)
+   Compiling amazing-net-tls v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-net-tls)
+   Compiling amazing-webrtc v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-webrtc)
+   Compiling amazing-regex v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-regex)
+   Compiling amazing-media v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-media)
+   Compiling amazing-text-provider v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-text-provider)
+   Compiling amazing-bindings v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-bindings)
+   Compiling amazing-html v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-html)
+   Compiling amazing-css v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-css)
+   Compiling amazing-net v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-net)
+   Compiling amazing-js v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-js)
+   Compiling amazing-paint v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-paint)
+   Compiling amazing-webrtc-codecs v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-webrtc-codecs)
+   Compiling amazing-webrtc-crypto v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-webrtc-crypto)
+   Compiling amazing-fetch v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-fetch)
+   Compiling amazing-dom v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-dom)
+   Compiling amazing-text v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-text)
+   Compiling amazing-common v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing-common)
+   Compiling amazing v0.0.1 (C:\Users\server\src\wt\layout\crates\amazing)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.81s
+────────────
+ Nextest run ID 7425f7a6-bc10-48a9-b5f0-6ed9b2937b42 with nextest profile: default
+    Starting 1590 tests across 57 binaries (3 tests skipped)
+────────────
+     Summary [  29.797s] 1590 tests run: 1590 passed, 3 skipped
