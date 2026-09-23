@@ -474,6 +474,20 @@ impl Dom {
         old: Option<String>,
     ) {
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
+        let new_value = self.get_attribute_ns(target, namespace, name)
+            .map(|value| value.encode_utf16().collect());
+        let new_tokens = self.selector_tokens(target);
+        let mut old_tokens = new_tokens.clone();
+        let old_value = old.as_ref().map(|value| value.encode_utf16().collect());
+        old_tokens.restore_attribute(namespace, name, old_value.clone());
+        self.record_render_mutation(target,
+            crate::render_mutation::RenderMutationKind::Attribute {
+                namespace_uri: namespace.map(str::to_owned), local_name: name.into(),
+                old_value, new_value, old_tokens, new_tokens,
+            });
+        if namespace.is_none() && matches!(name, "checked" | "selected" | "value") {
+            self.record_render_full(target, "form attribute state");
+        }
         let mut record = MutationRecord::new(MutationType::Attributes, target);
         record.attribute_name = Some(name.into());
         record.attribute_namespace = namespace.map(str::to_owned);
@@ -544,8 +558,12 @@ impl Dom {
         record.old_value_utf16 = Some(old.clone());
         self.mutations
             .queue(&self.inclusive_ancestors(node), record);
-        let mut data = old;
+        let mut data = old.clone();
         data.splice(offset..offset + count, value.iter().copied());
+        self.record_render_mutation(node,
+            crate::render_mutation::RenderMutationKind::CharacterData {
+                old_value: old, new_value: data.clone(),
+            });
         self.store_character_data(node, data);
         self.ranges_replace_data(node, offset, count, value.len());
         Ok(())

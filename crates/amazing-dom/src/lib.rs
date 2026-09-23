@@ -18,6 +18,7 @@ pub mod attr;
 pub mod collection;
 pub mod abort;
 pub mod document_surface;
+pub mod render_mutation;
 pub mod markup;
 #[cfg(test)] mod markup_tests;
 pub mod event_loop;
@@ -132,6 +133,10 @@ pub struct Dom {
     document_metadata: Vec<(NodeIdx, document_surface::DocumentMetadata)>,
     token_lists: Vec<(NodeIdx, String)>,
     mutation_generation: u64,
+    node_generations: Vec<u64>,
+    next_node_generation: u64,
+    render_epoch: u64,
+    render_mutations: Vec<render_mutation::RenderMutation>,
     dom_exceptions: Vec<DomExceptionData>,
     traversals: traversal::Traversals,
     shadow_roots: Vec<shadow::ShadowRootData>,
@@ -182,6 +187,10 @@ impl Dom {
             document_metadata: Vec::new(),
             token_lists: Vec::new(),
             mutation_generation: 0,
+            node_generations: Vec::new(),
+            next_node_generation: 1,
+            render_epoch: 0,
+            render_mutations: Vec::new(),
             dom_exceptions: Vec::new(),
             traversals: traversal::Traversals::default(),
             shadow_roots: Vec::new(),
@@ -206,6 +215,8 @@ impl Dom {
             next_sibling: None,
             prev_sibling: None,
         });
+        dom.node_generations.push(dom.next_node_generation);
+        dom.next_node_generation += 1;
         dom
     }
 
@@ -241,6 +252,9 @@ impl Dom {
             next_sibling: None,
             prev_sibling: None,
         });
+        self.node_generations.push(self.next_node_generation);
+        self.next_node_generation = self.next_node_generation.checked_add(1)
+            .expect("DOM node generation exhausted");
         NodeIdx(index)
     }
 
