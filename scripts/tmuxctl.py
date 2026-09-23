@@ -582,7 +582,11 @@ def open_questions(lane: str) -> list[str]:
         if not line.lstrip().startswith(("-", "*")):
             continue
         body = line.lstrip("-* ").strip()
-        if body.upper().startswith(("RESOLVED", "ANSWERED", "DONE")):
+        # The integrator marks a handled line in place by prefixing its outcome.
+        # Every such prefix means "no longer waiting on anyone".
+        if body.upper().startswith(("RESOLVED", "ANSWERED", "DONE", "ROUTED",
+                                    "NOTED", "CONFIRMED", "GRANTED", "ACK",
+                                    "QUEUED")):
             continue
         out.append(body)
     return out
