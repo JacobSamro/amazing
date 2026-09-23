@@ -118,7 +118,7 @@ pub fn parse_with_custom_element_host(
 pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     let context = context.to_ascii_lowercase();
     let supported = [
-        "div", "table", "tbody", "thead", "tfoot", "tr", "td", "th", "caption", "colgroup",
+        "div", "body", "html", "frameset", "table", "tbody", "thead", "tfoot", "tr", "td", "th", "caption", "colgroup",
         "textarea", "title", "style", "script", "noscript", "plaintext", "select", "option", "template",
     ];
     if !supported.contains(&context.as_str()) {
@@ -152,28 +152,17 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
             source.namespace(*node) == Some(Namespace::Html) && source.name(*node) == Some("html")
         })
         .ok_or_else(|| "fragment root was not constructed".to_owned())?;
-    let virtual_context = matches!(context.as_str(), "textarea" | "title" | "style" | "script" | "noscript" | "plaintext" | "select" | "option" | "template");
     let mut fragment = Dom::new();
-    if virtual_context {
-        for child in source.children(root) {
-            clone_subtree(&source, child, &mut fragment, NodeIdx(0));
-        }
-        return Ok(fragment);
-    }
-    let context_node = source
-        .children(root)
-        .find(|node| {
-            source.namespace(*node) == Some(Namespace::Html)
-                && source.name(*node) == Some(context.as_str())
-        })
-        .ok_or_else(|| "fragment context was not constructed".to_owned())?;
     for child in source.children(root) {
-        if child == context_node {
-            for context_child in source.children(context_node) {
-                clone_subtree(&source, context_child, &mut fragment, NodeIdx(0));
+        clone_subtree(&source, child, &mut fragment, NodeIdx(0));
+    }
+    // After an explicit </html> in the html fragment context, comments are
+    // document siblings of the synthetic root but still belong in the result.
+    if context == "html" {
+        for child in source.children(NodeIdx(0)) {
+            if child != root {
+                clone_subtree(&source, child, &mut fragment, NodeIdx(0));
             }
-        } else {
-            clone_subtree(&source, child, &mut fragment, NodeIdx(0));
         }
     }
     Ok(fragment)

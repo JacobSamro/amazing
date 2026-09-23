@@ -177,6 +177,7 @@ pub struct TreeBuilder {
     template_modes: Vec<Mode>,
     shadow_templates: Vec<(NodeIdx, NodeIdx)>,
     allow_declarative_shadow_roots: bool,
+    fragment: bool,
 }
 
 impl Default for TreeBuilder {
@@ -204,6 +205,7 @@ impl TreeBuilder {
             template_modes: Vec::new(),
             shadow_templates: Vec::new(),
             allow_declarative_shadow_roots: true,
+            fragment: false,
         }
     }
 
@@ -972,6 +974,7 @@ impl TreeBuilder {
                 "template" => Some(*self.template_modes.last().unwrap_or(&Mode::InTemplate)),
                 "frameset" => Some(Mode::InFrameset),
                 "body" => Some(Mode::InBody),
+                "html" if self.fragment => Some(Mode::InBody),
                 "html" => Some(if self.head.is_none() {
                     Mode::BeforeHead
                 } else {
@@ -1311,7 +1314,7 @@ impl TreeBuilder {
 
     fn clear_back_to_table(&mut self) {
         while let Some(&cur) = self.open.last() {
-            if self.dom.name(cur) == Some("table") {
+            if matches!(self.dom.name(cur), Some("table" | "html")) {
                 break;
             }
             self.open.pop();
@@ -1322,7 +1325,7 @@ impl TreeBuilder {
         while let Some(&cur) = self.open.last() {
             if matches!(
                 self.dom.name(cur),
-                Some("tbody") | Some("tfoot") | Some("thead") | Some("table")
+                Some("tbody") | Some("tfoot") | Some("thead") | Some("table") | Some("html")
             ) {
                 break;
             }
@@ -1332,7 +1335,7 @@ impl TreeBuilder {
 
     fn clear_back_to_row(&mut self) {
         while let Some(&cur) = self.open.last() {
-            if matches!(self.dom.name(cur), Some("tr") | Some("table")) {
+            if matches!(self.dom.name(cur), Some("tr") | Some("table") | Some("html")) {
                 break;
             }
             self.open.pop();
@@ -2768,29 +2771,25 @@ pub fn build_with_custom_element_host(
     builder.into_dom()
 }
 
-/// Fragment tree construction with a synthetic `html` root. Older supported
-/// table/body contexts use a wrapper node; text and select contexts set their
-/// initial tokenizer/insertion mode directly and have no wrapper on the stack.
+/// Fragment tree construction with only the synthetic `html` root on the open
+/// stack. The context element sets the initial mode but is not a tree child.
 pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
     let mut builder = TreeBuilder::new();
     builder.allow_declarative_shadow_roots = false;
+    builder.fragment = true;
     builder.insert_and_push("html", Vec::new());
-    let virtual_context = matches!(context, "textarea" | "title" | "style" | "script" | "noscript" | "plaintext" | "select" | "option" | "template");
-    if !virtual_context {
-        builder.insert_and_push(context, Vec::new());
-    }
-    builder.mode = if virtual_context {
-        if context == "select" { Mode::InSelect } else if context == "template" { Mode::InTemplate } else { Mode::InBody }
-    } else {
-        match context {
-            "table" => Mode::InTable,
-            "tbody" | "thead" | "tfoot" => Mode::InTableBody,
-            "tr" => Mode::InRow,
-            "td" | "th" => Mode::InCell,
-            "caption" => Mode::InCaption,
-            "colgroup" => Mode::InColumnGroup,
-            _ => Mode::InBody,
-        }
+    builder.mode = match context {
+        "html" => Mode::BeforeHead,
+        "frameset" => Mode::InFrameset,
+        "select" => Mode::InSelect,
+        "template" => Mode::InTemplate,
+        "table" => Mode::InTable,
+        "tbody" | "thead" | "tfoot" => Mode::InTableBody,
+        "tr" => Mode::InRow,
+        "td" | "th" => Mode::InCell,
+        "caption" => Mode::InCaption,
+        "colgroup" => Mode::InColumnGroup,
+        _ => Mode::InBody,
     };
     if context == "template" { builder.template_modes.push(Mode::InTemplate); }
     let mut tokenizer = Tokenizer::new(src.chars().collect());
