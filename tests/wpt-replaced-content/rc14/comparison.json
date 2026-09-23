@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "fixed_base": "582a6af0962dd3b7e6c94427c14746915aea14ab",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "focused": {
+    "before_counts": {
+      "pass": 8,
+      "mismatch": 4,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 10,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "before_nonblank_passes": 8,
+    "after_nonblank_passes": 10,
+    "before_pair_hashes_stable": true,
+    "after_pair_hashes_stable": true,
+    "before_nonblank_pair_stable": true,
+    "after_nonblank_pair_stable": true,
+    "gains": [
+      "css-cascade__all-prop-002.html",
+      "css-values__calc-border-radius-1.html"
+    ],
+    "losses": []
+  },
+  "retained_svg": {
+    "driver": "exact frozen IA 7e48a0e adapter rebuilt on fixed base",
+    "before_counts": {
+      "pass": 26,
+      "mismatch": 9,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 26,
+      "mismatch": 9,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "before_nonblank_passes": 23,
+    "after_nonblank_passes": 25,
+    "after_pair_hashes_stable": true,
+    "after_nonblank_pair_stable": true,
+    "gains": [],
+    "losses": [],
+    "painted_pass_gains": [
+      {
+        "id": "svg--shapes--reftests--ellipse-auto-rx-textpath",
+        "before_actual": 0,
+        "before_reference": 0,
+        "after_actual": 5776,
+        "after_reference": 5776
+      },
+      {
+        "id": "svg--painting--reftests--non-scaling-stroke-007",
+        "before_actual": 0,
+        "before_reference": 0,
+        "after_actual": 1900,
+        "after_reference": 1900
+      }
+    ],
+    "painted_pass_losses": []
+  }
+}

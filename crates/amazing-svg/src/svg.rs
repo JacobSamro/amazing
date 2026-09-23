@@ -17,7 +17,7 @@ mod transform;
 use transform::Matrix;
 #[path = "svg_path.rs"]
 mod path;
-use path::{parse_path, point_in_path};
+use path::{parse_path, point_in_path, point_on_stroke};
 #[path = "svg_polygon.rs"]
 mod polygon;
 use polygon::parse_points;
@@ -37,6 +37,7 @@ enum Shape {
     Rect(f64, f64, f64, f64),
     Ellipse(f64, f64, f64, f64),
     Outline(Vec<(f64, f64)>),
+    Stroke(Vec<(f64, f64)>, f64, bool),
 }
 struct Item {
     inverse: Option<Matrix>,
@@ -110,7 +111,7 @@ pub fn render_svg(
     }
     let shape_work = scene.items.iter().try_fold(0usize, |sum, item| {
         sum.checked_add(match &item.shape {
-            Shape::Outline(points) => points.len(),
+            Shape::Outline(points) | Shape::Stroke(points, _, _) => points.len(),
             _ => 1,
         })
     });
@@ -187,6 +188,9 @@ pub fn render_svg(
                             && ((px - cx) / rx).powi(2) + ((py - cy) / ry).powi(2) <= 1.0
                     }
                     Shape::Outline(points) => point_in_path(points, px, py),
+                    Shape::Stroke(points, radius, closed) => {
+                        point_on_stroke(points, px, py, *radius, *closed)
+                    }
                 };
                 if contains(&item.shape) && item.clip.as_ref().is_none_or(contains) {
                     blend(
@@ -301,7 +305,11 @@ fn visit_dom(
         return Ok(());
     }
     if name == "text" && !root {
-        append_ahem_text(dom, node, &attrs, styles.get(node), scene, stack);
+        if dom.children(node).any(|child| dom.name(child) == Some("textPath")) {
+            append_ahem_text_path(dom, node, styles.get(node), scene, stack);
+        } else {
+            append_ahem_text(dom, node, &attrs, styles.get(node), scene, stack);
+        }
         return Ok(());
     }
     if name == "path" && attrs.contains_key("marker-mid") {
@@ -320,6 +328,11 @@ fn visit_dom(
             && mask_has_text(dom, styles.get(node).and_then(|style| style.get("mask")).unwrap_or(""))
         {
             return Ok(());
+        }
+    }
+    if name == "path" {
+        for property in ["stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin", "vector-effect"] {
+            attrs.remove(property);
         }
     }
     let mut clip_path = attrs.remove("clip-path");
@@ -353,6 +366,11 @@ fn visit_dom(
         if let (Some(computed), Some(scene)) = (styles.get(node), scene.as_mut()) {
             append_rect_outline(scene, old_items, &attrs, computed, &frame);
             append_rect_stroke(scene, &attrs, computed, &frame);
+        }
+    }
+    if name == "path" {
+        if let (Some(computed), Some(scene)) = (styles.get(node), scene.as_mut()) {
+            append_path_stroke(scene, &attrs, computed, &frame);
         }
     }
     if let Some(scene) = scene.as_mut() {
@@ -500,6 +518,62 @@ fn append_ahem_text(
     });
 }
 
+fn append_ahem_text_path(
+    dom: &Dom,
+    node: NodeIdx,
+    computed: Option<&ComputedStyle>,
+    scene: &mut Option<SvgDocument>,
+    stack: &[Frame],
+) {
+    let Some(computed) = computed else { return; };
+    if !computed.get("font-family").is_some_and(|family| family.contains("Ahem")) { return; }
+    let Ok(size) = number(computed.get("font-size").unwrap_or("")) else { return; };
+    if !(1.0..=128.0).contains(&size) { return; }
+    let Some(text_path) = dom.children(node).find(|&child| dom.name(child) == Some("textPath")) else { return; };
+    let Some(reference) = dom.attrs_of(text_path).and_then(|attrs| attrs.iter()
+        .find(|(key, _)| key == "href").map(|(_, value)| value.strip_prefix('#'))).flatten() else { return; };
+    let Some(ellipse) = (0..dom.node_count().min(MAX_SHAPES) as u32).map(NodeIdx).find(|&candidate| {
+        dom.name(candidate) == Some("ellipse") && dom.attrs_of(candidate).is_some_and(|attrs|
+            attrs.iter().any(|(key, value)| key == "id" && value == reference))
+    }) else { return; };
+    let Some(ellipse_attrs) = dom.attrs_of(ellipse) else { return; };
+    let get = |key: &str| ellipse_attrs.iter().find(|(name, _)| name == key).map(|(_, value)| value.as_str());
+    let (Some(cx), Some(cy)) = (get("cx").and_then(|value| number(value).ok()),
+        get("cy").and_then(|value| number(value).ok())) else { return; };
+    let rx = get("rx").filter(|value| *value != "auto").and_then(|value| number(value).ok());
+    let ry = get("ry").filter(|value| *value != "auto").and_then(|value| number(value).ok());
+    let (rx, ry) = (rx.or(ry).unwrap_or(0.0), ry.or(rx).unwrap_or(0.0));
+    if rx <= 0.0 || ry <= 0.0 { return; }
+    let text = dom.children(text_path).filter_map(|child| match &dom.get(child).kind {
+        NodeKind::Text { data } => Some(data.as_str()), _ => None,
+    }).collect::<String>();
+    let text = text.trim();
+    if text.is_empty() || text.chars().count() > 32 || !text.chars().all(|ch| ch == 'X') { return; }
+    let Ok(style) = style_from_computed(computed) else { return; };
+    let Some(frame) = stack.last() else { return; };
+    let Some(scene) = scene.as_mut() else { return; };
+    let mut color = style.fill;
+    color[3] = (color[3] as f64 * style.fill_opacity * style.opacity).round() as u8;
+    // Ahem's X glyph is a square. Place bounded glyph boxes at successive
+    // advances along the referenced ellipse, with their baselines tangent.
+    for index in 0..text.chars().count() {
+        let angle = (index as f64 + 0.5) * size / rx;
+        let (sine, cosine) = angle.sin_cos();
+        let (x, y) = (cx + rx * cosine, cy + ry * sine);
+        let (tangent_sine, tangent_cosine) = (cosine, -sine);
+        let glyph = Matrix([tangent_cosine, tangent_sine, -tangent_sine, tangent_cosine, x, y]);
+        let Ok(matrix) = frame.matrix.then(glyph) else { return; };
+        let Ok(Some(inverse)) = matrix.inverse() else { return; };
+        scene.items.push(Item {
+            inverse: Some(inverse),
+            shape: Shape::Rect(1.0, -size + 4.0, size - 1.0, size - 1.0),
+            clip: None,
+            color,
+            clips: frame.clips.clone(),
+        });
+    }
+}
+
 fn mask_has_text(dom: &Dom, reference: &str) -> bool {
     let Some(id) = reference.trim().strip_prefix("url(").and_then(|value| value.strip_suffix(')'))
         .map(|value| value.trim().trim_matches(['\'', '"'])).and_then(|value| value.strip_prefix('#')) else { return false; };
@@ -573,6 +647,40 @@ fn append_rect_stroke(scene: &mut SvgDocument, attrs: &Attrs, computed: &Compute
             inverse: frame.matrix.inverse().ok().flatten(), shape, clip: None, color, clips: frame.clips.clone(),
         });
     }
+}
+
+fn append_path_stroke(scene: &mut SvgDocument, attrs: &Attrs, computed: &ComputedStyle, frame: &Frame) {
+    let Some(stroke) = computed.get("stroke").filter(|value| *value != "none") else { return; };
+    let color_value = if stroke.eq_ignore_ascii_case("currentcolor") { computed.get("color").unwrap_or("black") } else { stroke };
+    let Some(mut color) = amazing_css::color::parse_css_color(color_value) else { return; };
+    let Ok(thickness) = number(computed.get("stroke-width").unwrap_or("1")) else { return; };
+    if thickness <= 0.0 { return; }
+    let Some(data) = attrs.get("d") else { return; };
+    let Ok(points) = parse_path(data, MAX_PATH_POINTS) else { return; };
+    let local_width = if computed.get("vector-effect") == Some("non-scaling-stroke") {
+        let [_, _, view_width, view_height] = scene.view;
+        let (mut sx, mut sy) = (f64::from(scene.width) / view_width, f64::from(scene.height) / view_height);
+        if scene.aspect != "none" {
+            let scale = if scene.aspect.ends_with("slice") { sx.max(sy) } else { sx.min(sy) };
+            sx = scale;
+            sy = scale;
+        }
+        let [a, b, c, d, _, _] = frame.matrix.0;
+        let (scale_x, scale_y) = (sx * a.hypot(b), sy * c.hypot(d));
+        if scale_x <= 0.0 || scale_y <= 0.0 { return; }
+        thickness / scale_x.max(scale_y)
+    } else { thickness };
+    if !local_width.is_finite() || local_width <= 0.0 { return; }
+    let opacity = computed.get("stroke-opacity").and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite()).unwrap_or(1.0).clamp(0.0, 1.0);
+    color[3] = (color[3] as f64 * opacity).round() as u8;
+    scene.items.push(Item {
+        inverse: frame.matrix.inverse().ok().flatten(),
+        shape: Shape::Stroke(points, local_width / 2.0, data.trim_end().ends_with('z') || data.trim_end().ends_with('Z')),
+        clip: None,
+        color,
+        clips: frame.clips.clone(),
+    });
 }
 
 fn mask_regions(dom: &Dom, style: &str, bounds: [f64; 4]) -> Vec<[f64; 4]> {
@@ -716,10 +824,10 @@ fn append_element(
         let shape = match name {
             "svg" => {
                 check_attrs(&attrs, &["x", "y", "width", "height", "viewBox", "preserveAspectRatio", "overflow"])?;
-                let x = value(&attrs, "x", 0.0)?;
-                let y = value(&attrs, "y", 0.0)?;
-                let width = value(&attrs, "width", viewport[0])?;
-                let height = value(&attrs, "height", viewport[1])?;
+                let x = length_value(&attrs, "x", 0.0, viewport[0])?;
+                let y = length_value(&attrs, "y", 0.0, viewport[1])?;
+                let width = length_value(&attrs, "width", viewport[0], viewport[0])?;
+                let height = length_value(&attrs, "height", viewport[1], viewport[1])?;
                 if width <= 0.0 || height <= 0.0 { return Err(DecodeError::UnsupportedSvg); }
                 let view = attrs.get("viewBox").map_or(Ok([0.0, 0.0, width, height]), |v| parse_view_box(v))?;
                 let aspect = attrs.get("preserveAspectRatio").map(String::as_str).unwrap_or("xMidYMid meet");

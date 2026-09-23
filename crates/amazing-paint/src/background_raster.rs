@@ -5,7 +5,7 @@ use amazing_layout::Rect;
 
 pub(super) fn area(b: &LayoutBox, which: BoxArea) -> RoundedRect {
     let cb = b.content_box;
-    let outer = resolve_corner_radii(&b.style, &b.border_box);
+    let outer = resolve_corner_radii(b, &b.border_box);
     let (rect, top, right, bottom, left) = match which {
         BoxArea::Border => (b.border_box, 0.0, 0.0, 0.0, 0.0),
         BoxArea::Padding => (
