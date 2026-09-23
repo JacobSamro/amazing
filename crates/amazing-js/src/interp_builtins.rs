@@ -1123,7 +1123,11 @@ fn native_define_property(
         _ => return Err(Throw::type_error("property descriptor is not an object")),
     };
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
-    if let Some(result) = binary_define_index_object(i, &target, &key, &descriptor) { result?; return Ok(JsValue::Object(target)); }
+    if let Some(result) = binary_define_index_object(i, &target, &key, &descriptor) {
+        // DefinePropertyOrThrow: a rejected integer-indexed definition throws here.
+        if !result? { return Err(Throw::type_error("could not define TypedArray index")); }
+        return Ok(JsValue::Object(target));
+    }
     let has = |name: &str| descriptor.borrow().has_property(name);
     let accessor = has("get") || has("set");
     let data = has("value") || has("writable");
