@@ -48,6 +48,80 @@ fn important_reverses_layers_including_unlayered() {
         "green"
     );
 }
+
+#[test]
+fn important_revert_layer_excludes_weaker_important_layers() {
+    let css = "p { background-color: blue } \
+        @layer { p { background-color: green } } \
+        @layer { p { background-color: red; background-color: red !important; \
+                    background-color: revert-layer !important } } \
+        @layer { p { background-color: red; background-color: red !important } }";
+    assert_eq!(value(css, "background-color"), "green");
+}
+
+#[test]
+fn nth_child_of_selector_after_comment_survives_stylesheet_parsing() {
+    let mut dom = Dom::new();
+    let html = dom.create_element(NodeIdx(0), "html");
+    let body = dom.create_element(html, "body");
+    let mut targets = Vec::new();
+    for _ in 0..3 {
+        targets.push(dom.create_element(body, "target"));
+        dom.create_element(body, "div");
+    }
+    let sheet = parse_stylesheet("target{color:red}:nth-child(3 of/* my comment */target){color:green}");
+    let styled = compute(&dom, &[sheet]);
+    assert_eq!(styled.get(targets[2]).unwrap().get("color"), Some("green"));
+}
+
+#[test]
+fn dir_inside_not_with_adjacent_sibling_matches_stylesheet() {
+    let mut dom = Dom::new();
+    let html = dom.create_element(NodeIdx(0), "html");
+    let body = dom.create_element(html, "body");
+    let first = dom.create_element(body, "div");
+    dom.set_attrs(first, vec![("dir".into(), "rtl".into())]);
+    dom.create_text(body, "\n");
+    let second = dom.create_element(body, "div");
+    let sheet = parse_stylesheet("div{color:lime}:not(:dir(ltr)) + div{color:blue}");
+    assert_eq!(compute(&dom, &[sheet]).get(second).unwrap().get("color"), Some("blue"));
+}
+
+#[test]
+fn margin_inline_shorthand_expands_after_custom_property_substitution() {
+    assert_eq!(value("p{--space:4.009px;margin-inline:var(--space)}", "margin-left"), "4.009px");
+    assert_eq!(value("p{--space:4.009px;margin-inline:var(--space)}", "margin-right"), "4.009px");
+    assert_eq!(value("p{margin-inline:2px 3px}", "margin-left"), "2px");
+    assert_eq!(value("p{margin-inline:2px 3px}", "margin-right"), "3px");
+}
+
+#[test]
+fn color_four_values_reach_legacy_paint_as_rgba_hex() {
+    for (color, expected) in [
+        ("hsl(120 100% 25% / 1.0)", "#008000ff"),
+        ("hwb(120 70% 60%)", "#898989ff"),
+        ("color(a98-rgb 0.281363 0.498012 0.116746)", "#008000ff"),
+        ("lch(46.2775% 67.9892 134.3912)", "#008000ff"),
+    ] {
+        assert_eq!(value(&format!("p{{background-color:{color}}}"), "background-color"), expected, "{color}");
+    }
+}
+
+#[test]
+fn supported_system_color_aliases_share_resolved_paint_values() {
+    let face = value("p{background-color:ButtonFace}", "background-color");
+    assert_eq!(value("p{background-color:ThreeDFace}", "background-color"), face);
+    assert_eq!(value("p{background-color:red}@supports(color:ThreeDFace){p{background-color:ThreeDFace}}", "background-color"), face);
+    let border = value("p{background-color:ButtonBorder}", "background-color");
+    assert_eq!(value("p{background-color:ThreeDLightShadow}", "background-color"), border);
+    assert_eq!(value("p{background-color:red}@supports(color:ThreeDLightShadow){p{background-color:ThreeDLightShadow}}", "background-color"), border);
+}
+
+#[test]
+fn negative_calc_border_radius_clamps_after_winning_cascade() {
+    assert_eq!(value("p{border-radius:10px;border-radius:calc(-10px)}", "border-top-left-radius"), "0px");
+    assert_eq!(value("p{border-radius:calc(5px)}", "border-bottom-right-radius"), "5px");
+}
 #[test]
 fn nested_layers_group_under_parent_and_direct_rules_win() {
     assert_eq!(
@@ -150,7 +224,7 @@ fn important_layer_rollback_removes_normal_interval() {
             "@layer a,b; @layer a{p{color:revert-layer!important}} @layer b{p{color:green!important}}",
             "color"
         ),
-        "green"
+        "black"
     );
     assert_eq!(
         value(

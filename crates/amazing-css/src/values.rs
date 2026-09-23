@@ -311,7 +311,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
                     [Token::Function(name), ..]
                         if !matches!(name.to_ascii_lowercase().as_str(), "rgb" | "rgba") =>
                     {
-                        Some(V::Unparsed)
+                        Some(crate::color::parse_css_color(css)
+                            .map(|rgba| V::Color(Color::Rgba(rgba)))
+                            .unwrap_or(V::Unparsed))
                     }
                     [Token::Ident(name)] if known_color_keyword(name) => Some(
                         crate::color::parse_css_color(css)

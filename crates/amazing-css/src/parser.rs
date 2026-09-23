@@ -80,6 +80,20 @@ pub fn parse_stylesheet(src: &str) -> Stylesheet {
     parse_rule_list(&toks)
 }
 
+// Comment removal can leave two identifier tokens adjacent (for example
+// `of/*comment*/target`). Preserve the token boundary when a selector prelude
+// is serialized and then parsed again by the selector module.
+fn serialize_selector_prelude(tokens: &[Token]) -> String {
+    let mut separated = Vec::with_capacity(tokens.len());
+    for token in tokens {
+        if matches!(separated.last(), Some(Token::Ident(_))) && matches!(token, Token::Ident(_)) {
+            separated.push(Token::Whitespace);
+        }
+        separated.push(token.clone());
+    }
+    serialize(&separated)
+}
+
 /// Extracts `@font-face` descriptors without placing provider or resource
 /// types in the CSS crate. Invalid rules are ignored with normal CSS recovery.
 pub fn parse_font_faces(src: &str) -> Vec<FontFaceRule> {
@@ -441,7 +455,7 @@ impl Parser<'_> {
                 Token::OpenParen | Token::OpenSquare => depth += 1,
                 Token::CloseParen | Token::CloseSquare => depth = depth.saturating_sub(1),
                 Token::Comma if depth == 0 => {
-                    let seg = serialize(&prelude_toks[current_start..i]);
+                    let seg = serialize_selector_prelude(&prelude_toks[current_start..i]);
                     if !seg.trim().is_empty() {
                         selector_srcs.push(seg);
                     }
@@ -451,7 +465,7 @@ impl Parser<'_> {
             }
         }
         if current_start < prelude_toks.len() {
-            let seg = serialize(&prelude_toks[current_start..]);
+            let seg = serialize_selector_prelude(&prelude_toks[current_start..]);
             if !seg.trim().is_empty() {
                 selector_srcs.push(seg);
             }
@@ -665,6 +679,11 @@ fn supports_declaration(name_tokens: &[Token], value_tokens: &[Token]) -> bool {
     }
     if name.starts_with("--") {
         return crate::computed::valid_custom_property_value(value_tokens);
+    }
+    if name.eq_ignore_ascii_case("color") && !value_tokens.iter().any(
+        |token| matches!(token, Token::Function(function) if function.eq_ignore_ascii_case("var")),
+    ) {
+        return crate::color::parse_css_color(&serialize(value_tokens)).is_some();
     }
     crate::computed::is_supported_property(name)
         && value_tokens.iter().any(

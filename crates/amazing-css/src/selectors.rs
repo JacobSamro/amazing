@@ -20,7 +20,8 @@
 //! - arguments of `:not()`/`:is()` accept compound selectors but not
 //!   combinator-containing complex selectors
 //! - namespace prefixes (`svg|rect`) are not supported
-//! - `:lang()`, `:dir()`, `:nth-*` with `of S` syntax not implemented
+//! - `:has()` currently accepts single-compound relative arguments; complex
+//!   relative selectors and language-range wildcards remain unsupported
 
 use crate::syntax::{tokenize, serialize, Token};
 use amazing_dom::{Dom, Namespace, NodeIdx};
@@ -76,6 +77,11 @@ pub enum Simple {
     /// `:where(compound, …)` — same matching as [`Simple::Matches`], zero
     /// specificity.
     Where(Vec<Compound>),
+    /// Relative one-step selectors, with `>` for child and whitespace for descendant.
+    Has(Vec<(Combinator, Compound)>),
+    Lang(Vec<String>),
+    Dir(bool),
+    NthChildOf { a: i32, b: i32, from_last: bool, selectors: Vec<Selector> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,6 +189,14 @@ fn simple_specificity(s: &Simple) -> Specificity {
             let max = args.iter().map(compound_specificity).max().unwrap_or_default();
             spec = spec + max;
         },
+        Simple::Has(args) => {
+            spec = spec + args.iter().map(|(_, c)| compound_specificity(c)).max().unwrap_or_default();
+        },
+        Simple::NthChildOf { selectors, .. } => {
+            spec.b += 1;
+            spec = spec + selectors.iter().map(Selector::specificity).max().unwrap_or_default();
+        },
+        Simple::Lang(_) | Simple::Dir(_) => spec.b += 1,
         Simple::Universal | Simple::Where(_) => {},
     }
     spec
@@ -424,13 +438,54 @@ impl<'t> SelParser<'t> {
         // token; every functional form consumes it before its arguments.
         self.pos += 1;
         match name.as_str() {
-            "nth-child" => {
-                let (a, b) = self.anb()?;
-                Some(Simple::Pseudo(Pseudo::NthChild { a, b }))
+            "nth-child" => self.nth_args(false),
+            "nth-last-child" => self.nth_args(true),
+            "lang" => {
+                let mut ranges = Vec::new();
+                loop {
+                    self.skip_ws();
+                    let range = match self.bump()? {
+                        Token::Ident(value) | Token::Str(value) if !value.is_empty() => value,
+                        _ => return None,
+                    };
+                    ranges.push(range);
+                    self.skip_ws();
+                    match self.bump()? {
+                        Token::Comma => continue,
+                        Token::CloseParen => break,
+                        _ => return None,
+                    }
+                }
+                Some(Simple::Lang(ranges))
             },
-            "nth-last-child" => {
-                let (a, b) = self.anb()?;
-                Some(Simple::Pseudo(Pseudo::NthLastChild { a, b }))
+            "dir" => {
+                self.skip_ws();
+                let direction = match self.bump()? {
+                    Token::Ident(value) if value.eq_ignore_ascii_case("ltr") => false,
+                    Token::Ident(value) if value.eq_ignore_ascii_case("rtl") => true,
+                    _ => return None,
+                };
+                self.skip_ws();
+                (self.bump()? == Token::CloseParen).then_some(Simple::Dir(direction))
+            },
+            "has" => {
+                let mut args = Vec::new();
+                loop {
+                    self.skip_ws();
+                    let relation = if matches!(self.peek(), Some(Token::Delim('>'))) {
+                        self.pos += 1;
+                        self.skip_ws();
+                        Combinator::Child
+                    } else { Combinator::Descendant };
+                    args.push((relation, self.compound()?));
+                    self.skip_ws();
+                    match self.bump()? {
+                        Token::Comma => continue,
+                        Token::CloseParen => break,
+                        _ => return None,
+                    }
+                }
+                Some(Simple::Has(args))
             },
             "not" | "is" | "matches" | "where" => {
                 let mut args = Vec::new();
@@ -459,6 +514,57 @@ impl<'t> SelParser<'t> {
                 }
             },
             _ => None,
+        }
+    }
+
+    fn nth_args(&mut self, from_last: bool) -> Option<Simple> {
+        let mut depth = 0usize;
+        let mut of = None;
+        for index in self.pos..self.toks.len() {
+            match &self.toks[index] {
+                Token::OpenParen => depth += 1,
+                Token::CloseParen if depth == 0 => break,
+                Token::CloseParen => depth -= 1,
+                Token::Ident(value) if depth == 0 && value.eq_ignore_ascii_case("of") => {
+                    of = Some(index);
+                    break;
+                },
+                _ => {},
+            }
+        }
+        let Some(of_index) = of else {
+            let (a, b) = self.anb()?;
+            return Some(Simple::Pseudo(if from_last { Pseudo::NthLastChild { a, b } } else { Pseudo::NthChild { a, b } }));
+        };
+        let formula_end = (self.pos..of_index).rev().find(|&i| !matches!(self.toks[i], Token::Whitespace)).map(|i| i + 1)?;
+        let mut formula = self.toks[self.pos..formula_end].to_vec();
+        formula.push(Token::CloseParen);
+        let (a, b) = SelParser { toks: &formula, pos: 0 }.anb()?;
+        self.pos = of_index + 1;
+        let selectors = self.selector_list_until_close()?;
+        Some(Simple::NthChildOf { a, b, from_last, selectors })
+    }
+
+    fn selector_list_until_close(&mut self) -> Option<Vec<Selector>> {
+        let mut selectors = Vec::new();
+        let mut start = self.pos;
+        let mut depth = 0usize;
+        loop {
+            let end = self.pos;
+            match self.peek()? {
+                Token::OpenParen => depth += 1,
+                Token::CloseParen if depth > 0 => depth -= 1,
+                Token::Comma | Token::CloseParen if depth == 0 => {
+                    selectors.push(parse_selector(&serialize(&self.toks[start..end]))?);
+                    let closing = matches!(self.peek(), Some(Token::CloseParen));
+                    self.pos += 1;
+                    if closing { return Some(selectors); }
+                    start = self.pos;
+                    continue;
+                },
+                _ => {},
+            }
+            self.pos += 1;
         }
     }
 
@@ -608,10 +714,16 @@ fn match_rightward(dom: &Dom, el: NodeIdx, sel: &Selector, pos: usize, scope: Op
                 }
                 false
             },
-            Combinator::NextSibling => dom
-                .get(el)
-                .prev_sibling
-                .is_some_and(|sib| match_rightward(dom, sib, sel, pos - 1, scope)),
+            Combinator::NextSibling => {
+                let mut sibling = dom.get(el).prev_sibling;
+                while let Some(node) = sibling {
+                    if dom.name(node).is_some() {
+                        return match_rightward(dom, node, sel, pos - 1, scope);
+                    }
+                    sibling = dom.get(node).prev_sibling;
+                }
+                false
+            },
             Combinator::LaterSibling => {
                 let mut sib = dom.get(el).prev_sibling;
                 while let Some(s) = sib {
@@ -662,7 +774,57 @@ fn simple_in_scope(dom: &Dom, el: NodeIdx, s: &Simple, scope: Option<NodeIdx>) -
         Simple::Negation(args) => !args.iter().any(|c| compound_in_scope(dom, el, c, scope)),
         Simple::Matches(args) => args.iter().any(|c| compound_in_scope(dom, el, c, scope)),
         Simple::Where(args) => args.iter().any(|c| compound_in_scope(dom, el, c, scope)),
+        Simple::Has(args) => args.iter().any(|(relation, compound)| match relation {
+            Combinator::Child => dom.children(el).any(|child| dom.name(child).is_some() && compound_in_scope(dom, child, compound, scope)),
+            Combinator::Descendant => {
+                let mut pending: Vec<_> = dom.children(el).collect();
+                while let Some(node) = pending.pop() {
+                    if dom.name(node).is_some() && compound_in_scope(dom, node, compound, scope) { return true; }
+                    pending.extend(dom.children(node));
+                }
+                false
+            },
+            _ => false,
+        }),
+        Simple::Lang(ranges) => element_language(dom, el).is_some_and(|lang| ranges.iter().any(|range| {
+            lang.eq_ignore_ascii_case(range) || lang.get(..range.len()).is_some_and(|prefix| prefix.eq_ignore_ascii_case(range))
+                && lang.as_bytes().get(range.len()) == Some(&b'-')
+        })),
+        Simple::Dir(rtl) => element_direction(dom, el) == *rtl,
+        Simple::NthChildOf { a, b, from_last, selectors } => nth_index_of(dom, el, *from_last, selectors)
+            .is_some_and(|index| anb_matches(*a, *b, index)),
     }
+}
+
+fn element_language<'a>(dom: &'a Dom, el: NodeIdx) -> Option<&'a str> {
+    let mut current = Some(el);
+    while let Some(node) = current {
+        if let Some(language) = attr_of(dom, node, "lang").or_else(|| attr_of(dom, node, "xml:lang")) {
+            return (!language.is_empty()).then_some(language);
+        }
+        current = dom.get(node).parent;
+    }
+    None
+}
+
+fn element_direction(dom: &Dom, el: NodeIdx) -> bool {
+    let mut current = Some(el);
+    while let Some(node) = current {
+        if let Some(direction) = attr_of(dom, node, "dir") {
+            if direction.eq_ignore_ascii_case("rtl") { return true; }
+            if direction.eq_ignore_ascii_case("ltr") { return false; }
+        }
+        current = dom.get(node).parent;
+    }
+    false
+}
+
+fn nth_index_of(dom: &Dom, el: NodeIdx, from_last: bool, selectors: &[Selector]) -> Option<u32> {
+    let parent = dom.get(el).parent?;
+    let siblings: Vec<_> = dom.children(parent).filter(|node| dom.name(*node).is_some()
+        && selectors.iter().any(|selector| matches(dom, *node, selector))).collect();
+    let position = siblings.iter().position(|&node| node == el)? as u32 + 1;
+    Some(if from_last { siblings.len() as u32 + 1 - position } else { position })
 }
 
 fn matches_pseudo(dom: &Dom, el: NodeIdx, p: Pseudo) -> bool {
@@ -836,6 +998,73 @@ mod tests {
             cur = kids[i];
         }
         matches(dom, cur, &parse_selector(src).unwrap_or_else(|| panic!("parse fail: {src}")))
+    }
+
+    #[test]
+    fn language_direction_and_relative_has_match_dom_state() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        dom.set_attrs(html, vec![("lang".into(), "en-US".into())]);
+        let body = dom.create_element(html, "body");
+        let first = dom.create_element(body, "div");
+        let second = dom.create_element(body, "div");
+        let span = dom.create_element(second, "span");
+        dom.set_attrs(span, vec![("lang".into(), "fr-FR-x-foobar".into())]);
+        let rtl = dom.create_element(body, "div");
+        dom.set_attrs(rtl, vec![("dir".into(), "rtl".into())]);
+        let child = dom.create_element(rtl, "div");
+        let check = |el, text| matches(&dom, el, &parse_selector(text).unwrap());
+        assert!(check(first, ":lang(en-US)"));
+        assert!(check(span, ":lang(fr)"));
+        assert!(check(span, ":lang(\"FR\")"));
+        assert!(!check(first, ":lang(fr)"));
+        assert!(check(second, ":has(> span)"));
+        assert!(!check(first, ":has(> span)"));
+        assert!(check(second, ":not(:dir(rtl)) + div"));
+        assert!(check(child, ":dir(rtl)"));
+        dom.create_text(body, "\n");
+        let next = dom.create_element(body, "div");
+        assert!(matches(&dom, next, &parse_selector(":not(:dir(ltr)) + div").unwrap()));
+    }
+
+    #[test]
+    fn nth_of_filters_siblings_and_counts_from_either_end() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        let mut elements = Vec::new();
+        for name in ["target", "div", "target", "target", "div"] {
+            elements.push(dom.create_element(body, name));
+        }
+        let matches_text = |el, text| matches(&dom, el, &parse_selector(text).unwrap());
+        assert!(matches_text(elements[3], ":nth-child(3 of/*comment*/target)"));
+        assert!(matches_text(elements[3], ":nth-child(3 of/* my comment */target)"));
+        assert!(!matches_text(elements[2], ":nth-child(3 of target)"));
+        dom.set_attrs(elements[0], vec![("class".into(), "target".into()), ("target".into(), "".into())]);
+        dom.set_attrs(elements[2], vec![("class".into(), "target".into()), ("target".into(), "".into())]);
+        dom.set_attrs(elements[3], vec![("class".into(), "target".into()), ("target".into(), "".into())]);
+        let matches_text = |el, text| matches(&dom, el, &parse_selector(text).unwrap());
+        assert!(matches_text(elements[3], ":nth-child(3 of.target)"));
+        assert!(matches_text(elements[3], ":nth-child(3 of[target])"));
+        assert!(matches_text(elements[3], ":nth-last-child(1 of target, .missing)"));
+        assert_eq!(parse_selector(":nth-child(3 of target)").unwrap().specificity(),
+            Specificity { a: 0, b: 1, c: 1 });
+    }
+
+    #[test]
+    fn nth_last_child_of_complex_selector_list() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        let paragraphs: Vec<_> = (0..9).map(|_| {
+            let paragraph = dom.create_element(body, "p");
+            dom.create_text(body, "\n");
+            paragraph
+        }).collect();
+        let selector = parse_selector("p:nth-last-child(4n of html:root>body>p+p:not(empty), :not(*), p:not(p), span, .notthere)").unwrap();
+        for (index, paragraph) in paragraphs.into_iter().enumerate() {
+            assert_eq!(matches(&dom, paragraph, &selector), index == 1 || index == 5, "p {index}");
+        }
     }
 
     #[test]
