@@ -38,6 +38,9 @@ pub fn redirect(
             if request.mode == RequestMode::Navigate {
                 return Ok(RedirectAction::NavigationPending);
             }
+            if !crate::sri::Metadata::parse(&request.integrity).is_empty() {
+                return Err(FetchError::Integrity);
+            }
             let mut filtered = Response::hidden(ResponseType::OpaqueRedirect);
             filtered.url_list = request.url_list().to_vec();
             return Ok(RedirectAction::Manual(filtered));

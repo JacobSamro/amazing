@@ -87,6 +87,7 @@ pub struct ApiRequest {
     pub referrer: String,
     pub referrer_policy: ReferrerPolicy,
     pub integrity: String,
+    pub(crate) response_body_limit: Option<usize>,
     pub keepalive: bool,
     pub priority: ApiPriority,
     pub signal_aborted: bool,
@@ -126,6 +127,7 @@ impl ApiRequest {
                     referrer: "about:client".into(),
                     referrer_policy: ReferrerPolicy::StrictOriginWhenCrossOrigin,
                     integrity: String::new(),
+                    response_body_limit: None,
                     keepalive: false,
                     priority: ApiPriority::Auto,
                     signal_aborted: false,
@@ -150,6 +152,7 @@ impl ApiRequest {
                     referrer: other.referrer.clone(),
                     referrer_policy: other.referrer_policy,
                     integrity: other.integrity.clone(),
+                    response_body_limit: other.response_body_limit,
                     keepalive: other.keepalive,
                     priority: other.priority,
                     signal_aborted: other.signal_aborted,
@@ -324,6 +327,7 @@ impl ApiRequest {
             referrer: self.referrer.clone(),
             referrer_policy: self.referrer_policy,
             integrity: self.integrity.clone(),
+            response_body_limit: self.response_body_limit,
             keepalive: self.keepalive,
             priority: self.priority,
             signal_aborted: self.signal_aborted,
@@ -345,6 +349,8 @@ impl ApiRequest {
         };
         out.headers = self.headers.to_header_list()?;
         out.use_cors_preflight = self.stream_body || self.force_preflight;
+        out.response_body_limit = self.response_body_limit;
+        out.integrity = self.integrity.clone();
         let body = if self.body.shared_present() {
             Some(Body::Unreplayable)
         } else {
@@ -874,7 +880,15 @@ impl PendingFetchApi {
                 }
                 None
             }
-            NetEvent::Error { .. } => Some(Err(ApiError::Network(FetchError::Transport))),
+            NetEvent::Error { error, .. } => {
+                let mapped = match error {
+                    amazing_net::dispatch::DispatchError::Network(
+                        amazing_net::NetError::ResponseTooLarge,
+                    ) => FetchError::ResponseTooLarge,
+                    _ => FetchError::Transport,
+                };
+                Some(Err(ApiError::Network(mapped)))
+            }
             NetEvent::Aborted { .. } => Some(Err(ApiError::Aborted)),
             NetEvent::Done { .. } => {
                 let response = match self.current.take() {
@@ -977,12 +991,20 @@ fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::C
     conditional_headers: Option<&crate::HeaderList>,
 ) -> Result<amazing_net::dispatch::RequestId, ApiError> {
     let mut options = amazing_net::FetchOptions::default();
+    if let Some(limit) = request.response_body_limit {
+        options.max_response_bytes = limit;
+    }
     options.method = request.method().to_owned();
     options.request_headers = request
         .headers
         .iter()
         .map(|(n, v)| (n.to_owned(), v.to_owned()))
         .collect();
+    if plan.taint == ResponseType::Cors || request.method() == "OPTIONS" {
+        options
+            .request_headers
+            .push(("origin".into(), request.origin.serialize()));
+    }
     if let Some(referrer) = &plan.referrer {
         options
             .request_headers

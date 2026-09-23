@@ -54,6 +54,8 @@ pub struct Request {
     pub csp_integrity: Vec<String>,
     pub csp_parser_inserted: bool,
     pub csp_violations: Vec<CspViolation>,
+    pub(crate) response_body_limit: Option<usize>,
+    pub integrity: String,
     pub(crate) taint: ResponseType,
 }
 impl Request {
@@ -78,6 +80,8 @@ impl Request {
             csp_integrity: Vec::new(),
             csp_parser_inserted: false,
             csp_violations: Vec::new(),
+            response_body_limit: None,
+            integrity: String::new(),
             taint: ResponseType::Basic,
         }
     }

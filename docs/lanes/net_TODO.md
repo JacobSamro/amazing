@@ -1483,3 +1483,24 @@ Pinned WPT results: URL 896, IDNA 87 + 2,671, MIME/data 1,107, cookies
 same 183-file source manifest SHA-256
 `f945d97546b56dee3dc85f5c1b5b16a477aa3bdd51efec9cada8fb242b64ea19`.
 Full evidence is in `.agents/net/report.md`.
+
+## NET-22 — font fetches and Subresource Integrity
+
+Fixed base: `7c6824b8a12a50ea6ba99688678b98617bd27f26`. `FontRequest` builds
+CSS Fonts 4 anonymous CORS fetches from a stylesheet URL and document origin,
+with same-origin credentials and a caller body cap applied during transport,
+cache reuse, and data URL decoding. The service sets font CSP and security
+destinations. Live tests cover same-origin, cross-origin CORS success/failure,
+both redirect directions, and over-bound network/data bodies.
+
+SRI Level 2 metadata parsing supports SHA-256/384/512, ignores options and
+invalid tokens, chooses the strongest algorithm, and verifies the completed
+response after CORS filtering. Opaque responses with valid metadata fail.
+The std-only SHA-2 implementation has FIPS vectors. Native script assertions
+are ported from WPT `subresource-integrity/subresource-integrity.html` at
+`c48d58747e1f211527fb695fd60548a997fae617` (SHA-256
+`49afc676663f757ddbbc26c8c6c8ae29efab1650d9b33460d4e28e96666d9030`),
+using `script.js` (SHA-256
+`06eebcd4a327435e5160716fb18756ba6c1e785030d212434c5b7db1e12b8210`).
+The strongest-mismatch assertion substitutes a valid wrong digest so the
+parser does not discard malformed Base64 before strongest selection.
