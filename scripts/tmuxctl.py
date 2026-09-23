@@ -197,6 +197,13 @@ LANE_GRANTS.setdefault("js-runtime", []).extend([
 # back atomically (ADR 0003). ADDED LINES ONLY; everything else in interp.rs
 # is js-runtime's.
 LANE_GRANTS.setdefault("js-vm", []).append("crates/amazing-js/src/interp.rs")
+# JSVM-1: one additive FunctionBody::Bytecode variant (an opaque compiled-code
+# handle defined in vm/) in value.rs, plus exhaustive-match arms it forces.
+# ADDED LINES ONLY; rebase after JSRT-5, which rewrites value.rs strings.
+LANE_GRANTS["js-vm"].append("crates/amazing-js/src/value.rs")
+# TEXT-1: register the pinned WPT fonts/ CSSTest fixture faces in
+# page.rs::register_system_text_faces. That function only; additive.
+LANE_GRANTS.setdefault("text", []).append("crates/amazing/src/page.rs")
 LANE_GRANTS["integrator-assist"] = [
     "crates/amazing-shell-gpui/src/session_state.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
