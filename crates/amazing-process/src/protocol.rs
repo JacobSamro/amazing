@@ -84,6 +84,13 @@ interface! {pub interface BrowserEvents(9) => BrowserEventsProxy, BrowserEventsR
     fn frame_ready(event:FrameReady) -> () = 1;
 }}
 
+// The byte blob is the IPC-owned encoding of CompositorFrameSnapshot, including
+// its versioned ResourceDeltaSnapshot and retained property trees.
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct GpuFrame {sequence:u64, snapshot:ByteBuf}}
+interface! {pub interface GpuPresentation(11) => GpuProxy, GpuReceiver {
+    fn submit(frame:GpuFrame) -> Frame = 1;
+}}
+
 impl Frame {
     pub fn validate(&self) -> Result<(), amazing_ipc::Error> {
         let len = usize::try_from(self.width)

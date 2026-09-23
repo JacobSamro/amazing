@@ -202,6 +202,34 @@ impl<T: Wire> Wire for Option<T> {
         }
     }
 }
+/// An optional field introduced at an interface version. The tag stays on the
+/// wire so older peers can decode and ignore the field without losing bounds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MinVersion<T> {
+    pub since: u16,
+    pub value: Option<T>,
+}
+impl<T> MinVersion<T> {
+    pub fn at(&self, version: u16) -> Option<&T> {
+        (version >= self.since).then_some(self.value.as_ref()).flatten()
+    }
+}
+impl<T: Wire> Wire for MinVersion<T> {
+    fn encode(&self, e: &mut Encoder) -> Result<(), Error> {
+        if self.since == 0 {
+            return Err(Error::Invalid);
+        }
+        self.since.encode(e)?;
+        self.value.encode(e)
+    }
+    fn decode(d: &mut Decoder<'_>) -> Result<Self, Error> {
+        let since = u16::decode(d)?;
+        if since == 0 {
+            return Err(Error::Invalid);
+        }
+        Ok(Self { since, value: Option::<T>::decode(d)? })
+    }
+}
 impl<K: Wire + Ord, V: Wire> Wire for BTreeMap<K, V> {
     fn encode(&self, e: &mut Encoder) -> Result<(), Error> {
         if self.len() > MAX_ITEMS {

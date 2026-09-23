@@ -145,6 +145,7 @@ fn main() {
     }
     match role {
         Role::Renderer => amazing_process::renderer::serve_renderer(&conn, channel),
+        Role::Gpu => amazing_process::gpu::serve_gpu(&conn),
         Role::Network => amazing_process::network::serve_network(&conn),
         _ => {
             conn.bind(0, Ping);

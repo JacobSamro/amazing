@@ -289,9 +289,9 @@ impl RendererControls for RendererEndpoint {
 }
 /// Bind a renderer process to its browser IPC connection.
 pub fn serve_renderer(connection: &Arc<Connection>, channel: Option<HandleChannel>) {
-    connection.bind(0, crate::Ping);
     connection.bind(
         7,
         RendererReceiver(RendererEndpoint::new(connection.clone(), channel)),
     );
+    connection.bind(0, crate::Ping);
 }

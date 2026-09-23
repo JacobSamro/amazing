@@ -38,6 +38,7 @@ use windows_sys::Win32::System::Threading::{
     CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, INFINITE, PROCESS_DUP_HANDLE,
     PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
     PROC_THREAD_ATTRIBUTE_JOB_LIST, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+    GetProcessHandleCount,
     STARTF_USESTDHANDLES, STARTUPINFOEXW,
 };
 
@@ -490,4 +491,12 @@ pub fn probe_open_process(pid: u32) -> io::Result<()> {
     })?;
     drop(handle);
     Ok(())
+}
+
+/// Diagnostic count for long-running process and mapping leak tests.
+pub fn current_process_handle_count() -> io::Result<u32> {
+    let mut count = 0;
+    // SAFETY: current-process pseudo-handle and output pointer are valid.
+    check(unsafe { GetProcessHandleCount(GetCurrentProcess(), &mut count) })?;
+    Ok(count)
 }
