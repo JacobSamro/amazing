@@ -315,6 +315,54 @@ fn native_array_species(
     Ok(this)
 }
 
+fn array_await_ready(value: JsValue) -> Result<JsValue, Throw> {
+    if let JsValue::Object(object) = &value {
+        if let Exotic::Promise(state) = &object.borrow().exotic {
+            return match &state.state {
+                PromiseFate::Fulfilled(value) => Ok(value.clone()),
+                PromiseFate::Rejected(value) => Err(Throw(value.clone())),
+                PromiseFate::Pending => Err(Throw::type_error("pending async input is not yet supported")),
+            };
+        }
+    }
+    Ok(value)
+}
+
+fn native_array_from_async(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let result = (|| -> Result<JsValue, Throw> {
+        let source = array_receiver(i, args.first().cloned().unwrap_or(JsValue::Undefined))?;
+        let async_iterator = i.get_prop(&source, WellKnownSymbol::AsyncIterator.symbol())?;
+        if !async_iterator.is_undefined() && !async_iterator.is_null() {
+            return Err(Throw::type_error("async iterator is not yet supported"));
+        }
+        let mapper = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+        if !mapper.is_undefined() && callable_function(&mapper).is_none() {
+            return Err(Throw::type_error("Array.fromAsync mapFn is not callable"));
+        }
+        let iterator = i.get_prop(&source, WellKnownSymbol::Iterator.symbol())?;
+        let items = if iterator.is_undefined() || iterator.is_null() {
+            let length = array_like_length(i, &source)?;
+            (0..length).map(|index| i.get_prop(&source, index.to_string())).collect::<Result<Vec<_>, _>>()?
+        } else {
+            i.iterate(&source)?
+        };
+        let mut values = Vec::with_capacity(items.len());
+        for (index, item) in items.into_iter().enumerate() {
+            let item = array_await_ready(item)?;
+            let value = if mapper.is_undefined() { item } else {
+                i.call_value(&mapper, args.get(2).cloned().unwrap_or(JsValue::Undefined),
+                    vec![item, JsValue::num(index as f64)])?
+            };
+            values.push(array_await_ready(value)?);
+        }
+        array_values(i, values)
+    })();
+    Ok(new_promise(i, match result {
+        Ok(value) => PromiseFate::Fulfilled(value),
+        Err(Throw(value)) => PromiseFate::Rejected(value),
+    }))
+}
+
 fn native_array_at(
     i: &mut Interpreter,
     this: JsValue,
@@ -862,6 +910,9 @@ impl Interpreter {
 
     fn install_array_extra(&mut self) {
         if let Some(JsValue::Object(constructor)) = self.global_env.resolve("Array") {
+            let from_async = symbol_method(self, "fromAsync", native_array_from_async);
+            symbol_method_length(&from_async, 1);
+            constructor.borrow_mut().define("fromAsync", symbol_data(from_async, true, true)).unwrap();
             for (name, length) in [("from", 1), ("isArray", 1), ("of", 0)] {
                 let existing = constructor.borrow().own_prop(name).cloned();
                 if let Some(mut property) = existing {

@@ -793,6 +793,10 @@ mod tests {
             "function F(a,b){this.sum=a+b}; var B=F.bind(null,2); var x=new B(3); x.sum===5 && B.name==='bound F' && B.length===1 && !('prototype' in B)",
             "function f(a,b){return a+b}; f.apply(null,{0:2,1:3,length:2})===5",
             "var x=Array(3); x.length===3 && !(0 in x) && Array.of(3).length===1 && Array[Symbol.species]===Array",
+            "typeof Array.fromAsync==='function'",
+            "Array.fromAsync.length===1",
+            "!('prototype' in Array.fromAsync)",
+            "Array.fromAsync([1,2]) instanceof Promise",
             "var x=Object.groupBy([1,2,3], n=>n%2); x[0].join(',')==='2' && x[1].join(',')==='1,3'",
         ] {
             assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true), "{source}");

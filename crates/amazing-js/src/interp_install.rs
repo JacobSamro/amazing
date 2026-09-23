@@ -278,6 +278,8 @@ impl Interpreter {
         );
         let promise_ctor = Self::native("Promise", native_promise, &self.function_proto);
         if let JsValue::Object(o) = &promise_ctor {
+            let _ = self.set_prop(&promise_ctor, "prototype", JsValue::Object(self.promise_proto.clone()));
+            self.promise_proto.borrow_mut().define("constructor", symbol_data(promise_ctor.clone(), true, true)).unwrap();
             let _ = self.set_prop(
                 &JsValue::Object(o.clone()),
                 "resolve",
