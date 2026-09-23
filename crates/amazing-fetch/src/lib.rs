@@ -2,6 +2,7 @@
 //! HTTP(S) URL syntax and resolution use amazing-net ParsedUrl; IDNA remains
 //! deferred behind its provider seam. This policy model has no live dispatcher.
 #![forbid(unsafe_code)]
+pub mod api;
 pub mod cache;
 pub mod cookies;
 mod cors;
