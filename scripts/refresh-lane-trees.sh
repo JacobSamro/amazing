@@ -124,6 +124,20 @@ foreach (\$l in @(${lanes_ps%,})) {
   # artifact freshness.
   tar -xmf "$ARCHIVE_REMOTE" -C \$dest
   if (\$LASTEXITCODE -ne 0) { "REFRESH-ERROR \$l tar exit \$LASTEXITCODE"; continue }
+  # Prune first-party source files the archive no longer contains. tar only adds and
+  # overwrites, so a module moved from foo.rs to foo/mod.rs left both behind and broke
+  # builds with E0761 (amazing-compositor animation, 2026-09-24). Only .rs/.toml under
+  # crates/ are pruned; lanes re-sync their own new files after a refresh.
+  \$keep = New-Object 'System.Collections.Generic.HashSet[string]'
+  foreach (\$f in (tar -tf "$ARCHIVE_REMOTE")) { [void]\$keep.Add((\$f -replace '/', '\\')) }
+  \$crates = Join-Path \$dest 'crates'
+  if (Test-Path \$crates) {
+    Get-ChildItem \$crates -Recurse -File -Include *.rs,*.toml -EA SilentlyContinue |
+      Where-Object { \$_.FullName -notlike '*\\target\\*' } | ForEach-Object {
+        \$rel = \$_.FullName.Substring(\$dest.Length).TrimStart('\\')
+        if (-not \$keep.Contains(\$rel)) { Remove-Item -Force \$_.FullName; "pruned \$l \$rel" }
+      }
+  }
   # Belt and braces: drop first-party fingerprints and artifacts so they must
   # rebuild, while leaving third-party deps cached so this stays cheap.
   \$t = Join-Path 'C:\Users\server\target' \$l
@@ -150,7 +164,7 @@ ENCODED=$(build_ps | python3 -c 'import sys,base64; print(base64.b64encode(sys.s
 ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=120 "$HOST" \
   "powershell -NoProfile -EncodedCommand $ENCODED" 2>&1 |
   tr -d '\r' | tee /tmp/refresh-out-$STAMP.txt |
-  grep -E '^[a-z-]+ lock=|^REFRESH-ERROR'
+  grep -E '^[a-z-]+ lock=|^REFRESH-ERROR|^pruned '
 
 # A refresh that fails must never look like one that worked. Verify every
 # requested lane actually reported, and that none reported an error.
