@@ -18,3 +18,31 @@ base64 selection prepends `data:;base64,` and tests the same processor, includin
 Infra's forgiving-base64 decoder. The MIME
 selections compare the MIME Sniffing §4 serialization, including failure.
 They do not run WPT's JavaScript harness or all Fetch/MIME WPT tests.
+
+## NET-20 cookie HTTP cases
+
+At the same pinned revision, the former `cookies/http-state/` parser corpus is
+no longer present. The standalone HTTP-header vectors are embedded in HTML.
+`cookies/source/` contains these unedited upstream files; `cookies/generate.mjs`
+extracts their `httpCookieTest` and `httpRedirectCookieTest` calls to
+`cookies/cases.rs` (Node is needed only when regenerating fixtures). Run them
+with `cargo run -p amazing-fetch --example cookies_wpt --locked` on win-001.
+The runner gives each case a fresh jar and uses the paths and redirect hosts
+from WPT's cookie helper, with a fixed 2026-09-23 clock.
+
+| Selection under WPT `cookies/` | Raw SHA-256 | HTTP cases |
+|---|---|---:|
+| `attributes/max-age.html` | `9a6fe4fd1edb9a8cd094a99b4a6fc191a31fbb698fcc25a324ceec99aa30` | 10 |
+| `attributes/expires.html` | `0c237f0247b1c1c59b74e832ece358b77c70173f3594dd4faa83351dda95a451` | 11 |
+| `attributes/path.html` | `68902e72051ee0e165af2c7ab31d3b989be373d6cc6ef2e08887b86923cb4c85` | 21 |
+| `attributes/invalid.html` | `d0f32bb78e706b51fc2e6fb7a3ddce2e8f1add43631c6aff25a324ceec99aa30` | 26 |
+| `name/name.html` | `d3fca366a5390de24634890d07f5dc74649c3cdb1c5e053352168b5cae87a2af` | 45 |
+| `size/name-and-value.html` | `6ee5feac2958578f871bf7762adeac0e4431a4456ec13d8f28e5f3b7c3d42262` | 11 |
+| `size/attributes.www.sub.html` | `618ab9bbfb1ea28db70f41de63b0f2c853cffb3d96180de775d84192d9ae6b4f` | 14 |
+| `attributes/resources/domain-child.sub.html` | `a83028d4c41bc6d1b81213d33208e651351ab62c425a320939e1b474648d4673` | 54 |
+
+Total: 192 HTTP-header cases. The `expires.html` document.cookie duplicates
+and tests needing browser navigation, scripting, or multiple origins remain
+outside this native selection. SameSite and cookie-prefix behavior are covered
+by the crate's focused storage tests; WPT's corresponding files require the
+browser harness and are not counted here.

@@ -1432,3 +1432,23 @@ max-age (default five seconds, capped at two hours); zero is not stored. A
 credentialed grant can satisfy an uncredentialed request, while the reverse
 cannot. The cache holds at most 256 entries and discards expired entries on
 lookup and insert. Redirect hops consult it using the new URL and headers.
+
+## NET-20 — native cookie vectors and page-sequence service reference
+
+Fixed base: `cb3064bc248d7ea363957517474e18c757b4a850`.
+
+The pinned WPT `cookies/` revision no longer carries a standalone
+`http-state/` fixture. Its HTTP Set-Cookie vectors live in eight HTML files.
+The checked-in extractor generates 192 native cases for Max-Age, Expires,
+Domain, Path, attribute/name parsing, and byte-size limits. The first full
+pass was 191/192: `Domain=.` was incorrectly normalized to an empty Domain
+attribute and accepted as host-only. The parser now preserves the invalid
+single dot. The resulting corpus passes 192/192; provenance and raw source
+hashes are in `crates/amazing-fetch/tests/wpt/PROVENANCE.md`.
+
+The `network_service_page` integration test is the driver's reference for a
+single `NetworkService` session: it fetches a document, reads its CSP header,
+loads a cookie-bearing script, blocks an image before dispatch, follows a
+Set-Cookie redirect, validates an ETag-cached response with 304, and opens a
+cookie-bearing WebSocket. The browser driver still supplies the page's
+`ClientContext`, schedules `step`, and interprets service events.
