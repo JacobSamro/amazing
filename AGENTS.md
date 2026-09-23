@@ -100,6 +100,29 @@ three sequential batches would. The wrapper holds one of three Mac-side slots
 (`mkdir`-atomic, dead holders reclaimed) and queues the rest. Crate-scoped `-p`
 iterations do not need a slot.
 
+**Iterate on Linux; gate on Windows.** Two Linux build hosts, `venus-001`
+(32 threads) and `venus-003` (16 threads), take the platform-independent load:
+crate and workspace nextest while iterating, full Test262, the WPT `dom/`
+harness and the net corpora. The whole workspace builds and passes there
+(1,756 tests in about 20 seconds). Use:
+
+```
+scripts/linux-run.sh <lane> -- 'cargo nextest run -p <crate> --locked'
+scripts/linux-run.sh <lane> -- 'cargo nextest run --workspace --locked && cargo test --workspace --locked --doc'
+```
+
+It rsyncs your worktree (uncommitted edits included) to `~/amazing/wt/<lane>`
+on the lane's host, sets your own `CARGO_TARGET_DIR`, `JOBS` and
+`TEST262_ROOT` (the pinned `3655e746` checkout, on venus-003), and queues in
+that host's own slot pool. `--ref <sha>` runs an exact commit; `--no-slot` skips
+the queue for small `-p` runs. Results stay on the host under `~/amazing/out`.
+
+What still needs win-001: **final gates** (the numbers in your report), render
+sweeps and reftests, anything font, GPU, GPUI shell or media-pipeline specific,
+and any Windows-only code path. Linux numbers are for iteration and are never
+reported as the gate. If a result differs between Linux and Windows, that is a
+bug to report, not a reason to pick one.
+
 **nextest does not run doctests.** This workspace has them (`amazing-js`,
 `amazing-html`), and nextest silently reports success without them, so a lane
 that switches and forgets the `--doc` line loses that coverage without any
@@ -366,9 +389,9 @@ widen the pane if the context budget matters for it.
   fresh agent resumes without re-deriving the work.
 - **Stalls are detected, not waited on.** A lane whose tmux pane is busy while
   `status.json` has gone 20+ minutes stale is reported by `doctor`.
-- **win-001 is a single 16-core box.** It sustains ~3 concurrent builds. Agents
-  iterate with `cargo test -p <their crate>` and run `--workspace` only before
-  opening a PR.
+- **win-001 is a single 16-core box.** It sustains ~3 concurrent builds, so it
+  is kept for final gates and Windows-only work. Agents iterate on the venus
+  hosts through `scripts/linux-run.sh` and send only final gates to win-001.
 - **One ticket, one PR, then stop.** This mirrors the existing per-phase rule:
   report measured results and wait, never auto-proceed.
 

@@ -27,7 +27,9 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # three slots. Resolve the primary checkout through git's common dir instead.
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")"
 [ -d "$MAIN/.agents" ] || MAIN="$REPO"
-DIR="$MAIN/.agents/.build-slots"
+# BUILD_POOL names a separate set of slots for another machine (linux-run.sh
+# uses one pool per venus host). The default pool is win-001's.
+DIR="$MAIN/.agents/.build-slots${BUILD_POOL:+-$BUILD_POOL}"
 LANE="${1:?usage: with-build-slot.sh <lane> -- <command...>}"
 shift
 [ "${1:-}" = "--" ] && shift
@@ -104,5 +106,5 @@ while [ -z "$held" ]; do
 done
 
 rm -f "$ticket"
-echo "with-build-slot[$LANE]: acquired $(basename "$held") after ${waited}s" >&2
-"$@"
+echo "with-build-slot[$LANE]: acquired ${BUILD_POOL:+$BUILD_POOL/}$(basename "$held") after ${waited}s" >&2
+BUILD_SLOT="${held##*-}" "$@"
