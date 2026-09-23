@@ -1,0 +1,15 @@
+{
+  "revision": "43c83d40bf07b2468cc5ec9c2aee5c722ded49ff",
+  "base": "2021707",
+  "files": {
+    "crates/amazing/src/cmd/js.rs": "3171a1a2e0140f77b7a4943033699dfd39a5bbe6a55261a049f36f2ac5307be5",
+    "crates/amazing/src/cmd/net.rs": "b6ad582b260a66d02711bd56e3fc3ab62fb745c90966714cce74d65de0900c1f",
+    "crates/amazing/src/cmd/parse.rs": "73e0e675ff79a767cb3d24c7c711d205e808cae142c3da3e8aed6ab0b2a1e0fc",
+    "crates/amazing/src/cmd/render.rs": "c9c942b1512f586ecacd0f89c74ab15baad09d2d5138bf64316c43fea30ac305",
+    "crates/amazing/src/cmd/wpt.rs": "abc85cd57ffdd38a1a24c36723de259f299df0c40d949c2eb6eac7ee9d5f8b0f",
+    "crates/amazing/src/document.rs": "d9d63ab131295d72a3574037e4dee403d44af8f4adf013b21e8ec4f2d28f68a6",
+    "crates/amazing/src/gui.rs": "323d64194dba90fcb41bfe85ce005101b1d95e8af0b18b4c9c23e557a4099a13",
+    "crates/amazing/tests/html2_driver.rs": "d0cc2e33e001f2d13a3b94e75671a52549a850ac56341974435f03e46529c1c9",
+    "tests/wpt-integrator-assist/collect-html2-driver.ps1": "4ed07891771b0a466d62e47c31463ae5d635cc010cc15ecf4d47ac1ac76764b7"
+  }
+}

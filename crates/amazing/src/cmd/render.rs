@@ -1,8 +1,8 @@
 //! Style, layout, raster, and audio commands.
 use std::{cell::RefCell, rc::Rc, process::ExitCode};
 use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text}, gui};
-use super::{parse::read_source, js::execute_inline_scripts};
-use crate::document::{DocumentKind, PageError, parse_document};
+use super::{parse::{read_bytes, read_source}, js::execute_inline_scripts};
+use crate::document::{DocumentKind, PageError, parse_document_bytes};
 /// Phase 2 demo artifact: compute styles for an HTML page.
 ///
 /// Stylesheets come from every `<style>` element in document order plus any
@@ -21,11 +21,11 @@ pub(crate) fn cmd_style(args: &[String]) -> ExitCode {
         }
     };
 
-    let html = match read_source(Some(html_path), "style") {
+    let html = match read_bytes(Some(html_path), "style") {
         Ok(s) => s,
         Err(code) => return code,
     };
-    let dom = match parse_document(&html, html_path, None) {
+    let dom = match parse_document_bytes(&html, html_path, None) {
         Ok(document) => document.dom,
         Err(error) => {
             eprintln!("amazing style: {error}");
@@ -98,11 +98,11 @@ pub(crate) fn cmd_layout(args: &[String]) -> ExitCode {
     };
     let width: f32 = args.get(1).and_then(|w| w.parse().ok()).unwrap_or(800.0);
 
-    let html = match read_source(Some(html_path), "layout") {
+    let html = match read_bytes(Some(html_path), "layout") {
         Ok(s) => s,
         Err(code) => return code,
     };
-    let dom = match parse_document(&html, html_path, None) {
+    let dom = match parse_document_bytes(&html, html_path, None) {
         Ok(document) => document.dom,
         Err(error) => {
             eprintln!("amazing layout: {error}");
@@ -147,7 +147,7 @@ pub(crate) fn cmd_render(args: &[String]) -> ExitCode {
     let out_path = args.get(1).map(String::as_str).unwrap_or("render.bmp");
     let width: f32 = args.get(2).and_then(|w| w.parse().ok()).unwrap_or(800.0);
 
-    let html = match read_source(Some(html_path), "render") {
+    let html = match read_bytes(Some(html_path), "render") {
         Ok(s) => s,
         Err(code) => return code,
     };
@@ -190,12 +190,12 @@ pub(crate) fn cmd_render(args: &[String]) -> ExitCode {
 
 pub(crate) fn render_surface(
     html_path: &str,
-    html: &str,
+    html: &[u8],
     width: f32,
     fixed_height: Option<u32>,
     extra_css: &str,
 ) -> Result<amazing_paint::Surface, PageError> {
-    let document = parse_document(html, html_path, None)?;
+    let document = parse_document_bytes(html, html_path, None)?;
     document.require_static_xml()?;
     let scripting = document.kind == DocumentKind::Html;
     let host = Rc::new(RefCell::new(BrowserDomHost {

@@ -1,0 +1,143 @@
+{
+    "stage":  "before",
+    "driver_revision":  "2021707",
+    "executable_sha256":  "5ced7c78b96e08cc6ac3b55fb60dbd849374bc80e4051e72604f309a476fb732",
+    "cases":  [
+                  {
+                      "id":  "bom-over-meta",
+                      "input_sha256":  "8423398efe64d1af305b09c2be953f974a87b9cd77161a4af5269d83f5c39755",
+                      "result":  {
+                                     "exit":  0,
+                                     "stdout_sha256":  "b7ddba11c9e05fc779c3c889cbd26919185485479373290d4e036e93bc2e899c",
+                                     "stderr_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stdout":  "#document\n  \u003chtml\u003e\n    \u003chead\u003e\n    \u003cbody\u003e\n      \"﻿\"\n      \u003cmeta charset=\"windows-1252\"\u003e\n      \u003cp\u003e\n        \"é\"\n",
+                                     "stderr":  ""
+                                 }
+                  },
+                  {
+                      "id":  "meta-windows1252",
+                      "input_sha256":  "3d33d410f97c10ea1e8faa7a05eb82b9c1832f1adc2bd22a6ca04a30ab8fe973",
+                      "result":  {
+                                     "exit":  0,
+                                     "stdout_sha256":  "af47973aeafb03d51cc9fc914da2cdf69c7a192515778226fee2409f97fa9c94",
+                                     "stderr_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stdout":  "#document\n  \u003chtml\u003e\n    \u003chead\u003e\n      \u003cmeta charset=\"windows-1252\"\u003e\n    \u003cbody\u003e\n      \u003cp\u003e\n        \"�x�\"\n",
+                                     "stderr":  ""
+                                 }
+                  },
+                  {
+                      "id":  "default-windows1252",
+                      "input_sha256":  "92240f157e6266948923311865a42f3424a1a4aec5e3ee076dd9633f2101a4ae",
+                      "result":  {
+                                     "exit":  0,
+                                     "stdout_sha256":  "f90092de8e83a3051db7a1217d86b30af1149de4b9c04604d229a98fc26c6f50",
+                                     "stderr_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stdout":  "#document\n  \u003chtml\u003e\n    \u003chead\u003e\n    \u003cbody\u003e\n      \u003cp\u003e\n        \"�\"\n",
+                                     "stderr":  ""
+                                 }
+                  },
+                  {
+                      "id":  "utf16le-bom",
+                      "input_sha256":  "2f4ee96641166f5e220366d8aa4e81e0ec4a4273cbd582c93c552c8263e6aa05",
+                      "result":  {
+                                     "exit":  0,
+                                     "stdout_sha256":  "94e826748cd40954717a9d9fe0f13793445f5ac8fc5a07617aa44f49d09eaa89",
+                                     "stderr_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stdout":  "#document\n  \u003chtml\u003e\n    \u003chead\u003e\n    \u003cbody\u003e\n      \"��\u003c�p�\u003e��\u003c�/�p�\u003e�\"\n",
+                                     "stderr":  ""
+                                 }
+                  },
+                  {
+                      "id":  "utf16be-bom",
+                      "input_sha256":  "e3dea3f5742b3031ce4e4237488163738b46adb3aa2340cf35769eb29cb7cf00",
+                      "result":  {
+                                     "exit":  0,
+                                     "stdout_sha256":  "b43568d116dbf6c9d8b7a98a2bff33fd56edb1b671f405d6511ebc0daea92c76",
+                                     "stderr_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stdout":  "#document\n  \u003chtml\u003e\n    \u003chead\u003e\n    \u003cbody\u003e\n      \"���\u003c�p�\u003e���\u003c�/�p�\u003e\"\n",
+                                     "stderr":  ""
+                                 }
+                  },
+                  {
+                      "id":  "malformed-utf8-replacement",
+                      "input_sha256":  "db385606d60e6308eaadaaf588e7fa73880cea17b1893dd3112a002638cb71cf",
+                      "result":  {
+                                     "exit":  0,
+                                     "stdout_sha256":  "907f5732e45b839ce3089ee572c0a6b81f1f4f250345467cfba114a09b0cc711",
+                                     "stderr_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stdout":  "#document\n  \u003chtml\u003e\n    \u003chead\u003e\n      \u003cmeta charset=\"utf-8\"\u003e\n    \u003cbody\u003e\n      \u003cp\u003e\n        \"A�B\"\n",
+                                     "stderr":  ""
+                                 }
+                  },
+                  {
+                      "id":  "xml-valid-case",
+                      "input_sha256":  "c3be3650d5693d8dd8b930b94e0848fc1db47645f3225691dc313a32de64da60",
+                      "result":  {
+                                     "exit":  0,
+                                     "stdout_sha256":  "e23b43b68b09eb2f55e0a44567fbc00148df2eefd2d190b7374437dad1cc9a71",
+                                     "stderr_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stdout":  "#document\n  \u003cRoot\u003e\n    \u003cItem\u003e\n",
+                                     "stderr":  ""
+                                 }
+                  },
+                  {
+                      "id":  "xml-malformed-fatal",
+                      "input_sha256":  "2d0f35c84f4bad3903b3c5f31bd1e5f2615bf4af2f7b2aa5e3267cd1582bdf20",
+                      "result":  {
+                                     "exit":  2,
+                                     "stdout_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stderr_sha256":  "f536f881aef35d5ae3e4421f39e58c3666531f528407b792f145e4866e29f0e9",
+                                     "stdout":  "",
+                                     "stderr":  "amazing parse: XML Malformed at byte 19: mismatched end tag\n"
+                                 }
+                  },
+                  {
+                      "id":  "xml-undecoded-byte",
+                      "input_sha256":  "f5af331e81d3500a4f326a53eeb2165c6c1431da1889db26103407dd108f528d",
+                      "result":  {
+                                     "exit":  0,
+                                     "stdout_sha256":  "3bf669f8c41b2c0e542836e5cdffe06d97be403e86e6fbb49316e8e3efe2fdef",
+                                     "stderr_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stdout":  "#document\n  \u003cRoot\u003e\n    \"�\"\n",
+                                     "stderr":  ""
+                                 }
+                  },
+                  {
+                      "id":  "http-transport-over-meta",
+                      "input_sha256":  "1fb205361a667c519bb3213d75237dfe12312560e960b8549bc341c4bc9b2409",
+                      "content_type":  "text/html; charset=\"windows-1252\"",
+                      "result":  {
+                                     "exit":  0,
+                                     "stdout_sha256":  "5ab60409fc821cc2ac80f1f0019124fe236788783ae994992ce3ac1ef68a5c46",
+                                     "stderr_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stdout":  "#document\n  \u003chtml\u003e\n    \u003chead\u003e\n      \u003cmeta charset=\"utf-8\"\u003e\n    \u003cbody\u003e\n      \u003cp\u003e\n        \"�\"\n",
+                                     "stderr":  ""
+                                 }
+                  },
+                  {
+                      "id":  "http-bom-over-transport",
+                      "input_sha256":  "c7db632f77fbbc680d8e6ea02ecca3595f21486780cdf7c155f542eebf1a9b91",
+                      "content_type":  "text/html; charset=windows-1252",
+                      "result":  {
+                                     "exit":  0,
+                                     "stdout_sha256":  "b8873f476277406c8e6306285e6814ba455ac8f4ae40c02b9c687c601373bfaa",
+                                     "stderr_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stdout":  "#document\n  \u003chtml\u003e\n    \u003chead\u003e\n    \u003cbody\u003e\n      \"﻿\"\n      \u003cp\u003e\n        \"é\"\n",
+                                     "stderr":  ""
+                                 }
+                  },
+                  {
+                      "id":  "http-xml-mode",
+                      "input_sha256":  "2d0f35c84f4bad3903b3c5f31bd1e5f2615bf4af2f7b2aa5e3267cd1582bdf20",
+                      "content_type":  "application/xhtml+xml; charset=windows-1252",
+                      "result":  {
+                                     "exit":  2,
+                                     "stdout_sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                     "stderr_sha256":  "abfa687a369ea718481249959543e6dafc7f403f2224e133d66bc77f1abfa100",
+                                     "stdout":  "",
+                                     "stderr":  "amazing fetch-parse: XML Malformed at byte 19: mismatched end tag\n"
+                                 }
+                  }
+              ],
+    "projection_sha256":  "fdb548e3fc3973ab31cda1eac2fccc1ef92ccb4a359869d35a866c6fc3df1461"
+}

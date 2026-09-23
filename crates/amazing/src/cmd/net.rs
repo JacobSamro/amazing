@@ -32,8 +32,8 @@ pub(crate) fn cmd_fetch(args: &[String]) -> ExitCode {
     }
 }
 
-/// Phase 5 integration artifact: fetch an HTTP response and feed its decoded
-/// body directly into the Phase 1 parser before dumping the resulting DOM.
+/// Phase 5 integration artifact: fetch an HTTP response and pass its bytes
+/// and transport charset to document-mode selection before parsing.
 pub(crate) fn cmd_fetch_parse(args: &[String]) -> ExitCode {
     let target = match args.first() {
         Some(target) if target.starts_with("http://") => target,
@@ -53,8 +53,8 @@ pub(crate) fn cmd_fetch_parse(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let source = response.text().unwrap_or_default();
-    match crate::document::parse_document(&source, &response.url, response.content_type()) {
+    let content_type = response.headers.get("content-type");
+    match crate::document::parse_document_bytes(&response.body, &response.url, content_type) {
         Ok(document) => {
             print!("{}", document.dom.dump(amazing_dom::NodeIdx(0)));
             ExitCode::SUCCESS

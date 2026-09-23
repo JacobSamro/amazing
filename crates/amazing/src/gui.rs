@@ -894,11 +894,15 @@ mod windows {
     fn render_page(input: &str, width: u32) -> Result<RenderedPage, String> {
         let response = amazing_net::fetch(input, &amazing_net::FetchOptions::default())
             .map_err(|error| error.to_string())?;
-        let html = response
-            .text()
-            .ok_or_else(|| "response was not decodable as text".to_owned())?;
+        // File responses synthesize a UTF-8 Content-Type. It is not transport
+        // metadata and must not override a local document's BOM or meta tag.
+        let transport = if response.url.starts_with("http://") || response.url.starts_with("https://") {
+            crate::document::transport_label(response.headers.get("content-type"))
+        } else {
+            None
+        };
         let host = Rc::new(RefCell::new(BrowserDomHost {
-            dom: amazing_html::parse(&html),
+            dom: amazing_html::parse_bytes(&response.body, transport),
         }));
         let scripts = {
             let host_ref = host.borrow();
@@ -1455,6 +1459,16 @@ mod windows {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn native_page_load_decodes_html_bytes_before_parsing() {
+            let path = std::env::temp_dir().join(format!("amazing-gui-html2-{}.html", std::process::id()));
+            std::fs::write(&path, b"<p>\x80</p>").unwrap();
+            let rendered = render_page(path.to_str().unwrap(), 320).expect("HTML page renders");
+            let tree = rendered.runtime.host.borrow().dom.dump(NodeIdx(0));
+            let _ = std::fs::remove_file(path);
+            assert!(tree.contains("\"€\""), "{tree}");
+        }
 
         #[test]
         fn gpu_frame_matches_gdi_scroll_and_channel_order() {

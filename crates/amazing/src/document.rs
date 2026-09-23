@@ -77,15 +77,34 @@ pub(crate) fn document_kind(location: &str, content_type: Option<&str>) -> Docum
     }
 }
 
-pub(crate) fn parse_document(
-    source: &str,
+/// The Content-Type media type chooses document mode; only its charset
+/// parameter is passed to the bounded HTML byte decoder.
+pub(crate) fn transport_label(content_type: Option<&str>) -> Option<&str> {
+    content_type?.split(';').skip(1).find_map(|parameter| {
+        let (name, value) = parameter.split_once('=')?;
+        if !name.trim().eq_ignore_ascii_case("charset") {
+            return None;
+        }
+        let value = value.trim();
+        let value = value.strip_prefix('"').and_then(|quoted| quoted.strip_suffix('"')).unwrap_or(value);
+        (!value.is_empty()).then_some(value)
+    })
+}
+
+pub(crate) fn parse_document_bytes(
+    bytes: &[u8],
     location: &str,
     content_type: Option<&str>,
 ) -> Result<ParsedDocument, PageError> {
     let kind = document_kind(location, content_type);
     let dom = match kind {
-        DocumentKind::Html => amazing_html::parse(source),
-        DocumentKind::Xml => amazing_html::parse_xml(source).map_err(PageError::Xml)?,
+        DocumentKind::Html => amazing_html::parse_bytes(bytes, transport_label(content_type)),
+        // XML currently accepts caller-decoded Unicode only. Retain the
+        // previous lossy UTF-8 boundary; HTML's four decoders are not XML.
+        DocumentKind::Xml => {
+            let source = String::from_utf8_lossy(bytes);
+            amazing_html::parse_xml(&source).map_err(PageError::Xml)?
+        }
     };
     Ok(ParsedDocument { dom, kind })
 }
@@ -126,5 +145,13 @@ mod tests {
         }
         assert_eq!(document_kind("https://example.test/page.xhtml", Some("text/html")), DocumentKind::Html);
         assert_eq!(document_kind("page.html", None), DocumentKind::Html);
+    }
+
+    #[test]
+    fn transport_charset_reads_raw_content_type_parameters() {
+        assert_eq!(transport_label(Some("text/html; charset=windows-1252")), Some("windows-1252"));
+        assert_eq!(transport_label(Some("TEXT/HTML; boundary=x; CHARSET=\"utf-16be\"")), Some("utf-16be"));
+        assert_eq!(transport_label(Some("text/html")), None);
+        assert_eq!(transport_label(Some("text/html; charset=")), None);
     }
 }

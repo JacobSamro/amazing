@@ -1,0 +1,39 @@
+{
+  "revision": "43c83d40bf07b2468cc5ec9c2aee5c722ded49ff",
+  "fixed_base": "2021707",
+  "server_tree": "C:/Users/server/src/wt/integrator-assist",
+  "cargo_target_dir": "C:/Users/server/target/integrator-assist",
+  "shared_slot_wrapper": "/Users/jMac/Projects/OpenSource/amazing/scripts/with-build-slot.sh integrator-assist",
+  "nextest": {
+    "command": "cargo nextest run --workspace --locked",
+    "exit": 0,
+    "passed": 1322,
+    "skipped": 3,
+    "failed": 0,
+    "log_sha256": "c709aa64218cb7f8aaed504a43f7e5f947e5052bbeda4ab88a3bc9a6154e031f",
+    "server_log": "target/diagnostics/ia-html2/workspace-nextest.log"
+  },
+  "doctests": {
+    "command": "cargo test --workspace --locked --doc",
+    "exit": 0,
+    "passed": 2,
+    "failed": 0,
+    "log_sha256": "220cb96ad924be19826eecb28df976e3a49822a584ad28fb5e877797c283becb",
+    "server_log": "target/diagnostics/ia-html2/workspace-doc.log"
+  },
+  "scoped_driver": {
+    "command": "cargo nextest run -p amazing --locked",
+    "passed": 112,
+    "skipped": 3,
+    "failed": 0,
+    "from_checkpoint": true
+  },
+  "scoped_doctests": {
+    "command": "cargo test -p amazing --locked --doc",
+    "exit": 101,
+    "result": "no library targets found in package amazing",
+    "from_checkpoint": true
+  },
+  "source_verification": "944 of 944 HEAD source paths matched win-001 after workspace gates",
+  "refresh_hold_released": true
+}

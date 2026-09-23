@@ -1,6 +1,6 @@
 //! Fixed-viewport rendering for WPT reftests.
 use std::process::ExitCode;
-use super::{parse::read_source, render::render_surface};
+use super::{parse::read_bytes, render::render_surface};
 /// Deterministic rendering primitive for WPT reftests. Unlike `render`, the
 /// output surface is always exactly the requested viewport and only the PPM
 /// artifact is written. Test orchestration and comparison live outside the
@@ -33,7 +33,7 @@ pub(crate) fn cmd_render_wpt(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let html = match read_source(Some(html_path), "render-wpt") {
+    let html = match read_bytes(Some(html_path), "render-wpt") {
         Ok(source) => source,
         Err(code) => return code,
     };
