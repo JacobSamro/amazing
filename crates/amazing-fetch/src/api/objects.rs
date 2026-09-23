@@ -1,7 +1,7 @@
 use super::{usv_string, ApiBody, ApiError, ApiHeaders, BodyInput, HeaderGuard};
 use crate::{
     check_preflight, filter_response, preflight, redirect_location, Body, CredentialsMode,
-    FetchError, HttpUrl, NetworkOrCache, Origin, RedirectAction, RedirectMode, ReferrerPolicy,
+    Destination, FetchError, HttpUrl, NetworkOrCache, Origin, RedirectAction, RedirectMode, ReferrerPolicy,
     Request, RequestMode, ResponseType, Site,
 };
 
@@ -81,6 +81,7 @@ pub struct ApiRequest {
     pub headers: ApiHeaders,
     pub body: ApiBody,
     pub mode: RequestMode,
+    pub destination: Destination,
     pub credentials: CredentialsMode,
     pub cache: ApiCache,
     pub redirect: RedirectMode,
@@ -91,11 +92,60 @@ pub struct ApiRequest {
     pub keepalive: bool,
     pub priority: ApiPriority,
     pub signal_aborted: bool,
+    pub reload_or_history: bool,
+    pub client_reserved_id: Option<u64>,
     stream_body: bool,
     force_preflight: bool,
     origin: Origin,
 }
+/// Trusted browser navigation inputs. This constructor is outside WebIDL;
+/// JavaScript `new Request(..., { mode: "navigate" })` remains invalid.
+pub struct NavigationRequestInit {
+    pub method: String,
+    pub body: Vec<u8>,
+    pub referrer: String,
+    pub referrer_policy: String,
+    pub initiator_origin: Origin,
+    pub reload_or_history: bool,
+    pub client_reserved_id: Option<u64>,
+}
 impl ApiRequest {
+    pub fn navigation(target: HttpUrl, init: NavigationRequestInit) -> Result<Self, ApiError> {
+        let units: Vec<u16> = target.serialize().encode_utf16().collect();
+        let body = if init.body.is_empty() && matches!(init.method.as_str(), "GET" | "HEAD") {
+            None
+        } else {
+            Some(Some(BodyInput::Bytes(init.body)))
+        };
+        let mut request = Self::new(
+            ApiRequestInput::Url(&units),
+            ApiRequestInit {
+                method: Some(init.method.encode_utf16().collect()),
+                body,
+                referrer: Some(init.referrer.encode_utf16().collect()),
+                referrer_policy: Some(init.referrer_policy),
+                ..ApiRequestInit::default()
+            },
+            &target,
+            init.initiator_origin,
+        )?;
+        request.mode = RequestMode::Navigate;
+        request.destination = Destination::Document;
+        request.credentials = CredentialsMode::Include;
+        request.redirect = RedirectMode::Manual;
+        request.reload_or_history = init.reload_or_history;
+        request.client_reserved_id = init.client_reserved_id;
+        Ok(request)
+    }
+    /// Bound the response body before dispatch. Zero permits an empty body.
+    pub fn set_response_body_limit(&mut self, bytes: u64) -> Result<(), FetchError> {
+        let limit = usize::try_from(bytes).map_err(|_| FetchError::ResponseTooLarge)?;
+        if limit > super::MAX_API_BODY_BYTES {
+            return Err(FetchError::ResponseTooLarge);
+        }
+        self.response_body_limit = Some(limit);
+        Ok(())
+    }
     /// `base` and `origin` come from the embedding's relevant settings object.
     pub fn new(
         input: ApiRequestInput<'_>,
@@ -121,6 +171,7 @@ impl ApiRequest {
                     headers: ApiHeaders::new(HeaderGuard::Request),
                     body: ApiBody::empty(),
                     mode: RequestMode::Cors,
+                    destination: Destination::Empty,
                     credentials: CredentialsMode::SameOrigin,
                     cache: ApiCache::Default,
                     redirect: RedirectMode::Follow,
@@ -131,6 +182,8 @@ impl ApiRequest {
                     keepalive: false,
                     priority: ApiPriority::Auto,
                     signal_aborted: false,
+                    reload_or_history: false,
+                    client_reserved_id: None,
                     stream_body: false,
                     force_preflight: false,
                     origin: origin.clone(),
@@ -146,6 +199,7 @@ impl ApiRequest {
                     headers: other.headers.clone(),
                     body: other.body.clone_body()?,
                     mode: other.mode,
+                    destination: other.destination,
                     credentials: other.credentials,
                     cache: other.cache,
                     redirect: other.redirect,
@@ -156,6 +210,8 @@ impl ApiRequest {
                     keepalive: other.keepalive,
                     priority: other.priority,
                     signal_aborted: other.signal_aborted,
+                    reload_or_history: other.reload_or_history,
+                    client_reserved_id: other.client_reserved_id,
                     stream_body: other.stream_body,
                     force_preflight: other.force_preflight,
                     origin: other.origin.clone(),
@@ -321,6 +377,7 @@ impl ApiRequest {
             headers: self.headers.clone(),
             body: self.body.clone_body()?,
             mode: self.mode,
+            destination: self.destination,
             credentials: self.credentials,
             cache: self.cache,
             redirect: self.redirect,
@@ -331,6 +388,8 @@ impl ApiRequest {
             keepalive: self.keepalive,
             priority: self.priority,
             signal_aborted: self.signal_aborted,
+            reload_or_history: self.reload_or_history,
+            client_reserved_id: self.client_reserved_id,
             stream_body: self.stream_body,
             force_preflight: self.force_preflight,
             origin: self.origin.clone(),
@@ -339,6 +398,8 @@ impl ApiRequest {
     pub(crate) fn policy_request(&self) -> Result<Request, ApiError> {
         let mut out = Request::new(self.url.clone(), self.origin.clone());
         out.mode = self.mode;
+        out.security.destination = self.destination;
+        out.security.top_level_navigation = self.mode == RequestMode::Navigate;
         out.credentials = self.credentials;
         out.redirect = self.redirect;
         out.referrer_policy = self.referrer_policy;

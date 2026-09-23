@@ -9,7 +9,7 @@ pub struct Origin(OriginKind);
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum OriginKind {
     Tuple(TupleOrigin),
-    Opaque(u64),
+    Opaque(u128),
 }
 impl Origin {
     pub fn opaque() -> Self {
@@ -17,7 +17,18 @@ impl Origin {
         let id = NEXT
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
             .expect("opaque origin identity exhausted");
+        Self(OriginKind::Opaque((1_u128 << 127) | u128::from(id)))
+    }
+    /// Restore an opaque origin whose identity was minted by the browser.
+    /// The same ID denotes the same origin across process boundaries.
+    pub fn opaque_with_id(id: u128) -> Self {
         Self(OriginKind::Opaque(id))
+    }
+    pub fn opaque_id(&self) -> Option<u128> {
+        match &self.0 {
+            OriginKind::Opaque(id) => Some(*id),
+            OriginKind::Tuple(_) => None,
+        }
     }
     pub fn serialize(&self) -> String {
         match &self.0 {
@@ -61,7 +72,7 @@ pub trait RegistrableDomain {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Site {
     Tuple { scheme: String, domain: String },
-    Opaque(u64),
+    Opaque(u128),
 }
 
 /// Validated Fetch URL for HTTP(S) and data:. Syntax, canonicalization and
