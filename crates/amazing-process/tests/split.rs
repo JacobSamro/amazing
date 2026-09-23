@@ -207,8 +207,6 @@ fn shared_frame_survives_renderer_crash_and_releases_handles() {
     #[cfg(target_os = "linux")]
     let before = std::fs::read_dir("/proc/self/fd").unwrap().count();
     let mut network = spawn(Role::Network);
-    let mut renderer = spawn(Role::Renderer);
-    let (proxy, notifications) = connect(&renderer, &network);
     let request = Navigate {
         url: "http://example.test/crash".into(),
         html_bytes: ByteBuf(b"<p>crash phase</p>".to_vec()),
@@ -217,36 +215,41 @@ fn shared_frame_survives_renderer_crash_and_releases_handles() {
             height: 128,
         },
     };
-    let ready = proxy.navigate_shared(request.clone()).unwrap();
-    assert_eq!(
-        notifications
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .sequence,
-        ready.generation
-    );
-    let view = renderer.receive_frame(&ready).unwrap();
-    renderer.kill().unwrap();
-    assert_eq!(view.bytes().len(), ready.byte_len as usize);
-    drop(view);
-    drop(proxy);
-    drop(notifications);
-    drop(renderer);
-    // An unread published handle is also reclaimed when the browser drops its channel.
-    let mut renderer = spawn(Role::Renderer);
-    let (proxy, notifications) = connect(&renderer, &network);
-    let ready = proxy.navigate_shared(request).unwrap();
-    assert_eq!(
-        notifications
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .sequence,
-        ready.generation
-    );
-    renderer.kill().unwrap();
-    drop(proxy);
-    drop(notifications);
-    drop(renderer);
+    for phase in ["spawned", "metadata", "acquired", "mapped"] {
+        let mut renderer = spawn(Role::Renderer);
+        let (proxy, notifications) = connect(&renderer, &network);
+        let mut view = None;
+        if phase != "spawned" {
+            let ready = proxy.navigate_shared(request.clone()).unwrap();
+            assert_eq!(
+                notifications
+                    .recv_timeout(Duration::from_secs(2))
+                    .unwrap()
+                    .sequence,
+                ready.generation
+            );
+            if phase == "acquired" {
+                assert!(matches!(
+                    proxy
+                        .acquire_frame(AcquireFrame {
+                            generation: ready.generation
+                        })
+                        .unwrap(),
+                    AcquireResult::Transferred(())
+                ));
+            } else if phase == "mapped" {
+                view = Some(renderer.receive_frame(&ready).unwrap());
+            }
+        }
+        renderer.kill().unwrap();
+        if let Some(view) = &view {
+            assert_eq!(view.bytes().len(), 128 * 128 * 4);
+        }
+        drop(view);
+        drop(proxy);
+        drop(notifications);
+        drop(renderer);
+    }
     network.kill().unwrap();
     drop(network);
     #[cfg(target_os = "linux")]
