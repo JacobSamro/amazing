@@ -54,7 +54,14 @@ pub(crate) fn cmd_fetch_parse(args: &[String]) -> ExitCode {
         }
     };
     let source = response.text().unwrap_or_default();
-    let dom = amazing_html::parse(&source);
-    print!("{}", dom.dump(amazing_dom::NodeIdx(0)));
-    ExitCode::SUCCESS
+    match crate::document::parse_document(&source, &response.url, response.content_type()) {
+        Ok(document) => {
+            print!("{}", document.dom.dump(amazing_dom::NodeIdx(0)));
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("amazing fetch-parse: {error}");
+            error.exit_code()
+        }
+    }
 }

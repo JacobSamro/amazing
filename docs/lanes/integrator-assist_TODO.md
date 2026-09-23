@@ -165,6 +165,52 @@ REVIEW classification `b5d1b99`. This grants no XML shell dispatch. IA-XML is
 explicitly activated as the next scoped work; IA-1 is checkpointed before that
 implementation begins.
 
+## IA-XML — driver document dispatch
+
+The driver selects XML parsing for local `.xml`, `.xht`, `.xhtml`, and `.svg`
+files and for HTTP `application/xml`, `text/xml`, or `+xml` MIME types. An HTTP
+`text/html` response remains HTML regardless of its URL suffix. XML parser
+errors are fatal and never fall back to HTML. `XmlErrorKind::Unsupported`
+propagates separately from malformed XML and ordinary rendering/JS failures:
+exit 3 maps to `unsupported`, exit 2 to `error`, and exit 1 to `crash` in the
+render runner. Static XML can render, but XML script elements and inline event
+handlers are refused as Unsupported, and `domrun` refuses XML scripting. The
+runner now renders XHTML tests and references instead of excluding them by
+extension; when a reference fails, it retains the actual image hash.
+
+The frozen BEFORE is driver `aa9cb9be3ca79425bb979519c75b442646b37028`,
+executable SHA-256 `28b53f5950a99b972854ba3095476a77b5b7a91443ce40486a1d4d709a248ec1`.
+At pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, both 72-case
+cascade runs had **35 pass / 24 mismatch / 0 error / 0 timeout / 13 unsupported /
+0 crash**, projection SHA-256 `643e965ccd8783a3c1c94f395a5812c286286171ac4b0ac02de0dbe5e71d1f86`.
+This is the old revision's baseline, not a current-head control.
+
+After rebase onto `ffb143b`, driver revision
+`8a7b5c453d45629c94300add25988488601db2fe` built executable SHA-256
+`950964fe1de5296b5ba9b1a730470fe6cad0d9f58a7bf53a95da5af43c443055`.
+Both current 72-case runs had **38 pass / 32 mismatch / 0 error / 0 timeout /
+2 unsupported / 0 crash**, stable result/pixel/detail projection SHA-256
+`8aca2064b4c6309679c4a4b1508a163c4c3be720dbc597a2eb6f59c42d7a5c6f`.
+Of the 13 former unsupported cases, 3 became pass and 8 became mismatch. The
+other 2 remain Unsupported because they reference entities requiring external
+DTDs; they receive zero pass credit. All 61 cases with unchanged classifications
+also retained their recorded pixel hashes. These are overlapping selection
+results, not a browser-wide WPT pass rate. No shell XML dispatch is claimed.
+
+The 7 CLI integration tests exercise static XML pixels, case/structure,
+fatal malformed XML, external-DTD Unsupported, refusal of XML scripting,
+HTML script behavior, and HTTP MIME selection. Scoped driver nextest passed
+107/107 with 3 skipped on the refreshed Windows tree; the binary package has
+no library target for doctests. All 231 recorded source/input paths matched
+Windows hashes after own-tree refresh and re-sync. The synthetic four-case
+runner fixture classified 2 `error`, 1 `unsupported`, and 1 `crash`, with zero
+passes and a retained actual pixel hash when the XML reference failed. It
+earns zero WPT credit. Final win-001 workspace nextest passed **1270/1270**
+with **3 skipped** across 43 binaries; separate doctests passed **2/2** with
+0 failures across 19 summaries. The gate used the primary shared build slot
+and stayed under `REFRESH-HOLD` until both commands finished. Counts and
+artifact identity are recorded in the ticket report and `xml-evidence/`.
+
 ## IA-2 proposal — shell/driver URL migration
 
 Follow the caller inventory and persisted-key concerns in
@@ -178,3 +224,41 @@ Gate the migration with relative-resource/navigation fixtures, canonical-origin
 and default-port cases, persistence round trips, the pinned URL selection, and
 actual Windows shell screenshot proof. Keep it a separate ticket: URL behavior
 must not be folded into this command extraction.
+
+## DOM-5 driver adoption — mapping checkpoint
+
+Authorized alongside IA-XML, but checkpointed separately. Inspected the actual
+`BindingHost`, `InterfaceDefinition`, `Member`, `Operation`, `install/INTERFACES`
+and `invoke` seam at DOM checkpoint `2b917f8` (including `afa9ad5`), read-only in
+the DOM lane. The runtime owns the `BindingHost` implementation; the driver must
+not create a parallel binding trait or wrapper cache.
+
+Driver changes required once the runtime adapter is supplied:
+
+- `dom_host.rs`: lend mutable access to `BrowserDomHost.dom` through the runtime's
+  actual arena hook. This must be the same arena parsed for the page, not a cloned
+  DOM. Current `amazing_js::DomHost` exposes individual operations but has no
+  arena-access callback; that contract belongs to the runtime lane.
+- `cmd/wpt_harness.rs::execute`: install the runtime's standard interfaces after
+  attaching the same host and before upstream testharness/page scripts execute.
+  `cmd/js.rs` installs that host in inline-script and run-dom paths; native-driver
+  GUI is another existing consumer of the shared host. No XML shell dispatch is
+  authorized by this adoption map.
+- Keep node brands private. Runtime factories, query results and new binding
+  operations must share its canonical wrapper identity. `childNodes` must be
+  live and same-object. UTF-16 conversion/coercion stays outside DOM borrows;
+  constructors, methods and accessors forward the supplied `Operation`.
+
+Requested dependency merge through co-integrator, without blocking acceptance
+of native-only lower-crate evidence on later driver WPT installation. The current
+runtime source has no `BindingHost` adapter/installer. The existing driver →
+`amazing-js` dependency may suffice if the runtime exposes installation. If it
+requires direct binding types, the exact additional edge is driver `amazing` →
+`amazing-bindings`; manifest/lock updates are routed, not made speculatively.
+
+Validation after dependencies land must show an API is visible in actual driver
+WPT execution, mutations reach the parsed arena, factory/query/new-interface
+node identity agrees, and a retained `childNodes` object updates after mutation.
+Use a newly installed API (for example Text construction or append) and report
+measured before/after separately from native DOM/binding counts. This map earns
+no WPT credit and does not suspend the active no-fallback/no-scripting XML work.

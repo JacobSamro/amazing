@@ -165,12 +165,24 @@ pub(crate) fn cmd_domrun(args: &[String]) -> ExitCode {
         Ok(source) => source,
         Err(code) => return code,
     };
+    let document = match crate::document::parse_document(&html, html_path, None) {
+        Ok(document) => document,
+        Err(error) => {
+            eprintln!("amazing domrun: {error}");
+            return error.exit_code();
+        }
+    };
+    if document.kind == crate::document::DocumentKind::Xml {
+        let error = crate::document::PageError::Unsupported("XML DOM scripting is not implemented");
+        eprintln!("amazing domrun: {error}");
+        return error.exit_code();
+    }
     let script = match read_source(Some(script_path), "domrun script") {
         Ok(source) => source,
         Err(code) => return code,
     };
     let host = Rc::new(RefCell::new(BrowserDomHost {
-        dom: amazing_html::parse(&html),
+        dom: document.dom,
     }));
     let mut js = amazing_js::Interpreter::new();
     js.set_dom_host(host.clone());

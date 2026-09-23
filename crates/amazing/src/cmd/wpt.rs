@@ -41,7 +41,7 @@ pub(crate) fn cmd_render_wpt(args: &[String]) -> ExitCode {
         Ok(surface) => surface,
         Err(error) => {
             eprintln!("amazing render-wpt: {error}");
-            return ExitCode::FAILURE;
+            return error.exit_code();
         }
     };
     if let Err(error) = surface.save_ppm(out_path) {

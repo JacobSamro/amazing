@@ -1,0 +1,11 @@
+﻿{
+    "cases":  4,
+    "pass":  0,
+    "error":  2,
+    "unsupported":  1,
+    "crash":  1,
+    "reference_error_actual_sha256":  "500bdd43c2c7ccb08f2aafa20f856908facffc8f26179d95fcacecbf37685da0",
+    "executable_sha256":  "950964fe1de5296b5ba9b1a730470fe6cad0d9f58a7bf53a95da5af43c443055",
+    "report":  "C:\\Users\\server\\src\\wt\\integrator-assist\\target\\diagnostics\\ia-xml\\protocol\\results\\run-20260923T040046423Z-335808\\report.json",
+    "wpt_credit":  0
+}
