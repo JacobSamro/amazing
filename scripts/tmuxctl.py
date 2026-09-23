@@ -299,6 +299,11 @@ LANE_GRANTS.setdefault("dom-bindings", []).extend(["crates/amazing-js/src/interp
 LANE_GRANTS.setdefault("storage", []).extend(["crates/amazing-bindings/src/storage_interfaces.rs", "crates/amazing-bindings/src/lib.rs", "crates/amazing/src/runtime_binding_host.rs", "crates/amazing/Cargo.toml"])
 # NET-26: .htm and .window.js support in the installed WPT runner (additive).
 LANE_GRANTS.setdefault("net", []).append("crates/amazing/src/cmd/wpt_harness.rs")
+# COMP-10: compositor owns the canvas JS surface (own bindings file, one mod line,
+# ADDED LINES ONLY in runtime_binding_host.rs). dom-bindings: legacy element
+# extension fix for disconnected elements in runtime_binding_host.rs.
+LANE_GRANTS.setdefault("compositor", []).extend(["crates/amazing-bindings/src/canvas_interfaces.rs", "crates/amazing-bindings/src/lib.rs", "crates/amazing/src/runtime_binding_host.rs"])
+LANE_GRANTS["dom-bindings"].append("crates/amazing/src/runtime_binding_host.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
