@@ -42,8 +42,12 @@ pub(crate) fn cmd_fetch_parse(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let response = match amazing_net::fetch(target, &amazing_net::FetchOptions::default()) {
-        Ok(response) if response.is_success() => response,
+    let response = match amazing_net::fetch_stream(
+        target,
+        &amazing_net::FetchOptions::default(),
+        amazing_net::StreamOptions::default(),
+    ) {
+        Ok(response) if (200..300).contains(&response.status) => response,
         Ok(response) => {
             eprintln!("amazing fetch-parse: HTTP status {}", response.status);
             return ExitCode::FAILURE;
@@ -53,9 +57,8 @@ pub(crate) fn cmd_fetch_parse(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let content_type = response.headers.get("content-type");
-    match crate::document::parse_document_bytes(&response.body, &response.url, content_type) {
-        Ok(document) => {
+    match crate::document::parse_streaming_document(response) {
+        Ok((document, _metrics)) => {
             print!("{}", document.dom.dump(amazing_dom::NodeIdx(0)));
             ExitCode::SUCCESS
         }

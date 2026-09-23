@@ -1,6 +1,7 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::process::Command;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 #[test]
@@ -20,7 +21,7 @@ fn fetched_http_body_is_parsed_into_dom() {
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                     assert!(Instant::now() < deadline, "browser request timed out");
                     std::thread::sleep(Duration::from_millis(10));
-                },
+                }
                 Err(error) => panic!("accept browser request: {error}"),
             }
         };
@@ -55,4 +56,29 @@ fn fetched_http_body_is_parsed_into_dom() {
     assert!(output.contains("\"fetched\""), "{output}");
     assert!(output.contains("<div>"), "{output}");
     assert!(output.contains("\"parsed\""), "{output}");
+}
+
+#[test]
+fn http_error_is_rejected_from_headers_without_reading_body() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let (done_tx, done_rx) = mpsc::channel();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = [0; 1024];
+        stream.read(&mut request).unwrap();
+        stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nContent-Length: 100000\r\nConnection: close\r\n\r\n").unwrap();
+        done_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("driver waited for the 404 body");
+    });
+    let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
+        .args(["fetch-parse", &format!("http://{address}/missing")])
+        .output()
+        .unwrap();
+    done_tx.send(()).unwrap();
+    server.join().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("HTTP status 404"));
 }

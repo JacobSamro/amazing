@@ -353,3 +353,42 @@ preflight. No GPUI or lower-crate source was changed.
    encoding boundaries under HTML-2's four-decoder limit, without a full-body
    buffer or lower-crate edits. Full queued brief is in
    `.agents/co-integrator/ia-streaming-queued-20260923.md`.
+
+## IA-STREAM — pull fetch bodies into the driver parser
+
+The driver uses NET-9's `fetch_stream` for `fetch-parse` and native GUI page
+loading. After response headers choose document mode and an HTTP(S) transport
+charset, each HTML `next_chunk` result goes directly to HTML-4's
+`IncrementalByteParser::push_chunk`; `finish` is called once at EOF. Local file
+Content-Type is synthetic and supplies no charset. XML keeps the existing
+whole-source `parse_xml` path with fatal malformed/Unsupported errors and no
+HTML fallback. `fetch-parse` checks non-2xx status from the head before reading
+its body. The driver holds one HTML chunk at a time rather than a full HTML
+response. Scripts still run after EOF, and paint is not progressive.
+
+Implementation `2fb0208adb7cd889798f2a8614b89f6c3abe82db` is on fixed
+green dev base `133db582307bf14fd9cd8ece92a47c9620869f0d`. The delayed
+HTTP fixture compares five exact DOM dumps and HTML modes with the equivalent
+buffered parser. It withholds the rest of each body until the driver has pushed
+the first part; BOM, meta, UTF-8 scalar and UTF-16 boundaries are split. The
+100,007-byte case delivered 14 chunks with an observed 8,192-byte peak driver
+byte buffer. Smaller case byte/chunk/peak counts are recorded in
+`tests/wpt-integrator-assist/stream-evidence/gate-summary.json`; small chunk
+counts can vary with TCP coalescing. XML valid DOM/mode and malformed error
+text/exit match the buffered path. An incomplete HTTP 404 body is rejected
+from headers without another network read. Existing XML dispatch and GUI file
+decoding tests pass. These are controlled fixtures, not WPT credit.
+
+On win-001, the refreshed and re-synced lane tree matched **719/719** tracked
+Cargo/source/script/non-evidence test input SHA-256 hashes before and after the
+gate, with zero missing or mismatched paths. Scoped nextest passed **125/125**
+with 3 skipped; the binary package has no library doctest target. Under the
+shared build slot, workspace nextest passed **1439/1439** with 3 skipped and
+separate workspace doctests passed **2/2** across 19 summaries. Commands, log
+hashes, source manifest and fixture measurements are in
+`tests/wpt-integrator-assist/stream-evidence/`. No net, HTML, shell, root
+manifest or lockfile sources were edited. The four-decoder HTML-2 limit remains.
+
+RuntimeBindingHost is the next separate driver ticket after both DOM-7 and
+JSRT-3 land with the final accepted trait text. It was not started in
+IA-STREAM.
