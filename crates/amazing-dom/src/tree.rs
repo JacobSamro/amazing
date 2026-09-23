@@ -14,6 +14,8 @@ pub enum DomError {
     WrongDocumentError,
     InvalidCharacterError,
     NamespaceError,
+    InUseAttributeError,
+    SyntaxError,
 }
 impl std::fmt::Display for DomError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -176,7 +178,7 @@ impl Dom {
             }
         }
         let kind = &self.get(node).kind;
-        if matches!(kind, NodeKind::Document) {
+        if matches!(kind, NodeKind::Document | NodeKind::Attr { .. }) {
             return Err(DomError::HierarchyRequestError);
         }
         if !matches!(self.get(parent).kind, NodeKind::Document) {
@@ -186,7 +188,7 @@ impl Dom {
                 Ok(())
             };
         }
-        if matches!(kind, NodeKind::Text { .. }) {
+        if matches!(kind, NodeKind::Text { .. } | NodeKind::CDATASection { .. }) {
             return Err(DomError::HierarchyRequestError);
         }
         if matches!(
@@ -203,7 +205,7 @@ impl Dom {
             if elements > 1
                 || self
                     .children(node)
-                    .any(|n| matches!(self.get(n).kind, NodeKind::Text { .. }))
+                    .any(|n| matches!(self.get(n).kind, NodeKind::Text { .. } | NodeKind::CDATASection { .. }))
             {
                 return Err(DomError::HierarchyRequestError);
             }

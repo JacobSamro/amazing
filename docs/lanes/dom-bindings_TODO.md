@@ -1111,3 +1111,110 @@ for repeated true-to-true mutations; admission acknowledgment only after
 success; M rearming after its checkpoint; and outbox draining after both a thrown
 callback and a thrown script. The driver must use the same sequence at *every*
 interpreter entry, including error exits.
+
+### DOM-7 first-installation coverage audit (BindingHost extension accepted)
+
+Normative source pinned to WHATWG DOM Standard `dom.bs` at commit
+[`a2331a45360129e8645ef7e0a04740241b6e3726`](https://github.com/whatwg/dom/blob/a2331a45360129e8645ef7e0a04740241b6e3726/dom.bs),
+SHA-256 `d98c6542f35f2aa976cfbf037f8cd1f556c09a704700f19a0a163100935098ff`.
+This is an IDL-to-native/binding inventory on fixed engine base `c8c3c21`,
+not a conformance or WPT result. "Implemented" means the existing binding
+operation is present, even though the product driver has not installed it.
+"Needs host" means the native concept exists but the accepted `BindingHost`
+contract cannot privately brand/wrap or invoke the required JS value.
+"Deferred native" means the named standard behavior has no matching native
+model yet. The DOM-7 brief requires a stop and a question when a host primitive
+is missing; the request is in `.agents/dom-bindings/questions.md`.
+
+| Interface | Members (IDL names) | State | First missing piece |
+|---|---|---|---|
+| Document | `createTextNode`, `createComment`, `createDocumentFragment` | Implemented | Existing Node wrappers; no driver installation yet. |
+| Document | `createCDATASection`, `createAttribute`, `createAttributeNS`, `createProcessingInstruction` | Implemented | Native factories and private CDATASection/Attr wrappers; driver installation pending. |
+| Document | `createRange` | Implemented | Generic private Range wrapper and native dispatch; driver installation pending. |
+| Document | `createNodeIterator`, `createTreeWalker` | Implemented | Callback conversion and invocation release the DOM borrow; driver installation pending. |
+| Document | `createEvent` | Implemented | Event registry now belongs to Dom; driver installation pending. |
+| Document | `implementation` `[SameObject]` | Implemented | Associated document key supplies canonical private wrapper; driver installation pending. |
+| DOMImplementation | `createDocumentType`, `createDocument`, `createHTMLDocument`, `hasFeature` | Implemented | Native factory dispatch and mock proof; document metadata remains incomplete. |
+| CDATASection : Text | inherited Text/CharacterData/Node members | Implemented | Native node kind and factory; driver installation pending. |
+| Attr : Node | `namespaceURI`, `prefix`, `localName`, `name`, `value`, `ownerElement`, `specified` | Implemented | Attached/detached Attr identity and UTF-16 value sidecar; driver installation pending. |
+| NamedNodeMap | `length`, `item`, `getNamedItem`, `getNamedItemNS`, `setNamedItem`, `setNamedItemNS`, `removeNamedItem`, `removeNamedItemNS` | Implemented | Live map through element attributes; driver installation pending. |
+| NodeList | `length`, `item` | Implemented | Live `childNodes` and immutable mutation snapshot wrappers; shared private identity. |
+| NodeList | indexed getter, iterable | Needs installer | MemberKind currently has no indexed/iterable descriptor; integrator installer must supply it. |
+| HTMLCollection | `length`, `item`, `namedItem`, indexed/named getters | Deferred native | No live element collection state or named-property implementation. |
+| DOMTokenList | `length`, `item`, `contains`, `add`, `remove`, `toggle`, `replace`, `supports`, `value`, stringifier | Implemented | Live `classList` uses the element's class attribute and canonical wrapper. |
+| DOMTokenList | indexed getter, iterable | Needs installer | MemberKind has no indexed or iterable descriptor. |
+| AbstractRange | `startContainer`, `startOffset`, `endContainer`, `endOffset`, `collapsed` | Implemented | Private Range/StaticRange wrappers return live or immutable boundaries respectively. |
+| StaticRange : AbstractRange | constructor with `StaticRangeInit` dictionary | Implemented | Immutable native snapshot in an append-only registry; inherited getters accept its private brand. |
+| Range : AbstractRange | constructor, `commonAncestorContainer`, `setStart`, `setEnd`, `setStartBefore`, `setStartAfter`, `setEndBefore`, `setEndAfter`, `collapse`, `selectNode`, `selectNodeContents` | Implemented | Live native Range handle; `unsigned long` coercion runs before DOM borrow. |
+| Range : AbstractRange | `START_TO_START`, `START_TO_END`, `END_TO_END`, `END_TO_START`, `compareBoundaryPoints` | Implemented | Constants installed on interface/prototype through host primitive; comparison dispatch written. |
+| Range : AbstractRange | `deleteContents`, `extractContents`, `cloneContents`, `insertNode`, `surroundContents`, `cloneRange`, `detach`, `intersectsNode` | Implemented | Native algorithms dispatched; fragments use shared Node wrappers. |
+| Range : AbstractRange | `isPointInRange`, `comparePoint`, stringifier | Implemented | Native point checks and text projection dispatch. |
+| NodeFilter callback interface | `FILTER_ACCEPT`, `FILTER_REJECT`, `FILTER_SKIP`; `SHOW_ALL`, `SHOW_ELEMENT`, `SHOW_ATTRIBUTE`, `SHOW_TEXT`, `SHOW_CDATA_SECTION`, `SHOW_ENTITY_REFERENCE`, `SHOW_ENTITY`, `SHOW_PROCESSING_INSTRUCTION`, `SHOW_COMMENT`, `SHOW_DOCUMENT`, `SHOW_DOCUMENT_TYPE`, `SHOW_DOCUMENT_FRAGMENT`, `SHOW_NOTATION` | Implemented | Constants installed through the generic interface constant hook. |
+| NodeFilter callback interface | `acceptNode` | Implemented | Host retains opaque callback roots; traversal suspends native borrow, calls `acceptNode`, then resumes. |
+| NodeIterator | `root` `[SameObject]`, `referenceNode`, `pointerBeforeReferenceNode`, `whatToShow`, `filter`, `nextNode`, `previousNode`, `detach` | Implemented | Private traversal wrapper, retained filter identity and resumable invocation tested; GC release hook still needed in driver. |
+| TreeWalker | `root` `[SameObject]`, `whatToShow`, `filter`, `currentNode`, `parentNode`, `firstChild`, `lastChild`, `previousSibling`, `nextSibling`, `previousNode`, `nextNode` | Implemented | Same callback and root model as NodeIterator; GC release hook still needed in driver. |
+| EventTarget | constructor, `addEventListener`, `removeEventListener`, `dispatchEvent` | Implemented | Dom-owned registry, callback identity and resumable listener dispatch tested; driver still uses legacy separate registry. |
+| EventListener callback interface | `handleEvent` | Implemented | Function or object method resolved and called after DOM borrow. |
+| Event | constructor, `type`, `target`, `srcElement`, `currentTarget`, `composedPath`, `NONE`, `CAPTURING_PHASE`, `AT_TARGET`, `BUBBLING_PHASE`, `eventPhase` | Implemented with UTF-16 gap | Private Event wrapper and array path; native event type remains Rust String and rejects lone surrogate. |
+| Event | `stopPropagation`, `cancelBubble`, `stopImmediatePropagation`, `bubbles`, `cancelable`, `returnValue`, `preventDefault`, `defaultPrevented`, `composed`, `isTrusted`, `timeStamp`, `initEvent` | Implemented | Native methods and lifecycle; mock dispatch/cancellation tested. |
+| CustomEvent : Event | constructor, `detail`, `initCustomEvent` | Implemented | Native Event stores an opaque driver-owned value root; replacement releases the old root. Release on Event slot collection remains driver work. |
+| MutationObserver | constructor, `observe`, `disconnect`, `takeRecords` | Implemented | Callback root survives disconnect and observe again; mock test covers record snapshot and reconnect. |
+| MutationCallback | callback `(mutations, observer)` | Implemented | `deliver_mutation_checkpoint` runs post-borrow and takes native checkpoint only when JS-4 invokes M. |
+| MutationRecord | `type`, `target` `[SameObject]`, `addedNodes` `[SameObject]`, `removedNodes` `[SameObject]`, `previousSibling`, `nextSibling`, `attributeName`, `attributeNamespace`, `oldValue` | Implemented | Native record registry and two immutable NodeList slots per record preserve identity. |
+
+Integrator accepted the backend-neutral host extension on 2026-09-23. The
+trait now uses `PlatformKey { arena, slot, generation }` and a private
+`InterfaceBrand` family for canonical wrappers, with Node methods expressed
+through that generic identity. It also declares explicit-this `call`,
+`is_callable`, `same_value`, `create_array`, `to_number`, and `throw_value`.
+The additive `install_interface_constant` hook places non-Node constants on
+both interface and prototype while the opaque installer remains active.
+The 2026-09-23 final decision generalized retention to `retain_value`,
+`root_value`, and `release_value` for callbacks and CustomEvent detail, and moved
+`EventTargets` into `Dom`. The driver must route its legacy separate event
+registry to `Dom::events()` / `events_mut()` before binding installation. The
+current `Rc` runtime can leak a callback that captures its own target wrapper
+until the collector exists; `release_value` handles explicit listener removal
+and `once`. MutationObserver callbacks survive `disconnect()` so `observe()`
+can run again, and release only when the observer slot is freed. The future
+collector must trace those edges. Traversal filter roots need release when JS
+wrappers are collected.
+The driver must map these to the interpreter facade; js-runtime still owes
+explicit-this call, array construction, and SameValue. Binding tests use a
+mock host in the meantime. Runtime review should confirm the exact `u64`
+brand family values and the node key mapping before driver installation.
+
+The InterfaceDefinition list now covers every implemented row above; HTMLCollection,
+indexed/named property access and iterability remain explicit
+installation gaps. `BindingHost::string` returns `Result<Value, Error>` and
+propagates lone-surrogate rejection without inserting replacement characters.
+The driver must route native `DomError` values through
+`amazing_bindings::dom_exception::throw_dom_error` so exposed failures carry
+the specified DOMException name and legacy code. The mock host currently
+asserts the mapping separately from its `with_dom` error conversion.
+
+### DOM-7 final Windows gate (2026-09-23)
+
+The local lane branch was rebased onto `origin/dev` `a3d9001` (later than the
+required `133db58`). The Windows lane tree was refreshed from that exact dev
+commit with first-party artifact invalidation; all changed source files were
+re-synced, including the granted sibling match arms. Those four sibling files
+have additions only. The exact-source `cargo nextest run --workspace --locked`
+gate passed **1,452/1,452** tests with 3 skipped across 50 binaries. The
+separate `cargo test -p amazing-dom -p amazing-bindings --locked --doc` gate
+passed with 0 doctests in each crate. No local build or test ran.
+
+The pinned `dom/` AFTER selection at WPT
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` passed the unmodified
+upstream known-pass/known-fail proof twice. Both 627-source rounds were
+byte-identical: **2 pass, 248 fail, 30 timeout, 214 error, 133 unsupported**
+files; **83 pass and 2,590 fail** registered subtests, no other subtest
+statuses. Raw SHA-256:
+`0243a4ea04619f7c2125185bd3aa31b9d0520c9a4a13f127be3146666d04fba8`;
+outcome SHA-256:
+`7f939b5fd55441c27861e1cde846283ee4ae76d02add7765a0c4a3a01a10343b`.
+The durable summary is `crates/amazing-dom/tests/wpt-dom7-after.json`.
+Compared with the DOM-5 fixed-base gate, seven files moved from error to fail
+and six additional failing subtests registered. `dev` changed between those
+measurements, and the DOM-7 installer is not yet in the driver, so this is
+not attributed as a DOM-7 conformance improvement.

@@ -12,6 +12,10 @@ pub enum EventTarget {
 pub struct CallbackId(pub u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EventId(usize);
+impl EventId {
+    pub fn slot(self) -> usize { self.0 }
+    pub fn from_slot(slot: usize) -> Self { Self(slot) }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ListenerId(u64);
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -43,6 +47,8 @@ pub enum DispatchOrigin {
 #[derive(Debug)]
 pub struct Event {
     event_type: String,
+    custom: bool,
+    custom_detail: Option<CallbackId>,
     init: EventInit,
     timestamp: Duration,
     trusted: bool,
@@ -62,6 +68,8 @@ impl Event {
     pub fn new(event_type: impl Into<String>, init: EventInit, timestamp: Duration) -> Self {
         Self {
             event_type: event_type.into(),
+            custom: false,
+            custom_detail: None,
             init,
             timestamp,
             trusted: false,
@@ -78,6 +86,22 @@ impl Event {
     }
     pub fn event_type(&self) -> &str {
         &self.event_type
+    }
+    /// A CustomEvent keeps only an opaque driver-owned value root.
+    pub fn new_custom(event_type: impl Into<String>, init: EventInit, timestamp: Duration, detail: Option<CallbackId>) -> Self {
+        let mut event = Self::new(event_type, init, timestamp);
+        event.custom = true;
+        event.custom_detail = detail;
+        event
+    }
+    pub fn is_custom(&self) -> bool { self.custom }
+    pub fn custom_detail(&self) -> Option<CallbackId> { self.custom_detail }
+    /// None means dispatch is active and the initialization had no effect.
+    /// Otherwise returns the previous root for the binding driver to release.
+    pub fn init_custom_event(&mut self, event_type: impl Into<String>, bubbles: bool, cancelable: bool, detail: Option<CallbackId>) -> Option<Option<CallbackId>> {
+        if self.dispatching || !self.custom { return None; }
+        self.init_event(event_type, bubbles, cancelable);
+        Some(std::mem::replace(&mut self.custom_detail, detail))
     }
     pub fn bubbles(&self) -> bool {
         self.init.bubbles
@@ -253,8 +277,15 @@ pub struct EventInvocation {
     pub current_target: EventTarget,
     pub target: EventTarget,
     pub phase: EventPhase,
+    /// The listener has been removed from the native registry before invocation.
+    pub once: bool,
 }
 impl EventTargets {
+    pub fn listener_callbacks(&self, target: EventTarget, event_type: &str, capture: bool) -> Vec<CallbackId> {
+        self.listeners.iter().filter(|listener| listener.target == target
+            && listener.event_type == event_type && listener.capture == capture)
+            .map(|listener| listener.callback).collect()
+    }
     pub fn create_event(&mut self, event: Event) -> EventId {
         let id = EventId(self.events.len());
         self.events.push(event);
@@ -262,6 +293,9 @@ impl EventTargets {
     }
     pub fn event(&self, id: EventId) -> &Event {
         &self.events[id.0]
+    }
+    pub fn event_checked(&self, id: EventId) -> Option<&Event> {
+        self.events.get(id.0)
     }
     pub fn event_mut(&mut self, id: EventId) -> &mut Event {
         &mut self.events[id.0]
@@ -304,13 +338,17 @@ impl EventTargets {
         event_type: &str,
         callback: Option<CallbackId>,
         capture: bool,
-    ) {
+    ) -> Vec<CallbackId> {
+        let mut removed = Vec::new();
         self.listeners.retain(|l| {
-            !(l.target == target
+            let matches = l.target == target
                 && l.event_type == event_type
                 && Some(l.callback) == callback
-                && l.capture == capture)
+                && l.capture == capture;
+            if matches { removed.push(l.callback); }
+            !matches
         });
+        removed
     }
     pub fn remove_listener_id(&mut self, id: ListenerId) {
         self.listeners.retain(|l| l.id != id);
@@ -399,6 +437,7 @@ impl EventTargets {
                         current_target: entry.invocation,
                         target: entry.adjusted_target,
                         phase: event.phase,
+                        once,
                     });
                 }
             }
@@ -466,6 +505,27 @@ impl EventTargets {
         } else {
             Ok(!event.default_prevented())
         }
+    }
+}
+impl Dom {
+    /// Temporarily move the registry to satisfy the tree/registry borrows.
+    /// The resumable dispatch returns before script runs.
+    pub fn add_event_listener(
+        &mut self, target: EventTarget, event_type: &str,
+        callback: Option<CallbackId>, options: ListenerOptions,
+    ) -> Option<ListenerId> {
+        let mut events = std::mem::take(&mut self.events);
+        let result = events.add_listener(self, target, event_type, callback, options);
+        self.events = events;
+        result
+    }
+    pub fn begin_event_dispatch(
+        &mut self, target: EventTarget, event: EventId, origin: DispatchOrigin,
+    ) -> Result<Dispatch, DomError> {
+        let mut events = std::mem::take(&mut self.events);
+        let result = events.begin_dispatch(self, target, event, origin);
+        self.events = events;
+        result
     }
 }
 #[cfg(test)]

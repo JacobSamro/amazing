@@ -19,9 +19,19 @@
 #![forbid(unsafe_code)]
 
 pub mod host;
+pub mod dom_exception;
 
 mod interfaces;
 mod invoke;
+mod range_bindings;
+mod factories;
+mod collections;
+mod traversal_bindings;
+mod event_bindings;
+mod mutation_bindings;
+mod attr_bindings;
+mod tokenlist;
+pub use mutation_bindings::deliver_mutation_checkpoint;
 pub use amazing_dom::{Dom, DomError, NodeIdx};
 pub use interfaces::{install, INTERFACES};
 pub use invoke::invoke;
