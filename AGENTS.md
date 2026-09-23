@@ -123,6 +123,19 @@ and any Windows-only code path. Linux numbers are for iteration and are never
 reported as the gate. If a result differs between Linux and Windows, that is a
 bug to report, not a reason to pick one.
 
+**Windows gates: win-002 for crate/workspace, win-001 for renders.** win-001's
+three slots also carry every render sweep, so crate and workspace final gates run
+on win-002 (same toolchain), with its own two-slot pool:
+
+```
+scripts/win-run.sh <lane> -- 'cargo nextest run --workspace --locked; cargo test --workspace --locked --doc'
+```
+
+It extracts your worktree (or `--ref <sha>`) fresh into win-002 and runs the
+PowerShell commands with your own `CARGO_TARGET_DIR`. Render sweeps, reftests,
+and anything that needs the WPT checkout, fonts or GPU stay on win-001 via
+`with-build-slot.sh`.
+
 **Work in bulk (2026-09-24).** Tickets are whole areas, not slices. Write the
 whole area first, against the spec, then test it all at once. Do not gate
 after each function.
