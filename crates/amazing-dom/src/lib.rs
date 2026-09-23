@@ -16,6 +16,8 @@
 pub mod events;
 pub mod attr;
 pub mod collection;
+pub mod abort;
+pub mod document_surface;
 pub mod markup;
 #[cfg(test)] mod markup_tests;
 pub mod event_loop;
@@ -118,6 +120,9 @@ pub struct Dom {
     mutation_records: Vec<mutation::RegisteredRecord>,
     static_node_lists: Vec<Vec<NodeIdx>>,
     collections: Vec<collection::LiveCollection>,
+    abort_signals: abort::AbortSignals,
+    document_states: Vec<(NodeIdx, document_surface::ReadyState)>,
+    token_lists: Vec<(NodeIdx, String)>,
     mutation_generation: u64,
     dom_exceptions: Vec<DomExceptionData>,
     traversals: traversal::Traversals,
@@ -157,6 +162,9 @@ impl Dom {
             mutation_records: Vec::new(),
             static_node_lists: Vec::new(),
             collections: Vec::new(),
+            abort_signals: abort::AbortSignals::default(),
+            document_states: Vec::new(),
+            token_lists: Vec::new(),
             mutation_generation: 0,
             dom_exceptions: Vec::new(),
             traversals: traversal::Traversals::default(),

@@ -11,7 +11,7 @@ pub(crate) fn handles(op: O) -> bool { matches!(op,
 fn ascii_lower(value: &[u16]) -> Vec<u16> {
     value.iter().map(|&unit| if (65..=90).contains(&unit) { unit + 32 } else { unit }).collect()
 }
-fn keyword(value: &[u16], candidates: &[&str]) -> Option<Vec<u16>> {
+pub(crate) fn keyword(value: &[u16], candidates: &[&str]) -> Option<Vec<u16>> {
     let lower = ascii_lower(value);
     candidates.iter().find(|candidate| lower == candidate.encode_utf16().collect::<Vec<_>>())
         .map(|candidate| candidate.encode_utf16().collect())
@@ -34,14 +34,13 @@ pub(crate) fn signed_long(value: &[u16]) -> Option<i32> {
     i32::try_from(parsed_integer(value)?).ok()
 }
 /// Shared for future reflected unsigned-long attributes.
-#[allow(dead_code)]
 pub(crate) fn unsigned_long(value: &[u16]) -> Option<u32> {
     u32::try_from(parsed_integer(value)?).ok()
 }
-fn value(dom: &Dom, node: NodeIdx, name: &str) -> Vec<u16> {
+pub(crate) fn value(dom: &Dom, node: NodeIdx, name: &str) -> Vec<u16> {
     dom.attribute_utf16(node, name).unwrap_or_default()
 }
-fn set(dom: &mut Dom, node: NodeIdx, name: &str, units: Vec<u16>) -> Result<(), DomError> {
+pub(crate) fn set(dom: &mut Dom, node: NodeIdx, name: &str, units: Vec<u16>) -> Result<(), DomError> {
     if dom.get_attribute_ns(node, None, name).is_none() { dom.set_attribute(node, name, "")?; }
     let attr = dom.get_attribute_node(node, None, name).ok_or(DomError::InvalidStateError)?;
     dom.set_attr_value(attr, units)

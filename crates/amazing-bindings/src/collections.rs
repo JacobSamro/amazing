@@ -20,7 +20,8 @@ fn collection_slot<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<
 fn node_list_length<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<usize, H::Error> {
     let live = host.platform_object(receiver, InterfaceBrand::NODE_LIST);
     let static_list = host.platform_object(receiver, InterfaceBrand::STATIC_NODE_LIST);
-    let key = live.or(static_list).ok_or_else(|| host.type_error("Expected a NodeList"))?;
+    let filtered = host.platform_object(receiver, InterfaceBrand::FILTERED_NODE_LIST);
+    let key = live.or(static_list).or(filtered).ok_or_else(|| host.type_error("Expected a NodeList"))?;
     if key.arena != host.node_platform_key(host.current_document()).arena || key.generation != 1 {
         return Err(host.type_error("Invalid NodeList"));
     }
@@ -28,6 +29,7 @@ fn node_list_length<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result
         .ok_or_else(|| host.type_error("Invalid NodeList"))?) } else { None };
     host.with_dom(|dom| match parent {
         Some(parent) => Ok(dom.children(parent).count()),
+        None if filtered.is_some() => dom.collection_length(key.slot as usize),
         None => dom.static_node_list(key.slot as usize).map(|nodes| nodes.len())
             .ok_or(amazing_dom::DomError::InvalidStateError),
     })
@@ -122,7 +124,8 @@ pub(crate) fn invoke<H: BindingHost>(
     }
     let live = host.platform_object(&receiver, InterfaceBrand::NODE_LIST);
     let static_list = host.platform_object(&receiver, InterfaceBrand::STATIC_NODE_LIST);
-    let key = live.or(static_list).ok_or_else(|| host.type_error("Expected a NodeList"))?;
+    let filtered = host.platform_object(&receiver, InterfaceBrand::FILTERED_NODE_LIST);
+    let key = live.or(static_list).or(filtered).ok_or_else(|| host.type_error("Expected a NodeList"))?;
     if key.arena != host.node_platform_key(host.current_document()).arena || key.generation != 1 {
         return Err(host.type_error("Invalid NodeList"));
     }
@@ -139,6 +142,7 @@ pub(crate) fn invoke<H: BindingHost>(
     } else { 0 };
     let node = host.with_dom(|dom| match parent {
         Some(parent) => Ok(dom.children(parent).nth(index as usize)),
+        None if filtered.is_some() => dom.collection_item(key.slot as usize, index as usize),
         None => dom.static_node_list(key.slot as usize).map(|nodes| nodes.get(index as usize).copied())
             .ok_or(amazing_dom::DomError::InvalidStateError),
     })?;
