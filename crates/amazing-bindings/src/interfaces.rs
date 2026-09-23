@@ -137,6 +137,7 @@ const DOCUMENT: &[Member] = &[
     getter("head", O::DocumentHead),
     getter("body", O::DocumentBody), setter("body", O::DocumentSetBody),
     getter("documentElement", O::DocumentElement),
+    getter("doctype", O::DocumentDoctype),
     getter("readyState", O::DocumentReadyState),
     getter("URL", O::DocumentURL), getter("documentURI", O::DocumentURI),
     getter("characterSet", O::DocumentCharacterSet), getter("contentType", O::DocumentContentType),
@@ -324,6 +325,7 @@ const HTML_ELEMENT: &[Member] = &[
 ];
 const HYPERLINK: &[Member] = &[
     getter("href", O::ElementHref), setter("href", O::ElementSetHref),
+    method("toString", O::ElementHref, 0),
     getter("target", O::ElementTarget), setter("target", O::ElementSetTarget),
     getter("rel", O::ElementRel), setter("rel", O::ElementSetRel),
     getter("relList", O::ElementRelList),
@@ -713,7 +715,9 @@ pub fn html_element_interface(local: &str) -> I {
 pub fn install<H: BindingHost>(host: &mut H) -> Result<(), H::Error> {
     for definition in INTERFACES {
         host.install_interface(definition)?;
+        host.install_interface_class_string(definition.interface, definition.name)?;
     }
+    host.install_dom_exception_error_prototype()?;
     host.install_static_method(I::AbortSignal, "abort", O::AbortSignalAbort, 0)?;
     host.install_static_method(I::AbortSignal, "any", O::AbortSignalAny, 1)?;
     host.install_static_method(I::AbortSignal, "timeout", O::AbortSignalTimeout, 1)?;

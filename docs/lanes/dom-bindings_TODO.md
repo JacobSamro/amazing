@@ -1477,3 +1477,24 @@ One defect was found and fixed: `range_is_point_in_range` and `range_compare_poi
 No defect was found in the ported pre-insert, clone, normalization, splitText live-range, surround partial-node, iterator fix-up, TreeWalker filter cleanup, or event once/immediate-stop cases. The `Element-closest` and `matches` ports use only tag selectors because the mock selector seam intentionally supports tag names; CSS selector conformance and driver installation remain separate. Broader WPT parameter matrices, Shadow DOM, iframe unload mutation, and full event retargeting are not claimed by this native selection.
 
 The host-contract rule in `.agents/dom-bindings/decision-dom7-host.md` applies from DOM-11 onward: new `BindingHost` methods and seam traits need typed Unsupported defaults so the production driver keeps compiling. DOM-11 adds no host methods or seam traits. The decision explicitly leaves existing required methods unchanged.
+
+## DOM-12 WebIDL class strings and pinned `dom/common.js` setup (2026-09-23)
+
+Pinned WebIDL source: [whatwg/webidl `6a53497380036fc4a25b82be889a88e0de7cf448`](https://github.com/whatwg/webidl/blob/6a53497380036fc4a25b82be889a88e0de7cf448/index.bs), `index.bs` sections “Class strings”, “Interface prototype object”, “Stringifiers”, and “DOMException custom bindings”. Pinned WPT checkout: `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`; inspected `dom/common.js` lines 18–350 in that checkout. This is a binding/fixture audit, not a claim of passing WPT. The 30 shared sources currently register zero subtests after `TypeError: cannot convert object to primitive`; `DOMImplementation-createDocument.html` has four duplicate generated names after `String(arg)`.
+
+`BindingHost::install_interface_class_string` now runs for every `INTERFACES` descriptor. It requests a real `%Symbol.toStringTag%` data property on each interface prototype: value is the qualified interface name, writable false, enumerable false, configurable true. The interface object remains a Function object; the prototype object has its own class string. `HTMLAnchorElement` and `HTMLAreaElement` both install their `href` attribute stringifier as `toString` (length 0); `DOMTokenList` and `Range` already install their own `toString` stringifiers. `DOMException` does not get an own `toString`: its prototype must inherit `%Error.prototype%`, whose `toString` uses `name` and `message`. Location is absent from these bindings. Both new host hooks default to typed `NotSupportedError`; runtime/driver Symbol support is queued in `questions.md`.
+
+`setupRangeTests()` runs before test registration. Every operation executed during its fixture construction is accounted for here; the large range/point/node arrays contain **strings**, so their embedded DOM expressions run later, outside setup.
+
+| Executed setup operation | Binding status |
+|---|---|
+| `document.querySelector`, optional `parentNode.removeChild` | Bound through `SelectorEngine` and `Node.removeChild`; driver selector adoption remains external. |
+| `document.createElement`, `createTextNode`, `createComment`, `createDocumentFragment`, `createCDATASection`, `createProcessingInstruction` | Bound, including `new Document()` for the XML fixture. |
+| `testDiv.id =`, `setAttribute(id/style)`, `textContent =` | Bound setters. |
+| `document.body`, `firstChild`, `insertBefore`, `appendChild`, `append` | Bound tree/document members. |
+| `document.implementation.createHTMLDocument`, `createDocumentType`, `createDocument` | Bound DOMImplementation members. |
+| `document.doctype` and `foreignDoc.doctype` | Missing before DOM-12; now bound through direct-child native getter. |
+| `paras.push`, array literals, `concat` for range/point/node lists | JS Array runtime operations; not DOM bindings. |
+| `"setup" in window`, `setup(setupRangeTests)` | WPT harness/runtime operations; not DOM bindings. |
+
+The setup does not call `Node.compareDocumentPosition` or `isEqualNode`; helpers below it call those only when the registered tests run. The production runtime currently lacks real Symbol-keyed properties and platform-object ToPrimitive dispatch, so the WPT blocker cannot be declared fixed by the mock-host gate. IA-BINDINGS-2 must install these hooks and rerun the pinned selection.

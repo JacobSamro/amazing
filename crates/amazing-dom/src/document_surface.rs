@@ -41,6 +41,10 @@ impl Dom {
         self.document_checked(document)?;
         Ok(self.children(document).find(|node| matches!(self.get(*node).kind, NodeKind::Element { .. })))
     }
+    pub fn document_doctype(&self, document: NodeIdx) -> Result<Option<NodeIdx>, DomError> {
+        self.document_checked(document)?;
+        Ok(self.children(document).find(|node| matches!(self.get(*node).kind, NodeKind::DocumentType { .. })))
+    }
     fn html_root(&self, document: NodeIdx) -> Result<Option<NodeIdx>, DomError> {
         Ok(self.document_element(document)?.filter(|root| self.namespace(*root) == Some(Namespace::Html)
             && self.local_name(*root) == Some("html")))

@@ -3,7 +3,7 @@ use amazing_dom::{collection::CollectionFilter, DomError, NodeKind};
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::DocumentTitle | O::DocumentSetTitle | O::DocumentHead | O::DocumentBody
-        | O::DocumentSetBody | O::DocumentElement | O::DocumentReadyState | O::DocumentURL
+        | O::DocumentSetBody | O::DocumentElement | O::DocumentDoctype | O::DocumentReadyState | O::DocumentURL
         | O::DocumentURI | O::DocumentCharacterSet | O::DocumentContentType
         | O::DocumentCompatMode | O::DocumentReferrer | O::DocumentGetElementById
         | O::FragmentGetElementById | O::DocumentGetElementsByName | O::DocumentForms
@@ -28,10 +28,11 @@ pub(crate) fn invoke<H: DocumentHost>(host: &mut H, op: O, receiver: H::Value,
             host.with_dom(|dom| dom.set_document_title(node, &units))?;
             Ok(host.undefined())
         }
-        O::DocumentHead | O::DocumentBody | O::DocumentElement => {
+        O::DocumentHead | O::DocumentBody | O::DocumentElement | O::DocumentDoctype => {
             let target = host.with_dom(|dom| match op {
                 O::DocumentHead => dom.document_head(node),
                 O::DocumentBody => dom.document_body(node),
+                O::DocumentDoctype => dom.document_doctype(node),
                 _ => dom.document_element(node),
             })?;
             match target { Some(target) => host.wrap_node(target), None => Ok(host.null()) }

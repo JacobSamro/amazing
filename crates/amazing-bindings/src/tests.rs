@@ -22,6 +22,8 @@ enum V {
 struct Host {
     dom: Dom,
     installed: Vec<Interface>,
+    class_strings: Vec<(Interface, &'static str)>,
+    dom_exception_error_prototype: bool,
     constants: Vec<(&'static str, u16)>,
     interface_constants: Vec<(Interface, &'static str, u32)>,
     conversions: Vec<&'static str>,
@@ -152,6 +154,14 @@ impl BindingHost for Host {
     fn throw_value(&mut self, value: V) -> String { format!("throw: {value:?}") }
     fn install_interface(&mut self, d: &'static InterfaceDefinition) -> Result<(), String> {
         self.installed.push(d.interface);
+        Ok(())
+    }
+    fn install_interface_class_string(&mut self, interface: Interface, name: &'static str) -> Result<(), String> {
+        self.class_strings.push((interface, name));
+        Ok(())
+    }
+    fn install_dom_exception_error_prototype(&mut self) -> Result<(), String> {
+        self.dom_exception_error_prototype = true;
         Ok(())
     }
     fn install_node_constant(&mut self, n: &'static str, v: u16) -> Result<(), String> {
@@ -616,6 +626,9 @@ fn processing_instruction_and_range_point_queries_preserve_units() {
 fn installation_orders_parent_interfaces_and_preserves_constant_values() {
     let mut h = Host::default();
     install(&mut h).unwrap();
+    assert_eq!(h.class_strings,
+        INTERFACES.iter().map(|definition| (definition.interface, definition.name)).collect::<Vec<_>>());
+    assert!(h.dom_exception_error_prototype);
     for d in INTERFACES {
         if let Some(parent) = d.parent {
             assert!(
@@ -628,6 +641,23 @@ fn installation_orders_parent_interfaces_and_preserves_constant_values() {
     assert!(h
         .constants
         .contains(&("DOCUMENT_POSITION_CONTAINED_BY", 16)));
+}
+
+#[test]
+fn webidl_stringifiers_are_installed_on_declaring_prototypes() {
+    for (interface, operation) in [
+        (Interface::HTMLAnchorElement, O::ElementHref),
+        (Interface::HTMLAreaElement, O::ElementHref),
+        (Interface::DOMTokenList, O::TokenListValue),
+        (Interface::Range, O::RangeStringifier),
+    ] {
+        let definition = INTERFACES.iter().find(|d| d.interface == interface).unwrap();
+        assert!(definition.members.iter().any(|member|
+            member.name == "toString" && member.operation == operation &&
+            matches!(member.kind, crate::host::MemberKind::Method { length: 0 })));
+    }
+    let exception = INTERFACES.iter().find(|d| d.interface == Interface::DOMException).unwrap();
+    assert!(!exception.members.iter().any(|member| member.name == "toString"));
 }
 
 #[test]
@@ -1026,6 +1056,10 @@ fn timeout_signal_uses_host_timer_and_fires_on_expiry() {
 fn document_surface_uses_tree_and_host_metadata() {
     let mut h = Host::default();
     let doc = V::Node(NodeIdx(0));
+    assert_eq!(call(&mut h, O::DocumentDoctype, doc.clone(), &[]), V::Null);
+    let doctype = h.dom.create_document_type_in(NodeIdx(0), "html", "", "").unwrap();
+    h.dom.pre_insert(doctype, NodeIdx(0), None).unwrap();
+    assert_eq!(call(&mut h, O::DocumentDoctype, doc.clone(), &[]), V::Node(doctype));
     let html = h.dom.create_element(NodeIdx(0), "html");
     let head = h.dom.create_element(html, "head");
     let body = h.dom.create_element(html, "body");
