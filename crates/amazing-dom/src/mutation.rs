@@ -368,6 +368,7 @@ impl Dom {
         let old = self
             .get_attribute_ns(node, namespace, name)
             .map(str::to_owned);
+        let newly_inserted = old.is_none();
         if let Some(ns) = namespace {
             let attrs = &mut self.nodes[node.0 as usize].namespaced_attributes;
             if let Some(current) = attrs
@@ -389,6 +390,11 @@ impl Dom {
             } else {
                 attrs.push((name.into(), value.into()));
             }
+        }
+        if newly_inserted {
+            self.nodes[node.0 as usize].attribute_order.push(crate::namespace::AttributeKey {
+                namespace_uri: namespace.map(str::to_owned), local_name: name.into(),
+            });
         }
         self.sync_attached_attr_value(node, namespace, name, value);
         self.queue_attribute_record(node, namespace, name, old.clone());
@@ -451,6 +457,8 @@ impl Dom {
         } else if let NodeKind::Element { attrs, .. } = &mut self.nodes[node.0 as usize].kind {
             attrs.retain(|(local, _)| local != name);
         }
+        self.nodes[node.0 as usize].attribute_order.retain(|key|
+            key.namespace_uri.as_deref() != namespace || key.local_name != name);
         self.detach_attached_attr(node, namespace, name);
         self.queue_attribute_record(node, namespace, name, Some(old.clone()));
         self.custom_element_attribute_changed(node, namespace, name, Some(old), None);

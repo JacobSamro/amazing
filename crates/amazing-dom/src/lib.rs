@@ -97,6 +97,7 @@ pub enum NodeKind {
 pub struct Node {
     owner_document: NodeIdx,
     namespaced_attributes: Vec<namespace::NamespacedAttribute>,
+    attribute_order: Vec<namespace::AttributeKey>,
     character_data_units: Option<Vec<u16>>,
     prefix: Option<String>,
     pub kind: NodeKind,
@@ -193,6 +194,7 @@ impl Dom {
         dom.nodes.push(Node {
             owner_document: NodeIdx(0),
             namespaced_attributes: Vec::new(),
+            attribute_order: Vec::new(),
             character_data_units: None,
             prefix: None,
             kind: NodeKind::Document,
@@ -219,9 +221,15 @@ impl Dom {
         } else {
             NodeIdx(0)
         };
+        let attribute_order = if let NodeKind::Element { attrs, .. } = &kind {
+            attrs.iter().map(|(name, _)| namespace::AttributeKey {
+                namespace_uri: None, local_name: name.clone(),
+            }).collect()
+        } else { Vec::new() };
         self.nodes.push(Node {
             owner_document,
             namespaced_attributes: Vec::new(),
+            attribute_order,
             character_data_units: None,
             prefix: None,
             kind,
@@ -380,6 +388,12 @@ impl Dom {
         if let NodeKind::Element { attrs: slot, .. } = &mut self.nodes[idx.0 as usize].kind {
             *slot = attrs;
         }
+        let namespaced: Vec<_> = self.nodes[idx.0 as usize].attribute_order.iter()
+            .filter(|key| key.namespace_uri.is_some()).cloned().collect();
+        self.nodes[idx.0 as usize].attribute_order = self.attrs_of(idx).unwrap().iter()
+            .map(|(name, _)| namespace::AttributeKey {
+                namespace_uri: None, local_name: name.clone(),
+            }).chain(namespaced).collect();
     }
 
     pub fn is_text(&self, idx: NodeIdx) -> bool {

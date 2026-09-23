@@ -865,6 +865,25 @@ fn element_attribute_queries_toggle_and_name_validation_follow_dom_rules() {
 }
 
 #[test]
+fn attribute_names_and_named_node_map_share_cross_namespace_insertion_order() {
+    let mut h = Host::default();
+    let element = V::Node(h.dom.create_element(NodeIdx(0), "div"));
+    call(&mut h, O::ElementSetAttributeNS, element.clone(),
+        &[str_value("urn:a"), str_value("a:first"), str_value("1")]);
+    call(&mut h, O::ElementSetAttribute, element.clone(),
+        &[str_value("plain"), str_value("2")]);
+    call(&mut h, O::ElementSetAttributeNS, element.clone(),
+        &[str_value("urn:b"), str_value("b:last"), str_value("3")]);
+    assert_eq!(call(&mut h, O::ElementGetAttributeNames, element.clone(), &[]),
+        V::Array(vec![str_value("a:first"), str_value("plain"), str_value("b:last")]));
+    let map = call(&mut h, O::ElementAttributes, element, &[]);
+    for (index, name) in ["a:first", "plain", "b:last"].iter().enumerate() {
+        let attr = call(&mut h, O::NamedNodeMapItem, map.clone(), &[V::Number(index as f64)]);
+        assert_eq!(call(&mut h, O::AttrName, attr, &[]), str_value(name));
+    }
+}
+
+#[test]
 fn processing_instruction_and_range_point_queries_preserve_units() {
     let mut h = Host::default();
     let xml = node(call(&mut h, O::DocumentConstructor, V::Undefined, &[]));
