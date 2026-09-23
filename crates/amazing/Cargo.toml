@@ -7,6 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+amazing-bindings = { path = "../amazing-bindings" }
 amazing-common = { path = "../amazing-common" }
 amazing-dom = { path = "../amazing-dom" }
 amazing-html = { path = "../amazing-html" }
