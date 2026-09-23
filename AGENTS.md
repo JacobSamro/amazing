@@ -80,6 +80,18 @@ cargo nextest run -p <your crate> --locked      # or --workspace before a PR
 cargo test -p <your crate> --locked --doc       # ALWAYS run this too
 ```
 
+**Wrap every `--workspace` gate or full render sweep in a build slot:**
+
+```
+scripts/with-build-slot.sh <lane> -- ssh win-001 "powershell -NoProfile -EncodedCommand <b64>"
+```
+
+The box sustains about three concurrent full builds. When a fleet resumes, every
+lane re-gates at once and ten simultaneous workspace builds run slower than
+three sequential batches would. The wrapper holds one of three Mac-side slots
+(`mkdir`-atomic, dead holders reclaimed) and queues the rest. Crate-scoped `-p`
+iterations do not need a slot.
+
 **nextest does not run doctests.** This workspace has them (`amazing-js`,
 `amazing-html`), and nextest silently reports success without them, so a lane
 that switches and forgets the `--doc` line loses that coverage without any
