@@ -288,6 +288,24 @@ fixture is needed for that case to discriminate implementations.
 The remaining vertical-lr Ahem placement, nested upright bidi, sideways flex,
 orthogonal baseline, text-combine and ruby pairing/overhang cases exercise
 layout inline geometry or ruby structure. Exact cases and paths are recorded
-in `.agents/text/questions.md` for the layout lane. The current reported
-vertical score is 4/7, while the last committed seven-case report is 5/7;
-the changed case needs its current report before provider attribution.
+in `.agents/text/questions.md` for the layout lane. The retained seven-case
+vertical selection is 5/7 on the TEXT-12 build.
+
+## TEXT-12: unquoted data font URL fidelity
+
+The 40-case pinned font and writing-mode selection improved from 33 pass,
+5 mismatch, 1 timeout, 1 crash to 34 pass, 5 mismatch, 0 timeout, 1 crash.
+`font-feature-settings-descriptor-binary.html` now passes: the font-face
+parser preserves plus signs and numeric tokens in an unquoted base64 data URL,
+and page font warnings use bounded source labels so redirected stderr cannot
+block the render runner. No previous pass was lost. The six retained selections
+have unchanged classifications (4/8 font-face, 13/15 fonts, 5/7 vertical,
+11/20 vertical/ruby, 14/16 flow, 12/12 shaping). Evidence is in
+`crates/amazing-text-provider/evidence/text12-*-after.json` at WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+
+The five remaining expanded mismatches are routed to CSS and layout for
+`@supports font-kerning`, used kerning features, and letter-spacing with
+ligature precedence. The remaining crash is the DOM/driver
+`getElementById("content")` script-order issue. No remaining failure in this
+selection has a text-owned cause established by the audit.

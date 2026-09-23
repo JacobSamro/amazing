@@ -66,7 +66,7 @@ pub(crate) fn load_page_text_from_sheets(sheets: &[(String, String)], page: &str
             };
             let source_labels = descriptor.sources.iter().map(|source| match source {
                 amazing_text_provider::FontFaceSource::Local(name) => format!("local({name})"),
-                amazing_text_provider::FontFaceSource::Url { url, .. } => url.clone(),
+                amazing_text_provider::FontFaceSource::Url { url, .. } => font_loader::font_source_label(url),
             }).collect::<Vec<_>>().join(", ");
             if let Err(error) = text.provider.begin_font_load(descriptor.display) {
                 text.warnings.push(format!("font-face {family:?}: {error:?}"));

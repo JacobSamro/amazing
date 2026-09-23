@@ -111,7 +111,75 @@ fn serialize_selector_prelude(tokens: &[Token]) -> String {
 /// Extracts `@font-face` descriptors without placing provider or resource
 /// types in the CSS crate. Invalid rules are ignored with normal CSS recovery.
 pub fn parse_font_faces(src: &str) -> Vec<FontFaceRule> {
-    let tokens = tokenize(src);
+    // The general token serializer normalizes numeric tokens and consumes `+`
+    // signs. An unquoted data: URL may contain both in its base64 payload, so
+    // make it a CSS string before tokenization while preserving its bytes.
+    fn preserve_data_urls(src: &str) -> String {
+        let bytes = src.as_bytes();
+        let mut output = String::with_capacity(src.len());
+        let mut copied = 0usize;
+        let mut index = 0usize;
+        while index < bytes.len() {
+            if bytes[index..].starts_with(b"/*") {
+                index += 2;
+                while index + 1 < bytes.len() && !bytes[index..].starts_with(b"*/") {
+                    index += 1;
+                }
+                index = (index + 2).min(bytes.len());
+                continue;
+            }
+            if bytes[index] == b'\'' || bytes[index] == b'"' {
+                let quote = bytes[index];
+                index += 1;
+                while index < bytes.len() {
+                    if bytes[index] == b'\\' {
+                        index = (index + 2).min(bytes.len());
+                    } else if bytes[index] == quote {
+                        index += 1;
+                        break;
+                    } else {
+                        index += 1;
+                    }
+                }
+                continue;
+            }
+            if bytes[index..].get(..4).is_some_and(|part| part.eq_ignore_ascii_case(b"url("))
+                && (index == 0 || !matches!(bytes[index - 1], b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_'))
+            {
+                let mut value_start = index + 4;
+                while bytes.get(value_start).is_some_and(u8::is_ascii_whitespace) {
+                    value_start += 1;
+                }
+                if bytes[value_start..]
+                    .get(..5)
+                    .is_some_and(|part| part.eq_ignore_ascii_case(b"data:"))
+                    && let Some(close) = bytes[value_start..].iter().position(|byte| *byte == b')')
+                {
+                    let mut value_end = value_start + close;
+                    while value_end > value_start && bytes[value_end - 1].is_ascii_whitespace() {
+                        value_end -= 1;
+                    }
+                    if !bytes[value_start..value_end]
+                        .iter()
+                        .any(|byte| matches!(byte, b'\'' | b'"' | b'\\' | b'(') || byte.is_ascii_whitespace())
+                    {
+                        output.push_str(&src[copied..value_start]);
+                        output.push('"');
+                        output.push_str(&src[value_start..value_end]);
+                        output.push('"');
+                        copied = value_end;
+                        index = value_end;
+                        continue;
+                    }
+                }
+            }
+            index += 1;
+        }
+        output.push_str(&src[copied..]);
+        output
+    }
+    let protected = preserve_data_urls(src);
+    let tokens = tokenize(&protected);
     let mut faces = Vec::new();
     let mut position = 0usize;
     while position < tokens.len() {
@@ -911,6 +979,20 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn font_face_preserves_unquoted_data_url_payload() {
+        let payload = "data:font/ttf;base64,AB+00+90/AA==";
+        let css = format!("@font-face {{ font-family: Data; src: url({payload}) }}");
+        let faces = parse_font_faces(&css);
+        assert_eq!(faces[0].sources[0].url, payload);
+
+        let css = format!(
+            "/* url(data:font/ttf;base64,COMMENT+) */ \
+             @font-face {{ font-family: Data; src: url(  {payload}  ) }}"
+        );
+        assert_eq!(parse_font_faces(&css)[0].sources[0].url, payload);
     }
 
     #[test]
