@@ -3198,6 +3198,11 @@ impl RuntimeBindingHost<'_> {
             let source = self.state.borrow().canvas_slots.get(&source_node).map(|slot|
                 (slot.context.surface.width, slot.context.surface.height,
                     slot.context.surface.pixels.clone(), !slot.origin_clean));
+            let source = source.or_else(|| {
+                let (width, height) = (self.canvas_dimension(source_node, "width"), self.canvas_dimension(source_node, "height"));
+                (width <= 8192 && height <= 8192 && u64::from(width) * u64::from(height) <= 16_777_216)
+                    .then(|| (width, height, vec![0; width as usize * height as usize * 4], false))
+            });
             let Some((width, height, pixels, tainted)) = source else { return Ok(JsValue::Null); };
             if width == 0 || height == 0 { return Ok(JsValue::Null); }
             let bitmap = canvas::Bitmap::new(width, height, pixels)
@@ -3610,6 +3615,11 @@ impl RuntimeBindingHost<'_> {
             let source = self.state.borrow().canvas_slots.get(&source_node).map(|slot|
                 (slot.context.surface.width, slot.context.surface.height,
                     slot.context.surface.pixels.clone(), !slot.origin_clean));
+            let source = source.or_else(|| {
+                let (width, height) = (self.canvas_dimension(source_node, "width"), self.canvas_dimension(source_node, "height"));
+                (width <= 8192 && height <= 8192 && u64::from(width) * u64::from(height) <= 16_777_216)
+                    .then(|| (width, height, vec![0; width as usize * height as usize * 4], false))
+            });
             let (width, height, pixels, tainted) = source.ok_or_else(|| self.canvas_exception("InvalidStateError"))?;
             (canvas::Bitmap::new(width, height, pixels)
                 .map_err(|_| self.canvas_exception("InvalidStateError"))?, tainted)
