@@ -123,4 +123,23 @@ mod dom_model_tests {
         assert!(differences.is_empty(), "{} differing pixels; first: {:?}", differences.len(), differences.first());
         assert!(actual.pixels.chunks_exact(4).any(|pixel| pixel[3] != 0));
     }
+
+    #[test]
+    fn straight_line_strokes_and_odd_dash_patterns_render_from_dom() {
+        let css = "line, path { fill: none; stroke: green; stroke-width: 8px; stroke-dashoffset: -15px }";
+        let odd = render_inline_svg("<svg width='100' height='40'><line x1='0' y1='10' x2='100' y2='10' stroke-dasharray='20 10 5'></line><path d='M0 30 L100 30' stroke-dasharray='20 10 5'></path></svg>", 100, 40, css);
+        let even = render_inline_svg("<svg width='100' height='40'><line x1='0' y1='10' x2='100' y2='10' stroke-dasharray='20 10 5 20 10 5'></line><path d='M0 30 L100 30' stroke-dasharray='20 10 5 20 10 5'></path></svg>", 100, 40, css);
+        assert_eq!(odd.pixels, even.pixels);
+        assert!(odd.pixels.chunks_exact(4).any(|pixel| pixel == [0, 128, 0, 255]));
+        assert!(odd.pixels.chunks_exact(4).any(|pixel| pixel[3] == 0));
+    }
+
+    #[test]
+    fn path_length_calibrates_circle_dashes_without_erasing_stroke() {
+        let image = render_inline_svg("<svg width='100' height='100' viewBox='-20 -20 40 40' fill='none'><circle r='18' pathLength='100' stroke='green' stroke-width='1' stroke-dasharray='50 50'></circle></svg>", 100, 100, "");
+        let painted = image.pixels.chunks_exact(4).filter(|pixel| pixel[3] != 0).count();
+        assert!(painted > 50 && painted < 1000, "unexpected painted pixels: {painted}");
+        let pixel = |x: usize, y: usize| &image.pixels[((y * 100 + x) * 4)..][..4];
+        assert_eq!(pixel(50, 50), &[0, 0, 0, 0]);
+    }
 }

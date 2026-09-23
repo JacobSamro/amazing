@@ -759,3 +759,17 @@ production lock update, image nextest also passed **42/42** and its separate
 doctests **0/0**. Separate workspace doctests passed **2/2**. Paired reports,
 pixel counts and input hashes are
 under `tests/wpt-replaced-content/rc14/`.
+
+## RC-15 — bounded SVG stroke geometry and dashes
+
+The retained RC-11 selection still has six non-scaling stroke mismatches and
+one blank raw pass (`pathlength-005`). The SVG 2 stroke and vector-effect
+rules require stroke geometry in the host viewport for non-scaling stroke,
+odd dash arrays repeated to even length, negative dash offsets wrapped in the
+pattern, and `pathLength` calibration for dashes. The shared renderer now
+builds bounded strokes for rect, circle, ellipse, path, line, polygon and
+polyline. It accepts stroked byte SVG resources, including viewBox-only line
+images used by the data-URL cases, and retains strict rejection of curves and
+unsupported paint. Linux iteration passed image **45/45** plus the root
+workspace and doctests. Fixed-base Windows retained WPT before/after and final
+locked gates are pending.

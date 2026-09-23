@@ -1,7 +1,7 @@
 //! Explicit static SVG image subset, not a general SVG/DOM implementation.
 //! Strict XML subset; basic shapes and straight-line outlines with presentation fills.
 //! Bounded inline color/fill declarations use the shared CSS computed-style seam.
-//! No scripts, stylesheets, references, curves, text, strokes or animation.
+//! No scripts, external stylesheets, curves, general text or animation.
 //! Bounded attribute transforms on groups and shapes are supported.
 use crate::{DecodeError, DecodeLimits};
 use amazing_css::{
@@ -37,7 +37,19 @@ enum Shape {
     Rect(f64, f64, f64, f64),
     Ellipse(f64, f64, f64, f64),
     Outline(Vec<(f64, f64)>),
-    Stroke(Vec<(f64, f64)>, f64, bool),
+    Stroke(Stroke),
+}
+struct Stroke {
+    points: Vec<(f64, f64)>,
+    radius: f64,
+    closed: bool,
+    dash: Option<Dash>,
+    non_scaling: bool,
+}
+struct Dash {
+    lengths: Vec<f64>,
+    offset: f64,
+    author_length: Option<f64>,
 }
 struct Item {
     inverse: Option<Matrix>,
@@ -111,7 +123,8 @@ pub fn render_svg(
     }
     let shape_work = scene.items.iter().try_fold(0usize, |sum, item| {
         sum.checked_add(match &item.shape {
-            Shape::Outline(points) | Shape::Stroke(points, _, _) => points.len(),
+            Shape::Outline(points) => points.len(),
+            Shape::Stroke(stroke) => stroke.points.len(),
             _ => 1,
         })
     });
@@ -162,6 +175,20 @@ pub fn render_svg(
         return Err(DecodeError::GeometryLimit);
     }
     for item in &scene.items {
+        let host_stroke = match &item.shape {
+            Shape::Stroke(stroke) if stroke.non_scaling => Some(Stroke {
+                points: stroke.points.iter().map(|&(x, y)| ((x - vx) * sx + ox, (y - vy) * sy + oy)).collect(),
+                radius: stroke.radius * f64::from(dpr),
+                closed: stroke.closed,
+                dash: stroke.dash.as_ref().map(|dash| Dash {
+                    lengths: dash.lengths.iter().map(|length| length * f64::from(dpr)).collect(),
+                    offset: dash.offset * f64::from(dpr),
+                    author_length: dash.author_length.map(|length| length * f64::from(dpr)),
+                }),
+                non_scaling: false,
+            }),
+            _ => None,
+        };
         let Some(inverse) = item.inverse else {
             continue;
         };
@@ -188,9 +215,10 @@ pub fn render_svg(
                             && ((px - cx) / rx).powi(2) + ((py - cy) / ry).powi(2) <= 1.0
                     }
                     Shape::Outline(points) => point_in_path(points, px, py),
-                    Shape::Stroke(points, radius, closed) => {
-                        point_on_stroke(points, px, py, *radius, *closed)
-                    }
+                    Shape::Stroke(stroke) => match &host_stroke {
+                        Some(host) => point_on_stroke(host, x as f64 + 0.5, y as f64 + 0.5),
+                        None => point_on_stroke(stroke, px, py),
+                    },
                 };
                 if contains(&item.shape) && item.clip.as_ref().is_none_or(contains) {
                     blend(
@@ -320,19 +348,17 @@ fn visit_dom(
     if matches!(name, "polygon" | "polyline") {
         for marker in ["marker-start", "marker-mid", "marker-end"] { attrs.remove(marker); }
     }
-    if name == "rect" {
-        for property in ["stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin", "vector-effect"] {
+    let path_length = attrs.remove("pathLength").or_else(|| attrs.remove("pathlength"));
+    if matches!(name, "rect" | "circle" | "ellipse" | "path" | "line" | "polygon" | "polyline") {
+        for property in ["stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "vector-effect"] {
             attrs.remove(property);
         }
+    }
+    if name == "rect" {
         if styles.get(node).and_then(|style| style.get("mask")).is_some_and(|mask| mask != "none")
             && mask_has_text(dom, styles.get(node).and_then(|style| style.get("mask")).unwrap_or(""))
         {
             return Ok(());
-        }
-    }
-    if name == "path" {
-        for property in ["stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin", "vector-effect"] {
-            attrs.remove(property);
         }
     }
     let mut clip_path = attrs.remove("clip-path");
@@ -365,12 +391,11 @@ fn visit_dom(
     if name == "rect" {
         if let (Some(computed), Some(scene)) = (styles.get(node), scene.as_mut()) {
             append_rect_outline(scene, old_items, &attrs, computed, &frame);
-            append_rect_stroke(scene, &attrs, computed, &frame);
         }
     }
-    if name == "path" {
+    if matches!(name, "rect" | "circle" | "ellipse" | "path" | "line" | "polygon" | "polyline") {
         if let (Some(computed), Some(scene)) = (styles.get(node), scene.as_mut()) {
-            append_path_stroke(scene, &attrs, computed, &frame);
+            append_shape_stroke(scene, name, &attrs, computed, &frame, path_length.as_deref());
         }
     }
     if let Some(scene) = scene.as_mut() {
@@ -612,75 +637,86 @@ fn append_rect_outline(scene: &mut SvgDocument, shape_index: usize, attrs: &Attr
     }
 }
 
-fn append_rect_stroke(scene: &mut SvgDocument, attrs: &Attrs, computed: &ComputedStyle, frame: &Frame) {
-    let Some(stroke) = computed.get("stroke").filter(|value| *value != "none") else { return; };
-    let Some(color) = amazing_css::color::parse_css_color(stroke) else { return; };
-    let Ok(thickness) = number(computed.get("stroke-width").unwrap_or("1")) else { return; };
-    let (Ok(x), Ok(y), Ok(width), Ok(height)) = (
-        length_value(attrs, "x", 0.0, frame.viewport[0]), length_value(attrs, "y", 0.0, frame.viewport[1]),
-        length_value(attrs, "width", 0.0, frame.viewport[0]), length_value(attrs, "height", 0.0, frame.viewport[1]),
-    ) else { return; };
-    if thickness <= 0.0 || width <= 0.0 || height <= 0.0 { return; }
-    let (horizontal_width, vertical_width) = if computed.get("vector-effect") == Some("non-scaling-stroke") {
-        let [_, _, view_width, view_height] = scene.view;
-        let (mut sx, mut sy) = (f64::from(scene.width) / view_width, f64::from(scene.height) / view_height);
-        if scene.aspect != "none" {
-            let scale = if scene.aspect.ends_with("slice") { sx.max(sy) } else { sx.min(sy) };
-            sx = scale;
-            sy = scale;
-        }
-        let [a, b, c, d, _, _] = frame.matrix.0;
-        let scale_x = sx * a.hypot(b);
-        let scale_y = sy * c.hypot(d);
-        if scale_x <= 0.0 || scale_y <= 0.0 { return; }
-        (thickness / scale_x, thickness / scale_y)
-    } else { (thickness, thickness) };
-    let (half_x, half_y) = (horizontal_width / 2.0, vertical_width / 2.0);
-    let strips = [
-        Shape::Rect(x - half_x, y - half_y, width + horizontal_width, vertical_width),
-        Shape::Rect(x - half_x, y + height - half_y, width + horizontal_width, vertical_width),
-        Shape::Rect(x - half_x, y + half_y, horizontal_width, (height - vertical_width).max(0.0)),
-        Shape::Rect(x + width - half_x, y + half_y, horizontal_width, (height - vertical_width).max(0.0)),
-    ];
-    for shape in strips {
-        scene.items.push(Item {
-            inverse: frame.matrix.inverse().ok().flatten(), shape, clip: None, color, clips: frame.clips.clone(),
-        });
-    }
-}
-
-fn append_path_stroke(scene: &mut SvgDocument, attrs: &Attrs, computed: &ComputedStyle, frame: &Frame) {
+fn append_shape_stroke(scene: &mut SvgDocument, name: &str, attrs: &Attrs, computed: &ComputedStyle, frame: &Frame, path_length: Option<&str>) {
     let Some(stroke) = computed.get("stroke").filter(|value| *value != "none") else { return; };
     let color_value = if stroke.eq_ignore_ascii_case("currentcolor") { computed.get("color").unwrap_or("black") } else { stroke };
     let Some(mut color) = amazing_css::color::parse_css_color(color_value) else { return; };
-    let Ok(thickness) = number(computed.get("stroke-width").unwrap_or("1")) else { return; };
+    let basis = frame.viewport[0].hypot(frame.viewport[1]) / 2_f64.sqrt();
+    let Ok(thickness) = stroke_length(computed.get("stroke-width").unwrap_or("1"), basis) else { return; };
     if thickness <= 0.0 { return; }
-    let Some(data) = attrs.get("d") else { return; };
-    let Ok(points) = parse_path(data, MAX_PATH_POINTS) else { return; };
-    let local_width = if computed.get("vector-effect") == Some("non-scaling-stroke") {
-        let [_, _, view_width, view_height] = scene.view;
-        let (mut sx, mut sy) = (f64::from(scene.width) / view_width, f64::from(scene.height) / view_height);
-        if scene.aspect != "none" {
-            let scale = if scene.aspect.ends_with("slice") { sx.max(sy) } else { sx.min(sy) };
-            sx = scale;
-            sy = scale;
+    let shape = match name {
+        "rect" => {
+            let (Ok(x), Ok(y), Ok(w), Ok(h)) = (
+                length_value(attrs, "x", 0.0, frame.viewport[0]), length_value(attrs, "y", 0.0, frame.viewport[1]),
+                length_value(attrs, "width", 0.0, frame.viewport[0]), length_value(attrs, "height", 0.0, frame.viewport[1]),
+            ) else { return; };
+            if w <= 0.0 || h <= 0.0 { return; }
+            (vec![(x,y), (x+w,y), (x+w,y+h), (x,y+h)], true)
         }
-        let [a, b, c, d, _, _] = frame.matrix.0;
-        let (scale_x, scale_y) = (sx * a.hypot(b), sy * c.hypot(d));
-        if scale_x <= 0.0 || scale_y <= 0.0 { return; }
-        thickness / scale_x.max(scale_y)
-    } else { thickness };
-    if !local_width.is_finite() || local_width <= 0.0 { return; }
+        "circle" | "ellipse" => {
+            let (Ok(cx), Ok(cy)) = (length_value(attrs, "cx", 0.0, frame.viewport[0]), length_value(attrs, "cy", 0.0, frame.viewport[1])) else { return; };
+            let (rx, ry) = if name == "circle" {
+                let Ok(r) = stroke_length(attrs.get("r").map(String::as_str).unwrap_or("0"), basis) else { return; };
+                (r, r)
+            } else {
+                let (Ok(rx), Ok(ry)) = (length_value(attrs, "rx", 0.0, frame.viewport[0]), length_value(attrs, "ry", 0.0, frame.viewport[1])) else { return; };
+                (rx, ry)
+            };
+            if rx <= 0.0 || ry <= 0.0 { return; }
+            let steps = ((rx.max(ry) * 8.0).ceil() as usize).clamp(64, 512);
+            ((0..steps).map(|i| { let angle = std::f64::consts::TAU * i as f64 / steps as f64; (cx + rx * angle.cos(), cy + ry * angle.sin()) }).collect(), true)
+        }
+        "line" => {
+            let (Ok(x1), Ok(y1), Ok(x2), Ok(y2)) = (
+                length_value(attrs, "x1", 0.0, frame.viewport[0]), length_value(attrs, "y1", 0.0, frame.viewport[1]),
+                length_value(attrs, "x2", 0.0, frame.viewport[0]), length_value(attrs, "y2", 0.0, frame.viewport[1]),
+            ) else { return; };
+            (vec![(x1,y1), (x2,y2)], false)
+        }
+        "path" => {
+            let Some(data) = attrs.get("d") else { return; };
+            let Ok(points) = parse_path(data, MAX_PATH_POINTS) else { return; };
+            (points, data.trim_end().ends_with('z') || data.trim_end().ends_with('Z'))
+        }
+        "polygon" | "polyline" => {
+            let Some(data) = attrs.get("points") else { return; };
+            let Ok(points) = parse_points(data, MAX_POLYGON_POINTS) else { return; };
+            (points, name == "polygon")
+        }
+        _ => return,
+    };
     let opacity = computed.get("stroke-opacity").and_then(|value| value.parse::<f64>().ok())
         .filter(|value| value.is_finite()).unwrap_or(1.0).clamp(0.0, 1.0);
-    color[3] = (color[3] as f64 * opacity).round() as u8;
+    let group_opacity = computed.get("opacity").and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite()).unwrap_or(1.0).clamp(0.0, 1.0);
+    color[3] = (color[3] as f64 * opacity * group_opacity).round() as u8;
+    let dash = match computed.get("stroke-dasharray").unwrap_or("none") {
+        "none" => None,
+        value => {
+            let parts = value.replace(',', " ");
+            let Ok(mut lengths) = parts.split_whitespace().map(|part| stroke_length(part, basis)).collect::<Result<Vec<_>, _>>() else { return; };
+            if lengths.is_empty() || lengths.len() > 32 || lengths.iter().any(|n| *n < 0.0) { return; }
+            if lengths.len() % 2 == 1 { lengths.extend(lengths.clone()); }
+            let Ok(offset) = stroke_length(computed.get("stroke-dashoffset").unwrap_or("0"), basis) else { return; };
+            let author_length = path_length.and_then(|value| number(value).ok()).filter(|length| *length > 0.0);
+            Some(Dash { lengths, offset, author_length })
+        }
+    };
+    let non_scaling = computed.get("vector-effect") == Some("non-scaling-stroke");
+    let points = if non_scaling { shape.0.into_iter().map(|(x,y)| frame.matrix.point(x,y)).collect() } else { shape.0 };
     scene.items.push(Item {
         inverse: frame.matrix.inverse().ok().flatten(),
-        shape: Shape::Stroke(points, local_width / 2.0, data.trim_end().ends_with('z') || data.trim_end().ends_with('Z')),
+        shape: Shape::Stroke(Stroke { points, radius: thickness / 2.0, closed: shape.1, dash, non_scaling }),
         clip: None,
         color,
         clips: frame.clips.clone(),
     });
+}
+
+fn stroke_length(value: &str, basis: f64) -> Result<f64, DecodeError> {
+    if let Some(percent) = value.trim().strip_suffix('%') {
+        Ok(number(percent)? * basis / 100.0)
+    } else { number(value) }
 }
 
 fn mask_regions(dom: &Dom, style: &str, bounds: [f64; 4]) -> Vec<[f64; 4]> {
@@ -788,8 +824,11 @@ fn append_element(
                 "overflow",
             ],
         )?;
-        let width = required(&attrs, "width")?;
-        let height = required(&attrs, "height")?;
+        let declared_view = attrs.get("viewBox").map(|value| parse_view_box(value)).transpose()?;
+        let width = attrs.get("width").map(|value| number(value)).transpose()?
+            .or_else(|| declared_view.map(|view| view[2])).ok_or(DecodeError::UnsupportedSvg)?;
+        let height = attrs.get("height").map(|value| number(value)).transpose()?
+            .or_else(|| declared_view.map(|view| view[3])).ok_or(DecodeError::UnsupportedSvg)?;
         if width <= 0.0 || height <= 0.0 || width > u32::MAX as f64 || height > u32::MAX as f64 {
             return Err(DecodeError::GeometryLimit);
         }
@@ -797,7 +836,7 @@ fn append_element(
         if width.fract() != 0.0 || height.fract() != 0.0 {
             return Err(DecodeError::UnsupportedSvg);
         }
-        let view = attrs.get("viewBox").map_or(Ok([0.0, 0.0, width, height]), |v| parse_view_box(v))?;
+        let view = declared_view.unwrap_or([0.0, 0.0, width, height]);
         let aspect = attrs
             .get("preserveAspectRatio")
             .map(String::as_str)
@@ -883,13 +922,24 @@ fn append_element(
             }
             "path" => {
                 check_attrs(&attrs, &["d"])?;
-                Some(Shape::Outline(parse_path(
+                let points = parse_path(
                     attrs.get("d").ok_or(DecodeError::UnsupportedSvg)?,
                     MAX_PATH_POINTS,
-                )?))
+                )?;
+                if points.len() < 3 && style.computed.get("stroke").unwrap_or("none") == "none" {
+                    return Err(DecodeError::UnsupportedSvg);
+                }
+                Some(Shape::Outline(points))
+            }
+            "line" => {
+                check_attrs(&attrs, &["x1", "y1", "x2", "y2"])?;
+                let points = vec![
+                    (length_value(&attrs, "x1", 0.0, viewport[0])?, length_value(&attrs, "y1", 0.0, viewport[1])?),
+                    (length_value(&attrs, "x2", 0.0, viewport[0])?, length_value(&attrs, "y2", 0.0, viewport[1])?),
+                ];
+                Some(Shape::Outline(points))
             }
             // SVG fill closes an open polyline's endpoints for the fill operation.
-            // Strokes remain unsupported and are rejected by check_attrs.
             "polygon" | "polyline" => {
                 check_attrs(&attrs, &["points"])?;
                 Some(Shape::Outline(parse_points(
@@ -911,7 +961,14 @@ fn append_element(
             });
         }
     }
-    Ok(Frame { name: name.to_owned(), style, matrix, viewport, clips })
+    let frame = Frame { name: name.to_owned(), style, matrix, viewport, clips };
+    if computed.is_none() && matches!(name, "rect" | "circle" | "ellipse" | "path" | "line" | "polygon" | "polyline") {
+        if let Some(scene) = scene.as_mut() {
+            append_shape_stroke(scene, name, &attrs, &frame.style.computed, &frame,
+                attrs.get("pathLength").or_else(|| attrs.get("pathlength")).map(String::as_str));
+        }
+    }
+    Ok(frame)
 }
 
 fn parse_view_box(value: &str) -> Result<[f64; 4], DecodeError> {
@@ -1056,8 +1113,10 @@ fn style_from_computed(computed: &ComputedStyle) -> Result<Style, DecodeError> {
 }
 
 fn style(a: &Attrs, parent: Option<&Style>) -> Result<Style, DecodeError> {
+    let stroke_properties = ["stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset", "vector-effect"];
     let hints: Vec<Declaration> = ["color", "fill", "fill-opacity", "opacity"]
         .into_iter()
+        .chain(stroke_properties)
         .filter_map(|property| {
             a.get(property).map(|value| Declaration {
                 property: property.to_owned(),
@@ -1076,6 +1135,9 @@ fn style(a: &Attrs, parent: Option<&Style>) -> Result<Style, DecodeError> {
                 && !matches!(
                     decl.property.as_str(),
                     "color" | "fill" | "fill-opacity" | "opacity"
+                    | "stroke" | "stroke-width" | "stroke-opacity" | "stroke-linecap"
+                    | "stroke-linejoin" | "stroke-dasharray" | "stroke-dashoffset"
+                    | "vector-effect"
                 )
         })
     {
@@ -1106,6 +1168,9 @@ fn check_attrs(a: &Attrs, extra: &[&str]) -> Result<(), DecodeError> {
             "opacity",
             "style",
             "transform",
+            "stroke", "stroke-width", "stroke-opacity", "stroke-linecap",
+            "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset",
+            "vector-effect", "pathLength", "pathlength",
         ]
         .contains(&key.as_str())
             && !extra.contains(&key.as_str())
