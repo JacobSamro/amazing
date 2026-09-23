@@ -222,6 +222,9 @@ LANE_GRANTS["js-vm"].append("crates/amazing-js/src/value.rs")
 # TEXT-1: register the pinned WPT fonts/ CSSTest fixture faces in
 # page.rs::register_system_text_faces. That function only; additive.
 LANE_GRANTS.setdefault("text", []).append("crates/amazing/src/page.rs")
+# TEXT-6: the web-font loading pipeline. page.rs font registration/loading
+# functions only (already granted above); font_loader.rs is text's outright.
+LANE_GRANTS["text"].append("crates/amazing/src/font_loader.rs")
 # HTML-15 (ADR 0004): the amazing-html -> amazing-encoding lockfile edge must
 # land in the same commit as the manifest change, or --locked breaks.
 # ADDITIONS ONLY: the one dependency line.
