@@ -39,6 +39,7 @@ use amazing_css::ComputedStyle;
 use amazing_layout::font::FontSource;
 use amazing_layout::LayoutBox;
 use amazing_text::{GlyphCacheKey, GlyphContent, GlyphImage, TextSystem};
+use std::ops::Range;
 
 use crate::color::parse_css_color;
 use crate::display_list::{build_display_list, GroupEffect, PaintCommand};
@@ -484,6 +485,118 @@ pub fn paint_document_with_text_resources_and_controls(
         }
     }
     state.finish()
+}
+
+/// Replays the command stream so clips and effect groups around the selected
+/// items retain their original semantics, then translates the selected ink
+/// into a caller-owned target. This is the additive compositor raster seam.
+pub(crate) fn raster_command_range(
+    commands: &[PaintCommand<'_>],
+    selected: Range<usize>,
+    viewport: (u32, u32),
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+    controls: &dyn crate::controls::ControlProvider,
+    target: &mut Surface,
+    offset: (i32, i32),
+    target_clip: crate::display_list_view::PaintBounds,
+) -> bool {
+    let Some(pixels) = (viewport.0 as usize).checked_mul(viewport.1 as usize) else {
+        return false;
+    };
+    if pixels > MAX_LAYER_PIXELS || selected.start > selected.end || selected.end > commands.len() {
+        return false;
+    }
+    let mut state = RasterState::new(viewport.0, viewport.1);
+    state.surface.clear([0, 0, 0, 0]);
+    for (index, command) in commands.iter().enumerate() {
+        if state.failed {
+            break;
+        }
+        let draw = selected.contains(&index);
+        match command {
+            PaintCommand::BeginGroup(effect) => state.begin_group(*effect),
+            PaintCommand::EndGroup => state.end_group(),
+            PaintCommand::PushOverflowClip(box_) => state.push_overflow_clip(box_),
+            PaintCommand::PopClip => state.pop_clip(),
+            PaintCommand::PaintDecorations(box_, background) if draw => {
+                let color = resolve_text_color(&box_.style);
+                let clip = state.clip();
+                if !paint_decorations(
+                    &mut state.surface,
+                    box_,
+                    color,
+                    images,
+                    background,
+                    clip,
+                    &mut state.background_samples,
+                ) {
+                    state.failed = true;
+                }
+            }
+            PaintCommand::PaintControl(control) if draw => {
+                let clip = state.clip();
+                let content = controls.content(control.geometry.node.unwrap());
+                if !control_raster::paint(
+                    &mut state.surface,
+                    control,
+                    &content,
+                    images,
+                    clip,
+                    &mut state.background_samples,
+                ) {
+                    state.failed = true;
+                }
+                let rect = control.geometry.content_box;
+                let text_clip = clip.intersect(rect.x, rect.y, rect.w, rect.h);
+                for line in content.lines {
+                    paint_line_glyphs(&mut state.surface, line, text, text_clip);
+                }
+            }
+            PaintCommand::PaintContent(box_) if draw => {
+                let clip = state.clip();
+                paint_shaped_lines(&mut state.surface, box_, text, images, clip);
+            }
+            _ => {}
+        }
+    }
+    if state.failed || !state.groups.is_empty() {
+        return false;
+    }
+    if !target_clip.x.is_finite()
+        || !target_clip.y.is_finite()
+        || !target_clip.width.is_finite()
+        || !target_clip.height.is_finite()
+        || target_clip.width <= 0.0
+        || target_clip.height <= 0.0
+    {
+        return false;
+    }
+    let clip = ClipRect::viewport(target).intersect(
+        target_clip.x,
+        target_clip.y,
+        target_clip.width,
+        target_clip.height,
+    );
+    let [x0, y0, x1, y1] = clip.pixels();
+    let (dx, dy) = (i64::from(offset.0), i64::from(offset.1));
+    let sx0 = (x0 - dx).max(0).min(i64::from(viewport.0));
+    let sy0 = (y0 - dy).max(0).min(i64::from(viewport.1));
+    let sx1 = (x1 - dx).max(0).min(i64::from(viewport.0));
+    let sy1 = (y1 - dy).max(0).min(i64::from(viewport.1));
+    for sy in sy0..sy1 {
+        for sx in sx0..sx1 {
+            let source = state.surface.get_pixel(sx as u32, sy as u32).unwrap();
+            if source[3] == 0 {
+                continue;
+            }
+            let tx = (sx + dx) as u32;
+            let ty = (sy + dy) as u32;
+            let destination = target.get_pixel(tx, ty).unwrap();
+            target.set_pixel(tx, ty, source_over(source, destination, 1.0));
+        }
+    }
+    true
 }
 
 fn paint_decorations(

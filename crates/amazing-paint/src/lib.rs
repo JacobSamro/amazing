@@ -48,6 +48,7 @@ pub mod background;
 pub mod color;
 pub mod controls;
 mod display_list;
+pub mod display_list_view;
 pub mod image;
 pub mod paint;
 pub mod surface;
