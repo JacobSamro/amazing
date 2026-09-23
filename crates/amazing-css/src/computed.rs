@@ -976,12 +976,36 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 ("column-gap".to_owned(), column.to_owned()),
             ]
         }
+        "grid-column-start" | "grid-column-end" | "grid-row-start" | "grid-row-end"
+            if css_wide_keyword(value).is_some()
+                || contains_var_function(value)
+                || valid_grid_line(value) =>
+        {
+            vec![(property, value.to_owned())]
+        }
+        "grid-column-start" | "grid-column-end" | "grid-row-start" | "grid-row-end" => {
+            Vec::new()
+        }
+        "grid-column" | "grid-row" if css_wide_keyword(value).is_some() => {
+            let prefix = property.as_str();
+            vec![
+                (format!("{prefix}-start"), value.to_owned()),
+                (format!("{prefix}-end"), value.to_owned()),
+            ]
+        }
         "grid-column" | "grid-row" if !parts.is_empty() => {
             let prefix = property.as_str();
-            let (start, end) = value
-                .split_once('/')
-                .map(|(start, end)| (start.trim(), end.trim()))
-                .unwrap_or((value.trim(), "auto"));
+            let (start, explicit_end) = match value.split_once('/') {
+                Some((start, end)) if !end.contains('/') => (start.trim(), Some(end.trim())),
+                Some(_) => return Vec::new(),
+                None => (value.trim(), None),
+            };
+            if !valid_grid_line(start) || explicit_end.is_some_and(|end| !valid_grid_line(end)) {
+                return Vec::new();
+            }
+            let end = explicit_end.unwrap_or_else(|| {
+                if grid_line_custom_ident(start) { start } else { "auto" }
+            });
             vec![
                 (format!("{prefix}-start"), start.to_owned()),
                 (format!("{prefix}-end"), end.to_owned()),
@@ -1935,6 +1959,39 @@ fn valid_grid_line_name(name: &str) -> bool {
         name.to_ascii_lowercase().as_str(),
         "auto" | "span" | "default" | "initial" | "inherit" | "unset" | "revert" | "revert-layer"
     )
+}
+
+fn grid_line_custom_ident(value: &str) -> bool {
+    matches!(trim_tokens(&tokenize(value)), [Token::Ident(name)] if valid_grid_line_name(name))
+}
+
+fn valid_grid_line(value: &str) -> bool {
+    // A variable can supply the complete grid-line grammar after substitution.
+    if contains_var_function(value) {
+        return true;
+    }
+    let tokens = tokenize(value);
+    let components: Vec<&Token> = tokens.iter().filter(|token| !matches!(token, Token::Whitespace)).collect();
+    if matches!(components.as_slice(), [Token::Ident(name)] if name.eq_ignore_ascii_case("auto")) {
+        return true;
+    }
+    let mut span = false;
+    let mut integer = None;
+    let mut name = false;
+    for token in &components {
+        match token {
+            Token::Ident(ident) if ident.eq_ignore_ascii_case("span") && !span => span = true,
+            Token::Ident(ident) if valid_grid_line_name(ident) && !name => name = true,
+            Token::Number(number) if number.is_finite() && number.fract() == 0.0 && integer.is_none() => integer = Some(*number),
+            _ => return false,
+        }
+    }
+    if span {
+        (integer.is_some_and(|number| number > 0.0) || name)
+            && integer.is_none_or(|number| number > 0.0)
+    } else {
+        (integer.is_some() || name) && integer != Some(0.0)
+    }
 }
 
 /// Returns whether this is an auto-repeat plus its track-list body.
@@ -3190,6 +3247,43 @@ mod tests {
         assert_eq!(style.get("grid-column-end"), Some("-1"));
         assert_eq!(style.get("gap"), None);
         assert_eq!(style.get("grid-column"), None);
+    }
+
+    #[test]
+    fn grid_lines_validate_both_longhands_and_shorthand_halves() {
+        for property in ["grid-column-start", "grid-column-end", "grid-row-start", "grid-row-end"] {
+            for invalid in ["default", "0", "span 0", "span -1", "span", "auto foo", "1 2"] {
+                assert!(expand_declaration(property, invalid).is_empty(), "{property}: {invalid}");
+            }
+            for valid in ["auto", "foo", "-1 foo", "span foo 2", "foo span", "span 2"] {
+                assert_eq!(expand_declaration(property, valid), vec![(property.to_owned(), valid.to_owned())]);
+            }
+        }
+        for property in ["grid-column", "grid-row"] {
+            for invalid in ["default", "1 / default", "default / 1", "span 0", "0 / 1", "1 / 0", "1 / 2 / 3"] {
+                assert!(expand_declaration(property, invalid).is_empty(), "{property}: {invalid}");
+            }
+            assert_eq!(expand_declaration(property, "-1 foo / span foo 2"), vec![
+                (format!("{property}-start"), "-1 foo".into()),
+                (format!("{property}-end"), "span foo 2".into()),
+            ]);
+            assert_eq!(expand_declaration(property, "foo"), vec![
+                (format!("{property}-start"), "foo".into()),
+                (format!("{property}-end"), "foo".into()),
+            ]);
+            assert_eq!(expand_declaration(property, "span foo 2"), vec![
+                (format!("{property}-start"), "span foo 2".into()),
+                (format!("{property}-end"), "auto".into()),
+            ]);
+            assert_eq!(expand_declaration(property, "var(--line)").len(), 2);
+        }
+        let declarations = [("grid-column", "default"), ("grid-row-start", "default")];
+        let style = resolve(None, declarations.into_iter()
+            .flat_map(|(property, value)| expand_declaration(property, value))
+            .collect());
+        assert_eq!(style.get("grid-column-start"), Some("auto"));
+        assert_eq!(style.get("grid-column-end"), Some("auto"));
+        assert_eq!(style.get("grid-row-start"), Some("auto"));
     }
 
     #[test]
