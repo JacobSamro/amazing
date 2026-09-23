@@ -504,9 +504,11 @@ JSRT-7 owns that runtime/host-super facade. HTML-14 parser construction remains
 a separate document-loading integration. The registry surface is installed,
 but no class-upgrade WPT conformance is claimed.
 
-The DOM-15 `pattern` hook remains typed `NotSupported` at the primary's direction.
-JS `v` UnicodeSets and a full-match host facade are queued as JS-9; substituting
-`u` or Rust regex would give false patternMismatch results. DOM-10 abort timeout,
+The DOM-15 `pattern` hook now uses JS-9's first-party `amazing-regex` v-mode on
+exact UTF-16 code units. It checks standalone pattern validity before compiling
+the anchored expression, returns no compiled pattern for invalid syntax, and
+propagates resource limits. The primary granted the driver dependency and root
+lockfile edge. DOM-10 abort timeout,
 DocumentHost, and URL reflection were already installed on this base. There is
 no existing fetch/XHR global abort callback to connect before IA-NET; the
 unsupported abort algorithm remains explicit. NET-16 transport/security adoption
@@ -538,3 +540,10 @@ The subsequent serial, unchanged-deadline run was stopped by primary checkpoint
 direction during round 1 after its last logged 225/627 sources. It is partial
 and carries no baseline or final pass claim. A complete stable pair is still
 required before final WPT stability can be claimed.
+
+## Queued after IA-ADOPT — font loader adoption
+
+Net's `FontRequest` and `NetworkService::start_font` are ready for the driver.
+Next, route `@font-face` resource loading through that mode and register decoded
+faces with the page `TextProvider`. Keep its corpus and final Windows gate as a
+separate ticket after IA-ADOPT.

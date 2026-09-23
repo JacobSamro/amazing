@@ -829,6 +829,28 @@ impl BindingHost for RuntimeBindingHost<'_> {
         eprintln!("Uncaught custom element reaction: {}", error.describe());
         Ok(())
     }
+    fn form_pattern_matches(&mut self, pattern: &[u16], value: &[u16]) -> Result<Option<bool>, Throw> {
+        use amazing_regex::{Error as RegexError, Regex};
+
+        // HTML first compiles the source on its own. Anchoring must not turn
+        // an invalid pattern into a valid one.
+        match Regex::new_utf16(pattern, "v") {
+            Ok(_) => {}
+            Err(RegexError::Syntax(_)) => return Ok(None),
+            Err(error) => return Err(Throw::range_error(error.to_string())),
+        }
+        let mut anchored = "^(?:".encode_utf16().collect::<Vec<_>>();
+        anchored.extend_from_slice(pattern);
+        anchored.extend(")$".encode_utf16());
+        let regex = match Regex::new_utf16(&anchored, "v") {
+            Ok(regex) => regex,
+            Err(RegexError::Syntax(_)) => return Ok(None),
+            Err(error) => return Err(Throw::range_error(error.to_string())),
+        };
+        regex.exec_utf16(value, 0)
+            .map(|result| Some(result.is_some()))
+            .map_err(|error| Throw::range_error(error.to_string()))
+    }
     fn form_date_from_epoch_ms(&mut self, milliseconds: f64) -> Result<JsValue, Throw> {
         let global = self.js.binding_global_object();
         let date = self.js.binding_get_property(&global, "Date")?;

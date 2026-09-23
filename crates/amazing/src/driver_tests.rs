@@ -28,6 +28,26 @@ fn form_collections_and_validity_use_native_brands_and_live_hooks() {
 }
 
 #[test]
+fn form_pattern_uses_v_mode_and_full_string_matching() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<input id='p' pattern='[a&&a]' value='b'>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(
+        host, crate::js_scheduler::JS_CAPACITY,
+    ).unwrap();
+    assert_eq!(scheduler.run_script(
+        "let p=document.getElementById('p'); \
+         let invalidValue=p.validity.patternMismatch; \
+         p.value='a'; let matchingValue=!p.validity.patternMismatch; \
+         p.setAttribute('pattern','a|ab'); p.value='ab'; let fullAlternative=!p.validity.patternMismatch; \
+         p.setAttribute('pattern','['); let invalidPattern=!p.validity.patternMismatch; \
+         (invalidValue ? 1 : 0) + (matchingValue ? 2 : 0) + \
+         (fullAlternative ? 4 : 0) + (invalidPattern ? 8 : 0)"
+    ).unwrap(), amazing_js::value::JsValue::num(15.0));
+}
+
+#[test]
 fn custom_elements_registry_installs_and_when_defined_resolves() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse("<body></body>"),
