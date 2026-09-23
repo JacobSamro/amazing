@@ -90,7 +90,7 @@ impl Encoding {
     }
 }
 
-pub(super) const LABELS: [(&str, Encoding); 228] = [
+pub(crate) const LABELS: [(&str, Encoding); 228] = [
     ("866", Encoding::Ibm866),
     ("ansi_x3.4-1968", Encoding::Windows1252),
     ("arabic", Encoding::Iso88596),

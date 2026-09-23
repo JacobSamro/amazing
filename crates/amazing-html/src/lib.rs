@@ -17,8 +17,8 @@
 //! for supported syntax, namespace handling, and explicit DTD/encoding limits.
 //!
 //! HTML deviations from full spec (deliberate):
-//! - [`parse`] accepts caller-decoded text. [`parse_bytes`] supports a bounded
-//!   byte-level subset; see [`encoding`] for its precise encoding coverage.
+//! - [`parse`] accepts caller-decoded text. [`parse_bytes`] uses the pinned
+//!   WHATWG Encoding codec; see [`encoding`] for sniffing precedence.
 //! - [`IncrementalParser`] accepts already-decoded chunks and finishes only
 //!   when the caller explicitly ends the document.
 //! - Doctype identifiers are preserved; document quirks-mode handling remains

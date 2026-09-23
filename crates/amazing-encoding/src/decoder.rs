@@ -40,7 +40,11 @@ impl Decoder {
         while !self.pending.is_empty() {
             let mut step = self.step();
             if matches!(step, Step::Need) && final_input {
-                step = Step::Error(self.pending.len());
+                let n = if matches!(self.encoding, Encoding::Utf16Le | Encoding::Utf16Be)
+                    && self.pending.len() == 3 { 2 }
+                    else if self.encoding == Encoding::Iso2022Jp { 1 }
+                    else { self.pending.len() };
+                step = Step::Error(n);
             }
             let consumed = match step {
                 Step::Need => break,
@@ -116,7 +120,7 @@ impl Decoder {
             if !(0x81..=0xFE).contains(&p[2]) { return Step::Error(1); }
             if p.len() < 4 { return Step::Need; }
             if !(0x30..=0x39).contains(&p[3]) { return Step::Error(1); }
-            let pointer = ((first as u32-0x81)*1260*10) + ((second as u32-0x30)*1260)
+            let pointer = ((first as u32-0x81)*12600) + ((second as u32-0x30)*1260)
                 + ((p[2] as u32-0x81)*10) + (p[3] as u32-0x30);
             return gb18030_range_code_point(pointer).map_or(Step::Error(4), |cp| Step::Emit(cp,4));
         }
@@ -242,6 +246,8 @@ impl Decoder {
 }
 
 pub(crate) fn gb18030_range_code_point(pointer: u32) -> Option<u32> {
+    if (39420..189000).contains(&pointer) || pointer > 1237575 { return None; }
+    if pointer == 7457 { return Some(0xE7C7); }
     let ranges=&tables::GB18030_RANGES;
     let i=ranges.partition_point(|&(start,_)| start<=pointer).checked_sub(1)?;
     let cp=ranges[i].1+(pointer-ranges[i].0);

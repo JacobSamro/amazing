@@ -137,6 +137,7 @@ version = "0.0.1"
 dependencies = [
  "amazing-common",
  "amazing-dom",
+ "amazing-encoding",
 ]
 
 [[package]]

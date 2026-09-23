@@ -21,7 +21,7 @@ def const(name: str) -> str:
     return "INDEX_" + "".join(c.upper() if c.isalnum() else "_" for c in name)
 
 def array(name: str, values: list, width: int = 32) -> str:
-    rows = [f"pub(super) const {name}: [u32; {len(values)}] = ["]
+    rows = [f"pub(crate) const {name}: [u32; {len(values)}] = ["]
     vals = ["u32::MAX" if value is None else str(value) for value in values]
     for i in range(0, len(vals), width): rows.append("    " + ", ".join(vals[i:i+width]) + ",")
     rows.append("];")
@@ -34,7 +34,7 @@ def reverse_array(name: str, values: list) -> str:
     for pointer, cp in enumerate(values):
         if cp is not None: pairs.setdefault(cp, pointer)
     values = sorted(pairs.items())
-    rows = [f"pub(super) const {name}: [(u32, u32); {len(values)}] = ["]
+    rows = [f"pub(crate) const {name}: [(u32, u32); {len(values)}] = ["]
     vals = [f"({cp}, {pointer})" for cp, pointer in values]
     for i in range(0, len(vals), 24): rows.append("    " + ", ".join(vals[i:i+24]) + ",")
     rows.append("];")
@@ -58,12 +58,12 @@ def main() -> None:
         tables.append(array(const(name), values))
         reverse.append(reverse_array("REVERSE_" + const(name)[6:], values))
     ranges = indexes["gb18030-ranges"]
-    tables.append(f"pub(super) const GB18030_RANGES: [(u32, u32); {len(ranges)}] = [")
+    tables.append(f"pub(crate) const GB18030_RANGES: [(u32, u32); {len(ranges)}] = [")
     for i in range(0, len(ranges), 8):
         tables.append("    " + ", ".join(f"({p}, {c})" for p,c in ranges[i:i+8]) + ",")
     tables.append("];")
-    tables.append("pub(super) fn lookup(name: &str, pointer: usize) -> Option<u32> {\n    let table: &[u32] = match name {")
-    reverse.append("pub(super) fn reverse(name: &str, code_point: u32) -> Option<u32> {\n    let table: &[(u32,u32)] = match name {")
+    tables.append("pub(crate) fn lookup(name: &str, pointer: usize) -> Option<u32> {\n    let table: &[u32] = match name {")
+    reverse.append("pub(crate) fn reverse(name: &str, code_point: u32) -> Option<u32> {\n    let table: &[(u32,u32)] = match name {")
     for name in indexes:
         if name == "gb18030-ranges": continue
         tables.append(f'        "{name}" => &{const(name)},')
@@ -76,7 +76,7 @@ def main() -> None:
     for encoding in encodings: label_rows.append(f'            Self::{ident(encoding["name"])} => "{encoding["name"].lower()}",')
     label_rows.append("        }\n    }\n}\n")
     labels = sorted((label, ident(encoding["name"])) for encoding in encodings for label in encoding["labels"])
-    label_rows.append(f"pub(super) const LABELS: [(&str, Encoding); {len(labels)}] = [")
+    label_rows.append(f"pub(crate) const LABELS: [(&str, Encoding); {len(labels)}] = [")
     for label, var in labels: label_rows.append(f'    ("{label}", Encoding::{var}),')
     label_rows.append("];")
     outputs = {

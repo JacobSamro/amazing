@@ -518,3 +518,60 @@ Package nextest passed **131/131 twice**, with a separate package doctest
 and separate shared-slot workspace doctests passed **2/2**. Five new parser
 mock tests account for the package rise from HTML-13's 126. No push or PR;
 the lane stops for co-integrator preflight.
+
+## HTML-15 — WHATWG Encoding codec from pinned indexes
+
+At fixed source base `d2a610ede8f254b8da1be9121d59dbd7cf598e78`,
+`amazing-encoding` now contains std-only, unsafe-forbidden streaming decoders
+and encoders for the Encoding Standard's UTF, single-byte, CJK, replacement and
+x-user-defined families. The checked-in generator verifies WHATWG encoding
+revision `a985b62a9b45c17da3e17a9f0a0b4e30c34c4a8a` input hashes:
+`indexes.json` `b7c8961095f0b4cae8f4a16a5011e7c84047a60c1277e28ee8df9e56074ee509`
+and `encodings.json`
+`078212b3697f60b81225b6671bd9da2604497abff0aa8e96e4d46605c02ac9e7`.
+`tools/generate.py --check` reproduced all three generated tables. Reverse
+pointer exceptions for Big5 and Shift_JIS and gb18030 range/compatibility
+cases are handled by the encoder. The HTML parser and incremental byte parser
+now share this codec and the existing BOM, transport, meta and fallback
+selection. Their public `parse_bytes` entry and four formerly supported
+encodings remain covered by existing tests. The primary explicitly granted
+one `amazing-encoding` dependency line in root `Cargo.lock`; no other lock
+entry changed. Fetch, bindings and the browser driver remain separate owner
+adoptions.
+
+Pinned WPT `encoding/` revision is
+`53bc812da2ed81179ebd1ba76b2d197cc4747d12`. The frozen data selection
+hash is `a4dbb0faa4784085c56321d864a63acaf8c15c897a09c3bccd13a0ef95ea3cc3`;
+the checked-in TSV hash is
+`a78116be18ae160882afbd2e127aabdd99102aea125a63ee0bc1629eaae7436f`.
+It ports 222 label cases and 27 single-byte index vectors. Two Windows BEFORE
+runs had identical raw hash
+`bfbe5065da36561c2f374e3f3ef94ec64bef537f30b96c6e40b3a52161352f9e`;
+two AFTER runs had identical raw hash
+`30c71ff13e8fb2f7d3ca97ac016b195983a055eaf71c20d98fd55f42ff5ab932`.
+
+| Selection | BEFORE pass/fail/unsupported | AFTER pass/fail/unsupported |
+| --- | --- | --- |
+| Labels (222) | 25 / 0 / 197 | 222 / 0 / 0 |
+| Single-byte vectors (27) | 1 / 0 / 26 | 27 / 0 / 0 |
+
+The exact 249 case transitions are in
+`crates/amazing-html/evidence/html15-wpt-results.tsv` (SHA-256
+`c72492a5b830a9e976287bfa7e06b6a1c90728a533f1efa356da44cb039d3473`):
+223 unsupported-to-pass, 26 pass-to-pass, zero losses. This is a ported data
+selection through the HTML bridge, not unmodified WPT harness credit. Owned
+vectors cover all codec families, each single-byte encoder index, every-byte
+splits, malformed replacement/fatal behavior, labels, BOMs, compatibility
+exceptions, and bounded decoder state. They do not measure Fetch or
+`TextDecoder` adoption.
+
+The final 18-file source/input/output/fixture/lock hash manifest in
+`crates/amazing-html/evidence/html15-source-hashes.json` was identical
+before and after the gates
+(SHA-256 `5f43b398eb1096b04e5af3f6d26d12e4409e4584f7cd3c3fc961ca06b4f10f89`),
+with zero Mac/Windows mismatches before and after the fixed-tree gates.
+The final locked Windows scoped nextest ran **137/137 twice** (encoding 6,
+HTML 131); separate doctests ran **0 encoding, 1 HTML**, all passing. The
+shared-slot workspace nextest ran **1694 passed, 3 skipped**, with separate
+workspace doctests **2 passed**. The lane stops at this ticket for
+co-integrator preflight; no push or PR.

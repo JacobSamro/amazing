@@ -1,19 +1,10 @@
-//! Complete-buffer HTML byte decoding, with a deliberately bounded encoding set.
+//! Complete-buffer HTML byte decoding using WHATWG Encoding codecs.
 //!
-//! Supported decoders: UTF-8, UTF-16LE, UTF-16BE, and windows-1252. The
-//! accepted labels are enumerated by `label`; other labels are ignored during
-//! sniffing. The default is windows-1252, matching the HTML fallback for an
-//! unspecified locale. The prescan examines only the first 1024 bytes and
-//! recognizes ordinary meta charset and content-type declarations. It does
-//! not implement the complete Encoding label table or streaming reparses.
+//! Labels use the complete pinned Encoding table. The default is windows-1252.
+//! The prescan examines the first 1024 bytes for ordinary meta charset and
+//! content-type declarations; it does not implement streaming reparses.
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Encoding {
-    Utf8,
-    Utf16Le,
-    Utf16Be,
-    Windows1252,
-}
+pub use amazing_encoding::Encoding;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Source {
@@ -36,27 +27,14 @@ pub struct DecodedHtml {
 pub fn decode(bytes: &[u8], transport_label: Option<&str>) -> DecodedHtml {
     let (encoding, source, skip) = sniff(bytes, transport_label);
     let bytes = &bytes[skip..];
-    let text = match encoding {
-        Encoding::Utf8 => String::from_utf8_lossy(bytes).into_owned(),
-        Encoding::Utf16Le => decode_utf16(bytes, true),
-        Encoding::Utf16Be => decode_utf16(bytes, false),
-        Encoding::Windows1252 => bytes.iter().map(|&byte| windows1252(byte)).collect(),
-    };
+    let text = amazing_encoding::decode(bytes, encoding, false).expect("replacement mode cannot fail");
     DecodedHtml { text, encoding, source }
 }
 
 // Both complete and incremental input use this exact choice function. The
 // caller supplies at most the first 1024 bytes when streaming.
 pub(crate) fn sniff(bytes: &[u8], transport_label: Option<&str>) -> (Encoding, Source, usize) {
-    let bom = if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
-        Some((Encoding::Utf8, 3))
-    } else if bytes.starts_with(&[0xfe, 0xff]) {
-        Some((Encoding::Utf16Be, 2))
-    } else if bytes.starts_with(&[0xff, 0xfe]) {
-        Some((Encoding::Utf16Le, 2))
-    } else {
-        None
-    };
+    let bom = amazing_encoding::sniff_bom(bytes);
     let (encoding, source, skip) = if let Some((encoding, skip)) = bom {
         (encoding, Source::Bom, skip)
     } else if let Some(encoding) = transport_label.and_then(label) {
@@ -72,51 +50,7 @@ pub(crate) fn sniff(bytes: &[u8], transport_label: Option<&str>) -> (Encoding, S
 }
 
 fn label(raw: &str) -> Option<Encoding> {
-    let label = raw.trim_matches(|ch: char| matches!(ch, '\t' | '\n' | '\x0c' | '\r' | ' '));
-    if [
-        "utf-8",
-        "utf8",
-        "unicode-1-1-utf-8",
-        "unicode11utf8",
-        "unicode20utf8",
-        "x-unicode20utf8",
-    ]
-    .iter()
-    .any(|name| label.eq_ignore_ascii_case(name))
-    {
-        Some(Encoding::Utf8)
-    } else if ["utf-16", "utf-16le"]
-        .iter()
-        .any(|name| label.eq_ignore_ascii_case(name))
-    {
-        Some(Encoding::Utf16Le)
-    } else if label.eq_ignore_ascii_case("utf-16be") {
-        Some(Encoding::Utf16Be)
-    } else if [
-        "windows-1252",
-        "cp1252",
-        "x-cp1252",
-        "iso-8859-1",
-        "latin1",
-        "l1",
-        "us-ascii",
-        "ascii",
-        "iso8859-1",
-        "iso88591",
-        "iso_8859-1",
-        "csisolatin1",
-        "ibm819",
-        "cp819",
-        "iso-ir-100",
-        "ansi_x3.4-1968",
-    ]
-    .iter()
-    .any(|name| label.eq_ignore_ascii_case(name))
-    {
-        Some(Encoding::Windows1252)
-    } else {
-        None
-    }
+    amazing_encoding::encoding_for_label(raw)
 }
 
 fn xml_utf16_preamble(bytes: &[u8]) -> Option<Encoding> {
@@ -275,38 +209,6 @@ fn extract_content_charset(value: &[u8]) -> Option<&[u8]> {
 
 fn ascii_space(byte: u8) -> bool {
     matches!(byte, b'\t' | b'\n' | 0x0c | b'\r' | b' ')
-}
-
-fn decode_utf16(bytes: &[u8], little: bool) -> String {
-    let units = bytes.chunks_exact(2);
-    let odd = !units.remainder().is_empty();
-    let mut result: String = char::decode_utf16(units.map(|pair| {
-        if little {
-            u16::from_le_bytes([pair[0], pair[1]])
-        } else {
-            u16::from_be_bytes([pair[0], pair[1]])
-        }
-    }))
-    .map(|value| value.unwrap_or('\u{fffd}'))
-    .collect();
-    if odd {
-        result.push('\u{fffd}');
-    }
-    result
-}
-
-pub(crate) fn windows1252(byte: u8) -> char {
-    const C1: [u16; 32] = [
-        0x20ac, 0x0081, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160,
-        0x2039, 0x0152, 0x008d, 0x017d, 0x008f, 0x0090, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
-        0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x009d, 0x017e, 0x0178,
-    ];
-    char::from_u32(if (0x80..=0x9f).contains(&byte) {
-        C1[(byte - 0x80) as usize] as u32
-    } else {
-        byte as u32
-    })
-    .unwrap()
 }
 
 #[cfg(test)]

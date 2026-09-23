@@ -7,5 +7,6 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+amazing-encoding = { path = "../amazing-encoding" }
 amazing-common = { path = "../amazing-common" }
 amazing-dom = { path = "../amazing-dom" }

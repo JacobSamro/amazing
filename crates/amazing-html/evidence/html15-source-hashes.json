@@ -1,0 +1,23 @@
+{
+  "fixed_base": "d2a610ede8f254b8da1be9121d59dbd7cf598e78",
+  "hashes": {
+    "Cargo.lock": "30c1b66612223068a45b4f9429f7921b60ef45aae7ed4cdfa029d8610506d25a",
+    "crates/amazing-encoding/Cargo.toml": "cbc4b97a04c21d44ce5d1a60b77152d74298b7a32153954c8e125d9735c5250c",
+    "crates/amazing-encoding/data/encodings.json": "078212b3697f60b81225b6671bd9da2604497abff0aa8e96e4d46605c02ac9e7",
+    "crates/amazing-encoding/data/indexes.json": "b7c8961095f0b4cae8f4a16a5011e7c84047a60c1277e28ee8df9e56074ee509",
+    "crates/amazing-encoding/src/decoder.rs": "4074e27551e18de296a8b65a56e21773d57ae1e659063a6932d3da8cd4dd9e22",
+    "crates/amazing-encoding/src/encoder.rs": "877fcd9f5946e94f5c5cd27d5ee27188629642d46fa46dda40ba7fb776039291",
+    "crates/amazing-encoding/src/generated/labels.rs": "2d06224a04f0a71676814ffe36a851f6c7448ed091aecb02fc5f7b60a3a77560",
+    "crates/amazing-encoding/src/generated/reverse.rs": "a5121738bcae825d16615204c97e762f30904d0334e75ff18589297c69bfbe8e",
+    "crates/amazing-encoding/src/generated/tables.rs": "059e842b326f11d31b2da05daeb202ddfc1926b810cd6328c2c14922e02c451b",
+    "crates/amazing-encoding/src/lib.rs": "777bf316d11004750d1ba47c3f7a55258d3e15293783a718bf7b8829f9009432",
+    "crates/amazing-encoding/tests/codecs.rs": "8bc635b3b4fd5092b07acc7b78293dc69d617175a5af067e51527362f859345f",
+    "crates/amazing-encoding/tools/generate.py": "5aa53d93f976389a32f8ffaf2e132a386b2f27122c189a5e53e4c5d6dee68466",
+    "crates/amazing-html/Cargo.toml": "eb763de97f26fd7d04f0fd5cc6c710bf04bf72b713d7d903348489333db6cfc7",
+    "crates/amazing-html/evidence/html15-wpt-selection.tsv": "a78116be18ae160882afbd2e127aabdd99102aea125a63ee0bc1629eaae7436f",
+    "crates/amazing-html/examples/encoding_wpt_probe.rs": "7e0a3d6c2548b3136305f1886fc92819e4fb4b65ce5233877f4db85d65d77d5a",
+    "crates/amazing-html/src/byte_stream.rs": "597665a0a55b16f4e506e5186da4a9d3f8a7d66a1ddfc8f42e6bd42b9e0d2f2c",
+    "crates/amazing-html/src/encoding.rs": "7768e400ecb84690d5a534b496fb61886d99374411c44cb523ae88cf78475e7b",
+    "crates/amazing-html/src/lib.rs": "07b9003f62bb2e8f00c6b496544cd96bc7efb04f194e3419cc0153ff7dc1baf3"
+  }
+}
