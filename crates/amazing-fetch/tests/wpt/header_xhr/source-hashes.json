@@ -1,0 +1,24 @@
+{
+  "revision": "c48d58747e1f211527fb695fd60548a997fae617",
+  "files": {
+    "fetch/api/headers/header-values-normalize.any.js": "f980881b68c6cd572b2b7b61970585ca0ca5f6a6b175438357ee1ab5cec86d62",
+    "fetch/api/headers/headers-basic.any.js": "596cd577710773b42a5edf7c6150138fd0502e005a76b383a8331b5fcaf2cfeb",
+    "fetch/api/headers/headers-casing.any.js": "f9034ff6ddc3c23e2aa16419738005d229e19a0b40eb5791af465b16df3ab877",
+    "fetch/api/headers/headers-combine.any.js": "8bc26fcc318dc1fb0d0b60f2a4dd6d5fdaa8ac2e148d20856f6186b5d4f4971d",
+    "fetch/api/headers/headers-no-cors.any.js": "4ca3dc516dc745cc0a7073a3cb1e12b20a4938afc63f7f1e849d4de2e2c13b39",
+    "fetch/api/headers/headers-normalize.any.js": "8f914199d80ed14cd5dec7992464a10981e0b5b74fd26b70768f04f1fd1fb4c1",
+    "xhr/getallresponseheaders-cookies.htm": "1b9eeee35c01be536147ceeab8ea3f5efbff7fc8a2678a38cd3303541836b611",
+    "xhr/getallresponseheaders.htm": "e708c1a93c0cbd622046810fdac641778f9bce5635ac7f1661ffca9e28b80718",
+    "xhr/getresponseheader-case-insensitive.htm": "0a54615c8a84e2922e1bdc1bb811cb75a4be8f874af0e32e18cec864867a07eb",
+    "xhr/getresponseheader-cookies-and-more.htm": "e5545c3046b74575c8aa01f499bc728bae9ea7c4f27c1e1a8f2e83db83390e2d",
+    "xhr/getresponseheader.any.js": "60896a0f063e74bd12fa6033cd784b08dd4072c40de25c4c31f731898f4a48ff",
+    "xhr/resources/header-content-length-twice.asis": "be5927080aae42d8061d079a008d836ebd5a65af4c8e4111abfb130ad3592816",
+    "xhr/resources/header-content-length.asis": "f331dad61f118bb3bd5252c47207c95b6b071d56fde44ed687366f2899ee1dce",
+    "xhr/resources/headers-basic.asis": "744bb247a188dcc749f88bab928cf60f825dab6a9772027977ce9919ef49c6ed",
+    "xhr/resources/headers-double-empty.asis": "320e7b65bc284c9686e7e77f1b8a16179f7dd6918e2cdf45e24789185ecb0400",
+    "xhr/resources/headers-some-are-empty.asis": "bafd6d9a246e9b1c2e82bee9455ab02511559af5473124b96b3581fd40c445ab",
+    "xhr/resources/headers-www-authenticate.asis": "2335a48b82a1dfaf51a61b1ff7bf85de7104e7a42ec0dd9bbc2725fb43788e9e",
+    "xhr/resources/headers.asis": "a77e85a7fc8ab2013b772c462d773dc4bf6258f6a2e206cb2766b5c5913c1093",
+    "xhr/resources/headers.py": "fd5d29cabe20ddd050187e5600d0744ab687222e8e7f17df20192fb81366aa9d"
+  }
+}

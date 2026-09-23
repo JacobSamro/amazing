@@ -1518,3 +1518,12 @@ sources and SHA-256 values are under
 on non-GET/HEAD requests and zero Content-Length for empty POST/PUT, and
 accepts same-origin no-cors manual redirects. JS-level WPT remains a driver
 and bindings adoption request in `.agents/net/questions.md`.
+
+### NET-24 — pinned Fetch Headers and XHR header cluster
+
+Ported 19 pinned WPT source/fixture files at `c48d5874` and a 332-expectation
+native matrix for normalization, guards, duplicate combination, case handling,
+wire echoes, and XHR visibility. Fixed Fetch header value normalization to trim
+HTTP whitespace at edges while retaining valid control bytes. Linux baseline
+128/332; after 332/332. See `crates/amazing-fetch/tests/wpt/header_xhr/PROVENANCE.md`
+for scope and pending JS runner adoption.

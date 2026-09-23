@@ -251,6 +251,47 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
     let xhr = path.starts_with("/xhr/resources/");
     let name = path.rsplit('/').next().unwrap_or("");
     let mut headers = vec![header("Content-Type", "text/plain")];
+    if xhr && name == "headers.py" {
+        return reply(
+            200,
+            "OK",
+            vec![
+                header("Content-Type", "text/plain"),
+                header("X-Custom-Header", "test"),
+                header("Set-Cookie", "test"),
+                header("Set-Cookie2", "test"),
+                header("X-Custom-Header-Empty", ""),
+                header("X-Custom-Header-Comma", "1"),
+                header("X-Custom-Header-Comma", "2"),
+                header("X-Custom-Header-Bytes", "…"),
+            ],
+            b"TEST",
+        );
+    }
+    if xhr {
+        let raw: Option<&[u8]> = match name {
+            "headers.asis" => Some(include_bytes!("../../../amazing-fetch/tests/wpt/header_xhr/source/xhr/resources/headers.asis")),
+            "headers-basic.asis" => Some(include_bytes!("../../../amazing-fetch/tests/wpt/header_xhr/source/xhr/resources/headers-basic.asis")),
+            "headers-double-empty.asis" => Some(include_bytes!("../../../amazing-fetch/tests/wpt/header_xhr/source/xhr/resources/headers-double-empty.asis")),
+            "headers-some-are-empty.asis" => Some(include_bytes!("../../../amazing-fetch/tests/wpt/header_xhr/source/xhr/resources/headers-some-are-empty.asis")),
+            "headers-www-authenticate.asis" => Some(include_bytes!("../../../amazing-fetch/tests/wpt/header_xhr/source/xhr/resources/headers-www-authenticate.asis")),
+            "header-content-length.asis" => Some(include_bytes!("../../../amazing-fetch/tests/wpt/header_xhr/source/xhr/resources/header-content-length.asis")),
+            "header-content-length-twice.asis" => Some(include_bytes!("../../../amazing-fetch/tests/wpt/header_xhr/source/xhr/resources/header-content-length-twice.asis")),
+            _ => None,
+        };
+        if let Some(raw) = raw {
+            let mut wire = Vec::new();
+            for &byte in raw {
+                if byte == b'\n' {
+                    wire.extend_from_slice(b"\r\n");
+                } else {
+                    wire.push(byte);
+                }
+            }
+            wire.extend_from_slice(b"\r\n");
+            return wire;
+        }
+    }
     match (fetch, xhr, name) {
         (true, _, "inspect-headers.py") => {
             let checked = request.query("headers").unwrap_or_default();

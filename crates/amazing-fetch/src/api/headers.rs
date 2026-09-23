@@ -201,15 +201,11 @@ fn valid_name(name: &str) -> Result<String, ApiError> {
     Ok(name.to_ascii_lowercase())
 }
 fn normalize_value(value: &str) -> Result<String, ApiError> {
-    let value = value.trim_matches([' ', '\t']);
-    if value.chars().any(|c| {
-        c == '\0'
-            || c == '\r'
-            || c == '\n'
-            || c == '\u{7f}'
-            || (c < ' ' && c != '\t')
-            || c as u32 > 255
-    }) {
+    // Fetch's normalize-a-header-value removes HTTP whitespace at the edges.
+    // Other control bytes remain valid header values; CR/LF inside the value
+    // must still be rejected before serialization to prevent line injection.
+    let value = value.trim_matches([' ', '\t', '\r', '\n']);
+    if value.chars().any(|c| matches!(c, '\0' | '\r' | '\n') || c as u32 > 255) {
         return Err(ApiError::InvalidHeaderValue);
     }
     Ok(value.to_owned())
