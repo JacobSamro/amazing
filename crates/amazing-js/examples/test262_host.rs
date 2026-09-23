@@ -73,8 +73,9 @@ fn unsupported(name: &str) -> Result<JsValue, Throw> {
 fn realm(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     unsupported("host.createRealm")
 }
-fn detach(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    unsupported("host.detachArrayBuffer")
+fn detach(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    i.binding_detach_array_buffer(args.first().unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::Undefined)
 }
 fn gc(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
     unsupported("host.gc")
@@ -230,7 +231,7 @@ fn run() -> io::Result<()> {
 fn main() -> std::process::ExitCode {
     if std::env::args().any(|a| a == "--capabilities") {
         println!(
-            "{{\"protocol\":1,\"module\":false,\"async\":false,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":false,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":false}}"
+            "{{\"protocol\":1,\"module\":false,\"async\":false,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":false}}"
         );
         return std::process::ExitCode::SUCCESS;
     }

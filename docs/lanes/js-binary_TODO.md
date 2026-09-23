@@ -41,10 +41,43 @@ operations wait for JSB-2 rather than using lossy Number conversions.
 
 ## JSB-2 — BigInt
 
-Next: arbitrary-precision std-only limb arithmetic and BigInt built-ins in
-`builtins_binary_bigint*.rs`, then the shared value/coercion/operator paths,
-BigInt TypedArrays, DataView accessors and Atomics. Measure the pinned BigInt
-Test262 selections and full-suite zero lost passes before its own gate.
+Implemented signed base-2^32 limb arithmetic, BigInt literals, constructor,
+prototype, coercion, operators, comparisons, `asIntN`/`asUintN`, BigInt
+TypedArrays, DataView accessors and Atomics. The Test262 host now calls the
+binary module's real ArrayBuffer detach operation, so BigInt TypedArray
+detachment tests run instead of becoming unsupported when they reach the host.
+
+Pinned Linux Test262 revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`,
+53,872 sources, input hash
+`91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`:
+fixed `dev` base `d136fdd` had 19,687 pass / 23,658 fail / 16 timeout /
+10,217 unsupported / 294 skipped. JSB-2 had 20,999 pass / 22,557 fail /
+15 timeout / 10,007 unsupported / 294 skipped, with **zero lost passing
+files and zero lost passing variants**. After classification hash:
+`d6dad40499b358008e52a69ae8d82e91441dcee111f1de3822ce320cb8ddc254`.
+Selected pass counts: `built-ins/BigInt` 1→68,
+`TypedArrayConstructors/ctors-bigint` 20→80, `DataView` 368→442,
+`Atomics` 163→207. Linux amazing-js nextest passed 235/235 (one skipped),
+workspace nextest 1,927/1,927 (three skipped), and the crate doctest passed
+1/1. The updated Test262 runner self-test passed.
+
+The authoritative win-002 final gate used the same pinned revision and 53,872
+sources, input hash
+`a2ef5e43ff95da279324b6df9a37740a505b9f8b6c7a11406408af70f453b075`.
+Fixed `d136fdd` base: 19,687 pass / 23,659 fail / 16 timeout /
+10,216 unsupported / 294 skipped. JSB-2: 20,999 pass / 22,558 fail /
+15 timeout / 10,006 unsupported / 294 skipped. **Zero lost passing files and zero lost
+passing variants**. After classification hash:
+`d34e6f1a04def59753898bd8e519031f07e5f5eb249a5635c5c0737f885fa51c`.
+win-002 amazing-js nextest passed 235/235 (one skipped), crate doctests
+1/1; workspace nextest passed 1,930/1,930 (five skipped), workspace doctests
+2/2. The updated Test262 runner self-test passed on Windows too.
+
+Remaining gaps include BigInt Test262 cases blocked by user-thrown error
+constructor identity, global descriptor handling, and BigInt wrapper property
+overrides. The bigint limb implementation caps enormous exponent/shift/width
+results at 1,048,576 bits to avoid unbounded allocation. VM unary BigInt
+fast paths are routed to js-vm in `.agents/js-binary/questions.md`.
 
 The VM delegates binary operators to `Interpreter::binary`, but its unary
 Neg and BitNot instructions use Number fast paths in `vm/mod.rs`. Route that

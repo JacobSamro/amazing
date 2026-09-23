@@ -1798,7 +1798,10 @@ impl Interpreter {
 
     fn numeric(&self, n: &crate::tokens::Numeric) -> Result<JsValue, Throw> {
         if n.bigint {
-            return Err(Throw::type_error("BigInt is not implemented"));
+            let digits: String = n.raw.chars().filter(|character| *character != '_').collect();
+            let value = BinaryBigInt::parse_radix(&digits, n.radix as u32)
+                .ok_or_else(|| Throw::syntax_error("invalid BigInt literal"))?;
+            return Ok(Self::bigint_value(value));
         }
         let raw: String = n.raw.chars().filter(|c| *c != '_').collect();
         let v = if n.radix == 10 {
@@ -1889,11 +1892,15 @@ impl Interpreter {
             ast::UnOp::Not => Ok(JsValue::Bool(!self.eval_expr(x, env)?.to_boolean())),
             ast::UnOp::BitNot => {
                 let v = self.eval_expr(x, env)?;
-                Ok(JsValue::num((!self.to_int32(&v)?) as f64))
+                let primitive = self.primitive(v)?;
+                if let JsValue::BigInt(value) = &primitive { Ok(Self::bigint_value(value.bit_not())) }
+                else { Ok(JsValue::num((!self.to_int32(&primitive)?) as f64)) }
             }
             ast::UnOp::Neg => {
                 let v = self.eval_expr(x, env)?;
-                Ok(JsValue::num(-self.to_number(&v)?))
+                let primitive = self.primitive(v)?;
+                if let JsValue::BigInt(value) = &primitive { Ok(Self::bigint_value(value.negated())) }
+                else { Ok(JsValue::num(-self.to_number(&primitive)?)) }
             }
             ast::UnOp::Pos => {
                 let v = self.eval_expr(x, env)?;
@@ -1909,9 +1916,15 @@ impl Interpreter {
         env: &EnvHandle,
     ) -> Result<JsValue, Throw> {
         let (reference, old) = self.resolve_reference(x, env)?;
-        let n = self.to_number(&old)? + if op == ast::UpdateOp::Inc { 1.0 } else { -1.0 };
-        self.put_reference(reference, JsValue::num(n), env)?;
-        Ok(if prefix { JsValue::num(n) } else { old })
+        let primitive = self.primitive(old.clone())?;
+        let next = if let JsValue::BigInt(value) = primitive {
+            Self::bigint_value(if op == ast::UpdateOp::Inc { value.add(&BinaryBigInt::one()) }
+                else { value.sub(&BinaryBigInt::one()) })
+        } else {
+            JsValue::num(self.to_number(&primitive)? + if op == ast::UpdateOp::Inc { 1.0 } else { -1.0 })
+        };
+        self.put_reference(reference, next.clone(), env)?;
+        Ok(if prefix { next } else { old })
     }
     fn binary(&mut self, op: ast::BinOp, a: JsValue, b: JsValue) -> Result<JsValue, Throw> {
         use ast::BinOp::*;
@@ -1926,30 +1939,57 @@ impl Interpreter {
                     units.extend_from_slice(left.units());
                     units.extend_from_slice(right.units());
                     Ok(JsValue::str_units(units))
+                } else if matches!(x, JsValue::BigInt(_)) || matches!(y, JsValue::BigInt(_)) {
+                    self.bigint_operator(op, x, y)
                 } else {
                     Ok(JsValue::num(self.to_number(&x)? + self.to_number(&y)?))
                 }
             }
-            Sub => Ok(JsValue::num(self.to_number(&a)? - self.to_number(&b)?)),
-            Mul => Ok(JsValue::num(self.to_number(&a)? * self.to_number(&b)?)),
-            Div => Ok(JsValue::num(self.to_number(&a)? / self.to_number(&b)?)),
-            Rem => Ok(JsValue::num(self.to_number(&a)? % self.to_number(&b)?)),
-            Pow => Ok(JsValue::num(self.to_number(&a)?.powf(self.to_number(&b)?))),
+            Sub | Mul | Div | Rem | Pow | Shl | Shr | UShr | BitAnd | BitOr | BitXor => {
+                let x = self.primitive(a)?;
+                let y = self.primitive(b)?;
+                if matches!(x, JsValue::BigInt(_)) || matches!(y, JsValue::BigInt(_)) {
+                    return self.bigint_operator(op, x, y);
+                }
+                Ok(JsValue::num(match op {
+                    Sub => self.to_number(&x)? - self.to_number(&y)?,
+                    Mul => self.to_number(&x)? * self.to_number(&y)?,
+                    Div => self.to_number(&x)? / self.to_number(&y)?,
+                    Rem => self.to_number(&x)? % self.to_number(&y)?,
+                    Pow => self.to_number(&x)?.powf(self.to_number(&y)?),
+                    Shl | Shr | UShr => {
+                        let left = self.to_int32(&x)?;
+                        let shift = self.to_uint32(&y)? & 31;
+                        match op { Shl => left.wrapping_shl(shift) as f64,
+                            Shr => (left >> shift) as f64,
+                            _ => (left as u32).wrapping_shr(shift) as f64 }
+                    }
+                    BitAnd | BitOr | BitXor => {
+                        let left = self.to_int32(&x)?;
+                        let right = self.to_int32(&y)?;
+                        match op { BitAnd => (left & right) as f64,
+                            BitOr => (left | right) as f64,
+                            _ => (left ^ right) as f64 }
+                    }
+                    _ => unreachable!(),
+                }))
+            }
             Lt | Gt | Le | Ge => {
                 let x = self.primitive(a)?;
                 let y = self.primitive(b)?;
                 let c = if x.is_str() && y.is_str() {
-                    x.as_str().unwrap().cmp(y.as_str().unwrap())
+                    Some(x.as_str().unwrap().cmp(y.as_str().unwrap()))
+                } else if matches!(x, JsValue::BigInt(_)) || matches!(y, JsValue::BigInt(_)) {
+                    self.compare_bigint_primitives(&x, &y)?
                 } else {
                     self.to_number(&x)?
                         .partial_cmp(&self.to_number(&y)?)
-                        .unwrap_or(std::cmp::Ordering::Equal)
                 };
                 Ok(JsValue::Bool(match op {
-                    Lt => c.is_lt(),
-                    Gt => c.is_gt(),
-                    Le => c.is_le(),
-                    Ge => c.is_ge(),
+                    Lt => c.is_some_and(|order| order.is_lt()),
+                    Gt => c.is_some_and(|order| order.is_gt()),
+                    Le => c.is_some_and(|order| order.is_le()),
+                    Ge => c.is_some_and(|order| order.is_ge()),
                     _ => false,
                 }))
             }
@@ -1972,19 +2012,6 @@ impl Interpreter {
                     })),
                     _ => Err(Throw::type_error("right operand of in is not an object")),
                 }
-            }
-            Shl | Shr | UShr | BitAnd | BitOr | BitXor => {
-                let x = self.to_int32(&a)?;
-                let y = self.to_uint32(&b)? & 31;
-                Ok(JsValue::num(match op {
-                    Shl => (x << y) as f64,
-                    Shr => (x >> y) as f64,
-                    UShr => (x.wrapping_shr(y)) as u32 as f64,
-                    BitAnd => (x & (y as i32)) as f64,
-                    BitOr => (x | (y as i32)) as f64,
-                    BitXor => (x ^ (y as i32)) as f64,
-                    _ => 0.0,
-                }))
             }
         }
     }
@@ -2477,6 +2504,10 @@ impl Interpreter {
             .func
             .clone()
             .ok_or_else(|| Throw::type_error("not a constructor"))?;
+        if matches!(&fun.body, FunctionBody::Native(native)
+            if std::ptr::fn_addr_eq(*native, bigint_constructor as crate::value::NativeFn)) {
+            return Err(Throw::type_error("BigInt is not a constructor"));
+        }
         if fun.is_arrow {
             return Err(Throw::type_error("arrow is not a constructor"));
         }
@@ -3178,6 +3209,12 @@ impl Interpreter {
                 }
             }
             JsValue::Symbol(_) => self.get_prop_receiver(&JsValue::Object(self.symbol_proto.clone()), key, receiver),
+            JsValue::BigInt(_) => {
+                let prototype = self.global_env.resolve("BigInt")
+                    .and_then(|constructor| self.get_prop(&constructor, "prototype").ok());
+                if let Some(prototype) = prototype { self.get_prop_receiver(&prototype, key, receiver) }
+                else { Ok(JsValue::Undefined) }
+            }
             _ => Ok(JsValue::Undefined),
         }
     }
@@ -3509,6 +3546,7 @@ impl Interpreter {
             JsValue::Null => "object",
             JsValue::Bool(_) => "boolean",
             JsValue::Num(_) => "number",
+            JsValue::BigInt(_) => "bigint",
             JsValue::Str(_) => "string",
             JsValue::Symbol(_) => "symbol",
             JsValue::Object(o) => {
@@ -3522,6 +3560,31 @@ impl Interpreter {
     }
     fn primitive(&mut self, v: JsValue) -> Result<JsValue, Throw> {
         self.primitive_with_hint(v, false)
+    }
+    fn primitive_number_hint(&mut self, v: JsValue) -> Result<JsValue, Throw> {
+        if !v.is_object() { return Ok(v); }
+        let method = self.get_prop(&v, WellKnownSymbol::ToPrimitive.symbol())?;
+        if !method.is_undefined() && !method.is_null() {
+            if callable_function(&method).is_none() { return Err(Throw::type_error("@@toPrimitive is not callable")); }
+            let result = self.call_value(&method, v.clone(), vec![JsValue::str("number")])?;
+            if result.is_object() { return Err(Throw::type_error("@@toPrimitive returned an object")); }
+            return Ok(result);
+        }
+        if let JsValue::Object(object) = &v {
+            if object.borrow().get_own("valueOf").is_none() && object.borrow().get_own("toString").is_none() {
+                for slot in ["[[BooleanData]]", "[[NumberData]]", "[[StringData]]"] {
+                    if let Some(value) = object.borrow().get_own(slot) { return Ok(value); }
+                }
+            }
+        }
+        for name in ["valueOf", "toString"] {
+            let method = self.get_prop(&v, name)?;
+            if callable_function(&method).is_some() {
+                let result = self.call_value(&method, v.clone(), Vec::new())?;
+                if !result.is_object() { return Ok(result); }
+            }
+        }
+        Err(Throw::type_error("cannot convert object to primitive"))
     }
     fn primitive_with_hint(&mut self, v: JsValue, string_hint: bool) -> Result<JsValue, Throw> {
         if !v.is_object() {
@@ -3605,6 +3668,11 @@ impl Interpreter {
         Ok(match (a, b) {
             (Undefined, Null) | (Null, Undefined) | (Undefined, Undefined) | (Null, Null) => true,
             (Num(x), Num(y)) => x == y,
+            (BigInt(x), BigInt(y)) => x == y,
+            (BigInt(x), Num(y)) | (Num(y), BigInt(x)) =>
+                Self::compare_bigint_number(x, *y) == Some(std::cmp::Ordering::Equal),
+            (BigInt(x), Str(y)) | (Str(y), BigInt(x)) =>
+                BinaryBigInt::parse_string(&y.to_utf8_lossy()).is_some_and(|parsed| x.as_ref() == &parsed),
             (Str(x), Str(y)) => x == y,
             (Symbol(x), Symbol(y)) => x == y,
             (Bool(_), _) => {
@@ -3615,11 +3683,11 @@ impl Interpreter {
                 let n = b.to_number()?;
                 self.loose_eq(a, &Num(n))?
             }
-            (Num(_) | Str(_) | Symbol(_), Object(_)) => {
+            (Num(_) | BigInt(_) | Str(_) | Symbol(_), Object(_)) => {
                 let p = self.primitive(b.clone())?;
                 self.loose_eq(a, &p)?
             }
-            (Object(_), Num(_) | Str(_) | Symbol(_)) => {
+            (Object(_), Num(_) | BigInt(_) | Str(_) | Symbol(_)) => {
                 let p = self.primitive(a.clone())?;
                 self.loose_eq(&p, b)?
             }
@@ -3721,6 +3789,7 @@ include!("builtins_std_collections.rs");
 include!("builtins_std_collection_iter.rs");
 include!("builtins_std_iterator.rs");
 include!("builtins_binary.rs");
+include!("builtins_binary_bigint.rs");
 include!("builtins_temporal.rs");
 include!("builtins_temporal_arithmetic.rs");
 include!("builtins_temporal_epoch.rs");
