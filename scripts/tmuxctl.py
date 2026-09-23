@@ -221,7 +221,8 @@ LANE_GRANTS.setdefault("text", []).append("crates/amazing/src/page.rs")
 # ADDITIONS ONLY: the one dependency line.
 LANE_GRANTS.setdefault("html", []).append("Cargo.lock")
 # js-binary / js-stdlib: one include! line per module in interp.rs and the
-# install calls in interp_install.rs::install_builtins. ADDED LINES ONLY.
+# install calls in interp_install.rs::install_builtins. ADDED LINES ONLY, except
+# js-stdlib may also delete the Map/Set/WeakMap/WeakSet install lines it replaces.
 # JS-10: the Test262 host's module capability. ADDED LINES ONLY.
 LANE_GRANTS.setdefault("js-lang", []).append("crates/amazing-js/examples/test262_host.rs")
 # JS-10: module variants in the Test262 runner; classic framing byte-identical.
@@ -685,7 +686,7 @@ def open_questions(lane: str) -> list[str]:
         # Every such prefix means "no longer waiting on anyone".
         if body.upper().startswith(("RESOLVED", "ANSWERED", "DONE", "ROUTED",
                                     "NOTED", "CONFIRMED", "GRANTED", "ACK",
-                                    "QUEUED", "ACCEPTED")):
+                                    "QUEUED", "ACCEPTED", "DECIDED")):
             continue
         out.append(body)
     return out
