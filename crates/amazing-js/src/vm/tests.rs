@@ -130,15 +130,12 @@ fn bindings_branches_loops_and_completion_match() {
 #[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
-        "var changed = 1; function f() { [1]; }",
-        "changed = 1; if (false) { print('no'); }",
-        "changed = 1; [1, 2];",
-        "changed = 1; ({a: 2});",
+        "var changed = 1; function f() { try {} catch (e) {} }",
+        "changed = 1; class A {}",
         "changed = 1; for (;;) { break; }",
         "changed = 1; while (true) { break; }",
         "changed = 1; try {} catch (e) {}",
         "changed = 1; let [a] = [2];",
-        "changed = 1; changed += [2];",
         "changed = 1; delete changed;",
         "changed = 1; 2n;",
     ] {
@@ -198,6 +195,47 @@ fn compiled_program_can_outlive_ast_and_be_reused() {
     interpreter.run_script("var counter = 40;").unwrap();
     assert_eq!(code.run(&mut interpreter, 100).unwrap(), JsValue::num(41.0));
     assert_eq!(code.run(&mut interpreter, 100).unwrap(), JsValue::num(42.0));
+}
+
+#[test]
+fn heap_frame_suspends_and_resumes_at_instruction_boundaries() {
+    let code = compile(
+        &parse_script(
+            "var counter = 0; while (counter < 3) { let local = counter; counter++; } counter;",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut interpreter = Interpreter::new();
+    let env = interpreter.global_env.clone();
+    let mut frame = code.start_frame(&mut interpreter, env, 1000).unwrap();
+    let address = &*frame as *const VmFrame;
+    let mut suspensions = 0;
+    loop {
+        match code.resume_frame(&mut interpreter, &mut frame, 3).unwrap() {
+            FrameOutcome::Suspended => {
+                suspensions += 1;
+                assert_eq!(&*frame as *const VmFrame, address);
+                assert!(frame.pc > 0);
+            }
+            FrameOutcome::Completed(value) => {
+                assert_eq!(value, JsValue::num(3.0));
+                break;
+            }
+        }
+    }
+    assert!(suspensions > 1);
+    assert!(frame.scopes.is_empty());
+    assert!(frame.try_stack.is_empty());
+    assert_eq!(
+        interpreter.global_env.resolve("counter"),
+        Some(JsValue::num(3.0))
+    );
+    assert!(interpreter.global_env.resolve("local").is_none());
+    assert!(matches!(
+        code.resume_frame(&mut interpreter, &mut frame, 1).unwrap(),
+        FrameOutcome::Completed(JsValue::Num(_))
+    ));
 }
 
 #[test]
@@ -288,4 +326,136 @@ fn shared_coercion_preserves_callback_order_and_exceptions() {
             "coercion"
         );
     }
+}
+
+#[test]
+fn shared_calls_and_construction_match_tree_walker() {
+    for source in [
+        "Number('12') + 3",
+        "String(42) + '!'",
+        "(function (x) { return x * 2; })(4)",
+        "function twice(x) { return x + x; } twice(5)",
+        "typeof new Object()",
+        "typeof new Array(2)",
+    ] {
+        differential(source, &[]);
+    }
+
+    let mut tree = Interpreter::new();
+    let mut vm = Interpreter::new();
+    tree.run_script("function prior(x) { return x + 1; }")
+        .unwrap();
+    vm.run_script("function prior(x) { return x + 1; }")
+        .unwrap();
+    assert_eq!(
+        tree.run_script("prior(3)").unwrap(),
+        vm.run_script_with_backend("prior(3)", ExecutionBackend::Bytecode)
+            .unwrap()
+    );
+}
+
+#[test]
+fn shared_members_arrays_and_objects_match_tree_walker() {
+    for source in [
+        "({ a: 1 }).a",
+        "var o = { a: 1 }; o.a = 3; o.a",
+        "var o = { a: 1 }; o['a'] += 2; o.a",
+        "var o = { a: 4, m: function () { return this.a; } }; o.m()",
+        "var a = [1, , 3]; a.length",
+        "var a = [1, 2]; a[0] + a[1]",
+        "var a = [1]; a.push(2); a.length",
+        "var s = ''; var o = { [(s = s + 'k')]: (s = s + 'v') }; s",
+        "var key = 'x'; ({ [key]: 7 }).x",
+        "var o = { 2: 9 }; o[2]",
+    ] {
+        differential(source, &[]);
+    }
+}
+
+#[test]
+fn long_finite_loop_finishes_with_default_fuel() {
+    let source = "var count = 0; for (var index = 0; index < 65536; index++) { count++; } count";
+    differential(source, &[]);
+}
+
+#[test]
+fn deep_binary_expression_rejects_before_execution() {
+    let source = format!("changed = 1; {}", vec!["'verse'"; 100].join(" + "));
+    let program = parse_script(&source).unwrap();
+    assert!(compile(&program).is_err());
+    let mut interpreter = Interpreter::new();
+    assert!(interpreter
+        .run_program_with_backend(&program, ExecutionBackend::Bytecode)
+        .is_err());
+    assert!(interpreter.global_env.resolve("changed").is_none());
+}
+
+/// Explicit evidence tool: emit the first atomic compiler blocker per Test262
+/// file. The companion report filters these rows to eligible runtime files.
+#[test]
+#[ignore = "requires a pinned Test262 checkout and VM_RANK_OUTPUT"]
+fn rank_test262_first_blockers() {
+    use std::path::{Path, PathBuf};
+
+    fn visit(directory: &Path, files: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(directory).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                visit(&path, files);
+            } else if path.extension().is_some_and(|ext| ext == "js") {
+                files.push(path);
+            }
+        }
+    }
+
+    let root = PathBuf::from(std::env::var_os("TEST262_ROOT").expect("TEST262_ROOT"));
+    let output = PathBuf::from(std::env::var_os("VM_RANK_OUTPUT").expect("VM_RANK_OUTPUT"));
+    let test_root = root.join("test");
+    let mut files = Vec::new();
+    visit(&test_root, &mut files);
+    files.sort();
+    let chunk_size = files.len().div_ceil(8);
+    let rows = std::thread::scope(|scope| {
+        let jobs: Vec<_> = files
+            .chunks(chunk_size)
+            .enumerate()
+            .map(|(worker, chunk)| {
+                let test_root = &test_root;
+                std::thread::Builder::new()
+                    .stack_size(32 * 1024 * 1024)
+                    .spawn_scoped(scope, move || {
+                        let mut rows = String::new();
+                        for (index, path) in chunk.iter().enumerate() {
+                            let relative = path.strip_prefix(test_root).unwrap().to_string_lossy();
+                            let source = std::fs::read_to_string(path).unwrap();
+                            let reason = if source.len() > 100_000 {
+                                "large source"
+                            } else {
+                                match parse_script(&source) {
+                                    Ok(ast) => match compile(&ast) {
+                                        Ok(_) => "compiled",
+                                        Err(error) => error.message,
+                                    },
+                                    Err(_) => "parse",
+                                }
+                            };
+                            rows.push_str(&relative.replace('\\', "/"));
+                            rows.push('\t');
+                            rows.push_str(reason);
+                            rows.push('\n');
+                            if (index + 1) % 1_000 == 0 {
+                                eprintln!("ranking worker {worker}: {}/{}", index + 1, chunk.len());
+                            }
+                        }
+                        rows
+                    })
+                    .unwrap()
+            })
+            .collect();
+        jobs.into_iter()
+            .map(|job| job.join().unwrap())
+            .collect::<Vec<_>>()
+            .concat()
+    });
+    std::fs::write(output, rows).unwrap();
 }
