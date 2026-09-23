@@ -252,7 +252,7 @@ fn run() -> io::Result<()> {
 fn main() -> std::process::ExitCode {
     if std::env::args().any(|a| a == "--capabilities") {
         println!(
-            "{{\"protocol\":1,\"module\":false,\"async\":true,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":false}}"
+            "{{\"protocol\":1,\"module\":false,\"async\":true,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":true}}"
         );
         return std::process::ExitCode::SUCCESS;
     }
