@@ -392,3 +392,30 @@ matched on Mac and Windows before and after the gates. Package nextest passed
 **1564/1564** with 3 skipped, and separate shared-slot workspace doctests
 **2/2**. Two new tests account for the package increase from HTML-9's 117.
 No push or PR; the lane stops for co-integrator preflight.
+
+## HTML-11 — bounded noscript fragment context
+
+`parse_fragment("noscript", …)` now starts the tokenizer in RAWTEXT and uses a
+virtual context under the synthetic `html` root. The context is not on the
+open-element stack, so even an appropriate `</noscript>` remains literal
+fragment text. `<` and `&` stay literal; null becomes U+FFFD; CRLF and lone CR
+normalize to LF; incomplete end-tag candidates recover at EOF. `template`
+remains rejected. The parser's scripting flag is fixed enabled: this ticket
+does not claim scripting-disabled `noscript` behavior or alter document tree
+construction.
+
+Independent expected trees and exact pre-edit source/lockfile hashes are in
+`.agents/html/html11-fixtures.md`. The fixed-base Windows probe showed the
+`unsupported HTML fragment context` error for all five selected inputs and
+the existing document RAWTEXT behavior before implementation. Focused tests
+assert fragment trees independently and compare streaming RAWTEXT output at
+every Unicode scalar boundary and across multiple chunks inside an end tag.
+
+At fixed base `6481c90`, the HTML-only Windows tree was refreshed again after
+the code was complete and owned files were re-synced. A 293-input Rust source,
+Cargo manifest and root lockfile SHA-256 manifest (`8ef6c6e20410125e9c2c08910d1fb8f4390115aa3e8d998ecd15f50ae053f12c`)
+matched on Mac and Windows before and after the gates. Package nextest passed
+**121/121 twice**, and the separate package doctest passed **1/1**. Shared-slot
+workspace nextest passed **1591/1591** with 3 skipped, and separate shared-slot
+workspace doctests passed **2/2**. Two new tests account for the package increase
+from HTML-10's 119. No push or PR; the lane stops for co-integrator preflight.

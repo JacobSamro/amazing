@@ -1,6 +1,7 @@
 use amazing_dom::NodeIdx;
 
 use crate::{parse, parse_fragment};
+use crate::tokenizer::{Token, Tokenizer};
 
 fn dump(context: &str, src: &str) -> String {
     parse_fragment(context, src).unwrap().dump(NodeIdx(0))
@@ -45,10 +46,8 @@ fn select_fragment_ignores_stray_context_end_and_disallowed_tags() {
 
 #[test]
 fn contexts_without_required_rules_remain_explicitly_unsupported() {
-    for context in ["template", "noscript"] {
-        assert_eq!(parse_fragment(context, "x").unwrap_err(),
-            "unsupported HTML fragment context", "context={context}");
-    }
+    assert_eq!(parse_fragment("template", "x").unwrap_err(),
+        "unsupported HTML fragment context");
 }
 
 #[test]
@@ -112,4 +111,62 @@ fn script_fragment_escape_and_double_escape_sequences() {
     for input in ["a<", "a</", "a</ScR", "<!-- <scr"] {
         assert_eq!(dump("script", input), format!("#document\n  {input:?}\n"));
     }
+}
+
+#[test]
+fn noscript_fragment_uses_virtual_rawtext_context() {
+    assert_eq!(dump("noscript", "a<b>&amp;"), "#document\n  \"a<b>&amp;\"\n");
+    assert_eq!(dump("NoScRiPt", "x</NoScRiPt><i>y"),
+        "#document\n  \"x</NoScRiPt><i>y\"\n");
+    assert_eq!(dump("noscript", "x</noscripts>y</noscript >z"),
+        "#document\n  \"x</noscripts>y</noscript >z\"\n");
+    assert_eq!(dump("noscript", "a\0b\r\nc\rd"),
+        "#document\n  \"a�b\nc\nd\"\n");
+    assert_eq!(dump("noscript", "a</NoSc"), "#document\n  \"a</NoSc\"\n");
+    assert_eq!(dump("noscript", ""), "#document\n");
+    assert_eq!(parse_fragment("template", "x").unwrap_err(),
+        "unsupported HTML fragment context");
+}
+
+fn streamed_noscript(chunks: &[&str]) -> String {
+    let mut tokenizer = Tokenizer::streaming();
+    tokenizer.enter_fragment_text_context("noscript");
+    let mut text = String::new();
+    for chunk in chunks {
+        tokenizer.push_chars(chunk.chars());
+        while let Some(token) = tokenizer.next_available() {
+            match token {
+                Token::Characters(chars) => text.push_str(&chars),
+                unexpected => panic!("unexpected noscript fragment token: {unexpected:?}"),
+            }
+        }
+    }
+    tokenizer.finish_input();
+    while let Some(token) = tokenizer.next_available() {
+        match token {
+            Token::Characters(chars) => text.push_str(&chars),
+            Token::Eof => break,
+            unexpected => panic!("unexpected noscript fragment token: {unexpected:?}"),
+        }
+    }
+    text
+}
+
+#[test]
+fn noscript_fragment_rawtext_survives_every_scalar_split() {
+    for (input, expected) in [
+        ("a<b>&amp;", "a<b>&amp;"),
+        ("x</NoScRiPt><i>y", "x</NoScRiPt><i>y"),
+        ("x</noscripts>y</noscript >z", "x</noscripts>y</noscript >z"),
+        ("a\0b</NoSc", "a�b</NoSc"),
+        ("𐐷é漢字</NoScRiPt>", "𐐷é漢字</NoScRiPt>"),
+    ] {
+        assert_eq!(streamed_noscript(&[input]), expected);
+        for split in input.char_indices().map(|(offset, _)| offset).chain([input.len()]) {
+            assert_eq!(streamed_noscript(&[&input[..split], &input[split..]]),
+                expected, "split={split}, input={input:?}");
+        }
+    }
+    assert_eq!(streamed_noscript(&["x</No", "Sc", "Ri", "Pt>", "<i>y"]),
+        "x</NoScRiPt><i>y");
 }
