@@ -3,7 +3,7 @@
 use std::{cell::RefCell, collections::{BTreeMap, VecDeque}, rc::Rc, time::{Duration, Instant}};
 
 use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, TimerId};
-use amazing_js::{interp::{Interpreter, NativeMicrotaskKind, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
+use amazing_js::{DomHost, interp::{Interpreter, NativeMicrotaskKind, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
 
 use crate::dom_host::BrowserDomHost;
 
@@ -25,6 +25,7 @@ struct TimerRegistration {
 pub(crate) struct DriverScheduler {
     pub(crate) js: Interpreter,
     host: Rc<RefCell<BrowserDomHost>>,
+    bindings: crate::runtime_binding_host::RuntimeBindings,
     loop_: EventLoop,
     pending: VecDeque<SchedulingRequest>,
     payloads: BTreeMap<u64, Payload>,
@@ -40,10 +41,11 @@ impl DriverScheduler {
     pub(crate) fn new(host: Rc<RefCell<BrowserDomHost>>, js_capacity: usize) -> Result<Self, Throw> {
         let mut js = Interpreter::new_with_external_scheduler(js_capacity)?;
         js.set_dom_host(host.clone());
+        let bindings = crate::runtime_binding_host::install(&mut js, host.clone())?;
         let mut loop_ = EventLoop::new();
         loop_.register_global(GLOBAL).map_err(loop_error)?;
         Ok(Self {
-            js, host, loop_, pending: VecDeque::new(), payloads: BTreeMap::new(),
+            js, host, bindings, loop_, pending: VecDeque::new(), payloads: BTreeMap::new(),
             timers: BTreeMap::new(), frames: BTreeMap::new(), next_callback: 1,
             started: Instant::now(), now: Duration::ZERO, trace: Vec::new(),
         })
@@ -66,9 +68,20 @@ impl DriverScheduler {
         let before = self.js.output.borrow().len();
         let result = f(&mut self.js);
         self.trace.extend(self.js.output.borrow()[before..].iter().cloned());
+        let collected = self.collect_native_mutations();
         let drained = self.drain_outbox();
+        collected?;
         drained?;
         result
+    }
+
+    fn collect_native_mutations(&mut self) -> Result<(), Throw> {
+        let pending = self.host.borrow().pending_native_microtasks();
+        for request in pending {
+            self.js.enqueue_native_microtask(request.global, request.kind)?;
+            self.host.borrow_mut().acknowledge_native_microtask(request);
+        }
+        Ok(())
     }
 
     fn own(&mut self, payload: Payload) -> Result<CallbackId, Throw> {
@@ -162,13 +175,11 @@ impl DriverScheduler {
             }
             Payload::Mutation => {
                 self.payloads.remove(&callback.0);
-                let mut host = self.host.borrow_mut();
-                let mut checkpoint = host.dom.begin_mutation_checkpoint();
-                host.native_forwarded = false;
-                while host.dom.next_mutation_delivery(&mut checkpoint).is_some() {
-                    self.trace.push("M".into());
-                }
-                Ok(())
+                let bindings = self.bindings.clone();
+                let result = self.enter(|js| bindings.deliver_mutations(js));
+                self.host.borrow_mut().native_forwarded = false;
+                self.trace.push("M".into());
+                result
             }
         }
     }
@@ -232,7 +243,11 @@ mod tests {
             }).unwrap();
         }
         let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
-        let scheduler = DriverScheduler::new(host.clone(), capacity).unwrap();
+        let mut scheduler = DriverScheduler::new(host.clone(), capacity).unwrap();
+        if observe {
+            let callback = scheduler.run_script("(()=>{})").unwrap();
+            scheduler.bindings.seed_test_root(CallbackId(1), callback);
+        }
         (scheduler, host)
     }
 
