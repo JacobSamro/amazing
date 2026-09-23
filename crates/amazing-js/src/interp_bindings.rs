@@ -194,7 +194,12 @@ impl Interpreter {
 
     pub fn binding_own_property_keys(&mut self, object: &JsValue) -> Result<Vec<String>, Throw> {
         let owner = Self::binding_owner(object)?;
-        self.legacy_own_keys(&owner, false)
+        Ok(self.legacy_own_keys(&owner, false)?.into_iter().map(|key| key.to_utf8_lossy()).collect())
+    }
+
+    pub fn binding_own_property_key_units(&mut self, object: &JsValue) -> Result<Vec<Vec<u16>>, Throw> {
+        let owner = Self::binding_owner(object)?;
+        Ok(self.legacy_own_keys(&owner, false)?.into_iter().map(|key| key.units().to_vec()).collect())
     }
 
     pub fn binding_delete_property(&mut self, object: &JsValue, name: &str) -> Result<bool, Throw> {
@@ -281,6 +286,19 @@ impl Interpreter {
         self.to_number(value)
     }
 
+    /// Create and inspect WebIDL DOMString values without UTF-8 substitution.
+    pub fn binding_string(&self, units: &[u16]) -> JsValue {
+        JsValue::str_units(units.to_vec())
+    }
+
+    pub fn binding_string_units(&self, value: &JsValue) -> Option<Vec<u16>> {
+        value.as_str().map(|s| s.units().to_vec())
+    }
+
+    pub fn binding_to_dom_string(&mut self, value: &JsValue) -> Result<Vec<u16>, Throw> {
+        Ok(self.to_js_string(value)?.units().to_vec())
+    }
+
     pub fn binding_is_nullish(&self, value: &JsValue) -> bool {
         matches!(value, JsValue::Null | JsValue::Undefined)
     }
@@ -299,6 +317,67 @@ impl Interpreter {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn lone_surrogate_round_trips_through_fake_dom_host() {
+        let mut runtime = Interpreter::new();
+        let host_string = Rc::new(RefCell::new(Vec::<u16>::new()));
+        let host_slot = host_string.clone();
+        runtime.set_host_native_dispatcher(Rc::new(move |runtime, _, _, args, _| {
+            let units = runtime.binding_to_dom_string(args.first().unwrap_or(&JsValue::Undefined))?;
+            *host_slot.borrow_mut() = units;
+            Ok(runtime.binding_string(&host_slot.borrow()))
+        }));
+        let echo = runtime.binding_create_native_function(
+            HostFunctionId(99), "hostEcho", 1, HostCallPolicy::CallOnly,
+        );
+        runtime.binding_define_data_property(
+            &runtime.binding_global_object(), "hostEcho", echo, BindingPropertyFlags::METHOD,
+        ).unwrap();
+        let result = runtime.run_script(r#"
+            var lone = '\uD800';
+            var echoed = hostEcho(lone);
+            echoed === lone && echoed.length === 1 && echoed.charCodeAt(0) === 0xD800 &&
+            echoed.isWellFormed() === false && echoed.toWellFormed() === '\uFFFD'
+        "#).unwrap();
+        assert_eq!(result, JsValue::Bool(true));
+        assert_eq!(*host_string.borrow(), vec![0xD800]);
+    }
+
+    #[test]
+    fn utf16_strings_survive_properties_templates_and_regexp_exec() {
+        let mut runtime = Interpreter::new();
+        let result = runtime.run_script(r#"
+            var lone = String.fromCharCode(0xD800);
+            var object = {'\uD800': 7};
+            var pair = '\uD83D\uDE00';
+            object[lone] === 7 && Object.keys(object)[0] === lone &&
+            lone.charAt(0) === lone && lone.slice(0, 1) === lone &&
+            lone.substring(0, 1) === lone && ('a' + lone + 'b').indexOf(lone) === 1 &&
+            String.prototype.charAt.call(lone, 0) === lone &&
+            String.prototype.charAt.length === 1 &&
+            String.prototype.charAt.prototype === undefined &&
+            String.prototype.split.prototype === undefined &&
+            pair.length === 2 && pair.codePointAt(0) === 0x1F600 &&
+            `a${lone}`.charCodeAt(1) === 0xD800 &&
+            'e\u0301'.normalize() === '\u00E9' &&
+            '\u00E9'.normalize('NFD') === 'e\u0301' &&
+            /./u.exec(lone)[0] === lone
+        "#).unwrap();
+        assert_eq!(result, JsValue::Bool(true));
+        assert_eq!(runtime.run_script("var pieces = []; for (var part of 'a\\uD801\\uDC28b') pieces.push(part); pieces.length === 3 && pieces[1] === '\\uD801\\uDC28'").unwrap(), JsValue::Bool(true));
+        assert_eq!(runtime.run_script("'\\u0100'.normalize('NFD') === 'A\\u0304'").unwrap(), JsValue::Bool(true));
+        assert_eq!(runtime.run_script("var rejected = false; try { ''.normalize('NFE'); } catch (e) { rejected = e instanceof RangeError; } rejected").unwrap(), JsValue::Bool(true));
+        assert_eq!(runtime.run_script("var rejected = false; try { new (String.prototype.charAt)(); } catch (e) { rejected = e instanceof TypeError; } rejected").unwrap(), JsValue::Bool(true));
+        let unsupported = runtime.run_script("new RegExp('\\uD800', 'u')").unwrap_err();
+        assert!(unsupported.describe().contains("SyntaxError: RegExp pattern with a lone surrogate is unsupported until JS-8"));
+    }
+
+    #[test]
+    fn array_callbacks_skip_sparse_holes() {
+        let mut runtime = Interpreter::new();
+        assert_eq!(runtime.run_script("var sparse = []; sparse[10000] = 'x'; var calls = 0; sparse.forEach(function(value) { calls++; }); calls === 1 && sparse.filter(function(value) { return true; }).length === 1").unwrap(), JsValue::Bool(true));
+    }
 
     #[test]
     fn host_dispatch_is_per_instance_reentrant_and_preserves_new_target() {

@@ -139,7 +139,7 @@ struct DomListener {
 
 enum Reference {
     Binding(String),
-    Property(JsValue, String),
+    Property(JsValue, crate::value::JsString),
 }
 
 /// Host hooks for the small browser-facing DOM surface.
@@ -195,6 +195,7 @@ pub struct Interpreter {
     pub object_proto: Obj,
     pub function_proto: Obj,
     pub array_proto: Obj,
+    pub string_proto: Obj,
     pub map_proto: Obj,
     pub set_proto: Obj,
     pub date_proto: Obj,
@@ -236,6 +237,12 @@ impl Interpreter {
         let array_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
+            o
+        })));
+        let string_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o.set_own("[[StringData]]", JsValue::str(""));
             o
         })));
         let map_proto = Obj(Rc::new(RefCell::new({
@@ -281,6 +288,7 @@ impl Interpreter {
             object_proto,
             function_proto,
             array_proto,
+            string_proto,
             map_proto,
             set_proto,
             date_proto,
@@ -1119,13 +1127,13 @@ impl Interpreter {
                             self.bind_pattern(property, rest, kind, env)?;
                         }
                         ast::BindingKey::Static(name) => {
-                            used.push(name.clone());
+                            used.push(name.clone().into());
                             let item = self.get_prop(&source, name)?;
                             self.bind_pattern(property, item, kind, env)?;
                         }
                         ast::BindingKey::Computed(expression) => {
                             let computed_value = self.eval_expr(expression, env)?;
-                            let computed = self.to_property_key(&computed_value)?;
+                            let computed = self.to_js_string(&computed_value)?;
                             used.push(computed.clone());
                             let item = self.get_prop(&source, &computed)?;
                             self.bind_pattern(property, item, kind, env)?;
@@ -1137,7 +1145,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn object_rest(&mut self, source: &JsValue, used: &[String]) -> Result<JsValue, Throw> {
+    fn object_rest(&mut self, source: &JsValue, used: &[crate::value::JsString]) -> Result<JsValue, Throw> {
         let rest = self.object_value();
         for key in self.enumerable_keys(source)? {
             if !used.iter().any(|used_key| used_key == &key) {
@@ -1516,7 +1524,10 @@ impl Interpreter {
             )),
             ExprKind::RegExp(regex) => self.make_regexp(regex.clone()),
             ExprKind::Num(n) => self.numeric(n),
-            ExprKind::Str(s) => Ok(JsValue::str(s.as_str())),
+            ExprKind::Str(s) => Ok(match &e.string_utf16 {
+                Some(units) => JsValue::str_units(units.clone()),
+                None => JsValue::str(s.as_str()),
+            }),
             ExprKind::Bool(b) => Ok(JsValue::Bool(*b)),
             ExprKind::Null => Ok(JsValue::Null),
             ExprKind::Ident(i) => self
@@ -1537,15 +1548,19 @@ impl Interpreter {
                 Ok(JsValue::Object(prototype))
             }
             ExprKind::Template(t) => {
-                let mut s = String::new();
+                let mut s = Vec::<u16>::new();
                 for (i, q) in t.quasis.iter().enumerate() {
-                    s.push_str(q);
+                    if let Some(units) = t.quasis_utf16.get(i) {
+                        s.extend_from_slice(units);
+                    } else {
+                        s.extend(q.encode_utf16());
+                    }
                     if let Some(x) = t.exprs.get(i) {
                         let v = self.eval_expr(x, env)?;
-                        s.push_str(&self.to_string(&v)?);
+                        s.extend_from_slice(self.to_js_string(&v)?.units());
                     }
                 }
-                Ok(JsValue::str(s))
+                Ok(JsValue::str_units(s))
             }
             ExprKind::Array(xs) => {
                 let a = JsValue::object({
@@ -1589,7 +1604,10 @@ impl Interpreter {
                             }
                         }
                         ast::ObjElem::Prop(p) => {
-                            let k = self.prop_key(&p.key, env)?;
+                            let k = match &p.key_utf16 {
+                                Some(units) => crate::value::JsString::from_units(units.clone()),
+                                None => self.prop_key(&p.key, env)?,
+                            };
                             let v = match &p.value {
                                 ast::PropValue::Shorthand(i) => env
                                     .resolve(&i.name)
@@ -1794,11 +1812,12 @@ impl Interpreter {
                 let x = self.primitive(a)?;
                 let y = self.primitive(b)?;
                 if x.is_str() || y.is_str() {
-                    Ok(JsValue::str(format!(
-                        "{}{}",
-                        self.to_string(&x)?,
-                        self.to_string(&y)?
-                    )))
+                    let left = self.to_js_string(&x)?;
+                    let right = self.to_js_string(&y)?;
+                    let mut units = Vec::with_capacity(left.len() + right.len());
+                    units.extend_from_slice(left.units());
+                    units.extend_from_slice(right.units());
+                    Ok(JsValue::str_units(units))
                 } else {
                     Ok(JsValue::num(self.to_number(&x)? + self.to_number(&y)?))
                 }
@@ -1962,7 +1981,7 @@ impl Interpreter {
                 } else if self.global_obj.borrow().has_property(&identifier.name) {
                     let global = JsValue::Object(self.global_obj.clone());
                     let value = self.get_prop(&global, &identifier.name)?;
-                    Ok((Reference::Property(global, identifier.name.clone()), value))
+                    Ok((Reference::Property(global, identifier.name.clone().into()), value))
                 } else {
                     Ok((
                         Reference::Binding(identifier.name.clone()),
@@ -1973,7 +1992,7 @@ impl Interpreter {
             ExprKind::Member { obj, prop, .. } => {
                 let base = self.eval_expr(obj, env)?;
                 let key = match prop {
-                    MemberProp::Ident(identifier) => identifier.name.clone(),
+                    MemberProp::Ident(identifier) => identifier.name.clone().into(),
                     MemberProp::Private(_) => {
                         return Err(Throw::type_error(
                             "private names are not yet supported by the runtime",
@@ -1986,7 +2005,7 @@ impl Interpreter {
                                 "cannot access a property on nullish value",
                             ));
                         }
-                        self.to_property_key(&property_value)?
+                        self.to_js_string(&property_value)?
                     }
                 };
                 if base.is_null() || base.is_undefined() {
@@ -2165,29 +2184,29 @@ impl Interpreter {
         }
         Ok(out)
     }
-    fn member_key(&mut self, p: &MemberProp, e: &EnvHandle) -> Result<String, Throw> {
+    fn member_key(&mut self, p: &MemberProp, e: &EnvHandle) -> Result<crate::value::JsString, Throw> {
         match p {
-            MemberProp::Ident(i) => Ok(i.name.clone()),
+            MemberProp::Ident(i) => Ok(i.name.clone().into()),
             MemberProp::Private(_) => Err(Throw::type_error(
                 "private names are not yet supported by the runtime",
             )),
             MemberProp::Computed(x) => {
                 let v = self.eval_expr(x, e)?;
-                self.to_property_key(&v)
+                self.to_js_string(&v)
             }
         }
     }
-    fn prop_key(&mut self, p: &PropKey, e: &EnvHandle) -> Result<String, Throw> {
+    fn prop_key(&mut self, p: &PropKey, e: &EnvHandle) -> Result<crate::value::JsString, Throw> {
         match p {
-            PropKey::Ident(i) => Ok(i.name.clone()),
+            PropKey::Ident(i) => Ok(i.name.clone().into()),
             PropKey::Private(_) => Err(Throw::type_error(
                 "private names are not yet supported by the runtime",
             )),
-            PropKey::Str(s) => Ok(s.clone()),
-            PropKey::Num(n) => Ok(number_to_string(self.numeric(n)?.to_number()?)),
+            PropKey::Str(s) => Ok(s.clone().into()),
+            PropKey::Num(n) => Ok(number_to_string(self.numeric(n)?.to_number()?).into()),
             PropKey::Computed(x) => {
                 let v = self.eval_expr(x, e)?;
-                self.to_property_key(&v)
+                self.to_js_string(&v)
             }
         }
     }
@@ -2331,6 +2350,9 @@ impl Interpreter {
             .ok_or_else(|| Throw::type_error("not a constructor"))?;
         if fun.is_arrow {
             return Err(Throw::type_error("arrow is not a constructor"));
+        }
+        if !o.borrow().constructible {
+            return Err(Throw::type_error("function is not a constructor"));
         }
         let proto = match o.borrow().get_own("prototype") {
             Some(JsValue::Object(p)) => p,
@@ -2490,7 +2512,10 @@ impl Interpreter {
                 for m in &c.members {
                     if let ast::ClassMember::Method(x) = m {
                         if x.kind != ast::MethodKind::Constructor {
-                            let k = self.prop_key(&x.key, e)?;
+                            let k = match &x.key_utf16 {
+                                Some(units) => crate::value::JsString::from_units(units.clone()),
+                                None => self.prop_key(&x.key, e)?,
+                            };
                             let method = self.method_value(x, e);
                             if let JsValue::Object(method_object) = &method {
                                 method_object.borrow_mut().func.as_mut().unwrap().home =
@@ -2892,16 +2917,18 @@ impl Interpreter {
         name
     }
 
-    fn get_prop(&mut self, v: &JsValue, k: &str) -> Result<JsValue, Throw> {
-        self.get_prop_receiver(v, k, v.clone())
+    fn get_prop(&mut self, v: &JsValue, k: impl Into<crate::value::JsString>) -> Result<JsValue, Throw> {
+        self.get_prop_receiver(v, &k.into(), v.clone())
     }
 
     fn get_prop_receiver(
         &mut self,
         v: &JsValue,
-        k: &str,
+        key: &crate::value::JsString,
         receiver: JsValue,
     ) -> Result<JsValue, Throw> {
+        let text = key.to_utf8_lossy();
+        let k = text.as_str();
         match v {
             JsValue::Object(o) => {
                 if let Some(node) = Self::dom_dataset_id(o) {
@@ -2946,7 +2973,11 @@ impl Interpreter {
                         return Ok(JsValue::num(size as f64));
                     }
                 }
-                let property = self.legacy_own_property(o, k, false)?;
+                let property = if self.legacy_for(o).is_some() {
+                    self.legacy_own_property(o, key, false)?
+                } else {
+                    o.borrow().own_prop(key).cloned()
+                };
                 let prototype = o.borrow().proto.clone();
                 if let Some(property) = property {
                     if let Some(getter) = property.getter {
@@ -2958,87 +2989,28 @@ impl Interpreter {
                         Ok(property.value)
                     }
                 } else if let Some(p) = prototype {
-                    self.get_prop_receiver(&JsValue::Object(p), k, receiver)
+                    self.get_prop_receiver(&JsValue::Object(p), key, receiver)
                 } else {
                     Ok(JsValue::Undefined)
                 }
             }
             JsValue::Str(s) => {
-                if k == "match" {
-                    Ok(Self::native(
-                        "match",
-                        native_string_match,
-                        &self.function_proto,
-                    ))
-                } else if k == "search" {
-                    Ok(Self::native(
-                        "search",
-                        native_string_search,
-                        &self.function_proto,
-                    ))
-                } else if k == "split" {
-                    Ok(Self::native(
-                        "split",
-                        native_string_split,
-                        &self.function_proto,
-                    ))
-                } else if k == "trim" {
-                    Ok(Self::native(
-                        "trim",
-                        native_string_trim,
-                        &self.function_proto,
-                    ))
-                } else if k == "charAt" {
-                    Ok(Self::native(
-                        "charAt",
-                        native_string_char_at,
-                        &self.function_proto,
-                    ))
-                } else if k == "indexOf" {
-                    Ok(Self::native(
-                        "indexOf",
-                        native_string_index_of,
-                        &self.function_proto,
-                    ))
-                } else if k == "includes" {
-                    Ok(Self::native(
-                        "includes",
-                        native_string_includes,
-                        &self.function_proto,
-                    ))
-                } else if k == "replace" {
-                    Ok(Self::native(
-                        "replace",
-                        native_string_replace,
-                        &self.function_proto,
-                    ))
-                } else if k == "startsWith" {
-                    Ok(Self::native(
-                        "startsWith",
-                        native_string_starts_with,
-                        &self.function_proto,
-                    ))
-                } else if k == "endsWith" {
-                    Ok(Self::native(
-                        "endsWith",
-                        native_string_ends_with,
-                        &self.function_proto,
-                    ))
-                } else if k == "length" {
-                    Ok(JsValue::num(s.chars().count() as f64))
+                if k == "length" {
+                    Ok(JsValue::num(s.len() as f64))
                 } else if let Ok(n) = k.parse::<usize>() {
-                    Ok(s.chars()
-                        .nth(n)
-                        .map(|c| JsValue::str(c.to_string()))
+                    Ok(s.units().get(n).map(|u| JsValue::str_units(vec![*u]))
                         .unwrap_or(JsValue::Undefined))
                 } else {
-                    Ok(JsValue::Undefined)
+                    self.get_prop_receiver(&JsValue::Object(self.string_proto.clone()), key, receiver)
                 }
             }
             _ => Ok(JsValue::Undefined),
         }
     }
-    fn set_prop(&mut self, v: &JsValue, k: &str, x: JsValue) -> Result<(), Throw> {
+    fn set_prop(&mut self, v: &JsValue, key: impl Into<crate::value::JsString>, x: JsValue) -> Result<(), Throw> {
+        let key = key.into();
+        let text = key.to_utf8_lossy();
+        let k = text.as_str();
         let o = match v {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("cannot set property on primitive")),
@@ -3062,11 +3034,11 @@ impl Interpreter {
                 return Ok(());
             }
         }
-        if self.legacy_set(&o, k, x.clone())? { return Ok(()); }
-        if self.legacy_for(&o).is_some() && o.borrow().own_prop(k).is_none() {
+        if self.legacy_set(&o, &key, x.clone())? { return Ok(()); }
+        if self.legacy_for(&o).is_some() && o.borrow().own_prop(&key).is_none() {
             let mut cursor = o.borrow().proto.clone();
             while let Some(prototype) = cursor {
-                let descriptor = prototype.borrow().own_prop(k).cloned();
+                let descriptor = prototype.borrow().own_prop(&key).cloned();
                 if let Some(descriptor) = descriptor {
                     if let Some(setter) = descriptor.setter {
                         let callable = JsValue::object(JsObject::function(*setter));
@@ -3081,7 +3053,7 @@ impl Interpreter {
                 cursor = prototype.borrow().proto.clone();
             }
         }
-        if let Some(property) = o.borrow().own_prop(k).cloned() {
+        if let Some(property) = o.borrow().own_prop(&key).cloned() {
             if let Some(setter) = property.setter {
                 let function =
                     JsValue::Object(Obj(Rc::new(RefCell::new(JsObject::function(*setter)))));
@@ -3103,7 +3075,7 @@ impl Interpreter {
                 return Err(Throw::range_error("invalid array length"));
             }
         }
-        o.borrow_mut().set_own(k, x);
+        o.borrow_mut().set_own(&key, x);
         if let Ok(n) = k.parse::<usize>() {
             if matches!(o.borrow().exotic, Exotic::Array) {
                 let len = match o.borrow().get_own("length") {
@@ -3118,10 +3090,10 @@ impl Interpreter {
         }
         Ok(())
     }
-    fn enumerable_keys(&mut self, v: &JsValue) -> Result<Vec<String>, Throw> {
+    fn enumerable_keys(&mut self, v: &JsValue) -> Result<Vec<crate::value::JsString>, Throw> {
         match v {
             JsValue::Object(o) => self.legacy_own_keys(o, true),
-            JsValue::Str(s) => Ok((0..s.chars().count()).map(|i| i.to_string()).collect()),
+            JsValue::Str(s) => Ok((0..s.len()).map(|i| i.to_string().into()).collect()),
             _ => Ok(Vec::new()),
         }
     }
@@ -3158,7 +3130,10 @@ impl Interpreter {
                 return Err(Throw::type_error("value is not iterable"));
             }
             let mut values = Vec::new();
-            for _ in 0..1_000_000usize {
+            // This eager collector is a temporary bridge until iterator
+            // consumers advance lazily. Bound infinite iterators well below
+            // the conformance runner's per-file deadline.
+            for _ in 0..100_000usize {
                 let result = match self.call_value(&next, v.clone(), Vec::new()) {
                     Ok(result) => result,
                     Err(error) => {
@@ -3192,7 +3167,23 @@ impl Interpreter {
             return Err(Throw::range_error("iterator exceeded the iteration limit"));
         }
         match v {
-            JsValue::Str(s) => Ok(s.chars().map(|c| JsValue::str(c.to_string())).collect()),
+            JsValue::Str(s) => {
+                let mut values = Vec::with_capacity(s.len());
+                let mut at = 0;
+                while at < s.len() {
+                    let first = s.units()[at];
+                    if (0xd800..=0xdbff).contains(&first)
+                        && s.units().get(at + 1).is_some_and(|next| (0xdc00..=0xdfff).contains(next))
+                    {
+                        values.push(JsValue::str_units(s.units()[at..at + 2].to_vec()));
+                        at += 2;
+                    } else {
+                        values.push(JsValue::str_units(vec![first]));
+                        at += 1;
+                    }
+                }
+                Ok(values)
+            }
             _ => Err(Throw::type_error("value is not iterable")),
         }
     }
@@ -3350,15 +3341,21 @@ impl Interpreter {
         }
     }
     fn to_string(&mut self, v: &JsValue) -> Result<String, Throw> {
+        Ok(self.to_js_string(v)?.to_utf8_lossy())
+    }
+    fn to_js_string(&mut self, v: &JsValue) -> Result<crate::value::JsString, Throw> {
         if v.is_object() {
             let p = self.primitive_with_hint(v.clone(), true)?;
-            self.to_string(&p)
+            self.to_js_string(&p)
         } else {
-            Ok(crate::value::to_display_string(v))
+            match v {
+                JsValue::Str(s) => Ok(s.clone()),
+                _ => Ok(crate::value::JsString::from(crate::value::to_display_string(v))),
+            }
         }
     }
-    fn to_property_key(&mut self, v: &JsValue) -> Result<String, Throw> {
-        self.to_string(v)
+    fn to_property_key(&mut self, v: &JsValue) -> Result<crate::value::JsString, Throw> {
+        self.to_js_string(v)
     }
     fn to_int32(&mut self, v: &JsValue) -> Result<i32, Throw> {
         let n = self.to_number(v)?;
@@ -3411,7 +3408,7 @@ impl Interpreter {
         };
         if let (JsValue::Object(lhs), Some(fun)) = (a, r.borrow().func.clone()) {
             if let Some(JsValue::Str(lhs_name)) = lhs.borrow().get_own("name") {
-                if !fun.name.is_empty() && lhs_name.as_ref() == fun.name {
+                if !fun.name.is_empty() && lhs_name.units() == fun.name.encode_utf16().collect::<Vec<_>>() {
                     return Ok(JsValue::Bool(true));
                 }
             }
@@ -3435,7 +3432,7 @@ impl Interpreter {
 fn reference_name(reference: &Reference) -> Option<String> {
     match reference {
         Reference::Binding(name) => Some(name.clone()),
-        Reference::Property(_, key) => Some(key.clone()),
+        Reference::Property(_, key) => Some(key.to_utf8_lossy()),
     }
 }
 
