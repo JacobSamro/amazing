@@ -425,3 +425,56 @@ adds only `amazing-fetch` and its shell dependency edge. Logs and the pinned
 manifest are in `C:/Users/server/target/integrator-assist/diagnostics/ia-cache/`.
 These fixed-base gates are lane evidence; merged-head preflight belongs to the
 integrator. No WPT result is claimed for this shell-only change.
+
+## IA-SVG — driver adoption of the RC-13 SVG renderer
+
+Fixed pushed base `582a6af` contains RC-13, HTML-15, CSS-11, and NET-20.
+The lane branch retargets the driver and static reftest adapter from the old
+`amazing-image` re-export to root-workspace `amazing_svg::{from_dom, render_svg}`.
+The driver's `data:` image and stylesheet loading uses NET-17's
+`amazing_fetch::process_data_url`; other resources keep their file/network
+paths. A focused Windows driver gate passed **130/130**, three skipped, and
+the reftest data-image/data-stylesheet test passed **1/1**. The root driver SVG
+manifest/lock edge was granted by the primary. Cargo's Windows metadata also
+required one separate existing fetch lock edge and the standalone shell lock's
+HTML-15 encoding edge. The shell lock change matches Cargo's generated output
+exactly. All nine branch source/lock file hashes matched the Windows lane tree.
+
+The unchanged RC-11 manifest SHA-256 is
+`2fdbe12184173e8808ad2c09a6dc2ed41254affaa4bd1d84054e1880e110cfb0`,
+at WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, viewport 800×600 and
+DPR 1. The predecessor at `859bb53` repeated **22 pass / 13 mismatch** on all
+35 cases, **21/11** on the 32 inline cases, and **11/7** on the 18 inline cases
+that both Chrome and Safari pass. The IA adapter on RC-13 repeated **26/9**,
+**25/7**, and **14/4** respectively. The full 20-case both-browser consensus
+moves **11/9 → 14/6**. All four gains are
+`pathlength-005`, `polygon-with-filtered-marker`, `marker-implicit-subpaths`,
+and `will-change-under-mask`; no raw pass became a mismatch. Both AFTER runs
+have **23 nonblank passes** and identical per-case classifications, differing
+pixel counts, actual/reference/diff hashes, and nonwhite pixel counts. The
+AFTER projection SHA-256 is
+`a3302c905f0c7f2da50c91bd6b671125f1b78fbdfc4508b69eb1d32ff0821b99`
+in both rounds. It matches RC-13's after-move report per case.
+
+Three AFTER raw passes are blank actual/reference matches and get no paint
+credit: `ellipse-auto-rx-textpath`, `pathlength-005`, and
+`non-scaling-stroke-007`. The first and third were nonblank passes in the
+pre-RC-12 baseline, so **zero raw pass losses does not mean zero nonblank
+regressions**; those two cases lose paint evidence. RC-13 owns the renderer
+subset and this lane does not edit it. The first attempted sweep was denied by
+PowerShell execution policy before any case ran; the measured pair used
+process-local `ExecutionPolicy Bypass`. Raw reports, pixel counts, and
+comparison helpers are under `.agents/integrator-assist/ia-svg-final-{1,2}/`.
+
+Final fixed-base Windows gate under the shared build slot: root workspace
+`cargo nextest run --workspace --locked` passed **1,719/1,719**, three skipped;
+separate `cargo test --workspace --locked --doc` passed **2/2** across the
+workspace. The gate logs have SHA-256
+`9ca966780deb7b9eb000cc48cddd910c7d9b2f6524cfbdf85f16d717e9dfe72a`
+(nextest stderr, including summary) and
+`7e375c6ecdf2b3834b1c8e3f3199e7e9708fa14b554d9b8dd75284acdbedf0ac`
+(doctest stdout). All 11 files changed between the originally refreshed
+`6dff430` tree and the final rebased branch matched Mac/Windows SHA-256 after
+the gate, including the two pushed-base scripts. `REFRESH-HOLD` was released.
+The pushed base `582a6af` differs from `6dff430` only in those scripts. No
+push or PR was made by this lane.
