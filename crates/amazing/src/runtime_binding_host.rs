@@ -3,7 +3,8 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use amazing_bindings::{
-    deliver_mutation_checkpoint, fire_abort_timeout, html_element_interface,
+    deliver_custom_element_reactions, deliver_mutation_checkpoint, fire_abort_timeout,
+    html_element_interface, registry_for_document,
     dom_exception::throw_dom_error,
     host::{
         BindingHost, CallbackId, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition,
@@ -18,7 +19,7 @@ use amazing_js::{
     env::{EnvHandle, EnvKind},
     interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter, LegacyPlatformHooks as RuntimeLegacyHooks},
     value::{
-        HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsValue, Throw,
+        FunctionBody, HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsValue, Throw,
     },
 };
 
@@ -28,6 +29,7 @@ use crate::dom_host::BrowserDomHost;
 enum NativeEntry {
     Operation(Operation),
     IllegalConstructor,
+    CapturePromiseResolvers,
 }
 
 struct BindingState {
@@ -36,6 +38,8 @@ struct BindingState {
     functions: Vec<NativeEntry>,
     interfaces: Vec<(Interface, JsValue, JsValue)>,
     roots: Vec<Option<JsValue>>,
+    captured_resolvers: Option<(JsValue, JsValue)>,
+    promise_resolvers: HashMap<usize, (JsValue, JsValue)>,
     legacy_document: JsValue,
     legacy_elements: HashMap<u32, JsValue>,
     abort_timeouts: Vec<(AbortSignalId, u64)>,
@@ -98,6 +102,11 @@ impl RuntimeBindings {
             state: self.state.clone(),
         };
         deliver_mutation_checkpoint(&mut adapter)
+    }
+
+    pub(crate) fn deliver_reactions(&self, js: &mut Interpreter) -> Result<(), Throw> {
+        let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        deliver_custom_element_reactions(&mut adapter)
     }
 
     #[cfg(test)]
@@ -267,6 +276,11 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::MUTATION_RECORD => Interface::MutationRecord,
             InterfaceBrand::ATTRIBUTE => Interface::Attr,
             InterfaceBrand::COLLECTION => Interface::HTMLCollection,
+            InterfaceBrand::FORM_CONTROLS => Interface::HTMLFormControlsCollection,
+            InterfaceBrand::OPTIONS => Interface::HTMLOptionsCollection,
+            InterfaceBrand::RADIO_NODE_LIST => Interface::RadioNodeList,
+            InterfaceBrand::VALIDITY_STATE => Interface::ValidityState,
+            InterfaceBrand::CUSTOM_ELEMENT_REGISTRY => Interface::CustomElementRegistry,
             InterfaceBrand::NODE_LIST => Interface::NodeList,
             InterfaceBrand::STATIC_NODE_LIST => Interface::NodeList,
             InterfaceBrand::FILTERED_NODE_LIST => Interface::NodeList,
@@ -296,6 +310,8 @@ pub(crate) fn install(
         functions: Vec::new(),
         interfaces: Vec::new(),
         roots: Vec::new(),
+        captured_resolvers: None,
+        promise_resolvers: HashMap::new(),
         legacy_document: js.binding_get_property(&js.binding_global_object(), "document")?,
         legacy_elements: HashMap::new(),
         abort_timeouts: Vec::new(),
@@ -319,6 +335,13 @@ pub(crate) fn install(
         match entry {
             NativeEntry::Operation(operation) => invoke(&mut adapter, operation, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
+            NativeEntry::CapturePromiseResolvers => {
+                let (Some(resolve), Some(reject)) = (args.first(), args.get(1)) else {
+                    return Err(Throw::type_error("Promise executor missing resolvers"));
+                };
+                adapter.state.borrow_mut().captured_resolvers = Some((resolve.clone(), reject.clone()));
+                Ok(JsValue::Undefined)
+            }
         }
     });
     js.set_host_native_dispatcher(dispatch);
@@ -411,6 +434,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
             let dom = &mut host.dom;
             let length = match count_op {
                 Operation::HTMLCollectionSupportedIndexCount => dom.collection_length(handle.slot as usize),
+                Operation::FormCollectionSupportedIndexCount => dom.form_controls(NodeIdx(handle.slot as u32)).map(|items| items.len()),
+                Operation::OptionsSupportedIndexCount => dom.select_options(NodeIdx(handle.slot as u32)).map(|items| items.len()),
+                Operation::RadioNodeListSupportedIndexCount => dom.radio_list_items(handle.slot as usize).map(|items| items.len()),
                 Operation::NodeListSupportedIndexCount => match brand {
                     InterfaceBrand::NODE_LIST => Ok(dom.children(NodeIdx(handle.slot as u32)).count()),
                     InterfaceBrand::STATIC_NODE_LIST => dom.static_node_list(handle.slot as usize)
@@ -431,15 +457,23 @@ impl BindingHost for RuntimeBindingHost<'_> {
             }.map_err(|error| Throw::type_error(error.to_string()))?;
             u32::try_from(length).map_err(|_| Throw::range_error("collection length exceeds u32"))
         });
-        let names = hooks.supported_names.map(|_| {
+        let names = hooks.supported_names.map(|name_op| {
             let state = self.state.clone();
             Rc::new(move |handle: HostHandle| {
                 let borrowed = state.borrow();
                 if handle.arena != borrowed.arena || handle.generation != 1 || handle.brand != brand.0 {
                     return Err(Throw::type_error("Invalid legacy platform object"));
                 }
-                borrowed.host.borrow_mut().dom.collection_names(handle.slot as usize)
-                    .map_err(|error| Throw::type_error(error.to_string()))
+                let mut host = borrowed.host.borrow_mut();
+                let dom = &mut host.dom;
+                let result = match name_op {
+                    Operation::FormCollectionSupportedNames => dom.form_controls(NodeIdx(handle.slot as u32))
+                        .map(|items| native_form_names(dom, &items)),
+                    Operation::OptionsSupportedNames => dom.select_options(NodeIdx(handle.slot as u32))
+                        .map(|items| native_form_names(dom, &items)),
+                    _ => dom.collection_names(handle.slot as usize),
+                };
+                result.map_err(|error| Throw::type_error(error.to_string()))
             }) as Rc<dyn Fn(HostHandle) -> Result<Vec<Vec<u16>>, Throw>>
         });
         let indexed_op = hooks.indexed_getter;
@@ -458,9 +492,18 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 invoke(&mut adapter, op, receiver, &[arg])
             }) as Rc<dyn Fn(&mut Interpreter, HostHandle, &[u16]) -> Result<JsValue, Throw>>
         });
+        let indexed_setter = hooks.indexed_setter.map(|op| {
+            let state = self.state.clone();
+            Rc::new(move |js: &mut Interpreter, handle: HostHandle, index: u32, value: JsValue| {
+                let mut adapter = RuntimeBindingHost { js, state: state.clone() };
+                let receiver = adapter.hook_receiver(handle)?;
+                invoke(&mut adapter, op, receiver, &[JsValue::num(f64::from(index)), value])?;
+                Ok(())
+            }) as Rc<dyn Fn(&mut Interpreter, HostHandle, u32, JsValue) -> Result<(), Throw>>
+        });
         self.js.binding_define_legacy_platform_object(brand.0, RuntimeLegacyHooks {
             supported_index_count: count, supported_names: names, indexed_getter, named_getter,
-            indexed_setter: None, named_setter: None, named_deleter: None,
+            indexed_setter, named_setter: None, named_deleter: None,
             unenumerable_names: hooks.unenumerable_names, override_builtins: hooks.override_builtins,
         });
         Ok(())
@@ -714,6 +757,125 @@ impl BindingHost for RuntimeBindingHost<'_> {
         dom_exception.borrow_mut().proto = Some(error);
         Ok(OptionalHookInstall::Installed)
     }
+    fn install_custom_elements_global(&mut self) -> Result<OptionalHookInstall, Throw> {
+        let registry = registry_for_document(self, NodeIdx(0))?;
+        let global = self.js.binding_global_object();
+        self.define_data_property(&global, "customElements", registry, true, false, true)?;
+        Ok(OptionalHookInstall::Installed)
+    }
+    fn is_constructor(&mut self, value: &JsValue) -> Result<bool, Throw> {
+        let JsValue::Object(object) = value else { return Ok(false) };
+        let object = object.borrow();
+        Ok(object.func.as_ref().is_some_and(|function| {
+            !function.is_arrow && !function.is_async && !function.is_generator
+                && !matches!(function.body, FunctionBody::HostNative(_, JsCallPolicy::CallOnly, _))
+        }))
+    }
+    fn require_object(&mut self, value: &JsValue) -> Result<(), Throw> {
+        if value.is_object() { Ok(()) } else { Err(Throw::type_error("Expected an object")) }
+    }
+    fn sequence_dom_strings(&mut self, value: &JsValue) -> Result<Vec<Vec<u16>>, Throw> {
+        self.require_object(value)?;
+        let length = self.js.binding_get_property(value, "length")?;
+        let length = self.js.binding_to_number(&length)?;
+        if !length.is_finite() || length < 0.0 || length > u32::MAX as f64 {
+            return Err(Throw::type_error("Invalid sequence length"));
+        }
+        let mut strings = Vec::new();
+        for index in 0..length.trunc() as u32 {
+            let item = self.js.binding_get_property(value, &index.to_string())?;
+            strings.push(self.to_dom_string(&item)?);
+        }
+        Ok(strings)
+    }
+    fn construct_custom_element(&mut self, constructor: &JsValue,
+        _definition: usize, _element: NodeIdx) -> Result<JsValue, Throw> {
+        // JSRT-7 must make derived `super()` return this element's canonical
+        // wrapper. Until then the native finish check rejects ordinary objects.
+        self.js.binding_construct(constructor, Vec::new())
+    }
+    fn new_promise(&mut self) -> Result<JsValue, Throw> {
+        let global = self.js.binding_global_object();
+        let constructor = self.js.binding_get_property(&global, "Promise")?;
+        let executor = self.native("customElements executor", 2,
+            NativeEntry::CapturePromiseResolvers, HostCallPolicy::CallOnly);
+        let promise = self.js.binding_construct(&constructor, vec![executor])?;
+        let JsValue::Object(object) = &promise else {
+            return Err(Throw::type_error("Promise constructor returned a non-object"));
+        };
+        let resolvers = self.state.borrow_mut().captured_resolvers.take()
+            .ok_or_else(|| Throw::type_error("Promise constructor did not call executor"))?;
+        self.state.borrow_mut().promise_resolvers.insert(Rc::as_ptr(&object.0) as usize, resolvers);
+        Ok(promise)
+    }
+    fn resolve_promise(&mut self, promise: &JsValue, value: JsValue) -> Result<(), Throw> {
+        let JsValue::Object(object) = promise else { return Err(Throw::type_error("Expected a Promise")) };
+        let pair = self.state.borrow_mut().promise_resolvers.remove(&(Rc::as_ptr(&object.0) as usize))
+            .ok_or_else(|| Throw::type_error("Unknown customElements Promise"))?;
+        binding_call(self.js, &pair.0, &JsValue::Undefined, &[value])?;
+        Ok(())
+    }
+    fn reject_promise(&mut self, promise: &JsValue, reason: JsValue) -> Result<(), Throw> {
+        let JsValue::Object(object) = promise else { return Err(Throw::type_error("Expected a Promise")) };
+        let pair = self.state.borrow_mut().promise_resolvers.remove(&(Rc::as_ptr(&object.0) as usize))
+            .ok_or_else(|| Throw::type_error("Unknown customElements Promise"))?;
+        binding_call(self.js, &pair.1, &JsValue::Undefined, &[reason])?;
+        Ok(())
+    }
+    fn dom_exception_value(&mut self, error: DomError) -> Result<JsValue, Throw> {
+        Ok(throw_dom_error(self, error).0)
+    }
+    fn report_custom_element_exception(&mut self, error: Throw) -> Result<(), Throw> {
+        eprintln!("Uncaught custom element reaction: {}", error.describe());
+        Ok(())
+    }
+    fn form_pattern_matches(&mut self, pattern: &[u16], value: &[u16]) -> Result<Option<bool>, Throw> {
+        use amazing_regex::{Error as RegexError, Regex};
+
+        // HTML first compiles the source on its own. Anchoring must not turn
+        // an invalid pattern into a valid one.
+        match Regex::new_utf16(pattern, "v") {
+            Ok(_) => {}
+            Err(RegexError::Syntax(_)) => return Ok(None),
+            Err(error) => return Err(Throw::range_error(error.to_string())),
+        }
+        let mut anchored = "^(?:".encode_utf16().collect::<Vec<_>>();
+        anchored.extend_from_slice(pattern);
+        anchored.extend(")$".encode_utf16());
+        let regex = match Regex::new_utf16(&anchored, "v") {
+            Ok(regex) => regex,
+            Err(RegexError::Syntax(_)) => return Ok(None),
+            Err(error) => return Err(Throw::range_error(error.to_string())),
+        };
+        regex.exec_utf16(value, 0)
+            .map(|result| Some(result.is_some()))
+            .map_err(|error| Throw::range_error(error.to_string()))
+    }
+    fn form_date_from_epoch_ms(&mut self, milliseconds: f64) -> Result<JsValue, Throw> {
+        let global = self.js.binding_global_object();
+        let date = self.js.binding_get_property(&global, "Date")?;
+        self.js.binding_construct(&date, vec![JsValue::num(milliseconds)])
+    }
+    fn form_date_to_epoch_ms(&mut self, value: &JsValue) -> Result<Option<f64>, Throw> {
+        let JsValue::Object(object) = value else { return Err(Throw::type_error("Expected a Date")) };
+        let global = self.js.binding_global_object();
+        let date = self.js.binding_get_property(&global, "Date")?;
+        let JsValue::Object(date_prototype) = self.js.binding_get_property(&date, "prototype")? else {
+            return Err(Throw::type_error("Date prototype missing"));
+        };
+        let mut prototype = object.borrow().proto.clone();
+        let mut is_date = false;
+        while let Some(current) = prototype {
+            if Rc::ptr_eq(&current.0, &date_prototype.0) { is_date = true; break; }
+            prototype = current.borrow().proto.clone();
+        }
+        if !is_date { return Err(Throw::type_error("Expected a Date")); }
+        match object.borrow().get_own("[[DateValue]]") {
+            Some(JsValue::Num(milliseconds)) if milliseconds.is_finite() => Ok(Some(milliseconds)),
+            Some(JsValue::Num(_)) => Ok(None),
+            _ => Err(Throw::type_error("Invalid Date value")),
+        }
+    }
     fn install_node_constant(&mut self, name: &'static str, value: u16) -> Result<(), Throw> {
         let prototype = self
             .prototype(Interface::Node)
@@ -929,4 +1091,16 @@ fn binding_create_array(js: &mut Interpreter, values: Vec<JsValue>) -> Result<Js
 }
 fn binding_same_value(js: &Interpreter, left: &JsValue, right: &JsValue) -> bool {
     js.binding_same_value(left, right)
+}
+
+fn native_form_names(dom: &Dom, items: &[NodeIdx]) -> Vec<Vec<u16>> {
+    let mut names = Vec::new();
+    for &item in items {
+        for value in [dom.attribute_utf16(item, "id"), dom.attribute_utf16(item, "name")] {
+            if let Some(value) = value.filter(|value| !value.is_empty()) {
+                if !names.contains(&value) { names.push(value); }
+            }
+        }
+    }
+    names
 }

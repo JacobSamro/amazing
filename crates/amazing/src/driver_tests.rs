@@ -5,6 +5,95 @@ use amazing_text::TextSystem;
 use std::{cell::RefCell, rc::Rc};
 
 #[test]
+fn form_collections_and_validity_use_native_brands_and_live_hooks() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<form id='f'><input id='a' name='choice' type='radio' value='one' checked><input id='b' name='choice' type='radio' value='two'><input id='required' required></form><select id='s'><option value='old'>old</option></select>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(
+        host, crate::js_scheduler::JS_CAPACITY,
+    ).unwrap();
+    let result = scheduler.run_script(
+        "let f=document.getElementById('f'); let c=f.elements; \
+         let a=document.getElementById('a'); let s=document.getElementById('s'); \
+         let group=c.choice; let before=c.length===3 && c[0]===a && group instanceof RadioNodeList \
+           && group.length===2 && group.value==='one' && c.required.validity.valueMissing; \
+         group.value='two'; let chosen=group.value==='two'; \
+         let replacement=document.createElement('option'); replacement.value='new'; \
+         s.options[0]=replacement; \
+         before && chosen && s.options instanceof HTMLOptionsCollection \
+           && s.options[0]===replacement && s.options.length===1"
+    ).unwrap();
+    assert_eq!(result, amazing_js::value::JsValue::Bool(true));
+}
+
+#[test]
+fn form_pattern_uses_v_mode_and_full_string_matching() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<input id='p' pattern='[a&&a]' value='b'>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(
+        host, crate::js_scheduler::JS_CAPACITY,
+    ).unwrap();
+    assert_eq!(scheduler.run_script(
+        "let p=document.getElementById('p'); \
+         let invalidValue=p.validity.patternMismatch; \
+         p.value='a'; let matchingValue=!p.validity.patternMismatch; \
+         p.setAttribute('pattern','a|ab'); p.value='ab'; let fullAlternative=!p.validity.patternMismatch; \
+         p.setAttribute('pattern','['); let invalidPattern=!p.validity.patternMismatch; \
+         (invalidValue ? 1 : 0) + (matchingValue ? 2 : 0) + \
+         (fullAlternative ? 4 : 0) + (invalidPattern ? 8 : 0)"
+    ).unwrap(), amazing_js::value::JsValue::num(15.0));
+}
+
+#[test]
+fn custom_elements_registry_installs_and_when_defined_resolves() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(
+        host, crate::js_scheduler::JS_CAPACITY,
+    ).unwrap();
+    assert_eq!(scheduler.run_script(
+        "function X(){}; let ready=false; \
+         let pending=window.customElements.whenDefined('x-card'); \
+         pending.then(value=>{ready=value===X}); \
+         customElements.define('x-card',X); \
+         customElements===window.customElements \
+           && customElements instanceof CustomElementRegistry \
+           && customElements.get('x-card')===X \
+           && customElements.getName(X)==='x-card'"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
+    scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
+    assert_eq!(scheduler.run_script("ready").unwrap(), amazing_js::value::JsValue::Bool(true));
+}
+
+#[test]
+fn form_date_and_document_metadata_use_current_driver_state() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body><input id='date' type='date'></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(
+        host, crate::js_scheduler::JS_CAPACITY,
+    ).unwrap();
+    scheduler.set_location_url("https://example.test/path/page.html");
+    scheduler.set_document_metadata("UTF-8", "text/html", "https://referrer.test/");
+    assert_eq!(scheduler.run_script(
+        "let input=document.getElementById('date'); \
+         input.valueAsDate=new Date(0); \
+         let link=document.createElement('a'); link.href='../next'; \
+         input.value==='1970-01-01' && input.valueAsDate instanceof Date \
+           && document.URL==='https://example.test/path/page.html' \
+           && document.characterSet==='UTF-8' && document.contentType==='text/html' \
+           && document.referrer==='https://referrer.test/' \
+           && link.href==='https://example.test/next'"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
+}
+
+#[test]
 fn shadow_root_uses_its_interface_and_slotchange_reaches_the_event_loop() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse("<body><div id='host'></div></body>"),

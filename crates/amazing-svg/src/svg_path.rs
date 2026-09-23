@@ -1,5 +1,6 @@
-//! One straight-line SVG outline for fill. This deliberately excludes subpaths and fill rules.
+//! One straight-line SVG outline for fill and stroke. Subpaths and curves remain outside this bounded parser.
 use crate::DecodeError;
+use super::Stroke;
 
 #[derive(Clone, Copy)]
 enum Token {
@@ -123,7 +124,7 @@ pub(super) fn parse_path(data: &str, limit: usize) -> Result<Vec<(f64, f64)>, De
         }
     }
     // Fill implicitly joins the last point to the first, with or without Z.
-    if pos != tokens.len() || points.len() < 3 {
+    if pos != tokens.len() || points.len() < 2 {
         return Err(DecodeError::UnsupportedSvg);
     }
     Ok(points)
@@ -147,28 +148,43 @@ pub(super) fn point_in_path(points: &[(f64, f64)], x: f64, y: f64) -> bool {
     winding != 0
 }
 
-pub(super) fn point_on_stroke(
-    points: &[(f64, f64)],
-    x: f64,
-    y: f64,
-    radius: f64,
-    closed: bool,
-) -> bool {
-    if points.len() < 2 || radius <= 0.0 {
+pub(super) fn point_on_stroke(stroke: &Stroke, x: f64, y: f64) -> bool {
+    let points = &stroke.points;
+    if points.len() < 2 || stroke.radius <= 0.0 {
         return false;
     }
-    let radius_squared = radius * radius;
+    let radius_squared = stroke.radius * stroke.radius;
     let segments = points.windows(2).map(|pair| (pair[0], pair[1]));
-    let closing = closed.then(|| (*points.last().unwrap(), points[0]));
+    let closing = stroke.closed.then(|| (*points.last().unwrap(), points[0]));
+    let total_length = if stroke.dash.is_some() {
+        segments.clone().chain(closing).map(|((ax, ay), (bx, by))| (bx - ax).hypot(by - ay)).sum()
+    } else { 0.0 };
+    let mut progress = 0.0;
     segments.chain(closing).any(|((ax, ay), (bx, by))| {
         let (dx, dy) = (bx - ax, by - ay);
         let length_squared = dx * dx + dy * dy;
+        let length = length_squared.sqrt();
         let t = if length_squared > 0.0 {
             (((x - ax) * dx + (y - ay) * dy) / length_squared).clamp(0.0, 1.0)
         } else {
             0.0
         };
         let (ox, oy) = (x - (ax + t * dx), y - (ay + t * dy));
-        ox * ox + oy * oy <= radius_squared
+        let distance = progress + t * length;
+        progress += length;
+        ox * ox + oy * oy <= radius_squared && stroke.dash.as_ref().is_none_or(|dash| {
+            let position = match dash.author_length {
+                Some(author) if total_length > 0.0 => distance * author / total_length,
+                _ => distance,
+            };
+            let cycle: f64 = dash.lengths.iter().sum();
+            if cycle <= 0.0 { return true; }
+            let mut phase = (position + dash.offset).rem_euclid(cycle);
+            for (index, length) in dash.lengths.iter().enumerate() {
+                if phase < *length { return index % 2 == 0; }
+                phase -= length;
+            }
+            false
+        })
     })
 }

@@ -84,9 +84,12 @@ impl DriverScheduler {
         self.drain_outbox()?;
         let before = self.js.output.borrow().len();
         let result = f(&mut self.js);
+        let bindings = self.bindings.clone();
+        let reactions = bindings.deliver_reactions(&mut self.js);
         self.trace.extend(self.js.output.borrow()[before..].iter().cloned());
         let collected = self.collect_native_mutations();
         let drained = self.drain_outbox();
+        reactions?;
         collected?;
         drained?;
         result

@@ -48,11 +48,31 @@ fn shape_alpha_composites_in_document_order() {
     assert_eq!(pixel(&bytes, 5, 5), [255, 0, 0, 255]);
 }
 #[test]
+fn byte_svg_strokes_rect_and_line_without_filling_the_line() {
+    let rect = svg("", r#"<rect x="1" y="1" width="6" height="6" fill="none" stroke="red" stroke-width="2"/>"#);
+    assert_eq!(pixel(&rect, 1, 1), [255, 0, 0, 255]);
+    assert_eq!(pixel(&rect, 4, 4), [0; 4]);
+    let line = svg("", r#"<line x1="0" y1="4" x2="8" y2="4" stroke="green" stroke-width="2"/>"#);
+    assert_eq!(pixel(&line, 4, 4), [0, 128, 0, 255]);
+    assert_eq!(pixel(&line, 4, 0), [0; 4]);
+    let view_only = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><line x1="0" y1="25" x2="50" y2="25" stroke-width="50" stroke="green" vector-effect="non-scaling-stroke"/></svg>"#;
+    let decoded = decode(view_only, DecodeLimits::default()).unwrap();
+    assert_eq!((decoded.width, decoded.height), (50, 50));
+    assert!(decoded.pixels.chunks_exact(4).all(|pixel| pixel == [0, 128, 0, 255]));
+}
+
+#[test]
+fn inherited_byte_polyline_stroke_survives_non_scaling_viewbox() {
+    let source = br#"<svg xmlns='http://www.w3.org/2000/svg' stroke-width='1px' stroke='black' width='50' height='50' viewBox='0 0 50 50'><polyline vector-effect='non-scaling-stroke' points='50 0 0 50'/></svg>"#;
+    let decoded = decode(source, DecodeLimits::default()).unwrap();
+    assert_eq!((decoded.width, decoded.height), (50, 50));
+    assert!(decoded.pixels.chunks_exact(4).any(|pixel| pixel == [0, 0, 0, 255]));
+}
+#[test]
 fn unsupported_svg_fails_whole_image_without_partial_success() {
     for body in [
         r#"<rect width="8" height="8"/><script/>"#,
         r#"<path d="M0 0"/>"#,
-        r#"<rect width="8" height="8" stroke="red"/>"#,
         r#"<g opacity="0.5"><rect width="1" height="1"/></g>"#,
         r#"<image href="https://example.com/image.png"/>"#,
     ] {
@@ -216,7 +236,6 @@ fn inline_fill_opacity_and_unsupported_css_fail_closed() {
     let bytes = svg("", r#"<rect width="8" height="8" style="fill: red; fill-opacity: .5"/>"#);
     assert_eq!(pixel(&bytes, 0, 0), [255, 0, 0, 128]);
     for body in [
-        r#"<rect width="8" height="8" style="stroke: red"/>"#,
         r#"<rect width="8" height="8" style="fill: url(#paint)"/>"#,
         r#"<rect width="8" height="8" style="fill: red; filter: blur(1px)"/>"#,
         r#"<g style="opacity: .5"><rect width="8" height="8"/></g>"#,
@@ -250,7 +269,6 @@ fn computed_svg_style_resolves_alpha_and_rejects_unsupported_paint() {
     for body in [
         r#"<rect width="8" height="8" style="fill: url(#paint)"/>"#,
         r#"<rect width="8" height="8" style="color: lab(50% 0 0); fill: currentColor"/>"#,
-        r#"<rect width="8" height="8" stroke="red"/>"#,
         r#"<g style="opacity: .5"><rect width="8" height="8"/></g>"#,
     ] {
         assert_eq!(decode(&svg("", body), Default::default()).unwrap_err(), DecodeError::UnsupportedSvg);
@@ -317,8 +335,6 @@ fn open_paths_reject_invalid_commands_and_unsupported_paint_whole_image() {
         r#"<path d="M1 1 L6, L6 6"/>"#,
         r#"<path d="M1 1 L6 1 L6 6 Z L1 6"/>"#,
         r#"<path d="M1 1 L6 1 L6 6" fill-rule="nonzero"/>"#,
-        r#"<path d="M1 1 L6 1 L6 6" stroke="none"/>"#,
-        r#"<path d="M1 1 L6 1 L6 6" style="stroke: red"/>"#,
         r#"<path d="M1 1 L6 1 L6 6" href="other.svg"/>"#,
         r#"<path d="M1 1 L6 1 L6 6" fill="url(#paint)"/>"#,
     ] {
@@ -352,7 +368,6 @@ fn paths_reject_curved_malformed_and_unsupported_paint_whole_image() {
         r#"<path d="M1 1 L6, L6 6 Z"/>"#,
         r#"<path d="M1 1 L6 1 L6 6 Z,"/>"#,
         r#"<path d="M1 1 L6 1 L6 6 Z" fill-rule="evenodd"/>"#,
-        r#"<path d="M1 1 L6 1 L6 6 Z" stroke="red"/>"#,
         r#"<path d="M1 1 L6 1 L6 6 Z" fill="url(#paint)"/>"#,
         r#"<path d="M1 1 L6 1 L6 6 Z" href="other.svg"/>"#,
     ] {
@@ -401,7 +416,6 @@ fn polygons_reject_malformed_points_and_unsupported_features_whole_image() {
         r#"<polygon points="0,0 1e309,0 1,1"/>"#,
         r#"<polygon points="0,0 1e,0 1,1"/>"#,
         r#"<polygon points="0,0-1,0 1,1"/>"#,
-        r#"<polygon points="0,0 1,0 1,1" stroke="red"/>"#,
         r#"<polygon points="0,0 1,0 1,1" fill-rule="evenodd"/>"#,
         r#"<polygon points="0,0 1,0 1,1" fill-rule="nonzero"/>"#,
         r#"<polygon points="0,0 1,0 1,1" fill="url(#paint)"/>"#,
@@ -453,7 +467,6 @@ fn polylines_reject_malformed_points_and_unsupported_features_whole_image() {
     for polyline in [
         r#"<polyline/>"#,
         r#"<polyline points=""/>"#,
-        r#"<polyline points="0,0 1,0"/>"#,
         r#"<polyline points="0,0 1,0 1"/>"#,
         r#"<polyline points=",0 1,0 1,1"/>"#,
         r#"<polyline points="0,0 1,,0 1,1"/>"#,
@@ -462,8 +475,6 @@ fn polylines_reject_malformed_points_and_unsupported_features_whole_image() {
         r#"<polyline points="0,0 1e309,0 1,1"/>"#,
         r#"<polyline points="0,0 1e,0 1,1"/>"#,
         r#"<polyline points="0,0-1,0 1,1"/>"#,
-        r#"<polyline points="0,0 1,0 1,1" stroke="none"/>"#,
-        r#"<polyline points="0,0 1,0 1,1" style="stroke: red"/>"#,
         r#"<polyline points="0,0 1,0 1,1" fill-rule="evenodd"/>"#,
         r#"<polyline points="0,0 1,0 1,1" fill="url(#paint)"/>"#,
         r#"<polyline points="0,0 1,0 1,1" href="other.svg"/>"#,
