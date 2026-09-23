@@ -124,6 +124,13 @@ the integrator's authoritative gate, run on the merged head after every merge.
 Rebase and re-gate only when the drift since your base **touches your own
 crates**; check with `git diff --name-only <base> origin/dev -- <your paths>`.
 
+**Each integrator gates in its own tree.** The co-integrator uses
+`wt\integrator`; the primary uses `wt\integrator-primary`, each with its
+matching target dir. On 2026-09-23 the two shared one tree: the co-integrator's
+`REFRESH-HOLD` silently skipped the primary's refresh, so a "merged-head" gate
+measured a different commit and reported the previous head's count as a pass.
+A merged-head gate that did not print a fresh lock line is not evidence.
+
 **A refresh overwrites lane-owned files in the server tree with the `dev`
 versions**, including work the lane had already synced up. The Mac worktree is
 the source of truth so nothing is lost, but the lane must re-`scp` its own

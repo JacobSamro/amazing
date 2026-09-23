@@ -30,10 +30,12 @@ ARCHIVE_REMOTE="C:\\Users\\server\\dev-refresh-$STAMP.tar"
 cleanup() { rm -f "$ARCHIVE_LOCAL"; }
 trap cleanup EXIT
 
-# "integrator" is not an agent lane: it is the tree the integrators use for the
-# authoritative gate on a merged head. Borrowing a lane's tree for that would
-# overwrite the lane's own synced work mid-ticket.
-ALL_LANES=(js-lang js-runtime dom-bindings layout css net replaced-content html integrator-assist integrator)
+# "integrator" and "integrator-primary" are not agent lanes: they are the trees
+# the co-integrator and the primary integrator use for authoritative gates on a
+# merged head. Borrowing a lane's tree would overwrite its synced work
+# mid-ticket. Two integrators sharing one tree failed too: one's REFRESH-HOLD
+# silently skipped the other's refresh, and a gate measured the wrong commit.
+ALL_LANES=(js-lang js-runtime dom-bindings layout css net replaced-content html integrator-assist integrator integrator-primary)
 
 # Lanes run this for THEMSELVES, so a bare invocation must not touch anyone
 # else's tree. Refreshing every lane is an integrator action and has to be
