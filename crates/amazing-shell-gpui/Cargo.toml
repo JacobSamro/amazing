@@ -8,6 +8,7 @@ rust-version = "1.89"
 
 [dependencies]
 amazing-css = { path = "../amazing-css" }
+amazing-compositor = { path = "../amazing-compositor" }
 amazing-dom = { path = "../amazing-dom" }
 amazing-fetch = { path = "../amazing-fetch" }
 amazing-html = { path = "../amazing-html" }
@@ -26,6 +27,14 @@ windows-sys = { version = "0.61.2", features = ["Win32_Media_Audio"] }
 [[bin]]
 name = "amazing-shell"
 path = "src/main.rs"
+
+[[test]]
+name = "compositor_presenter"
+path = "src/compositor_presenter.rs"
+
+[[bin]]
+name = "amazing-compositor-proof"
+path = "src/bin/compositor_proof.rs"
 
 [profile.release]
 opt-level = 3

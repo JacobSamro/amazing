@@ -5,11 +5,13 @@
 mod animation;
 mod frame;
 mod hit;
+mod paint_view;
 mod property;
 mod quad;
 use amazing_paint::Surface;
 pub use animation::*;
 pub use hit::*;
+pub use paint_view::*;
 pub use property::*;
 pub use quad::*;
 use std::collections::{HashMap, HashSet};

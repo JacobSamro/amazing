@@ -8,3 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 amazing-paint = { path = "../amazing-paint" }
+
+[dev-dependencies]
+amazing-layout = { path = "../amazing-layout" }
+amazing-text = { path = "../amazing-text" }
