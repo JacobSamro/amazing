@@ -115,7 +115,7 @@ LANE_PATHS = {
     # constructors, Atomics.
     "js-binary": ["crates/amazing-js/src/builtins_binary"],
     # ADR 0005 (Stage 3): typed IPC and the process model, beside the engine.
-    "ipc": ["crates/amazing-ipc/", "crates/amazing-process/"],
+    "ipc": ["crates/amazing-ipc/", "crates/amazing-process/", "crates/amazing-ipc-platform/"],
     # ADR 0006 (Stage 2): property trees, layerization, tiled raster cache.
     "compositor": ["crates/amazing-compositor/"],
     # Stage 2: Web Storage, IndexedDB and Cache API storage engines.
