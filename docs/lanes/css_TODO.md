@@ -1,5 +1,58 @@
 # CSS lane decision map
 
+## CSS-12 — font features and broader cascade gate (fixed base `582a6af`)
+
+CSS Fonts 4 `font-feature-settings` and `font-variant-ligatures` are inherited,
+initial `normal`, and validated before cascade ranking. Their computed text is
+available through `ComputedStyle::get()`. `font` resets both, including when
+its value comes from `var()`, and also resets the already represented
+`font-size-adjust` longhand. CSS Fonts 4 specification pin:
+CSSWG drafts `main` revision `d3e4fc5eced2be0f70c1ba9cb7d23d3c54e2dec6`.
+
+The broader gate fixes WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` and selects up to 80
+static, self-contained, local-reference HTML reftests per category by the
+lowest SHA-256 path hashes from `css/selectors`, `css/css-color`,
+`css/css-values`, and `css/css-cascade`. Eligible totals are 83, 232, 107,
+and 19; the frozen selection has 80, 80, 80, and 19 cases (259 total).
+The manifest and inventory are in `crates/amazing-css/evidence/`. Exact-revision
+Chrome 154.0.8016.0 and Safari 26.6 run IDs are 5182906107691008 and
+5141363439173632. All 259 oracle cases were found: 215 pass/pass,
+36 Chrome pass/Safari fail, 4 fail/fail, and 4 Chrome pass/Safari unreported.
+
+The first consensus clusters selected from this corpus are Selectors 4
+`:lang()` extended language ranges and CSS Color 4 `oklab()`, `oklch()`,
+`lab()`, and predefined `color()` spaces. CSS normalizes supported colors at
+computed style so paint receives a usable RGBA value. A same-space relative
+`color(from currentColor <rgb-space> r g b)` retains its source through
+explicit inheritance and rebinds to the inheriting element's `color`. The
+unimplemented wider CSS Color 5 relative-color grammar remains a separate
+cluster; this ticket covers the channel-copy identity form exercised by the
+pinned corpus. Color conversion follows CSS Color 4's published matrices and
+transfer functions; language-range matching follows Selectors 4 and RFC 4647
+extended filtering.
+
+Win-001 final gate: CSS nextest **209/209**, CSS doctests **0/0**;
+workspace nextest **1,726/1,726** with 3 skipped, workspace doctests **2/2**.
+The 259-case broad corpus ran twice on each build, with stable per-case
+classification, differing pixels, and actual/reference/diff image hashes:
+**160 pass / 97 mismatch / 2 crash → 184 pass / 73 mismatch / 2 crash**.
+There are 24 raw pass gains, 21 Chrome/Safari pass/pass gains, and zero pass
+losses. Consensus pass/pass counts move **153 → 174**. The two unchanged
+crashes are the driver's `data:text/css` stylesheet path handling, routed in
+`.agents/css/questions.md`. The old 72-case cascade corpus is **59/11/2 →
+59/11/2**, with zero pass losses; its three changed image hashes remain passes.
+All eight downstream selections have identical per-case projections. Full
+per-case results and selection projection hashes are in
+`crates/amazing-css/evidence/css12-case-results.jsonl` and
+`css12-results.json`. Baseline and final executable SHA256 values are
+`51c63e2bdc4e4db2090cb44cbc9d49011e4ef93618e6ae8ad6c3d93470858348`
+and `192c550c43826af344b9ecad4d407d31cdaa927941544335030e6056967babaf`.
+The gate used WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`;
+`origin/dev` advanced to `f8bdb33` without changing CSS-owned paths since
+the fixed base.
+
+
 ## CSS-11 — standardized CSS zoom and cascade retriage (fixed base `cb3064b`)
 
 `zoom` accepts a nonnegative number or percentage, computes percentages to

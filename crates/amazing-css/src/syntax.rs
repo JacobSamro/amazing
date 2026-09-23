@@ -338,7 +338,8 @@ pub fn tokenize(src: &str) -> Vec<Token> {
                 lx.pos += 1;
                 Token::CloseSquare
             },
-            Some(c) if is_ident_start(c) => {
+            Some(c) if is_ident_start(c) ||
+                (c == '\\' && lx.peek_at(1).is_some_and(|next| next != '\n')) => {
                 let name = lx.ident();
                 if lx.peek() == Some('(') {
                     lx.pos += 1;

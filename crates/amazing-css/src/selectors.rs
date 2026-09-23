@@ -21,7 +21,7 @@
 //!   combinator-containing complex selectors
 //! - namespace prefixes (`svg|rect`) are not supported
 //! - `:has()` currently accepts single-compound relative arguments; complex
-//!   relative selectors and language-range wildcards remain unsupported
+//!   relative selectors remain unsupported
 
 use crate::syntax::{tokenize, serialize, Token};
 use amazing_dom::{Dom, Namespace, NodeIdx};
@@ -445,7 +445,7 @@ impl<'t> SelParser<'t> {
                 loop {
                     self.skip_ws();
                     let range = match self.bump()? {
-                        Token::Ident(value) | Token::Str(value) if !value.is_empty() => value,
+                        Token::Ident(value) | Token::Str(value) => value,
                         _ => return None,
                     };
                     ranges.push(range);
@@ -786,10 +786,11 @@ fn simple_in_scope(dom: &Dom, el: NodeIdx, s: &Simple, scope: Option<NodeIdx>) -
             },
             _ => false,
         }),
-        Simple::Lang(ranges) => element_language(dom, el).is_some_and(|lang| ranges.iter().any(|range| {
-            lang.eq_ignore_ascii_case(range) || lang.get(..range.len()).is_some_and(|prefix| prefix.eq_ignore_ascii_case(range))
-                && lang.as_bytes().get(range.len()) == Some(&b'-')
-        })),
+        Simple::Lang(ranges) => ranges.iter().any(|range| {
+            let language = element_language(dom, el);
+            if range.is_empty() { return language.is_none(); }
+            language.is_some_and(|lang| extended_language_match(range, lang))
+        }),
         Simple::Dir(rtl) => element_direction(dom, el) == *rtl,
         Simple::NthChildOf { a, b, from_last, selectors } => nth_index_of(dom, el, *from_last, selectors)
             .is_some_and(|index| anb_matches(*a, *b, index)),
@@ -805,6 +806,33 @@ fn element_language<'a>(dom: &'a Dom, el: NodeIdx) -> Option<&'a str> {
         current = dom.get(node).parent;
     }
     None
+}
+
+/// RFC 4647 §3.3.2 extended filtering. Non-initial range wildcards skip
+/// positions; a tag singleton starts an extension and cannot be skipped.
+fn extended_language_match(range: &str, language: &str) -> bool {
+    let ranges: Vec<_> = range.split('-').collect();
+    let tags: Vec<_> = language.split('-').collect();
+    let valid_range = ranges.iter().enumerate().all(|(index, part)| {
+        *part == "*" || (!part.is_empty() && part.len() <= 8
+            && part.bytes().all(|c| if index == 0 { c.is_ascii_alphabetic() } else { c.is_ascii_alphanumeric() }))
+    });
+    let valid_tag = tags.iter().all(|part| !part.is_empty() && part.len() <= 8
+        && part.bytes().all(|c| c.is_ascii_alphanumeric()));
+    if !valid_range || !valid_tag || ranges.is_empty() || tags.is_empty() { return false; }
+    if ranges[0] != "*" && !ranges[0].eq_ignore_ascii_case(tags[0]) { return false; }
+    let (mut r, mut t) = (1, 1);
+    while r < ranges.len() {
+        if ranges[r] == "*" { r += 1; continue; }
+        if t == tags.len() { return false; }
+        if ranges[r].eq_ignore_ascii_case(tags[t]) {
+            r += 1;
+        } else if tags[t].len() == 1 {
+            return false;
+        }
+        t += 1;
+    }
+    true
 }
 
 fn element_direction(dom: &Dom, el: NodeIdx) -> bool {

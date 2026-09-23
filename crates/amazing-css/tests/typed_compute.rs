@@ -8,9 +8,7 @@ fn unsupported_color_spaces_preserve_the_existing_cascade_winner() {
     for color in [
         "darkred",
         "canvastext",
-        "oklch(0% 0 0)",
-        "color(xyz-d65 0 0 0)",
-        "color(from currentcolor rec2020 r g b)",
+        "color(from currentcolor xyz x y z)",
     ] {
         let sheet = parse_stylesheet(&format!(
             "div {{ background-color: red; background-color: {color}; }}"

@@ -1,0 +1,349 @@
+{
+  "fixed_base": "582a6af0962dd3b7e6c94427c14746915aea14ab",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selections": {
+    "broad": {
+      "baseline": {
+        "counts": {
+          "pass": 160,
+          "mismatch": 97,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 2
+        },
+        "projection_sha256": "f49ff8b92159f2f5956e317a491de0509c7b6bfd5fa93d4431428afb40c7d28e",
+        "cases": 259
+      },
+      "candidate": {
+        "counts": {
+          "pass": 184,
+          "mismatch": 73,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 2
+        },
+        "projection_sha256": "85d3ed7e6009b823d5178d8e4b10b546b87f9f1c43f3dbf9fcaf6ca0f0e44bf8",
+        "cases": 259
+      },
+      "pass_losses": [],
+      "changed_case_count": 39
+    },
+    "cascade": {
+      "baseline": {
+        "counts": {
+          "pass": 59,
+          "mismatch": 11,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 2,
+          "crash": 0
+        },
+        "projection_sha256": "616fe54f74d75858bab70845becd504f6689b58418de1543acb69cb68990df05",
+        "cases": 72
+      },
+      "candidate": {
+        "counts": {
+          "pass": 59,
+          "mismatch": 11,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 2,
+          "crash": 0
+        },
+        "projection_sha256": "c4cd1753f5cc857f53e1ad9c81bf04a3d0533d11cab5aaa5f9ffc08c3f42586d",
+        "cases": 72
+      },
+      "pass_losses": [],
+      "changed_case_count": 3
+    },
+    "block-collapse": {
+      "baseline": {
+        "counts": {
+          "pass": 9,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "7c3b2f107bf6c2dee3d3da1a2d6568447b3b2036ba60cd813f4be89965c3a616",
+        "cases": 9
+      },
+      "candidate": {
+        "counts": {
+          "pass": 9,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "7c3b2f107bf6c2dee3d3da1a2d6568447b3b2036ba60cd813f4be89965c3a616",
+        "cases": 9
+      },
+      "pass_losses": [],
+      "changed_case_count": 0
+    },
+    "position": {
+      "baseline": {
+        "counts": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "411eb4cbb44b55e88a5dbb1b0f82d9fee1faadecfeaec7198789f6d21ac9aa4f",
+        "cases": 12
+      },
+      "candidate": {
+        "counts": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "411eb4cbb44b55e88a5dbb1b0f82d9fee1faadecfeaec7198789f6d21ac9aa4f",
+        "cases": 12
+      },
+      "pass_losses": [],
+      "changed_case_count": 0
+    },
+    "text-flow": {
+      "baseline": {
+        "counts": {
+          "pass": 14,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "27f6c80f1e9a9882f9cc14bab7007d0c7b4d16011852e9f664dd88dcee1d290f",
+        "cases": 16
+      },
+      "candidate": {
+        "counts": {
+          "pass": 14,
+          "mismatch": 2,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "27f6c80f1e9a9882f9cc14bab7007d0c7b4d16011852e9f664dd88dcee1d290f",
+        "cases": 16
+      },
+      "pass_losses": [],
+      "changed_case_count": 0
+    },
+    "flex-grid": {
+      "baseline": {
+        "counts": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "d1b491fc15c8f98bafba4e50658de1a1c3309cef7d39779ba86d63bfaf710bec",
+        "cases": 24
+      },
+      "candidate": {
+        "counts": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "d1b491fc15c8f98bafba4e50658de1a1c3309cef7d39779ba86d63bfaf710bec",
+        "cases": 24
+      },
+      "pass_losses": [],
+      "changed_case_count": 0
+    },
+    "paint-compositing": {
+      "baseline": {
+        "counts": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "85a2ff2a9c05e6a286fbf1104101a29f25c72096fba67be157bc1dfa572628c5",
+        "cases": 24
+      },
+      "candidate": {
+        "counts": {
+          "pass": 24,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "85a2ff2a9c05e6a286fbf1104101a29f25c72096fba67be157bc1dfa572628c5",
+        "cases": 24
+      },
+      "pass_losses": [],
+      "changed_case_count": 0
+    },
+    "text-shaping": {
+      "baseline": {
+        "counts": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "a5add82d3b330b8e86647832fe44b8de85b5491affbc152e51f5b29639ab0c9f",
+        "cases": 12
+      },
+      "candidate": {
+        "counts": {
+          "pass": 12,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "a5add82d3b330b8e86647832fe44b8de85b5491affbc152e51f5b29639ab0c9f",
+        "cases": 12
+      },
+      "pass_losses": [],
+      "changed_case_count": 0
+    },
+    "vertical-ruby": {
+      "baseline": {
+        "counts": {
+          "pass": 11,
+          "mismatch": 9,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "b6d835809b311ebff4cf629f2bfdbb696ccc823623b620f300a6cb49dfd6176c",
+        "cases": 20
+      },
+      "candidate": {
+        "counts": {
+          "pass": 11,
+          "mismatch": 9,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "b6d835809b311ebff4cf629f2bfdbb696ccc823623b620f300a6cb49dfd6176c",
+        "cases": 20
+      },
+      "pass_losses": [],
+      "changed_case_count": 0
+    },
+    "cellspacing": {
+      "baseline": {
+        "counts": {
+          "pass": 1,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "b01be36b683ee6171e1d46d9535a2ca9f8b36b5ad735640f729da23ca95362a7",
+        "cases": 1
+      },
+      "candidate": {
+        "counts": {
+          "pass": 1,
+          "mismatch": 0,
+          "error": 0,
+          "timeout": 0,
+          "unsupported": 0,
+          "crash": 0
+        },
+        "projection_sha256": "b01be36b683ee6171e1d46d9535a2ca9f8b36b5ad735640f729da23ca95362a7",
+        "cases": 1
+      },
+      "pass_losses": [],
+      "changed_case_count": 0
+    }
+  },
+  "broad_movement": {
+    "baseline_consensus": {
+      "pass": 153,
+      "mismatch": 60,
+      "crash": 2
+    },
+    "candidate_consensus": {
+      "pass": 174,
+      "mismatch": 39,
+      "crash": 2
+    },
+    "consensus_pass_gains": [
+      "css-color__a98rgb-004.html",
+      "css-color__display-p3-001.html",
+      "css-color__display-p3-linear-002.html",
+      "css-color__lab-003.html",
+      "css-color__oklab-001.html",
+      "css-color__oklab-006.html",
+      "css-color__oklch-002.html",
+      "css-color__oklch-003.html",
+      "css-color__oklch-004.html",
+      "css-color__oklch-005.html",
+      "css-color__relative-currentcolor-displayp3-01.html",
+      "css-color__relative-currentcolor-rec2020-01.html",
+      "css-color__srgb-linear-002.html",
+      "css-color__xyz-002.html",
+      "css-color__xyz-d50-001.html",
+      "css-color__xyz-d50-002.html",
+      "selectors__selectors-4__lang-007.html",
+      "selectors__selectors-4__lang-008.html",
+      "selectors__selectors-4__lang-009.html",
+      "selectors__selectors-4__lang-010.html",
+      "selectors__selectors-4__lang-021.html"
+    ],
+    "consensus_pass_losses": [],
+    "raw_pass_gains": [
+      "css-color__a98rgb-004.html",
+      "css-color__display-p3-001.html",
+      "css-color__display-p3-006.html",
+      "css-color__display-p3-linear-002.html",
+      "css-color__lab-003.html",
+      "css-color__oklab-001.html",
+      "css-color__oklab-006.html",
+      "css-color__oklch-002.html",
+      "css-color__oklch-003.html",
+      "css-color__oklch-004.html",
+      "css-color__oklch-005.html",
+      "css-color__relative-currentcolor-displayp3-01.html",
+      "css-color__relative-currentcolor-rec2020-01.html",
+      "css-color__srgb-linear-002.html",
+      "css-color__xyz-002.html",
+      "css-color__xyz-d50-001.html",
+      "css-color__xyz-d50-002.html",
+      "selectors__selectors-4__lang-007.html",
+      "selectors__selectors-4__lang-008.html",
+      "selectors__selectors-4__lang-009.html",
+      "selectors__selectors-4__lang-010.html",
+      "selectors__selectors-4__lang-017.html",
+      "selectors__selectors-4__lang-018.html",
+      "selectors__selectors-4__lang-021.html"
+    ],
+    "raw_pass_losses": []
+  }
+}
