@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "layout8-six-named-diagnostic"
+  },
+  "sparse_paths": [
+    "css/css-values",
+    "css/css-sizing",
+    "css/css-cascade"
+  ],
+  "tests": [
+    {
+      "id": "css-cascade__all-prop-002.html",
+      "test": "css/css-cascade/all-prop-002.html"
+    },
+    {
+      "id": "css-values__calc-border-radius-1.html",
+      "test": "css/css-values/calc-border-radius-1.html"
+    },
+    {
+      "id": "css-values__calc-max-height-block-1.html",
+      "test": "css/css-values/calc-max-height-block-1.html"
+    },
+    {
+      "id": "css-values__calc-min-width-block-intrinsic-1.html",
+      "test": "css/css-values/calc-min-width-block-intrinsic-1.html"
+    },
+    {
+      "id": "css-values__calc-rounding-003.html",
+      "test": "css/css-values/calc-rounding-003.html"
+    },
+    {
+      "id": "css-values__ch-unit-008.html",
+      "test": "css/css-values/ch-unit-008.html"
+    }
+  ]
+}

@@ -738,6 +738,22 @@ mod tests {
     use crate::font::FontSource;
     use amazing_dom::Dom;
 
+    #[test]
+    fn calc_height_constraint_needs_a_definite_percentage_basis() {
+        // Construct the post-CSS style directly while CSS-9 owns calc
+        // validation and preservation in the cascade.
+        let style: amazing_css::ComputedStyle = [
+            ("max-height".to_owned(), "calc(25px + 50%)".to_owned()),
+            ("height".to_owned(), "calc(150% / 2 - 30px)".to_owned()),
+        ].into_iter().collect();
+        let mut box_ = LayoutBox::new(None, crate::Display::Block, style, 16.0, 19.2);
+        assert_eq!(size_constraint(&box_, "max-height", 16.0), None);
+        assert_eq!(specified_height(&box_, 16.0), None);
+        box_.containing_block_height = Some(100.0);
+        assert_eq!(size_constraint(&box_, "max-height", 16.0), Some(75.0));
+        assert_eq!(specified_height(&box_, 16.0), Some(45.0));
+    }
+
     fn layout(html: &str, css: &str) -> (Dom, LayoutBox) {
         let dom = amazing_html::parse(html);
         let root = crate::layout_dom_document(&dom, css, 800.0, &FontSource::fallback());

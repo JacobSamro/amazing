@@ -1256,6 +1256,27 @@ mod tests {
     use super::*;
     use crate::block;
 
+    #[test]
+    fn cyclic_percent_min_width_contributes_only_its_length_to_intrinsic_size() {
+        let fonts = FontSource::fallback();
+        for (value, expected) in [
+            ("calc(50% - 3px)", 1.0),
+            ("calc(5em - 3px)", 47.0),
+            ("calc(5em - 0%)", 50.0),
+            ("calc(50%)", 1.0),
+            ("calc(50px)", 50.0),
+            ("calc(25% + 25%)", 1.0),
+        ] {
+            let style: amazing_css::ComputedStyle = [
+                ("width".to_owned(), "1px".to_owned()),
+                ("min-width".to_owned(), value.to_owned()),
+            ].into_iter().collect();
+            let box_ = LayoutBox::new(None, crate::Display::Block, style, 10.0, 12.0);
+            assert_eq!(max_content_width(&box_, &fonts), expected, "{value}");
+            assert_eq!(min_content_width(&box_, &fonts), expected, "{value}");
+        }
+    }
+
     /// Full pipeline: html+css → laid-out root at `width` px.
     fn lay(html: &str, css: &str, width: f32) -> LayoutBox {
         let dom = amazing_html::parse(html);
