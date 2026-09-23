@@ -58,11 +58,26 @@ case "$HOST" in
   *) echo "linux-run: unknown host $HOST" >&2; exit 2 ;;
 esac
 
+# One run per lane tree at a time. Two runs of the same lane share the remote
+# tree and output paths; on 2026-09-24 a second comparison synced a different
+# commit into the tree mid-build and made a Test262 baseline measure the wrong
+# source. Held for the whole sync + run.
+LOCKDIR="$MAIN/.agents/.remote-locks"
+mkdir -p "$LOCKDIR"
+LANE_LOCK="$LOCKDIR/$(basename "$0" .sh)-$LANE"
+until mkdir "$LANE_LOCK" 2>/dev/null; do
+  holder="$(cat "$LANE_LOCK/pid" 2>/dev/null || true)"
+  if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then rm -rf "$LANE_LOCK"; continue; fi
+  sleep 5
+done
+echo "$$" > "$LANE_LOCK/pid"
+
+trap 'rm -rf "$LANE_LOCK"' EXIT
 # Source: the lane's worktree (with uncommitted edits), or an exact commit.
 if [ -n "$REF" ]; then
   COMMIT="$(git -C "$MAIN" rev-parse "$REF")" || exit 2
   SRC="$(mktemp -d)"
-  trap 'rm -rf "$SRC"' EXIT
+  trap 'rm -rf "$SRC" "$LANE_LOCK"' EXIT
   git -C "$MAIN" archive "$COMMIT" | tar x -C "$SRC"
   echo "linux-run[$LANE]: $HOST at $REF ($COMMIT)" >&2
 else
