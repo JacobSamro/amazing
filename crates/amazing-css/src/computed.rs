@@ -24,6 +24,7 @@ pub struct ComputedStyle {
     typed: BTreeMap<String, ComputedValue>,
     custom: BTreeMap<String, CustomValue>,
     root_font_px: f64,
+    effective_zoom: f64,
     author_specified: BTreeSet<String>,
 }
 
@@ -34,12 +35,36 @@ impl Default for ComputedStyle {
             typed: BTreeMap::new(),
             custom: BTreeMap::new(),
             root_font_px: 16.0,
+            effective_zoom: 1.0,
             author_specified: BTreeSet::new(),
         }
     }
 }
 
 impl ComputedStyle {
+    /// Product of this element's zoom and its ancestors' zoom values.
+    /// CSS Viewport applies this at the used-value stage, while computed
+    /// lengths and `get()` remain unscaled for CSSOM-style consumers.
+    pub fn effective_zoom(&self) -> f64 {
+        self.effective_zoom
+    }
+
+    /// Scale an absolute CSS length at the used-value boundary.
+    pub fn scale_used_length(&self, unscaled_px: f64) -> f64 {
+        unscaled_px * self.effective_zoom
+    }
+
+    /// The zoomed used value of a typed absolute length. Percentages, `auto`,
+    /// and expressions needing a layout basis stay with the layout consumer.
+    pub fn used_length_px(&self, property: &str) -> Option<f64> {
+        match self.typed(property) {
+            Some(ComputedValue::LengthPercentage(values::LengthPercentage::Px(px))) => {
+                Some(self.scale_used_length(*px))
+            }
+            _ => None,
+        }
+    }
+
     /// Parsed once during computation. Custom properties are never exposed.
     /// `Unparsed` marks a standard/unknown grammar outside the typed prototype.
     pub fn typed(&self, property: &str) -> Option<&ComputedValue> {
@@ -125,6 +150,7 @@ impl ComputedStyle {
         if property.starts_with("--") {
             return;
         }
+        let prior_zoom = self.get("zoom").and_then(used_zoom_factor).unwrap_or(1.0);
         for (longhand, expanded) in expand_declaration(property, value) {
             let typed = values::parse(&longhand, &expanded).unwrap_or(ComputedValue::Unparsed);
             self.typed.insert(longhand.clone(), typed);
@@ -132,6 +158,8 @@ impl ComputedStyle {
             self.author_specified.remove(&longhand);
             self.props.insert(longhand, expanded);
         }
+        let next_zoom = self.get("zoom").and_then(used_zoom_factor).unwrap_or(1.0);
+        self.effective_zoom *= next_zoom / prior_zoom;
         self.resolve_typed_units();
     }
 
@@ -782,6 +810,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
         initial: "auto",
         inherited: false,
     },
+    PropertyMetadata { name: "zoom", initial: "1", inherited: false },
 ];
 
 pub(crate) fn known_properties() -> impl Iterator<Item = &'static str> {
@@ -2574,8 +2603,11 @@ pub(crate) fn resolve_with_root(
         typed: BTreeMap::new(),
         custom: inherited_custom,
         root_font_px: f64::from(root_font_px),
+        effective_zoom: 1.0,
         author_specified: BTreeSet::new(),
     };
+    let local_zoom = style.props.get("zoom").and_then(|value| used_zoom_factor(value)).unwrap_or(1.0);
+    style.effective_zoom = parent.map_or(1.0, |parent| parent.effective_zoom) * local_zoom;
     style.rebuild_typed();
     style.typed.extend(inherited_typed);
     // Axis coupling happens after inheritance and can change an inherited axis.
@@ -2593,6 +2625,13 @@ pub(crate) fn resolve_with_root(
     }
     style.resolve_typed_units();
     style
+}
+
+fn used_zoom_factor(value: &str) -> Option<f64> {
+    match values::parse("zoom", value) {
+        Some(ComputedValue::Number(n)) => Some(if n == 0.0 { 1.0 } else { n }),
+        _ => None,
+    }
 }
 
 /// Determine rollback after variable substitution without reviving invalid values.
@@ -2728,6 +2767,11 @@ fn compute_normal_value(
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
     } else if matches!(property.name, "opacity" | "fill-opacity") {
         computed_opacity(&computed).unwrap_or_else(|| property.initial.to_owned())
+    } else if property.name == "zoom" {
+        match values::parse("zoom", &computed) {
+            Some(ComputedValue::Number(n)) => n.to_string(),
+            _ => property.initial.to_owned(),
+        }
     } else if matches!(property.name, "color" | "background-color"
         | "border-top-color" | "border-right-color" | "border-bottom-color" | "border-left-color") {
         normalized_extended_color(&computed).unwrap_or(computed)

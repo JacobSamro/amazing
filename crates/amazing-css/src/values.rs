@@ -280,6 +280,13 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         return crate::svg_presentation::parse_property(property, css);
     }
     match property {
+        "zoom" => {
+            return match significant(&tokenize(css)).as_slice() {
+                [Token::Number(n)] if n.is_finite() && *n >= 0.0 => Some(V::Number(*n)),
+                [Token::Percentage(n)] if n.is_finite() && *n >= 0.0 => Some(V::Number(*n / 100.0)),
+                _ => None,
+            };
+        }
         "display" => {
             return Display::parse(display_canonical(css).unwrap_or(css)).map(V::Display);
         }
