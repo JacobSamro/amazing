@@ -273,6 +273,10 @@ LANE_GRANTS.setdefault("compositor", []).extend(["crates/amazing-shell-gpui/src/
 # TEXT-6: one driver test (malformed_page_font_warns_without_advancing_font_generation)
 # updated to the CSS Fonts 4 section 4.1 shadowing policy.
 LANE_GRANTS["text"].append("crates/amazing/src/driver_tests.rs")
+# JSVM-4: async test support in the Test262 runner (js-lang edits the same file for
+# modules; both keep classic classification byte-identical).
+LANE_GRANTS["js-vm"].append("scripts/test262.py")
+LANE_GRANTS["js-vm"].append("crates/amazing-js/examples/test262_host.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
