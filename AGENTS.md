@@ -116,6 +116,14 @@ scp -q -i ~/.ssh/win001-build-key /tmp/dev-refresh.tar server@win-001:C:/Users/s
 # then, per lane, server-side:  tar -xf C:\Users\server\dev-refresh.tar -C C:\Users\server\src\wt\<lane>
 ```
 
+**Do not chase `dev` during a final gate.** With many lanes merging, `dev`
+moves every few minutes, and re-gating on each move means a busy fleet never
+finishes. A lane's final gate proves *its branch on a fixed base*: record that
+base commit in `report.md` and gate against it. Proving the combination works is
+the integrator's authoritative gate, run on the merged head after every merge.
+Rebase and re-gate only when the drift since your base **touches your own
+crates**; check with `git diff --name-only <base> origin/dev -- <your paths>`.
+
 **A refresh overwrites lane-owned files in the server tree with the `dev`
 versions**, including work the lane had already synced up. The Mac worktree is
 the source of truth so nothing is lost, but the lane must re-`scp` its own
