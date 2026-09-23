@@ -1,0 +1,138 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-7",
+  "implementation_base": "5177362",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selections": {
+    "font-face": {
+      "before": "text7-font-face-before.json",
+      "after": "text7-font-face-axes.json",
+      "before_counts": {
+        "pass": 2,
+        "mismatch": 6,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 3,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [
+        {
+          "id": "css-fonts__variations__font-descriptor-range-reversed.html",
+          "before": "mismatch",
+          "after": "pass"
+        }
+      ],
+      "classification_losses": 0
+    },
+    "vertical": {
+      "before": "text7-vertical-before.json",
+      "after": "text7-vertical-bidi.json",
+      "before_counts": {
+        "pass": 2,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 5,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [
+        {
+          "id": "css-writing-modes__text-orientation-mixed-vlr-100.html",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "css-writing-modes__text-orientation-upright-directionality-001.html",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "css-writing-modes__text-orientation-mixed-vrl-100.html",
+          "before": "mismatch",
+          "after": "pass"
+        }
+      ],
+      "classification_losses": 0
+    },
+    "vertical-ruby": {
+      "before": "text7-vertical-ruby-before.json",
+      "after": "text7-vertical-ruby-bidi.json",
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [
+        {
+          "id": "css-writing-modes__text-orientation-mixed-vrl-100.html",
+          "before": "mismatch",
+          "after": "pass"
+        },
+        {
+          "id": "css-writing-modes__text-combine-upright-line-breaking-rules-001.html",
+          "before": "pass",
+          "after": "mismatch"
+        }
+      ],
+      "classification_losses": 1
+    },
+    "font": {
+      "before": "text6-font-after.json",
+      "after": "text7-font-axes.json",
+      "before_counts": {
+        "pass": 12,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 13,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [
+        {
+          "id": "css-fonts__font-variant-ligatures-11.optional.html",
+          "before": "mismatch",
+          "after": "pass"
+        }
+      ],
+      "classification_losses": 0,
+      "baseline_base": "a4ab541 (TEXT-6 candidate; not same as TEXT-7 implementation base)",
+      "note": "ligature pass appeared after base advanced to 5177362; do not attribute this gain to TEXT-7"
+    }
+  },
+  "pending_layout_fix": "text-combine-upright-line-breaking-rules-001 passes before Tr mapping but mismatches after it because amazing-layout/src/inline.rs::split_atomic_units fabricates an allowed break before U+FFFC; LAYOUT-14 item 0 owns the fix, and TEXT-7 must merge afterward."
+}

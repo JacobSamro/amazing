@@ -186,3 +186,72 @@ Remaining clusters: `first-available-font-002`, PUA primary-font selection, and
 ligature variant mismatch need diagnosis; font-face reftest crashes await the
 DOM-17 `document.fonts.ready` work. Installed `local()` lookup currently covers
 known platform faces and the pinned WPT orientation fixture.
+
+## TEXT-7: exposed font-face cases and vertical orientation
+
+Implementation base: `5177362`, which includes DOM-17. That binding removes
+all six previous `document.fonts.ready.then(...)` page-script crashes: the
+font-face selection reaches rendering at 2 pass / 6 mismatch. TEXT-7 normalizes
+reversed descriptor ranges and fractional stretch endpoints, raising it to
+3 pass / 5 mismatch. Selected variable face axes now reach shaping and
+rasterization, with explicit variation settings taking precedence. The five
+remaining font-face mismatches need exact computed stretch percentage and
+oblique angle from layout for Fonts 4 section 5.2 face ranking.
+
+In mixed vertical text, UAX50 `Tr` codepoints are upright and receive `vert`.
+Sideways modes ignore `text-orientation: upright` during bidi analysis. These
+provider fixes raise the seven-case vertical selection from 2/7 to 5/7.
+Remaining failures are the Ahem vertical-lr inline placement and the complex
+`direction-upright` bidi/layout case. The retained vertical/ruby selection
+holds at 11/20 but has one gain and one **pending loss**:
+`text-combine-upright-line-breaking-rules-001` loses because
+`amazing-layout/src/inline.rs::split_atomic_units` inserts an allowed break
+before the combined U+FFFC object despite the provider's no-break boundary.
+LAYOUT-14 item 0 owns that fix; TEXT-7 must merge after it. Other ruby,
+text-combine, sideways flex, and orthogonal baseline mismatches are routed to
+layout. Evidence: `crates/amazing-text-provider/evidence/text7-gate-summary.json`
+at pinned WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+
+## TEXT-8: exact font matching contract
+
+`TextStyle` now exposes `stretch_percent: f32` and
+`oblique_angle_degrees: Option<f32>`. A zero width value temporarily uses the
+legacy integer `stretch`; `None` uses the CSS default 14-degree oblique angle.
+LAYOUT-14 item 5 will fill both exact computed values in
+`box_tree.rs::text_style`. The provider now preserves fractional face descriptor
+ranges, ranks width then style (including oblique angle) then weight using CSS
+Fonts 4 section 5.2, and applies selected exact width/angle to variable font
+axes. Explicit `font-variation-settings` still overrides matched axes.
+
+On the TEXT-7 base `9eda828`, the pinned font-face selection improved 3/8 to
+4/8 (`font-descriptor-range-reversed-002`), while the 15-case font selection
+stayed 13/15, vertical and vertical/ruby stayed 5/7 and 11/20, and retained
+flow and shaping stayed 14/16 and 12/12. Across 78 cases no classifications
+were lost relative to the retained baselines. The vertical/ruby
+`tcy` line-break loss introduced in TEXT-7 remains pending LAYOUT-14 item 0,
+so the combined series must merge only after that fix. Evidence:
+`crates/amazing-text-provider/evidence/text8-gate-summary.json` at WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+
+## TEXT-9: contingent object line breaks
+
+The provider supplements ICU's line opportunities at U+FFFC (the unresolved
+UAX #14 CB class), allowing breaks before and after atomic inline placeholders,
+including adjacent objects. Higher-priority OP, CL/CP/EX/IS/SY, QU, GL, WJ,
+ZWJ, space and mandatory-break rules still suppress their respective
+boundaries. The provider also filters any ICU opportunity that would violate
+those neighbor rules. `white-space: nowrap` remains authoritative. This is the
+provider seam needed by LAYOUT-14 item 0; its separate `split_atomic_units`
+rule must still stop inserting a break after `「`.
+
+## TEXT-10: first-available-font relative metrics contract
+
+`TextSystem::font_relative_metrics(&TextStyle) -> FontRelativeMetrics` exposes
+`ch_advance`, `ic_advance`, `x_height`, `cap_height`, and `line_height_normal`
+in used pixels for LAYOUT-14 item 1. The provider selects the first face that
+contains U+0020, including registered web fonts, then measures U+0030 and
+U+6C34 in that same face with selected variation axes and text orientation.
+Missing glyphs use CSS Values 4 defaults: `ch` is 0.5em (1em for upright
+vertical text), `ic` is 1em, `ex` is 0.5em, and `cap` uses the selected font's
+ascent when cap height is unavailable. The default text system provides
+stable synthetic measures and `normal` line height from its metrics.
