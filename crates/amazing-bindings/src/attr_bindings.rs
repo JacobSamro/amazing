@@ -27,6 +27,8 @@ pub(crate) fn supported_names<H: BindingHost>(host: &mut H, receiver: &H::Value)
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::CreateAttribute | O::CreateAttributeNS | O::ElementAttributes
+        | O::ElementHasAttributes | O::ElementGetAttributeNames | O::ElementHasAttribute
+        | O::ElementHasAttributeNS | O::ElementToggleAttribute
         | O::AttrNamespaceURI | O::AttrPrefix | O::AttrLocalName | O::AttrName
         | O::AttrValue | O::AttrSetValue | O::AttrOwnerElement | O::AttrSpecified
         | O::ElementGetAttribute | O::ElementGetAttributeNS | O::ElementSetAttribute
@@ -73,6 +75,12 @@ fn map_element<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<Node
     host.with_dom(|dom| if matches!(dom.get(node).kind, NodeKind::Element { .. }) { Ok(()) }
         else { Err(DomError::TypeError) })?;
     Ok(node)
+}
+fn html_element_in_html_document<H: BindingHost>(host: &mut H, element: NodeIdx)
+    -> Result<bool, H::Error> {
+    let (document, html_namespace) = host.with_dom(|dom| Ok((dom.owner_document(element).unwrap(),
+        dom.namespace_uri(element) == Some("http://www.w3.org/1999/xhtml"))))?;
+    Ok(html_namespace && host.is_html_document(document))
 }
 fn wrap_optional<H: BindingHost>(host: &mut H, node: Option<NodeIdx>) -> Result<H::Value, H::Error> {
     match node { Some(node) => host.wrap_node(node), None => Ok(host.null()) }
@@ -141,6 +149,47 @@ pub(crate) fn invoke<H: BindingHost>(
     if op == O::ElementAttributes {
         return host.wrap_platform_object(host.node_platform_key(element), InterfaceBrand::NAMED_NODE_MAP);
     }
+    if op == O::ElementHasAttributes {
+        let present = host.with_dom(|dom| Ok(dom.attributes_expanded(element)
+            .is_some_and(|attrs| !attrs.is_empty())))?;
+        return Ok(host.boolean(present));
+    }
+    if op == O::ElementGetAttributeNames {
+        let names = host.with_dom(|dom| Ok(dom.attributes_expanded(element).unwrap().into_iter()
+            .map(|attr| attr.qualified_name()).collect::<Vec<_>>()))?;
+        let values = names.iter().map(|name| host.string(&name.encode_utf16().collect::<Vec<_>>()))
+            .collect::<Result<Vec<_>, _>>()?;
+        return host.create_array(values);
+    }
+    if matches!(op, O::ElementHasAttribute | O::ElementHasAttributeNS | O::ElementToggleAttribute) {
+        let uri = if op == O::ElementHasAttributeNS { nullable_uri(host, args, 0)? } else { None };
+        let mut name = argument(host, args, usize::from(op == O::ElementHasAttributeNS))?;
+        let force = if op == O::ElementToggleAttribute { args.get(1).map(|value| host.to_boolean(value)) }
+            else { None };
+        if op == O::ElementToggleAttribute && !amazing_dom::Dom::is_valid_attribute_name(&name) {
+            return host.with_dom::<H::Value>(|_| Err(DomError::InvalidCharacterError));
+        }
+        let html = html_element_in_html_document(host, element)?;
+        if uri.is_none() && op != O::ElementHasAttributeNS && html { name.make_ascii_lowercase(); }
+        let present = host.with_dom(|dom| Ok(if op == O::ElementHasAttributeNS {
+            dom.attribute_ns(element, uri.as_deref(), &name).is_some()
+        } else {
+            dom.attributes_expanded(element).unwrap().into_iter()
+                .any(|attr| attr.qualified_name() == name)
+        }))?;
+        if op != O::ElementToggleAttribute { return Ok(host.boolean(present)); }
+        if !present && force != Some(false) {
+            host.with_dom(|dom| dom.set_attribute(element, &name, ""))?;
+            return Ok(host.boolean(true));
+        }
+        if present && force != Some(true) {
+            if let Some(attr) = named(host, element, None, &name, true)? {
+                host.with_dom(|dom| dom.remove_attribute_node(element, attr))?;
+            }
+            return Ok(host.boolean(false));
+        }
+        return Ok(host.boolean(present));
+    }
     if matches!(op, O::NamedNodeMapLength | O::NamedNodeMapItem) {
         let index = if op == O::NamedNodeMapItem { Some(u32_arg(host, args)?) } else { None };
         let attrs = host.with_dom(|dom| dom.attribute_nodes(element))?;
@@ -165,8 +214,7 @@ pub(crate) fn invoke<H: BindingHost>(
     } else {
         (nullable_uri(host, args, 0)?, argument(host, args, 1)?, 2)
     };
-    let owner_document = host.with_dom(|dom| Ok(dom.owner_document(element).unwrap()))?;
-    if qualified && host.is_html_document(owner_document) {
+    if qualified && html_element_in_html_document(host, element)? {
         name.make_ascii_lowercase();
     }
     if matches!(op, O::ElementGetAttribute | O::ElementGetAttributeNS
@@ -183,8 +231,17 @@ pub(crate) fn invoke<H: BindingHost>(
     if matches!(op, O::ElementSetAttribute | O::ElementSetAttributeNS) {
         let value = args.get(value_index).ok_or_else(|| host.type_error("Not enough arguments"))?;
         let units = host.to_dom_string(value)?;
+        if qualified && !amazing_dom::Dom::is_valid_attribute_name(&name) {
+            return host.with_dom::<H::Value>(|_| Err(DomError::InvalidCharacterError));
+        }
         let display = String::from_utf16_lossy(&units);
+        let existing = if qualified { named(host, element, None, &name, true)? } else { None };
         let attr = host.with_dom(|dom| {
+            if let Some(attr) = existing {
+                let snapshot = dom.attr_snapshot(attr)?;
+                dom.set_attribute_ns(element, snapshot.namespace_uri.as_deref(), &snapshot.local_name, &display)?;
+                return Ok(attr);
+            }
             if qualified { dom.set_attribute(element, &name, &display)?; }
             else { dom.set_attribute_qualified_ns(element, uri.as_deref(), &name, &display)?; }
             let (local, uri) = if qualified { (name.as_str(), None) }

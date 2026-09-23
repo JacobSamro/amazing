@@ -38,6 +38,10 @@ impl AttributeRef<'_> {
 }
 
 impl Dom {
+    /// DOM attribute-name check shared by setAttribute and toggleAttribute.
+    pub fn is_valid_attribute_name(name: &str) -> bool {
+        valid_attribute_name(name)
+    }
     /// Attributes in storage order, including foreign namespaced attributes.
     pub fn attributes_expanded(&self, node: NodeIdx) -> Option<Vec<AttributeRef<'_>>> {
         let plain = self.attrs_of(node)?;
