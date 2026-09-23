@@ -154,6 +154,10 @@ name = "amazing-ipc"
 version = "0.0.1"
 
 [[package]]
+name = "amazing-ipc-platform"
+version = "0.0.1"
+
+[[package]]
 name = "amazing-js"
 version = "0.0.1"
 dependencies = [
