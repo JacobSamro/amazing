@@ -434,6 +434,9 @@ fn handle(request: &SeenRequest, state: &mut BTreeMap<String, String>) -> Vec<u8
             let mut location = request
                 .query("location")
                 .unwrap_or_else(|| "redirect.py?followed".into());
+            if xhr && location.starts_with("redirect.py") {
+                location.push_str(&format!("&code={status}"));
+            }
             if fetch && request.query("simple").is_none() && !location.is_empty() {
                 location.push(if location.contains('?') { '&' } else { '?' });
                 location.push_str("count=1");

@@ -33,7 +33,8 @@ pub struct DispatchLimits {
 impl Default for DispatchLimits {
     fn default() -> Self {
         Self {
-            max_in_flight: 32,
+            // Submitted requests can wait for a per-origin connection slot.
+            max_in_flight: 128,
             max_per_origin: 6,
             bytes_per_step: 64 * 1024,
             max_buffered_bytes: 4 * 1024 * 1024,

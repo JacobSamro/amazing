@@ -483,6 +483,31 @@ fn xhr_states_events_response_type_and_redirect_from_wpt() {
 }
 
 #[test]
+fn xhr_redirect_rewrites_post_method_and_body_headers() {
+    let server = WptServer::new();
+    let base = base(&server);
+    for (status, expected_method, expected_content_type) in [
+        (301, "GET", "NO"),
+        (302, "GET", "NO"),
+        (303, "GET", "NO"),
+        (307, "POST", "application/x-pony"),
+    ] {
+        let mut xhr = Xhr::default();
+        let url = server.url(&format!("/xhr/resources/redirect.py?location=content.py&code={status}"));
+        xhr.open(&u("POST"), &u(&url), true, &base, base.origin().clone()).unwrap();
+        xhr.set_request_header(&u("Content-Type"), &u("application/x-pony")).unwrap();
+        xhr.send(None, 0).unwrap();
+        let mut service = NetworkService::new(DispatchLimits::default());
+        xhr_run(&mut service, &mut xhr);
+        assert_eq!(xhr.status(), 200, "status {status}");
+        assert_eq!(xhr.get_response_header(&u("x-request-method")).unwrap().as_deref(),
+            Some(expected_method), "status {status}");
+        assert_eq!(xhr.get_response_header(&u("x-request-content-type")).unwrap().as_deref(),
+            Some(expected_content_type), "status {status}");
+    }
+}
+
+#[test]
 fn xhr_status_chunked_and_timeout_from_wpt() {
     // xhr/status-basic.htm: 9 status rows x GET, HEAD, CHICKEN.
     // xhr/getresponseheader-chunked-trailer.htm and xhr/event-timeout.any.js.
