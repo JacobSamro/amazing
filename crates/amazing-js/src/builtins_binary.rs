@@ -546,24 +546,21 @@ fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, pro
         binary_write_value(i, &view, kind, index * kind.size(), true, &property.value)
     })())
 }
-fn binary_define_index_object(i: &mut Interpreter, object: &Obj, key: &PropertyKey, descriptor: &Obj) -> Option<Result<(), Throw>> {
+fn binary_define_index_object(i: &mut Interpreter, object: &Obj, key: &PropertyKey, descriptor: &Obj) -> Option<Result<bool, Throw>> {
     let (view, kind, index) = binary_index_view(object, key)?;
     Some((|| {
+        let fields = i.std_descriptor_fields(&JsValue::Object(descriptor.clone()))?;
         let Some(index) = index.filter(|index| *index < binary_length(&view)) else {
-            return Err(Throw::type_error("invalid TypedArray index"));
+            return Ok(false);
         };
-        let has = |name| descriptor.borrow().has_property(name);
-        if has("get") || has("set") { return Err(Throw::type_error("TypedArray index cannot be an accessor")); }
-        for name in ["configurable", "enumerable", "writable"] {
-            if has(name) && !i.get_prop(&JsValue::Object(descriptor.clone()), name)?.to_boolean() {
-                return Err(Throw::type_error("incompatible TypedArray index descriptor"));
-            }
+        if fields.configurable == Some(false) || fields.enumerable == Some(false)
+            || fields.get.is_some() || fields.set.is_some() || fields.writable == Some(false) {
+            return Ok(false);
         }
-        if has("value") {
-            let value = i.get_prop(&JsValue::Object(descriptor.clone()), "value")?;
+        if let Some(value) = fields.value {
             binary_write_value(i, &view, kind, index * kind.size(), true, &value)?;
         }
-        Ok(())
+        Ok(true)
     })())
 }
 fn binary_own_keys(object: &Obj) -> Option<Vec<PropertyKey>> {
