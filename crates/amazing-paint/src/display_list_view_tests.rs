@@ -198,3 +198,68 @@ fn raw_tile_leaves_ancestor_clip_to_compositor() {
     assert!(view.raster_range(item.index..item.index + 1, &mut baked, (0, 0), PaintBounds::viewport(20, 10)));
     assert_eq!(baked.get_pixel(15, 2), Some([0, 0, 0, 0]));
 }
+
+#[test]
+fn generated_source_order_reorders_boxes_without_changing_dom_fallback() {
+    use amazing_layout::Flow;
+    fn set_order(box_: &mut LayoutBox) {
+        match box_.style.get("background-color") {
+            Some("red") => box_.source_order = Some(100),
+            Some("blue") => box_.source_order = Some(1),
+            _ => {}
+        }
+        if let Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) = &mut box_.flow {
+            for child in children { set_order(child); }
+        }
+        for child in &mut box_.positioned { set_order(child); }
+    }
+    fn colors(view: &DisplayListView<'_>) -> Vec<String> {
+        view.items().iter().filter_map(|item| match &view.commands[view.item_commands[item.index]] {
+            PaintCommand::PaintDecorations(box_, _) => box_.style.get("background-color")
+                .filter(|color| matches!(*color, "red" | "blue")).map(str::to_owned),
+            _ => None,
+        }).collect()
+    }
+    let mut root = fixture();
+    let text = FallbackTextSystem::new();
+    let normal = DisplayListView::new(&root, 48, 48, &text, &crate::paint::NoImages, &crate::controls::NoControls);
+    assert_eq!(colors(&normal), ["red", "blue"]);
+    drop(normal);
+    set_order(&mut root);
+    let generated = DisplayListView::new(&root, 48, 48, &text, &crate::paint::NoImages, &crate::controls::NoControls);
+    assert_eq!(colors(&generated), ["blue", "red"]);
+}
+
+#[test]
+fn display_list_follows_insert_before_instead_of_arena_id() {
+    use amazing_dom::{Dom, NodeIdx};
+
+    let mut dom = Dom::new();
+    let html = dom.create_element(NodeIdx(0), "html");
+    let body = dom.create_element(html, "body");
+    let old = dom.create_element(body, "div");
+    dom.set_attrs(old, vec![("class".into(), "red".into())]);
+    let inserted = dom.create_element(body, "div");
+    dom.set_attrs(inserted, vec![("class".into(), "blue".into())]);
+    dom.detach(inserted);
+    dom.attach_before(body, Some(old), inserted);
+    assert!(inserted.0 > old.0);
+
+    let root = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
+        &dom,
+        "body{margin:0}.red,.blue{width:20px;height:20px}.red{background:red}.blue{background:blue}",
+        48.0,
+        Some(48.0),
+        &FallbackTextSystem::new(),
+        &amazing_layout::NoReplacedElements,
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::new(&root, 48, 48, &text, &crate::paint::NoImages, &crate::controls::NoControls);
+    let painted = view.items().iter().filter_map(|item| match &view.commands[view.item_commands[item.index]] {
+        PaintCommand::PaintDecorations(box_, _) => box_.style.get("background-color")
+            .filter(|color| matches!(*color, "red" | "blue"))
+            .map(str::to_owned),
+        _ => None,
+    }).collect::<Vec<_>>();
+    assert_eq!(painted, ["blue", "red"]);
+}

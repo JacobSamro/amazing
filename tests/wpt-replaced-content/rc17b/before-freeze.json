@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "fixed_base": "ba83010663168cf959f2d02b20a3e3dcaadd790f",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "manifest_sha256": "86973f4cd6aa2ef8d73ad6315b95cc65b93863a5a80ef2852fd66b42a17b284e",
+  "root_lock_sha256": "5805cd2f1cfb89a839377662df59c2d78ab43633c9674ca0caf9a568b47892c9",
+  "paint_rs_sha256": "90a33db8d4d6a87317a5a579497d3ec8f9e39a23b41c6d257b95fdc913c7d3f5",
+  "case_classifications": {
+    "css-content__pseudo-element-inline-box": "pass",
+    "css-pseudo__relative-box-order-of-pseudo-elements": "mismatch",
+    "css-pseudo__outside-marker-paint-order": "mismatch",
+    "css-pseudo__marker-content-008": "mismatch",
+    "css-pseudo__marker-and-other-pseudo-elements": "mismatch",
+    "css-content__element-replacement": "mismatch",
+    "css-content__element-replacement-image-alt": "pass"
+  },
+  "before_runs": {
+    "generated": {
+      "counts": {
+        "pass": 2,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "stable_test_records": true,
+      "report_sha256": [
+        "8c69dbfa39f5cc724a5815d494a249d252ecc97f399487e6503325d7ac9e8c62",
+        "d1c92cb1759a3c31a8d0e83b9ff3b71e3868a95b6bb7f6f788bd0968806e31c2"
+      ]
+    },
+    "focused": {
+      "counts": {
+        "pass": 10,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "stable_test_records": true,
+      "report_sha256": [
+        "93db710e6d5f7a2b0254b6f155576e31c9a2b352c7342f815285d54b98f28f3c",
+        "3b801e71b7b231d943f8bbd1349d74243f9bde7e6a2d071a2d759b55efdc2ea1"
+      ]
+    },
+    "svg": {
+      "counts": {
+        "pass": 25,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 1
+      },
+      "stable_test_records": true,
+      "report_sha256": [
+        "fff9a4cddd1ee9486fa42d41206e8698364df09f4c7c0e9b8f1e7af8da8ac78d",
+        "8494283aae1bff959f149a5f5426a6555d4f42cd5204f914621ef871d5f83937"
+      ]
+    }
+  }
+}
