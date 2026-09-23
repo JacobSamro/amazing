@@ -138,6 +138,23 @@ changed files afterwards, and must treat any Windows result from before the
 refresh as stale. Order is: rebase on `origin/dev` → refresh tree → re-sync own
 files → gate.
 
+### Disk hygiene on win-001
+
+On 2026-09-23 the C: drive filled to 3.4 GB free and every build failed with
+`os error 112`. The causes were render and evidence folders from merged
+tickets left under `target\<lane>\` (60 GB, mostly layout), Cargo
+incremental caches, and the retired pre-worktree checkout's
+`src\amazing\target` (68 GB). Clearing them brought it back to 202 GB free.
+
+- **Once a ticket merges, the lane deletes its own server-side
+  render/evidence folders.** Durable evidence is what the lane committed
+  under `crates/*/evidence/` or `docs/lanes/`. The server copies are scratch.
+- Keep `debug\` and `release\` build caches. `debug\incremental` may be
+  purged at any time, because Cargo rebuilds it.
+- The integrator checks free space when a build fails oddly:
+  `(Get-PSDrive C).Free`. Below about 30 GB, purge stale folders (unmodified
+  for 2 hours or more) under `target\*\` other than `debug`/`release`.
+
 ### Build server environment (already provisioned)
 
 - cargo/rustc 1.97.1, git 2.55, VS 2022 Build Tools
