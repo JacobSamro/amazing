@@ -334,8 +334,9 @@ fn orb_never_sniffed(mime: &str) -> bool {
             | "text/vtt"
     )
 }
-/// ORB draft bounded-prefix check. The JavaScript-versus-JSON full-body parse
-/// step needs a parser and EOF; this policy blocks at that fallback instead.
+/// Shipping Chromium ORB compatibility: its final sniff checks the bounded
+/// prefix for CORB-protected HTML/XML/JSON, rather than parsing the full body
+/// as JavaScript. Plain mislabeled JavaScript is allowed at this step.
 /// `prefix` is read-only and at most its first 1024 bytes are inspected.
 pub fn check_opaque_response(
     status: u16,
@@ -378,7 +379,62 @@ pub fn check_opaque_response(
     }
     // A streaming implementation must wait for 1024 bytes or EOF before this
     // fallback. It can call this function once that bounded prefix is ready.
-    Err(FetchError::OpaqueResponse)
+    if corb_document_prefix(prefix) {
+        Err(FetchError::OpaqueResponse)
+    } else {
+        Ok(())
+    }
+}
+fn corb_document_prefix(prefix: &[u8]) -> bool {
+    let bytes = prefix.strip_prefix(b"\xef\xbb\xbf").unwrap_or(prefix);
+    let bytes = bytes.trim_ascii_start();
+    if bytes.starts_with(b")]}'") || bytes.starts_with(b"{}&&") || bytes.starts_with(b"for(;;);") {
+        return true;
+    }
+    if json_object_prefix(bytes) {
+        return true;
+    }
+    [
+        b"<!doctype html".as_slice(),
+        b"<html".as_slice(),
+        b"<head".as_slice(),
+        b"<script".as_slice(),
+        b"<body".as_slice(),
+        b"<iframe".as_slice(),
+        b"<div".as_slice(),
+        b"<table".as_slice(),
+        b"<style".as_slice(),
+        b"<?xml".as_slice(),
+    ]
+    .iter()
+    .any(|tag| {
+        bytes
+            .get(..tag.len())
+            .is_some_and(|b| b.eq_ignore_ascii_case(tag))
+    })
+}
+fn json_object_prefix(bytes: &[u8]) -> bool {
+    let Some(mut tail) = bytes.strip_prefix(b"{") else {
+        return false;
+    };
+    tail = tail.trim_ascii_start();
+    let Some(rest) = tail.strip_prefix(b"\"") else {
+        return false;
+    };
+    let mut escaped = false;
+    for (i, byte) in rest.iter().enumerate() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match byte {
+            b'\\' => escaped = true,
+            b'"' => return rest[i + 1..].trim_ascii_start().starts_with(b":"),
+            b'\n' | b'\r' | 0..=31 => return false,
+            _ => (),
+        }
+    }
+    false
 }
 fn valid_partial_response(headers: &HeaderList) -> bool {
     let Some(range) = headers.get("content-range") else {
@@ -405,6 +461,10 @@ pub fn check_response_security_with_prefix(
     prefix: &[u8],
     domains: &impl RegistrableDomain,
 ) -> Result<(), FetchError> {
+    let csp = request.csp.post_request(request, request.url());
+    if csp.blocked {
+        return Err(FetchError::Csp(csp.violations));
+    }
     if request.security.client_restricts_mixed_content
         && !a_priori_authenticated(request.url())
         && !(request.security.destination == Destination::Document

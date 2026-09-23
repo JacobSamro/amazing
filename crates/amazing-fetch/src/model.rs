@@ -46,12 +46,21 @@ pub struct Request {
     pub use_cors_preflight: bool,
     /// Supplied by the embedding; this crate does not derive DOM secure contexts.
     pub security: SecurityContext,
+    /// Policy container and element metadata supplied by the embedding.
+    pub csp: CspPolicyList,
+    pub csp_self_origin: Origin,
+    pub csp_destination: CspDestination,
+    pub csp_nonce: Option<String>,
+    pub csp_integrity: Vec<String>,
+    pub csp_parser_inserted: bool,
+    pub csp_violations: Vec<CspViolation>,
     pub(crate) taint: ResponseType,
 }
 impl Request {
     pub fn new(url: HttpUrl, origin: Origin) -> Self {
         Self {
             url_list: vec![url],
+            csp_self_origin: origin.clone(),
             origin,
             method: "GET".into(),
             headers: HeaderList::default(),
@@ -63,6 +72,12 @@ impl Request {
             referrer_policy: ReferrerPolicy::StrictOriginWhenCrossOrigin,
             use_cors_preflight: false,
             security: SecurityContext::default(),
+            csp: CspPolicyList::default(),
+            csp_destination: CspDestination::None,
+            csp_nonce: None,
+            csp_integrity: Vec::new(),
+            csp_parser_inserted: false,
+            csp_violations: Vec::new(),
             taint: ResponseType::Basic,
         }
     }
@@ -111,6 +126,11 @@ impl Request {
     /// Call before each transport hop. Taint is sticky across redirects.
     pub fn prepare(&mut self) -> Result<FetchPlan, FetchError> {
         upgrade_mixed_content(self)?;
+        let csp = self.csp.pre_request(self);
+        self.csp_violations.extend(csp.violations.iter().cloned());
+        if csp.blocked {
+            return Err(FetchError::Csp(csp.violations));
+        }
         check_request_security(self)?;
         let cross = self.origin != *self.url().origin();
         match self.mode {

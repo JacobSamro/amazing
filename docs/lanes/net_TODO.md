@@ -1174,3 +1174,47 @@ PSL regeneration, TLS/Brotli fixture pins, dependency feature checks and
 nextest leak-notice checks passed. Logs, results, source manifests, recipe and
 input hashes are in the integrator checkout's `.agents/net/net11-final-evidence/`,
 `net11_gate.py`, and `net11-inputs.json`. NET-11 stops at the policy seam.
+
+## NET-12 — CSP3 fetch checks and ORB compatibility
+
+Fixed base: `d29e1ff`. CSP algorithms are pinned to
+[W3C CSP Level 3 `b1bad631`](https://github.com/w3c/webappsec-csp/blob/b1bad631b091cdca904138d6947a16b89edfd2b4/index.bs),
+particularly serialized policy lists (§2.1.1), fetch pre/post checks (§4.1.2–3),
+script source checks (§6.7.1), expression matching (§6.7.2.7–12), and fetch
+fallback lists (§6.8.3). The brief calls the path-after-redirect rule §6.7.2.9;
+in this pinned revision it is §6.7.2.8, step 3.6.
+
+`amazing-fetch::csp` parses enforcement and Report-Only policy lists with a
+65,536-byte total header limit, 64-policy limit and 256-directive limit checked
+before source allocation. First duplicate directive wins. The embedder supplies
+the policy container's self-origin, destination, nonce, integrity hashes and
+parser-inserted state. `Request::prepare` runs pre-request checks on each hop;
+the response-security path runs post-request checks and redirect processing
+runs them before following a hop. The public `CspCheck` returns typed
+violations and never blocks for Report-Only. Report delivery, inline script and
+style checks, and eval checks are adoption seams for DOM/JS bindings. The
+WebSocket embedder can call `csp_source_matches` with its parsed ws/wss URL;
+the HTTP-only `HttpUrl` Fetch path cannot carry that scheme itself.
+
+The ORB final fallback follows [Chromium's ORB v0.1 shipping decision](https://groups.google.com/a/chromium.org/g/blink-dev/c/ScjhKz3Z6U4/m/q3nEd1lcBAAJ)
+the [Chromium 138.0.7204.49 ORB source revision](https://chromium.googlesource.com/chromium/src/+/138.0.7204.49/services/network/orb/orb_impl.cc),
+and the pinned [CORB sniffer source `600fb323`](https://chromium.googlesource.com/chromium/src/+/600fb3234c1b8ce8e05bcb57637c79cc11e0388e/services/network/public/cpp/cross_origin_read_blocking.cc):
+it uses bounded CORB-style HTML/XML/JSON and security-prefix sniffing, allowing
+plain mislabeled JavaScript after earlier MIME/media/image checks. This differs
+from the [ORB draft `61c1be7`](https://github.com/annevk/orb/tree/61c1be761fca35288b6c90249da66ab563f1074c)
+final full-body JavaScript-versus-JSON parse. The borrowed prefix remains capped
+at 1024 bytes; no whole-body buffer is added.
+
+Once DOM/Fetch bindings pass policy containers and element metadata through to
+this crate, WPT `content-security-policy/default-src/`,
+`content-security-policy/script-src/`, `content-security-policy/style-src/`,
+`content-security-policy/img-src/`, `content-security-policy/connect-src/`,
+`content-security-policy/font-src/`, `content-security-policy/media-src/`,
+`content-security-policy/object-src/`, `content-security-policy/child-src/`,
+`content-security-policy/frame-src/`, `content-security-policy/worker-src/`,
+`content-security-policy/script-src-attr-elem/`,
+`content-security-policy/style-src-attr-elem/`,
+`content-security-policy/parsing/`, and
+`content-security-policy/reporting/` become measurable. They are not counted
+as passing by the native tests here. Inline/eval coverage requires the
+DOM/JS adoption seam; network report delivery requires a reporting dispatcher.

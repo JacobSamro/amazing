@@ -242,15 +242,33 @@ fn orb_blocks_json_prefix_and_allows_image_signature_with_bounded_input() {
     )
     .unwrap();
     check_opaque_response(200, &headers(&[]), png, NoCorsMediaState::NotMedia).unwrap();
-    assert_eq!(
-        check_opaque_response(
-            200,
-            &headers(&[("Content-Type", "text/plain")]),
-            b"let x=1;",
-            NoCorsMediaState::NotMedia
-        ),
-        Err(FetchError::OpaqueResponse)
-    );
+    check_opaque_response(
+        200,
+        &headers(&[("Content-Type", "text/plain")]),
+        b"let x=1;",
+        NoCorsMediaState::NotMedia,
+    )
+    .unwrap();
+    check_opaque_response(
+        200,
+        &headers(&[]),
+        b"{ statement(); }",
+        NoCorsMediaState::NotMedia,
+    )
+    .unwrap();
+    check_opaque_response(200, &headers(&[]), b"[1, 2]", NoCorsMediaState::NotMedia).unwrap();
+    for prefix in [
+        br#"{"secret":42}"#.as_slice(),
+        b")]}'\n{}".as_slice(),
+        b"{}&&alert(1)",
+        b"for(;;);[1]",
+        b"<html><body>x",
+    ] {
+        assert_eq!(
+            check_opaque_response(200, &headers(&[]), prefix, NoCorsMediaState::NotMedia),
+            Err(FetchError::OpaqueResponse)
+        );
+    }
     let mp4 = b"\0\0\0\x18ftypisom";
     check_opaque_response(
         200,

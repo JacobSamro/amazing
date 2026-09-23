@@ -19,6 +19,13 @@ pub fn redirect(
         return Ok(RedirectAction::NotRedirect);
     }
     let plan = request.prepare()?;
+    let csp = request.csp.post_request(request, request.url());
+    request
+        .csp_violations
+        .extend(csp.violations.iter().cloned());
+    if csp.blocked {
+        return Err(FetchError::Csp(csp.violations));
+    }
     // Network redirect responses receive CORP checks before the next URL is
     // adopted, including same-origin redirects carrying their own policy.
     check_redirect_corp(request, response, &crate::psl::PublicSuffixList)?;

@@ -5,6 +5,7 @@
 pub mod cache;
 pub mod cookies;
 mod cors;
+pub mod csp;
 mod headers;
 mod model;
 mod origin;
@@ -13,6 +14,7 @@ mod redirect;
 mod referrer;
 mod security;
 pub use cors::*;
+pub use csp::*;
 pub use headers::*;
 pub use model::*;
 pub use origin::*;
@@ -38,6 +40,7 @@ pub enum FetchError {
     MimeType,
     Nosniff,
     OpaqueResponse,
+    Csp(Vec<CspViolation>),
 }
 impl std::fmt::Display for FetchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
