@@ -61,11 +61,23 @@ fn temporary_exhaustion_does_not_resolve_ambiguous_tokens() {
     assert_eq!(tok.next_available(), None);
 
     let mut reference = Tokenizer::streaming();
-    reference.push_chars("&not".chars());
+    reference.push_chars("&amp".chars());
     assert_eq!(reference.next_available(), None);
-    reference.push_chars("in;".chars());
-    assert_eq!(reference.next_available(), Some(Token::Characters("∉".into())));
+    reference.push_chars(";".chars());
+    assert_eq!(reference.next_available(), Some(Token::Characters("&".into())));
     assert_eq!(reference.next_available(), None);
+
+    let mut doctype = Tokenizer::streaming();
+    doctype.push_chars("<!doct".chars());
+    assert_eq!(doctype.next_available(), None);
+    doctype.push_chars("ype html>".chars());
+    assert!(matches!(doctype.next_available(), Some(Token::Doctype { name: Some(name), .. }) if name == "html"));
+
+    let mut comment = Tokenizer::streaming();
+    comment.push_chars("<!--unfinished".chars());
+    assert_eq!(comment.next_available(), None);
+    comment.push_chars("-->".chars());
+    assert_eq!(comment.next_available(), Some(Token::Comment("unfinished".into())));
 }
 
 #[test]
