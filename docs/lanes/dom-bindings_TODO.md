@@ -772,3 +772,295 @@ Windows lane target. Native implementation is unchanged from the checkpoint;
 the higher workspace count reflects newer sibling code in the integration base.
 The authorized core/XML delivery is complete and ready for integrator merge.
 The broader DOM-4 JS/WPT integration gate remains deferred and unclaimed.
+
+
+## DOM-5 — full dom/ conformance push (in progress)
+
+Assignment: implement high-impact error/timeout clusters without waiting for the
+DOM-4 scheduling integration. Branch: `lane/dom-bindings-dom5`; starting dev
+`11dd8a8` includes merged DOM-4 core `74e3c50`. The orchestration brief still
+names DOM-3; the integrator's explicit DOM-5 assignment supersedes it.
+
+### Evidence and selection discipline
+
+A fresh BEFORE pair is running on Windows after an artifact-invalidating own-lane
+refresh and source-hash verification. The upstream known-pass/known-fail proof
+already passed twice. WPT revision remains
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`; selection is the same 627 tracked
+source files, not expanded WPT URLs. No AFTER or improvement is claimed yet.
+
+The historical DOM-1/DOM-4-before baseline is 2 pass / 241 fail / 30 timeout /
+221 error / 133 unsupported; 83 PASS / 2584 FAIL subtests. The following
+**diagnostic grouping**, not a proven causal ranking, accounts for all 251
+error/timeout sources. “Observed subtests” means callbacks recorded before the
+source ended; it is neither the source's complete potential count nor an
+estimate of passes a fix would produce. Zero means registration did not yield
+results, not that fixing the cluster has no value.
+
+| Diagnostic group | Sources | Observed subtests |
+|---|---:|---:|
+| Duplicate names / JS stringification | 7 | 744 |
+| Missing callable (mixed DOM APIs) | 35 | 129 |
+| Deadline (requires per-source analysis) | 30 | 78 |
+| Missing global/interface | 14 | 1 |
+| Conversion diagnostic (may mask setup exception) | 41 | 0 |
+| Shared testdriver parser failure | 76 | 0 |
+| Other JavaScript parser failures | 42 | 0 |
+| Unavailable upstream resource | 3 | 0 |
+| Other runtime error | 3 | 0 |
+
+The 76-source shared parser failure is `testdriver.js` at `subscribe`; another
+42 sources fail parsing other scripts. These require JS-owner work, not a DOM
+algorithm change. The 41 conversion diagnostics include 30 in `dom/common.js`;
+that shared file calls `setup(setupRangeTests)`, which needs document creation,
+node insertion, and multiple node kinds. Exception stringification may mask the
+original missing API, so treating all 41 as one proven JS coercion bug would be
+incorrect.
+
+The duplicate-name group contains 596 recorded subtests in
+`Document-createElementNS.html`, 100 in `passive-by-default.html`, and 48 in five
+shadow-range files. The first uses array stringification for names and XML/XHTML
+iframe documents. A namespace core fix alone cannot honestly claim to unlock
+596 tests. The callable group spans document factories, ChildNode/ParentNode
+methods, collection interfaces, and events and needs subdivision by the first
+missing operation. The 30 deadlines likewise include iframe/document loading,
+constructors, events, and selectors; none is automatically assigned to the
+deferred event-loop seam merely because it timed out.
+
+### Binding integration prerequisite (routed in questions.md)
+
+`amazing-bindings` does not yet exist or appear in the workspace. Current live
+wrappers are private methods/native functions in `amazing-js/src/interp.rs` and
+`interp_builtins.rs`; `BrowserDomHost` in the driver owns the parsed `Dom`.
+The existing `DomHost` trait has no general node-kind, namespace, comment,
+fragment, range, traversal, or Event object surface. Adding native algorithms
+alone cannot change WPT-visible behavior. Registration belongs to the integrator;
+JS hooks and driver adoption belong to their respective owners.
+
+Proposed additive binding route, independent of scheduling:
+
+- The runtime provides an owned native callback closure, or equivalent per-
+  interpreter extension state and invocation hook, so `amazing-bindings` can
+  install constructors, methods, and accessors using its own DOM state without
+  process-global/thread-local registries. Current `NativeFn` is a bare function
+  pointer and the interpreter's DOM host is private.
+- Expose the runtime's ordinary get/set and WebIDL-required conversion hooks to
+  the binding layer. Conversions must preserve thrown exceptions and observable
+  getter/coercion order, rather than using Rust debug formatting.
+- The driver supplies access to its **same parsed Dom**, installs bindings before
+  page scripts, and retains canonical wrappers keyed by arena node identity. A
+  second disconnected Dom would only manufacture apparent conformance. Native
+  borrows must be released before any callback/getter/coercion can re-enter JS.
+- Register `amazing-bindings` with first-party `amazing-dom` / `amazing-js`
+  dependencies and wire the driver dependency/install call. Alternatively route
+  a narrowly scoped bridge grant; no edits to another lane are assumed.
+
+Final validation remains two stable full-selection AFTER runs with the same
+upstream proof and revision, measured BEFORE/AFTER counts and cluster impact,
+Windows `cargo nextest run -p amazing-dom --locked` (and amazing-bindings once
+registered), separate doctests, then refreshed/re-synced workspace nextest plus
+workspace doctests. Report the two runner counts separately.
+
+### Diagnostic probes (not WPT results)
+
+Windows driver `--scaffold` probes on base `11dd8a8` confirm that
+`String(new Error("sentinel"))` throws “cannot convert object to primitive”,
+array stringification is incorrect, and `Math.random` is absent. Consequently
+the six NodeList tampering scripts in the callable diagnostic bucket first hit
+the JS-owned `Math.random()` interpolation in their shared support script; they
+are not six demonstrated NodeList implementation defects. Template interpolation
+of a number itself works.
+
+The same probes confirm missing Event/Node/Comment/Text/Document constructors;
+`document.createEvent/createComment/createDocumentFragment/createElementNS/
+createRange/createAttribute`, `document.implementation`, and element
+`cloneNode/insertBefore/querySelectorAll/nodeType`. `document.body` and element
+`append` do exist. In `setupRangeTests`, the earliest unsupported call after
+creating its div is `document.body.insertBefore`; its error is then liable to be
+masked by the confirmed Error stringification failure. Thirty shared-resource
+errors therefore require both setup APIs and usable exception reporting, not
+merely another Range core implementation. The probe output explicitly carries
+`suite: scaffolding-only`; it contributes zero WPT results.
+
+### DOM-5 concrete runtime contract (supersedes proposed import direction above)
+
+Integrator seeded `amazing-bindings` in `62f8487`, depending only on amazing-dom.
+The concrete trait is `crates/amazing-bindings/src/host.rs::BindingHost`; runtime
+implements it and calls the binding crate, never the reverse dependency. Please
+use the file's exact types: `InterfaceDefinition`, `Member`, `Operation`, and
+`BindingHost`. Installation registers descriptors and prototypes; native entry
+points forward `Operation`, receiver and arguments to the forthcoming `invoke`.
+`with_dom` executes a non-reentrant native closure on the driver's same arena;
+all JS coercion and wrapper creation occur outside it. `node_brand` must use a
+private brand; `wrap_node` must share identity with existing wrappers, including
+the existing document object. `child_nodes` supplies a live same-object NodeList.
+DOMString conversion takes/returns UTF-16 code units and propagates throws. The
+initial operations cover node factories/base properties and ParentNode/ChildNode
+mutations, not callbacks or scheduling. `is_html_document` controls the existing
+HTML element nodeName casing rule and must reflect document kind.
+
+Native mutation work is checkpointed on this branch. The ChildNode before/after/
+replaceWith source helpers have respectively 15, 15, and 11 test declarations
+called for Comment, Element and Text: 123 source-declared registrations currently
+blocked before any result. This is a bounded synchronous candidate alongside the
+ParentNode family, not a claim that 123 tests will pass. Source-declared potential
+is kept distinct from measured registered results.
+
+Runtime install notes: new constructors require `new`; `None` constructors are
+illegal constructors with real interface/prototype objects. Install members
+without deleting unrelated legacy APIs, but migrate legacy **own** properties
+that would shadow the new prototype methods/getters. Canonical wrapping applies
+to query results and legacy createElement as well as new factories. Map
+`DomError::TypeError` to a JS TypeError and hierarchy/not-found errors to genuine
+DOMException-shaped exceptions. `is_undefined` distinguishes constructor default
+empty strings from explicit null (`"null"`). `DocumentConstructor` makes a new
+XML document; `is_html_document` must return false for it. New `NodeOrString::Utf16`
+preserves lone surrogate arguments through native fragment conversion.
+
+Targeted Windows validation on the refreshed 62f8487 tree: 149 DOM tests passed
+(140 existing + 9 mutation tests); eight binding tests passed (157 combined).
+Separate doctests: amazing-dom 0, amazing-bindings 0. These are native and host-
+contract tests, not evidence that the runtime has adopted the contract. No
+workspace or WPT AFTER claim is made at this checkpoint.
+
+Fresh BEFORE pair completed on 11dd8a8: both raw JSONL streams are byte-identical
+to each other and to DOM-1/DOM-4-before. 2 pass / 241 fail / 30 timeout / 221 error /
+133 unsupported, 83 PASS / 2584 FAIL. Summary/provenance is committed at
+`crates/amazing-dom/tests/wpt-dom5-before.json`; raw artifact SHA-256 is
+`3601e251023d0f34e0668c7e9b8d1b24df1fbca43391e0cff123ab51ee719f4c`.
+
+Timeout inspection: 24 of 30 source bodies mention iframe/frame access; the
+Comment/Text constructor pair additionally loads iframe work from their shared
+support script. Thus 26 have explicit frame dependencies in source or support;
+this is dependency evidence, not proof of a single runtime cause. The remaining
+four are two click activation tests, EventListener-handleEvent, and the SVG
+window.onload smoke test. Constructors can gain synchronous subtest passes while
+their cross-realm part still times out; do not claim the whole file is fixed.
+
+### DOM-5 end-of-day triage checkpoint (2026-09-20 UTC)
+
+Standing down by explicit user instruction during the win-001 SSH outage. No
+post-outage gate ran and no further SSH/scp connections are permitted until the
+integrator clears the stand-down. New durable evidence is in
+`crates/amazing-dom/tests/dom5-triage/README.md` and its adjacent artifacts.
+
+The instrumented copied harness recovered the original exception in all 41
+conversion-error sources. All 30 common.js cases reached body.insertBefore and
+threw “value is not callable” before the next statement; the harness's String(e)
+then masked it. This is a confirmed missing binding, not a native Range failure.
+A pre-outage Edge registration census measured 49,514 subtests behind those 30
+sources (34,505 Range boundaries/queries; 5,626 mutation response; 4,179 content;
+3,652 node properties/relationships; 1,552 traversal). These are reference counts,
+not Amazing results or a promise that one missing method unlocks all of them.
+The remaining fixture dependencies include CDATA and DOMImplementation APIs.
+
+All 118 parser failures have source-location attribution: 76 async object-method,
+33 await-expression, 6 trailing-call-comma, 3 surrogate-escape failures. Full
+causal ranking is still partial: the additional call-site tracer was NOT run
+because SSH failed. Remaining mixed callable/duplicate-name/deadline groups and
+the full failed/unsupported inventory need completion. The current binding/core
+implementation is unchanged; no runtime adoption or WPT AFTER result is claimed.
+
+FIRST resume action: check the integrator's current restoration/stand-down notice.
+Do not open SSH/scp until explicitly cleared. Then retrieve the reference-census
+server metadata and clean up only task-owned reference-browser profiles, review
+and run the draft call tracer, inspect routed runtime/driver adoption, and follow
+fresh rebase/refresh/re-sync gates. The report lists every remaining item.
+
+### DOM-5 resumed triage and native microtask contract (2026-09-23)
+
+The integrator restored SSH and refreshed the lane tree to `origin/dev`
+`ffb143b`; the lane rebased and re-synced its owned files. The 30 reference
+census records were retrieved, and 30 task-owned headless-browser profiles were
+removed after confirming none was in use. The copied-resource call tracer ran
+for 46 historical callable/conversion error sources. Its results, the complete
+627-source historical ranking and their diagnostic limitations are under
+`crates/amazing-dom/tests/dom5-triage/`. None of that changes the pre-outage WPT
+baseline; a fresh current-base full selection is queued in a shared build slot.
+
+JS-4's draft scheduling host is being revised to a bounded interpreter outbox.
+Native MutationObserver delivery must interleave with JS jobs **during** an
+interpreter entry: script queues Promise P, mutates the DOM (M), then calls
+queueMicrotask Q, so the outbox must preserve P,M,Q when it drains into the
+EventLoop after the entry. `BindingHost::with_dom` observes the DOM's mutation
+delivery flag across the native closure, drops the DOM borrow, and appends an
+opaque `NativeMicrotask::MutationObserver` request before the next JS statement.
+It does this even when the closure mutates and then returns an error. The native
+request neither invokes JS nor steps EventLoop synchronously. The DOM flag is
+cleared only by `begin_mutation_checkpoint` when that queued EventLoop microtask
+runs, not when admission is attempted or acknowledged. Mutations with no
+interested observer leave the flag clear; multiple records while it is set
+produce one pending delivery per surrounding agent.
+
+The integrator's capacity decision reserves one native outbox slot per agent
+for this flag-gated request. JS Promise, queueMicrotask, timer and frame requests
+use only unreserved capacity, so native admission cannot fail. Acknowledgement
+means successful M admission. At JS capacity one, P takes the JS slot, M takes
+the native slot and Q throws catchable TypeError without being enqueued: the
+resulting order is P,M. With enough JS capacity for P and Q, the order is
+P,M,Q. A future native kind without a bounded flag would require a different
+failure policy, potentially a poison state; that policy is not part of this
+MutationObserver contract. js-runtime owns the capacity split and exact outbox
+API, js-lang reviews it, and this lane owns the DOM flag semantics. The real
+EventLoop adapter proof must include these two traces plus script A, Promise P,
+queueMicrotask Q, chained R, timer B and frame cancellation after a checkpoint.
+No driver adapter will be built against the draft SchedulingHost signature.
+
+js-runtime answered the final proposed API as
+`Interpreter::enqueue_native_microtask(global: u64, kind: NativeMicrotaskKind)
+-> Result<(), Throw>` and
+`SchedulingRequest::NativeMicrotask { global, kind }`, with
+`NativeMicrotaskKind::MutationObserver`. The adapter's forwarded bit is set
+only after successful outbox admission and prevents duplicate true-to-true
+posts. A test-only real Interpreter/DOM/EventLoop proof is drafted under
+`crates/amazing-dom/tests/dom5-triage/`; the integrator granted exactly one new
+driver integration test file at
+`crates/amazing/tests/js4_event_loop_adapter.rs`. Move and compile the draft
+there only after JS-4 merges to dev. No `amazing-dom` → `amazing-js` test
+dependency or root lockfile change is authorized.
+
+### BindingHost placement and lossless string boundary (2026-09-23 decision)
+
+`amazing_bindings::host::BindingHost` is declared by amazing-bindings, which
+continues to depend only on amazing-dom. The driver-local `RuntimeBindingHost`
+will implement it with backend-neutral capabilities exposed by amazing-js.
+js-runtime accepted the object/function/property capability vocabulary in
+`crates/amazing-bindings/src/host.rs`. `create_native_function` takes
+`HostCallPolicy::{CallOnly, ConstructOnly, CallAndConstruct}` and an opaque
+`Operation` token; the driver maps that token to a runtime-owned,
+per-interpreter `HostFunctionId`. No AST or VM type crosses the trait.
+The active opaque `install_interface` entry point is retained until the driver
+adapter and real installer are ready. Integrator-assist owns the driver file.
+
+The existing `string(&[u16]) -> Value` and
+`to_dom_string(&Value) -> Result<Vec<u16>, Error>` signatures are accepted as
+lossless UTF-16 contracts. In particular, lone surrogates must round-trip
+unchanged, without U+FFFD substitution. js-lang first adds UTF-16 literal data
+to the AST without removing the existing field. js-runtime then migrates
+`JsValue::Str` to an opaque `JsString` storing code units, verifies Test262
+before/after against the 10,314 baseline, and proves JS→DOM→JS lone-surrogate
+round-trip. Runtime string methods for BindingHost wait for `JsString`;
+independent object/function/property capabilities can proceed before it.
+
+### DOM-5 native fixed-base final gate (2026-09-23)
+
+On recorded base `2021707`, the Windows lane tree was refreshed with first-party
+artifact invalidation and owned files re-synced. The pinned 627-source `dom/`
+AFTER pair at WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`
+completed with two workers per round. The unmodified upstream known-pass and
+known-fail proof passed twice. Both rounds were byte-identical: 2 pass, 241
+fail, 30 timeout, 221 error and 133 unsupported files; 83 pass and 2,584 fail
+registered subtests, with no other subtest statuses. Each raw SHA-256 was
+`3601e251023d0f34e0668c7e9b8d1b24df1fbca43391e0cff123ab51ee719f4c`;
+each outcome SHA-256 was
+`327f8456d54edf7b306759439ffda04763a1f6c0ffc705ebdb7d8bc2cf0aa4d4`.
+These equal the BEFORE gate; no ranked cluster closed in the unadopted driver.
+The durable summary is `crates/amazing-dom/tests/wpt-dom5-after.json`.
+
+The final fixed-base Windows workspace gate verified 24 owned file hashes,
+including the accepted `HostCallPolicy` trait signatures. `cargo nextest run
+--workspace --locked` passed 1,335/1,335 tests with 3 skipped across 43
+binaries. Separate `cargo test --workspace --locked --doc` passed 2/2
+doctests; amazing-dom and amazing-bindings each had zero doctests. The JS-4
+adapter proof and driver installer remain follow-up integration work after
+native DOM-5 merge.

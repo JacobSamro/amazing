@@ -7,8 +7,9 @@
 //! and the binding layer installs one onto the other.
 //!
 //! Deliberately depends on `amazing-dom` only. The install direction is
-//! inverted through a host trait the runtime provides, so this crate never
-//! imports the interpreter and the dependency graph keeps pointing downward
+//! inverted through the host trait declared in this crate and implemented by
+//! the driver using runtime capabilities, so this crate never imports the
+//! interpreter and the dependency graph keeps pointing downward
 //! per the component graph in ARCHITECTURE.md.
 //!
 //! std-only, like every engine core. Skeleton registered by the integrator;
@@ -16,3 +17,14 @@
 //! trait with `js-runtime`.
 
 #![forbid(unsafe_code)]
+
+pub mod host;
+
+mod interfaces;
+mod invoke;
+pub use amazing_dom::{Dom, DomError, NodeIdx};
+pub use interfaces::{install, INTERFACES};
+pub use invoke::invoke;
+
+#[cfg(test)]
+mod tests;

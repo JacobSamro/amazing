@@ -6,6 +6,50 @@ fn fixture() -> (Dom, NodeIdx, NodeIdx) {
     (d, p, t)
 }
 #[test]
+fn delivery_signal_only_changes_for_interested_records_and_rearms_after_checkpoint() {
+    let (mut d, p, _) = fixture();
+    d.set_attribute(p, "unobserved", "1").unwrap();
+    assert!(!d.mutation_microtask_pending());
+
+    let o = d.create_mutation_observer(7);
+    d.observe(
+        o,
+        p,
+        ObserveOptions {
+            attribute_filter: Some(vec!["watched".into()]),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let second_observer = d.create_mutation_observer(8);
+    d.observe(
+        second_observer,
+        p,
+        ObserveOptions {
+            attribute_filter: Some(vec!["watched".into()]),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    d.set_attribute(p, "ignored", "2").unwrap();
+    assert!(!d.mutation_microtask_pending());
+    d.set_attribute(p, "watched", "3").unwrap();
+    assert!(d.mutation_microtask_pending());
+    d.set_attribute(p, "watched", "4").unwrap();
+    assert!(d.mutation_microtask_pending());
+
+    let mut first = d.begin_mutation_checkpoint();
+    assert!(!d.mutation_microtask_pending());
+    assert_eq!(d.next_mutation_delivery(&mut first).unwrap().records.len(), 2);
+    assert_eq!(d.next_mutation_delivery(&mut first).unwrap().records.len(), 2);
+    assert!(d.next_mutation_delivery(&mut first).is_none());
+    d.set_attribute(p, "watched", "5").unwrap();
+    assert!(d.mutation_microtask_pending());
+    let mut second = d.begin_mutation_checkpoint();
+    assert_eq!(d.next_mutation_delivery(&mut second).unwrap().records.len(), 1);
+    assert_eq!(d.next_mutation_delivery(&mut second).unwrap().records.len(), 1);
+}
+#[test]
 fn options_validate_presence_not_only_truth() {
     let (mut d, p, _) = fixture();
     let o = d.create_mutation_observer(1);

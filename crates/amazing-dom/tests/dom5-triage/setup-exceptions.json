@@ -1,0 +1,3103 @@
+{
+  "kind": "NON-CONFORMANCE setup exception diagnostic",
+  "engine_sha256": "9e6ddc78f3c3e75d849bb8e31b80f754a0dfaaa05ed6769323ede70499a96e4f",
+  "selected": 41,
+  "results": [
+    {
+      "test": "dom/events/Event-constants.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "ReferenceError: Event is not defined"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/events/Event-constants.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "inline script: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "ReferenceError: Event is not defined"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/CharacterData-remove.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/CharacterData-remove.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "inline script: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/Document-createAttribute.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/Document-createAttribute.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "inline script: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/DocumentType-remove.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/DocumentType-remove.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "inline script: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/Element-children.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/Element-children.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "inline script: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/Element-getElementsByTagName.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/Element-getElementsByTagName.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "inline script: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/Element-getElementsByTagNameNS.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/Element-getElementsByTagNameNS.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "inline script: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/Node-compareDocumentPosition.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/Node-compareDocumentPosition.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/Node-constants.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "ReferenceError: Node is not defined"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/Node-constants.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "inline script: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "ReferenceError: Node is not defined"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/Node-contains.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/Node-contains.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/Node-properties.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/Node-properties.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/Node-textContent.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/Node-textContent.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "inline script: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/nodes/case.html",
+      "baseline_detail": "case.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/nodes/case.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "case.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-cloneContents.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-cloneContents.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-cloneRange.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-cloneRange.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-collapse.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-collapse.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-commonAncestorContainer.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-commonAncestorContainer.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-compareBoundaryPoints.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-compareBoundaryPoints.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-comparePoint.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-comparePoint.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-deleteContents.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-deleteContents.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-extractContents.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-extractContents.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-insertNode.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-insertNode.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-intersectsNode.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-intersectsNode.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-isPointInRange.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-isPointInRange.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-mutations-appendChild.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-mutations-appendChild.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-mutations-appendData.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-mutations-appendData.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-mutations-dataChange.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-mutations-dataChange.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-mutations-deleteData.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-mutations-deleteData.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-mutations-insertBefore.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-mutations-insertBefore.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-mutations-insertData.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-mutations-insertData.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-mutations-removeChild.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-mutations-removeChild.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-mutations-replaceChild.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-mutations-replaceChild.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-mutations-replaceData.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-mutations-replaceData.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-mutations-splitText.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-mutations-splitText.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-selectNode.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-selectNode.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-set.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-set.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/ranges/Range-surroundContents.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/ranges/Range-surroundContents.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/traversal/NodeFilter-constants.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "ReferenceError: NodeFilter is not defined"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/traversal/NodeFilter-constants.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "inline script: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "ReferenceError: NodeFilter is not defined"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/traversal/NodeIterator-removal.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/traversal/NodeIterator-removal.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/traversal/NodeIterator.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/traversal/NodeIterator.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    },
+    {
+      "test": "dom/traversal/TreeWalker.html",
+      "baseline_detail": "../common.js: TypeError: cannot convert object to primitive",
+      "diagnostic": [
+        {
+          "name": "DOM5_TRACE_QUERY_TEST",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_CREATE_DIV",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_SET_DIV_ID",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+          "status": 0,
+          "message": "reached"
+        },
+        {
+          "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+          "status": 1,
+          "message": "TypeError: value is not callable"
+        }
+      ],
+      "scaffold_result": {
+        "schema": 1,
+        "suite": "scaffolding-only",
+        "wpt_revision": null,
+        "test": "dom/traversal/TreeWalker.html",
+        "viewport": [
+          800,
+          600
+        ],
+        "timeout_ms": 10000,
+        "status": "error",
+        "harness_status": null,
+        "detail": "../common.js: TypeError: cannot convert object to primitive",
+        "file_counts": {
+          "pass": 0,
+          "fail": 0,
+          "timeout": 0,
+          "error": 1,
+          "unsupported": 0
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "timeout": 0,
+          "notrun": 0,
+          "error": 0
+        },
+        "subtests": [
+          {
+            "name": "DOM5_TRACE_QUERY_TEST",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_CREATE_DIV",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_SET_DIV_ID",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_TRACE_BODY_INSERT_BEFORE",
+            "status": 0,
+            "message": "reached"
+          },
+          {
+            "name": "DOM5_ORIGINAL_SETUP_EXCEPTION",
+            "status": 1,
+            "message": "TypeError: value is not callable"
+          }
+        ]
+      }
+    }
+  ],
+  "original_harness_sha256": "d2399236c2a09c429804ff2299ad6629e17e2b53f17a74dd341e936adb11ae3e",
+  "instrumented_harness_sha256": "f564a2a47f079937cb035e40ca5f7ba91c3fca09e099c772bc171452bf808add",
+  "original_common_sha256": "732f485014a4c6a6633439b24dfc442ab89391199504a1163b421a02374dfad3",
+  "instrumented_common_sha256": "22fed6aa10fc214f537006049b2e628a9d720bfede482b737bdb468b801347b3",
+  "changes": [
+    "Emit original setup exception name/message before existing String(e) expression; preserve String(e) and original control flow.",
+    "Emit before selected common.js statements, without replacing DOM operations.",
+    "Redirect copied testharness script tags to instrumented harness; omit visual reporter as normal runner does."
+  ],
+  "wpt_credit": 0
+}

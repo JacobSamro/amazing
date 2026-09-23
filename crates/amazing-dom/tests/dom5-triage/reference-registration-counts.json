@@ -1,0 +1,393 @@
+[
+  {
+    "test": "dom/nodes/Node-compareDocumentPosition.html",
+    "reference_census": {
+      "tests": 1444,
+      "counts": {
+        "0": 1444
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 2.83
+  },
+  {
+    "test": "dom/nodes/Node-contains.html",
+    "reference_census": {
+      "tests": 1482,
+      "counts": {
+        "0": 1482
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 2.74
+  },
+  {
+    "test": "dom/nodes/Node-properties.html",
+    "reference_census": {
+      "tests": 726,
+      "counts": {
+        "0": 726
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.56
+  },
+  {
+    "test": "dom/ranges/Range-cloneContents.html",
+    "reference_census": {
+      "tests": 187,
+      "counts": {
+        "0": 187
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.81
+  },
+  {
+    "test": "dom/ranges/Range-cloneRange.html",
+    "reference_census": {
+      "tests": 62,
+      "counts": {
+        "0": 62
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.31
+  },
+  {
+    "test": "dom/ranges/Range-collapse.html",
+    "reference_census": {
+      "tests": 186,
+      "counts": {
+        "0": 186
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 2.25
+  },
+  {
+    "test": "dom/ranges/Range-commonAncestorContainer.html",
+    "reference_census": {
+      "tests": 63,
+      "counts": {
+        "0": 63
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.66
+  },
+  {
+    "test": "dom/ranges/Range-compareBoundaryPoints.html",
+    "reference_census": {
+      "tests": 9313,
+      "counts": {
+        "0": 9313
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 6.62
+  },
+  {
+    "test": "dom/ranges/Range-comparePoint.html",
+    "reference_census": {
+      "tests": 5580,
+      "counts": {
+        "0": 5580
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 4.03
+  },
+  {
+    "test": "dom/ranges/Range-deleteContents.html",
+    "reference_census": {
+      "tests": 125,
+      "counts": {
+        "0": 125
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.83
+  },
+  {
+    "test": "dom/ranges/Range-extractContents.html",
+    "reference_census": {
+      "tests": 187,
+      "counts": {
+        "0": 187
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.39
+  },
+  {
+    "test": "dom/ranges/Range-insertNode.html",
+    "reference_census": {
+      "tests": 1840,
+      "counts": {
+        "0": 1840
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 6.98
+  },
+  {
+    "test": "dom/ranges/Range-intersectsNode.html",
+    "reference_census": {
+      "tests": 2356,
+      "counts": {
+        "0": 2356
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 3.17
+  },
+  {
+    "test": "dom/ranges/Range-isPointInRange.html",
+    "reference_census": {
+      "tests": 5733,
+      "counts": {
+        "0": 5733
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 4.91
+  },
+  {
+    "test": "dom/ranges/Range-mutations-appendChild.html",
+    "reference_census": {
+      "tests": 70,
+      "counts": {
+        "0": 70
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 2.58
+  },
+  {
+    "test": "dom/ranges/Range-mutations-appendData.html",
+    "reference_census": {
+      "tests": 384,
+      "counts": {
+        "0": 384
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 2.08
+  },
+  {
+    "test": "dom/ranges/Range-mutations-dataChange.html",
+    "reference_census": {
+      "tests": 2808,
+      "counts": {
+        "0": 2808
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 5.12
+  },
+  {
+    "test": "dom/ranges/Range-mutations-deleteData.html",
+    "reference_census": {
+      "tests": 564,
+      "counts": {
+        "0": 564
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 2.06
+  },
+  {
+    "test": "dom/ranges/Range-mutations-insertBefore.html",
+    "reference_census": {
+      "tests": 76,
+      "counts": {
+        "0": 76
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.34
+  },
+  {
+    "test": "dom/ranges/Range-mutations-insertData.html",
+    "reference_census": {
+      "tests": 382,
+      "counts": {
+        "0": 382
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.98
+  },
+  {
+    "test": "dom/ranges/Range-mutations-removeChild.html",
+    "reference_census": {
+      "tests": 20,
+      "counts": {
+        "0": 20
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.75
+  },
+  {
+    "test": "dom/ranges/Range-mutations-replaceChild.html",
+    "reference_census": {
+      "tests": 60,
+      "counts": {
+        "0": 60
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.55
+  },
+  {
+    "test": "dom/ranges/Range-mutations-replaceData.html",
+    "reference_census": {
+      "tests": 1146,
+      "counts": {
+        "0": 1146
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 2.83
+  },
+  {
+    "test": "dom/ranges/Range-mutations-splitText.html",
+    "reference_census": {
+      "tests": 116,
+      "counts": {
+        "0": 116
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.55
+  },
+  {
+    "test": "dom/ranges/Range-selectNode.html",
+    "reference_census": {
+      "tests": 292,
+      "counts": {
+        "0": 292
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.56
+  },
+  {
+    "test": "dom/ranges/Range-set.html",
+    "reference_census": {
+      "tests": 10920,
+      "counts": {
+        "0": 10920
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 8.0
+  },
+  {
+    "test": "dom/ranges/Range-surroundContents.html",
+    "reference_census": {
+      "tests": 1840,
+      "counts": {
+        "0": 1840
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 4.62
+  },
+  {
+    "test": "dom/traversal/NodeIterator-removal.html",
+    "reference_census": {
+      "tests": 25,
+      "counts": {
+        "0": 24,
+        "1": 1
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 1.92
+  },
+  {
+    "test": "dom/traversal/NodeIterator.html",
+    "reference_census": {
+      "tests": 766,
+      "counts": {
+        "0": 766
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 3.34
+  },
+  {
+    "test": "dom/traversal/TreeWalker.html",
+    "reference_census": {
+      "tests": 761,
+      "counts": {
+        "0": 761
+      },
+      "harness_status": 0,
+      "message": null
+    },
+    "exit_code": 0,
+    "elapsed_s": 2.58
+  }
+]

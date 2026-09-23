@@ -1,0 +1,338 @@
+use crate::host::{BindingHost, Operation as O};
+use amazing_dom::{Dom, DomError, Namespace, NodeIdx, NodeKind, NodeOrString};
+
+enum ResultValue {
+    Undefined,
+    Null,
+    Boolean(bool),
+    Number(f64),
+    String(Vec<u16>),
+    Node(NodeIdx),
+    Children(NodeIdx),
+}
+fn node_result(node: Option<NodeIdx>) -> ResultValue {
+    node.map_or(ResultValue::Null, ResultValue::Node)
+}
+fn valid(dom: &Dom, node: NodeIdx) -> Result<(), DomError> {
+    if (node.0 as usize) < dom.node_count() {
+        Ok(())
+    } else {
+        Err(DomError::InvalidNode)
+    }
+}
+fn receiver_valid(dom: &Dom, node: NodeIdx, op: O) -> Result<(), DomError> {
+    valid(dom, node)?;
+    let kind = &dom.get(node).kind;
+    let good = match op {
+        O::CreateText | O::CreateComment | O::CreateFragment => matches!(kind, NodeKind::Document),
+        O::Append | O::Prepend | O::ReplaceChildren => matches!(
+            kind,
+            NodeKind::Element { .. } | NodeKind::Document | NodeKind::DocumentFragment
+        ),
+        O::Before | O::After | O::ReplaceWith | O::Remove => {
+            !matches!(kind, NodeKind::Document | NodeKind::DocumentFragment)
+        }
+        O::Data | O::SetData | O::Length => dom.character_data(node).is_some(),
+        _ => true,
+    };
+    if good {
+        Ok(())
+    } else {
+        Err(DomError::TypeError)
+    }
+}
+fn text_content(dom: &Dom, node: NodeIdx) -> Option<Vec<u16>> {
+    match dom.get(node).kind {
+        NodeKind::Document | NodeKind::DocumentType { .. } => None,
+        NodeKind::Element { .. } | NodeKind::DocumentFragment => Some(
+            dom.tree_order(node)
+                .into_iter()
+                .filter(|id| matches!(dom.get(*id).kind, NodeKind::Text { .. }))
+                .flat_map(|id| dom.character_data_utf16(id).unwrap_or_default())
+                .collect(),
+        ),
+        _ => dom.character_data_utf16(node),
+    }
+}
+fn character_node(
+    dom: &mut Dom,
+    document: NodeIdx,
+    comment: bool,
+    data: &[u16],
+) -> Result<NodeIdx, DomError> {
+    let kind = if comment {
+        NodeKind::Comment {
+            data: String::new(),
+        }
+    } else {
+        NodeKind::Text {
+            data: String::new(),
+        }
+    };
+    let node = dom.create_node_in(document, kind)?;
+    if !data.is_empty() {
+        dom.replace_character_data(node, 0, 0, data)?;
+    }
+    Ok(node)
+}
+fn set_data(dom: &mut Dom, node: NodeIdx, data: &[u16]) -> Result<(), DomError> {
+    let length = dom
+        .character_data_utf16(node)
+        .ok_or(DomError::TypeError)?
+        .len();
+    dom.replace_character_data(node, 0, length, data)
+}
+fn required_node<H: BindingHost>(
+    host: &mut H,
+    value: Option<&H::Value>,
+) -> Result<NodeIdx, H::Error> {
+    value
+        .and_then(|v| host.node_brand(v))
+        .ok_or_else(|| host.type_error("Expected a Node"))
+}
+fn nullable_node<H: BindingHost>(
+    host: &mut H,
+    value: &H::Value,
+) -> Result<Option<NodeIdx>, H::Error> {
+    if host.is_nullish(value) {
+        Ok(None)
+    } else {
+        required_node(host, Some(value)).map(Some)
+    }
+}
+
+/// Invoke one installed synchronous DOM operation. WebIDL coercions run before
+/// arena mutation, in argument order, and may re-enter the runtime or throw.
+/// This entry point never drains a private job queue or drives an event loop.
+pub fn invoke<H: BindingHost>(
+    host: &mut H,
+    operation: O,
+    receiver: H::Value,
+    args: &[H::Value],
+) -> Result<H::Value, H::Error> {
+    let constructor = matches!(
+        operation,
+        O::TextConstructor
+            | O::CommentConstructor
+            | O::FragmentConstructor
+            | O::DocumentConstructor
+    );
+    let target = if constructor {
+        host.current_document()
+    } else {
+        required_node(host, Some(&receiver))?
+    };
+    if !constructor {
+        host.with_dom(|dom| receiver_valid(dom, target, operation))?;
+    }
+    let required = match operation {
+        O::CreateText | O::CreateComment | O::AppendChild | O::RemoveChild | O::Contains => 1,
+        O::InsertBefore | O::ReplaceChild => 2,
+        _ => 0,
+    };
+    if args.len() < required {
+        return Err(host.type_error("Not enough arguments"));
+    }
+    let mut values = Vec::new();
+    if matches!(
+        operation,
+        O::Append | O::Prepend | O::ReplaceChildren | O::Before | O::After | O::ReplaceWith
+    ) {
+        for value in args {
+            values.push(if let Some(node) = host.node_brand(value) {
+                NodeOrString::Node(node)
+            } else {
+                NodeOrString::Utf16(host.to_dom_string(value)?)
+            });
+        }
+    }
+    let mut data = Vec::new();
+    if matches!(
+        operation,
+        O::TextConstructor
+            | O::CommentConstructor
+            | O::CreateText
+            | O::CreateComment
+            | O::SetData
+            | O::SetNodeValue
+            | O::SetTextContent
+    ) {
+        let value = args.first().cloned().unwrap_or_else(|| host.undefined());
+        let default_empty = matches!(operation, O::TextConstructor | O::CommentConstructor)
+            && host.is_undefined(&value);
+        let nullable =
+            matches!(operation, O::SetNodeValue | O::SetTextContent) && host.is_nullish(&value);
+        if !default_empty && !nullable {
+            data = host.to_dom_string(&value)?;
+        }
+    }
+    let argument_node = if matches!(
+        operation,
+        O::AppendChild | O::InsertBefore | O::ReplaceChild | O::RemoveChild
+    ) {
+        Some(required_node(host, args.first())?)
+    } else if operation == O::Contains {
+        nullable_node(host, &args[0])?
+    } else {
+        None
+    };
+    let reference = if operation == O::InsertBefore {
+        nullable_node(host, &args[1])?
+    } else if operation == O::ReplaceChild {
+        Some(required_node(host, args.get(1))?)
+    } else {
+        None
+    };
+    let deep = operation == O::CloneNode && args.first().is_some_and(|v| host.to_boolean(v));
+    let html = if operation == O::NodeName {
+        let document = host.with_dom(|dom| Ok(dom.owner_document(target).unwrap_or(target)))?;
+        host.is_html_document(document)
+    } else {
+        false
+    };
+    let result = host.with_dom(|dom| {
+        use ResultValue as R;
+        let result = match operation {
+            O::DocumentConstructor => R::Node(dom.create_document()),
+            O::TextConstructor | O::CommentConstructor | O::CreateText | O::CreateComment => {
+                R::Node(character_node(
+                    dom,
+                    target,
+                    matches!(operation, O::CommentConstructor | O::CreateComment),
+                    &data,
+                )?)
+            }
+            O::FragmentConstructor | O::CreateFragment => {
+                R::Node(dom.create_document_fragment(target)?)
+            }
+            O::Append => {
+                dom.append_nodes(target, &values)?;
+                R::Undefined
+            }
+            O::Prepend => {
+                dom.prepend_nodes(target, &values)?;
+                R::Undefined
+            }
+            O::ReplaceChildren => {
+                dom.replace_children(target, &values)?;
+                R::Undefined
+            }
+            O::Before => {
+                dom.before_nodes(target, &values)?;
+                R::Undefined
+            }
+            O::After => {
+                dom.after_nodes(target, &values)?;
+                R::Undefined
+            }
+            O::ReplaceWith => {
+                dom.replace_with(target, &values)?;
+                R::Undefined
+            }
+            O::Remove => {
+                dom.remove(target)?;
+                R::Undefined
+            }
+            O::AppendChild | O::InsertBefore => {
+                R::Node(dom.pre_insert(argument_node.unwrap(), target, reference)?)
+            }
+            O::RemoveChild => R::Node(dom.pre_remove(argument_node.unwrap(), target)?),
+            O::ReplaceChild => {
+                R::Node(dom.replace(reference.unwrap(), argument_node.unwrap(), target)?)
+            }
+            O::CloneNode => R::Node(dom.clone_node(target, deep)?),
+            O::NodeType => R::Number(match dom.get(target).kind {
+                NodeKind::Element { .. } => 1.,
+                NodeKind::Text { .. } => 3.,
+                NodeKind::ProcessingInstruction { .. } => 7.,
+                NodeKind::Comment { .. } => 8.,
+                NodeKind::Document => 9.,
+                NodeKind::DocumentType { .. } => 10.,
+                NodeKind::DocumentFragment => 11.,
+            }),
+            O::NodeName => {
+                let name = match &dom.get(target).kind {
+                    NodeKind::Element { namespace, .. } => {
+                        let name = dom.qualified_name(target).unwrap();
+                        if html && *namespace == Namespace::Html {
+                            name.to_ascii_uppercase()
+                        } else {
+                            name
+                        }
+                    }
+                    NodeKind::Text { .. } => "#text".into(),
+                    NodeKind::Comment { .. } => "#comment".into(),
+                    NodeKind::Document => "#document".into(),
+                    NodeKind::DocumentFragment => "#document-fragment".into(),
+                    NodeKind::DocumentType { name, .. } => name.clone(),
+                    NodeKind::ProcessingInstruction { target, .. } => target.clone(),
+                };
+                R::String(name.encode_utf16().collect())
+            }
+            O::NodeValue => dom.character_data_utf16(target).map_or(R::Null, R::String),
+            O::TextContent => text_content(dom, target).map_or(R::Null, R::String),
+            O::SetNodeValue => {
+                if dom.character_data(target).is_some() {
+                    set_data(dom, target, &data)?;
+                }
+                R::Undefined
+            }
+            O::SetTextContent => {
+                match dom.get(target).kind {
+                    NodeKind::Document | NodeKind::DocumentType { .. } => (),
+                    NodeKind::Element { .. } | NodeKind::DocumentFragment => {
+                        let node = if data.is_empty() {
+                            None
+                        } else {
+                            Some(character_node(
+                                dom,
+                                dom.owner_document(target).unwrap(),
+                                false,
+                                &data,
+                            )?)
+                        };
+                        dom.replace_all(target, node)?;
+                    }
+                    _ => set_data(dom, target, &data)?,
+                }
+                R::Undefined
+            }
+            O::ParentNode => node_result(dom.get(target).parent),
+            O::ParentElement => node_result(
+                dom.get(target)
+                    .parent
+                    .filter(|p| matches!(dom.get(*p).kind, NodeKind::Element { .. })),
+            ),
+            O::OwnerDocument => node_result(dom.owner_document(target)),
+            O::FirstChild => node_result(dom.get(target).first_child),
+            O::LastChild => node_result(dom.get(target).last_child),
+            O::PreviousSibling => node_result(dom.get(target).prev_sibling),
+            O::NextSibling => node_result(dom.get(target).next_sibling),
+            O::ChildNodes => R::Children(target),
+            O::HasChildNodes => R::Boolean(dom.get(target).first_child.is_some()),
+            O::IsConnected => R::Boolean(dom.is_connected(target)),
+            O::Contains => {
+                if let Some(node) = argument_node {
+                    valid(dom, node)?;
+                }
+                R::Boolean(dom.contains(target, argument_node))
+            }
+            O::Data => R::String(dom.character_data_utf16(target).unwrap()),
+            O::SetData => {
+                set_data(dom, target, &data)?;
+                R::Undefined
+            }
+            O::Length => R::Number(dom.character_data_utf16(target).unwrap().len() as f64),
+        };
+        Ok(result)
+    })?;
+    Ok(match result {
+        ResultValue::Undefined => host.undefined(),
+        ResultValue::Null => host.null(),
+        ResultValue::Boolean(v) => host.boolean(v),
+        ResultValue::Number(v) => host.number(v),
+        ResultValue::String(v) => host.string(&v),
+        ResultValue::Node(v) => host.wrap_node(v)?,
+        ResultValue::Children(v) => host.child_nodes(v)?,
+    })
+}

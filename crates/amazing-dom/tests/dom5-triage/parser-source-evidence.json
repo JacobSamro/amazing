@@ -1,0 +1,297 @@
+[
+  {
+    "test": "dom/events/Event-dispatch-single-activation-behavior.html",
+    "error": "inline script: SyntaxError: 100:15: expected `;`, found keyword `new`",
+    "source_lines": [
+      "        await new Promise(r => {"
+    ]
+  },
+  {
+    "test": "dom/events/preventDefault-during-activation-behavior.html",
+    "error": "inline script: SyntaxError: 34:9: expected `;`, found identifier `click_promise`",
+    "source_lines": [
+      "  await click_promise;"
+    ]
+  },
+  {
+    "test": "dom/events/scrolling/save-iframe-scroll-offset-when-display-none.html",
+    "error": "scroll_support.js: SyntaxError: 79:17: expected `;`, found identifier `waitForDelayWithoutScrollEvent`",
+    "source_lines": [
+      "          await waitForDelayWithoutScrollEvent(eventTarget);"
+    ]
+  },
+  {
+    "test": "dom/events/scrolling/scroll-event-fired-to-element.html",
+    "error": "scroll_support.js: SyntaxError: 79:17: expected `;`, found identifier `waitForDelayWithoutScrollEvent`",
+    "source_lines": [
+      "          await waitForDelayWithoutScrollEvent(eventTarget);"
+    ]
+  },
+  {
+    "test": "dom/events/scrolling/scroll-event-fired-to-iframe.html",
+    "error": "scroll_support.js: SyntaxError: 79:17: expected `;`, found identifier `waitForDelayWithoutScrollEvent`",
+    "source_lines": [
+      "          await waitForDelayWithoutScrollEvent(eventTarget);"
+    ]
+  },
+  {
+    "test": "dom/events/scrolling/scrollend-event-fired-after-instant-scroll-in-microtask.html",
+    "error": "scroll_support.js: SyntaxError: 79:17: expected `;`, found identifier `waitForDelayWithoutScrollEvent`",
+    "source_lines": [
+      "          await waitForDelayWithoutScrollEvent(eventTarget);"
+    ]
+  },
+  {
+    "test": "dom/events/scrolling/scrollend-fires-to-text-input.html",
+    "error": "inline script: SyntaxError: 22:15: expected `;`, found identifier `scrollend_promise`",
+    "source_lines": [
+      "        await scrollend_promise;"
+    ]
+  },
+  {
+    "test": "dom/events/scrolling/scrollend-with-snap-on-fractional-offset.html",
+    "error": "scroll_support.js: SyntaxError: 79:17: expected `;`, found identifier `waitForDelayWithoutScrollEvent`",
+    "source_lines": [
+      "          await waitForDelayWithoutScrollEvent(eventTarget);"
+    ]
+  },
+  {
+    "test": "dom/events/webkit-animation-end-event.html",
+    "error": "resources/prefixed-animation-event-tests.js: SyntaxError: 141:11: expected `;`, found identifier `waitForEventThenAnimationFrame`",
+    "source_lines": [
+      "    await waitForEventThenAnimationFrame(t, unprefixedType);"
+    ]
+  },
+  {
+    "test": "dom/events/webkit-animation-iteration-event.html",
+    "error": "resources/prefixed-animation-event-tests.js: SyntaxError: 141:11: expected `;`, found identifier `waitForEventThenAnimationFrame`",
+    "source_lines": [
+      "    await waitForEventThenAnimationFrame(t, unprefixedType);"
+    ]
+  },
+  {
+    "test": "dom/events/webkit-animation-start-event.html",
+    "error": "resources/prefixed-animation-event-tests.js: SyntaxError: 141:11: expected `;`, found identifier `waitForEventThenAnimationFrame`",
+    "source_lines": [
+      "    await waitForEventThenAnimationFrame(t, unprefixedType);"
+    ]
+  },
+  {
+    "test": "dom/events/webkit-transition-end-event.html",
+    "error": "resources/prefixed-animation-event-tests.js: SyntaxError: 141:11: expected `;`, found identifier `waitForEventThenAnimationFrame`",
+    "source_lines": [
+      "    await waitForEventThenAnimationFrame(t, unprefixedType);"
+    ]
+  },
+  {
+    "test": "dom/historical-mutation-events.html",
+    "error": "inline script: SyntaxError: 56:11: expected `;`, found keyword `new`",
+    "source_lines": [
+      "    await new Promise(resolve=>t.step_timeout(resolve,0));"
+    ]
+  },
+  {
+    "test": "dom/nodes/CharacterData-surrogates.html",
+    "error": "inline script: SyntaxError: 9:52: invalid Unicode code point in escape",
+    "source_lines": [
+      "    assert_equals(node.substringData(1, 8), \"\\uDF20 test \\uD83C\")"
+    ]
+  },
+  {
+    "test": "dom/nodes/MutationObserver-textContent.html",
+    "error": "inline script: SyntaxError: 17:9: expected `;`, found identifier `Promise`",
+    "source_lines": [
+      "  await Promise.resolve(); // Run microtasks"
+    ]
+  },
+  {
+    "test": "dom/nodes/ParentNode-querySelector-escapes.html",
+    "error": "inline script: SyntaxError: 45:25: invalid Unicode code point in escape",
+    "source_lines": [
+      "testNeverMatched(\"\\ud83dsurrogateFirst\", \"#\\\\d83d surrogateFirst\");"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/continue-css-animation-left.html",
+    "error": "inline script: SyntaxError: 5:13: expected `;`, found keyword `new`",
+    "source_lines": [
+      "      await new Promise(resolve => addEventListener(\"animationstart\", () => {"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/continue-css-animation-transform.html",
+    "error": "inline script: SyntaxError: 5:13: expected `;`, found keyword `new`",
+    "source_lines": [
+      "      await new Promise(resolve => addEventListener(\"animationstart\", () => {"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/continue-css-transition-left-pseudo.html",
+    "error": "inline script: SyntaxError: 6:13: expected `;`, found keyword `new`",
+    "source_lines": [
+      "      await new Promise(resolve => item.addEventListener(\"transitionstart\", resolve));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/continue-css-transition-left.html",
+    "error": "inline script: SyntaxError: 6:13: expected `;`, found keyword `new`",
+    "source_lines": [
+      "      await new Promise(resolve => item.addEventListener(\"transitionstart\", resolve));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/continue-css-transition-transform-pseudo.html",
+    "error": "inline script: SyntaxError: 6:13: expected `;`, found keyword `new`",
+    "source_lines": [
+      "      await new Promise(resolve => item.addEventListener(\"transitionstart\", resolve));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/continue-css-transition-transform.html",
+    "error": "inline script: SyntaxError: 6:13: expected `;`, found keyword `new`",
+    "source_lines": [
+      "      await new Promise(resolve => item.addEventListener(\"transitionstart\", resolve));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/css-animation-commit-styles.html",
+    "error": "inline script: SyntaxError: 4:13: expected `;`, found keyword `new`",
+    "source_lines": [
+      "      await new Promise(resolve => item.addEventListener(\"animationstart\", resolve));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/css-transition-cross-document.html",
+    "error": "inline script: SyntaxError: 3:13: expected `;`, found identifier `iframeLoadPromise`",
+    "source_lines": [
+      "    let iframeLoadPromise = new Promise((r) => { iframeLoadResolve = r; });",
+      "      await iframeLoadPromise;"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/css-transition-cross-shadow.html",
+    "error": "inline script: SyntaxError: 6:13: expected `;`, found keyword `new`",
+    "source_lines": [
+      "      await new Promise(resolve => item.addEventListener(\"transitionstart\", resolve));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/css-transition-to-disconnected-document.html",
+    "error": "inline script: SyntaxError: 6:13: expected `;`, found keyword `new`",
+    "source_lines": [
+      "      await new Promise(resolve => item.addEventListener(\"transitionstart\", resolve));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/css-transition-trigger.html",
+    "error": "inline script: SyntaxError: 6:13: expected `;`, found keyword `new`",
+    "source_lines": [
+      "      await new Promise(resolve => item.addEventListener(\"transitionstart\", resolve));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/custom-element-move-reactions.html",
+    "error": "inline script: SyntaxError: 18:15: expected `;`, found identifier `Promise`",
+    "source_lines": [
+      "        await Promise.resolve();"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/fire-focusin-focusout.html",
+    "error": "inline script: SyntaxError: 67:11: expected `;`, found keyword `new`",
+    "source_lines": [
+      "    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/focus-preserve.html",
+    "error": "inline script: SyntaxError: 35:11: expected `;`, found identifier `eventually_blurred`",
+    "source_lines": [
+      "    await eventually_blurred(t, button);"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/focus-within.html",
+    "error": "inline script: SyntaxError: 45:11: expected `;`, found keyword `new`",
+    "source_lines": [
+      "    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/moveBefore-shadow-inside.html",
+    "error": "inline script: SyntaxError: 5:15: expected `;`, found keyword `new`",
+    "source_lines": [
+      "        await new Promise(resolve => requestAnimationFrame(() => resolve()));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/mutation-observer.html",
+    "error": "inline script: SyntaxError: 13:9: expected `;`, found keyword `new`",
+    "source_lines": [
+      "  await new Promise(resolve => queueMicrotask(resolve));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/popover-preserve.html",
+    "error": "inline script: SyntaxError: 5:11: expected `;`, found keyword `new`",
+    "source_lines": [
+      "    await new Promise(resolve => requestAnimationFrame(() => resolve()));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/relevant-mutations.html",
+    "error": "inline script: SyntaxError: 20:9: expected `;`, found keyword `new`",
+    "source_lines": [
+      "  await new Promise(resolve => img.addEventListener('load', e => resolve(), {once: true}));"
+    ]
+  },
+  {
+    "test": "dom/nodes/moveBefore/slotchange-events.html",
+    "error": "inline script: SyntaxError: 13:1: unexpected `)`",
+    "source_lines": [
+      ");"
+    ]
+  },
+  {
+    "test": "dom/nodes/processing-instruction-attributes.html",
+    "error": "inline script: SyntaxError: 18:7: unexpected `)`",
+    "source_lines": [
+      "      ).firstChild,"
+    ]
+  },
+  {
+    "test": "dom/ranges/Range-deleteContents-around-shadow.html",
+    "error": "inline script: SyntaxError: 27:7: unexpected `)`",
+    "source_lines": [
+      "      );"
+    ]
+  },
+  {
+    "test": "dom/ranges/Range-deleteContents-around-shadow.tentative.html",
+    "error": "inline script: SyntaxError: 29:7: unexpected `)`",
+    "source_lines": [
+      "      );"
+    ]
+  },
+  {
+    "test": "dom/ranges/Range-extractContents-around-shadow.html",
+    "error": "inline script: SyntaxError: 33:7: unexpected `)`",
+    "source_lines": [
+      "      );"
+    ]
+  },
+  {
+    "test": "dom/ranges/Range-extractContents-around-shadow.tentative.html",
+    "error": "inline script: SyntaxError: 35:7: unexpected `)`",
+    "source_lines": [
+      "      );"
+    ]
+  },
+  {
+    "test": "dom/ranges/tentative/OpaqueRange-geometry-complexity-and-visibility.html",
+    "error": "inline script: SyntaxError: 54:26: invalid Unicode code point in escape",
+    "source_lines": [
+      "    const value = '\\ud83c\\udf20A\\ud83c\\udf20'; // \ud83c\udf20A\ud83c\udf20 in UTF-16."
+    ]
+  }
+]

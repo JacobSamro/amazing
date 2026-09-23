@@ -1,0 +1,1903 @@
+{
+  "kind": "NON-CONFORMANCE member call-site trace",
+  "selected": 46,
+  "exe_sha256": "9e6ddc78f3c3e75d849bb8e31b80f754a0dfaaa05ed6769323ede70499a96e4f",
+  "instrumentation": "Identifier member-call keys evaluate a native trace before looking up the original method, preserving receiver Reference/this. Strings/templates/comments are skipped; this is diagnostic transformation, never a WPT result.",
+  "results": [
+    {
+      "test": "dom/events/Event-constants.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "trace_count": 0,
+      "last_calls": [],
+      "original_setup_errors": [
+        "ReferenceError: Event is not defined"
+      ],
+      "diagnostic_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": []
+    },
+    {
+      "test": "dom/events/Event-propagation.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/events/Event-propagation.html:21 document.createEvent"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/events/Event-propagation.html:21 document.createEvent"
+      ]
+    },
+    {
+      "test": "dom/events/EventListener-invoke-legacy.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 8,
+      "last_calls": [
+        "dom/events/EventListener-invoke-legacy.html:4 document.createElement",
+        "dom/events/EventListener-invoke-legacy.html:5 document.body.appendChild",
+        "dom/events/EventListener-invoke-legacy.html:6 t.add_cleanup",
+        "dom/events/EventListener-invoke-legacy.html:15 elem.addEventListener",
+        "dom/events/EventListener-invoke-legacy.html:16 t.unreached_func",
+        "dom/events/EventListener-invoke-legacy.html:17 elem.addEventListener",
+        "dom/events/EventListener-invoke-legacy.html:17 t.step_func",
+        "dom/events/EventListener-invoke-legacy.html:7 document.body.removeChild"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/events/EventListener-invoke-legacy.html:4 document.createElement",
+        "dom/events/EventListener-invoke-legacy.html:5 document.body.appendChild",
+        "dom/events/EventListener-invoke-legacy.html:6 t.add_cleanup",
+        "dom/events/EventListener-invoke-legacy.html:15 elem.addEventListener",
+        "dom/events/EventListener-invoke-legacy.html:16 t.unreached_func",
+        "dom/events/EventListener-invoke-legacy.html:17 elem.addEventListener",
+        "dom/events/EventListener-invoke-legacy.html:17 t.step_func",
+        "dom/events/EventListener-invoke-legacy.html:7 document.body.removeChild"
+      ]
+    },
+    {
+      "test": "dom/lists/DOMTokenList-coverage-for-attributes.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 4,
+      "last_calls": [
+        "dom/lists/DOMTokenList-coverage-for-attributes.html:32 pairs.forEach",
+        "dom/lists/DOMTokenList-coverage-for-attributes.html:33 namespaces.forEach",
+        "dom/lists/DOMTokenList-coverage-for-attributes.html:34 elements.forEach",
+        "dom/lists/DOMTokenList-coverage-for-attributes.html:35 document.createElementNS"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/lists/DOMTokenList-coverage-for-attributes.html:32 pairs.forEach",
+        "dom/lists/DOMTokenList-coverage-for-attributes.html:33 namespaces.forEach",
+        "dom/lists/DOMTokenList-coverage-for-attributes.html:34 elements.forEach",
+        "dom/lists/DOMTokenList-coverage-for-attributes.html:35 document.createElementNS"
+      ]
+    },
+    {
+      "test": "dom/nodes/CharacterData-remove.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "trace_count": 3,
+      "last_calls": [
+        "dom/nodes/CharacterData-remove.html:6 document.createTextNode",
+        "dom/nodes/CharacterData-remove.html:7 document.createElement",
+        "dom/nodes/CharacterData-remove.html:8 document.createComment"
+      ],
+      "original_setup_errors": [
+        "TypeError: value is not callable"
+      ],
+      "diagnostic_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/CharacterData-remove.html:6 document.createTextNode",
+        "dom/nodes/CharacterData-remove.html:7 document.createElement",
+        "dom/nodes/CharacterData-remove.html:8 document.createComment"
+      ]
+    },
+    {
+      "test": "dom/nodes/ChildNode-after.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/ChildNode-after.html:155 document.createComment"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/ChildNode-after.html:155 document.createComment"
+      ]
+    },
+    {
+      "test": "dom/nodes/ChildNode-before.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/ChildNode-before.html:155 document.createComment"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/ChildNode-before.html:155 document.createComment"
+      ]
+    },
+    {
+      "test": "dom/nodes/ChildNode-replaceWith.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/ChildNode-replaceWith.html:99 document.createComment"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/ChildNode-replaceWith.html:99 document.createComment"
+      ]
+    },
+    {
+      "test": "dom/nodes/Document-characterSet-normalization-1.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 4,
+      "last_calls": [
+        "dom/nodes/characterset-helper.js:3 Object.keys",
+        "dom/nodes/characterset-helper.js:3 (expression).forEach",
+        "dom/nodes/characterset-helper.js:5 encodingMap[name].map",
+        "dom/nodes/characterset-helper.js:5 s.toUpperCase"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/characterset-helper.js:3 Object.keys",
+        "dom/nodes/characterset-helper.js:3 (expression).forEach",
+        "dom/nodes/characterset-helper.js:5 encodingMap[name].map",
+        "dom/nodes/characterset-helper.js:5 s.toUpperCase"
+      ]
+    },
+    {
+      "test": "dom/nodes/Document-characterSet-normalization-2.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 4,
+      "last_calls": [
+        "dom/nodes/characterset-helper.js:3 Object.keys",
+        "dom/nodes/characterset-helper.js:3 (expression).forEach",
+        "dom/nodes/characterset-helper.js:5 encodingMap[name].map",
+        "dom/nodes/characterset-helper.js:5 s.toUpperCase"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/characterset-helper.js:3 Object.keys",
+        "dom/nodes/characterset-helper.js:3 (expression).forEach",
+        "dom/nodes/characterset-helper.js:5 encodingMap[name].map",
+        "dom/nodes/characterset-helper.js:5 s.toUpperCase"
+      ]
+    },
+    {
+      "test": "dom/nodes/Document-createAttribute.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/Document-createAttribute.html:4 document.implementation.createDocument"
+      ],
+      "original_setup_errors": [
+        "TypeError: value is not callable"
+      ],
+      "diagnostic_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/Document-createAttribute.html:4 document.implementation.createDocument"
+      ]
+    },
+    {
+      "test": "dom/nodes/Document-createCDATASection.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/Document-createCDATASection.html:6 document.createCDATASection"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/Document-createCDATASection.html:6 document.createCDATASection"
+      ]
+    },
+    {
+      "test": "dom/nodes/Document-getElementById.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 8,
+      "last_calls": [
+        "dom/nodes/Document-getElementById.html:2 document.getElementsByTagName",
+        "dom/nodes/Document-getElementById.html:5 document.getElementById",
+        "dom/nodes/Document-getElementById.html:9 document.createElement",
+        "dom/nodes/Document-getElementById.html:10 element.setAttribute",
+        "dom/nodes/Document-getElementById.html:11 document.body.appendChild",
+        "dom/nodes/Document-getElementById.html:12 this.add_cleanup",
+        "dom/nodes/Document-getElementById.html:13 document.getElementById",
+        "dom/nodes/Document-getElementById.html:12 document.body.removeChild"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 1,
+      "original_results": [
+        {
+          "name": "Calling document.getElementById with an empty string argument.",
+          "status": 0,
+          "message": null
+        }
+      ],
+      "trace": [
+        "dom/nodes/Document-getElementById.html:2 document.getElementsByTagName",
+        "dom/nodes/Document-getElementById.html:5 document.getElementById",
+        "dom/nodes/Document-getElementById.html:9 document.createElement",
+        "dom/nodes/Document-getElementById.html:10 element.setAttribute",
+        "dom/nodes/Document-getElementById.html:11 document.body.appendChild",
+        "dom/nodes/Document-getElementById.html:12 this.add_cleanup",
+        "dom/nodes/Document-getElementById.html:13 document.getElementById",
+        "dom/nodes/Document-getElementById.html:12 document.body.removeChild"
+      ]
+    },
+    {
+      "test": "dom/nodes/Document-getElementsByClassName.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 6,
+      "last_calls": [
+        "dom/nodes/Document-getElementsByClassName.html:3 document.createElement",
+        "dom/nodes/Document-getElementsByClassName.html:4 document.createElement",
+        "dom/nodes/Document-getElementsByClassName.html:6 this.add_cleanup",
+        "dom/nodes/Document-getElementsByClassName.html:7 document.body.appendChild",
+        "dom/nodes/Document-getElementsByClassName.html:9 document.getElementsByClassName",
+        "dom/nodes/Document-getElementsByClassName.html:6 document.body.removeChild"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/Document-getElementsByClassName.html:3 document.createElement",
+        "dom/nodes/Document-getElementsByClassName.html:4 document.createElement",
+        "dom/nodes/Document-getElementsByClassName.html:6 this.add_cleanup",
+        "dom/nodes/Document-getElementsByClassName.html:7 document.body.appendChild",
+        "dom/nodes/Document-getElementsByClassName.html:9 document.getElementsByClassName",
+        "dom/nodes/Document-getElementsByClassName.html:6 document.body.removeChild"
+      ]
+    },
+    {
+      "test": "dom/nodes/Document-getElementsByTagName.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 27,
+      "last_calls": [
+        "dom/nodes/Document-Element-getElementsByTagName.js:114 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:114 document.createElementNS",
+        "dom/nodes/Document-Element-getElementsByTagName.js:121 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:121 document.createElementNS",
+        "dom/nodes/Document-Element-getElementsByTagName.js:128 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:128 document.createElementNS",
+        "dom/nodes/Document-Element-getElementsByTagName.js:137 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:137 document.createElementNS",
+        "dom/nodes/Document-Element-getElementsByTagName.js:146 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:146 document.createElement",
+        "dom/nodes/Document-Element-getElementsByTagName.js:147 this.add_cleanup",
+        "dom/nodes/Document-Element-getElementsByTagName.js:147 element.removeChild"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 12,
+      "original_results": [
+        {
+          "name": "Interfaces",
+          "status": 1,
+          "message": "NodeList is not defined"
+        },
+        {
+          "name": "Caching is allowed",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "Shouldn't be able to set unsigned properties on a HTMLCollection (non-strict mode)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected (undefined) ${expected} but got (string) ${actual}"
+        },
+        {
+          "name": "Shouldn't be able to set unsigned properties on a HTMLCollection (strict mode)",
+          "status": 1,
+          "message": "${function_name}: ${description}${func} did not throw"
+        },
+        {
+          "name": "Should be able to set expando shadowing a proto prop (item)",
+          "status": 1,
+          "message": "HTMLCollection is not defined"
+        },
+        {
+          "name": "Should be able to set expando shadowing a proto prop (namedItem)",
+          "status": 1,
+          "message": "HTMLCollection is not defined"
+        },
+        {
+          "name": "hasOwnProperty, getOwnPropertyDescriptor, getOwnPropertyNames",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "HTML element with uppercase tagName never matches in HTML Documents",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element in non-HTML namespace, no prefix, lowercase name",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element in non-HTML namespace, no prefix, uppercase name",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element in non-HTML namespace, prefix, lowercase name",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element in non-HTML namespace, prefix, uppercase name",
+          "status": 1,
+          "message": "value is not callable"
+        }
+      ],
+      "trace": [
+        "dom/nodes/Document-Element-getElementsByTagName.js:4 context.getElementsByTagName",
+        "dom/nodes/Document-Element-getElementsByTagName.js:11 context.getElementsByTagName",
+        "dom/nodes/Document-Element-getElementsByTagName.js:12 context.getElementsByTagName",
+        "dom/nodes/Document-Element-getElementsByTagName.js:18 context.getElementsByTagName",
+        "dom/nodes/Document-Element-getElementsByTagName.js:25 context.getElementsByTagName",
+        "dom/nodes/Document-Element-getElementsByTagName.js:35 context.getElementsByTagName",
+        "dom/nodes/Document-Element-getElementsByTagName.js:44 context.getElementsByTagName",
+        "dom/nodes/Document-Element-getElementsByTagName.js:53 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:53 document.createElement",
+        "dom/nodes/Document-Element-getElementsByTagName.js:55 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:55 document.createElement",
+        "dom/nodes/Document-Element-getElementsByTagName.js:56 t2.setAttribute",
+        "dom/nodes/Document-Element-getElementsByTagName.js:57 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:57 document.createElementNS",
+        "dom/nodes/Document-Element-getElementsByTagName.js:104 document.createElementNS",
+        "dom/nodes/Document-Element-getElementsByTagName.js:114 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:114 document.createElementNS",
+        "dom/nodes/Document-Element-getElementsByTagName.js:121 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:121 document.createElementNS",
+        "dom/nodes/Document-Element-getElementsByTagName.js:128 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:128 document.createElementNS",
+        "dom/nodes/Document-Element-getElementsByTagName.js:137 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:137 document.createElementNS",
+        "dom/nodes/Document-Element-getElementsByTagName.js:146 element.appendChild",
+        "dom/nodes/Document-Element-getElementsByTagName.js:146 document.createElement",
+        "dom/nodes/Document-Element-getElementsByTagName.js:147 this.add_cleanup",
+        "dom/nodes/Document-Element-getElementsByTagName.js:147 element.removeChild"
+      ]
+    },
+    {
+      "test": "dom/nodes/DocumentFragment-querySelectorAll-after-modification.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/DocumentFragment-querySelectorAll-after-modification.html:6 document.createDocumentFragment"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/DocumentFragment-querySelectorAll-after-modification.html:6 document.createDocumentFragment"
+      ]
+    },
+    {
+      "test": "dom/nodes/DocumentType-remove.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/DocumentType-remove.html:4 document.implementation.createDocumentType"
+      ],
+      "original_setup_errors": [
+        "TypeError: value is not callable"
+      ],
+      "diagnostic_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/DocumentType-remove.html:4 document.implementation.createDocumentType"
+      ]
+    },
+    {
+      "test": "dom/nodes/Element-children.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "trace_count": 2,
+      "last_calls": [
+        "dom/nodes/Element-children.html:4 document.getElementById",
+        "dom/nodes/Element-children.html:5 document.createElementNS"
+      ],
+      "original_setup_errors": [
+        "TypeError: value is not callable"
+      ],
+      "diagnostic_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/Element-children.html:4 document.getElementById",
+        "dom/nodes/Element-children.html:5 document.createElementNS"
+      ]
+    },
+    {
+      "test": "dom/nodes/Element-classlist.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 39,
+      "last_calls": [
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:185 Array.isArray",
+        "dom/nodes/Element-classlist.html:186 (expression).fill"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 24,
+      "original_results": [
+        {
+          "name": "Assigning to classList (HTML node)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": ".supports() must throw TypeError (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}${constructor} is not an Error subtype"
+        },
+        {
+          "name": "classList.length when removed (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"   \\t  \\f\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"a\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"a A\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"\\r\\na\\t\\f\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"a a\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"a a a a a a\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"a a b b\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"a A B b\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"a b c c b a a b c c\" (HTML node)",
+          "status": 0,
+          "message": null
+        },
+        {
+          "name": "classList.length when set to \"   a  a b\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.length when set to \"a\\tb\\nc\\fd\\re f\" (HTML node)",
+          "status": 1,
+          "message": "${function_name}: ${description}expected ${expected} but got ${actual}"
+        },
+        {
+          "name": "classList.toString() when removed (HTML node)",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "classList.toString() when set to \"foo\" (HTML node)",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "classList.toString() when set to \"   a  a b\" (HTML node)",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "classList.item() when set to null (HTML node)",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "classList.item() when set to \"a\" (HTML node)",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "classList.item() when set to \"aa AA aa\" (HTML node)",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "classList.item() when set to \"a b\" (HTML node)",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "classList.item() when set to \"   a  a b\" (HTML node)",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "classList.item() when set to \"\\t\\n\\f\\r a\\t\\n\\f\\r b\\t\\n\\f\\r \" (HTML node)",
+          "status": 1,
+          "message": "value is not callable"
+        }
+      ],
+      "trace": [
+        "dom/nodes/Element-classlist.html:451 document.getElementById",
+        "dom/nodes/Element-classlist.html:453 document.createElement",
+        "dom/nodes/Element-classlist.html:454 content.appendChild",
+        "dom/nodes/Element-classlist.html:74 e.removeAttribute",
+        "dom/nodes/Element-classlist.html:82 e.removeAttribute",
+        "dom/nodes/Element-classlist.html:97 e.classList.supports",
+        "dom/nodes/Element-classlist.html:8 e.removeAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:8 e.removeAttribute",
+        "dom/nodes/Element-classlist.html:130 e.classList.toString",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:130 e.classList.toString",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:130 e.classList.toString",
+        "dom/nodes/Element-classlist.html:8 e.removeAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:10 e.setAttribute",
+        "dom/nodes/Element-classlist.html:143 e.classList.item",
+        "dom/nodes/Element-classlist.html:185 Array.isArray",
+        "dom/nodes/Element-classlist.html:186 (expression).fill"
+      ]
+    },
+    {
+      "test": "dom/nodes/Element-getElementsByClassName.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 13,
+      "last_calls": [
+        "dom/nodes/Element-getElementsByClassName.html:3 document.createElement",
+        "dom/nodes/Element-getElementsByClassName.html:5 a.appendChild",
+        "dom/nodes/Element-getElementsByClassName.html:6 a.getElementsByClassName",
+        "dom/nodes/Element-getElementsByClassName.html:13 document.getElementsByClassName",
+        "dom/nodes/Element-getElementsByClassName.html:19 document.createElement",
+        "dom/nodes/Element-getElementsByClassName.html:20 document.createElement",
+        "dom/nodes/Element-getElementsByClassName.html:21 document.createElement",
+        "dom/nodes/Element-getElementsByClassName.html:23 document.body.appendChild",
+        "dom/nodes/Element-getElementsByClassName.html:24 this.add_cleanup",
+        "dom/nodes/Element-getElementsByClassName.html:25 a.appendChild",
+        "dom/nodes/Element-getElementsByClassName.html:27 a.getElementsByClassName",
+        "dom/nodes/Element-getElementsByClassName.html:24 document.body.removeChild"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 2,
+      "original_results": [
+        {
+          "name": "getElementsByClassName should work on disconnected subtrees.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Interface should be correct.",
+          "status": 1,
+          "message": "NodeList is not defined"
+        }
+      ],
+      "trace": [
+        "dom/nodes/Element-getElementsByClassName.html:3 document.createElement",
+        "dom/nodes/Element-getElementsByClassName.html:3 document.createElement",
+        "dom/nodes/Element-getElementsByClassName.html:5 a.appendChild",
+        "dom/nodes/Element-getElementsByClassName.html:6 a.getElementsByClassName",
+        "dom/nodes/Element-getElementsByClassName.html:13 document.getElementsByClassName",
+        "dom/nodes/Element-getElementsByClassName.html:19 document.createElement",
+        "dom/nodes/Element-getElementsByClassName.html:20 document.createElement",
+        "dom/nodes/Element-getElementsByClassName.html:21 document.createElement",
+        "dom/nodes/Element-getElementsByClassName.html:23 document.body.appendChild",
+        "dom/nodes/Element-getElementsByClassName.html:24 this.add_cleanup",
+        "dom/nodes/Element-getElementsByClassName.html:25 a.appendChild",
+        "dom/nodes/Element-getElementsByClassName.html:27 a.getElementsByClassName",
+        "dom/nodes/Element-getElementsByClassName.html:24 document.body.removeChild"
+      ]
+    },
+    {
+      "test": "dom/nodes/Element-getElementsByTagName.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "trace_count": 21,
+      "last_calls": [
+        "dom/nodes/Element-getElementsByTagName.html:9 p.appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:9 document.createElement",
+        "dom/nodes/Element-getElementsByTagName.html:10 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:10 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagName.html:11 p.appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:11 document.createElement",
+        "dom/nodes/Element-getElementsByTagName.html:12 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:12 document.createElement",
+        "dom/nodes/Element-getElementsByTagName.html:13 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:13 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagName.html:14 element.appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:14 document.createComment"
+      ],
+      "original_setup_errors": [
+        "TypeError: value is not callable"
+      ],
+      "diagnostic_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/Element-getElementsByTagName.html:4 document.createElement",
+        "dom/nodes/Element-getElementsByTagName.html:5 element.appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:5 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagName.html:6 element.appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:6 document.createElement",
+        "dom/nodes/Element-getElementsByTagName.html:7 p.appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:7 document.createElement",
+        "dom/nodes/Element-getElementsByTagName.html:8 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:8 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagName.html:9 p.appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:9 document.createElement",
+        "dom/nodes/Element-getElementsByTagName.html:10 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:10 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagName.html:11 p.appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:11 document.createElement",
+        "dom/nodes/Element-getElementsByTagName.html:12 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:12 document.createElement",
+        "dom/nodes/Element-getElementsByTagName.html:13 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:13 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagName.html:14 element.appendChild",
+        "dom/nodes/Element-getElementsByTagName.html:14 document.createComment"
+      ]
+    },
+    {
+      "test": "dom/nodes/Element-getElementsByTagNameNS.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "trace_count": 21,
+      "last_calls": [
+        "dom/nodes/Element-getElementsByTagNameNS.html:9 p.appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:9 document.createElement",
+        "dom/nodes/Element-getElementsByTagNameNS.html:10 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:10 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagNameNS.html:11 p.appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:11 document.createElement",
+        "dom/nodes/Element-getElementsByTagNameNS.html:12 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:12 document.createElement",
+        "dom/nodes/Element-getElementsByTagNameNS.html:13 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:13 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagNameNS.html:14 element.appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:14 document.createComment"
+      ],
+      "original_setup_errors": [
+        "TypeError: value is not callable"
+      ],
+      "diagnostic_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/Element-getElementsByTagNameNS.html:4 document.createElement",
+        "dom/nodes/Element-getElementsByTagNameNS.html:5 element.appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:5 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagNameNS.html:6 element.appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:6 document.createElement",
+        "dom/nodes/Element-getElementsByTagNameNS.html:7 p.appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:7 document.createElement",
+        "dom/nodes/Element-getElementsByTagNameNS.html:8 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:8 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagNameNS.html:9 p.appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:9 document.createElement",
+        "dom/nodes/Element-getElementsByTagNameNS.html:10 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:10 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagNameNS.html:11 p.appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:11 document.createElement",
+        "dom/nodes/Element-getElementsByTagNameNS.html:12 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:12 document.createElement",
+        "dom/nodes/Element-getElementsByTagNameNS.html:13 (expression).appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:13 document.createTextNode",
+        "dom/nodes/Element-getElementsByTagNameNS.html:14 element.appendChild",
+        "dom/nodes/Element-getElementsByTagNameNS.html:14 document.createComment"
+      ]
+    },
+    {
+      "test": "dom/nodes/MutationObserver-attributes.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 70,
+      "last_calls": [
+        "dom/nodes/MutationObserver-attributes.html:224 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:233 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:243 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:253 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:262 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:271 document.getElementById",
+        "dom/nodes/MutationObserver-attributes.html:272 n90.setAttributeNS"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 34,
+      "original_results": [
+        {
+          "name": "attributes Element.id: update, no oldValue, mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.id: update mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.id: empty string update mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.id: same value mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.unknown: IDL attribute no mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes HTMLInputElement.type: type update mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.className: new value mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.className: empty string update mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.className: same value mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.className: same multiple values mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.add: single token addition mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.add: multiple tokens addition mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.add: syntax err/no mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.add: invalid character/no mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.add: same value mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.remove: single token removal mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.remove: multiple tokens removal mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.remove: missing token removal mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.toggle: token removal mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.toggle: token addition mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.toggle: forced token removal mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.toggle: forced missing token removal no mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.toggle: forced existing token addition no mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.classList.toggle: forced token addition mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.attributes.value: update mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.attributes.value: same id mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.setAttribute: id mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.setAttribute: same class mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.setAttribute: classname mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.removeAttribute: removal mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.removeAttribute: removal no mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "childList HTMLInputElement.removeAttribute: type removal mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.setAttributeNS: creation mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "attributes Element.setAttributeNS: prefixed attribute creation mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        }
+      ],
+      "trace": [
+        "dom/nodes/MutationObserver-attributes.html:3 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:11 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:18 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:25 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:32 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:39 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:46 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:53 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:60 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:67 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:74 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:81 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:88 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:96 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:104 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:111 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:118 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:125 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:132 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:139 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:146 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:153 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:160 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:167 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:174 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:188 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:197 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:206 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:215 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:224 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:233 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:243 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:253 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:262 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-attributes.html:271 document.getElementById",
+        "dom/nodes/MutationObserver-attributes.html:272 n90.setAttributeNS"
+      ]
+    },
+    {
+      "test": "dom/nodes/MutationObserver-childList.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 30,
+      "last_calls": [
+        "dom/nodes/MutationObserver-childList.html:62 n21.appendChild",
+        "dom/nodes/MutationObserver-childList.html:62 document.createTextNode",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:75 document.getElementById",
+        "dom/nodes/MutationObserver-childList.html:76 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:85 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:93 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:105 document.getElementById",
+        "dom/nodes/MutationObserver-childList.html:5 document.createDocumentFragment"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 10,
+      "original_results": [
+        {
+          "name": "childList Node.nodeValue: no mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "childList Node.textContent: replace content mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "childList Node.textContent: no previous content mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "childList Node.textContent: textContent no mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "childList Node.textContent: empty string mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "childList Node.normalize mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "childList Node.normalize mutations",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "childList Node.insertBefore: addition mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "childList Node.insertBefore: removal mutation",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        },
+        {
+          "name": "childList Node.insertBefore: removal and addition mutations",
+          "status": 1,
+          "message": "MutationObserver is not defined"
+        }
+      ],
+      "trace": [
+        "dom/nodes/MutationObserver-childList.html:2 document.getElementById",
+        "dom/nodes/MutationObserver-childList.html:11 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:19 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:28 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:36 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:43 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:50 document.getElementById",
+        "dom/nodes/MutationObserver-childList.html:51 n20.appendChild",
+        "dom/nodes/MutationObserver-childList.html:51 document.createTextNode",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:60 document.getElementById",
+        "dom/nodes/MutationObserver-childList.html:61 n21.appendChild",
+        "dom/nodes/MutationObserver-childList.html:61 document.createTextNode",
+        "dom/nodes/MutationObserver-childList.html:62 n21.appendChild",
+        "dom/nodes/MutationObserver-childList.html:62 document.createTextNode",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:75 document.getElementById",
+        "dom/nodes/MutationObserver-childList.html:76 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:85 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:93 document.getElementById",
+        "dom/nodes/mutationobservers.js:69 test.step",
+        "dom/nodes/MutationObserver-childList.html:105 document.getElementById",
+        "dom/nodes/MutationObserver-childList.html:5 document.createDocumentFragment"
+      ]
+    },
+    {
+      "test": "dom/nodes/Node-cloneNode-svg.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 2,
+      "last_calls": [
+        "dom/nodes/Node-cloneNode-svg.html:4 document.querySelector",
+        "dom/nodes/Node-cloneNode-svg.html:5 svg.cloneNode"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/Node-cloneNode-svg.html:4 document.querySelector",
+        "dom/nodes/Node-cloneNode-svg.html:5 svg.cloneNode"
+      ]
+    },
+    {
+      "test": "dom/nodes/Node-constants.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "trace_count": 0,
+      "last_calls": [],
+      "original_setup_errors": [
+        "ReferenceError: Node is not defined"
+      ],
+      "diagnostic_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": []
+    },
+    {
+      "test": "dom/nodes/Node-lookupNamespaceURI.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/Node-lookupNamespaceURI.html:15 document.createDocumentFragment"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/Node-lookupNamespaceURI.html:15 document.createDocumentFragment"
+      ]
+    },
+    {
+      "test": "dom/nodes/Node-textContent.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/Node-textContent.html:9 document.implementation.createDocument"
+      ],
+      "original_setup_errors": [
+        "TypeError: value is not callable"
+      ],
+      "diagnostic_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/Node-textContent.html:9 document.implementation.createDocument"
+      ]
+    },
+    {
+      "test": "dom/nodes/NodeList-static-length-getter-tampered-1.html",
+      "baseline_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "trace_count": 0,
+      "last_calls": [],
+      "original_setup_errors": [],
+      "diagnostic_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": []
+    },
+    {
+      "test": "dom/nodes/NodeList-static-length-getter-tampered-2.html",
+      "baseline_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "trace_count": 0,
+      "last_calls": [],
+      "original_setup_errors": [],
+      "diagnostic_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": []
+    },
+    {
+      "test": "dom/nodes/NodeList-static-length-getter-tampered-3.html",
+      "baseline_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "trace_count": 0,
+      "last_calls": [],
+      "original_setup_errors": [],
+      "diagnostic_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": []
+    },
+    {
+      "test": "dom/nodes/NodeList-static-length-getter-tampered-indexOf-1.html",
+      "baseline_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "trace_count": 0,
+      "last_calls": [],
+      "original_setup_errors": [],
+      "diagnostic_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": []
+    },
+    {
+      "test": "dom/nodes/NodeList-static-length-getter-tampered-indexOf-2.html",
+      "baseline_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "trace_count": 0,
+      "last_calls": [],
+      "original_setup_errors": [],
+      "diagnostic_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": []
+    },
+    {
+      "test": "dom/nodes/NodeList-static-length-getter-tampered-indexOf-3.html",
+      "baseline_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "trace_count": 0,
+      "last_calls": [],
+      "original_setup_errors": [],
+      "diagnostic_detail": "support/NodeList-static-length-tampered.js: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": []
+    },
+    {
+      "test": "dom/nodes/ParentNode-append.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 19,
+      "last_calls": [
+        "dom/nodes/pre-insertion-validation-hierarchy.js:78 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:90 document.implementation.createHTMLDocument",
+        "dom/nodes/ParentNode-append.html:67 document.createElement",
+        "dom/nodes/ParentNode-append.html:6 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:12 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:18 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:24 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:30 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:37 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:46 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:57 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:68 document.createDocumentFragment"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 17,
+      "original_results": [
+        {
+          "name": "If node is a host-including inclusive ancestor of parent, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is not a DocumentFragment, DocumentType, Element, Text, ProcessingInstruction, or Comment node, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a Text node and parent is a document, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a doctype and parent is not a document, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a DocumentFragment with multiple elements and parent is a document, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a DocumentFragment with an element and parent is a document with another element, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is an Element and parent is a document with another element, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a doctype and parent is a document with another doctype, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a doctype and parent is a document with an element, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.append() without any argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.append() with null as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.append() with undefined as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.append() with only text as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.append() with only one element as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.append() with null as an argument, on a parent having a child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.append() with one element and text as argument, on a parent having a child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.append() with the same element twice.",
+          "status": 1,
+          "message": "value is not callable"
+        }
+      ],
+      "trace": [
+        "dom/nodes/pre-insertion-validation-hierarchy.js:18 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:25 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:32 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:38 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:45 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:57 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:68 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:78 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:90 document.implementation.createHTMLDocument",
+        "dom/nodes/ParentNode-append.html:67 document.createElement",
+        "dom/nodes/ParentNode-append.html:6 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:12 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:18 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:24 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:30 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:37 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:46 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:57 node.cloneNode",
+        "dom/nodes/ParentNode-append.html:68 document.createDocumentFragment"
+      ]
+    },
+    {
+      "test": "dom/nodes/ParentNode-prepend.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 17,
+      "last_calls": [
+        "dom/nodes/pre-insertion-validation-hierarchy.js:57 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:68 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:78 document.implementation.createHTMLDocument",
+        "dom/nodes/ParentNode-prepend.html:57 document.createElement",
+        "dom/nodes/ParentNode-prepend.html:6 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:12 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:18 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:24 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:30 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:37 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:46 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:58 document.createDocumentFragment"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 15,
+      "original_results": [
+        {
+          "name": "If node is a host-including inclusive ancestor of parent, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is not a DocumentFragment, DocumentType, Element, Text, ProcessingInstruction, or Comment node, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a Text node and parent is a document, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a doctype and parent is not a document, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a DocumentFragment with multiple elements and parent is a document, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a DocumentFragment with an element and parent is a document with another element, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is an Element and parent is a document with another element, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a doctype and parent is a document with another doctype, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.prepend() without any argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.prepend() with null as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.prepend() with undefined as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.prepend() with only text as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.prepend() with only one element as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.prepend() with null as an argument, on a parent having a child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.prepend() with one element and text as argument, on a parent having a child.",
+          "status": 1,
+          "message": "value is not callable"
+        }
+      ],
+      "trace": [
+        "dom/nodes/pre-insertion-validation-hierarchy.js:18 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:25 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:32 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:38 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:45 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:57 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:68 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:78 document.implementation.createHTMLDocument",
+        "dom/nodes/ParentNode-prepend.html:57 document.createElement",
+        "dom/nodes/ParentNode-prepend.html:6 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:12 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:18 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:24 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:30 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:37 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:46 node.cloneNode",
+        "dom/nodes/ParentNode-prepend.html:58 document.createDocumentFragment"
+      ]
+    },
+    {
+      "test": "dom/nodes/ParentNode-querySelectorAll-removed-elements.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 2,
+      "last_calls": [
+        "dom/nodes/ParentNode-querySelectorAll-removed-elements.html:6 document.querySelector",
+        "dom/nodes/ParentNode-querySelectorAll-removed-elements.html:8 container.querySelectorAll"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/ParentNode-querySelectorAll-removed-elements.html:6 document.querySelector",
+        "dom/nodes/ParentNode-querySelectorAll-removed-elements.html:8 container.querySelectorAll"
+      ]
+    },
+    {
+      "test": "dom/nodes/ParentNode-querySelectors-exclusive.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 2,
+      "last_calls": [
+        "dom/nodes/ParentNode-querySelectors-exclusive.html:6 document.createElement",
+        "dom/nodes/ParentNode-querySelectors-exclusive.html:8 button.querySelector"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/ParentNode-querySelectors-exclusive.html:6 document.createElement",
+        "dom/nodes/ParentNode-querySelectors-exclusive.html:8 button.querySelector"
+      ]
+    },
+    {
+      "test": "dom/nodes/ParentNode-replaceChildren.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 16,
+      "last_calls": [
+        "dom/nodes/pre-insertion-validation-hierarchy.js:45 document.implementation.createHTMLDocument",
+        "dom/nodes/ParentNode-replaceChildren.html:115 document.createElement",
+        "dom/nodes/ParentNode-replaceChildren.html:6 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:12 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:18 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:24 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:30 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:37 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:45 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:54 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:67 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:116 document.createDocumentFragment"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 14,
+      "original_results": [
+        {
+          "name": "If node is a host-including inclusive ancestor of parent, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is not a DocumentFragment, DocumentType, Element, Text, ProcessingInstruction, or Comment node, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a Text node and parent is a document, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a doctype and parent is not a document, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "If node is a DocumentFragment with multiple elements and parent is a document, then throw a HierarchyRequestError DOMException.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.replaceChildren() without any argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.replaceChildren() with null as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.replaceChildren() with undefined as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.replaceChildren() with only text as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.replaceChildren() with only one element as an argument, on a parent having no child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.replaceChildren() without any argument, on a parent having a child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.replaceChildren() with null as an argument, on a parent having a child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.replaceChildren() with one element and text as argument, on a parent having a child.",
+          "status": 1,
+          "message": "value is not callable"
+        },
+        {
+          "name": "Element.replaceChildren() should move nodes in the right order",
+          "status": 1,
+          "message": "value is not callable"
+        }
+      ],
+      "trace": [
+        "dom/nodes/pre-insertion-validation-hierarchy.js:18 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:25 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:32 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:38 document.implementation.createHTMLDocument",
+        "dom/nodes/pre-insertion-validation-hierarchy.js:45 document.implementation.createHTMLDocument",
+        "dom/nodes/ParentNode-replaceChildren.html:115 document.createElement",
+        "dom/nodes/ParentNode-replaceChildren.html:6 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:12 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:18 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:24 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:30 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:37 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:45 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:54 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:67 node.cloneNode",
+        "dom/nodes/ParentNode-replaceChildren.html:116 document.createDocumentFragment"
+      ]
+    },
+    {
+      "test": "dom/nodes/append-on-Document.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/append-on-Document.html:5 document.implementation.createDocument"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/append-on-Document.html:5 document.implementation.createDocument"
+      ]
+    },
+    {
+      "test": "dom/nodes/case.html",
+      "baseline_detail": "case.js: TypeError: cannot convert object to primitive",
+      "trace_count": 16,
+      "last_calls": [
+        "dom/nodes/case.js:21 tests.push",
+        "dom/nodes/case.js:57 compute_outer_product.apply",
+        "dom/nodes/case.js:57 (expression).concat",
+        "dom/nodes/case.js:57 Array.prototype.slice.call",
+        "dom/nodes/case.js:47 Array.prototype.slice.call",
+        "dom/nodes/case.js:50 args[index].forEach",
+        "dom/nodes/case.js:51 compute_outer_product.apply",
+        "dom/nodes/case.js:51 (expression).concat",
+        "dom/nodes/case.js:51 args.slice",
+        "dom/nodes/case.js:51 args.slice",
+        "dom/nodes/case.js:47 Array.prototype.slice.call",
+        "dom/nodes/case.js:50 args[index].forEach"
+      ],
+      "original_setup_errors": [
+        "TypeError: value is not callable"
+      ],
+      "diagnostic_detail": "case.js: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/case.js:17 name_inputs.forEach",
+        "dom/nodes/case.js:18 tests.push",
+        "dom/nodes/case.js:19 tests.push",
+        "dom/nodes/case.js:20 tests.push",
+        "dom/nodes/case.js:21 tests.push",
+        "dom/nodes/case.js:57 compute_outer_product.apply",
+        "dom/nodes/case.js:57 (expression).concat",
+        "dom/nodes/case.js:57 Array.prototype.slice.call",
+        "dom/nodes/case.js:47 Array.prototype.slice.call",
+        "dom/nodes/case.js:50 args[index].forEach",
+        "dom/nodes/case.js:51 compute_outer_product.apply",
+        "dom/nodes/case.js:51 (expression).concat",
+        "dom/nodes/case.js:51 args.slice",
+        "dom/nodes/case.js:51 args.slice",
+        "dom/nodes/case.js:47 Array.prototype.slice.call",
+        "dom/nodes/case.js:50 args[index].forEach"
+      ]
+    },
+    {
+      "test": "dom/nodes/moveBefore/preserve-render-blocking-style.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 3,
+      "last_calls": [
+        "dom/nodes/moveBefore/preserve-render-blocking-style.html:2 document.createElement",
+        "dom/nodes/moveBefore/preserve-render-blocking-style.html:5 link.setAttribute",
+        "dom/nodes/moveBefore/preserve-render-blocking-style.html:6 document.head.append"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/moveBefore/preserve-render-blocking-style.html:2 document.createElement",
+        "dom/nodes/moveBefore/preserve-render-blocking-style.html:5 link.setAttribute",
+        "dom/nodes/moveBefore/preserve-render-blocking-style.html:6 document.head.append"
+      ]
+    },
+    {
+      "test": "dom/nodes/name-validation.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/name-validation.html:21 String.fromCodePoint"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/name-validation.html:21 String.fromCodePoint"
+      ]
+    },
+    {
+      "test": "dom/nodes/prepend-on-Document.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 1,
+      "last_calls": [
+        "dom/nodes/prepend-on-Document.html:5 document.implementation.createDocument"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/nodes/prepend-on-Document.html:5 document.implementation.createDocument"
+      ]
+    },
+    {
+      "test": "dom/ranges/StaticRange-constructor.html",
+      "baseline_detail": "inline script: TypeError: value is not callable",
+      "trace_count": 2,
+      "last_calls": [
+        "dom/ranges/StaticRange-constructor.html:4 document.getElementById",
+        "dom/ranges/StaticRange-constructor.html:6 document.createProcessingInstruction"
+      ],
+      "original_setup_errors": [],
+      "diagnostic_detail": "inline script: TypeError: value is not callable",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": [
+        "dom/ranges/StaticRange-constructor.html:4 document.getElementById",
+        "dom/ranges/StaticRange-constructor.html:6 document.createProcessingInstruction"
+      ]
+    },
+    {
+      "test": "dom/traversal/NodeFilter-constants.html",
+      "baseline_detail": "inline script: TypeError: cannot convert object to primitive",
+      "trace_count": 0,
+      "last_calls": [],
+      "original_setup_errors": [
+        "ReferenceError: NodeFilter is not defined"
+      ],
+      "diagnostic_detail": "inline script: TypeError: cannot convert object to primitive",
+      "diagnostic_status": "error",
+      "changed_parse": false,
+      "recorded_test_results": 0,
+      "original_results": [],
+      "trace": []
+    }
+  ]
+}
