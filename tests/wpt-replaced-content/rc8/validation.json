@@ -1,0 +1,45 @@
+{
+  "fixed_base": "52222f8f458f669a89641f0a5362114605fe8a5b",
+  "build_host": "win-001",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "owned": {
+    "before_non_inert_passes": 0,
+    "after_non_inert_passes": 4,
+    "cases": 4,
+    "after_repeats": 2,
+    "stable_classifications_and_hashes": true
+  },
+  "pinned_wpt": {
+    "before_passes": 4,
+    "after_passes": 4,
+    "cases": 4,
+    "after_repeats": 2,
+    "stable_classifications_and_hashes": true,
+    "new_polygon_credit": 0
+  },
+  "image_nextest": {
+    "passed": 26,
+    "failed": 0,
+    "skipped": 0
+  },
+  "image_doctests": {
+    "passed": 0,
+    "failed": 0
+  },
+  "workspace_nextest": {
+    "passed": 1529,
+    "failed": 0,
+    "skipped": 3
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "input_hashes": {
+    "count": 31,
+    "mac_windows_equal_before": true,
+    "mac_windows_equal_after": true,
+    "unchanged_across_gate": true
+  },
+  "workspace_and_full_render_build_slots": true
+}

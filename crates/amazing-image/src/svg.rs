@@ -17,11 +17,15 @@ use transform::Matrix;
 #[path = "svg_path.rs"]
 mod path;
 use path::{parse_path, point_in_path};
+#[path = "svg_polygon.rs"]
+mod polygon;
+use polygon::parse_points;
 
 type Attrs = BTreeMap<String, String>;
 const MAX_SHAPES: usize = 1024;
 const MAX_WORK: usize = 64 * 1024 * 1024;
 const MAX_PATH_POINTS: usize = 1024;
+const MAX_POLYGON_POINTS: usize = 512;
 struct Style {
     computed: ComputedStyle,
     fill: [u8; 4],
@@ -31,7 +35,7 @@ struct Style {
 enum Shape {
     Rect(f64, f64, f64, f64),
     Ellipse(f64, f64, f64, f64),
-    Path(Vec<(f64, f64)>),
+    Outline(Vec<(f64, f64)>),
 }
 struct Item {
     inverse: Option<Matrix>,
@@ -69,7 +73,7 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> 
     }
     let shape_work = scene.items.iter().try_fold(0usize, |sum, item| {
         sum.checked_add(match &item.shape {
-            Shape::Path(points) => points.len(),
+            Shape::Outline(points) => points.len(),
             _ => 1,
         })
     });
@@ -135,7 +139,7 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> 
                             && *ry > 0.0
                             && ((px - cx) / rx).powi(2) + ((py - cy) / ry).powi(2) <= 1.0
                     }
-                    Shape::Path(points) => point_in_path(points, px, py),
+                    Shape::Outline(points) => point_in_path(points, px, py),
                 };
                 if inside {
                     blend(
@@ -313,9 +317,16 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
                 }
                 "path" => {
                     check_attrs(&attrs, &["d"])?;
-                    Some(Shape::Path(parse_path(
+                    Some(Shape::Outline(parse_path(
                         attrs.get("d").ok_or(DecodeError::UnsupportedSvg)?,
                         MAX_PATH_POINTS,
+                    )?))
+                }
+                "polygon" => {
+                    check_attrs(&attrs, &["points"])?;
+                    Some(Shape::Outline(parse_points(
+                        attrs.get("points").ok_or(DecodeError::UnsupportedSvg)?,
+                        MAX_POLYGON_POINTS,
                     )?))
                 }
                 _ => return Err(DecodeError::UnsupportedSvg),

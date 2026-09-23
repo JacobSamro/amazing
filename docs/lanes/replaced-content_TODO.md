@@ -544,3 +544,26 @@ remains unsupported by the strict static decoder. The owned HTML resource
 corpus adds a matching double-wound/reference/blank case, moving the expanded
 five-case proof from **4/5** before the correction to **5/5 non-inert** after.
 Final repeated hashes and Windows package gate are in the RC-7 evidence packet.
+
+## RC-8 — bounded SVG polygon fill
+
+Fixed dev base `52222f8` (RC-7 merge). The `amazing-image` static SVG decoder
+accepts `<polygon points="...">` with finite coordinate pairs, SVG comma or
+whitespace separators, and a negative second coordinate adjacent to the first
+as allowed by the SVG points grammar. At least three vertices are required;
+512 vertices/1,024 numeric tokens are the explicit cap. Malformed values,
+unsupported attributes, `<polyline>`, strokes, fill rules, paint servers,
+references and animation reject the entire resource. Accepted polygons share
+the RC-7 closed-outline nonzero winding sampler, viewport/transform path,
+computed fill/color/alpha and vertex-weighted raster work budget. No other
+engine crate, driver, shell, root graph or lockfile was edited.
+
+The owned 64×64 HTML image corpus has simple, concave, transformed/alpha and
+same-direction double-wound polygons, each paired with a shape-only SVG
+reference and blank control. The fixed-base predecessor renderer was **0/4**,
+with every actual identical to blank. The polygon renderer is **4/4 non-inert
+in two runs**, identical per-case classifications and actual/reference/blank
+hashes; colored pixels differ from blank at 1,024, 624, 576 and 1,024 pixels.
+The pinned CSS Images SVG resource selection has no `<polygon>` resource and
+remains **4/4 raw before and twice after** with stable pixel hashes. This is
+**zero new WPT polygon credit**. Evidence: `tests/wpt-replaced-content/rc8/`.
