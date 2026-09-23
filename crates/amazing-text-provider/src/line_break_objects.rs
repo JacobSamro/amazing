@@ -2,7 +2,7 @@
 //! ICU's line iterator omits some boundaries between adjacent inline objects.
 
 use super::{BreakOpportunity, break_kind};
-use amazing_text::TextSpan;
+use amazing_text::{ObjectBreakClass, TextSpan, object_break_allowed};
 use swash::text::{Codepoint, LineBreak};
 
 const OBJECT: char = '\u{fffc}';
@@ -17,46 +17,29 @@ pub(super) fn allows(text: &str, offset: usize) -> bool {
     if !adjacent_object(text, offset) {
         return true;
     }
-    let left = text[..offset].chars().next_back().unwrap().line_break();
-    let right = text[offset..].chars().next().unwrap().line_break();
+    object_break_allowed(text, offset, object_break_class)
+}
 
-    // LB6-8a, LB11-13, LB15d, and LB19 precede LB20. A contingent
-    // object break must not defeat joining, glue, or closing punctuation.
-    if matches!(
-        left,
-        LineBreak::WJ | LineBreak::GL | LineBreak::ZWJ | LineBreak::QU
-    ) || matches!(
-        right,
-        LineBreak::WJ
-            | LineBreak::GL
-            | LineBreak::ZWJ
-            | LineBreak::CM
-            | LineBreak::QU
-            | LineBreak::CL
-            | LineBreak::CP
-            | LineBreak::EX
-            | LineBreak::IS
-            | LineBreak::SY
-            | LineBreak::SP
-            | LineBreak::ZW
-            | LineBreak::BK
-            | LineBreak::CR
-            | LineBreak::LF
-            | LineBreak::NL
-    ) {
-        return false;
+fn object_break_class(ch: char) -> ObjectBreakClass {
+    match ch.line_break() {
+        LineBreak::OP => ObjectBreakClass::Opening,
+        LineBreak::SP => ObjectBreakClass::Space,
+        LineBreak::WJ | LineBreak::GL | LineBreak::ZWJ | LineBreak::QU => {
+            ObjectBreakClass::BothProhibited
+        }
+        LineBreak::CM
+        | LineBreak::CL
+        | LineBreak::CP
+        | LineBreak::EX
+        | LineBreak::IS
+        | LineBreak::SY
+        | LineBreak::ZW
+        | LineBreak::BK
+        | LineBreak::CR
+        | LineBreak::LF
+        | LineBreak::NL => ObjectBreakClass::RightProhibited,
+        _ => ObjectBreakClass::Other,
     }
-    // LB14 applies across intervening spaces: OP SP* × CB.
-    if text[offset..].starts_with(OBJECT)
-        && text[..offset]
-            .chars()
-            .rev()
-            .find(|ch| ch.line_break() != LineBreak::SP)
-            .is_some_and(|ch| ch.line_break() == LineBreak::OP)
-    {
-        return false;
-    }
-    true
 }
 
 pub(super) fn opportunities(text: &str, spans: &[TextSpan]) -> Vec<BreakOpportunity> {
