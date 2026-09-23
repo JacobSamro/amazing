@@ -375,3 +375,15 @@ fn expanded_attributes_clone_and_notify_by_local_name() {
         "p:a"
     );
 }
+#[test]
+fn wpt_doctype_name_allows_empty_and_punctuation_but_rejects_ascii_whitespace_and_gt() {
+    let mut dom = crate::Dom::new();
+    let document = crate::NodeIdx(0);
+    for name in ["", "1foo", "@foo", "edi:/", "{"] {
+        assert!(dom.create_document_type_in(document, name, "", "").is_ok(), "{name:?}");
+    }
+    for name in ["a b", "edi:>", "a\0b", "a\tb"] {
+        assert_eq!(dom.create_document_type_in(document, name, "", ""),
+            Err(crate::DomError::InvalidCharacterError), "{name:?}");
+    }
+}

@@ -59,6 +59,10 @@ const NODE: &[Member] = &[
     method("replaceChild", O::ReplaceChild, 2),
     method("cloneNode", O::CloneNode, 0),
     method("getRootNode", O::GetRootNode, 0),
+    method("lookupNamespaceURI", O::NodeLookupNamespaceURI, 1),
+    method("isDefaultNamespace", O::NodeIsDefaultNamespace, 1),
+    method("normalize", O::NodeNormalize, 0),
+    method("isSameNode", O::NodeIsSameNode, 1),
 ];
 const EVENT_TARGET: &[Member] = &[
     method("addEventListener", O::AddEventListener, 2),
@@ -139,16 +143,15 @@ const PARENT: &[Member] = &[
     method("prepend", O::Prepend, 0),
     method("replaceChildren", O::ReplaceChildren, 0),
 ];
-const CHILD: &[Member] = &[
-    method("before", O::Before, 0),
-    method("after", O::After, 0),
-    method("replaceWith", O::ReplaceWith, 0),
-    method("remove", O::Remove, 0),
-];
 const CHARACTER_DATA: &[Member] = &[
     getter("data", O::Data),
     setter("data", O::SetData),
     getter("length", O::Length),
+    method("substringData", O::CharacterDataSubstring, 2),
+    method("appendData", O::CharacterDataAppend, 1),
+    method("insertData", O::CharacterDataInsert, 2),
+    method("deleteData", O::CharacterDataDelete, 2),
+    method("replaceData", O::CharacterDataReplace, 3),
     method("before", O::Before, 0),
     method("after", O::After, 0),
     method("replaceWith", O::ReplaceWith, 0),
@@ -298,6 +301,10 @@ const RANGE: &[Member] = &[
     method("toString", O::RangeStringifier, 0),
 ];
 const ELEMENT: &[Member] = &[
+    getter("namespaceURI", O::ElementNamespaceURI),
+    getter("prefix", O::ElementPrefix),
+    getter("localName", O::ElementLocalName),
+    getter("tagName", O::ElementTagName),
     method("attachShadow", O::ElementAttachShadow, 1),
     getter("shadowRoot", O::ElementShadowRoot),
     getter("assignedSlot", O::ElementAssignedSlot),
@@ -339,6 +346,15 @@ const ELEMENT: &[Member] = &[
     method("replaceWith", O::ReplaceWith, 0),
     method("remove", O::Remove, 0),
 ];
+const DOCUMENT_TYPE: &[Member] = &[
+    getter("name", O::DocumentTypeName),
+    getter("publicId", O::DocumentTypePublicId),
+    getter("systemId", O::DocumentTypeSystemId),
+    method("before", O::Before, 0),
+    method("after", O::After, 0),
+    method("replaceWith", O::ReplaceWith, 0),
+    method("remove", O::Remove, 0),
+];
 const SHADOW_ROOT: &[Member] = &[
     getter("mode", O::ShadowMode),
     getter("host", O::ShadowHost),
@@ -354,7 +370,10 @@ const SLOT: &[Member] = &[
     method("assignedNodes", O::SlotAssignedNodes, 0),
     method("assignedElements", O::SlotAssignedElements, 0),
 ];
-const TEXT: &[Member] = &[getter("assignedSlot", O::TextAssignedSlot)];
+const TEXT: &[Member] = &[
+    getter("assignedSlot", O::TextAssignedSlot),
+    method("splitText", O::TextSplit, 1),
+];
 const HTML_ELEMENT: &[Member] = &[
     getter("innerText", O::ElementInnerText), setter("innerText", O::ElementSetInnerText),
     getter("title", O::HTMLTitle), setter("title", O::HTMLSetTitle),
@@ -542,7 +561,7 @@ pub static INTERFACES: &[D] = &[
         name: "DocumentType",
         parent: Some(I::Node),
         constructor: None,
-        members: CHILD,
+        members: DOCUMENT_TYPE,
     },
     D {
         interface: I::Element,

@@ -28,6 +28,7 @@ pub mod forms;
 mod template;
 #[cfg(test)] mod template_tests;
 mod namespace;
+mod namespace_lookup;
 mod node_mixins;
 pub use node_mixins::NodeOrString;
 pub use namespace::{AttributeRef, NamespaceId};

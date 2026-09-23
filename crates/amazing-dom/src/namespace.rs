@@ -69,7 +69,7 @@ impl Dom {
     pub fn create_document_type_in(
         &mut self, document: NodeIdx, name: &str, public_id: &str, system_id: &str,
     ) -> Result<NodeIdx, DomError> {
-        if !valid_element_local_name(name) {
+        if !valid_doctype_name(name) {
             return Err(DomError::InvalidCharacterError);
         }
         self.create_node_in(document, NodeKind::DocumentType {
@@ -290,6 +290,9 @@ impl Dom {
 
 fn forbidden(c: char) -> bool {
     matches!(c, '\0' | '\t' | '\n' | '\x0c' | '\r' | ' ' | '/' | '>')
+}
+fn valid_doctype_name(name: &str) -> bool {
+    !name.chars().any(|c| matches!(c, '\0' | '\t' | '\n' | '\x0c' | '\r' | ' ' | '>'))
 }
 pub(crate) fn valid_element_local_name(name: &str) -> bool {
     let mut chars = name.chars();
