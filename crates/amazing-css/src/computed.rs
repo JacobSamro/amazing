@@ -157,6 +157,16 @@ struct PropertyMetadata {
 // or paint behavior. Keeping initial/inheritance metadata in one registry is
 // what makes CSS-wide keywords and `all` property-aware.
 const PROPERTIES: &[PropertyMetadata] = &[
+    PropertyMetadata { name: "background-image", initial: "none", inherited: false },
+    PropertyMetadata { name: "background-position", initial: "0% 0%", inherited: false },
+    PropertyMetadata { name: "background-size", initial: "auto", inherited: false },
+    PropertyMetadata { name: "background-repeat", initial: "repeat", inherited: false },
+    PropertyMetadata { name: "background-origin", initial: "padding-box", inherited: false },
+    PropertyMetadata { name: "background-attachment", initial: "scroll", inherited: false },
+    PropertyMetadata { name: "aspect-ratio", initial: "auto", inherited: false },
+    PropertyMetadata { name: "border-spacing", initial: "0px", inherited: true },
+    PropertyMetadata { name: "counter-reset", initial: "none", inherited: false },
+    PropertyMetadata { name: "counter-set", initial: "none", inherited: false },
     PropertyMetadata {
         name: "align-content",
         initial: "normal",
@@ -814,14 +824,10 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
             }
             expanded
         }
-        "background" if parts.len() == 1 => vec![(
-            "background-color".to_owned(),
-            if parts[0].eq_ignore_ascii_case("none") {
-                "transparent".to_owned()
-            } else {
-                parts[0].to_owned()
-            },
-        )],
+        "background" if contains_var_function(value) => PROPERTIES.iter()
+            .filter(|p| p.name.starts_with("background-"))
+            .map(|p| (p.name.to_owned(), deferred(DEFERRED_BACKGROUND, value))).collect(),
+        "background" => expand_basic_background(value).unwrap_or_default(),
         "border-radius" if css_wide_keyword(value).is_some() => [
             "border-top-left-radius",
             "border-top-right-radius",
@@ -1009,6 +1015,20 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     }
 }
 
+// Existing simple background grammar, with proper omitted-longhand resets.
+// Layered image/position/size shorthand parsing remains a separate ticket.
+fn expand_basic_background(value: &str) -> Option<Vec<(String, String)>> {
+    let value = value.trim();
+    let wide = css_wide_keyword(value).is_some();
+    let none = value.eq_ignore_ascii_case("none");
+    if !wide && !none && values::parse("background-color", value).is_none() { return None; }
+    Some(PROPERTIES.iter().filter(|p| p.name.starts_with("background-"))
+        .map(|p| (p.name.to_owned(), if wide || (p.name == "background-color" && !none) {
+            value.to_owned()
+        } else { p.initial.to_owned() })).collect())
+}
+
+const DEFERRED_BACKGROUND: &str = "amazing-internal-background";
 const DEFERRED_BORDER_WIDTH: &str = "amazing-internal-border-side-width";
 const DEFERRED_BORDER_STYLE: &str = "amazing-internal-border-side-style";
 const DEFERRED_BORDER_COLOR: &str = "amazing-internal-border-side-color";
@@ -2507,6 +2527,10 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    if let Some(inner) = deferred_inner(value, DEFERRED_BACKGROUND) {
+        return expand_basic_background(inner).ok_or(())?.into_iter()
+            .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());
+    }
     if let Some(inner) = deferred_inner(value, DEFERRED_ALL) {
         return css_wide_keyword(inner).map(|_| inner.to_owned()).ok_or(());
     }

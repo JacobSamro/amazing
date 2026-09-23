@@ -422,7 +422,7 @@ and `render_surface`. All authored files remain below 4,000 lines (driver:
 ## CSS-4 — side-border shorthands and author-specified provenance
 
 The integrator reassigned CSS-4 to two CSS-owned requests while shell stylesheet
-provenance remains outstanding. Background shorthand is now CSS-5. Base:
+provenance remains outstanding. Background shorthand was provisionally CSS-5 (subsequently reassigned below). Base:
 `156cc13`. No layout, paint, driver, shell, or root-manifest changes.
 
 ### Side-border shorthands
@@ -601,7 +601,7 @@ The original 32 rendering runs above precede this follow-up; they were not rerun
 and are not claimed as post-fix evidence. This focused follow-up proves the
 canonical CSS API regression and the refreshed full workspace.
 
-## CSS-5 — background shorthand and stylesheet URL provenance (queued)
+## Later ticket — background shorthand and stylesheet URL provenance (queued)
 
 User originally queued this during CSS-2; **do not start without a new brief**. Replaced-content has implemented background longhands in paint.
 CSS owns expansion of the full multi-layer `background` shorthand grammar;
@@ -611,7 +611,7 @@ provenance through computed values, resolving against the originating stylesheet
 Keep this work separate from CSS-2 cascade layers, revert, and scope.
 
 
-CSS-5 still needs an explicit stylesheet base-URL seam: preserve the fetched
+The deferred background ticket still needs an explicit stylesheet base-URL seam: preserve the fetched
 stylesheet's final URL, inline/ownerless sheet document base, and the winning
 declaration's provenance through cascade/variable/shorthand computation. CSS-3
 preserves sheet identity and scope roots, not URL bases. Font discovery still
@@ -620,7 +620,7 @@ also retains its existing combined ownerless input. Coordinate those caller
 seams with the integrator before claiming relative-resource conformance.
 
 
-## Queued CSS ticket — HTML width/height presentational hints
+## Routed request — HTML width/height presentational hints (now CSS-5)
 
 Routed by integrator-assist after correcting the intrinsic_size contract.
 Width/height attributes were accidentally applied as intrinsic dimensions by
@@ -631,7 +631,215 @@ ordinary author CSS overriding them. Keep author-declaration provenance distinct
 from these hints, as it already is for dir. The existing StyledDom and
 ReplacedElementProvider boundaries suffice; do not restore the driver workaround.
 
-This needs a separate integrator brief/ticket number and focused sizing/cascade
-coverage. It is recorded only: no width/height implementation is part of the
-CSS-4 border rollback follow-up. CSS-5 background shorthand remains separately
-queued pending shell stylesheet provenance.
+This was recorded separately from the CSS-4 border rollback follow-up and is
+now assigned CSS-5 below. Background shorthand remains deferred pending shell
+stylesheet provenance.
+
+
+## CSS-5 — HTML presentational hints (complete on fixed base 2021707)
+
+Assigned 2026-09-21 after CSS-4 and its border rollback follow-up merged.
+The previously queued background shorthand ticket remains deferred; CSS-5 now
+owns the HTML attribute regression exposed by the corrected intrinsic-size contract.
+
+A distinct `Hint` origin sits between UA and author origins, before layer and
+specificity comparisons. Every author declaration (including a universal rule in
+the first layer) wins. Hints never set `is_author_specified`. Explicit author
+initial/inherit/unset remain author-specified. Per Cascade 5 section 6.5, author
+`revert` removes hints, whereas `revert-layer` can restore them. The same applies
+after variable substitution. Existing public compute/StyledDom signatures stay intact.
+
+DOM-local mappings implemented for review:
+
+- HTML img/embed/iframe/object/video and input[type=image] width/height;
+  img/video/image-input aspect ratio; canvas aspect ratio only (its attributes
+  remain intrinsic dimensions, not CSS width/height). HTML decimal-prefix and
+  nonnegative-integer grammars are distinct, including element-specific zero rules.
+- Replaced-element hspace/vspace, border and iframe frameborder; legacy float
+  and vertical alignment mappings that have direct CSS equivalents.
+- Table/group/row/column/cell dimensions; cellspacing, nearest-table cellpadding;
+  align/valign/nowrap; table border/frame/rules and cell/group border hints,
+  with logical sides resolved against computed writing mode.
+- Legacy body/table/group/row/cell/marquee background colors, font/hr colors,
+  table bordercolor, body text and unvisited link colors. HTML legacy color
+  recovery is separate from CSS color parsing, with all named-color keywords.
+- Body local margin attributes; font face/size; list type/value/start/reversed;
+  block text alignment, br clear, pre wrap, textarea wrap=off; hr size/align;
+  marquee width/height and spacing.
+- Background attributes serialize as a single escaped document-relative URL,
+  never as a stylesheet-relative URL. Actual resource URL resolution remains
+  the embedding loader's responsibility.
+- Initial/inherited metadata added for aspect-ratio, border-spacing and list
+  counter properties so `all`, CSS-wide keywords and inheritance cover hints.
+
+Known context/consumer boundaries, routed in questions.md (not claimed complete):
+CSS receives no document URL/encoding/quirks mode, visited or active link state,
+selected picture source, or containing frame. Exact background URL serialization,
+quirks cell nowrap exception, selected-source image dimensions, body vlink/alink,
+and frame margin fallback need those inputs. HTML descendant block alignment,
+replaced align=middle's baseline geometry and anonymous color-well backgrounds
+need layout/paint support rather than invented host-property mappings. Counter
+and aspect-ratio computed values do not by themselves claim downstream support.
+Foreign namespaces receive none of these HTML hints. The existing simple background shorthand forms (none, color, CSS-wide and
+var-substituted equivalents) now reset omitted longhands so an author shorthand
+can override a hinted image. Full layered/image/position/size shorthand and
+stylesheet URL provenance remain deferred.
+
+References: [HTML rendering](https://html.spec.whatwg.org/multipage/rendering.html),
+[HTML microsyntaxes](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html),
+[hint origin and rollback](https://drafts.csswg.org/css-cascade-5/#preshint).
+
+Historical pre-outage baseline bb79669 and lock E4D68B10 are superseded by
+the fixed-base 2021707 gate below. Do not present those older results as current.
+
+
+### Integration boundary discovered by the CLI proof
+
+At final-gate base `11dd8a8`, `crates/amazing/src/main.rs::load_page_media`
+still turns integer width/height attributes into `PageImage.used_size`, and
+`PageMedia::intrinsic_size` returns that value. The integrator-assist correction
+referenced in the assignment is not yet present in this fetched dev tree.
+Consequently an integer-only before/after fixture is masked by the old adapter.
+The CSS proof uses width=80% with height=32 at an 80x50 viewport and a decoded
+2x2 red P6 image: **1024 differing pixels before, 0 after**, versus a CSS 64x32
+reference. A low author layer overriding integer attributes to 24x12 is **0**
+different. Both full CLI proof runs have identical SHA256 results.
+
+A separate diagnostic deliberately sets author width:auto;height:auto on an
+image with width=64,height=32. CSS computes auto, but the current driver reports
+64x32 as intrinsic dimensions: **2044 differing pixels before and after** versus
+the true 2x2 reference. This is routed to integrator-assist and is explicitly
+not claimed fixed. No driver/provider workaround was added to CSS.
+
+
+### CSS-5 day-end checkpoint — 2026-09-21
+
+Stopped by user instruction during the fleet SSH outage. Source commits are
+`a3953bc` and `736d4e7`; no new ticket or remote publication started. Recorded
+**pre-outage** Windows results: CSS 168/0 including explicit cellspacing;
+workspace nextest 1241/0/3 skipped; explicit doctests 2/0. These were not rerun
+during stand-down and are not evidence for a later rebased/refreshed tree.
+
+The saved bundle contains 36 completed pinned rendering reports (nine selections,
+two runs on each side); both repetitions have stable per-case/image hashes.
+The original eight selections are unchanged; cascade remains 35 pass / 24
+mismatch / 13 unsupported, including Variables 12/12. Raw pinned cellspacing
+improves 478 -> 371 differing pixels and remains a mismatch. Layout needs the
+`table cellspacing` nonnegative-integer -> `border-spacing` Hint-origin mapping,
+including zero, combined with its display:contents work. CLI percentage-size
+proof remains 1024 -> 0; the driver author-auto diagnostic remains 2044 -> 2044.
+
+Final remote process and post-render source/executable integrity checks were
+not obtained before SSH became unavailable. FIRST resume action: read the
+main checkout `.agents/css/report.md` and wait for the integrator recovery
+broadcast before any SSH/SCP; then verify preserved artifacts and source
+identity before deciding which gates need rerunning. Full background shorthand,
+URL provenance, driver intrinsic-size integration, and context-dependent HTML
+mappings remain queued. No CSS-owned REFRESH-HOLD was present at stand-down.
+
+## CSS-6 — grid grammar and typed values (queued after CSS-5 lands)
+
+Do not start in parallel with CSS-5. Layout owns formatting algorithms; CSS owns
+only specified grammar acceptance and typed computed values. Layout measured
+fixed-base `bebca0f` cases against exact-revision Chrome 154 and Safari 26.6.
+
+1. **Subgrid first:** `valid_grid_track_list` rejects
+   `grid-template-columns: subgrid` and `grid-template-rows: subgrid`, including
+   optional line-name lists, before layout can see them. Nineteen broad cases
+   are blocked; **8 have Chrome/Safari pass consensus**. Accept only the
+   specified grammar and preserve a typed subgrid value for layout.
+2. **Grid Lanes second:** `values.rs` rejects `display: grid-lanes` and
+   `display: inline grid-lanes`, leaving layout with the initial inline value.
+   Of 61 failing cases, **17 have Chrome/Safari pass consensus** and 41 are
+   Chrome-only. The 17 consensus cases make this the largest consensus cluster,
+   so its grammar is worth implementing after subgrid. Grid Lanes is draft CSS
+   Grid Level 3 (formerly masonry). Accept only the specified grammar and keep
+   the computed display value typed.
+
+These are layout-lane measurements, not CSS-6 results. CSS-5 must land and
+stop at its ticket boundary before CSS-6 begins.
+
+
+### CSS-5 final fixed-base gate — 2026-09-23
+
+**Gate base:** `origin/dev` at `2021707` (IA-XML driver dispatch merge),
+rebased lane branch `lane/css`. The CSS Windows tree was refreshed to that
+commit with `tar -m` and first-party Cargo artifact invalidation. The five
+CSS-owned changed files were then re-synced with `tar -m`. The refreshed
+baseline and candidate were built from **238** and **240** verified tracked
+Rust/manifest/selected-render inputs, respectively. Candidate inputs matched
+again after the full workspace, all rendering, and the CLI repetitions.
+
+Fresh Windows results (no Mac build or test):
+
+- `cargo nextest run -p amazing-css --locked`: **168 passed / 0 failed /
+  0 skipped**, including the explicit cellspacing origin/rollback regression.
+- `cargo nextest run --workspace --locked`: **1,329 passed / 0 failed /
+  3 skipped**.
+- `cargo test --workspace --locked --doc`: **2 passed / 0 failed /
+  0 ignored** across 19 targets. Nextest does not include these doctests.
+- Two baseline and two candidate runs of each of nine pinned selections:
+  **36 reports**, WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+  Each before and candidate repeat agrees exactly on classification, pixel
+  count, and actual/reference/diff image SHA256. Every original eight
+  selection has identical before/candidate per-case image hashes.
+
+Counts below are pass / mismatch / unsupported; errors, timeouts, and crashes
+are zero in every run.
+
+| Selection | Baseline | Candidate |
+|---|---:|---:|
+| cascade | 38/32/2 | 38/32/2 |
+| Variables subset | 12/0/0 | 12/0/0 |
+| block-collapse | 9/0/0 | 9/0/0 |
+| position | 12/0/0 | 12/0/0 |
+| text-flow | 14/2/0 | 14/2/0 |
+| flex-grid | 24/0/0 | 24/0/0 |
+| paint-compositing | 24/0/0 | 24/0/0 |
+| text-shaping | 12/0/0 | 12/0/0 |
+| vertical-ruby | 11/9/0 | 11/9/0 |
+| raw cellspacing | 0/1/0 | **1/0/0** |
+
+Cascade differs from the pre-outage 35/24/13 because the current base's XML
+driver dispatch classifies former unsupported XHTML cases; the baseline and
+candidate both read 38/32/2. The cascade per-case normalized SHA256 is
+`2aa504f219f1fbbd68a0e55622d12cd22633b1bdc92b8266d3434c8bb91e60a1`
+for all four runs. The pinned unmodified
+`css-display__display-contents-td-001.html` raw case improves **399
+differing pixels / mismatch -> 0 / pass**, stable in both repeats. This is
+observed with the base's integrated layout; CSS supplies the HTML
+`cellspacing` -> computed `border-spacing` Hint-origin mapping, including 0.
+
+Real CLI proof, repeated twice at 80×50, uses a decoded 32×32 red P6 image,
+CSS `height:32px`, and HTML `width=80%` versus a CSS 64×32 reference.
+Baseline: **1,024 differing pixels**; candidate: **0**. An author-layer
+definite-size override and author `width:auto;height:auto` diagnostics are
+0 before/after with the corrected driver. The repeated proof JSON files are
+identical, SHA256
+`7b3b28cdfaca38cbb2f6a614b8d20dafa924124eb37a7f331cef47fbdd3a9a86`.
+The corrected driver now supplies the image's natural dimensions; the prior
+2044-pixel author-auto diagnostic was historical and is no longer a defect.
+
+Baseline executable SHA256:
+`2735149475AB6D67D3C09AC48932C86693F9C442CFD9D8335189A2581FD91337`.
+Candidate executable SHA256:
+`0CE5458B21F4E021D1D942E6718F121B909C83D533C895B86F2E764C8198142C`.
+Both immutable hashes were verified after rendering. The full evidence,
+per-case hashes, source manifests, logs, and scripts live in the primary
+checkout's `.agents/css/css5-r3-*`; Windows artifacts are in
+`C:/Users/server/target/css/`. The shared-slot wrapper printed an acquired
+slot for each full workspace/render gate.
+
+Two resumed intermediate runs are excluded from final claims: first, a
+474251e run predated later merged input changes; second, its candidate CSS
+was extracted without `tar -m`, leaving Cargo to reuse stale downstream
+artifacts despite byte-correct source. That run had CLI 2044→2044 and
+cellspacing 478→478 and correctly failed the CLI assertion. The final
+2021707 run refreshed and invalidated first-party artifacts, compiled CSS,
+layout, and driver together, and passed the end-to-end proof.
+
+Under the fleet's fixed-base rule, later HTML-only merges do not require
+CSS-5 to chase `dev`: `git diff --name-only 2021707 origin/dev --
+crates/amazing-css` was empty at reporting. The integrator's authoritative
+merged-head gate validates the combined tree. Context-dependent mappings
+listed above remain separate work; CSS-6 is queued below.
