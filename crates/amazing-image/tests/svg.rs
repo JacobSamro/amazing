@@ -268,7 +268,7 @@ fn computed_svg_style_resolves_alpha_and_rejects_unsupported_paint() {
     assert_eq!(pixel(&bytes, 0, 0), [255, 0, 0, 128]);
     for body in [
         r#"<rect width="8" height="8" style="fill: url(#paint)"/>"#,
-        r#"<rect width="8" height="8" style="color: lab(50% 0 0); fill: currentColor"/>"#,
+        r#"<rect width="8" height="8" style="fill: context-fill"/>"#,
         r#"<g style="opacity: .5"><rect width="8" height="8"/></g>"#,
     ] {
         assert_eq!(decode(&svg("", body), Default::default()).unwrap_err(), DecodeError::UnsupportedSvg);
