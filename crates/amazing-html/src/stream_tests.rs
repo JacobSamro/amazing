@@ -77,6 +77,18 @@ fn chunks_are_invariant_across_html_lexical_boundaries() {
 }
 
 #[test]
+fn malformed_table_and_tail_tokens_keep_chunk_equivalence() {
+    for src in [
+        "<table><tbody><tbody><tbody>",
+        "<table><tr><td>x</tr><td>y</table>",
+        "</html><!--abc--><table><tr>",
+        "<colgroup><col><a></colgroup>",
+    ] {
+        assert_all_splits(src);
+    }
+}
+
+#[test]
 fn plaintext_document_is_invariant_across_every_scalar_boundary() {
     for src in [
         "<plaintext>a<b>&amp;</plaintext><p>z",

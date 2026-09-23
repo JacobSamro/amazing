@@ -8,6 +8,24 @@ fn dump(context: &str, src: &str) -> String {
 }
 
 #[test]
+fn virtual_table_family_contexts_keep_only_fragment_children() {
+    assert_eq!(dump("table", "<table><tr>"),
+        "#document\n  <tbody>\n    <tr>\n");
+    assert_eq!(dump("tr", "</tr><td>"), "#document\n  <td>\n");
+    assert_eq!(dump("tbody", "<tbody><a>"), "#document\n  <a>\n");
+    assert_eq!(dump("colgroup", "<a><col>"), "#document\n  <col>\n");
+    assert_eq!(dump("caption", "<table>"), "#document\n  <table>\n");
+}
+
+#[test]
+fn html_fragment_keeps_comments_after_explicit_html_end() {
+    assert_eq!(dump("html", "</html><!--abc-->"),
+        "#document\n  <head>\n  <body>\n  <!-- abc -->\n");
+    assert_eq!(dump("body", "<span><body>"), "#document\n  <span>\n");
+    assert_eq!(dump("frameset", "<frame>"), "#document\n  <frame>\n");
+}
+
+#[test]
 fn text_fragment_contexts_use_their_initial_tokenizer_states() {
     // Literal tree expectations were recorded before implementation.
     assert_eq!(dump("textarea", "a<b>&amp;\r\nz</textarea><i>"),
