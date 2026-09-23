@@ -1,0 +1,162 @@
+{
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": [
+    800,
+    600
+  ],
+  "capture": "Pinned Windows renderer P6 output; lossless PNG conversion for fresh-epoch inspection",
+  "baseline_executable_sha256": "e427e0c86475d599cab4cbfd3402c9262050261a65ab6c67b643942cb4573832",
+  "final_executable_sha256": "34c0c1312a0c9ead40a7ea42f2d5628031bd76e46c5e0677a8a997b8f64249d1",
+  "cases": {
+    "text-inherit": {
+      "note": "Normal collapsed sibling whitespace no longer shifts the preformatted Two; newline remains preserved.",
+      "fixture": "css/css-display/display-contents-text-inherit.html",
+      "selection": "geometry",
+      "report_id": "css-display__display-contents-text-inherit.html",
+      "baseline": {
+        "actual": {
+          "png": "baseline/text-inherit/actual.png",
+          "png_sha256": "4d1b891c3d24387aec2c0b1e1bed163f9f827b2fc7b1b36209ea52d3bd6fa35f",
+          "ppm_sha256": "c7256b23882bf5913e5fa23f569f10ef98910716a2fb7176480876034162a1cd"
+        },
+        "reference": {
+          "png": "baseline/text-inherit/reference.png",
+          "png_sha256": "41b4ac7a4f3a0fff9dda0325b01a1882cbbe603842bf3714cfd807c4054cc1a4",
+          "ppm_sha256": "b7178175dcf69acea98b925649119fa634143e64d5a12dd2edd2a2bfa3af1b4d"
+        }
+      },
+      "final": {
+        "actual": {
+          "png": "final/text-inherit/actual.png",
+          "png_sha256": "41b4ac7a4f3a0fff9dda0325b01a1882cbbe603842bf3714cfd807c4054cc1a4",
+          "ppm_sha256": "b7178175dcf69acea98b925649119fa634143e64d5a12dd2edd2a2bfa3af1b4d"
+        },
+        "reference": {
+          "png": "final/text-inherit/reference.png",
+          "png_sha256": "41b4ac7a4f3a0fff9dda0325b01a1882cbbe603842bf3714cfd807c4054cc1a4",
+          "ppm_sha256": "b7178175dcf69acea98b925649119fa634143e64d5a12dd2edd2a2bfa3af1b4d"
+        }
+      }
+    },
+    "oof-002": {
+      "note": "Contents fixed-position principal box and red background removed; PASS aligns with reference.",
+      "fixture": "css/css-display/display-contents-oof-002.html",
+      "selection": "geometry",
+      "report_id": "css-display__display-contents-oof-002.html",
+      "baseline": {
+        "actual": {
+          "png": "baseline/oof-002/actual.png",
+          "png_sha256": "056300737edf53a653aca00a50345112ba6133a04d9493acdcc4fc465614bee3",
+          "ppm_sha256": "bce844f4986d2f1244488401b97dd17e318dc1b65d096df06c4ac675a4010046"
+        },
+        "reference": {
+          "png": "baseline/oof-002/reference.png",
+          "png_sha256": "b92b6caff9e6ac47317d90afe4bcae57d4a0bc616781951729bfd075e5b410d7",
+          "ppm_sha256": "f35083b6b4afed9ce5437fd91ec2d00e0cbf88f21c239dcd3ecd47bf495f4859"
+        }
+      },
+      "final": {
+        "actual": {
+          "png": "final/oof-002/actual.png",
+          "png_sha256": "b92b6caff9e6ac47317d90afe4bcae57d4a0bc616781951729bfd075e5b410d7",
+          "ppm_sha256": "f35083b6b4afed9ce5437fd91ec2d00e0cbf88f21c239dcd3ecd47bf495f4859"
+        },
+        "reference": {
+          "png": "final/oof-002/reference.png",
+          "png_sha256": "b92b6caff9e6ac47317d90afe4bcae57d4a0bc616781951729bfd075e5b410d7",
+          "ppm_sha256": "f35083b6b4afed9ce5437fd91ec2d00e0cbf88f21c239dcd3ecd47bf495f4859"
+        }
+      }
+    },
+    "td-001": {
+      "note": "Promoted text forms contiguous PASS. Remaining 2px horizontal/vertical offset from cellspacing presentation mapping is a raw mismatch.",
+      "fixture": "css/css-display/display-contents-td-001.html",
+      "selection": "geometry",
+      "report_id": "css-display__display-contents-td-001.html",
+      "baseline": {
+        "actual": {
+          "png": "baseline/td-001/actual.png",
+          "png_sha256": "97f77fd1427fd74f22b183d244bff2c598acfc89a07b3a66a93e41d68d89bade",
+          "ppm_sha256": "888a85b93d43f2e4f46e7276fe0b4c4eaa4d29ccbcdf558b4b2fa5710080a117"
+        },
+        "reference": {
+          "png": "baseline/td-001/reference.png",
+          "png_sha256": "85101e49618802ec01f44d253429731df71eff735c8709c811f9158aeaef84dd",
+          "ppm_sha256": "09f4002f91032ccc02392f7ebf98eb3f32a3bc26270f2bffd4a16d1d39e7293c"
+        }
+      },
+      "final": {
+        "actual": {
+          "png": "final/td-001/actual.png",
+          "png_sha256": "7104ea604043ece589f38c17068164e599d060245f9dfface23454d898b10ea7",
+          "ppm_sha256": "def5b66fdc2369e158331945176fbeb5fdbb2f9635009a7a24f3de6d23d8ed12"
+        },
+        "reference": {
+          "png": "final/td-001/reference.png",
+          "png_sha256": "85101e49618802ec01f44d253429731df71eff735c8709c811f9158aeaef84dd",
+          "ppm_sha256": "09f4002f91032ccc02392f7ebf98eb3f32a3bc26270f2bffd4a16d1d39e7293c"
+        }
+      }
+    },
+    "first-letter-002": {
+      "note": "Contents red background removed; inherited green text retained. Transparent pseudo declaration does not validate first-letter generation.",
+      "fixture": "css/css-display/display-contents-first-letter-002.html",
+      "selection": "geometry",
+      "report_id": "css-display__display-contents-first-letter-002.html",
+      "baseline": {
+        "actual": {
+          "png": "baseline/first-letter-002/actual.png",
+          "png_sha256": "c5d73c067e8e43266e24645608523b393c267c59891c67331ed1c34f3fb27a00",
+          "ppm_sha256": "1e8a940d87c8a75593489829da65a0a296861607ed498d8ec74bad6eada3e27a"
+        },
+        "reference": {
+          "png": "baseline/first-letter-002/reference.png",
+          "png_sha256": "0e22a4035ff3bd4fea02c69f26bf4168f00085dec9a2041651ad9306e8a1ed9e",
+          "ppm_sha256": "8b35dee996af48212135d46f53d4528f0e022cae219a9df43a3285f31a774d15"
+        }
+      },
+      "final": {
+        "actual": {
+          "png": "final/first-letter-002/actual.png",
+          "png_sha256": "0e22a4035ff3bd4fea02c69f26bf4168f00085dec9a2041651ad9306e8a1ed9e",
+          "ppm_sha256": "8b35dee996af48212135d46f53d4528f0e022cae219a9df43a3285f31a774d15"
+        },
+        "reference": {
+          "png": "final/first-letter-002/reference.png",
+          "png_sha256": "0e22a4035ff3bd4fea02c69f26bf4168f00085dec9a2041651ad9306e8a1ed9e",
+          "ppm_sha256": "8b35dee996af48212135d46f53d4528f0e022cae219a9df43a3285f31a774d15"
+        }
+      }
+    },
+    "sharing-001": {
+      "note": "Unboxed body/unusual br preserve the visible PASS; this is not a blank-page match.",
+      "fixture": "css/css-display/display-contents-sharing-001.html",
+      "selection": "geometry",
+      "report_id": "css-display__display-contents-sharing-001.html",
+      "baseline": {
+        "actual": {
+          "png": "baseline/sharing-001/actual.png",
+          "png_sha256": "79f7174661961bf78d69e84c4b9dc41b8aba218fff681f45cd38ada4e899fa9e",
+          "ppm_sha256": "d061b066355aa3c9902d3b0ff51e9ef1573ccb03b1a3139e7ca8d3eac93204b4"
+        },
+        "reference": {
+          "png": "baseline/sharing-001/reference.png",
+          "png_sha256": "430951dc75b220bb02d5f0c079ca2e8a184c13600c45405460cd297c595f3429",
+          "ppm_sha256": "c0cf19041f9aeaa4e80e8e1f96843ecd1cd07696bfce187dfccbede194dc7a7a"
+        }
+      },
+      "final": {
+        "actual": {
+          "png": "final/sharing-001/actual.png",
+          "png_sha256": "53b4dd193fa23ded082b95f146f80bdb59c0f550bb3b489e380c2bd4fd6227a6",
+          "ppm_sha256": "c8f0f0cab7ecc7aacebb8e5326fe1b21b9b07ef70f1f6f45ddf1cd95c1f02339"
+        },
+        "reference": {
+          "png": "final/sharing-001/reference.png",
+          "png_sha256": "53b4dd193fa23ded082b95f146f80bdb59c0f550bb3b489e380c2bd4fd6227a6",
+          "ppm_sha256": "c8f0f0cab7ecc7aacebb8e5326fe1b21b9b07ef70f1f6f45ddf1cd95c1f02339"
+        }
+      }
+    }
+  }
+}

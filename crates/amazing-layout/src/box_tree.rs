@@ -48,6 +48,23 @@ pub fn build_layout_tree_with_replaced(
     match start {
         Some(idx) => {
             let mut root = build_element(dom, styled, idx, values::ROOT_FONT_SIZE, fonts, replaced);
+            if is_contents(&root.style) {
+                let original = std::mem::take(&mut root.style);
+                root.node = None;
+                root.display = Display::Block;
+                // The engine starts at body. Keep an anonymous viewport host,
+                // but no body box, decoration, positioning or sizing.
+                for property in [
+                    "direction", "text-align", "writing-mode", "white-space", "line-height",
+                ] {
+                    if let Some(value) = original.get(property) {
+                        root.style.set(property, value);
+                    }
+                }
+                for property in ["margin-top", "margin-right", "margin-bottom", "margin-left"] {
+                    root.style.set(property, "0");
+                }
+            }
             crate::table_tree::normalize(&mut root);
             root
         },
@@ -150,6 +167,91 @@ fn is_display_none(style: &ComputedStyle) -> bool {
     style
         .get("display")
         .is_some_and(|v| v.eq_ignore_ascii_case("none"))
+}
+
+/// Box-tree children after removing `display: contents` ancestors. The DOM
+/// remains intact: text style and relative font metrics still follow its
+/// original parent chain, even when formatting parents differ.
+struct FormattingChild {
+    node: NodeIdx,
+    owner: NodeIdx,
+    parent_font: f32,
+}
+
+fn is_contents(style: &ComputedStyle) -> bool {
+    style
+        .get("display")
+        .is_some_and(|value| value.eq_ignore_ascii_case("contents"))
+}
+
+fn contents_suppresses_subtree(dom: &Dom, node: NodeIdx) -> bool {
+    matches!(
+        dom.name(node),
+        Some(
+            "br" | "wbr"
+                | "meter"
+                | "progress"
+                | "canvas"
+                | "embed"
+                | "object"
+                | "audio"
+                | "iframe"
+                | "img"
+                | "video"
+                | "frame"
+                | "frameset"
+                | "input"
+                | "textarea"
+                | "select"
+        )
+    )
+}
+
+fn formatting_children(
+    dom: &Dom,
+    styled: &StyledDom,
+    owner: NodeIdx,
+    font_size: f32,
+) -> Vec<FormattingChild> {
+    let mut pending: Vec<_> = dom
+        .children(owner)
+        .map(|node| FormattingChild {
+            node,
+            owner,
+            parent_font: font_size,
+        })
+        .collect();
+    pending.reverse();
+    let mut children = Vec::new();
+    while let Some(child) = pending.pop() {
+        if matches!(dom.get(child.node).kind, NodeKind::Element { .. }) {
+            let style = styled.get(child.node).cloned().unwrap_or_default();
+            if is_display_none(&style) || crate::replaced::hidden(dom, child.node) {
+                continue;
+            }
+            if is_contents(&style) {
+                // Do this before positioning, float blockification, controls,
+                // or flex/grid item construction: there is no principal box.
+                if contents_suppresses_subtree(dom, child.node) {
+                    continue;
+                }
+                let font_size = values::resolve_font_size(
+                    style.get("font-size").unwrap_or("medium"),
+                    child.parent_font,
+                );
+                let start = pending.len();
+                pending.extend(dom.children(child.node).map(|node| FormattingChild {
+                    node,
+                    owner: child.node,
+                    parent_font: font_size,
+                }));
+                pending[start..].reverse();
+                continue;
+            }
+        }
+        children.push(child);
+    }
+    children
 }
 
 fn is_out_of_flow(style: &ComputedStyle) -> bool {
@@ -989,17 +1091,19 @@ fn classify_children(
         let mut items: Vec<LayoutBox> = Vec::new();
         let mut run: Vec<InlineNode> = Vec::new();
         let mut positioned = Vec::new();
-        for child in dom.children(idx) {
+        for entry in formatting_children(dom, styled, idx, font_size) {
+            let child = entry.node;
+            let text_parent = styled.get(entry.owner).cloned().unwrap_or_default();
             match &dom.get(child).kind {
                 NodeKind::Text { data } => {
-                    if !text_for_white_space(data, &own_style, child, usize::MAX).0.is_empty() {
+                    if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
                         run.push(inline_text(
                             dom,
-                            idx,
+                            entry.owner,
                             child,
                             data.clone(),
-                            &own_style,
-                            font_size,
+                            &text_parent,
+                            entry.parent_font,
                             false,
                         ));
                     }
@@ -1015,13 +1119,13 @@ fn classify_children(
                     }
                     if is_out_of_flow(&child_style) {
                         positioned.push(build_element(
-                            dom, styled, child, font_size, fonts, replaced,
+                            dom, styled, child, entry.parent_font, fonts, replaced,
                         ));
                         continue;
                     }
                     flush_anonymous_into(&mut items, &mut run, font_size, fonts);
                     items.push(build_element(
-                        dom, styled, child, font_size, fonts, replaced,
+                        dom, styled, child, entry.parent_font, fonts, replaced,
                     ));
                 }
             }
@@ -1039,19 +1143,21 @@ fn classify_children(
     let mut inlines: Vec<InlineNode> = Vec::new();
     let mut positioned = Vec::new();
 
-    for child in dom.children(idx) {
+    for entry in formatting_children(dom, styled, idx, font_size) {
+        let child = entry.node;
+        let text_parent = styled.get(entry.owner).cloned().unwrap_or_default();
         match &dom.get(child).kind {
             NodeKind::Text { data } => {
                 // Whitespace-only runs between block-level children carry no
                 // rendering; keep non-empty collapsed runs as separators.
-                if !text_for_white_space(data, &own_style, child, usize::MAX).0.is_empty() {
+                if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
                     inlines.push(inline_text(
                         dom,
-                        idx,
+                        entry.owner,
                         child,
                         data.clone(),
-                        &own_style,
-                        font_size,
+                        &text_parent,
+                        entry.parent_font,
                         false,
                     ));
                 }
@@ -1067,7 +1173,7 @@ fn classify_children(
                 }
                 if is_out_of_flow(&child_style) {
                     positioned.push(build_element(
-                        dom, styled, child, font_size, fonts, replaced,
+                        dom, styled, child, entry.parent_font, fonts, replaced,
                     ));
                     continue;
                 }
@@ -1076,11 +1182,11 @@ fn classify_children(
                     // no children, so flatten_inline would see nothing).
                     Some("br") => inlines.push(InlineNode::Break),
                     _ if is_ruby_container(dom, styled, child) => {
-                        inlines.push(ruby_inline(dom, styled, child, font_size));
+                        inlines.push(ruby_inline(dom, styled, child, entry.parent_font));
                     },
                     _ if crate::replaced::inline_atomic(dom, child, &child_style) => {
                         if let Some(item) =
-                            crate::replaced::construct(dom, child, &child_style, font_size, replaced)
+                            crate::replaced::construct(dom, child, &child_style, entry.parent_font, replaced)
                         {
                             inlines.push(item);
                         }
@@ -1093,19 +1199,19 @@ fn classify_children(
                         // Flush pending inline content into an anonymous block.
                         flush_anonymous_into(&mut blocks, &mut inlines, font_size, fonts);
                         blocks.push(build_element(
-                            dom, styled, child, font_size, fonts, replaced,
+                            dom, styled, child, entry.parent_font, fonts, replaced,
                         ));
                     }
                     _ => {
                         let child_font_size = values::resolve_font_size(
                             child_style.get("font-size").unwrap_or("medium"),
-                            font_size,
+                            entry.parent_font,
                         );
                         let edge = boundary_between(
                             dom,
                             child,
-                            &own_style,
-                            font_size,
+                            &text_parent,
+                            entry.parent_font,
                             &child_style,
                             child_font_size,
                         );
@@ -1114,7 +1220,7 @@ fn classify_children(
                             styled,
                             child,
                             child_style,
-                            font_size,
+                            entry.parent_font,
                             edge,
                             &mut inlines,
                             &mut blocks,
@@ -1211,18 +1317,20 @@ fn flatten_inline(
     let bidi_style = text_style(dom, idx, &style, font_size, true);
     let inline_start = inlines.len();
 
-    for child in dom.children(idx) {
+    for entry in formatting_children(dom, styled, idx, font_size) {
+        let child = entry.node;
+        let text_parent = styled.get(entry.owner).cloned().unwrap_or_default();
         match &dom.get(child).kind {
             NodeKind::Text { data } => {
-                if !text_for_white_space(data, &style, child, usize::MAX).0.is_empty() {
+                if !text_for_white_space(data, &text_parent, child, usize::MAX).0.is_empty() {
                     inlines.push(inline_text(
                         dom,
-                        idx,
+                        entry.owner,
                         child,
                         data.clone(),
-                        &style,
-                        font_size,
-                        true,
+                        &text_parent,
+                        entry.parent_font,
+                        entry.owner == idx,
                     ));
                 }
             }
@@ -1240,7 +1348,7 @@ fn flatten_inline(
                         dom,
                         styled,
                         child,
-                        parent_font_px,
+                        entry.parent_font,
                         fonts,
                         replaced,
                     ));
@@ -1249,11 +1357,11 @@ fn flatten_inline(
                 match dom.name(child) {
                     Some("br") => inlines.push(InlineNode::Break),
                     _ if is_ruby_container(dom, styled, child) => {
-                        inlines.push(ruby_inline(dom, styled, child, font_size));
+                        inlines.push(ruby_inline(dom, styled, child, entry.parent_font));
                     },
                     _ if crate::replaced::inline_atomic(dom, child, &cs) => {
                         if let Some(item) =
-                            crate::replaced::construct(dom, child, &cs, font_size, replaced)
+                            crate::replaced::construct(dom, child, &cs, entry.parent_font, replaced)
                         {
                             inlines.push(item);
                         }
@@ -1269,7 +1377,7 @@ fn flatten_inline(
                             dom,
                             styled,
                             child,
-                            parent_font_px,
+                            entry.parent_font,
                             fonts,
                             replaced,
                         ));
@@ -1277,16 +1385,16 @@ fn flatten_inline(
                     _ => {
                         let child_font_size = values::resolve_font_size(
                             cs.get("font-size").unwrap_or("medium"),
-                            font_size,
+                            entry.parent_font,
                         );
                         let edge =
-                            boundary_between(dom, child, &style, font_size, &cs, child_font_size);
+                            boundary_between(dom, child, &text_parent, entry.parent_font, &cs, child_font_size);
                         flatten_inline(
                             dom,
                             styled,
                             child,
                             cs,
-                            font_size,
+                            entry.parent_font,
                             edge,
                             inlines,
                             blocks_out,

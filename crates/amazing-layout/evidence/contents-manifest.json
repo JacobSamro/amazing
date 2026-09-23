@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "explicit upstream static display:contents reftests",
+    "rationale": "flex item promotion, floated wrapper removal, inline inheritance/decoration, line height and unusual-element suppression; excludes dynamic script-driven fixtures"
+  },
+  "sparse_paths": [
+    "css/css-display"
+  ],
+  "tests": [
+    {
+      "id": "display-contents-flex-001",
+      "test": "css/css-display/display-contents-flex-001.html"
+    },
+    {
+      "id": "display-contents-float-001",
+      "test": "css/css-display/display-contents-float-001.html"
+    },
+    {
+      "id": "display-contents-inline-001",
+      "test": "css/css-display/display-contents-inline-001.html"
+    },
+    {
+      "id": "display-contents-inline-002",
+      "test": "css/css-display/display-contents-inline-002.html"
+    },
+    {
+      "id": "display-contents-line-height",
+      "test": "css/css-display/display-contents-line-height.html"
+    },
+    {
+      "id": "display-contents-unusual-html-elements-none",
+      "test": "css/css-display/display-contents-unusual-html-elements-none.html"
+    }
+  ]
+}

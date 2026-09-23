@@ -1,0 +1,16 @@
+{
+  "gated_base": "b5d1b99",
+  "gated_implementation": "15f9572",
+  "post_gate_base": "9bf1224",
+  "rebased_implementation": "985e5ef",
+  "network_connections_used_for_rebase": false,
+  "layout_sources_unchanged": {
+    "crates/amazing-layout/src/box_tree.rs": "45e77dbd0c8795f5787e749ff62ec6a7d78747258a9116fc92fec347f4b959bb",
+    "crates/amazing-layout/src/contents_tests.rs": "fde6b6de5b4ba95680ed7ad12f868ce929f0bf9aa950a8d641e8de2c0c0487ae",
+    "crates/amazing-layout/src/inline.rs": "ae95f14ea63eedbb2a52574e45c1d45730d62097e4dce6e60adf72950b423420",
+    "crates/amazing-layout/src/lib.rs": "fc8640deaeda289f6123f9516ad4859c031deee708fbb034540ff0e32eae5368"
+  },
+  "implementation_patch_sha256": "c421ddbbbff44cd8dd4c804db24e67ec8a8b35b91834a68544a92d0ed3ca9b70",
+  "workspace_and_rendering_not_rerun_after_rebase": true,
+  "reason": "User requested post-gate rebase; fleet-wide SSH stand-down prevents further server work. Gate results describe the b5d1b99 source epoch."
+}

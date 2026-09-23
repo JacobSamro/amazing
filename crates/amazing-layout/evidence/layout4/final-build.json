@@ -1,0 +1,304 @@
+{
+  "source_manifest_sha256": "76369fc1fd9669aaf37d42c01df2d67aaeb8c68c162287cd0ce105eb6914d04a",
+  "image_executable": "C:\\Users\\server\\target\\layout\\layout4-final-images.exe",
+  "sources_verified_before_build_and_after_every_command": true,
+  "completed_utc": "2026-09-23T03:49:27.4436948Z",
+  "image_executable_sha256": "43c88cfc04c492bd6a87ef4f38b2d42d89301757201f1fa78f7ef8b90db2ee66",
+  "compiler_artifacts": [
+    {
+      "fresh": false,
+      "name": "amazing_common",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net_brotli",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net-brotli#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_media",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-media#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net_tls",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net-tls#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_regex",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-regex#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_dom",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc_codecs",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-codecs#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text_provider",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text-provider#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_html",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc_crypto",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-crypto#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_css",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_js",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-js#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_paint",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-paint#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_layout",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing",
+      "test_profile": false,
+      "kind": [
+        "bin"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout4-final-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_common",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+      "log": "layout4-final-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_media",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-media#0.0.1",
+      "log": "layout4-final-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+      "log": "layout4-final-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_dom",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+      "log": "layout4-final-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_html",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+      "log": "layout4-final-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_image",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-image#0.0.1",
+      "log": "layout4-final-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_css",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout4-final-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_layout",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+      "log": "layout4-final-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_paint",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-paint#0.0.1",
+      "log": "layout4-final-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "render_reftest",
+      "test_profile": false,
+      "kind": [
+        "example"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-image#0.0.1",
+      "log": "layout4-final-images-build.log"
+    }
+  ],
+  "verified_source_files": 220,
+  "started_utc": "2026-09-23T03:48:03.8360643Z",
+  "executable": "C:\\Users\\server\\target\\layout\\layout4-final.exe",
+  "incremental_compilation": false,
+  "executable_sha256": "34c0c1312a0c9ead40a7ea42f2d5628031bd76e46c5e0677a8a997b8f64249d1",
+  "phase": "final",
+  "first_party_fingerprints_and_artifacts_removed": true,
+  "logs": {
+    "layout4-final-images-build.log": "e8fb854712c32a6e3da453dd21c553248d3e4483e30a3878253754930c156421",
+    "layout4-final-tests.log": "e408207ccf79467c135efba4e3f21fc318edb3aa5caebf34ff26d06b5044805a",
+    "layout4-final-workspace-doc.log": "aa1c7837028fac9fcfacfee0f059ded21cc283d065d438d41d91189a10797a6c",
+    "layout4-final-workspace.log": "0e615d3d1838cbfc444643b8c6a14f8a8448121570dde90a3ddf3cd80ffc3b97",
+    "layout4-final-doc.log": "81332640fd3b409b7a34c5edc57b871b60862e4014f850b901c23cddd3b403bb",
+    "layout4-final-renderer.log": "69a187b13091d35bc35aa80d612f60387db1e94fc4fcddc4a4fe37e68c6bd87d"
+  }
+}

@@ -471,3 +471,130 @@ and [pixel review](../../crates/amazing-layout/evidence/layout3/review/review.js
 No local builds or tests were run. LAYOUT-3 stops at this review boundary;
 no next ticket was started. The implementation and evidence are local commits;
 remote publication remains an integrator/user action.
+
+
+## LAYOUT-4 — Contents unboxing (checkpointed; audit pending)
+
+Rebased first onto `bb79669`. Fresh Windows baseline broad geometry is
+**35 pass / 26 mismatch**, twice with identical result/pixel hashes at WPT
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, 800×600. The older 34/61 baseline
+is superseded: CSS side-border improvements already repair the inline-table
+overflow fixture. The six-case static contents shard measures **2/6**, twice.
+
+Before engine edits, fixture/reference audit and rendered pixel inspection rank
+`display:contents` first (7 failing cases), atomic inline-block/grid second
+(2 cases, both with additional sizing/margin-trim dependencies), then
+aspect-ratio and sticky (0 failing cases involving either). The one passing
+sticky fixture is unscrolled and does not establish scroll-constraint support.
+Eleven failures belong to margin-trim, outside the four proposed primitives.
+These are affected-case counts, not promised gains. Two contents fixtures need
+generated pseudo-content as well as unboxing. Raw failures stay visible.
+
+This ticket's bounded implementation slice is contents unboxing across normal
+flow, flex/grid items, anonymous table repair, text inheritance/shaping edges,
+and unusual HTML elements. Atomic inline subtrees are the next independent
+interface change and are deferred rather than bolted onto this slice.
+Source/pixel findings and case IDs: [ranking](../../crates/amazing-layout/evidence/layout4/ranking.json).
+Rules: [CSS Display 3 box generation](https://www.w3.org/TR/css-display-3/#box-generation)
+and [unusual HTML elements](https://www.w3.org/TR/css-display-3/#unbox-html).
+
+The text-inherit pixels already break into two lines: the defect is a leading
+space before Two. OOF002 retains a red positioned wrapper; TD001 retains cell
+padding between letters; first-letter002 paints a red contents background.
+Focused tests must exercise these concrete effects, not only tree counts.
+
+Implementation retains DOM/style ancestry while promoting contents descendants
+before float, positioning, replaced-element, flex/grid and table classification.
+The same traversal handles inline descendants and suppresses unusual HTML
+contents subtrees. Twelve tests cover wrapper removal, relative font inheritance,
+source mappings, positioned descendants, table repair, body hosting, controls,
+flex/grid items and normal/preformatted whitespace boundaries. The whitespace
+fix uses the whitespace supplier's style rather than the next word's style.
+
+The TD001 probe forms one anonymous cell and contiguous PASS, but the remaining
+2px offset is HTML `cellspacing="0"` presentation mapping, routed to CSS/DOM.
+The first-letter fixture's transparent pseudo rule has no visible effect;
+removing the contents background is the measured improvement, not evidence of
+general first-letter support. Generated before/after content remains deferred.
+SVG/MathML unusual-element rules are outside this HTML implementation slice.
+
+### End-of-day checkpoint — not certified for merge
+
+Implementation is committed as `985e5ef`, rebased locally onto `9bf1224` after
+the rendering runs, as requested. The layout source bytes are unchanged from
+measured implementation `15f9572` on base `b5d1b99`. **No tests were run on the
+new rebased tree.** The driver and WPT runner changed upstream, so do not treat
+the measurements below as current `9bf1224` results.
+
+All 40 rendering executions completed and the existing Windows controller
+exited 0. These are console-observed pass/total counts from two baseline and two
+final runs at the pinned WPT revision above:
+
+| Selection | Baseline | Implementation |
+| --- | --- | --- |
+| Geometry | 35/61 | 39/61 |
+| Tables | 9/12 | 9/12 |
+| Contents | 2/6 | 6/6 |
+| Floats | 6/8 | 6/8 |
+| Collapse | 9/9 | 9/9 |
+| Position | 12/12 | 12/12 |
+| Text | 14/16 | 14/16 |
+| Flex/grid | 24/24 | 24/24 |
+| Paint | 24/24 | 24/24 |
+| CSS Images | 12/12 | 12/12 |
+
+Layout nextest: **189 → 201 passed**. On the measured tree, workspace nextest
+passed **1,241 tests with 3 skipped**, twice; separate workspace doctests passed
+**2/2**, twice. Builds and workspace tests predate the SSH outage; the already
+running rendering session finished during it. No new connections were attempted
+after the fleet stand-down.
+
+**Unproven:** per-case hash stability, individual regression comparisons, the
+final whole-source/artifact/log audit, and pixel review of this fresh epoch.
+The outage prevented collection of those reports; matching console counts alone
+do not certify these gates. No final `summary.json` is published. An earlier
+`11dd8a8` epoch was superseded after an external refresh; its pixel review and
+results remain archived and are not credited as fresh evidence.
+
+The user requested an end-of-day stop. All partial work is committed; the refresh
+hold is removed. Resume only after the SSH all-clear. Preserve the retained
+Windows reports before refreshing, then establish which source epoch is still
+available. Any new gate must name its actual measured revision.
+See [checkpoint observations](../../crates/amazing-layout/evidence/layout4/checkpoint.json),
+[rebase/source equality](../../crates/amazing-layout/evidence/layout4/post-gate-rebase.json)
+and [reproduction notes](../../crates/amazing-layout/evidence/layout4/README.md).
+
+### LAYOUT-4 final gate — 2026-09-23
+
+The ticket is complete at a review boundary on `lane/layout`. The current gate
+uses dev `ffb143b` and layout implementation `1419e48`, after the integrator's
+shared coordination-script fix. The two earlier render epochs described above
+remain historical. The implementation source is unchanged by the final gate.
+
+Windows layout nextest: **189 → 201 passed**; separate layout doctests **0/0**.
+Final workspace nextest: **1,274 passed, 3 skipped**, twice; separate workspace
+doctests: **2 passed, 0 failed**, twice. The full workspace runs and all 40
+render runs acquired shared primary-checkout build slots. The earlier
+`474251e` repeat used a private worktree slot and is excluded. The first
+collector attempt failed because it read the stale prefixed source manifest;
+the corrected collector verified all 220 final source files, exact source set,
+clean pinned WPT checkout, executable/log hashes and successful gate exits.
+
+At pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` and 800 × 600,
+broad geometry improves **35/61 → 39/61** and focused contents **2/6 → 6/6**.
+Tables remain 9/12, floats 6/8, block collapse 9/9, position 12/12, text
+14/16, flex/grid 24/24, paint 24/24 and CSS Images 12/12. Both baseline and
+final run each selection twice with matching per-case classifications and
+actual/reference/diff hashes, zero timeout/unsupported/crash, and no pass loss.
+The four geometry gains are text-inherit, sharing-001, oof-002 and
+first-letter-002. Fresh pixel review confirms the visible changes; it does not
+claim first-letter pseudo support. The remaining `td-001` 2px offset is the
+routed `cellspacing="0"` presentational-mapping dependency.
+
+The 22 remaining geometry mismatches group as eleven margin-trim, five
+intrinsic sizing, two float/quirks, two generated pseudo-content, one
+flow-root/list-item and the one `td-001` mapping case. Atomic inline subtree,
+aspect-ratio and sticky work remains outside LAYOUT-4. The measured source
+manifests, 40 normalized reports, hash audit, `summary.json`, and reviewed
+pixels are in [LAYOUT-4 evidence](../../crates/amazing-layout/evidence/layout4/README.md).
+No next ticket starts at this boundary.

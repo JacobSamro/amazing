@@ -274,7 +274,7 @@ struct ShapedWord {
     decorations: Vec<ShapedDecoration>,
     range: Range<usize>,
     context: Rc<ShapedContext>,
-    preserve_space_before: bool,
+    preserved_space_before: f32,
     hyphen_after: bool,
     hyphen_advance: f32,
     requires_reshape: bool,
@@ -536,10 +536,10 @@ pub(crate) fn layout_lines_shaped(
                 if !has_content {
                     prepare(&mut cursor, word.width, strut.line_height);
                 }
-                let mut spacing = if has_content || word.preserve_space_before {
+                let mut spacing = if has_content {
                     word.space_before
                 } else {
-                    0.0
+                    word.preserved_space_before
                 };
                 let break_width = if word.hyphen_after {
                     word.hyphen_advance
@@ -564,20 +564,13 @@ pub(crate) fn layout_lines_shaped(
                         &mut cursor,
                     );
                     prepare(&mut cursor, word.width, strut.line_height);
-                    if !word.preserve_space_before {
-                        spacing = 0.0;
-                    }
+                    spacing = word.preserved_space_before;
                 }
-                let line_range_x = cursor;
                 let x = cursor + spacing;
                 placed_text.push(PlacedText {
                     context: Rc::clone(&word.context),
                     range: word.range.clone(),
-                    x: if word.preserve_space_before {
-                        line_range_x
-                    } else {
-                        x
-                    },
+                    x: x - word.preserved_space_before,
                     hyphen_after: word.hyphen_after,
                     requires_reshape: word.requires_reshape,
                 });
@@ -1841,17 +1834,23 @@ fn shape_chunk(
         let mut font_size = spans[0].style.size;
         let mut active_source = None;
         let mut decoration_start = 0.0;
-        let preserve_space_before = spans
+        // Whitespace belongs to the span that supplied it, not the next word.
+        // Drop a collapsible prefix at line start, retaining preformatted gaps.
+        let preserved_start = spans
             .iter()
-            .find(|span| span.range.contains(&range.start))
-            .is_some_and(|span| {
-                matches!(
-                    span.style.white_space,
-                    amazing_text::WhiteSpace::Pre
-                        | amazing_text::WhiteSpace::PreWrap
-                        | amazing_text::WhiteSpace::BreakSpaces
-                )
-            });
+            .find(|span| {
+                span.range.end > previous_end
+                    && span.range.start < range.start
+                    && matches!(
+                        span.style.white_space,
+                        amazing_text::WhiteSpace::Pre
+                            | amazing_text::WhiteSpace::PreWrap
+                            | amazing_text::WhiteSpace::BreakSpaces
+                    )
+            })
+            .map(|span| span.range.start.max(previous_end))
+            .unwrap_or(range.start);
+        let preserved_space_before = advance_in_range(&shaped, preserved_start..range.start);
         let local_line;
         let visual_runs = if let Some(visual_line) = &visual_line {
             &visual_line.runs
@@ -1957,13 +1956,9 @@ fn shape_chunk(
             space_before: advance_in_range(&shaped, previous_end..range.start),
             glyphs,
             decorations,
-            range: if preserve_space_before {
-                previous_end..range.end
-            } else {
-                range.clone()
-            },
+            range: preserved_start..range.end,
             context: Rc::clone(&context),
-            preserve_space_before,
+            preserved_space_before,
             hyphen_after,
             hyphen_advance,
             requires_reshape: shaped.unsafe_breaks.binary_search(&range.end).is_ok(),
@@ -2381,7 +2376,7 @@ pub(crate) fn intrinsic_widths_shaped(
             ShapedUnit::Break => { maximum = maximum.max(line); line = 0.0; ruby_run = 0.0; }
             ShapedUnit::Word(word) => {
                 minimum = minimum.max(word.width + word.hyphen_advance);
-                line += word.width + if line > 0.0 || word.preserve_space_before {word.space_before} else {0.0};
+                line += word.width + if line > 0.0 {word.space_before} else {word.preserved_space_before};
                 ruby_run = 0.0;
             }
             ShapedUnit::Replaced { size, .. } => {minimum = minimum.max(size.width); line += size.width; ruby_run = 0.0;}

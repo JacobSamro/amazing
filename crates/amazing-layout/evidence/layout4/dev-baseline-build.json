@@ -1,0 +1,302 @@
+{
+  "source_manifest_sha256": "8d8bc6bc44d6cab3188d5605d50a1bd081b721696ba96448e3b023c465354203",
+  "image_executable": "C:\\Users\\server\\target\\layout\\layout4-dev-baseline-images.exe",
+  "sources_verified_before_build_and_after_every_command": true,
+  "completed_utc": "2026-09-23T03:47:19.7495839Z",
+  "image_executable_sha256": "6a8ecda90cbc4076291700a1643226c885749e47ae59e7d5dfd26056101d2fbb",
+  "compiler_artifacts": [
+    {
+      "fresh": false,
+      "name": "amazing_common",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net_brotli",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net-brotli#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net_tls",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net-tls#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_media",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-media#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_regex",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-regex#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_dom",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text_provider",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text-provider#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc_codecs",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-codecs#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_net",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_html",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_webrtc_crypto",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-crypto#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_css",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_js",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-js#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_layout",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_paint",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-paint#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing",
+      "test_profile": false,
+      "kind": [
+        "bin"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+      "log": "layout4-dev-baseline-renderer.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_common",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+      "log": "layout4-dev-baseline-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_media",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-media#0.0.1",
+      "log": "layout4-dev-baseline-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_text",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+      "log": "layout4-dev-baseline-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_dom",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+      "log": "layout4-dev-baseline-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_html",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+      "log": "layout4-dev-baseline-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_css",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+      "log": "layout4-dev-baseline-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_image",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-image#0.0.1",
+      "log": "layout4-dev-baseline-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_layout",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+      "log": "layout4-dev-baseline-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "amazing_paint",
+      "test_profile": false,
+      "kind": [
+        "lib"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-paint#0.0.1",
+      "log": "layout4-dev-baseline-images-build.log"
+    },
+    {
+      "fresh": false,
+      "name": "render_reftest",
+      "test_profile": false,
+      "kind": [
+        "example"
+      ],
+      "package": "path+file:///C:/Users/server/src/wt/layout/crates/amazing-image#0.0.1",
+      "log": "layout4-dev-baseline-images-build.log"
+    }
+  ],
+  "verified_source_files": 219,
+  "started_utc": "2026-09-23T03:46:38.6392111Z",
+  "executable": "C:\\Users\\server\\target\\layout\\layout4-dev-baseline.exe",
+  "incremental_compilation": false,
+  "executable_sha256": "e427e0c86475d599cab4cbfd3402c9262050261a65ab6c67b643942cb4573832",
+  "phase": "dev-baseline",
+  "first_party_fingerprints_and_artifacts_removed": true,
+  "logs": {
+    "layout4-dev-baseline-renderer.log": "9995e3c8c45bdee47d713293a89acb046a2ffa48381b925fcac0080ad498e73d",
+    "layout4-dev-baseline-images-build.log": "78ad83a497385fa31cb446e337d88e51c4cd86c64867313ffbf434b325681a02",
+    "layout4-dev-baseline-doc.log": "5ad33ee7c0106a21babe484cd3cbe1c291a416d1f56d44997e263a63bc51f5fe",
+    "layout4-dev-baseline-tests.log": "4420917db21ae44b0d8b9aafc36bbd566a9aae1be0abe83c591b804d4439401d"
+  }
+}

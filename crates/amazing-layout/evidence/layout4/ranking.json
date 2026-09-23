@@ -1,0 +1,76 @@
+{
+  "baseline_commit": "bb79669",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": [
+    800,
+    600
+  ],
+  "baseline_counts": {
+    "pass": 35,
+    "mismatch": 26,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "stable_repeats": 2,
+  "ranking": [
+    {
+      "feature": "display:contents",
+      "affected_failing_cases": [
+        "css-display__display-contents-text-inherit.html",
+        "css-display__display-contents-sharing-001.html",
+        "css-display__display-contents-before-after-002.html",
+        "css-display__display-contents-oof-002.html",
+        "css-display__display-contents-before-after-001.html",
+        "css-display__display-contents-td-001.html",
+        "css-display__display-contents-first-letter-002.html"
+      ],
+      "count": 7,
+      "additional_blockers": [
+        "before-after-001 and before-after-002 require generated pseudo-content"
+      ],
+      "decision": "Implement complete unboxing slice first; stop before atomic inline subtree layout"
+    },
+    {
+      "feature": "atomic inline-block/flex/grid",
+      "affected_failing_cases": [
+        "css-box__margin-trim__grid-block-end.html",
+        "css-sizing__intrinsic-percent-non-replaced-004.html"
+      ],
+      "count": 2,
+      "additional_blockers": [
+        "margin-trim/logical margins in grid-block-end",
+        "vertical intrinsic percentage/calc sizing in intrinsic-percent-non-replaced-004"
+      ]
+    },
+    {
+      "feature": "aspect-ratio",
+      "count": 0,
+      "affected_failing_cases": []
+    },
+    {
+      "feature": "position:sticky",
+      "count": 0,
+      "affected_failing_cases": [],
+      "limitation": "one already-passing unscrolled RTL fixture does not validate scrolling constraints"
+    }
+  ],
+  "other_clusters": {
+    "margin_trim": 11,
+    "float_and_quirks": 2,
+    "flow_root_list_item": 1,
+    "other_intrinsic_sizing": 4
+  },
+  "review_findings": {
+    "text-inherit": "Newline already preserved; unwanted leading space before Two",
+    "oof-002": "fixed contents element still paints a full-width red background",
+    "td-001": "unboxed td padding still separates P A S S",
+    "first-letter-002": "contents background paints red behind green PASS"
+  },
+  "source_analysis": "Counts mean observed mismatches involving a feature, not guaranteed fixes. Fixture and reference inspected; generated pseudo-content and ancillary layout dependencies retained.",
+  "measurement_reports": [
+    "ranking-geometry-1.json",
+    "ranking-geometry-2.json"
+  ],
+  "baseline_renderer_sha256": "0da20d844d617567191f4d79d42afc244c6f1d3de3bbab061b92b9edc2f3cb62"
+}

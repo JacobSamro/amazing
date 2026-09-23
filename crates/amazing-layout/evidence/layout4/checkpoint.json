@@ -1,0 +1,108 @@
+{
+  "state": "checkpointed",
+  "observed_at_utc": "2026-09-20T20:42:11.501567+00:00",
+  "gated_base": "b5d1b99",
+  "gated_implementation": "15f9572",
+  "rebased_base": "9bf1224",
+  "rebased_implementation": "985e5ef",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": [
+    800,
+    600
+  ],
+  "render_controller_exit": 0,
+  "observations_from_existing_session": {
+    "geometry": {
+      "baseline_pass": 35,
+      "final_pass": 39,
+      "total": 61,
+      "baseline_completed_runs": 2,
+      "final_completed_runs": 2
+    },
+    "tables": {
+      "baseline_pass": 9,
+      "final_pass": 9,
+      "total": 12,
+      "baseline_completed_runs": 2,
+      "final_completed_runs": 2
+    },
+    "contents": {
+      "baseline_pass": 2,
+      "final_pass": 6,
+      "total": 6,
+      "baseline_completed_runs": 2,
+      "final_completed_runs": 2
+    },
+    "floats": {
+      "baseline_pass": 6,
+      "final_pass": 6,
+      "total": 8,
+      "baseline_completed_runs": 2,
+      "final_completed_runs": 2
+    },
+    "block-collapse": {
+      "baseline_pass": 9,
+      "final_pass": 9,
+      "total": 9,
+      "baseline_completed_runs": 2,
+      "final_completed_runs": 2
+    },
+    "position": {
+      "baseline_pass": 12,
+      "final_pass": 12,
+      "total": 12,
+      "baseline_completed_runs": 2,
+      "final_completed_runs": 2
+    },
+    "text-flow": {
+      "baseline_pass": 14,
+      "final_pass": 14,
+      "total": 16,
+      "baseline_completed_runs": 2,
+      "final_completed_runs": 2
+    },
+    "flex-grid": {
+      "baseline_pass": 24,
+      "final_pass": 24,
+      "total": 24,
+      "baseline_completed_runs": 2,
+      "final_completed_runs": 2
+    },
+    "paint-compositing": {
+      "baseline_pass": 24,
+      "final_pass": 24,
+      "total": 24,
+      "baseline_completed_runs": 2,
+      "final_completed_runs": 2
+    },
+    "images": {
+      "baseline_pass": 12,
+      "final_pass": 12,
+      "total": 12,
+      "baseline_completed_runs": 2,
+      "final_completed_runs": 2
+    }
+  },
+  "layout_nextest": {
+    "baseline_passed": 189,
+    "final_passed": 201,
+    "final_skipped": 0
+  },
+  "workspace_nextest": {
+    "passed": 1241,
+    "skipped": 3,
+    "completed_runs": 2
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0,
+    "completed_runs": 2
+  },
+  "final_hash_stability_verified": false,
+  "final_source_artifact_log_audit_completed": false,
+  "per_case_regression_comparison_completed": false,
+  "fresh_epoch_pixel_review_completed": false,
+  "new_rebased_tree_tested": false,
+  "timing": "Builds and workspace tests predate the SSH outage. The already-running rendering session completed all 40 runs during the outage. No new SSH/SCP was attempted after the fleet stand-down. These observations are historical b5d1b99 measurements, not gates on rebased 9bf1224.",
+  "blocked_by": "User end-of-day stand-down and win-001 SSH outage; retained reports and final provenance await collection."
+}
