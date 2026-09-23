@@ -1,8 +1,8 @@
 //! HTML parsing commands and shared source input.
 use std::io::Read;
 use std::process::ExitCode;
-/// Reads a file (or stdin when `path` is None) as lossy UTF-8.
-pub(crate) fn read_source(path: Option<&str>, what: &str) -> Result<String, ExitCode> {
+/// Reads document bytes without choosing an encoding before document mode.
+pub(crate) fn read_bytes(path: Option<&str>, what: &str) -> Result<Vec<u8>, ExitCode> {
     let mut bytes = Vec::new();
     match path {
         Some(p) => match std::fs::File::open(p) {
@@ -24,17 +24,21 @@ pub(crate) fn read_source(path: Option<&str>, what: &str) -> Result<String, Exit
             }
         }
     }
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
+    Ok(bytes)
+}
+
+/// Caller-decoded text for scripts, stylesheets, and HTML fragments.
+pub(crate) fn read_source(path: Option<&str>, what: &str) -> Result<String, ExitCode> {
+    read_bytes(path, what).map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// Phase 1 demo artifact: parse HTML with the WHATWG tokenizer + tree
 /// builder, dump the DOM tree to stdout.
 ///
-/// Bytes are decoded as lossy UTF-8 (documented Phase 1 deviation).
 pub(crate) fn cmd_parse(path: Option<&str>) -> ExitCode {
-    match read_source(path, "parse") {
-        Ok(src) => {
-            match crate::document::parse_document(&src, path.unwrap_or(""), None) {
+    match read_bytes(path, "parse") {
+        Ok(bytes) => {
+            match crate::document::parse_document_bytes(&bytes, path.unwrap_or(""), None) {
                 Ok(document) => {
                     print!("{}", document.dom.dump(amazing_dom::NodeIdx(0)));
                     ExitCode::SUCCESS

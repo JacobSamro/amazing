@@ -161,11 +161,11 @@ pub(crate) fn cmd_domrun(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let html = match read_source(Some(html_path), "domrun html") {
+    let html = match super::parse::read_bytes(Some(html_path), "domrun html") {
         Ok(source) => source,
         Err(code) => return code,
     };
-    let document = match crate::document::parse_document(&html, html_path, None) {
+    let document = match crate::document::parse_document_bytes(&html, html_path, None) {
         Ok(document) => document,
         Err(error) => {
             eprintln!("amazing domrun: {error}");
