@@ -1,6 +1,5 @@
 //! Driver-owned WebIDL installation over the same arena used for page parsing.
-//! The JS runtime currently stores strings as Unicode scalars. Until its
-//! UTF-16 migration, a lone surrogate is an explicit TypeError at this seam.
+//! DOMString values cross the runtime boundary as exact UTF-16 code units.
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use amazing_bindings::{
@@ -20,7 +19,6 @@ use amazing_js::{
     interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter, LegacyPlatformHooks as RuntimeLegacyHooks},
     value::{
         HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsValue, Throw,
-        to_display_string,
     },
 };
 
@@ -171,7 +169,7 @@ impl RuntimeBindingHost<'_> {
             "hasAttribute", "removeAttribute", "innerHTML", "innerText", "onclick", "click"];
         let properties = {
             let old = old.borrow();
-            extensions.iter().filter_map(|name| old.own_prop(name).cloned().map(|prop| (*name, prop)))
+            extensions.iter().filter_map(|name| old.own_prop(*name).cloned().map(|prop| (*name, prop)))
                 .collect::<Vec<_>>()
         };
         // The legacy extensions still use the old node marker internally. The
@@ -787,9 +785,7 @@ impl BindingHost for RuntimeBindingHost<'_> {
         JsValue::Num(value)
     }
     fn string(&self, value: &[u16]) -> Result<JsValue, Throw> {
-        String::from_utf16(value)
-            .map(JsValue::str)
-            .map_err(|_| Throw::type_error("lone surrogate not yet representable"))
+        Ok(self.js.binding_string(value))
     }
     fn is_undefined(&self, value: &JsValue) -> bool {
         value.is_undefined()
@@ -801,27 +797,10 @@ impl BindingHost for RuntimeBindingHost<'_> {
         self.js.binding_to_boolean(value)
     }
     fn string_units(&self, value: &JsValue) -> Option<Vec<u16>> {
-        match value { JsValue::Str(value) => Some(value.encode_utf16().collect()), _ => None }
+        self.js.binding_string_units(value)
     }
     fn to_dom_string(&mut self, value: &JsValue) -> Result<Vec<u16>, Throw> {
-        let primitive = if value.is_object() {
-            let mut primitive = None;
-            for name in ["toString", "valueOf"] {
-                let method = self.js.binding_get_property(value, name)?;
-                if !self.js.binding_is_callable(&method) {
-                    continue;
-                }
-                let result = binding_call(self.js, &method, value, &[])?;
-                if !result.is_object() {
-                    primitive = Some(result);
-                    break;
-                }
-            }
-            primitive.ok_or_else(|| Throw::type_error("cannot convert object to primitive"))?
-        } else {
-            value.clone()
-        };
-        Ok(to_display_string(&primitive).encode_utf16().collect())
+        self.js.binding_to_dom_string(value)
     }
     fn type_error(&mut self, message: &'static str) -> Throw {
         Throw::type_error(message)
