@@ -398,3 +398,22 @@ reflects intervening dev changes, not RC-4.
 
 Stop at RC-4 for co-integrator review and authoritative merged-head validation.
 No remote branch/PR publication or next ticket.
+
+### RC-4 HTML-2 named-source workspace checkpoint
+
+After `ffb143b`, dev added HTML-2 `parse_bytes`/encoding (no production caller)
+and a refresh-script change. The only changed paths are `amazing-html`
+`encoding.rs`/`lib.rs`, HTML decision notes, and the refresh script; there are
+no RC, driver, render harness, or fixture changes. RC-4 rebased cleanly to dev
+`4e9d71c390d949d03b6adbdd48e55b72fb3ea4b1`, compiled lane
+`043292f1968ef71b99f9d7aff9b2225fc7b08a7d`. The primary coordinator
+refreshed only the RC Windows tree from origin/dev, RC files were re-synced,
+and 329 Rust/Cargo/harness/fixture hashes matched. Root locked metadata passed.
+Under the primary shared build slot, root nextest passed **1270/1270** with
+3 skipped across 42 binaries and separate doctests passed **2/2** across 19
+targets. See `tests/wpt-replaced-content/rc4/rebase-4e9d71c/`.
+
+The five pinned render pairs and owned proof were not rerun: their committed
+pixel evidence is explicitly for `ffb143b` compiled source. This checkpoint
+claims only the named-source workspace gate. Integrator will stage/rebase an
+integration snapshot on later dev and authoritative-gate the merged head.
