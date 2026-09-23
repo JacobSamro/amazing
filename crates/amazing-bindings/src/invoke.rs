@@ -91,6 +91,26 @@ fn required_node<H: BindingHost>(
         .and_then(|v| host.node_brand(v))
         .ok_or_else(|| host.type_error("Expected a Node"))
 }
+
+/// Native key metadata for a legacy platform object. The runtime calls this
+/// outside a DOM borrow, then uses the count as the index range 0..count.
+pub fn supported_index_count<H: BindingHost>(
+    host: &mut H, operation: O, receiver: &H::Value,
+) -> Result<u32, H::Error> {
+    match operation {
+        O::HTMLCollectionSupportedIndexCount | O::NodeListSupportedIndexCount =>
+            crate::collections::supported_index_count(host, operation, receiver),
+        O::TokenListSupportedIndexCount => crate::tokenlist::supported_index_count(host, receiver),
+        _ => Err(host.type_error("Expected a supported index count hook")),
+    }
+}
+
+/// Native UTF-16 names in WebIDL supported-property-name order.
+pub fn supported_names<H: BindingHost>(
+    host: &mut H, operation: O, receiver: &H::Value,
+) -> Result<Vec<Vec<u16>>, H::Error> {
+    crate::collections::supported_names(host, operation, receiver)
+}
 fn nullable_node<H: BindingHost>(
     host: &mut H,
     value: &H::Value,
@@ -137,6 +157,9 @@ pub fn invoke<H: BindingHost>(
     }
     if crate::tokenlist::handles(operation) {
         return crate::tokenlist::invoke(host, operation, receiver, args);
+    }
+    if crate::html_reflection::handles(operation) {
+        return crate::html_reflection::invoke(host, operation, receiver, args);
     }
     let constructor = matches!(
         operation,

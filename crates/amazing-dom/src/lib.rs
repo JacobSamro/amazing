@@ -15,6 +15,7 @@
 
 pub mod events;
 pub mod attr;
+pub mod collection;
 pub mod event_loop;
 pub mod mutation;
 mod namespace;
@@ -114,6 +115,8 @@ pub struct Dom {
     external_event_targets: u64,
     mutation_records: Vec<mutation::RegisteredRecord>,
     static_node_lists: Vec<Vec<NodeIdx>>,
+    collections: Vec<collection::LiveCollection>,
+    mutation_generation: u64,
     dom_exceptions: Vec<DomExceptionData>,
     traversals: traversal::Traversals,
     /// Doctype name captured by the tree builder (Phase 1). Quirks-mode bits
@@ -151,6 +154,8 @@ impl Dom {
             external_event_targets: 0,
             mutation_records: Vec::new(),
             static_node_lists: Vec::new(),
+            collections: Vec::new(),
+            mutation_generation: 0,
             dom_exceptions: Vec::new(),
             traversals: traversal::Traversals::default(),
             doctype: None,

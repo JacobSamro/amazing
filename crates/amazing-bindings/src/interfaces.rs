@@ -1,5 +1,5 @@
 use crate::host::{
-    BindingHost, Interface as I, InterfaceDefinition as D, Member, MemberKind as K, Operation as O,
+    BindingHost, Interface as I, InterfaceBrand, InterfaceDefinition as D, IterableKind, LegacyPlatformHooks, Member, MemberKind as K, Operation as O,
 };
 const fn method(name: &'static str, operation: O, length: u8) -> Member {
     Member {
@@ -99,6 +99,7 @@ const DOM_EXCEPTION: &[Member] = &[
     getter("code", O::DOMExceptionCode),
 ];
 const PARENT: &[Member] = &[
+    getter("children", O::FragmentChildren),
     method("append", O::Append, 0),
     method("prepend", O::Prepend, 0),
     method("replaceChildren", O::ReplaceChildren, 0),
@@ -119,6 +120,10 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    getter("children", O::DocumentChildren),
+    method("getElementsByTagName", O::DocumentGetElementsByTagName, 1),
+    method("getElementsByTagNameNS", O::DocumentGetElementsByTagNameNS, 2),
+    method("getElementsByClassName", O::DocumentGetElementsByClassName, 1),
     getter("implementation", O::DocumentImplementation),
     method("createElement", O::CreateElement, 1),
     method("createElementNS", O::CreateElementNS, 2),
@@ -146,6 +151,11 @@ const DOM_IMPLEMENTATION: &[Member] = &[
 const NODE_LIST: &[Member] = &[
     getter("length", O::NodeListLength),
     method("item", O::NodeListItem, 1),
+];
+const HTML_COLLECTION: &[Member] = &[
+    getter("length", O::HTMLCollectionLength),
+    method("item", O::HTMLCollectionItem, 1),
+    method("namedItem", O::HTMLCollectionNamedItem, 1),
 ];
 const ATTR: &[Member] = &[
     getter("namespaceURI", O::AttrNamespaceURI),
@@ -236,6 +246,12 @@ const RANGE: &[Member] = &[
     method("toString", O::RangeStringifier, 0),
 ];
 const ELEMENT: &[Member] = &[
+    getter("id", O::ElementId),
+    setter("id", O::ElementSetId),
+    getter("children", O::ElementChildren),
+    method("getElementsByTagName", O::ElementGetElementsByTagName, 1),
+    method("getElementsByTagNameNS", O::ElementGetElementsByTagNameNS, 2),
+    method("getElementsByClassName", O::ElementGetElementsByClassName, 1),
     getter("classList", O::ElementClassList),
     getter("className", O::ElementClassName),
     setter("className", O::ElementSetClassName),
@@ -258,6 +274,15 @@ const ELEMENT: &[Member] = &[
     method("after", O::After, 0),
     method("replaceWith", O::ReplaceWith, 0),
     method("remove", O::Remove, 0),
+];
+const HTML_ELEMENT: &[Member] = &[
+    getter("title", O::HTMLTitle), setter("title", O::HTMLSetTitle),
+    getter("lang", O::HTMLLang), setter("lang", O::HTMLSetLang),
+    getter("dir", O::HTMLDir), setter("dir", O::HTMLSetDir),
+    getter("hidden", O::HTMLHidden), setter("hidden", O::HTMLSetHidden),
+    getter("tabIndex", O::HTMLTabIndex), setter("tabIndex", O::HTMLSetTabIndex),
+    getter("accessKey", O::HTMLAccessKey), setter("accessKey", O::HTMLSetAccessKey),
+    getter("translate", O::HTMLTranslate), setter("translate", O::HTMLSetTranslate),
 ];
 pub static INTERFACES: &[D] = &[
     D {
@@ -302,6 +327,71 @@ pub static INTERFACES: &[D] = &[
         constructor: None,
         members: ELEMENT,
     },
+    D { interface: I::HTMLElement, name: "HTMLElement", parent: Some(I::Element), constructor: None, members: HTML_ELEMENT },
+    D { interface: I::HTMLUnknownElement, name: "HTMLUnknownElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLHtmlElement, name: "HTMLHtmlElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLHeadElement, name: "HTMLHeadElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTitleElement, name: "HTMLTitleElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLBaseElement, name: "HTMLBaseElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLLinkElement, name: "HTMLLinkElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLMetaElement, name: "HTMLMetaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLStyleElement, name: "HTMLStyleElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLBodyElement, name: "HTMLBodyElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLHeadingElement, name: "HTMLHeadingElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLParagraphElement, name: "HTMLParagraphElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLHRElement, name: "HTMLHRElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLPreElement, name: "HTMLPreElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLQuoteElement, name: "HTMLQuoteElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLOListElement, name: "HTMLOListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLUListElement, name: "HTMLUListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLLIElement, name: "HTMLLIElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLDListElement, name: "HTMLDListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLDivElement, name: "HTMLDivElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLAnchorElement, name: "HTMLAnchorElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLImageElement, name: "HTMLImageElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLBRElement, name: "HTMLBRElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLModElement, name: "HTMLModElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTimeElement, name: "HTMLTimeElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLDataElement, name: "HTMLDataElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTableElement, name: "HTMLTableElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTableCaptionElement, name: "HTMLTableCaptionElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTableSectionElement, name: "HTMLTableSectionElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTableRowElement, name: "HTMLTableRowElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTableCellElement, name: "HTMLTableCellElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTableColElement, name: "HTMLTableColElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLFormElement, name: "HTMLFormElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLInputElement, name: "HTMLInputElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLButtonElement, name: "HTMLButtonElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLSelectElement, name: "HTMLSelectElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLOptionElement, name: "HTMLOptionElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLOptGroupElement, name: "HTMLOptGroupElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTextAreaElement, name: "HTMLTextAreaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLLabelElement, name: "HTMLLabelElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLFieldSetElement, name: "HTMLFieldSetElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLDataListElement, name: "HTMLDataListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLMeterElement, name: "HTMLMeterElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLMediaElement, name: "HTMLMediaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLVideoElement, name: "HTMLVideoElement", parent: Some(I::HTMLMediaElement), constructor: None, members: &[] },
+    D { interface: I::HTMLAudioElement, name: "HTMLAudioElement", parent: Some(I::HTMLMediaElement), constructor: None, members: &[] },
+    D { interface: I::HTMLSourceElement, name: "HTMLSourceElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTrackElement, name: "HTMLTrackElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLCanvasElement, name: "HTMLCanvasElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLEmbedElement, name: "HTMLEmbedElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLObjectElement, name: "HTMLObjectElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLParamElement, name: "HTMLParamElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLDetailsElement, name: "HTMLDetailsElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLDialogElement, name: "HTMLDialogElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLMapElement, name: "HTMLMapElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLAreaElement, name: "HTMLAreaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLPictureElement, name: "HTMLPictureElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLMenuElement, name: "HTMLMenuElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D {
         interface: I::CharacterData,
         name: "CharacterData",
@@ -400,6 +490,7 @@ pub static INTERFACES: &[D] = &[
         constructor: None,
         members: NODE_LIST,
     },
+    D { interface: I::HTMLCollection, name: "HTMLCollection", parent: None, constructor: None, members: HTML_COLLECTION },
     D {
         interface: I::NodeIterator,
         name: "NodeIterator",
@@ -451,6 +542,79 @@ pub static INTERFACES: &[D] = &[
     },
 ];
 
+/// Primary HTML interface selected from a lower-case local name.
+/// The native wrapper keeps its Node brand; the driver uses this lookup for
+/// the prototype when it creates the canonical wrapper.
+pub fn html_element_interface(local: &str) -> I {
+    match local {
+        "html" => I::HTMLHtmlElement,
+        "head" => I::HTMLHeadElement,
+        "title" => I::HTMLTitleElement,
+        "base" => I::HTMLBaseElement,
+        "link" => I::HTMLLinkElement,
+        "meta" => I::HTMLMetaElement,
+        "style" => I::HTMLStyleElement,
+        "body" => I::HTMLBodyElement,
+        "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => I::HTMLHeadingElement,
+        "p" => I::HTMLParagraphElement,
+        "hr" => I::HTMLHRElement,
+        "pre" | "listing" | "xmp" => I::HTMLPreElement,
+        "blockquote" | "q" => I::HTMLQuoteElement,
+        "ol" => I::HTMLOListElement,
+        "ul" => I::HTMLUListElement,
+        "li" => I::HTMLLIElement,
+        "dl" => I::HTMLDListElement,
+        "div" => I::HTMLDivElement,
+        "a" => I::HTMLAnchorElement,
+        "img" => I::HTMLImageElement,
+        "br" => I::HTMLBRElement,
+        "ins" | "del" => I::HTMLModElement,
+        "time" => I::HTMLTimeElement,
+        "data" => I::HTMLDataElement,
+        "table" => I::HTMLTableElement,
+        "caption" => I::HTMLTableCaptionElement,
+        "thead" | "tbody" | "tfoot" => I::HTMLTableSectionElement,
+        "tr" => I::HTMLTableRowElement,
+        "td" | "th" => I::HTMLTableCellElement,
+        "col" | "colgroup" => I::HTMLTableColElement,
+        "form" => I::HTMLFormElement,
+        "input" => I::HTMLInputElement,
+        "button" => I::HTMLButtonElement,
+        "select" => I::HTMLSelectElement,
+        "option" => I::HTMLOptionElement,
+        "optgroup" => I::HTMLOptGroupElement,
+        "textarea" => I::HTMLTextAreaElement,
+        "label" => I::HTMLLabelElement,
+        "fieldset" => I::HTMLFieldSetElement,
+        "legend" => I::HTMLLegendElement,
+        "datalist" => I::HTMLDataListElement,
+        "output" => I::HTMLOutputElement,
+        "progress" => I::HTMLProgressElement,
+        "meter" => I::HTMLMeterElement,
+        "video" => I::HTMLVideoElement,
+        "audio" => I::HTMLAudioElement,
+        "source" => I::HTMLSourceElement,
+        "track" => I::HTMLTrackElement,
+        "canvas" => I::HTMLCanvasElement,
+        "script" => I::HTMLScriptElement,
+        "template" => I::HTMLTemplateElement,
+        "slot" => I::HTMLSlotElement,
+        "iframe" => I::HTMLIFrameElement,
+        "embed" => I::HTMLEmbedElement,
+        "object" => I::HTMLObjectElement,
+        "param" => I::HTMLParamElement,
+        "details" => I::HTMLDetailsElement,
+        "dialog" => I::HTMLDialogElement,
+        "map" => I::HTMLMapElement,
+        "area" => I::HTMLAreaElement,
+        "picture" => I::HTMLPictureElement,
+        "menu" => I::HTMLMenuElement,
+        "article" | "aside" | "b" | "bdi" | "bdo" | "big" | "center" | "cite" | "code" | "dd" | "dfn" | "dt" | "em" | "figcaption" | "figure" | "footer" | "header" | "hgroup" | "i" | "kbd" | "main" | "mark" | "nav" | "nobr" | "noembed" | "noframes" | "noscript" | "plaintext" | "rb" | "rp" | "rt" | "rtc" | "ruby" | "s" | "samp" | "search" | "section" | "small" | "span" | "strike" | "strong" | "sub" | "sup" | "tt" | "u" | "var" | "wbr" | "address" | "abbr" | "acronym" | "basefont" => I::HTMLElement,
+        name if name.contains('-') => I::HTMLElement,
+        _ => I::HTMLUnknownElement,
+    }
+}
+
 /// Add these descriptors without deleting unrelated existing browser APIs.
 /// Constructors require `new`; illegal constructors still expose prototypes.
 /// Runtime defines writable/configurable methods, enumerable configurable
@@ -459,6 +623,33 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<(), H::Error> {
     for definition in INTERFACES {
         host.install_interface(definition)?;
     }
+    host.define_legacy_platform_object(InterfaceBrand::COLLECTION, LegacyPlatformHooks {
+        supported_index_count: O::HTMLCollectionSupportedIndexCount,
+        supported_names: Some(O::HTMLCollectionSupportedNames),
+        indexed_getter: O::HTMLCollectionIndexedGetter,
+        indexed_setter: None,
+        named_getter: Some(O::HTMLCollectionNamedGetter),
+        named_setter: None,
+        named_deleter: None,
+        override_builtins: false,
+        unenumerable_names: true,
+    })?;
+    for brand in [InterfaceBrand::NODE_LIST, InterfaceBrand::STATIC_NODE_LIST] {
+        host.define_legacy_platform_object(brand, LegacyPlatformHooks {
+            supported_index_count: O::NodeListSupportedIndexCount, supported_names: None,
+            indexed_getter: O::NodeListIndexedGetter, indexed_setter: None, named_getter: None,
+            named_setter: None, named_deleter: None, override_builtins: false,
+            unenumerable_names: false,
+        })?;
+    }
+    host.define_legacy_platform_object(InterfaceBrand::DOM_TOKEN_LIST, LegacyPlatformHooks {
+        supported_index_count: O::TokenListSupportedIndexCount, supported_names: None,
+        indexed_getter: O::TokenListIndexedGetter, indexed_setter: None, named_getter: None,
+        named_setter: None, named_deleter: None, override_builtins: false,
+        unenumerable_names: false,
+    })?;
+    host.define_iterable(I::NodeList, IterableKind::Values)?;
+    host.define_iterable(I::DOMTokenList, IterableKind::Values)?;
     for (name, value) in [
         ("ELEMENT_NODE", 1),
         ("ATTRIBUTE_NODE", 2),

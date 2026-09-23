@@ -1,5 +1,5 @@
 use super::*;
-use crate::host::{BindingHost, CallbackId, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, Operation as O, PlatformKey};
+use crate::host::{BindingHost, CallbackId, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, PlatformKey};
 use amazing_dom::NodeKind;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -29,6 +29,8 @@ struct Host {
     callbacks: Vec<Option<V>>,
     calls: Vec<u64>,
     reject_lone_surrogate: bool,
+    legacy: Vec<(InterfaceBrand, LegacyPlatformHooks)>,
+    iterables: Vec<(Interface, IterableKind)>,
 }
 impl BindingHost for Host {
     type Value = V;
@@ -69,6 +71,12 @@ impl BindingHost for Host {
         _configurable: bool,
     ) -> Result<(), String> {
         Err("installation capability unused by this invocation mock".into())
+    }
+    fn define_legacy_platform_object(&mut self, brand: InterfaceBrand, hooks: LegacyPlatformHooks) -> Result<(), String> {
+        self.legacy.push((brand, hooks)); Ok(())
+    }
+    fn define_iterable(&mut self, interface: Interface, kind: IterableKind) -> Result<(), String> {
+        self.iterables.push((interface, kind)); Ok(())
     }
     fn get_property(&mut self, object: &V, name: &str) -> Result<V, String> {
         assert!(!self.arena_borrowed);
@@ -188,7 +196,12 @@ impl BindingHost for Host {
         matches!(v, V::Undefined | V::Null)
     }
     fn to_boolean(&self, v: &V) -> bool {
-        !matches!(v, V::Undefined | V::Null | V::Bool(false))
+        match v { V::Undefined | V::Null | V::Bool(false) => false,
+            V::Number(n) => *n != 0. && !n.is_nan(),
+            V::String(s) => !s.is_empty(), _ => true }
+    }
+    fn string_units(&self, v: &V) -> Option<Vec<u16>> {
+        if let V::String(units) = v { Some(units.clone()) } else { None }
     }
     fn to_dom_string(&mut self, value: &V) -> Result<Vec<u16>, String> {
         assert!(!self.arena_borrowed);
@@ -214,6 +227,32 @@ fn str_value(s: &str) -> V {
 }
 fn call(h: &mut Host, op: O, receiver: V, args: &[V]) -> V {
     invoke(h, op, receiver, args).unwrap()
+}
+fn mock_legacy_get(h: &mut Host, receiver: V, key: &str) -> V {
+    let hooks = h.legacy.iter().find(|(brand, _)| h.platform_object(&receiver, *brand).is_some()).unwrap().1;
+    if let Ok(index) = key.parse::<u32>() {
+        if index < crate::supported_index_count(h, hooks.supported_index_count, &receiver).unwrap() {
+            return call(h, hooks.indexed_getter, receiver, &[V::Number(index as f64)]);
+        }
+    }
+    if let Some(names_op) = hooks.supported_names {
+        let supported = crate::supported_names(h, names_op, &receiver).unwrap();
+        if supported.contains(&key.encode_utf16().collect()) {
+            return call(h, hooks.named_getter.unwrap(), receiver, &[str_value(key)]);
+        }
+    }
+    V::Undefined
+}
+fn mock_legacy_keys(h: &mut Host, receiver: V) -> Vec<String> {
+    let hooks = h.legacy.iter().find(|(brand, _)| h.platform_object(&receiver, *brand).is_some()).unwrap().1;
+    let mut keys = Vec::new();
+    let count = crate::supported_index_count(h, hooks.supported_index_count, &receiver).unwrap();
+    keys.extend((0..count).map(|index| index.to_string()));
+    if let Some(names) = hooks.supported_names {
+        let values = crate::supported_names(h, names, &receiver).unwrap();
+        for units in values { keys.push(String::from_utf16(&units).unwrap()); }
+    }
+    keys
 }
 fn node(v: V) -> NodeIdx {
     if let V::Node(n) = v {
@@ -689,4 +728,105 @@ fn class_list_is_live_canonical_and_validates_tokens() {
     assert_eq!(call(&mut h, O::ElementClassName, element, &[]), V::String(vec![0xD800]));
     h.reject_lone_surrogate = true;
     assert_eq!(invoke(&mut h, O::TokenListValue, list, &[]), Err("TypeError: cannot represent lone surrogate".into()));
+}
+
+#[test]
+fn html_collection_binding_and_legacy_hooks_are_live() {
+    let mut h = Host::default();
+    install(&mut h).unwrap();
+    assert_eq!(h.legacy.len(), 4);
+    assert_eq!(h.legacy[0].0, InterfaceBrand::COLLECTION);
+    assert_eq!(h.legacy[0].1.named_getter, Some(O::HTMLCollectionNamedGetter));
+    assert!(h.legacy[0].1.unenumerable_names);
+    assert!(h.legacy.iter().all(|(_, hooks)| !hooks.override_builtins
+        && hooks.indexed_setter.is_none() && hooks.named_setter.is_none()
+        && hooks.named_deleter.is_none()));
+    assert!(h.iterables.contains(&(Interface::NodeList, IterableKind::Values)));
+    assert!(h.iterables.contains(&(Interface::DOMTokenList, IterableKind::Values)));
+    let root = h.dom.create_element(NodeIdx(0), "div");
+    let document_children = call(&mut h, O::DocumentChildren, V::Node(NodeIdx(0)), &[]);
+    assert_eq!(call(&mut h, O::HTMLCollectionItem, document_children, &[V::Number(0.)]), V::Node(root));
+    let fragment = h.dom.create_document_fragment(NodeIdx(0)).unwrap();
+    let fragment_child = h.dom.create_element(fragment, "i");
+    let fragment_children = call(&mut h, O::FragmentChildren, V::Node(fragment), &[]);
+    assert_eq!(call(&mut h, O::HTMLCollectionItem, fragment_children, &[V::Number(0.)]), V::Node(fragment_child));
+    let first = h.dom.create_element(root, "span");
+    h.dom.set_attribute(first, "id", "first").unwrap();
+    let receiver = V::Node(root);
+    let child_nodes = call(&mut h, O::ChildNodes, receiver.clone(), &[]);
+    assert_eq!(mock_legacy_get(&mut h, child_nodes, "0"), V::Node(first));
+    call(&mut h, O::ElementSetClassName, V::Node(first), &[str_value("a b")]);
+    let class_list = call(&mut h, O::ElementClassList, V::Node(first), &[]);
+    assert_eq!(mock_legacy_get(&mut h, class_list, "1"), str_value("b"));
+    let collection = call(&mut h, O::ElementChildren, receiver.clone(), &[]);
+    assert_eq!(call(&mut h, O::ElementChildren, receiver.clone(), &[]), collection);
+    assert_eq!(call(&mut h, O::HTMLCollectionLength, collection.clone(), &[]), V::Number(1.));
+    assert_eq!(call(&mut h, O::HTMLCollectionItem, collection.clone(), &[V::Number(0.)]), V::Node(first));
+    assert_eq!(call(&mut h, O::HTMLCollectionNamedGetter, collection.clone(), &[str_value("first")]), V::Node(first));
+    assert_eq!(mock_legacy_get(&mut h, collection.clone(), "0"), V::Node(first));
+    assert_eq!(mock_legacy_get(&mut h, collection.clone(), "first"), V::Node(first));
+    assert_eq!(mock_legacy_keys(&mut h, collection.clone()), vec!["0", "first"]);
+    assert_eq!(crate::supported_names(&mut h, O::HTMLCollectionSupportedNames, &collection).unwrap(), vec!["first".encode_utf16().collect::<Vec<_>>()]);
+    let second = h.dom.create_element(root, "b");
+    h.dom.set_attribute(second, "name", "named").unwrap();
+    assert_eq!(crate::supported_index_count(&mut h, O::HTMLCollectionSupportedIndexCount, &collection).unwrap(), 2);
+    assert_eq!(call(&mut h, O::HTMLCollectionNamedItem, collection.clone(), &[str_value("named")]), V::Node(second));
+    h.dom.detach(first);
+    assert_eq!(call(&mut h, O::HTMLCollectionItem, collection.clone(), &[V::Number(0.)]), V::Node(second));
+    assert_eq!(mock_legacy_get(&mut h, collection.clone(), "first"), V::Undefined);
+    assert_eq!(mock_legacy_keys(&mut h, collection.clone()), vec!["0", "named"]);
+    assert_eq!(mock_legacy_get(&mut h, collection, "0"), V::Node(second));
+    let tags = call(&mut h, O::ElementGetElementsByTagName, receiver.clone(), &[str_value("b")]);
+    assert_eq!(call(&mut h, O::HTMLCollectionLength, tags, &[]), V::Number(1.));
+    let surrogate_query = call(&mut h, O::ElementGetElementsByTagName, receiver.clone(), &[V::String(vec![0xD800])]);
+    assert_eq!(call(&mut h, O::HTMLCollectionLength, surrogate_query, &[]), V::Number(0.));
+    let classes = call(&mut h, O::ElementGetElementsByClassName, receiver, &[str_value("x")]);
+    assert_eq!(call(&mut h, O::HTMLCollectionLength, classes, &[]), V::Number(0.));
+}
+
+#[test]
+fn html_reflection_handles_strings_keywords_booleans_and_tabindex() {
+    let mut h = Host::default();
+    let node = h.dom.create_element(NodeIdx(0), "button");
+    let value = V::Node(node);
+    assert_eq!(call(&mut h, O::HTMLTabIndex, value.clone(), &[]), V::Number(0.));
+    call(&mut h, O::ElementSetId, value.clone(), &[str_value("x")]);
+    assert_eq!(call(&mut h, O::ElementId, value.clone(), &[]), str_value("x"));
+    call(&mut h, O::HTMLSetTitle, value.clone(), &[V::String(vec![0xD800])]);
+    assert_eq!(call(&mut h, O::HTMLTitle, value.clone(), &[]), V::String(vec![0xD800]));
+    h.dom.set_attribute(node, "dir", "RTL").unwrap();
+    assert_eq!(call(&mut h, O::HTMLDir, value.clone(), &[]), str_value("rtl"));
+    h.dom.set_attribute(node, "dir", "bogus").unwrap();
+    assert_eq!(call(&mut h, O::HTMLDir, value.clone(), &[]), str_value(""));
+    call(&mut h, O::HTMLSetHidden, value.clone(), &[V::Bool(true)]);
+    assert_eq!(call(&mut h, O::HTMLHidden, value.clone(), &[]), V::Bool(true));
+    call(&mut h, O::HTMLSetHidden, value.clone(), &[V::Bool(false)]);
+    assert_eq!(call(&mut h, O::HTMLHidden, value.clone(), &[]), V::Bool(false));
+    call(&mut h, O::HTMLSetHidden, value.clone(), &[str_value("UNTIL-FOUND")]);
+    assert_eq!(call(&mut h, O::HTMLHidden, value.clone(), &[]), str_value("until-found"));
+    call(&mut h, O::HTMLSetTabIndex, value.clone(), &[V::Number(-3.)]);
+    assert_eq!(call(&mut h, O::HTMLTabIndex, value.clone(), &[]), V::Number(-3.));
+    call(&mut h, O::HTMLSetTranslate, value.clone(), &[V::Bool(false)]);
+    assert_eq!(call(&mut h, O::HTMLTranslate, value, &[]), V::Bool(false));
+}
+
+#[test]
+fn html_element_interface_lookup_has_specialized_and_unknown_fallbacks() {
+    assert_eq!(html_element_interface("button"), Interface::HTMLButtonElement);
+    assert_eq!(html_element_interface("h3"), Interface::HTMLHeadingElement);
+    assert_eq!(html_element_interface("section"), Interface::HTMLElement);
+    assert_eq!(html_element_interface("my-widget"), Interface::HTMLElement);
+    assert_eq!(html_element_interface("someunknown"), Interface::HTMLUnknownElement);
+    let video = INTERFACES.iter().find(|definition| definition.interface == Interface::HTMLVideoElement).unwrap();
+    assert_eq!(video.parent, Some(Interface::HTMLMediaElement));
+}
+
+#[test]
+fn shared_html_integer_reflection_parses_leading_digits_and_range() {
+    let units = |s: &str| s.encode_utf16().collect::<Vec<_>>();
+    assert_eq!(crate::html_reflection::signed_long(&units("  -12px")), Some(-12));
+    assert_eq!(crate::html_reflection::signed_long(&units("+2")), Some(2));
+    assert_eq!(crate::html_reflection::signed_long(&units("2147483648")), None);
+    assert_eq!(crate::html_reflection::unsigned_long(&units("4294967295rest")), Some(u32::MAX));
+    assert_eq!(crate::html_reflection::unsigned_long(&units("-1")), None);
 }

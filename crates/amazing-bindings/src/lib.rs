@@ -31,10 +31,11 @@ mod event_bindings;
 mod mutation_bindings;
 mod attr_bindings;
 mod tokenlist;
+mod html_reflection;
 pub use mutation_bindings::deliver_mutation_checkpoint;
 pub use amazing_dom::{Dom, DomError, NodeIdx};
-pub use interfaces::{install, INTERFACES};
-pub use invoke::invoke;
+pub use interfaces::{html_element_interface, install, INTERFACES};
+pub use invoke::{invoke, supported_index_count, supported_names};
 
 #[cfg(test)]
 mod tests;

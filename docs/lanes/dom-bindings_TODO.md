@@ -1139,10 +1139,12 @@ is missing; the request is in `.agents/dom-bindings/questions.md`.
 | Attr : Node | `namespaceURI`, `prefix`, `localName`, `name`, `value`, `ownerElement`, `specified` | Implemented | Attached/detached Attr identity and UTF-16 value sidecar; driver installation pending. |
 | NamedNodeMap | `length`, `item`, `getNamedItem`, `getNamedItemNS`, `setNamedItem`, `setNamedItemNS`, `removeNamedItem`, `removeNamedItemNS` | Implemented | Live map through element attributes; driver installation pending. |
 | NodeList | `length`, `item` | Implemented | Live `childNodes` and immutable mutation snapshot wrappers; shared private identity. |
-| NodeList | indexed getter, iterable | Needs installer | MemberKind currently has no indexed/iterable descriptor; integrator installer must supply it. |
-| HTMLCollection | `length`, `item`, `namedItem`, indexed/named getters | Deferred native | No live element collection state or named-property implementation. |
+| NodeList | indexed getter, iterable | Runtime hook draft | Live/static NodeList indexed hooks and `define_iterable(NodeList, Values)` declare dynamic indexed access and `@@iterator`, `keys`, `values`, `entries`, `forEach`; runtime implementation pending. |
+| HTMLCollection | `children` on Document, DocumentFragment, Element; `getElementsByTagName(NS)`, `getElementsByClassName`; `length`, `item`, `namedItem`, indexed/named getters | Native and binding dispatch implemented | Live mutation-generation cache and canonical owner/filter key; `define_legacy_platform_object` is a draft runtime hook, so JS property access awaits js-runtime. |
+| HTMLElement : Element | `id`, `className`, `title`, `lang`, `dir`, `hidden`, `tabIndex`, `accessKey`, `translate` | Native binding dispatch implemented | Shared reflection helpers, specialized empty-prototype registrations, known/unknown interface lookup; driver prototype selection pending. |
+| HTMLUnknownElement : HTMLElement | inherited members | Interface registered | Fallback from local-name lookup; driver prototype selection pending. |
 | DOMTokenList | `length`, `item`, `contains`, `add`, `remove`, `toggle`, `replace`, `supports`, `value`, stringifier | Implemented | Live `classList` uses the element's class attribute and canonical wrapper. |
-| DOMTokenList | indexed getter, iterable | Needs installer | MemberKind has no indexed or iterable descriptor. |
+| DOMTokenList | indexed getter, iterable | Runtime hook draft | Dynamic indexed hooks and `define_iterable(DOMTokenList, Values)` registered; runtime implementation pending. |
 | AbstractRange | `startContainer`, `startOffset`, `endContainer`, `endOffset`, `collapsed` | Implemented | Private Range/StaticRange wrappers return live or immutable boundaries respectively. |
 | StaticRange : AbstractRange | constructor with `StaticRangeInit` dictionary | Implemented | Immutable native snapshot in an append-only registry; inherited getters accept its private brand. |
 | Range : AbstractRange | constructor, `commonAncestorContainer`, `setStart`, `setEnd`, `setStartBefore`, `setStartAfter`, `setEndBefore`, `setEndAfter`, `collapse`, `selectNode`, `selectNodeContents` | Implemented | Live native Range handle; `unsigned long` coercion runs before DOM borrow. |
@@ -1218,3 +1220,195 @@ Compared with the DOM-5 fixed-base gate, seven files moved from error to fail
 and six additional failing subtests registered. `dev` changed between those
 measurements, and the DOM-7 installer is not yet in the driver, so this is
 not attributed as a DOM-7 conformance improvement.
+
+### DOM-8 legacy platform object host draft (2026-09-23)
+
+`HTMLCollection` uses the native owner/filter collection slot as a private key. The runtime must consult the registered hooks during `[[Get]]`, `[[GetOwnProperty]]` and `[[OwnPropertyKeys]]`, applying WebIDL named-property visibility and the `LegacyUnenumerableNamedProperties` rule. It must not materialize keys as ordinary own properties. Supported names are returned in tree order, with each element’s ID before its HTML `name`; `namedItem` finds the first element in tree order whose ID or HTML name matches. Indexed getters use currently supported indices. Every hook call runs outside `with_dom`, then binds a short native borrow. `NodeList` iterable registration needs runtime iterator state with live indexed reads. The mock exercises dynamic key resolution after mutation. This is an additive proposal for js-runtime, not a runtime implementation.
+
+The js-runtime review is incorporated: all four registered legacy objects set `override_builtins: false` and expose optional `indexed_setter`, `named_setter`, and `named_deleter` slots (currently `None` for these read-only objects). The supported index hook dispatches through `supported_index_count(host, operation, receiver) -> Result<u32, H::Error>`; the runtime treats `0..count` as the supported indices. The names hook dispatches through `supported_names(host, operation, receiver) -> Result<Vec<Vec<u16>>, H::Error>`, preserving UTF-16 units and spec order. These typed functions return native values; the generic `invoke` entry point handles getter operations returning JS values, and the runtime converts keys only for `[[OwnPropertyKeys]]`. Every callback starts outside a DOM borrow and acquires only its own short borrow. Optional setter/deleter operations remain available for future mutable legacy interfaces.
+
+Exact `host.rs` diff on the fixed base:
+
+```diff
+diff --git a/crates/amazing-bindings/src/host.rs b/crates/amazing-bindings/src/host.rs
+index 81848d9..6d21c52 100644
+--- a/crates/amazing-bindings/src/host.rs
++++ b/crates/amazing-bindings/src/host.rs
+@@ -51,6 +51,72 @@ pub enum Interface {
+     DocumentFragment,
+     DocumentType,
+     Element,
++    HTMLElement,
++    HTMLHtmlElement,
++    HTMLHeadElement,
++    HTMLTitleElement,
++    HTMLBaseElement,
++    HTMLLinkElement,
++    HTMLMetaElement,
++    HTMLStyleElement,
++    HTMLBodyElement,
++    HTMLHeadingElement,
++    HTMLParagraphElement,
++    HTMLHRElement,
++    HTMLPreElement,
++    HTMLQuoteElement,
++    HTMLOListElement,
++    HTMLUListElement,
++    HTMLLIElement,
++    HTMLDListElement,
++    HTMLDivElement,
++    HTMLAnchorElement,
++    HTMLImageElement,
++    HTMLBRElement,
++    HTMLModElement,
++    HTMLTimeElement,
++    HTMLDataElement,
++    HTMLTableElement,
++    HTMLTableCaptionElement,
++    HTMLTableSectionElement,
++    HTMLTableRowElement,
++    HTMLTableCellElement,
++    HTMLTableColElement,
++    HTMLFormElement,
++    HTMLInputElement,
++    HTMLButtonElement,
++    HTMLSelectElement,
++    HTMLOptionElement,
++    HTMLOptGroupElement,
++    HTMLTextAreaElement,
++    HTMLLabelElement,
++    HTMLFieldSetElement,
++    HTMLLegendElement,
++    HTMLDataListElement,
++    HTMLOutputElement,
++    HTMLProgressElement,
++    HTMLMeterElement,
++    HTMLVideoElement,
++    HTMLMediaElement,
++    HTMLAudioElement,
++    HTMLSourceElement,
++    HTMLTrackElement,
++    HTMLCanvasElement,
++    HTMLScriptElement,
++    HTMLTemplateElement,
++    HTMLSlotElement,
++    HTMLIFrameElement,
++    HTMLEmbedElement,
++    HTMLObjectElement,
++    HTMLParamElement,
++    HTMLDetailsElement,
++    HTMLDialogElement,
++    HTMLMapElement,
++    HTMLAreaElement,
++    HTMLPictureElement,
++    HTMLMenuElement,
++    HTMLUnknownElement,
++    HTMLCollection,
+     CharacterData,
+     Text,
+     Comment,
+@@ -112,8 +178,26 @@ pub enum Operation {
+     ElementClassList,
+     ElementClassName,
+     ElementSetClassName,
++    ElementId,
++    ElementSetId,
++    HTMLTitle,
++    HTMLSetTitle,
++    HTMLLang,
++    HTMLSetLang,
++    HTMLDir,
++    HTMLSetDir,
++    HTMLHidden,
++    HTMLSetHidden,
++    HTMLTabIndex,
++    HTMLSetTabIndex,
++    HTMLAccessKey,
++    HTMLSetAccessKey,
++    HTMLTranslate,
++    HTMLSetTranslate,
+     TokenListLength,
+     TokenListItem,
++    TokenListSupportedIndexCount,
++    TokenListIndexedGetter,
+     TokenListContains,
+     TokenListAdd,
+     TokenListRemove,
+@@ -195,6 +279,24 @@ pub enum Operation {
+     CreateElementNS,
+     NodeListLength,
+     NodeListItem,
++    NodeListSupportedIndexCount,
++    NodeListIndexedGetter,
++    ElementChildren,
++    DocumentChildren,
++    FragmentChildren,
++    ElementGetElementsByTagName,
++    ElementGetElementsByTagNameNS,
++    ElementGetElementsByClassName,
++    DocumentGetElementsByTagName,
++    DocumentGetElementsByTagNameNS,
++    DocumentGetElementsByClassName,
++    HTMLCollectionLength,
++    HTMLCollectionItem,
++    HTMLCollectionNamedItem,
++    HTMLCollectionSupportedIndexCount,
++    HTMLCollectionSupportedNames,
++    HTMLCollectionIndexedGetter,
++    HTMLCollectionNamedGetter,
+     CreateNodeIterator,
+     CreateTreeWalker,
+     TraversalRoot,
+@@ -294,6 +396,28 @@ pub enum HostCallPolicy {
+     CallAndConstruct,
+ }
+
++/// Runtime-owned internal methods for WebIDL legacy platform objects. The
++/// runtime asks bindings for the currently supported keys and values during
++/// [[Get]], [[GetOwnProperty]] and [[OwnPropertyKeys]], after ordinary WebIDL
++/// visibility rules. No indexed or named properties are preinstalled.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct LegacyPlatformHooks {
++    /// Routed through `supported_index_count`, returning a native count.
++    pub supported_index_count: Operation,
++    /// Routed through `supported_names`, returning UTF-16 names in spec order.
++    pub supported_names: Option<Operation>,
++    pub indexed_getter: Operation,
++    pub indexed_setter: Option<Operation>,
++    pub named_getter: Option<Operation>,
++    pub named_setter: Option<Operation>,
++    pub named_deleter: Option<Operation>,
++    pub override_builtins: bool,
++    pub unenumerable_names: bool,
++}
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum IterableKind { Values }
++
+ /// The binding layer declares this trait. The driver implements it using the
+ /// runtime's backend-neutral capabilities and its same parsed DOM arena.
+ ///
+@@ -354,6 +478,12 @@ pub trait BindingHost: Sized {
+         enumerable: bool,
+         configurable: bool,
+     ) -> Result<(), Self::Error>;
++    fn define_legacy_platform_object(
++        &mut self, brand: InterfaceBrand, hooks: LegacyPlatformHooks,
++    ) -> Result<(), Self::Error>;
++    /// Installs @@iterator, keys, values, entries and forEach on the interface
++    /// prototype with runtime-owned iterator state and live indexed reads.
++    fn define_iterable(&mut self, interface: Interface, kind: IterableKind) -> Result<(), Self::Error>;
+     fn get_property(
+         &mut self,
+         object: &Self::Value,
+@@ -443,6 +573,9 @@ pub trait BindingHost: Sized {
+     fn is_undefined(&self, value: &Self::Value) -> bool;
+     fn is_nullish(&self, value: &Self::Value) -> bool;
+     fn to_boolean(&self, value: &Self::Value) -> bool;
++    /// Returns code units only when the runtime value is a primitive String.
++    /// Used before WebIDL union conversion for `HTMLElement.hidden`.
++    fn string_units(&self, value: &Self::Value) -> Option<Vec<u16>>;
+     /// WebIDL DOMString conversion, preserving code units and thrown coercions.
+     fn to_dom_string(&mut self, value: &Self::Value) -> Result<Vec<u16>, Self::Error>;
+     fn type_error(&mut self, message: &'static str) -> Self::Error;
+```
