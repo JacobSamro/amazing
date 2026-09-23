@@ -591,7 +591,7 @@ def open_questions(lane: str) -> list[str]:
         # Every such prefix means "no longer waiting on anyone".
         if body.upper().startswith(("RESOLVED", "ANSWERED", "DONE", "ROUTED",
                                     "NOTED", "CONFIRMED", "GRANTED", "ACK",
-                                    "QUEUED")):
+                                    "QUEUED", "ACCEPTED")):
             continue
         out.append(body)
     return out
