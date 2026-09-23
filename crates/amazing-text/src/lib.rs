@@ -376,6 +376,61 @@ impl FontMetrics {
     }
 }
 
+/// Used pixel measures of font-relative CSS units for the first available
+/// font in the requested family list. `ch` and `ic` use that font's glyphs,
+/// and never substitute a later family's glyph just for the measurement.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FontRelativeMetrics {
+    pub ch_advance: f32,
+    pub ic_advance: f32,
+    pub x_height: f32,
+    pub cap_height: f32,
+    pub line_height_normal: f32,
+}
+
+impl FontRelativeMetrics {
+    /// CSS Values 4 defaults when the selected font or a metric is unavailable.
+    pub fn fallback(style: &TextStyle) -> Self {
+        let em = if style.size.is_finite() && style.size > 0.0 {
+            style.size
+        } else {
+            16.0
+        };
+        Self {
+            ch_advance: em
+                * if style.writing_mode.uses_vertical_metrics()
+                    && style.text_orientation == TextOrientation::Upright
+                {
+                    1.0
+                } else {
+                    0.5
+                },
+            ic_advance: em,
+            x_height: em * 0.5,
+            cap_height: em * 0.8,
+            line_height_normal: em * 1.2,
+        }
+    }
+
+    pub fn with_font_metrics(mut self, metrics: FontMetrics) -> Self {
+        if metrics.x_height.is_finite() && metrics.x_height > 0.0 {
+            self.x_height = metrics.x_height;
+        }
+        self.cap_height = if metrics.cap_height.is_finite() && metrics.cap_height > 0.0 {
+            metrics.cap_height
+        } else if metrics.ascent.is_finite() && metrics.ascent > 0.0 {
+            metrics.ascent
+        } else {
+            self.cap_height
+        };
+        let normal = metrics.line_height();
+        if normal.is_finite() && normal > 0.0 {
+            self.line_height_normal = normal;
+        }
+        self
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct GlyphFlags {
     pub unsafe_to_break: bool,
@@ -537,6 +592,11 @@ pub enum TextError {
 pub trait TextSystem {
     fn generation(&self) -> u64;
     fn metrics(&self, style: &TextStyle) -> Result<FontMetrics, TextError>;
+    fn font_relative_metrics(&self, style: &TextStyle) -> FontRelativeMetrics {
+        let fallback = FontRelativeMetrics::fallback(style);
+        self.metrics(style)
+            .map_or(fallback, |metrics| fallback.with_font_metrics(metrics))
+    }
     fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError>;
     fn shape_line(&self, request: LineRequest<'_>) -> Result<ShapedLine, TextError>;
     fn rasterize(&self, request: GlyphRasterRequest<'_>) -> Result<Option<GlyphImage>, TextError>;
@@ -1061,6 +1121,28 @@ mod tests {
         assert_eq!(metrics.vertical_descent, 8.0);
         assert_eq!(metrics.vertical_leading, 0.0);
         assert!(!metrics.has_canonical_vertical_metrics);
+    }
+
+    #[test]
+    fn font_relative_units_use_css_values_fallbacks() {
+        let text = FallbackTextSystem::new();
+        let style = TextStyle {
+            size: 20.0,
+            ..TextStyle::default()
+        };
+        let metrics = text.font_relative_metrics(&style);
+        assert_eq!(metrics.ch_advance, 10.0);
+        assert_eq!(metrics.ic_advance, 20.0);
+        assert_eq!(metrics.x_height, 10.0);
+        assert_eq!(metrics.cap_height, 14.0);
+        assert_eq!(metrics.line_height_normal, 24.0);
+
+        let upright = TextStyle {
+            writing_mode: WritingMode::VerticalRl,
+            text_orientation: TextOrientation::Upright,
+            ..style
+        };
+        assert_eq!(text.font_relative_metrics(&upright).ch_advance, 20.0);
     }
 
     #[test]

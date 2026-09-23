@@ -4,6 +4,7 @@
 
 mod font_display;
 mod font_matching;
+mod font_relative_metrics;
 mod font_variations;
 mod line_break_objects;
 pub use font_display::FontDisplayPeriods;
@@ -704,6 +705,12 @@ impl TextSystem for TextProvider {
         font_metrics(&self.fonts[index], style.size)
     }
 
+    fn font_relative_metrics(&self, style: &TextStyle) -> amazing_text::FontRelativeMetrics {
+        let Some(index) = self.matching_font_with_space_policy(style, Some(" "), true) else {
+            return self.fallback.font_relative_metrics(style);
+        };
+        font_relative_metrics::for_font(&self.fonts[index], style)
+    }
     fn shape(&self, paragraph: Paragraph<'_>) -> Result<ShapedParagraph, TextError> {
         amazing_text::validate_paragraph(&Paragraph {
             text: paragraph.text,
@@ -2101,7 +2108,7 @@ mod tests {
         synthetic_font_with_metrics(mapped, feature, 800)
     }
 
-    fn synthetic_font_with_metrics(mapped: char, feature: Option<[u8; 4]>, ascent: u16) -> Vec<u8> {
+    pub(super) fn synthetic_font_with_metrics(mapped: char, feature: Option<[u8; 4]>, ascent: u16) -> Vec<u8> {
         let mut glyf = vec![0u8; 10];
         glyf[0..2].copy_from_slice(&be16(1));
         glyf[6..8].copy_from_slice(&be16(500));
@@ -3197,12 +3204,12 @@ mod tests {
             with_space
         );
         assert_eq!(metrics, expected);
+        assert_eq!(provider.font_relative_metrics(&style).line_height_normal, expected.line_height());
         assert_ne!(
             metrics.ascent,
             font_metrics(&provider.fonts[0], style.size).unwrap().ascent
         );
     }
-
     #[test]
     fn unicode_range_can_exclude_space_from_the_first_available_font() {
         let mut loader = FakeFontLoader::default();

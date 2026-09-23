@@ -243,3 +243,15 @@ boundaries. The provider also filters any ICU opportunity that would violate
 those neighbor rules. `white-space: nowrap` remains authoritative. This is the
 provider seam needed by LAYOUT-14 item 0; its separate `split_atomic_units`
 rule must still stop inserting a break after `「`.
+
+## TEXT-10: first-available-font relative metrics contract
+
+`TextSystem::font_relative_metrics(&TextStyle) -> FontRelativeMetrics` exposes
+`ch_advance`, `ic_advance`, `x_height`, `cap_height`, and `line_height_normal`
+in used pixels for LAYOUT-14 item 1. The provider selects the first face that
+contains U+0020, including registered web fonts, then measures U+0030 and
+U+6C34 in that same face with selected variation axes and text orientation.
+Missing glyphs use CSS Values 4 defaults: `ch` is 0.5em (1em for upright
+vertical text), `ic` is 1em, `ex` is 0.5em, and `cap` uses the selected font's
+ascent when cap height is unavailable. The default text system provides
+stable synthetic measures and `normal` line height from its metrics.
