@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 use amazing_ipc::codec::{self, Decoder, Encoder, Wire};
 use amazing_ipc::{Connection, StdioTransport};
+use amazing_ipc::version::{negotiate, VersionRange};
 use amazing_ipc_platform::{FrameBudget, FrameMetadata, FrameView, HandleChannel};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
@@ -9,7 +10,17 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-pub const BOOTSTRAP_VERSION: u16 = 1;
+pub const BOOTSTRAP_VERSION: u16 = 2;
+const INTERFACES: &[VersionRange] = &[
+    VersionRange { interface: 0, min: 1, max: 1 },
+    VersionRange { interface: 7, min: 1, max: 1 },
+    VersionRange { interface: 8, min: 1, max: 1 },
+    VersionRange { interface: 9, min: 1, max: 1 },
+    VersionRange { interface: 10, min: 2, max: 2 },
+    VersionRange { interface: 11, min: 1, max: 1 },
+    VersionRange { interface: 17, min: 1, max: 1 },
+    VersionRange { interface: 18, min: 1, max: 1 },
+];
 const FRAME_NONCE_CAPABILITY: &str = "__frame_nonce";
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Role {
@@ -55,18 +66,21 @@ pub struct Handshake {
     pub version: u16,
     pub role: String,
     pub capabilities: Capabilities,
+    pub interfaces: Vec<VersionRange>,
 }
 impl Wire for Handshake {
     fn encode(&self, e: &mut Encoder) -> Result<(), codec::Error> {
         self.version.encode(e)?;
         self.role.encode(e)?;
-        self.capabilities.encode(e)
+        self.capabilities.encode(e)?;
+        self.interfaces.encode(e)
     }
     fn decode(d: &mut Decoder<'_>) -> Result<Self, codec::Error> {
         Ok(Self {
             version: u16::decode(d)?,
             role: String::decode(d)?,
             capabilities: Capabilities::decode(d)?,
+            interfaces: Vec::<VersionRange>::decode(d)?,
         })
     }
 }
@@ -134,6 +148,10 @@ fn verify(h: &Handshake, role: Role) -> Result<(), Error> {
     if Role::parse(&h.role) != Some(role) {
         return Err(Error::Role);
     }
+    let versions = negotiate(INTERFACES, &h.interfaces)?;
+    if versions.get(&0) != Some(&1) {
+        return Err(Error::Version);
+    }
     Ok(())
 }
 /// Child entry point called after parsing --type=<role> from argv.
@@ -171,15 +189,17 @@ pub fn bootstrap_child(
         let frame_fd = -1;
         amazing_ipc_platform::enter_renderer_sandbox(frame_fd)?;
     }
+    let versions = negotiate(INTERFACES, &parent.interfaces)?;
     send_boot(
         &mut output,
         &Handshake {
             version: BOOTSTRAP_VERSION,
             role: role.name().into(),
             capabilities,
+            interfaces: INTERFACES.to_vec(),
         },
     )?;
-    let connection = Connection::new(StdioTransport::new(input, output));
+    let connection = Connection::with_versions(StdioTransport::new(input, output), versions);
     Ok((connection, parent.capabilities, frame_channel))
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -346,6 +366,7 @@ impl ProcessHost {
                     version: BOOTSTRAP_VERSION,
                     role: Role::Browser.name().into(),
                     capabilities,
+                    interfaces: INTERFACES.to_vec(),
                 },
             )?;
             let mut response = recv_boot(&mut stdout)?;
@@ -357,9 +378,10 @@ impl ProcessHost {
                 }
                 response.capabilities.0.remove(FRAME_NONCE_CAPABILITY);
             }
-            Ok((stdin, stdout, response))
+            let versions = negotiate(INTERFACES, &response.interfaces)?;
+            Ok((stdin, stdout, response, versions))
         })();
-        let (stdin, stdout, response) = match boot {
+        let (stdin, stdout, response, versions) = match boot {
             Ok(boot) => boot,
             Err(error) => {
                 let _ = child.kill();
@@ -367,8 +389,8 @@ impl ProcessHost {
                 return Err(error);
             }
         };
-        let conn = Connection::new(StdioTransport::new(stdout, stdin));
-        Ok(Self {
+        let conn = Connection::with_versions(StdioTransport::new(stdout, stdin), versions);
+        let mut host = Self {
             child,
             connection: conn,
             role,
@@ -380,7 +402,28 @@ impl ProcessHost {
             sandboxed_renderer,
             frame_channel: Mutex::new(frame_channel),
             frame_budget: Arc::new(Mutex::new(FrameBudget::new())),
-        })
+        };
+        host.wait_ready(Duration::from_secs(5))?;
+        Ok(host)
+    }
+    fn wait_ready(&mut self, timeout: Duration) -> Result<(), Error> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                let _ = self.kill();
+                return Err(Error::Ipc(amazing_ipc::Error::Timeout));
+            }
+            match self.ping(remaining) {
+                Ok(()) => return Ok(()),
+                Err(Error::Ipc(amazing_ipc::Error::Remote(message)))
+                    if message == "UnknownInterface" => std::thread::yield_now(),
+                Err(error) => {
+                    let _ = self.kill();
+                    return Err(error);
+                }
+            }
+        }
     }
     pub fn pid(&self) -> u32 {
         self.child.id()
@@ -591,6 +634,8 @@ pub mod network;
 pub mod network_v2;
 pub mod protocol;
 pub mod renderer;
+pub mod gpu;
+pub mod gpu_snapshot_wire;
 
 /// Browser-side liveness observer. A crash is emitted once per renderer host.
 pub struct RendererMonitor {

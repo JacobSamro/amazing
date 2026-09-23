@@ -232,6 +232,7 @@ dependencies = [
 name = "amazing-process"
 version = "0.0.1"
 dependencies = [
+ "amazing-compositor",
  "amazing-css",
  "amazing-dom",
  "amazing-fetch",
