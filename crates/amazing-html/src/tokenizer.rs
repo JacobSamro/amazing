@@ -4,7 +4,6 @@
 //! the spec's error-recovery behavior is the interop contract. Deviations
 //! from full spec (all deliberate, all listed in lib.rs):
 //! - encoding sniffing happens in the caller; input is lossy UTF-8 `char`s
-//! - PUBLIC/SYSTEM identifiers are consumed but not captured
 //!
 //! Input is a `Vec<char>` — one `char` = one scalar value, so cursor
 //! arithmetic is per-character and entity names (ASCII) match 1 byte = 1 char.
@@ -18,6 +17,8 @@ use crate::entities::{LEGACY_NO_SEMI, MAX_NAME_LEN, NAMED};
 pub enum Token {
     Doctype {
         name: Option<String>,
+        public_id: Option<String>,
+        system_id: Option<String>,
         /// `true` when the doctype was malformed enough to force quirks mode.
         force_quirks: bool,
     },
@@ -72,6 +73,17 @@ enum State {
     BeforeDoctypeName,
     DoctypeName,
     AfterDoctypeName,
+    AfterDoctypePublicKeyword,
+    BeforeDoctypePublicIdentifier,
+    DoctypePublicIdentifierDouble,
+    DoctypePublicIdentifierSingle,
+    AfterDoctypePublicIdentifier,
+    BetweenDoctypePublicAndSystemIdentifiers,
+    AfterDoctypeSystemKeyword,
+    BeforeDoctypeSystemIdentifier,
+    DoctypeSystemIdentifierDouble,
+    DoctypeSystemIdentifierSingle,
+    AfterDoctypeSystemIdentifier,
     BogusDoctype,
     RawText,
     RawTextLessThan,
@@ -163,6 +175,9 @@ pub struct Tokenizer {
     processing_target: String,
     processing_data: String,
     doctype_name: Option<String>,
+    doctype_public_id: Option<String>,
+    doctype_system_id: Option<String>,
+    doctype_force_quirks: bool,
     /// End-tag name we're looking for while in a text state.
     raw_end: String,
     /// The script double-escape delimiter's case-folded name.
@@ -207,6 +222,9 @@ impl Tokenizer {
             processing_target: String::new(),
             processing_data: String::new(),
             doctype_name: None,
+            doctype_public_id: None,
+            doctype_system_id: None,
+            doctype_force_quirks: false,
             raw_end: String::new(),
             script_temporary: String::new(),
             eof_sent: false,
@@ -398,9 +416,11 @@ impl Tokenizer {
                 self.peek() == Some('&') && self.reference_needs_more()
             },
             State::AfterDoctypeName if self.peek().is_some_and(is_alpha) => {
-                // The existing PUBLIC/SYSTEM scanner is all-at-once; wait for
-                // its terminator so a chunk boundary cannot restart it.
-                !self.input[self.pos..].contains(&'>')
+                let tail = &self.input[self.pos..];
+                ["public", "system"].iter().any(|keyword| {
+                    tail.len() < keyword.len()
+                        && tail.iter().zip(keyword.chars()).all(|(a, b)| a.eq_ignore_ascii_case(&b))
+                })
             },
             _ => false,
         }
@@ -1002,8 +1022,6 @@ impl Tokenizer {
                     },
                 },
 
-                // PUBLIC/SYSTEM identifiers are consumed but not captured —
-                // only their presence matters for quirks-mode detection.
                 State::AfterDoctypeName => match self.peek() {
                     None => {},
                     Some(c) if is_ws(c) => {
@@ -1014,24 +1032,128 @@ impl Tokenizer {
                         self.emit_doctype(false);
                         self.state = State::Data;
                     },
-            Some(c)
-                if is_alpha(c) && (self.ci_at(0, "public") || self.ci_at(0, "system")) =>
-            {
-                self.doctype_consume_external(self.ci_at(0, "public"));
-            },
+                    Some(c) if is_alpha(c) && self.ci_at(0, "public") => {
+                        self.pos += 6;
+                        self.state = State::AfterDoctypePublicKeyword;
+                    },
+                    Some(c) if is_alpha(c) && self.ci_at(0, "system") => {
+                        self.pos += 6;
+                        self.state = State::AfterDoctypeSystemKeyword;
+                    },
                     Some(_) => {
-                        // Anything unrecognised after the name: bogus doctype
-                        // (force-quirks on close). Approximation of the
-                        // before/between/after-public/system-id states.
+                        self.doctype_force_quirks = true;
                         self.state = State::BogusDoctype;
                     },
+                },
+
+                State::AfterDoctypePublicKeyword | State::BeforeDoctypePublicIdentifier => {
+                    match self.peek() {
+                        Some(c) if is_ws(c) => {
+                            self.pos += 1;
+                            self.state = State::BeforeDoctypePublicIdentifier;
+                        },
+                        Some('"') | Some('\'') => {
+                            let quote = self.bump().unwrap();
+                            self.doctype_public_id = Some(String::new());
+                            self.state = if quote == '"' { State::DoctypePublicIdentifierDouble }
+                                else { State::DoctypePublicIdentifierSingle };
+                        },
+                        Some('>') => {
+                            self.pos += 1;
+                            self.emit_doctype(true);
+                            self.state = State::Data;
+                        },
+                        Some(_) => {
+                            self.doctype_force_quirks = true;
+                            self.state = State::BogusDoctype;
+                        },
+                        None => {},
+                    }
+                },
+                State::DoctypePublicIdentifierDouble | State::DoctypePublicIdentifierSingle => {
+                    let quote = if self.state == State::DoctypePublicIdentifierDouble { '"' } else { '\'' };
+                    match self.bump() {
+                        Some(c) if c == quote => self.state = State::AfterDoctypePublicIdentifier,
+                        Some('>') => { self.emit_doctype(true); self.state = State::Data; },
+                        Some('\0') => self.doctype_public_id.as_mut().unwrap().push('\u{FFFD}'),
+                        Some(c) => self.doctype_public_id.as_mut().unwrap().push(c),
+                        None => {},
+                    }
+                },
+                State::AfterDoctypePublicIdentifier | State::BetweenDoctypePublicAndSystemIdentifiers => {
+                    match self.peek() {
+                        Some(c) if is_ws(c) => {
+                            self.pos += 1;
+                            self.state = State::BetweenDoctypePublicAndSystemIdentifiers;
+                        },
+                        Some('>') => {
+                            self.pos += 1;
+                            self.emit_doctype(false);
+                            self.state = State::Data;
+                        },
+                        Some('"') | Some('\'') => {
+                            let quote = self.bump().unwrap();
+                            self.doctype_system_id = Some(String::new());
+                            self.state = if quote == '"' { State::DoctypeSystemIdentifierDouble }
+                                else { State::DoctypeSystemIdentifierSingle };
+                        },
+                        Some(_) => {
+                            self.doctype_force_quirks = true;
+                            self.state = State::BogusDoctype;
+                        },
+                        None => {},
+                    }
+                },
+                State::AfterDoctypeSystemKeyword | State::BeforeDoctypeSystemIdentifier => {
+                    match self.peek() {
+                        Some(c) if is_ws(c) => {
+                            self.pos += 1;
+                            self.state = State::BeforeDoctypeSystemIdentifier;
+                        },
+                        Some('"') | Some('\'') => {
+                            let quote = self.bump().unwrap();
+                            self.doctype_system_id = Some(String::new());
+                            self.state = if quote == '"' { State::DoctypeSystemIdentifierDouble }
+                                else { State::DoctypeSystemIdentifierSingle };
+                        },
+                        Some('>') => {
+                            self.pos += 1;
+                            self.emit_doctype(true);
+                            self.state = State::Data;
+                        },
+                        Some(_) => {
+                            self.doctype_force_quirks = true;
+                            self.state = State::BogusDoctype;
+                        },
+                        None => {},
+                    }
+                },
+                State::DoctypeSystemIdentifierDouble | State::DoctypeSystemIdentifierSingle => {
+                    let quote = if self.state == State::DoctypeSystemIdentifierDouble { '"' } else { '\'' };
+                    match self.bump() {
+                        Some(c) if c == quote => self.state = State::AfterDoctypeSystemIdentifier,
+                        Some('>') => { self.emit_doctype(true); self.state = State::Data; },
+                        Some('\0') => self.doctype_system_id.as_mut().unwrap().push('\u{FFFD}'),
+                        Some(c) => self.doctype_system_id.as_mut().unwrap().push(c),
+                        None => {},
+                    }
+                },
+                State::AfterDoctypeSystemIdentifier => match self.peek() {
+                    Some(c) if is_ws(c) => { self.pos += 1; },
+                    Some('>') => {
+                        self.pos += 1;
+                        self.emit_doctype(false);
+                        self.state = State::Data;
+                    },
+                    Some(_) => self.state = State::BogusDoctype,
+                    None => {},
                 },
 
                 State::BogusDoctype => match self.peek() {
                     None => {},
                     Some('>') => {
                         self.pos += 1;
-                        self.emit_doctype(true);
+                        self.emit_doctype(false);
                         self.state = State::Data;
                     },
                     Some(_) => {
@@ -1277,6 +1399,9 @@ impl Tokenizer {
             Some('!') if self.ci_at(2, "doctype") => {
                 self.pos += 9; // "<!" + "doctype"
                 self.doctype_name = None;
+                self.doctype_public_id = None;
+                self.doctype_system_id = None;
+                self.doctype_force_quirks = false;
                 self.state = State::BeforeDoctypeName;
             },
             Some('!') if self.allow_cdata && self.input[self.pos + 2..]
@@ -1472,44 +1597,10 @@ impl Tokenizer {
 
     fn emit_doctype(&mut self, force_quirks: bool) {
         let name = self.doctype_name.take();
-        self.emit(Token::Doctype { name, force_quirks });
-    }
-
-    /// Consumes a PUBLIC/SYSTEM keyword plus its quoted identifier(s),
-    /// leaving the cursor on the terminator (usually '>' or EOF). The id
-    /// strings themselves are discarded. `two_ids` is true for PUBLIC
-    /// (formal identifier + system URI) and false for SYSTEM.
-    fn doctype_consume_external(&mut self, two_ids: bool) {
-        self.pos += 6; // skip "public"/"system"
-        let mut strings_closed = 0usize;
-        loop {
-            match self.peek() {
-                None => return,
-                Some('>') => return, // AfterDoctypeName will close it out
-                Some(q @ ('"' | '\'')) => {
-                    self.pos += 1;
-                    loop {
-                        match self.peek() {
-                            None => return,
-                            Some('>') => break, // unterminated string
-                            Some(c) => {
-                                self.pos += 1;
-                                if c == q {
-                                    strings_closed += 1;
-                                    break;
-                                }
-                            },
-                        }
-                    }
-                    if strings_closed >= if two_ids { 2 } else { 1 } {
-                        return;
-                    }
-                },
-                Some(_) => {
-                    self.pos += 1;
-                },
-            }
-        }
+        let public_id = self.doctype_public_id.take();
+        let system_id = self.doctype_system_id.take();
+        let force_quirks = force_quirks || std::mem::take(&mut self.doctype_force_quirks);
+        self.emit(Token::Doctype { name, public_id, system_id, force_quirks });
     }
 
     /// Central EOF handling: emit whatever token the current state was in
@@ -1593,12 +1684,20 @@ impl Tokenizer {
             State::BeforeDoctypeName
             | State::DoctypeName
             | State::AfterDoctypeName
+            | State::AfterDoctypePublicKeyword
+            | State::BeforeDoctypePublicIdentifier
+            | State::DoctypePublicIdentifierDouble
+            | State::DoctypePublicIdentifierSingle
+            | State::AfterDoctypePublicIdentifier
+            | State::BetweenDoctypePublicAndSystemIdentifiers
+            | State::AfterDoctypeSystemKeyword
+            | State::BeforeDoctypeSystemIdentifier
+            | State::DoctypeSystemIdentifierDouble
+            | State::DoctypeSystemIdentifierSingle
+            | State::AfterDoctypeSystemIdentifier
             | State::BogusDoctype => {
-                let name = self.doctype_name.take();
-                self.emit(Token::Doctype {
-                    name,
-                    force_quirks: true,
-                });
+                let force = self.state != State::BogusDoctype;
+                self.emit_doctype(force);
             },
         }
         self.flush_text();
@@ -1877,16 +1976,46 @@ mod tests {
     fn doctype_case_insensitive_and_missing_name() {
         assert_eq!(
             tokenize("<!DOCTYPE html>"),
-            vec![Token::Doctype { name: Some("html".into()), force_quirks: false }]
+            vec![Token::Doctype { name: Some("html".into()), public_id: None, system_id: None, force_quirks: false }]
         );
         assert_eq!(
             tokenize("<!doctype Html>"),
-            vec![Token::Doctype { name: Some("html".into()), force_quirks: false }]
+            vec![Token::Doctype { name: Some("html".into()), public_id: None, system_id: None, force_quirks: false }]
         );
         assert_eq!(
             tokenize("<!DOCTYPE >"),
-            vec![Token::Doctype { name: None, force_quirks: true }]
+            vec![Token::Doctype { name: None, public_id: None, system_id: None, force_quirks: true }]
         );
+    }
+
+    #[test]
+    fn doctype_identifiers_and_recovery() {
+        let cases = [
+            ("<!DOCTYPE html PUBLIC \"pub\">", Some("pub"), None, false),
+            ("<!DOCTYPE html SYSTEM 'sys'>", None, Some("sys"), false),
+            ("<!DOCTYPE Html PUBLIC 'p' \"s\"><p>x", Some("p"), Some("s"), false),
+            ("<!DOCTYPE html PUBLIC '' \"\">", Some(""), Some(""), false),
+            ("<!DOCTYPE html PUBLIC \"p\">", Some("p"), None, false),
+            ("<!DOCTYPE html PUBLIC\"p\">", Some("p"), None, false),
+            ("<!DOCTYPE html SYSTEM's'>", None, Some("s"), false),
+            ("<!DOCTYPE html PUBLIC nope>", None, None, true),
+            ("<!DOCTYPE html SYSTEM nope>", None, None, true),
+            ("<!DOCTYPE html PUBLIC \"partial", Some("partial"), None, true),
+            ("<!DOCTYPE html SYSTEM 'partial", None, Some("partial"), true),
+            ("<!DOCTYPE html PUBLIC \"p>tail", Some("p"), None, true),
+            ("<!DOCTYPE html SYSTEM \"s\"junk>", None, Some("s"), false),
+            ("<!DOCTYPE html PUBLIC 'a\0b'>", Some("a\u{FFFD}b"), None, false),
+        ];
+        for (input, public, system, force_quirks) in cases {
+            let tokens = tokenize(input);
+            assert_eq!(tokens.first(), Some(&Token::Doctype {
+                name: Some("html".into()),
+                public_id: public.map(str::to_owned),
+                system_id: system.map(str::to_owned),
+                force_quirks,
+            }), "{input:?}");
+        }
+        assert_eq!(tokenize("<!DOCTYPE html PUBLIC \"p>tail")[1], Token::Characters("tail".into()));
     }
 
     #[test]

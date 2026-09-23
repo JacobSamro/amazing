@@ -1,6 +1,31 @@
 use crate::{parse, IncrementalParser};
 use crate::tokenizer::{Token, Tokenizer};
-use amazing_dom::NodeIdx;
+use amazing_dom::{NodeIdx, NodeKind};
+
+#[test]
+fn doctype_identifiers_survive_character_chunks() {
+    let input = "<!DOCTYPE Html PUBLIC 'p' \"s\"><p>x";
+    let mut tokenizer = Tokenizer::streaming();
+    let mut tokens = Vec::new();
+    let mut parser = IncrementalParser::new();
+    for scalar in input.chars() {
+        tokenizer.push_chars([scalar]);
+        while let Some(token) = tokenizer.next_available() { tokens.push(token); }
+        parser.push_chunk(&scalar.to_string());
+    }
+    tokenizer.finish_input();
+    while let Some(token) = tokenizer.next_available() { tokens.push(token); }
+    assert_eq!(tokens[0], Token::Doctype {
+        name: Some("html".into()), public_id: Some("p".into()),
+        system_id: Some("s".into()), force_quirks: false,
+    });
+    let dom = parser.finish();
+    let doctype = dom.document_doctype(NodeIdx(0)).unwrap().unwrap();
+    assert_eq!(dom.get(doctype).kind, NodeKind::DocumentType {
+        name: "html".into(), public_id: "p".into(), system_id: "s".into(),
+    });
+    assert_eq!(dom.dump(NodeIdx(0)), parse(input).dump(NodeIdx(0)));
+}
 
 fn streamed(chunks: &[&str]) -> String {
     let mut parser = IncrementalParser::new();
