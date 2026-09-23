@@ -51,6 +51,72 @@ pub enum Interface {
     DocumentFragment,
     DocumentType,
     Element,
+    HTMLElement,
+    HTMLHtmlElement,
+    HTMLHeadElement,
+    HTMLTitleElement,
+    HTMLBaseElement,
+    HTMLLinkElement,
+    HTMLMetaElement,
+    HTMLStyleElement,
+    HTMLBodyElement,
+    HTMLHeadingElement,
+    HTMLParagraphElement,
+    HTMLHRElement,
+    HTMLPreElement,
+    HTMLQuoteElement,
+    HTMLOListElement,
+    HTMLUListElement,
+    HTMLLIElement,
+    HTMLDListElement,
+    HTMLDivElement,
+    HTMLAnchorElement,
+    HTMLImageElement,
+    HTMLBRElement,
+    HTMLModElement,
+    HTMLTimeElement,
+    HTMLDataElement,
+    HTMLTableElement,
+    HTMLTableCaptionElement,
+    HTMLTableSectionElement,
+    HTMLTableRowElement,
+    HTMLTableCellElement,
+    HTMLTableColElement,
+    HTMLFormElement,
+    HTMLInputElement,
+    HTMLButtonElement,
+    HTMLSelectElement,
+    HTMLOptionElement,
+    HTMLOptGroupElement,
+    HTMLTextAreaElement,
+    HTMLLabelElement,
+    HTMLFieldSetElement,
+    HTMLLegendElement,
+    HTMLDataListElement,
+    HTMLOutputElement,
+    HTMLProgressElement,
+    HTMLMeterElement,
+    HTMLVideoElement,
+    HTMLMediaElement,
+    HTMLAudioElement,
+    HTMLSourceElement,
+    HTMLTrackElement,
+    HTMLCanvasElement,
+    HTMLScriptElement,
+    HTMLTemplateElement,
+    HTMLSlotElement,
+    HTMLIFrameElement,
+    HTMLEmbedElement,
+    HTMLObjectElement,
+    HTMLParamElement,
+    HTMLDetailsElement,
+    HTMLDialogElement,
+    HTMLMapElement,
+    HTMLAreaElement,
+    HTMLPictureElement,
+    HTMLMenuElement,
+    HTMLUnknownElement,
+    HTMLCollection,
     CharacterData,
     Text,
     Comment,
@@ -112,8 +178,26 @@ pub enum Operation {
     ElementClassList,
     ElementClassName,
     ElementSetClassName,
+    ElementId,
+    ElementSetId,
+    HTMLTitle,
+    HTMLSetTitle,
+    HTMLLang,
+    HTMLSetLang,
+    HTMLDir,
+    HTMLSetDir,
+    HTMLHidden,
+    HTMLSetHidden,
+    HTMLTabIndex,
+    HTMLSetTabIndex,
+    HTMLAccessKey,
+    HTMLSetAccessKey,
+    HTMLTranslate,
+    HTMLSetTranslate,
     TokenListLength,
     TokenListItem,
+    TokenListSupportedIndices,
+    TokenListIndexedGetter,
     TokenListContains,
     TokenListAdd,
     TokenListRemove,
@@ -195,6 +279,24 @@ pub enum Operation {
     CreateElementNS,
     NodeListLength,
     NodeListItem,
+    NodeListSupportedIndices,
+    NodeListIndexedGetter,
+    ElementChildren,
+    DocumentChildren,
+    FragmentChildren,
+    ElementGetElementsByTagName,
+    ElementGetElementsByTagNameNS,
+    ElementGetElementsByClassName,
+    DocumentGetElementsByTagName,
+    DocumentGetElementsByTagNameNS,
+    DocumentGetElementsByClassName,
+    HTMLCollectionLength,
+    HTMLCollectionItem,
+    HTMLCollectionNamedItem,
+    HTMLCollectionSupportedIndices,
+    HTMLCollectionSupportedNames,
+    HTMLCollectionIndexedGetter,
+    HTMLCollectionNamedGetter,
     CreateNodeIterator,
     CreateTreeWalker,
     TraversalRoot,
@@ -294,6 +396,22 @@ pub enum HostCallPolicy {
     CallAndConstruct,
 }
 
+/// Runtime-owned internal methods for WebIDL legacy platform objects. The
+/// runtime asks bindings for the currently supported keys and values during
+/// [[Get]], [[GetOwnProperty]] and [[OwnPropertyKeys]], after ordinary WebIDL
+/// visibility rules. No indexed or named properties are preinstalled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LegacyPlatformHooks {
+    pub supported_indices: Operation,
+    pub supported_names: Option<Operation>,
+    pub indexed_getter: Operation,
+    pub named_getter: Option<Operation>,
+    pub unenumerable_names: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IterableKind { Values }
+
 /// The binding layer declares this trait. The driver implements it using the
 /// runtime's backend-neutral capabilities and its same parsed DOM arena.
 ///
@@ -354,6 +472,12 @@ pub trait BindingHost: Sized {
         enumerable: bool,
         configurable: bool,
     ) -> Result<(), Self::Error>;
+    fn define_legacy_platform_object(
+        &mut self, brand: InterfaceBrand, hooks: LegacyPlatformHooks,
+    ) -> Result<(), Self::Error>;
+    /// Installs @@iterator, keys, values, entries and forEach on the interface
+    /// prototype with runtime-owned iterator state and live indexed reads.
+    fn define_iterable(&mut self, interface: Interface, kind: IterableKind) -> Result<(), Self::Error>;
     fn get_property(
         &mut self,
         object: &Self::Value,
@@ -443,6 +567,9 @@ pub trait BindingHost: Sized {
     fn is_undefined(&self, value: &Self::Value) -> bool;
     fn is_nullish(&self, value: &Self::Value) -> bool;
     fn to_boolean(&self, value: &Self::Value) -> bool;
+    /// Returns code units only when the runtime value is a primitive String.
+    /// Used before WebIDL union conversion for `HTMLElement.hidden`.
+    fn string_units(&self, value: &Self::Value) -> Option<Vec<u16>>;
     /// WebIDL DOMString conversion, preserving code units and thrown coercions.
     fn to_dom_string(&mut self, value: &Self::Value) -> Result<Vec<u16>, Self::Error>;
     fn type_error(&mut self, message: &'static str) -> Self::Error;

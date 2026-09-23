@@ -3,7 +3,7 @@ use amazing_dom::{DomError, NodeIdx, NodeKind};
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::ElementClassList | O::ElementClassName | O::ElementSetClassName
-        | O::TokenListLength | O::TokenListItem | O::TokenListContains
+        | O::TokenListLength | O::TokenListItem | O::TokenListSupportedIndices | O::TokenListIndexedGetter | O::TokenListContains
         | O::TokenListAdd | O::TokenListRemove | O::TokenListToggle
         | O::TokenListReplace | O::TokenListSupports | O::TokenListValue
         | O::TokenListSetValue)
@@ -83,7 +83,10 @@ pub(crate) fn invoke<H: BindingHost>(
     let original = class_value(host, element)?;
     let mut current = tokens(&original);
     if op == O::TokenListLength { return Ok(host.number(current.len() as f64)); }
-    if op == O::TokenListItem {
+    if op == O::TokenListSupportedIndices {
+        return host.create_array((0..current.len()).map(|index| host.number(index as f64)).collect());
+    }
+    if matches!(op, O::TokenListItem | O::TokenListIndexedGetter) {
         let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let number = host.to_number(value)?;
         let index = if number.is_finite() { number.trunc().rem_euclid(4_294_967_296.0) as usize } else { 0 };

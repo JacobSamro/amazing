@@ -441,6 +441,7 @@ impl Dom {
         name: &str,
         old: Option<String>,
     ) {
+        self.mutation_generation = self.mutation_generation.wrapping_add(1);
         let mut record = MutationRecord::new(MutationType::Attributes, target);
         record.attribute_name = Some(name.into());
         record.attribute_namespace = namespace.map(str::to_owned);

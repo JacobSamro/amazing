@@ -378,6 +378,7 @@ impl Dom {
         }
     }
     pub(crate) fn link_before(&mut self, parent: NodeIdx, before: Option<NodeIdx>, node: NodeIdx) {
+        self.mutation_generation = self.mutation_generation.wrapping_add(1);
         let prev = if let Some(before) = before {
             self.get(before).prev_sibling
         } else {
@@ -399,6 +400,7 @@ impl Dom {
         }
     }
     pub(crate) fn remove_internal(&mut self, node: NodeIdx, suppress: bool) {
+        self.mutation_generation = self.mutation_generation.wrapping_add(1);
         let n = self.get(node);
         let parent = n.parent.expect("remove requires parent");
         let prev = n.prev_sibling;

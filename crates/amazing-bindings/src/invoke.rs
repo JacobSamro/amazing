@@ -138,6 +138,9 @@ pub fn invoke<H: BindingHost>(
     if crate::tokenlist::handles(operation) {
         return crate::tokenlist::invoke(host, operation, receiver, args);
     }
+    if crate::html_reflection::handles(operation) {
+        return crate::html_reflection::invoke(host, operation, receiver, args);
+    }
     let constructor = matches!(
         operation,
         O::TextConstructor
