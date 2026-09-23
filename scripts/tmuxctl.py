@@ -211,6 +211,10 @@ LANE_GRANTS.setdefault("text", []).append("crates/amazing/src/page.rs")
 # land in the same commit as the manifest change, or --locked breaks.
 # ADDITIONS ONLY: the one dependency line.
 LANE_GRANTS.setdefault("html", []).append("Cargo.lock")
+# RC-13: the amazing-svg move adds exactly an amazing-svg package entry and one
+# amazing-image -> amazing-svg edge to the shell's isolated lockfile. ADDITIONS
+# ONLY; no adapter-only fetch/net edges.
+LANE_GRANTS["replaced-content"].append("crates/amazing-shell-gpui/Cargo.lock")
 LANE_GRANTS["integrator-assist"] = [
     "crates/amazing-shell-gpui/src/session_state.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
