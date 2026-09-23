@@ -1,112 +1,108 @@
 # HTML lane decision map
 
-## HTML-1 — checkpointed for daily stand-down; render integration pending
+## HTML-1 — XML parser and integrated renderer cascade complete on fixed base
 
-Parser source `868d296` and evidence `8f15980` landed through `c4b6757`;
-Mac lane ancestry was verified and lane/html rebased cleanly to that merge.
-IA-1 was subsequently reported merged as `9bf1224`, but its authoritative
-checks are **UNRUN**; no gate was active. IA XML dispatch and the integrated
-cascade boundary remain pending owner confirmation. No new parser ticket.
+HTML-1's final renderer ticket was gated on branch `lane/html` at fixed base
+`a292537252b34b74aee4c4772e732cf7c384f888` after one HTML-only Windows
+refresh. IA-XML dispatch and the Git-free runner landed earlier in `2021707`.
+No parser, driver, or runner source edit was made in this final ticket. The
+integrator's post-merge authoritative gate covers later combined heads; the
+HTML lane does not chase unrelated `dev` movement. At the last check,
+`git diff --name-only a292537 origin/dev -- crates/amazing-html` was empty.
 
-Daily stand-down: no SSH/SCP until the primary recovery broadcast and no lane
-work until resumed. HTML Windows source tree AND target reservation have been
-explicitly released; no HTML REFRESH-HOLD remains. Coordinate a new reservation
-before any future Windows gate. The exact restart procedure is recorded in the
-shared HTML report; first read current primary/co-integrator/IA status locally.
+### Owned parser contract and boundary
 
-Implementation gate revision: `868d296`, based on `origin/dev` `11dd8a8`.
-DOM expanded-name APIs were verified in `74e3c50` before adoption. The earlier
-`d835fb3` merge lacked the initial namespace seam; `c8c8264` corrected it.
-Both namespace merge issues and all DOM seam requests are now resolved.
+- `parse_xml(&str) -> Result<Dom, XmlError>` builds the real DOM with fatal
+  well-formedness errors and no HTML recovery. `xml::parse_xml_with_declaration`
+  additionally returns XML declaration metadata. The input is decoded Unicode.
+- XML QName and namespace binding rules are checked before using DOM's expanded
+  name APIs. DOM owns namespace identity and prefix storage; default namespace
+  does not apply to unprefixed attributes. The temporary `XmlTreeSink` was
+  retired after DOM's namespace APIs landed.
+- XML 1.0 declarations, elements, attributes, the five predefined and numeric
+  entities, CDATA, comments, PIs, and external PUBLIC/SYSTEM doctype identifiers
+  are supported without external loads. XML 1.1, DTD internal subsets, and
+  unresolved external-DTD entities remain Unsupported. Limits: 16 MiB input,
+  512 open elements, 1024 attributes per element. XML scripts do not execute.
+- Driver dispatch is integrator-owned; it calls `parse_xml` for local XML/XHTML/SVG
+  extensions and recognized HTTP XML MIME types without HTML fallback. This
+  final ticket does not adopt `parse_bytes`, wire Fetch, or expand encoding.
 
-### Design
+### Exact final render measurement
 
-- `parse_xml(&str) -> Result<Dom, XmlError>` constructs and owns the real DOM;
-  no partial document escapes a fatal error. No HTML recovery or fallback.
-- The temporary `XmlTreeSink` and `parse_xml_into` are retired. The metadata
-  entry point is `xml::parse_xml_with_declaration`, returning DOM plus optional
-  XML declaration encoding/standalone information. Input is decoded Unicode;
-  this is not byte decoding or encoding sniffing.
-- The parser validates XML QName grammar, namespace binding/reserved names, and
-  duplicate expanded attributes before calling DOM's `create_element_expanded`
-  and `set_attribute_expanded`. DOM owns namespace identity and prefix storage.
-  This preserves attribute prefixes and accepts valid unprefixed xmlns element
-  names without misapplying DOM API QName restrictions. No parallel namespace
-  enum, local DOM shim, extra dependency, or sibling-crate modification.
-- Namespace scopes use per-element undo records. Default namespaces do not
-  apply to unprefixed attributes. HTML/SVG/MathML retain existing enum identity;
-  null/custom namespaces, prefix and local name are represented by DOM APIs.
-- Iterative parsing, 16 MiB input, 512 open elements, 1024 attributes/element.
-  XML character validation, BOM removal and CR/CRLF normalization precede tree
-  construction. Character references preserve referenced attribute whitespace.
-- Supports XML 1.0 declaration, elements, attributes, five predefined entities,
-  numeric references, CDATA, comments, PIs and external PUBLIC/SYSTEM doctype
-  identifiers without loading them. XML version 1.1 and DTD internal subsets
-  are Unsupported. External-DTD entities remain Unsupported unless standalone
-  rules require a malformed-document error. No external resource loading.
-- XML scripting/document.write, validating DTD processing, byte decoding and
-  incremental input remain out of scope. Dispatch must not execute XML scripts.
-- References: [XML 1.0 Fifth Edition](https://www.w3.org/TR/xml/) and
-  [Namespaces in XML 1.0 Third Edition](https://www.w3.org/TR/xml-names/).
+WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` was verified by a
+revision marker on win-001; no server Git command was used. The unchanged
+`tests/wpt-render/cascade-manifest.json` SHA-256 is
+`bf3d76b0f4b07e1189fdbb9e3dac8a7897328be394c2fcefcf4503cf240b5343`.
+It selects 72 cases by SHA-256 path stratification: 12 each from css-cascade,
+selectors, css-values, css-color, css-fonts and css-variables, with no declared
+exclusions. Each test and its upstream reference were rendered at 800×600,
+scale 1, with WPT font loading through HarfRust 0.13.2 and Swash 0.2.10.
 
-### Historical Windows evidence — predates the SSH outage
+The frozen pre-dispatch source was `aa9cb9be3ca79425bb979519c75b442646b37028`,
+executable SHA-256 `10eac183bb83c91b8c6360554dbef939a927ff997fddbbab91d2f7ed668a4355`;
+its executable remains at `C:\Users\server\target\html\before-aa9cb9b\debug\amazing.exe`.
+The current source was fixed base `a292537`, executable SHA-256 at sweep time
+`600f30c52b8f76e97420cc4949ce1915d238a240c3c62492b92010a5a39a32b1`.
+The current target executable was subsequently replaced by Cargo test/build
+commands; the sweep-time hash and PPM/report artifacts identify this run.
+The prior runner excluded XHTML tests and references, while the current runner
+attempted them and classified XML failures. Both used the same manifest bytes
+and WPT checkout.
 
-No build or test was run by this resumed HTML agent. The measurements below
-predate the fleet SSH outage and are not current integrated-head evidence.
-Co-integrator separately reported authoritative `c4b6757` workspace nextest
-**1229 passed / 0 failed / 3 skipped**, explicit workspace doctests **2 passed /
-0 failed**, and **193 tracked Rust/manifest/lock hashes** matching before and
-after, with incremental disabled after the HTML-only refresh. That reported
-pre-outage gate is distinct from the source-checkpoint gate below and does not
-validate `9bf1224` or subsequent XML dispatch.
+| Side, twice stable | Pass | Mismatch | Error | Timeout | Unsupported | Crash | Per-case classification/pixel projection SHA-256 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Pre-dispatch | 35 | 24 | 0 | 0 | 13 | 0 | `33165bc36299847812c95d2f46a75ce5968da1316ab4213b20f3c76c0c57b8b7` |
+| Integrated | 38 | 32 | 0 | 0 | 2 | 0 | `fea336c5e6e0f00bd3f08809cb9a982c0913652a40187133776c96dc2fc9f318` |
 
-After rebase and source re-sync following the integrator refresh, **370 tracked
-crate/workspace files matched SHA256 before and after the successful gate**.
-An earlier cargo-test attempt interrupted by a refresh is not credited.
+Both repeats on each side had identical full per-case projections, including
+pixel hashes, and all four raw runner reports had 72 cases and `unexpected=0`.
+The exact projections and a result summary are in
+`tests/wpt-html/html1-cascade-before-projection.json`,
+`html1-cascade-after-projection.json`, and `html1-cascade-results.json`.
+Raw reports and PPM artifacts are retained under
+`C:\Users\server\target\html\diagnostics\html1-final-cascade\`.
+The historical 35/24/13 baseline is now freshly reproduced from the named
+frozen revision; parser-only 12 parsed/2 Unsupported counts are not render
+passes and are kept separate.
 
-- `cargo nextest run --workspace --locked`: **1229 passed / 0 failed / 3 skipped**;
-  39.330 seconds test execution. Recorded in tests/wpt-html/workspace-results.json.
-- `cargo test --workspace --locked --doc`: **2 passed / 0 failed / 0 ignored**,
-  HTML 1 and JS 1. Nextest does not run these tests.
-- HTML nextest subset and package repeat: **84 passed / 0 failed / 0 skipped**,
-  identical test-name projections. HTML doctest passed separately twice.
-  Includes 21 XML tests against the real DOM, including qualified attributes
-  and valid xmlns element names. See tests/wpt-html/unit-results.json.
-- Pinned parser-only diagnostic: **12 parsed / 0 error / 0 timeout / 2
-  unsupported**, 14 distinct XML documents, two identical runs. WPT revision
-  `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`; per-source and DOM-output hashes in
-  tests/wpt-html/parser-cascade-results.json. Canonical projection remains
-  `193d33ee4941222c4c7a6a77ac4726ea9b41c54239c05d2668024a8ef417dee2`.
+All 13 prior exclusions were XHTML-related. Four HTML tests had XHTML
+references: `css-cascade__revert-layer-002.html` (now pass), and
+`css-cascade__revert-layer-011.html`, `css-cascade__all-prop-002.html`,
+`css-cascade__revert-layer-005.html` (now mismatch). Nine XHTML tests were
+excluded: `css-color__t425-hsla-values-b.xht` and
+`css-color__t421-rgb-clip-outside-gamut-b.xht` (still Unsupported);
+`css-fonts__font-family-name-014.xht` and
+`css-fonts__font-family-name-001.xht` (now pass); and
+`css-fonts__font-family-name-000.xht`, `css-fonts__font-family-name-022.xht`,
+`css-fonts__font-family-name-018.xht`, `css-fonts__font-family-name-024.xht`,
+`css-fonts__font-family-name-019.xht` (now mismatch). Thus 3 old exclusions
+became pass, 8 mismatch, and 2 remain Unsupported. The two colour cases still
+need external-DTD entities; `XmlErrorKind::Unsupported` is the honest outcome
+because external entities are not loaded. There were no other exclusions.
+`use-descendant-combinator-003.html` is outside this selection and gets no
+pass credit; the corrected root mapping in the broader IA diagnostic exposed a
+page-script TypeError/crash.
 
-The two colour cases t421-rgb-clip-outside-gamut-b.xht and
-t425-hsla-values-b.xht require external-DTD entities and remain Unsupported.
-These parser acceptance counts are not render passes or a WPT conformance rate.
-The brief's 35 pass / 24 mismatch / 13 unsupported cascade baseline has not
-been freshly reproduced, and no render improvement is claimed.
+### Windows source and test gates
 
-Runnable artifact: build `cargo build -p amazing-html --example xml_parse
---locked` on win-001 and invoke it on tests/wpt-html/xhtml-smoke.xhtml. The
-companion xhtml-fatal.xhtml must return failure, never a recovered HTML DOM.
+The fixed-base hash manifest `tests/wpt-html/html1-fixed-base-source-hashes.json`
+(SHA-256 `b2bc5f20a2b6d2d2d3785736ce77b61964caa51a2f4cc815519f1ca72c591228`)
+records 231 tracked Rust, Cargo, runner and selection inputs. All 231 matched
+the refreshed Windows HTML tree before and after; local inputs did not drift.
+Root `Cargo.lock` SHA-256 stayed
+`f4ff57271aa44d67cd1a9d2eee65074b7fb885d8d181cf71b8f738e4a4159fb3`.
+All full sweeps and workspace commands held the shared HTML build slot and used
+`CARGO_TARGET_DIR=C:\Users\server\target\html` for the current source.
 
-### Remaining integration and gates
+- HTML package nextest: **95 passed / 0 failed / 0 skipped**; separate HTML
+  doctest: **1 passed / 0 failed**.
+- Workspace nextest: **1321 passed / 0 failed / 3 skipped**; separate workspace
+  doctests: **2 passed / 0 failed**.
 
-- [x] Fatal well-formedness, entities, CDATA, namespaces and limits tested.
-- [x] DOM-owned null/custom namespaces and element/attribute prefixes.
-- [x] Valid xmlns element names through parser-safe DOM creation.
-- [x] Refreshed workspace gate and explicit doctests; no test failures.
-- [ ] Driver XML/XHTML dispatch, no HTML fallback or XML scripting.
-- [ ] Git-free render runner/root mapping and removal of blanket XML exclusions.
-- [ ] Two stable actual cascade before/after render runs and final integrated gate.
-
-Co-integrator owns integration. The parser dependency has landed; do not request
-its merge again or redo parser implementation. IA-XML was activated after that
-merge and must preserve IA-1 frozen sweeps. Verify the owner's actual landed
-symbols and exact integration revision on resume before claiming dispatch or
-runner completion. After recovery and owner coordination, remaining evidence is
-actual cascade before/after measurement, twice-stable pinned classifications and
-pixel hashes, and final integrated workspace nextest plus separate doctests.
-No server Git, no push/PR, and no next ticket. Historical parser counts are not
-render passes; both external-DTD Unsupported limitations remain.
+The HTML-1 final ticket stops here for integrator preflight/merge. It does not
+start another ticket. HTML-3's decoded-text streaming API and HTML-2's bounded
+byte decoder remain their separately measured decisions below.
 
 ## HTML-2 — bounded HTML byte input
 
