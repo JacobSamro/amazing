@@ -1,6 +1,294 @@
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn external() -> Interpreter {
+        Interpreter::new_with_external_scheduler(64).unwrap()
+    }
+
+    fn take(i: &mut Interpreter, all: &mut Vec<SchedulingRequest>) {
+        all.extend(i.take_scheduling_requests());
+    }
+
+    fn job(request: SchedulingRequest) -> SchedulingToken {
+        match request {
+            SchedulingRequest::Microtask { job_token } => job_token,
+            _ => panic!("expected microtask request"),
+        }
+    }
+
+    fn callback(request: SchedulingRequest) -> SchedulingToken {
+        match request {
+            SchedulingRequest::Timer { callback_token, .. }
+            | SchedulingRequest::AnimationFrame { callback_token, .. } => callback_token,
+            _ => panic!("expected callback request"),
+        }
+    }
+
+    #[test]
+    fn external_registration_is_ordered_and_runs_nothing_until_invoked() {
+        let mut i = external();
+        i.run_script("setTimeout(()=>console.log('timer'),0); setInterval(()=>console.log('interval'),5); requestAnimationFrame(()=>console.log('frame')); Promise.resolve(1).then(()=>console.log('promise')); queueMicrotask(()=>console.log('microtask'));").unwrap();
+        assert!(i.output.borrow().is_empty());
+        let requests = i.take_scheduling_requests();
+        assert!(matches!(&requests[..], [
+            SchedulingRequest::Timer { repeat: false, .. },
+            SchedulingRequest::Timer { repeat: true, .. },
+            SchedulingRequest::AnimationFrame { .. },
+            SchedulingRequest::Microtask { .. },
+            SchedulingRequest::Microtask { .. },
+        ]));
+        assert!(i.pump_timers().is_err());
+        assert!(i.drain_microtasks().is_err());
+    }
+
+    #[test]
+    fn external_driver_controls_every_checkpoint_and_nested_eval() {
+        let mut i = external();
+        i.run_script("setTimeout(()=>{console.log('A'); Promise.resolve().then(()=>{console.log('P'); queueMicrotask(()=>console.log('R'))}); queueMicrotask(()=>console.log('Q')); eval('1+1');},0); setTimeout(()=>console.log('B'),0)").unwrap();
+        let mut requests = i.take_scheduling_requests();
+        let a = callback(requests[0]);
+        let b = callback(requests[1]);
+        i.invoke_one_callback(a, JsValue::Object(i.global_obj.clone()), None).unwrap();
+        assert_eq!(&*i.output.borrow(), &["A"]);
+        take(&mut i, &mut requests);
+        let p = job(requests[2]);
+        let q = job(requests[3]);
+        i.invoke_one_job(p).unwrap();
+        assert_eq!(&*i.output.borrow(), &["A", "P"]);
+        take(&mut i, &mut requests);
+        let r = job(requests[4]);
+        i.invoke_one_job(q).unwrap();
+        i.invoke_one_job(r).unwrap();
+        i.invoke_one_callback(b, JsValue::Object(i.global_obj.clone()), None).unwrap();
+        assert_eq!(&*i.output.borrow(), &["A", "P", "Q", "R", "B"]);
+        assert!(i.invoke_one_job(p).is_err());
+        assert!(i.invoke_one_callback(a, JsValue::Undefined, None).is_err());
+    }
+
+    #[test]
+    fn promise_chains_enqueue_new_jobs_without_draining_existing_ones() {
+        let mut i = external();
+        i.run_script("Promise.resolve(1).then(x=>{console.log('P1'); return x+1}).then(()=>console.log('P2')); Promise.resolve(3).then(()=>console.log('Q'));").unwrap();
+        let mut requests = i.take_scheduling_requests();
+        assert_eq!(requests.len(), 2);
+        let p = job(requests[0]);
+        let q = job(requests[1]);
+        i.invoke_one_job(p).unwrap();
+        assert_eq!(&*i.output.borrow(), &["P1"]);
+        take(&mut i, &mut requests);
+        assert_eq!(requests.len(), 3);
+        i.invoke_one_job(q).unwrap();
+        i.invoke_one_job(job(requests[2])).unwrap();
+        assert_eq!(&*i.output.borrow(), &["P1", "Q", "P2"]);
+    }
+
+    #[test]
+    fn native_between_js_entries_can_be_merged_in_order() {
+        let mut i = external();
+        i.run_script("Promise.resolve().then(()=>console.log('P'))").unwrap();
+        let first = i.take_scheduling_requests();
+        assert_eq!(first.len(), 1);
+        let mut order = vec!["P"];
+        // A DOM native notification between entries uses the driver's FIFO.
+        order.push("M");
+        i.run_script("queueMicrotask(()=>console.log('Q'))").unwrap();
+        let second = i.take_scheduling_requests();
+        assert_eq!(second.len(), 1);
+        order.push("Q");
+        assert_eq!(order, ["P", "M", "Q"]);
+        i.invoke_one_job(job(first[0])).unwrap();
+        i.invoke_one_job(job(second[0])).unwrap();
+        assert_eq!(&*i.output.borrow(), &["P", "Q"]);
+    }
+
+    #[test]
+    fn throwing_callback_leaves_new_jobs_and_later_callbacks_owned() {
+        let mut i = external();
+        i.run_script("setTimeout(()=>{console.log('A'); queueMicrotask(()=>console.log('Q')); throw 9},0); setTimeout(()=>console.log('B'),0)").unwrap();
+        let requests = i.take_scheduling_requests();
+        let a = callback(requests[0]);
+        let b = callback(requests[1]);
+        assert!(i.invoke_one_callback(a, JsValue::Undefined, None).is_err());
+        assert_eq!(&*i.output.borrow(), &["A"]);
+        let queued = i.take_scheduling_requests();
+        i.invoke_one_job(job(queued[0])).unwrap();
+        i.invoke_one_callback(b, JsValue::Undefined, None).unwrap();
+        assert_eq!(&*i.output.borrow(), &["A", "Q", "B"]);
+    }
+
+    #[test]
+    fn cancellation_suppresses_due_tokens_and_intervals_can_clear_themselves() {
+        let mut i = external();
+        i.run_script("let b=setTimeout(()=>console.log('B'),0); setTimeout(()=>{clearTimeout(b); console.log('A')},0); let interval=setInterval(()=>{console.log('I'); clearInterval(interval)},0)").unwrap();
+        let requests = i.take_scheduling_requests();
+        let b = callback(requests[0]);
+        let a = callback(requests[1]);
+        let interval = callback(requests[2]);
+        i.invoke_one_callback(a, JsValue::Undefined, None).unwrap();
+        assert!(matches!(i.take_scheduling_requests()[..], [SchedulingRequest::CancelTimer { .. }]));
+        assert!(i.invoke_one_callback(b, JsValue::Undefined, None).is_err());
+        i.invoke_one_callback(interval, JsValue::Undefined, None).unwrap();
+        assert!(matches!(i.take_scheduling_requests()[..], [SchedulingRequest::CancelTimer { .. }]));
+        assert!(i.invoke_one_callback(interval, JsValue::Undefined, None).is_err());
+        assert_eq!(&*i.output.borrow(), &["A", "I"]);
+    }
+
+    #[test]
+    fn frame_timestamp_receiver_and_timer_arguments_are_supplied_by_driver() {
+        let mut i = external();
+        i.run_script("setTimeout(function(a,b){console.log(this===window,a,b)},0,2,3); requestAnimationFrame(function(ts){console.log(this===window,ts)})").unwrap();
+        let requests = i.take_scheduling_requests();
+        let timer = callback(requests[0]);
+        let frame = callback(requests[1]);
+        assert!(matches!(requests[1], SchedulingRequest::AnimationFrame { .. }));
+        let window = JsValue::Object(i.global_obj.clone());
+        assert!(i.invoke_one_callback(frame, window.clone(), None).is_err());
+        i.invoke_one_callback(timer, window.clone(), None).unwrap();
+        i.invoke_one_callback(frame, window, Some(Duration::from_millis(32))).unwrap();
+        assert_eq!(&*i.output.borrow(), &["true 2 3", "true 32"]);
+    }
+
+    #[test]
+    fn frame_cancellation_can_happen_from_its_prior_frames_microtask() {
+        let mut i = external();
+        i.run_script("let b=requestAnimationFrame(()=>console.log('B')); requestAnimationFrame(()=>{console.log('A'); Promise.resolve().then(()=>cancelAnimationFrame(b))})").unwrap();
+        let requests = i.take_scheduling_requests();
+        let b = callback(requests[0]);
+        let a = callback(requests[1]);
+        i.invoke_one_callback(a, JsValue::Undefined, Some(Duration::from_millis(4))).unwrap();
+        assert_eq!(&*i.output.borrow(), &["A"]);
+        let queued = i.take_scheduling_requests();
+        i.invoke_one_job(job(queued[0])).unwrap();
+        assert!(matches!(i.take_scheduling_requests()[..], [SchedulingRequest::CancelAnimationFrame { .. }]));
+        assert!(i.invoke_one_callback(b, JsValue::Undefined, Some(Duration::from_millis(4))).is_err());
+    }
+
+    #[test]
+    fn full_outbox_rejects_registration_without_losing_prior_work() {
+        let mut i = Interpreter::new_with_external_scheduler(1).unwrap();
+        i.run_script("queueMicrotask(()=>console.log('kept'))").unwrap();
+        assert!(i.run_script("queueMicrotask(()=>console.log('lost'))").is_err());
+        let requests = i.take_scheduling_requests();
+        assert_eq!(requests.len(), 1);
+        let token = job(requests[0]);
+        let mut other = external();
+        assert!(other.invoke_one_job(token).is_err());
+        i.invoke_one_job(token).unwrap();
+        assert_eq!(&*i.output.borrow(), &["kept"]);
+    }
+
+    #[test]
+    fn full_outbox_rejects_cancellation_but_retains_the_timer() {
+        let mut i = Interpreter::new_with_external_scheduler(1).unwrap();
+        i.run_script("let timer=setTimeout(()=>console.log('kept'),0)").unwrap();
+        assert!(i.run_script("clearTimeout(timer)").is_err());
+        let requests = i.take_scheduling_requests();
+        let token = callback(requests[0]);
+        i.invoke_one_callback(token, JsValue::Undefined, None).unwrap();
+        assert_eq!(&*i.output.borrow(), &["kept"]);
+    }
+
+    #[test]
+    fn timer_delay_uses_signed_webidl_long_before_dom_clamping() {
+        let mut i = external();
+        i.run_script("setTimeout(()=>{},-1); setTimeout(()=>{},4294967295); setInterval(()=>{},4294967297.9); setTimeout(()=>{},NaN); setTimeout(()=>{},Infinity)").unwrap();
+        let delays: Vec<_> = i.take_scheduling_requests().into_iter().map(|request| {
+            match request {
+                SchedulingRequest::Timer { delay_ms, .. } => delay_ms,
+                _ => panic!("expected timer"),
+            }
+        }).collect();
+        assert_eq!(delays, [-1, -1, 1, 0, 0]);
+    }
+
+    #[derive(Default)]
+    struct NativeMutationState { pending: bool, forwarded: bool, fail: bool }
+
+    struct NativeMutationHost(Rc<RefCell<NativeMutationState>>);
+
+    impl DomHost for NativeMutationHost {
+        fn query_selector(&mut self, _: &str) -> Option<u32> { Some(1) }
+        fn query_selector_all(&mut self, _: &str) -> Vec<u32> { vec![1] }
+        fn matches_selector(&self, _: u32, _: &str) -> bool { true }
+        fn parent_node(&self, _: u32) -> Option<u32> { None }
+        fn get_text_content(&self, _: u32) -> Option<String> { None }
+        fn set_text_content(&mut self, _: u32, _: &str) -> Result<(), String> { Ok(()) }
+        fn get_document_title(&self) -> String { String::new() }
+        fn set_document_title(&mut self, _: &str) -> Result<(), String> { Ok(()) }
+        fn fetch(&mut self, _: &str, _: &str) -> Result<HostResponse, String> { Err("not used".into()) }
+        fn get_inner_html(&self, _: u32) -> Option<String> { None }
+        fn set_inner_html(&mut self, _: u32, _: &str) -> Result<(), String> { Ok(()) }
+        fn get_attribute(&self, _: u32, _: &str) -> Option<Option<String>> { None }
+        fn set_attribute(&mut self, _: u32, _: &str, _: &str) -> Result<(), String> {
+            let mut state = self.0.borrow_mut();
+            state.pending = true;
+            if state.fail { Err("mutated then failed".into()) } else { Ok(()) }
+        }
+        fn remove_attribute(&mut self, _: u32, _: &str) -> Result<(), String> { Ok(()) }
+        fn create_element(&mut self, _: &str) -> Result<u32, String> { Ok(1) }
+        fn create_text_node(&mut self, _: &str) -> Result<u32, String> { Ok(1) }
+        fn append_child(&mut self, _: u32, _: u32) -> Result<(), String> { Ok(()) }
+        fn append_text(&mut self, _: u32, _: &str) -> Result<(), String> { Ok(()) }
+        fn remove_node(&mut self, _: u32) -> Result<(), String> { Ok(()) }
+        fn get_style(&self, _: u32, _: &str) -> Option<String> { None }
+        fn set_style(&mut self, _: u32, _: &str, _: &str) -> Result<(), String> { Ok(()) }
+        fn pending_native_microtasks(&self) -> Vec<NativeMicrotaskRequest> {
+            let state = self.0.borrow();
+            if state.pending && !state.forwarded {
+                vec![NativeMicrotaskRequest { global: 7, kind: NativeMicrotaskKind::MutationObserver }]
+            } else { Vec::new() }
+        }
+        fn acknowledge_native_microtask(&mut self, _: NativeMicrotaskRequest) {
+            self.0.borrow_mut().forwarded = true;
+        }
+    }
+
+    fn with_native_host(capacity: usize, fail: bool) -> (Interpreter, Rc<RefCell<NativeMutationState>>) {
+        let state = Rc::new(RefCell::new(NativeMutationState { fail, ..Default::default() }));
+        let host: Rc<RefCell<dyn DomHost>> = Rc::new(RefCell::new(NativeMutationHost(state.clone())));
+        let mut i = Interpreter::new_with_external_scheduler(capacity).unwrap();
+        i.set_dom_host(host);
+        (i, state)
+    }
+
+    #[test]
+    fn mutation_microtask_keeps_same_script_p_m_q_order() {
+        let (mut i, state) = with_native_host(4, false);
+        i.run_script("Promise.resolve().then(()=>{}); document.querySelector('x').setAttribute('x','y'); queueMicrotask(()=>{})").unwrap();
+        let requests = i.take_scheduling_requests();
+        assert!(matches!(&requests[..], [
+            SchedulingRequest::Microtask { .. },
+            SchedulingRequest::NativeMicrotask { global: 7, kind: NativeMicrotaskKind::MutationObserver },
+            SchedulingRequest::Microtask { .. },
+        ]));
+        assert!(state.borrow().pending); // DOM queued flag remains until checkpoint.
+        assert!(state.borrow().forwarded); // Only the forwarding bit is acknowledged.
+    }
+
+    #[test]
+    fn native_mutation_is_forwarded_even_when_operation_throws() {
+        let (mut i, state) = with_native_host(3, true);
+        assert!(i.run_script("Promise.resolve().then(()=>{}); document.querySelector('x').setAttribute('x','y'); queueMicrotask(()=>{})").is_err());
+        assert!(matches!(&i.take_scheduling_requests()[..], [
+            SchedulingRequest::Microtask { .. },
+            SchedulingRequest::NativeMicrotask { .. },
+        ]));
+        assert!(state.borrow().forwarded);
+    }
+
+    #[test]
+    fn reserved_native_slot_keeps_m_before_caught_q_capacity_failure() {
+        let (mut i, state) = with_native_host(1, false);
+        i.run_script("Promise.resolve().then(()=>{}); document.querySelector('x').setAttribute('x','y'); try { queueMicrotask(()=>{}) } catch(e) { console.log('caught') }").unwrap();
+        let requests = i.take_scheduling_requests();
+        assert!(matches!(&requests[..], [
+            SchedulingRequest::Microtask { .. },
+            SchedulingRequest::NativeMicrotask { .. },
+        ]));
+        assert_eq!(&*i.output.borrow(), &["caught"]);
+        assert!(state.borrow().pending);
+        assert!(state.borrow().forwarded);
+    }
 
     fn num(v: JsValue) -> f64 {
         match v {

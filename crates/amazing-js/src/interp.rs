@@ -6,8 +6,9 @@
 //! real asynchronous job queue remain explicit later milestones.
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
@@ -30,6 +31,61 @@ struct PromiseJob {
     reaction: PendingReaction,
     fate: PromiseFate,
 }
+
+enum Job {
+    Promise(PromiseJob),
+    Microtask(JsValue),
+}
+
+/// An interpreter-owned root for exactly one scheduled item. Tokens cannot be
+/// forged by JavaScript or used with another interpreter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SchedulingToken {
+    owner: u64,
+    sequence: u64,
+}
+
+/// Host-owned work ordered with JavaScript microtasks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NativeMicrotaskKind { MutationObserver }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NativeMicrotaskRequest {
+    pub global: u64,
+    pub kind: NativeMicrotaskKind,
+}
+
+/// Ordered requests in the runtime's bounded outbox. The runtime retains all
+/// JS values; these requests contain only scalar metadata.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SchedulingRequest {
+    Timer { registration: u32, callback_token: SchedulingToken, delay_ms: i32, repeat: bool },
+    CancelTimer { registration: u32 },
+    AnimationFrame { registration: u32, callback_token: SchedulingToken },
+    CancelAnimationFrame { registration: u32 },
+    Microtask { job_token: SchedulingToken },
+    /// Native work retained and invoked by the embedding, ordered with JS jobs.
+    NativeMicrotask { global: u64, kind: NativeMicrotaskKind },
+}
+
+enum ScheduledTask {
+    Job(Job),
+    Timer { registration: u32, callback: JsValue, args: Vec<JsValue>, repeat: bool },
+    Frame { registration: u32, callback: JsValue },
+}
+
+struct ExternalScheduling {
+    outbox: VecDeque<SchedulingRequest>,
+    js_capacity: usize,
+    owner: u64,
+    next_sequence: u64,
+    next_registration: u32,
+    tasks: BTreeMap<u64, ScheduledTask>,
+    timers: BTreeMap<u32, u64>,
+    frames: BTreeMap<u32, u64>,
+}
+
+static NEXT_SCHEDULER_OWNER: AtomicU64 = AtomicU64::new(1);
 
 struct TimerJob {
     id: u32,
@@ -93,6 +149,12 @@ pub trait DomHost {
     fn remove_node(&mut self, node: u32) -> Result<(), String>;
     fn get_style(&self, node: u32, property: &str) -> Option<String>;
     fn set_style(&mut self, node: u32, property: &str, value: &str) -> Result<(), String>;
+    /// Native work newly pending after a host operation. This must not clear
+    /// the DOM's queued flag; the adapter tracks whether it was forwarded.
+    fn pending_native_microtasks(&self) -> Vec<NativeMicrotaskRequest> { Vec::new() }
+    /// Called only after the runtime outbox accepts the request. Mark it
+    /// forwarded, while leaving the DOM queued flag until its checkpoint.
+    fn acknowledge_native_microtask(&mut self, _request: NativeMicrotaskRequest) {}
     fn storage_get(&self, _origin: &str, _key: &str) -> Option<String> {
         None
     }
@@ -121,7 +183,8 @@ pub struct Interpreter {
     pub output: RefCell<Vec<String>>,
     depth: u32,
     native_stack: Vec<Obj>,
-    jobs: VecDeque<PromiseJob>,
+    jobs: VecDeque<Job>,
+    external_scheduling: Option<ExternalScheduling>,
     completion: JsValue,
     frames: Vec<CallFrame>,
     dom_host: Option<Rc<RefCell<dyn DomHost>>>,
@@ -195,6 +258,7 @@ impl Interpreter {
             depth: 0,
             native_stack: Vec::new(),
             jobs: VecDeque::new(),
+            external_scheduling: None,
             completion: JsValue::Undefined,
             frames: Vec::new(),
             dom_host: None,
@@ -462,35 +526,207 @@ impl Interpreter {
         self.last_event_default_prevented
     }
 
+    /// Opt into driver-owned time and checkpoints before running page code.
+    /// `js_capacity` bounds JS-originated requests. One additional slot is
+    /// reserved for the flag-gated MutationObserver microtask of this agent.
+    pub fn new_with_external_scheduler(js_capacity: usize) -> Result<Self, Throw> {
+        if js_capacity == 0 {
+            return Err(Throw::range_error("scheduler JS capacity must be positive"));
+        }
+        let owner = NEXT_SCHEDULER_OWNER
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+            .map_err(|_| Throw::range_error("scheduler owner IDs exhausted"))?;
+        let mut interpreter = Self::new();
+        interpreter.external_scheduling = Some(ExternalScheduling {
+            outbox: VecDeque::new(), js_capacity,
+            owner, next_sequence: 1, next_registration: 1,
+            tasks: BTreeMap::new(), timers: BTreeMap::new(), frames: BTreeMap::new(),
+        });
+        Ok(interpreter)
+    }
+
+    /// Drain ordered registration/cancellation requests after an entry point.
+    /// Taking requests never runs JS and does not consume callback roots.
+    pub fn take_scheduling_requests(&mut self) -> Vec<SchedulingRequest> {
+        self.external_scheduling.as_mut()
+            .map(|external| external.outbox.drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    fn emit_scheduling(&mut self, request: SchedulingRequest) -> Result<(), Throw> {
+        let external = self.external_scheduling.as_mut().expect("external scheduling");
+        let native = matches!(request, SchedulingRequest::NativeMicrotask { .. });
+        let used = external.outbox.iter().filter(|entry| {
+            matches!(entry, SchedulingRequest::NativeMicrotask { .. }) == native
+        }).count();
+        if native && used == 1 {
+            return Err(Throw::type_error("native microtask already queued for this agent"));
+        }
+        if !native && used >= external.js_capacity {
+            return Err(Throw::type_error("scheduler JS outbox is full"));
+        }
+        external.outbox.push_back(request);
+        Ok(())
+    }
+
+    fn enqueue_scheduled(
+        &mut self,
+        task: ScheduledTask,
+        request: impl FnOnce(SchedulingToken) -> SchedulingRequest,
+    ) -> Result<SchedulingToken, Throw> {
+        let external = self.external_scheduling.as_mut().expect("external scheduling");
+        let sequence = external.next_sequence;
+        external.next_sequence = sequence.checked_add(1)
+            .ok_or_else(|| Throw::range_error("scheduler tokens exhausted"))?;
+        let token = SchedulingToken { owner: external.owner, sequence };
+        external.tasks.insert(sequence, task);
+        if let Err(error) = self.emit_scheduling(request(token)) {
+            self.external_scheduling.as_mut().unwrap().tasks.remove(&sequence);
+            return Err(error);
+        }
+        Ok(token)
+    }
+
+    fn next_registration(&mut self) -> Result<u32, Throw> {
+        let external = self.external_scheduling.as_mut().expect("external scheduling");
+        let id = external.next_registration;
+        external.next_registration = id.checked_add(1)
+            .ok_or_else(|| Throw::range_error("scheduler registrations exhausted"))?;
+        Ok(id)
+    }
+
+    fn enqueue_job(&mut self, job: Job) -> Result<(), Throw> {
+        if self.external_scheduling.is_some() {
+            self.enqueue_scheduled(ScheduledTask::Job(job), |job_token| {
+                SchedulingRequest::Microtask { job_token }
+            })?;
+        } else {
+            self.jobs.push_back(job);
+        }
+        Ok(())
+    }
+
+    fn enqueue_promise_job(&mut self, job: PromiseJob) -> Result<(), Throw> {
+        self.enqueue_job(Job::Promise(job))
+    }
+
+    /// Append a host-owned microtask at the exact native enqueue point.
+    /// Its payload stays with the host; the driver invokes the host's delivery.
+    pub fn enqueue_native_microtask(&mut self, global: u64, kind: NativeMicrotaskKind) -> Result<(), Throw> {
+        if self.external_scheduling.is_some() {
+            self.emit_scheduling(SchedulingRequest::NativeMicrotask { global, kind })
+        } else {
+            Err(Throw::type_error("external scheduler is not enabled"))
+        }
+    }
+
+    fn flush_native_microtasks(&mut self) -> Result<(), Throw> {
+        if self.external_scheduling.is_none() { return Ok(()); }
+        let Some(host) = self.dom_host.as_ref().cloned() else { return Ok(()) };
+        let pending = host.borrow().pending_native_microtasks();
+        for request in pending {
+            self.enqueue_native_microtask(request.global, request.kind)?;
+            host.borrow_mut().acknowledge_native_microtask(request);
+        }
+        Ok(())
+    }
+
+    /// Queue one callback in the same ordered channel as Promise reactions.
+    pub fn queue_microtask(&mut self, callback: JsValue) -> Result<(), Throw> {
+        if callable_function(&callback).is_none() {
+            return Err(Throw::type_error("queueMicrotask callback is not callable"));
+        }
+        self.enqueue_job(Job::Microtask(callback))
+    }
+
+    /// Run exactly one owned Promise or queueMicrotask job. No private drain.
+    pub fn invoke_one_job(&mut self, token: SchedulingToken) -> Result<(), Throw> {
+        let external = self.external_scheduling.as_mut()
+            .ok_or_else(|| Throw::type_error("external scheduler is not enabled"))?;
+        if token.owner != external.owner || !matches!(external.tasks.get(&token.sequence), Some(ScheduledTask::Job(_))) {
+            return Err(Throw::type_error("unknown or wrong-kind scheduling token"));
+        }
+        let Some(ScheduledTask::Job(job)) = external.tasks.remove(&token.sequence) else { unreachable!() };
+        self.run_job(job)
+    }
+
+    /// Invoke one timer or animation frame. `Some(timestamp)` is required for
+    /// frames and forbidden for timers; the embedding supplies the receiver.
+    pub fn invoke_one_callback(&mut self, token: SchedulingToken, receiver: JsValue,
+        frame_timestamp: Option<Duration>) -> Result<(), Throw> {
+        let external = self.external_scheduling.as_mut()
+            .ok_or_else(|| Throw::type_error("external scheduler is not enabled"))?;
+        if token.owner != external.owner {
+            return Err(Throw::type_error("foreign scheduling token"));
+        }
+        let task = external.tasks.get(&token.sequence);
+        let valid = matches!((task, frame_timestamp),
+            (Some(ScheduledTask::Timer { .. }), None) | (Some(ScheduledTask::Frame { .. }), Some(_)));
+        if !valid { return Err(Throw::type_error("unknown or wrong-kind scheduling token")); }
+        let (callback, args) = match task.unwrap() {
+            ScheduledTask::Timer { registration, callback, args, repeat } => {
+                let result = (callback.clone(), args.clone());
+                if !repeat {
+                    let registration = *registration;
+                    external.tasks.remove(&token.sequence);
+                    external.timers.remove(&registration);
+                }
+                result
+            }
+            ScheduledTask::Frame { callback, registration } => {
+                let result = (callback.clone(), vec![JsValue::num(frame_timestamp.unwrap().as_secs_f64() * 1000.0)]);
+                external.frames.remove(registration);
+                external.tasks.remove(&token.sequence);
+                result
+            }
+            ScheduledTask::Job(_) => unreachable!(),
+        };
+        self.call_value(&callback, receiver, args).map(|_| ())
+    }
+
     /// Runs promise reactions queued by a host callback. Browser integrations
     /// call this after dispatching an input event or timer task.
     pub fn drain_microtasks(&mut self) -> Result<(), Throw> {
+        if self.external_scheduling.is_some() {
+            return Err(Throw::type_error("external scheduler owns microtasks"));
+        }
         self.drain_jobs()
     }
 
-    pub fn schedule_timer(&mut self, callback: JsValue, delay_ms: u64, args: Vec<JsValue>) -> u32 {
+    pub fn schedule_timer(&mut self, callback: JsValue, delay_ms: i32, args: Vec<JsValue>) -> Result<u32, Throw> {
         self.schedule_timer_kind(callback, delay_ms, args, false)
     }
 
     pub fn schedule_interval(
         &mut self,
         callback: JsValue,
-        delay_ms: u64,
+        delay_ms: i32,
         args: Vec<JsValue>,
-    ) -> u32 {
+    ) -> Result<u32, Throw> {
         self.schedule_timer_kind(callback, delay_ms, args, true)
     }
 
     fn schedule_timer_kind(
         &mut self,
         callback: JsValue,
-        delay_ms: u64,
+        delay_ms: i32,
         args: Vec<JsValue>,
         repeat: bool,
-    ) -> u32 {
+    ) -> Result<u32, Throw> {
+        if self.external_scheduling.is_some() {
+            let registration = self.next_registration()?;
+            let token = self.enqueue_scheduled(
+                ScheduledTask::Timer { registration, callback, args, repeat },
+                |callback_token| SchedulingRequest::Timer {
+                    registration, callback_token, delay_ms, repeat,
+                },
+            )?;
+            self.external_scheduling.as_mut().unwrap().timers.insert(registration, token.sequence);
+            return Ok(registration);
+        }
         let id = self.next_timer_id;
         self.next_timer_id = self.next_timer_id.wrapping_add(1).max(1);
-        let delay = Duration::from_millis(delay_ms);
+        let delay = Duration::from_millis(delay_ms.max(0) as u64);
         self.timers.push(TimerJob {
             id,
             due: Instant::now() + delay,
@@ -499,16 +735,53 @@ impl Interpreter {
             callback,
             args,
         });
-        id
+        Ok(id)
     }
 
-    pub fn cancel_timer(&mut self, id: u32) {
+    pub fn cancel_timer(&mut self, id: u32) -> Result<(), Throw> {
+        if let Some(external) = self.external_scheduling.as_ref() {
+            if let Some(&sequence) = external.timers.get(&id) {
+                self.emit_scheduling(SchedulingRequest::CancelTimer { registration: id })?;
+                let external = self.external_scheduling.as_mut().unwrap();
+                external.timers.remove(&id);
+                external.tasks.remove(&sequence);
+            }
+            return Ok(());
+        }
         self.timers.retain(|timer| timer.id != id);
+        Ok(())
+    }
+
+    pub fn schedule_animation_frame(&mut self, callback: JsValue) -> Result<u32, Throw> {
+        if self.external_scheduling.is_none() {
+            return self.schedule_timer(callback, 16, vec![JsValue::num(0.0)]);
+        }
+        let registration = self.next_registration()?;
+        let token = self.enqueue_scheduled(ScheduledTask::Frame { registration, callback },
+            |callback_token| SchedulingRequest::AnimationFrame { registration, callback_token })?;
+        self.external_scheduling.as_mut().unwrap().frames.insert(registration, token.sequence);
+        Ok(registration)
+    }
+
+    pub fn cancel_animation_frame(&mut self, id: u32) -> Result<(), Throw> {
+        if let Some(external) = self.external_scheduling.as_ref() {
+            if let Some(&sequence) = external.frames.get(&id) {
+                self.emit_scheduling(SchedulingRequest::CancelAnimationFrame { registration: id })?;
+                let external = self.external_scheduling.as_mut().unwrap();
+                external.frames.remove(&id);
+                external.tasks.remove(&sequence);
+            }
+            return Ok(());
+        }
+        self.cancel_timer(id)
     }
 
     /// Executes all timers whose deadline has passed, then drains resulting
     /// Promise reactions. Returns whether at least one timer ran.
     pub fn pump_timers(&mut self) -> Result<bool, Throw> {
+        if self.external_scheduling.is_some() {
+            return Err(Throw::type_error("external scheduler owns timers"));
+        }
         let now = Instant::now();
         let mut due = Vec::new();
         self.timers.retain_mut(|timer| {
@@ -599,7 +872,7 @@ impl Interpreter {
             ),
             _ => false,
         };
-        self.drain_jobs()?;
+        if self.external_scheduling.is_none() { self.drain_jobs()?; }
         Ok(())
     }
 
@@ -657,7 +930,7 @@ impl Interpreter {
                 }
             }
         }
-        self.drain_jobs()?;
+        if self.external_scheduling.is_none() { self.drain_jobs()?; }
         let result = self.completion.clone();
         self.completion = previous_completion;
         Ok(result)
@@ -1003,9 +1276,19 @@ impl Interpreter {
 
     fn drain_jobs(&mut self) -> Result<(), Throw> {
         while let Some(job) = self.jobs.pop_front() {
-            run_promise_reaction(job.reaction, job.fate, self);
+            self.run_job(job)?;
         }
         Ok(())
+    }
+
+    fn run_job(&mut self, job: Job) -> Result<(), Throw> {
+        match job {
+            Job::Promise(job) => run_promise_reaction(job.reaction, job.fate, self),
+            Job::Microtask(callback) => {
+                self.call_value(&callback, JsValue::Undefined, Vec::new())?;
+                Ok(())
+            }
+        }
     }
     fn loop_while(
         &mut self,
@@ -2667,29 +2950,20 @@ impl Interpreter {
         };
         if let Some(node) = Self::dom_style_id(&o) {
             let value = self.to_string(&x)?;
-            dom_host(self)?
-                .borrow_mut()
-                .set_style(node, k, &value)
-                .map_err(Throw::type_error)?;
+            dom_mutation(self, |host| host.set_style(node, k, &value))?;
             return Ok(());
         }
         if let Some(node) = Self::dom_dataset_id(&o) {
             let name = Self::dataset_attribute_name(k);
             let value = self.to_string(&x)?;
-            dom_host(self)?
-                .borrow_mut()
-                .set_attribute(node, &name, &value)
-                .map_err(Throw::type_error)?;
+            dom_mutation(self, |host| host.set_attribute(node, &name, &value))?;
             return Ok(());
         }
         if let Some(node) = dom_node_id(&o) {
             if node != 0 && (k == "id" || k == "className") {
                 let name = if k == "className" { "class" } else { "id" };
                 let value = self.to_string(&x)?;
-                dom_host(self)?
-                    .borrow_mut()
-                    .set_attribute(node, name, &value)
-                    .map_err(Throw::type_error)?;
+                dom_mutation(self, |host| host.set_attribute(node, name, &value))?;
                 return Ok(());
             }
         }
@@ -3098,9 +3372,13 @@ impl Interpreter {
             "cancelAnimationFrame",
             Self::native(
                 "cancelAnimationFrame",
-                native_clear_timeout,
+                native_cancel_animation_frame,
                 &self.function_proto,
             ),
+        );
+        self.define_global(
+            "queueMicrotask",
+            Self::native("queueMicrotask", native_queue_microtask, &self.function_proto),
         );
         self.define_global(
             "Error",
