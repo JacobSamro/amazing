@@ -39,6 +39,7 @@ mod custom_element_bindings;
 mod form_bindings;
 mod form_reflection;
 mod web_bindings;
+mod location_bindings;
 mod attr_bindings;
 mod character_data_bindings;
 mod tokenlist;

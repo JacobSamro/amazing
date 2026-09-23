@@ -27,6 +27,34 @@ impl Interpreter {
         self.frames.last().and_then(|frame| frame.new_target.clone())
     }
 
+    /// Produce the existing DOM facade for an element already allocated by the
+    /// binding layer. Its style and dataset objects remain live for that node.
+    pub fn binding_make_legacy_dom_element(&self, node: u32) -> JsValue {
+        self.make_dom_element(node)
+    }
+
+    pub fn binding_replace_location_object(&mut self, location: JsValue) -> Result<(), Throw> {
+        self.global_obj.borrow_mut().set_own("[[LocationObject]]", location.clone());
+        let location_property = { self.global_obj.borrow().own_prop("location").cloned() };
+        if let Some(mut property) = location_property {
+            property.configurable = false;
+            self.global_obj.borrow_mut().define("location", property)
+                .map_err(|_| Throw::type_error("Cannot install Window.location"))?;
+        }
+        self.global_env.assign("location", location).map(|_| ())
+    }
+
+    pub fn binding_location_href(&self) -> &str { &self.location_url }
+
+    pub fn binding_location_navigate(&mut self, href: &str, _replace: bool) {
+        self.location_url = href.to_owned();
+        self.pending_navigation = Some(href.to_owned());
+    }
+
+    pub fn binding_location_reload(&mut self) {
+        self.pending_navigation = Some(self.location_url.clone());
+    }
+
     /// Set the instance-owned native dispatcher before installing host functions.
     /// The dispatcher must not capture unrooted JS values in its Rust closure.
     pub fn set_host_native_dispatcher(&mut self, dispatch: Rc<HostNativeDispatch>) {

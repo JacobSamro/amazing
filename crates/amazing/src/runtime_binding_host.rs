@@ -165,6 +165,31 @@ impl RuntimeBindings {
 }
 
 impl RuntimeBindingHost<'_> {
+    fn materialize_location_unforgeables(&self, wrapper: &JsValue) -> Result<(), Throw> {
+        let JsValue::Object(object) = wrapper else { return Err(Throw::type_error("Location wrapper")); };
+        let prototype = self.prototype(Interface::Location)
+            .ok_or_else(|| Throw::type_error("Location prototype missing"))?;
+        let JsValue::Object(prototype) = prototype else { return Err(Throw::type_error("Location prototype")); };
+        for name in ["href", "origin", "protocol", "host", "hostname", "port",
+            "pathname", "search", "hash", "assign", "replace", "reload",
+            "ancestorOrigins", "toString"] {
+            let Some(mut property) = prototype.borrow().own_prop(name).cloned() else { continue };
+            property.configurable = false;
+            object.borrow_mut().define(name, property)
+                .map_err(|_| Throw::type_error("Cannot install Location member"))?;
+        }
+        Ok(())
+    }
+
+    fn materialize_document_location_unforgeable(&self, wrapper: &JsValue) -> Result<(), Throw> {
+        let JsValue::Object(object) = wrapper else { return Ok(()); };
+        let location_property = { object.borrow().own_prop("location").cloned() };
+        let Some(mut property) = location_property else { return Ok(()); };
+        property.configurable = false;
+        object.borrow_mut().define("location", property)
+            .map_err(|_| Throw::type_error("Cannot install Document.location"))
+    }
+
     fn hook_receiver(&mut self, handle: HostHandle) -> Result<JsValue, Throw> {
         self.wrap_platform_object(PlatformKey { arena: handle.arena, slot: handle.slot,
             generation: handle.generation }, InterfaceBrand(handle.brand))
@@ -194,9 +219,13 @@ impl RuntimeBindingHost<'_> {
 
     fn preserve_legacy_element_extensions(&mut self, node: NodeIdx, wrapper: &JsValue) -> Result<(), Throw> {
         let host = self.state.borrow().host.clone();
-        if !host.borrow().dom.is_connected(node) { return Ok(()); }
+        let connected = host.borrow().dom.is_connected(node);
         let old = self.state.borrow().legacy_elements.get(&node.0).cloned();
-        let old = if let Some(old) = old { old } else {
+        let old = if let Some(old) = old { old } else if !connected {
+            let value = self.js.binding_make_legacy_dom_element(node.0);
+            self.state.borrow_mut().legacy_elements.insert(node.0, value.clone());
+            value
+        } else {
             let document = self.state.borrow().legacy_document.clone();
             let query = self.js.binding_get_property(&document, "querySelectorAll")?;
             let all = binding_call(self.js, &query, &document, &[JsValue::str("*")])?;
@@ -335,6 +364,8 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::FILTERED_NODE_LIST => Interface::NodeList,
             InterfaceBrand::NAMED_NODE_MAP => Interface::NamedNodeMap,
             InterfaceBrand::DOM_TOKEN_LIST => Interface::DOMTokenList,
+            InterfaceBrand::LOCATION => Interface::Location,
+            InterfaceBrand::DOM_STRING_LIST => Interface::DOMStringList,
             InterfaceBrand::DOM_EXCEPTION => Interface::DOMException,
             InterfaceBrand::DOM_IMPLEMENTATION => Interface::DOMImplementation,
             InterfaceBrand::ABORT_CONTROLLER => Interface::AbortController,
@@ -408,8 +439,15 @@ pub(crate) fn install(
         state: state.clone(),
     };
     install_interfaces(&mut adapter)?;
+    let location = adapter.wrap_platform_object(PlatformKey {
+        arena, slot: 0, generation: 1,
+    }, InterfaceBrand::LOCATION)?;
+    adapter.js.binding_replace_location_object(location)?;
     if let Some(element_prototype) = adapter.prototype(Interface::Element) {
         adapter.js.binding_install_put_forwards(&element_prototype, "style", "cssText")?;
+    }
+    if let Some(document_prototype) = adapter.prototype(Interface::Document) {
+        adapter.js.binding_install_put_forwards(&document_prototype, "location", "href")?;
     }
     let window = adapter.js.binding_global_object();
     adapter.js.binding_install_put_forwards(&window, "location", "href")?;
@@ -652,6 +690,8 @@ impl BindingHost for RuntimeBindingHost<'_> {
         let brand = match interface {
             Interface::NodeList => InterfaceBrand::NODE_LIST,
             Interface::DOMTokenList => InterfaceBrand::DOM_TOKEN_LIST,
+            Interface::Location => InterfaceBrand::LOCATION,
+            Interface::DOMStringList => InterfaceBrand::DOM_STRING_LIST,
             _ => return Err(Throw::type_error("Unsupported iterable interface")),
         };
         let prototype = self.prototype(interface).ok_or_else(|| Throw::type_error("Missing iterable prototype"))?;
@@ -681,7 +721,14 @@ impl BindingHost for RuntimeBindingHost<'_> {
             },
             &prototype,
         )?;
-        self.materialize_accessors(&value);
+        if brand == InterfaceBrand::LOCATION {
+            self.materialize_location_unforgeables(&value)?;
+        } else {
+            self.materialize_accessors(&value);
+        }
+        if brand == InterfaceBrand::NODE && key.slot == 0 {
+            self.materialize_document_location_unforgeable(&value)?;
+        }
         if brand == InterfaceBrand::NODE {
             if let Some(node) = self.node_from_platform_key(key) {
                 let is_element = {
@@ -1017,6 +1064,29 @@ impl BindingHost for RuntimeBindingHost<'_> {
         }
     }
 
+    fn document_location(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
+        if document != NodeIdx(0) { return Ok(None); }
+        let arena = self.state.borrow().arena;
+        self.wrap_platform_object(PlatformKey { arena, slot: 0, generation: 1 },
+            InterfaceBrand::LOCATION).map(Some)
+    }
+    fn location_href(&mut self) -> Result<String, Throw> {
+        Ok(self.js.binding_location_href().to_owned())
+    }
+    fn location_navigate(&mut self, url: &str, replace: bool) -> Result<(), Throw> {
+        self.js.binding_location_navigate(url, replace);
+        self.state.borrow_mut().document_url = Some(url.to_owned());
+        Ok(())
+    }
+    fn location_reload(&mut self) -> Result<(), Throw> {
+        self.js.binding_location_reload();
+        Ok(())
+    }
+    fn location_ancestor_origins(&mut self) -> Result<JsValue, Throw> {
+        let arena = self.state.borrow().arena;
+        self.wrap_platform_object(PlatformKey { arena, slot: 0, generation: 1 },
+            InterfaceBrand::DOM_STRING_LIST)
+    }
     fn url_new(&mut self, url: UrlWithSearchParams) -> Result<JsValue, Throw> {
         self.web_allocate(WebObject::Url(url, None), InterfaceBrand::URL)
     }
@@ -1358,8 +1428,10 @@ impl DocumentHost for RuntimeBindingHost<'_> {
     fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, Throw> {
         if document != NodeIdx(0) {
             let host = self.state.borrow().host.clone();
-            let metadata = host.borrow().dom.document_metadata(document).ok().flatten().cloned()
-                .ok_or_else(|| throw_dom_error(self, DomError::NotSupportedError))?;
+            let metadata = { host.borrow().dom.document_metadata(document).ok().flatten().cloned() };
+            let Some(metadata) = metadata else {
+                return Err(throw_dom_error(self, DomError::NotSupportedError));
+            };
             let value = match field {
                 DocumentField::URL | DocumentField::DocumentURI => metadata.url,
                 DocumentField::CharacterSet => metadata.character_set,
@@ -1369,14 +1441,16 @@ impl DocumentHost for RuntimeBindingHost<'_> {
             };
             return Ok(value.encode_utf16().collect());
         }
-        if document != NodeIdx(0) { return Err(throw_dom_error(self, DomError::NotSupportedError)); }
         let value = match field {
             DocumentField::URL | DocumentField::DocumentURI => self.state.borrow().document_url.clone(),
             DocumentField::CharacterSet => self.state.borrow().document_character_set.clone(),
             DocumentField::ContentType => self.state.borrow().document_content_type.clone(),
             DocumentField::Referrer => self.state.borrow().document_referrer.clone(),
             DocumentField::CompatMode => None,
-        }.ok_or_else(|| throw_dom_error(self, DomError::NotSupportedError))?;
+        };
+        let Some(value) = value else {
+            return Err(throw_dom_error(self, DomError::NotSupportedError));
+        };
         Ok(value.encode_utf16().collect())
     }
     fn active_element(&mut self, _document: NodeIdx) -> Result<Option<NodeIdx>, Throw> {

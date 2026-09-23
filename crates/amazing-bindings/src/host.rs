@@ -60,6 +60,8 @@ impl InterfaceBrand {
     pub const FORM_DATA: Self = Self(31);
     pub const FONT_FACE_SET: Self = Self(32);
     pub const DOM_PARSER: Self = Self(33);
+    pub const LOCATION: Self = Self(34);
+    pub const DOM_STRING_LIST: Self = Self(35);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -70,6 +72,8 @@ pub enum Interface {
     Attr,
     NamedNodeMap,
     DOMTokenList,
+    Location,
+    DOMStringList,
     Document,
     XMLDocument,
     DocumentFragment,
@@ -205,6 +209,12 @@ pub enum Operation {
     FormDataGetAll, FormDataHas, FormDataSet, FormDataForEach,
     DocumentFonts, FontFaceSetStatus, FontFaceSetReady,
     DOMParserConstructor, DOMParserParseFromString,
+    DocumentLocation, LocationHref, LocationSetHref, LocationOrigin, LocationProtocol, LocationSetProtocol,
+    LocationHost, LocationSetHost, LocationHostname, LocationSetHostname,
+    LocationPort, LocationSetPort, LocationPathname, LocationSetPathname,
+    LocationSearch, LocationSetSearch, LocationHash, LocationSetHash,
+    LocationAssign, LocationReplace, LocationReload, LocationAncestorOrigins,
+    LocationToString, DOMStringListLength, DOMStringListItem, DOMStringListContains,
     FormElements, FormLength, FormReset, FormCheckValidity, FormReportValidity,
     FormControlForm, FormControlName, FormControlSetName,
     InputValue, InputSetValue, InputDefaultValue, InputSetDefaultValue,
@@ -855,6 +865,24 @@ pub trait BindingHost: Sized {
     }
     /// Driver-owned storage for URL and body objects. Defaults are explicitly
     /// unsupported until the runtime adapter can allocate their private slots.
+    /// Current browsing-context URL; an absent browsing context uses about:blank.
+    fn location_href(&mut self) -> Result<String, Self::Error> {
+        self.with_dom::<String>(|_| Err(DomError::NotSupportedError))
+    }
+    fn document_location(&mut self, _document: NodeIdx) -> Result<Option<Self::Value>, Self::Error> {
+        self.with_dom::<Option<Self::Value>>(|_| Err(DomError::NotSupportedError))
+    }
+    /// Queue navigation after WebIDL coercion and URL parsing. `replace` selects
+    /// history replacement rather than a new history entry.
+    fn location_navigate(&mut self, _url: &str, _replace: bool) -> Result<(), Self::Error> {
+        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
+    fn location_reload(&mut self) -> Result<(), Self::Error> {
+        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
+    fn location_ancestor_origins(&mut self) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
     fn url_new(&mut self, _url: amazing_net::url::UrlWithSearchParams) -> Result<Self::Value, Self::Error> {
         self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
     }

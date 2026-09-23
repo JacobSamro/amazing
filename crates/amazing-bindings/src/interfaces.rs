@@ -165,6 +165,7 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    getter("location", O::DocumentLocation),
     getter("fonts", O::DocumentFonts),
     getter("title", O::DocumentTitle), setter("title", O::DocumentSetTitle),
     getter("head", O::DocumentHead),
@@ -302,6 +303,26 @@ const DOM_TOKEN_LIST: &[Member] = &[
     getter("value", O::TokenListValue),
     setter("value", O::TokenListSetValue),
     method("toString", O::TokenListValue, 0),
+];
+const LOCATION: &[Member] = &[
+    getter("href", O::LocationHref), setter("href", O::LocationSetHref),
+    getter("origin", O::LocationOrigin),
+    getter("protocol", O::LocationProtocol), setter("protocol", O::LocationSetProtocol),
+    getter("host", O::LocationHost), setter("host", O::LocationSetHost),
+    getter("hostname", O::LocationHostname), setter("hostname", O::LocationSetHostname),
+    getter("port", O::LocationPort), setter("port", O::LocationSetPort),
+    getter("pathname", O::LocationPathname), setter("pathname", O::LocationSetPathname),
+    getter("search", O::LocationSearch), setter("search", O::LocationSetSearch),
+    getter("hash", O::LocationHash), setter("hash", O::LocationSetHash),
+    method("assign", O::LocationAssign, 1), method("replace", O::LocationReplace, 1),
+    method("reload", O::LocationReload, 0),
+    getter("ancestorOrigins", O::LocationAncestorOrigins),
+    method("toString", O::LocationToString, 0),
+];
+const DOM_STRING_LIST: &[Member] = &[
+    getter("length", O::DOMStringListLength),
+    method("item", O::DOMStringListItem, 1),
+    method("contains", O::DOMStringListContains, 1),
 ];
 const NODE_ITERATOR: &[Member] = &[
     getter("root", O::TraversalRoot),
@@ -669,6 +690,10 @@ const OLIST: &[Member] = &[
 ];
 const LI: &[Member] = &[getter("value", O::LIValue), setter("value", O::LISetValue)];
 pub static INTERFACES: &[D] = &[
+    D { interface: I::Location, name: "Location", parent: None,
+        constructor: None, members: LOCATION },
+    D { interface: I::DOMStringList, name: "DOMStringList", parent: None,
+        constructor: None, members: DOM_STRING_LIST },
     D { interface: I::DOMParser, name: "DOMParser", parent: None,
         constructor: Some(O::DOMParserConstructor), members: DOM_PARSER },
     D { interface: I::URL, name: "URL", parent: None, constructor: Some(O::URLConstructor), members: URL },
