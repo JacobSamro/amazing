@@ -345,7 +345,8 @@ fn paint_host_surface_with_updates(
     // Font discovery retains each sheet's URL; style computation retains each
     // sheet owner's implicit scope root.
 
-    let media = load_page_media(&dom.dom, html_path);
+    let styled = amazing_css::compute(&dom.dom, &sheets);
+    let media = load_page_media(&dom.dom, html_path, &styled);
     for warning in &media.warnings {
         eprintln!("amazing render: {warning}");
     }
@@ -372,7 +373,6 @@ fn paint_host_surface_with_updates(
             .ceil()
             .clamp(1.0, 8192.0) as u32
     });
-    let styled = amazing_css::compute(&dom.dom, &sheets);
     let paint = PagePaint { media: &media, dom: &dom.dom, styles: &styled };
     Ok(amazing_paint::paint_document_with_text_resources(
         &root,
