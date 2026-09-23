@@ -253,3 +253,41 @@ method is implemented before `JsString` lands; object, function, property and
 private identity capabilities may proceed meanwhile. Exit evidence is full
 Test262 before/after with no regression from 10,314 passing files and a JS →
 DOM → JS lone-surrogate round-trip test.
+
+### JSRT-2 testharness scaffolding builtins (merged)
+
+On fixed base `c82ca69`, runtime added string-hint OrdinaryToPrimitive and
+Error.prototype.toString, Array.prototype.toString through generic join, and
+per-interpreter seedable Math.random. Windows amazing-js nextest finished
+178/178 with one doctest. Twice-stable pinned Test262 directory counts moved:
+Error.prototype.toString 0→8/17, Array.prototype.toString 0→4/11,
+Array.prototype.join 8→13/23, Math.random 0→1/5. The full pinned sweep moved
+10,314→10,386 passes across 53,872 files, with 72 fail→pass transitions and
+zero lost file or variant passes. Classification hash after JSRT-2:
+`b7d67bc195c033d623b3cf5b7549d7b23599b05c81a2ba8b006ee5ba72c73ef3`.
+The 41 dom-bindings conversion diagnostics are a follow-up measurement; their
+raw count is not a pass promise.
+
+### JSRT-3 facade and interpreter split
+
+Fixed base `133db58` combines JSRT-2, JS-5 private-name parsing, and the
+Throw::describe hotfix. Its measured pinned Test262 baseline is 10,575 passes
+with classification hash
+`d2251207a676957b84fb0d8556859f96146dd027c9e45ab2cd0ce65c05cd8b96`.
+The mechanical `interp.rs` split into `interp_install.rs` reconstructs the
+base file byte-for-byte, and the Windows full sweep preserves that exact hash.
+It was committed separately as `7222c62`.
+
+The subsequent facade adds explicit-receiver `binding_call`, realm
+`binding_create_array`, and ECMAScript `binding_same_value`. `HostHandle` slot
+and generation are u64 to map DOM-7 `PlatformKey` without narrowing. The
+extended DOM-7 BindingHost trait is accepted: runtime supplies call, arrays,
+SameValue, private wrapper identity and conversions; the driver owns native
+key validation, callback retention, interface constants, and installation.
+Cloned JsValue values are strong Rc references in the current runtime, so a
+driver registry holding a clone keeps its callback alive. A callback capturing
+its own target can form an Rc cycle until the future collector traces and
+releases those registry roots. Windows amazing-js nextest passed 182/182 with
+one doctest. The full Test262 classification remained byte-identical to the
+10,575-pass combined baseline, with zero file or variant transitions. The
+workspace gate passed 1,438/1,438 nextest tests (3 skipped) and 2/2 doctests.
