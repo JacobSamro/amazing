@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "manifest": "css14-parsing-manifest.json",
+  "cases": 51,
+  "base_commit": "37cd090ae95468ba67f33ab3e69509a415018694",
+  "candidate_commit": "196396e1eafb48f7e96aa8edc9590defa49ea190",
+  "base_executable_sha256": "67BCF6D081680E3C07D7C8855060CE58FDD1F53C531230E0C0A168D8DB9095E6",
+  "candidate_executable_sha256": "61A0BA6BFD13E8F40D2021EEEABCEB0584FEC42C5DDDCCC9276D200251DAE837",
+  "counts": {
+    "base": {
+      "fail": 47,
+      "error": 4
+    },
+    "candidate": {
+      "fail": 47,
+      "error": 4
+    }
+  },
+  "subtests": {
+    "base": {
+      "pass": 0,
+      "fail": 424,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    },
+    "candidate": {
+      "pass": 0,
+      "fail": 424,
+      "timeout": 0,
+      "notrun": 0,
+      "error": 0
+    }
+  },
+  "pass_losses": [],
+  "changed_cases": []
+}
