@@ -1488,7 +1488,9 @@ impl TreeBuilder {
                     slot_assignment: if manual { SlotAssignment::Manual } else { SlotAssignment::Named },
                     clonable: has("shadowrootclonable"), serializable: has("shadowrootserializable"),
                 };
-                self.dom.attach_shadow(host, options).ok()
+                self.dom.attach_declarative_shadow(
+                    host, options, has("shadowrootcustomelementregistry")
+                ).ok()
             })
         } else { None };
         let template = if let Some(root) = shadow {

@@ -1,0 +1,13 @@
+id	before	after	before_output_fnv64	after_output_fnv64
+basic-open	fail	pass	11556dbb0d0e9856	b4f616ba3ca15668
+closed-root	fail	pass	0b28240a384ff2aa	776a8e82d6534b08
+serializable-open	fail	pass	355c7b40f3ef3b35	bf6be8f1bf3d2f27
+serializable-nested	fail	pass	f9c4b35ad0354777	2572f95697472031
+repeated-root	fail	pass	57a1962570d2558d	4d4071efab2fe55b
+invalid-mode	pass	pass	88aa91251653c27f	88aa91251653c27f
+fragment-inert	pass	pass	b54b95909f9a0595	b54b95909f9a0595
+eof-recovery	fail	pass	52905ff4ba75b054	e8c7e8074b733bd2
+attach-open-same	fail	pass	c9620e949679b84c	75912089d6a5a4d6
+attach-closed-same	fail	pass	0b28240a384ff2aa	776a8e82d6534b08
+attach-open-opposite	pass	pass	c9620e949679b84c	75912089d6a5a4d6
+delegates-focus	fail	pass	09774817e9a93445	0e1408b4fb3ba39b
