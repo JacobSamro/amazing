@@ -69,7 +69,7 @@ impl Dom {
     pub fn create_document_type_in(
         &mut self, document: NodeIdx, name: &str, public_id: &str, system_id: &str,
     ) -> Result<NodeIdx, DomError> {
-        if !valid_element_local_name(name) {
+        if !valid_doctype_name(name) {
             return Err(DomError::InvalidCharacterError);
         }
         self.create_node_in(document, NodeKind::DocumentType {
@@ -108,6 +108,17 @@ impl Dom {
         let uri = namespace_uri.filter(|uri| !uri.is_empty());
         let (prefix, local_name) = validate_and_extract(uri, qualified_name, false)?;
         self.create_element_expanded_in(document, uri, prefix, local_name)
+    }
+
+    /// `Document.createElement` takes a local name, not a qualified name.
+    /// Colons are literal characters here; only `createElementNS` extracts a prefix.
+    pub fn create_element_local_in(
+        &mut self, document: NodeIdx, namespace_uri: Option<&str>, local_name: &str,
+    ) -> Result<NodeIdx, DomError> {
+        if !valid_element_local_name(local_name) {
+            return Err(DomError::InvalidCharacterError);
+        }
+        self.create_element_expanded_in(document, namespace_uri, None, local_name)
     }
 
     /// Parser primitive: append an element from already-validated expanded names.
@@ -290,6 +301,9 @@ impl Dom {
 
 fn forbidden(c: char) -> bool {
     matches!(c, '\0' | '\t' | '\n' | '\x0c' | '\r' | ' ' | '/' | '>')
+}
+fn valid_doctype_name(name: &str) -> bool {
+    !name.chars().any(|c| matches!(c, '\0' | '\t' | '\n' | '\x0c' | '\r' | ' ' | '>'))
 }
 pub(crate) fn valid_element_local_name(name: &str) -> bool {
     let mut chars = name.chars();

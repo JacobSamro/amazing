@@ -53,8 +53,11 @@ pub(crate) fn invoke<H: BindingHost>(
     }
     if matches!(op, O::CreateElement | O::CreateElementNS) {
         let doc = document(host, &receiver)?;
+        let html_document = host.is_html_document(doc);
         let (uri, name) = if op == O::CreateElement {
-            (host.is_html_document(doc).then(|| "http://www.w3.org/1999/xhtml".to_owned()), argument(host, args, 0)?)
+            let mut name = argument(host, args, 0)?;
+            if html_document { name.make_ascii_lowercase(); }
+            (html_document.then(|| "http://www.w3.org/1999/xhtml".to_owned()), name)
         } else {
             let uri_value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
             let uri = if host.is_nullish(uri_value) { None } else { Some(string(host, uri_value)?) };
@@ -71,7 +74,11 @@ pub(crate) fn invoke<H: BindingHost>(
             } else { None }
         };
         let node = host.with_dom(|dom| {
-            let node = dom.create_element_ns_in(doc, uri.as_deref(), &name)?;
+            let node = if op == O::CreateElement {
+                dom.create_element_local_in(doc, uri.as_deref(), &name)?
+            } else {
+                dom.create_element_ns_in(doc, uri.as_deref(), &name)?
+            };
             if let Some(is_name) = &is_name { dom.set_attribute(node, "is", is_name)?; }
             Ok(node)
         })?;

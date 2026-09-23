@@ -974,6 +974,98 @@ fn template_content_binding_returns_the_persistent_inert_fragment() {
 }
 
 #[test]
+fn wpt_element_names_and_document_type_fields_are_installed() {
+    let mut h = Host::default();
+    let html = h.dom.create_element_ns_in(NodeIdx(0),
+        Some("http://www.w3.org/1999/xhtml"), "p:span").unwrap();
+    let receiver = V::Node(html);
+    assert_eq!(call(&mut h, O::ElementNamespaceURI, receiver.clone(), &[]),
+        str_value("http://www.w3.org/1999/xhtml"));
+    assert_eq!(call(&mut h, O::ElementPrefix, receiver.clone(), &[]), str_value("p"));
+    assert_eq!(call(&mut h, O::ElementLocalName, receiver.clone(), &[]), str_value("span"));
+    assert_eq!(call(&mut h, O::ElementTagName, receiver, &[]), str_value("P:SPAN"));
+    let null = h.dom.create_element_ns_in(NodeIdx(0), None, "span").unwrap();
+    assert_eq!(call(&mut h, O::ElementNamespaceURI, V::Node(null), &[]), V::Null);
+    assert_eq!(call(&mut h, O::ElementPrefix, V::Node(null), &[]), V::Null);
+    assert_eq!(call(&mut h, O::ElementTagName, V::Node(null), &[]), str_value("span"));
+    let doctype = h.dom.create_document_type_in(NodeIdx(0), "html", "public", "system").unwrap();
+    assert_eq!(call(&mut h, O::DocumentTypeName, V::Node(doctype), &[]), str_value("html"));
+    assert_eq!(call(&mut h, O::DocumentTypePublicId, V::Node(doctype), &[]), str_value("public"));
+    assert_eq!(call(&mut h, O::DocumentTypeSystemId, V::Node(doctype), &[]), str_value("system"));
+    assert!(invoke(&mut h, O::ElementLocalName, V::Node(doctype), &[]).is_err());
+}
+
+#[test]
+fn wpt_create_element_uses_local_name_validation() {
+    let mut h = Host::default();
+    let uppercase = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)),
+        &[str_value("DIV")]));
+    assert_eq!(call(&mut h, O::ElementLocalName, V::Node(uppercase), &[]), str_value("div"));
+    let element = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)),
+        &[str_value(":good:times:")]));
+    assert_eq!(call(&mut h, O::ElementLocalName, V::Node(element), &[]),
+        str_value(":good:times:"));
+    assert_eq!(call(&mut h, O::ElementPrefix, V::Node(element), &[]), V::Null);
+    assert_eq!(invoke(&mut h, O::CreateElementNS, V::Node(NodeIdx(0)),
+        &[str_value("http://www.w3.org/1999/xhtml"), str_value(":good:times:")]),
+        Err("InvalidCharacterError".into()));
+}
+
+#[test]
+fn wpt_empty_attribute_namespace_matches_null_namespace() {
+    let mut h = Host::default();
+    let element = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)),
+        &[str_value("p")]));
+    call(&mut h, O::ElementSetAttribute, V::Node(element),
+        &[str_value("FOO"), str_value("bar")]);
+    assert_eq!(call(&mut h, O::ElementGetAttributeNS, V::Node(element),
+        &[str_value(""), str_value("foo")]), str_value("bar"));
+    assert_eq!(call(&mut h, O::ElementGetAttributeNS, V::Node(element),
+        &[str_value(""), str_value("FOO")]), V::Null);
+}
+
+#[test]
+fn wpt_character_data_methods_use_utf16_offsets_and_validate_bounds() {
+    let mut h = Host::default();
+    let parent = h.dom.create_element(NodeIdx(0), "div");
+    let text = h.dom.create_text(parent, "a😀b");
+    let receiver = V::Node(text);
+    assert_eq!(call(&mut h, O::CharacterDataSubstring, receiver.clone(),
+        &[V::Number(1.), V::Number(2.)]), V::String(vec![0xD83D, 0xDE00]));
+    assert!(invoke(&mut h, O::CharacterDataSubstring, receiver.clone(),
+        &[V::Number(5.), V::Number(1.)]).is_err());
+    call(&mut h, O::CharacterDataInsert, receiver.clone(),
+        &[V::Number(1.), str_value("x")]);
+    call(&mut h, O::CharacterDataDelete, receiver.clone(),
+        &[V::Number(2.), V::Number(2.)]);
+    call(&mut h, O::CharacterDataReplace, receiver.clone(),
+        &[V::Number(1.), V::Number(1.), str_value("y")]);
+    call(&mut h, O::CharacterDataAppend, receiver.clone(), &[str_value("z")]);
+    assert_eq!(call(&mut h, O::Data, receiver.clone(), &[]), str_value("aybz"));
+    let split = node(call(&mut h, O::TextSplit, receiver.clone(), &[V::Number(2.)]));
+    assert_eq!(call(&mut h, O::Data, receiver, &[]), str_value("ay"));
+    assert_eq!(call(&mut h, O::Data, V::Node(split), &[]), str_value("bz"));
+}
+
+#[test]
+fn wpt_node_namespace_and_identity_methods_are_installed() {
+    let mut h = Host::default();
+    let root = h.dom.create_element_ns(NodeIdx(0), Some("urn:own"), "p:root").unwrap();
+    let receiver = V::Node(root);
+    assert_eq!(call(&mut h, O::NodeLookupNamespaceURI, receiver.clone(), &[str_value("p")]),
+        str_value("urn:own"));
+    assert_eq!(call(&mut h, O::NodeLookupNamespaceURI, receiver.clone(), &[V::Null]), V::Null);
+    assert_eq!(call(&mut h, O::NodeIsDefaultNamespace, receiver.clone(), &[V::Null]), V::Bool(true));
+    assert_eq!(call(&mut h, O::NodeIsSameNode, receiver.clone(), &[receiver.clone()]), V::Bool(true));
+    assert_eq!(call(&mut h, O::NodeIsSameNode, receiver.clone(), &[V::Null]), V::Bool(false));
+    let first = h.dom.create_text(root, "a");
+    let second = h.dom.create_text(root, "b");
+    call(&mut h, O::NodeNormalize, receiver, &[]);
+    assert_eq!(h.dom.character_data(first).as_deref(), Some("ab"));
+    assert_eq!(h.dom.get(second).parent, None);
+}
+
+#[test]
 fn class_list_is_live_canonical_and_validates_tokens() {
     let mut h = Host::default();
     let element = V::Node(element(&mut h));
@@ -1340,6 +1432,25 @@ fn element_specific_reflection_handles_urls_enums_numbers_and_rel_list() {
     let script = h.dom.create_element(root, "script");
     call(&mut h, O::ScriptSetAsync, V::Node(script), &[V::Bool(true)]);
     assert_eq!(call(&mut h, O::ScriptAsync, V::Node(script), &[]), V::Bool(true));
+}
+
+#[test]
+fn wpt_html_token_list_attributes_are_live_and_canonical() {
+    let mut h = Host::default();
+    for (tag, operation, attribute) in [
+        ("output", O::OutputHtmlFor, "for"),
+        ("iframe", O::IFrameSandbox, "sandbox"),
+        ("link", O::LinkSizes, "sizes"),
+    ] {
+        let element = h.dom.create_element(NodeIdx(0), tag);
+        let receiver = V::Node(element);
+        let list = call(&mut h, operation, receiver.clone(), &[]);
+        assert_eq!(call(&mut h, operation, receiver, &[]), list);
+        call(&mut h, O::TokenListAdd, list.clone(), &[str_value("sample")]);
+        assert_eq!(h.dom.attribute_utf16(element, attribute),
+            Some("sample".encode_utf16().collect()));
+        assert_eq!(call(&mut h, O::TokenListValue, list, &[]), str_value("sample"));
+    }
 }
 
 // Pinned WPT custom-elements/CustomElementRegistry.html,

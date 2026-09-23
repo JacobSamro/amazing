@@ -37,6 +37,7 @@ mod shadow_bindings;
 mod custom_element_bindings;
 mod form_bindings;
 mod attr_bindings;
+mod character_data_bindings;
 mod tokenlist;
 mod html_reflection;
 mod markup_bindings;

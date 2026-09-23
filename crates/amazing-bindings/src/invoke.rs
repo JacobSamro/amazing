@@ -33,6 +33,10 @@ fn receiver_valid(dom: &Dom, node: NodeIdx, op: O) -> Result<(), DomError> {
             !matches!(kind, NodeKind::Document | NodeKind::DocumentFragment)
         }
         O::Data | O::SetData | O::Length => dom.character_data(node).is_some(),
+        O::ElementNamespaceURI | O::ElementPrefix | O::ElementLocalName
+        | O::ElementTagName => matches!(kind, NodeKind::Element { .. }),
+        O::DocumentTypeName | O::DocumentTypePublicId | O::DocumentTypeSystemId =>
+            matches!(kind, NodeKind::DocumentType { .. }),
         _ => true,
     };
     if good {
@@ -153,6 +157,9 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
 fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + DocumentHost + UrlReflection>(
     host: &mut H, operation: O, receiver: H::Value, args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    if crate::character_data_bindings::handles(operation) {
+        return crate::character_data_bindings::invoke(host, operation, receiver, args);
+    }
     if crate::custom_element_bindings::handles(operation) {
         return crate::custom_element_bindings::invoke(host, operation, receiver, args);
     }
@@ -220,7 +227,8 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
         host.with_dom(|dom| receiver_valid(dom, target, operation))?;
     }
     let required = match operation {
-        O::CreateText | O::CreateCDATASection | O::CreateComment | O::AppendChild | O::RemoveChild | O::Contains => 1,
+        O::CreateText | O::CreateCDATASection | O::CreateComment | O::AppendChild | O::RemoveChild
+        | O::Contains | O::NodeLookupNamespaceURI | O::NodeIsDefaultNamespace | O::NodeIsSameNode => 1,
         O::InsertBefore | O::ReplaceChild | O::MoveBefore => 2,
         _ => 0,
     };
@@ -279,7 +287,16 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
         None
     };
     let deep = operation == O::CloneNode && args.first().is_some_and(|v| host.to_boolean(v));
-    let html = if matches!(operation, O::NodeName | O::CreateCDATASection) {
+    let namespace_argument = if matches!(operation, O::NodeLookupNamespaceURI | O::NodeIsDefaultNamespace) {
+        if host.is_nullish(&args[0]) { None } else {
+            let units = host.to_dom_string(&args[0])?;
+            Some(String::from_utf16(&units).map_err(|_| host.type_error("Invalid namespace string"))?)
+        }
+    } else { None };
+    let same_node = if operation == O::NodeIsSameNode {
+        if host.is_nullish(&args[0]) { None } else { Some(required_node(host, args.first())?) }
+    } else { None };
+    let html = if matches!(operation, O::NodeName | O::ElementTagName | O::CreateCDATASection) {
         let document = host.with_dom(|dom| Ok(dom.owner_document(target).unwrap_or(target)))?;
         host.is_html_document(document)
     } else {
@@ -357,7 +374,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
                 NodeKind::DocumentType { .. } => 10.,
                 NodeKind::DocumentFragment => 11.,
             }),
-            O::NodeName => {
+            O::NodeName | O::ElementTagName => {
                 let name = match &dom.get(target).kind {
                     NodeKind::Element { namespace, .. } => {
                         let name = dom.qualified_name(target).unwrap();
@@ -380,6 +397,22 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
                     NodeKind::ProcessingInstruction { target, .. } => target.clone(),
                 };
                 R::String(name.encode_utf16().collect())
+            }
+            O::ElementNamespaceURI => dom.namespace_uri(target)
+                .map_or(R::Null, |uri| R::String(uri.encode_utf16().collect())),
+            O::ElementPrefix => dom.prefix(target)
+                .map_or(R::Null, |prefix| R::String(prefix.encode_utf16().collect())),
+            O::ElementLocalName => R::String(dom.local_name(target).unwrap().encode_utf16().collect()),
+            O::DocumentTypeName | O::DocumentTypePublicId | O::DocumentTypeSystemId => {
+                let NodeKind::DocumentType { name, public_id, system_id } = &dom.get(target).kind else {
+                    unreachable!("validated DocumentType receiver")
+                };
+                let value = match operation {
+                    O::DocumentTypeName => name,
+                    O::DocumentTypePublicId => public_id,
+                    _ => system_id,
+                };
+                R::String(value.encode_utf16().collect())
             }
             O::NodeValue => if matches!(dom.get(target).kind, NodeKind::Attr { .. }) {
                 R::String(dom.attr_snapshot(target)?.value)
@@ -435,6 +468,11 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
                 }
                 R::Boolean(dom.contains(target, argument_node))
             }
+            O::NodeLookupNamespaceURI => dom.lookup_namespace_uri(target, namespace_argument.as_deref())?
+                .map_or(R::Null, |uri| R::String(uri.encode_utf16().collect())),
+            O::NodeIsDefaultNamespace => R::Boolean(dom.is_default_namespace(target, namespace_argument.as_deref())?),
+            O::NodeNormalize => { dom.normalize(target)?; R::Undefined },
+            O::NodeIsSameNode => R::Boolean(same_node == Some(target)),
             O::Data => R::String(dom.character_data_utf16(target).unwrap()),
             O::SetData => {
                 set_data(dom, target, &data)?;

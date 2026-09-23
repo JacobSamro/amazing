@@ -24,7 +24,8 @@ fn argument<H: BindingHost>(host: &mut H, args: &[H::Value], index: usize) -> Re
 }
 fn nullable_uri<H: BindingHost>(host: &mut H, args: &[H::Value], index: usize) -> Result<Option<String>, H::Error> {
     let value = args.get(index).ok_or_else(|| host.type_error("Not enough arguments"))?;
-    Ok(if host.is_nullish(value) { None } else { Some(string(host, value)?) })
+    Ok(if host.is_nullish(value) { None } else { Some(string(host, value)?) }
+        .filter(|uri| !uri.is_empty()))
 }
 fn node<H: BindingHost>(host: &mut H, value: Option<&H::Value>) -> Result<NodeIdx, H::Error> {
     value.and_then(|value| host.node_brand(value)).ok_or_else(|| host.type_error("Expected a Node"))

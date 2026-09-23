@@ -59,6 +59,10 @@ const NODE: &[Member] = &[
     method("replaceChild", O::ReplaceChild, 2),
     method("cloneNode", O::CloneNode, 0),
     method("getRootNode", O::GetRootNode, 0),
+    method("lookupNamespaceURI", O::NodeLookupNamespaceURI, 1),
+    method("isDefaultNamespace", O::NodeIsDefaultNamespace, 1),
+    method("normalize", O::NodeNormalize, 0),
+    method("isSameNode", O::NodeIsSameNode, 1),
 ];
 const EVENT_TARGET: &[Member] = &[
     method("addEventListener", O::AddEventListener, 2),
@@ -139,16 +143,15 @@ const PARENT: &[Member] = &[
     method("prepend", O::Prepend, 0),
     method("replaceChildren", O::ReplaceChildren, 0),
 ];
-const CHILD: &[Member] = &[
-    method("before", O::Before, 0),
-    method("after", O::After, 0),
-    method("replaceWith", O::ReplaceWith, 0),
-    method("remove", O::Remove, 0),
-];
 const CHARACTER_DATA: &[Member] = &[
     getter("data", O::Data),
     setter("data", O::SetData),
     getter("length", O::Length),
+    method("substringData", O::CharacterDataSubstring, 2),
+    method("appendData", O::CharacterDataAppend, 1),
+    method("insertData", O::CharacterDataInsert, 2),
+    method("deleteData", O::CharacterDataDelete, 2),
+    method("replaceData", O::CharacterDataReplace, 3),
     method("before", O::Before, 0),
     method("after", O::After, 0),
     method("replaceWith", O::ReplaceWith, 0),
@@ -298,6 +301,10 @@ const RANGE: &[Member] = &[
     method("toString", O::RangeStringifier, 0),
 ];
 const ELEMENT: &[Member] = &[
+    getter("namespaceURI", O::ElementNamespaceURI),
+    getter("prefix", O::ElementPrefix),
+    getter("localName", O::ElementLocalName),
+    getter("tagName", O::ElementTagName),
     method("attachShadow", O::ElementAttachShadow, 1),
     getter("shadowRoot", O::ElementShadowRoot),
     getter("assignedSlot", O::ElementAssignedSlot),
@@ -339,6 +346,15 @@ const ELEMENT: &[Member] = &[
     method("replaceWith", O::ReplaceWith, 0),
     method("remove", O::Remove, 0),
 ];
+const DOCUMENT_TYPE: &[Member] = &[
+    getter("name", O::DocumentTypeName),
+    getter("publicId", O::DocumentTypePublicId),
+    getter("systemId", O::DocumentTypeSystemId),
+    method("before", O::Before, 0),
+    method("after", O::After, 0),
+    method("replaceWith", O::ReplaceWith, 0),
+    method("remove", O::Remove, 0),
+];
 const SHADOW_ROOT: &[Member] = &[
     getter("mode", O::ShadowMode),
     getter("host", O::ShadowHost),
@@ -354,7 +370,10 @@ const SLOT: &[Member] = &[
     method("assignedNodes", O::SlotAssignedNodes, 0),
     method("assignedElements", O::SlotAssignedElements, 0),
 ];
-const TEXT: &[Member] = &[getter("assignedSlot", O::TextAssignedSlot)];
+const TEXT: &[Member] = &[
+    getter("assignedSlot", O::TextAssignedSlot),
+    method("splitText", O::TextSplit, 1),
+];
 const HTML_ELEMENT: &[Member] = &[
     getter("innerText", O::ElementInnerText), setter("innerText", O::ElementSetInnerText),
     getter("title", O::HTMLTitle), setter("title", O::HTMLSetTitle),
@@ -412,6 +431,17 @@ const FORM_CONTROL: &[Member] = &[
     getter("validationMessage", O::ControlValidationMessage),
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
+];
+const OUTPUT: &[Member] = &[
+    getter("htmlFor", O::OutputHtmlFor),
+    getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
+    getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
+    getter("validationMessage", O::ControlValidationMessage),
+    method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
+    method("setCustomValidity", O::ControlSetCustomValidity, 1),
+];
+const IFRAME: &[Member] = &[
+    getter("sandbox", O::IFrameSandbox),
 ];
 const BUTTON: &[Member] = &[
     getter("type", O::ButtonType), setter("type", O::ButtonSetType),
@@ -483,6 +513,7 @@ const LINK: &[Member] = &[
     getter("href", O::ElementHref), setter("href", O::ElementSetHref),
     getter("rel", O::ElementRel), setter("rel", O::ElementSetRel),
     getter("relList", O::ElementRelList),
+    getter("sizes", O::LinkSizes),
     getter("media", O::LinkMedia), setter("media", O::LinkSetMedia),
     getter("type", O::ResourceType), setter("type", O::ResourceSetType),
     getter("disabled", O::ElementDisabled), setter("disabled", O::ElementSetDisabled),
@@ -542,7 +573,7 @@ pub static INTERFACES: &[D] = &[
         name: "DocumentType",
         parent: Some(I::Node),
         constructor: None,
-        members: CHILD,
+        members: DOCUMENT_TYPE,
     },
     D {
         interface: I::Element,
@@ -594,7 +625,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLFieldSetElement, name: "HTMLFieldSetElement", parent: Some(I::HTMLElement), constructor: None, members: FORM_CONTROL },
     D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDataListElement, name: "HTMLDataListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: FORM_CONTROL },
+    D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: OUTPUT },
     D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLMeterElement, name: "HTMLMeterElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLMediaElement, name: "HTMLMediaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -606,7 +637,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: SCRIPT },
     D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[getter("content", O::TemplateContent)] },
     D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: SLOT },
-    D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: IFRAME },
     D { interface: I::HTMLEmbedElement, name: "HTMLEmbedElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLObjectElement, name: "HTMLObjectElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLParamElement, name: "HTMLParamElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
