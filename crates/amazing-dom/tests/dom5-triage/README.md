@@ -104,3 +104,16 @@ Resume only after the integrator announces SSH restoration. Retrieve reference
 results and remove task-owned `dom-5-reference-census/profile-*` directories and
 any task-owned leftover headless processes, without touching user browser
 profiles. No cleanup connection was attempted during stand-down.
+
+## 2026-09-23 resume addendum
+
+SSH restoration was explicitly announced. The full reference metadata is now
+preserved in `reference-results.json`; all 30 task-owned `profile-*` directories
+were removed after checking that no process used their command-line paths. The
+former draft tracer was run on win-001 as `trace-calls.py` using a separate
+disposable copy of the diagnostic resources. Its 46 records are in
+`callsite-trace-results.json`; no non-parser diagnostic changed to a parser
+error, but the rewriter is not a complete JS lexer. Its output remains
+non-conformance diagnostic data. `full-selection-ranking.md` accounts for all
+627 historical sources and states the implementable boundary. Those historical
+counts still need replacement by a fresh current-base gate.

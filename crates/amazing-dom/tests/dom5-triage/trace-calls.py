@@ -1,8 +1,11 @@
 """NON-CONFORMANCE call-site tracing on diagnostic copies; Windows only."""
 from pathlib import Path
-import re,json,subprocess,concurrent.futures,hashlib
+import re,json,subprocess,concurrent.futures,hashlib,shutil
 BASE=Path('C:/Users/server/target/dom-bindings');WPT=Path('C:/Users/server/target/dom-bindings-wpt')
-ROOT=BASE/'dom-5-setup-triage/instrumented';OUT=BASE/'dom-5-call-triage';OUT.mkdir(exist_ok=True)
+ROOT=BASE/'dom-5-call-triage/instrumented';OUT=BASE/'dom-5-call-triage';OUT.mkdir(exist_ok=True)
+if ROOT.exists():
+ raise RuntimeError('Refusing to overwrite an existing diagnostic copy')
+shutil.copytree(BASE/'dom-5-setup-triage/instrumented', ROOT)
 EXE=BASE/'dom-5-before/amazing.exe'
 assert hashlib.sha256(EXE.read_bytes()).hexdigest()=='9e6ddc78f3c3e75d849bb8e31b80f754a0dfaaa05ed6769323ede70499a96e4f'
 # Skip quoted strings, templates and comments. Only identifier member calls are
@@ -41,7 +44,8 @@ def one(r):
  calls=[s['message'] for s in result['subtests'] if s['name']=='DOM5_CALL']
  errors=[s['message'] for s in result['subtests'] if s['name']=='DOM5_ORIGINAL_SETUP_EXCEPTION']
  original=[s for s in result['subtests'] if not s['name'].startswith('DOM5_')]
- return {'test':r['test'],'baseline_detail':r['detail'],'trace_count':len(calls),'last_calls':calls[-12:],'original_setup_errors':errors,'diagnostic_detail':result['detail'],'diagnostic_status':result['status'],'recorded_test_results':len(original),'original_results':original,'trace':calls}
+ changed_parse='SyntaxError:' in (result['detail'] or '') and 'SyntaxError:' not in (r['detail'] or '')
+ return {'test':r['test'],'baseline_detail':r['detail'],'trace_count':len(calls),'last_calls':calls[-12:],'original_setup_errors':errors,'diagnostic_detail':result['detail'],'diagnostic_status':result['status'],'changed_parse':changed_parse,'recorded_test_results':len(original),'original_results':original,'trace':calls}
 results=[]
 with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
  for r in pool.map(one,selected):
