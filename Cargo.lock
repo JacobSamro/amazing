@@ -208,6 +208,10 @@ dependencies = [
 [[package]]
 name = "amazing-process"
 version = "0.0.1"
+dependencies = [
+ "amazing-fetch",
+ "amazing-ipc",
+]
 
 [[package]]
 name = "amazing-regex"

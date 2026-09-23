@@ -7,3 +7,5 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+amazing-ipc = { path = "../amazing-ipc" }
+amazing-fetch = { path = "../amazing-fetch" }
