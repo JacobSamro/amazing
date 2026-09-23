@@ -21,6 +21,7 @@ members = [
     "crates/amazing-ipc-platform",
     "crates/amazing-process",
     "crates/amazing-compositor",
+    "crates/amazing-canvas",
     "crates/amazing-storage",
     "crates/amazing-text",
     "crates/amazing-text-provider",
