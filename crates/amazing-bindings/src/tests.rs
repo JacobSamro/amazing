@@ -996,6 +996,22 @@ fn wpt_element_names_and_document_type_fields_are_installed() {
 }
 
 #[test]
+fn wpt_create_element_uses_local_name_validation() {
+    let mut h = Host::default();
+    let uppercase = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)),
+        &[str_value("DIV")]));
+    assert_eq!(call(&mut h, O::ElementLocalName, V::Node(uppercase), &[]), str_value("div"));
+    let element = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)),
+        &[str_value(":good:times:")]));
+    assert_eq!(call(&mut h, O::ElementLocalName, V::Node(element), &[]),
+        str_value(":good:times:"));
+    assert_eq!(call(&mut h, O::ElementPrefix, V::Node(element), &[]), V::Null);
+    assert_eq!(invoke(&mut h, O::CreateElementNS, V::Node(NodeIdx(0)),
+        &[str_value("http://www.w3.org/1999/xhtml"), str_value(":good:times:")]),
+        Err("InvalidCharacterError".into()));
+}
+
+#[test]
 fn wpt_character_data_methods_use_utf16_offsets_and_validate_bounds() {
     let mut h = Host::default();
     let parent = h.dom.create_element(NodeIdx(0), "div");

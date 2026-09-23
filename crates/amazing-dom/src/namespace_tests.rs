@@ -2,6 +2,19 @@ use super::*;
 use crate::range::BoundaryPoint;
 
 #[test]
+fn create_element_local_name_does_not_extract_colon_prefix() {
+    let mut dom = Dom::new();
+    let element = dom.create_element_local_in(NodeIdx(0), Some(HTML), ":good:times:").unwrap();
+    assert_eq!(dom.local_name(element), Some(":good:times:"));
+    assert_eq!(dom.prefix(element), None);
+    assert_eq!(dom.namespace(element), Some(Namespace::Html));
+    assert_eq!(dom.create_element_local_in(NodeIdx(0), Some(HTML), ""),
+        Err(DomError::InvalidCharacterError));
+    assert_eq!(dom.create_element_ns_in(NodeIdx(0), Some(HTML), ":good:times:"),
+        Err(DomError::InvalidCharacterError));
+}
+
+#[test]
 fn null_empty_and_arbitrary_namespaces_keep_identity_and_case() {
     let mut dom = Dom::new();
     let root = dom.create_element(NodeIdx(0), "root");
