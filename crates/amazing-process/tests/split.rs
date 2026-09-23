@@ -20,13 +20,16 @@ fn spawn(role: Role) -> ProcessHost {
     )
     .unwrap()
 }
-struct Events(mpsc::Sender<u64>);
+struct Events(mpsc::Sender<FrameReady>);
 impl BrowserEvents for Events {
     fn frame_ready(&self, event: FrameReady) -> Result<(), Error> {
-        self.0.send(event.sequence).map_err(|_| Error::Disconnected)
+        self.0.send(event).map_err(|_| Error::Disconnected)
     }
 }
-fn connect(renderer: &ProcessHost, network: &ProcessHost) -> (RendererProxy, mpsc::Receiver<u64>) {
+fn connect(
+    renderer: &ProcessHost,
+    network: &ProcessHost,
+) -> (RendererProxy, mpsc::Receiver<FrameReady>) {
     let (tx, rx) = mpsc::channel();
     renderer.connection.bind(
         8,
@@ -82,7 +85,7 @@ fn renderer_network_frame_parity_and_input_events() {
         )
     })
     .unwrap();
-    let actual = proxy.navigate(request).unwrap();
+    let actual = proxy.navigate(request.clone()).unwrap();
     expected.sequence = actual.sequence;
     actual.validate().unwrap();
     assert!(
@@ -103,9 +106,23 @@ fn renderer_network_frame_parity_and_input_events() {
     );
     assert_eq!(actual, expected);
     assert_eq!(
-        notifications.recv_timeout(Duration::from_secs(2)).unwrap(),
+        notifications
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .sequence,
         actual.sequence
     );
+    let shared = proxy.navigate_shared(request).unwrap();
+    let view = renderer.receive_frame(&shared).unwrap();
+    assert_eq!(view.bytes(), actual.rgba.0);
+    let event = notifications.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert_eq!(event.shared, Some(shared.clone()));
+    assert!(proxy
+        .release_frame(ReleaseFrame {
+            generation: shared.generation
+        })
+        .unwrap());
+    drop(view);
     for event in [
         InputEvent::Click(Point { x: 4, y: 5 }),
         InputEvent::Scroll(ScrollDelta { x: 0, y: 2 }),
@@ -113,12 +130,262 @@ fn renderer_network_frame_parity_and_input_events() {
     ] {
         let ack = proxy.input(event).unwrap();
         assert_eq!(
-            notifications.recv_timeout(Duration::from_secs(2)).unwrap(),
+            notifications
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .sequence,
             ack.sequence
         );
     }
     renderer.kill().unwrap();
     network.kill().unwrap();
+}
+#[test]
+fn shared_frames_match_byte_fallback_at_multiple_viewports() {
+    let mut network = spawn(Role::Network);
+    let mut renderer = spawn(Role::Renderer);
+    let (_short_proxy, notifications) = connect(&renderer, &network);
+    let proxy = RendererProxy::new(renderer.connection.clone(), Duration::from_secs(5));
+    let mut measurements = Vec::new();
+    for (width, height) in [(96, 64), (112, 72), (128, 96)] {
+        let request = Navigate {
+            url: "http://example.test/shared".into(),
+            html_bytes: ByteBuf(b"<style>body{background:#123456}</style><p>shared</p>".to_vec()),
+            viewport: Viewport { width, height },
+        };
+        let byte_start = Instant::now();
+        let copied = proxy.navigate(request.clone()).unwrap();
+        let byte_time = byte_start.elapsed();
+        assert_eq!(
+            notifications
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .sequence,
+            copied.sequence
+        );
+        let shared_start = Instant::now();
+        let ready = proxy.navigate_shared(request).unwrap();
+        let view = renderer.receive_frame(&ready).unwrap();
+        let shared_time = shared_start.elapsed();
+        let mut forged = ready.clone();
+        forged.handle_id = 0;
+        assert!(forged.metadata().is_err());
+        forged = ready.clone();
+        forged.byte_len += 4;
+        assert!(forged.metadata().is_err());
+        assert!(renderer.receive_frame(&ready).is_err()); // stale/duplicate metadata fails before mapping
+        let event = notifications.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(event.sequence, ready.generation);
+        assert_eq!(event.shared, Some(ready.clone()));
+        assert_eq!(ready.byte_len as usize, copied.rgba.0.len());
+        assert_eq!(view.bytes(), copied.rgba.0);
+        assert!(proxy
+            .release_frame(ReleaseFrame {
+                generation: ready.generation
+            })
+            .unwrap());
+        assert!(!proxy
+            .release_frame(ReleaseFrame {
+                generation: ready.generation
+            })
+            .unwrap());
+        assert_eq!(view.bytes(), copied.rgba.0); // Browser view owns its mapping until Drop.
+        measurements.push((
+            width,
+            height,
+            byte_time.as_micros(),
+            shared_time.as_micros(),
+        ));
+    }
+    eprintln!("IPC-3 frame times (viewport, byte us, shared us): {measurements:?}; frame transfer copies: byte >=2, shared 1");
+    renderer.kill().unwrap();
+    network.kill().unwrap();
+}
+
+#[test]
+fn shared_frame_survives_renderer_crash_and_releases_handles() {
+    #[cfg(target_os = "linux")]
+    let before = std::fs::read_dir("/proc/self/fd").unwrap().count();
+    let mut network = spawn(Role::Network);
+    let request = Navigate {
+        url: "http://example.test/crash".into(),
+        html_bytes: ByteBuf(b"<p>crash phase</p>".to_vec()),
+        viewport: Viewport {
+            width: 128,
+            height: 128,
+        },
+    };
+    for phase in ["spawned", "metadata", "acquired", "mapped"] {
+        let mut renderer = spawn(Role::Renderer);
+        let (proxy, notifications) = connect(&renderer, &network);
+        let mut view = None;
+        if phase != "spawned" {
+            let ready = proxy.navigate_shared(request.clone()).unwrap();
+            assert_eq!(
+                notifications
+                    .recv_timeout(Duration::from_secs(2))
+                    .unwrap()
+                    .sequence,
+                ready.generation
+            );
+            if phase == "acquired" {
+                assert!(matches!(
+                    proxy
+                        .acquire_frame(AcquireFrame {
+                            generation: ready.generation
+                        })
+                        .unwrap(),
+                    AcquireResult::Transferred(())
+                ));
+            } else if phase == "mapped" {
+                view = Some(renderer.receive_frame(&ready).unwrap());
+            }
+        }
+        renderer.kill().unwrap();
+        if let Some(view) = &view {
+            assert_eq!(view.bytes().len(), 128 * 128 * 4);
+        }
+        drop(view);
+        drop(proxy);
+        drop(notifications);
+        drop(renderer);
+    }
+    network.kill().unwrap();
+    drop(network);
+    #[cfg(target_os = "linux")]
+    {
+        for _ in 0..50 {
+            if std::fs::read_dir("/proc/self/fd").unwrap().count() <= before + 2 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let after = std::fs::read_dir("/proc/self/fd").unwrap().count();
+        assert!(
+            after <= before + 2,
+            "file descriptors: before={before}, after={after}"
+        );
+    }
+}
+#[test]
+fn demand_driven_acquire_skips_superseded_frames() {
+    let mut network = spawn(Role::Network);
+    let mut renderer = spawn(Role::Renderer);
+    let (proxy, notifications) = connect(&renderer, &network);
+    let request = Navigate {
+        url: "http://example.test/latest".into(),
+        html_bytes: ByteBuf(b"<p>latest</p>".to_vec()),
+        viewport: Viewport {
+            width: 64,
+            height: 64,
+        },
+    };
+    let mut ready = Vec::new();
+    for _ in 0..8 {
+        let frame = proxy.navigate_shared(request.clone()).unwrap();
+        assert_eq!(
+            notifications
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .sequence,
+            frame.generation
+        );
+        ready.push(frame);
+    }
+    assert!(matches!(
+        proxy
+            .acquire_frame(AcquireFrame {
+                generation: ready[0].generation
+            })
+            .unwrap(),
+        AcquireResult::Superseded(_)
+    ));
+    assert!(renderer.receive_frame(&ready[0]).is_err());
+    let view = renderer.receive_frame(ready.last().unwrap()).unwrap();
+    assert_eq!(view.bytes().len(), 64 * 64 * 4);
+    assert!(proxy
+        .release_frame(ReleaseFrame {
+            generation: ready.last().unwrap().generation
+        })
+        .unwrap());
+    drop(view);
+    renderer.kill().unwrap();
+    network.kill().unwrap();
+}
+
+#[test]
+fn forged_transferred_handle_closes_the_channel() {
+    let mut network = spawn(Role::Network);
+    let mut renderer = spawn(Role::Renderer);
+    let (proxy, notifications) = connect(&renderer, &network);
+    let ready = proxy
+        .navigate_shared(Navigate {
+            url: "http://example.test/forged".into(),
+            html_bytes: ByteBuf(b"<p>forged</p>".to_vec()),
+            viewport: Viewport {
+                width: 64,
+                height: 64,
+            },
+        })
+        .unwrap();
+    assert_eq!(
+        notifications
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .sequence,
+        ready.generation
+    );
+    let mut forged = ready;
+    forged.handle_id = u64::MAX;
+    assert!(renderer.receive_frame(&forged).is_err());
+    assert!(renderer.connection.is_closed());
+    let _ = renderer.kill();
+    network.kill().unwrap();
+}
+
+#[cfg(any(target_os = "linux", windows))]
+#[test]
+fn browser_crash_reaps_renderer_at_each_transfer_phase() {
+    use std::io::{BufRead, BufReader};
+    for phase in ["spawned", "published", "acquired", "mapped"] {
+        let mut browser = std::process::Command::new(exe())
+            .arg(format!("--browser-crash-probe={phase}"))
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut pid_line = String::new();
+        BufReader::new(browser.stdout.take().unwrap())
+            .read_line(&mut pid_line)
+            .unwrap();
+        let pid: u32 = pid_line.trim().parse().unwrap();
+        assert_eq!(browser.wait().unwrap().code(), Some(77));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while renderer_alive(pid) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            !renderer_alive(pid),
+            "renderer {pid} survived browser crash at {phase}"
+        );
+    }
+}
+#[cfg(target_os = "linux")]
+fn renderer_alive(pid: u32) -> bool {
+    let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+        return false;
+    };
+    status
+        .split(") ")
+        .nth(1)
+        .is_some_and(|tail| !tail.starts_with('Z'))
+}
+#[cfg(windows)]
+fn renderer_alive(pid: u32) -> bool {
+    let output = std::process::Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&output.stdout).contains(&format!(",\"{pid}\","))
 }
 #[test]
 fn crash_during_navigation_reports_one_sad_tab() {
@@ -182,6 +449,10 @@ fn all_interface_decoders_are_bounded_and_panic_free() {
                 let _ = codec::decode::<InputEvent>($bytes);
                 let _ = codec::decode::<InputAck>($bytes);
                 let _ = codec::decode::<FrameReady>($bytes);
+                let _ = codec::decode::<SharedFrameReady>($bytes);
+                let _ = codec::decode::<ReleaseFrame>($bytes);
+                let _ = codec::decode::<AcquireFrame>($bytes);
+                let _ = codec::decode::<AcquireResult>($bytes);
                 let _ = codec::decode::<SadTab>($bytes);
                 let _ = codec::decode::<StartRequest>($bytes);
                 let _ = codec::decode::<Started>($bytes);
@@ -227,7 +498,28 @@ fn all_interface_decoders_are_bounded_and_panic_free() {
     );
     check(InputEvent::Key("a".into()), &oversized);
     check(InputAck { sequence: 1 }, &oversized);
-    check(FrameReady { sequence: 1 }, &oversized);
+    check(
+        FrameReady {
+            sequence: 1,
+            shared: None,
+        },
+        &oversized,
+    );
+    check(
+        SharedFrameReady {
+            generation: 1,
+            width: 1,
+            height: 1,
+            stride: 4,
+            format: 1,
+            byte_len: 4,
+            handle_id: 1,
+        },
+        &oversized,
+    );
+    check(ReleaseFrame { generation: 1 }, &oversized);
+    check(AcquireFrame { generation: 1 }, &oversized);
+    check(AcquireResult::Superseded(2), &oversized);
     check(
         SadTab {
             pid: 1,

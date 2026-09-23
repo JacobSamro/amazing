@@ -161,6 +161,10 @@ version = "0.0.1"
 [[package]]
 name = "amazing-ipc-platform"
 version = "0.0.1"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "amazing-js"
@@ -226,6 +230,7 @@ dependencies = [
  "amazing-fetch",
  "amazing-html",
  "amazing-ipc",
+ "amazing-ipc-platform",
  "amazing-layout",
  "amazing-media",
  "amazing-net",

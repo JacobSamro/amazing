@@ -1,14 +1,81 @@
+use amazing_ipc::codec::ByteBuf;
 use amazing_ipc::interface;
+use amazing_process::protocol::{
+    AcquireFrame, AcquireResult, BrowserEvents, BrowserEventsReceiver, FrameReady, Navigate,
+    RendererProxy, Viewport,
+};
 use amazing_process::{bootstrap_child, Capabilities, Ping, Role};
 use std::collections::BTreeMap;
+use std::io::Write;
+use std::time::Duration;
 interface! {pub interface Echo(17) => EchoProxy, EchoReceiver {fn echo(message:String) -> String = 1;}}
 struct EchoHandler;
+struct ProbeEvents;
+impl BrowserEvents for ProbeEvents {
+    fn frame_ready(&self, _: FrameReady) -> Result<(), amazing_ipc::Error> {
+        Ok(())
+    }
+}
+fn browser_crash_probe(phase: &str) {
+    let exe = std::env::current_exe().unwrap();
+    let renderer = amazing_process::ProcessHost::spawn(
+        &exe,
+        Role::Renderer,
+        Capabilities(BTreeMap::new()),
+        amazing_process::RestartPolicy::Never,
+    )
+    .unwrap();
+    renderer
+        .connection
+        .bind(9, BrowserEventsReceiver(ProbeEvents));
+    if phase != "spawned" {
+        let proxy = RendererProxy::new(renderer.connection.clone(), Duration::from_secs(5));
+        let ready = proxy
+            .navigate_shared(Navigate {
+                url: "http://example.test/crash".into(),
+                html_bytes: ByteBuf(b"<p>crash</p>".to_vec()),
+                viewport: Viewport {
+                    width: 64,
+                    height: 64,
+                },
+            })
+            .unwrap();
+        if phase == "acquired" {
+            assert!(matches!(
+                proxy
+                    .acquire_frame(AcquireFrame {
+                        generation: ready.generation
+                    })
+                    .unwrap(),
+                AcquireResult::Transferred(())
+            ));
+            assert!(matches!(
+                proxy
+                    .acquire_frame(AcquireFrame {
+                        generation: ready.generation
+                    })
+                    .unwrap(),
+                AcquireResult::Busy(())
+            ));
+        } else if phase == "mapped" {
+            let _view = renderer.receive_frame(&ready).unwrap();
+        }
+    }
+    println!("{}", renderer.pid());
+    std::io::stdout().flush().unwrap();
+    std::process::exit(77);
+}
 impl Echo for EchoHandler {
     fn echo(&self, message: String) -> Result<String, amazing_ipc::Error> {
         Ok(format!("echo:{message}"))
     }
 }
 fn main() {
+    if let Some(phase) =
+        std::env::args().find_map(|s| s.strip_prefix("--browser-crash-probe=").map(str::to_owned))
+    {
+        browser_crash_probe(&phase);
+    }
     let Some(role) = std::env::args().find_map(|s| s.strip_prefix("--type=").and_then(Role::parse))
     else {
         return;
@@ -18,11 +85,11 @@ fn main() {
         ("renderer".into(), "1".into()),
         ("network".into(), "1".into()),
     ]));
-    let Ok((conn, _)) = bootstrap_child(role, caps) else {
+    let Ok((conn, _, channel)) = bootstrap_child(role, caps) else {
         return;
     };
     match role {
-        Role::Renderer => amazing_process::renderer::serve_renderer(&conn),
+        Role::Renderer => amazing_process::renderer::serve_renderer(&conn, channel),
         Role::Network => amazing_process::network::serve_network(&conn),
         _ => {
             conn.bind(0, Ping);

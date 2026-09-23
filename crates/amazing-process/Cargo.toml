@@ -6,8 +6,13 @@ version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+default = ["byte-frame-fallback"]
+byte-frame-fallback = []
+
 [dependencies]
 amazing-ipc = { path = "../amazing-ipc" }
+amazing-ipc-platform = { path = "../amazing-ipc-platform" }
 amazing-fetch = { path = "../amazing-fetch" }
 amazing-html = { path = "../amazing-html" }
 amazing-css = { path = "../amazing-css" }

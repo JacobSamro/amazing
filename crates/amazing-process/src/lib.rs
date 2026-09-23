@@ -2,13 +2,15 @@
 #![forbid(unsafe_code)]
 use amazing_ipc::codec::{self, Decoder, Encoder, Wire};
 use amazing_ipc::{Connection, StdioTransport};
+use amazing_ipc_platform::{FrameBudget, FrameMetadata, FrameView, HandleChannel};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 pub const BOOTSTRAP_VERSION: u16 = 1;
+const FRAME_NONCE_CAPABILITY: &str = "__frame_nonce";
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Role {
     Browser,
@@ -77,6 +79,9 @@ pub enum Error {
     Role,
     Dead,
     Limit,
+    Superseded(u64),
+    Busy,
+    Platform(amazing_ipc_platform::Error),
 }
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
@@ -91,6 +96,11 @@ impl From<amazing_ipc::Error> for Error {
 impl From<codec::Error> for Error {
     fn from(e: codec::Error) -> Self {
         Self::Codec(e)
+    }
+}
+impl From<amazing_ipc_platform::Error> for Error {
+    fn from(e: amazing_ipc_platform::Error) -> Self {
+        Self::Platform(e)
     }
 }
 impl std::fmt::Display for Error {
@@ -129,12 +139,26 @@ fn verify(h: &Handshake, role: Role) -> Result<(), Error> {
 /// Child entry point called after parsing --type=<role> from argv.
 pub fn bootstrap_child(
     role: Role,
-    capabilities: Capabilities,
-) -> Result<(Arc<Connection>, Capabilities), Error> {
+    mut capabilities: Capabilities,
+) -> Result<(Arc<Connection>, Capabilities, Option<HandleChannel>), Error> {
+    let frame_channel = if role == Role::Renderer && cfg!(any(target_os = "linux", windows)) {
+        Some(HandleChannel::from_child_env()?)
+    } else {
+        None
+    };
     let mut input = std::io::stdin();
     let mut output = std::io::stdout();
-    let parent = recv_boot(&mut input)?;
+    let mut parent = recv_boot(&mut input)?;
     verify(&parent, Role::Browser)?;
+    if let Some(channel) = &frame_channel {
+        if parent.capabilities.0.get(FRAME_NONCE_CAPABILITY) != Some(&channel.nonce_hex()) {
+            return Err(Error::Role);
+        }
+        capabilities
+            .0
+            .insert(FRAME_NONCE_CAPABILITY.into(), channel.nonce_hex());
+        parent.capabilities.0.remove(FRAME_NONCE_CAPABILITY);
+    }
     send_boot(
         &mut output,
         &Handshake {
@@ -144,7 +168,7 @@ pub fn bootstrap_child(
         },
     )?;
     let connection = Connection::new(StdioTransport::new(input, output));
-    Ok((connection, parent.capabilities))
+    Ok((connection, parent.capabilities, frame_channel))
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RestartPolicy {
@@ -161,20 +185,56 @@ pub struct ProcessHost {
     last_pong: Instant,
     restarts: u32,
     policy: RestartPolicy,
+    frame_channel: Mutex<Option<HandleChannel>>,
+    frame_budget: Arc<Mutex<FrameBudget>>,
+}
+/// A browser mapping charged to the renderer until the browser drops its view.
+pub struct BrowserFrame {
+    view: FrameView,
+    budget: Arc<Mutex<FrameBudget>>,
+    generation: u64,
+}
+impl BrowserFrame {
+    pub fn bytes(&self) -> &[u8] {
+        self.view.bytes()
+    }
+    pub fn metadata(&self) -> FrameMetadata {
+        self.view.metadata()
+    }
+}
+impl Drop for BrowserFrame {
+    fn drop(&mut self) {
+        self.budget.lock().unwrap().release(self.generation);
+    }
 }
 impl ProcessHost {
     pub fn spawn(
         exe: &std::path::Path,
         role: Role,
-        capabilities: Capabilities,
+        mut capabilities: Capabilities,
         policy: RestartPolicy,
     ) -> Result<Self, Error> {
-        let mut child = Command::new(exe)
+        let mut command = Command::new(exe);
+        command
             .arg(format!("--type={}", role.name()))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()?;
+            .stderr(Stdio::null());
+        let mut frame_channel = if role == Role::Renderer && cfg!(any(target_os = "linux", windows))
+        {
+            Some(HandleChannel::prepare_child(&mut command)?)
+        } else {
+            None
+        };
+        if let Some(channel) = &frame_channel {
+            capabilities
+                .0
+                .insert(FRAME_NONCE_CAPABILITY.into(), channel.nonce_hex());
+        }
+        let mut child = command.spawn()?;
+        if let Some(channel) = &mut frame_channel {
+            channel.attach_child(&child)?;
+        }
         let mut stdin = child.stdin.take().ok_or(Error::Dead)?;
         let mut stdout = child.stdout.take().ok_or(Error::Dead)?;
         send_boot(
@@ -185,8 +245,14 @@ impl ProcessHost {
                 capabilities,
             },
         )?;
-        let response = recv_boot(&mut stdout)?;
+        let mut response = recv_boot(&mut stdout)?;
         verify(&response, role)?;
+        if let Some(channel) = &frame_channel {
+            if response.capabilities.0.get(FRAME_NONCE_CAPABILITY) != Some(&channel.nonce_hex()) {
+                return Err(Error::Role);
+            }
+            response.capabilities.0.remove(FRAME_NONCE_CAPABILITY);
+        }
         let conn = Connection::new(StdioTransport::new(stdout, stdin));
         Ok(Self {
             child,
@@ -197,10 +263,68 @@ impl ProcessHost {
             last_pong: Instant::now(),
             restarts: 0,
             policy,
+            frame_channel: Mutex::new(frame_channel),
+            frame_budget: Arc::new(Mutex::new(FrameBudget::new())),
         })
     }
     pub fn pid(&self) -> u32 {
         self.child.id()
+    }
+    /// Consume a shared frame only from this host's launched renderer.
+    pub fn receive_frame(&self, ready: &protocol::SharedFrameReady) -> Result<BrowserFrame, Error> {
+        if self.role != Role::Renderer {
+            return Err(Error::Role);
+        }
+        let metadata = ready.metadata()?;
+        let mut channel_guard = self.frame_channel.lock().unwrap();
+        let channel = channel_guard.as_ref().ok_or(Error::Role)?;
+        let mut budget = self.frame_budget.lock().unwrap();
+        budget.reserve(metadata.generation, metadata.byte_len as usize)?;
+        let proxy = protocol::RendererProxy::new(self.connection.clone(), Duration::from_secs(5));
+        match proxy.acquire_frame(protocol::AcquireFrame {
+            generation: metadata.generation,
+        }) {
+            Ok(protocol::AcquireResult::Transferred(())) => {}
+            Ok(protocol::AcquireResult::Superseded(latest)) => {
+                budget.release(metadata.generation);
+                return Err(Error::Superseded(latest));
+            }
+            Ok(protocol::AcquireResult::Busy(())) => {
+                budget.release(metadata.generation);
+                return Err(Error::Busy);
+            }
+            Err(error) => {
+                budget.release(metadata.generation);
+                channel_guard.take();
+                self.connection.close();
+                return Err(error.into());
+            }
+        }
+        let view = match channel.receive(metadata, self.child.id()) {
+            Ok(view) => view,
+            Err(error) => {
+                budget.release(metadata.generation);
+                channel_guard.take();
+                self.connection.close();
+                return Err(error.into());
+            }
+        };
+        let acknowledged = proxy.frame_received(protocol::AcquireFrame {
+            generation: metadata.generation,
+        });
+        if !matches!(acknowledged, Ok(true)) {
+            budget.release(metadata.generation);
+            channel_guard.take();
+            self.connection.close();
+            return Err(Error::Dead);
+        }
+        budget.protect(metadata.generation);
+        drop(budget);
+        Ok(BrowserFrame {
+            view,
+            budget: self.frame_budget.clone(),
+            generation: metadata.generation,
+        })
     }
     pub fn crashed(&mut self) -> Result<bool, Error> {
         Ok(self.child.try_wait()?.is_some() || self.connection.is_closed())
