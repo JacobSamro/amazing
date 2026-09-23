@@ -2,7 +2,7 @@
 //! Time is caller-supplied UTC seconds; the embedding supplies audited browsing
 //! context (including ancestors, redirects and reload rules), not merely the
 //! address-bar URL. Cookie octets remain bytes, never percent-decoded or UTF-8 replaced.
-mod date;
+pub(crate) mod date;
 mod parse;
 use crate::{HttpUrl, Origin, RegistrableDomain};
 

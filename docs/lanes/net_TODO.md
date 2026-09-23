@@ -1050,3 +1050,64 @@ neither workspace run emitted a nextest leak notice. Canonical gate logs,
 results, source manifests, recipe and input hashes are under the integrator
 checkout's `.agents/net/net9-final-evidence/`, `net9_gate.py` and
 `net9-inputs.json`. NET-9 stops at this transport API boundary.
+
+## NET-10 — RFC 9111 cache policy
+
+`amazing-fetch::cache` owns private/shared cache semantics behind a generic
+`CacheStorage` interface. The default `MemoryCacheStorage` is in memory only;
+the embedding supplies requests, completed responses, clock times, transport
+and any persistence. `CacheStore` makes the freshness, validation, Vary,
+invalidation, and admission decisions. `CacheEntry` is an owned record an
+embedding can serialize without adopting a prescribed file format.
+
+The primary key retains the shell's exact `input + "\\n" + Cookie` shape.
+Vary compares the named outbound request fields, including Cookie, and `Vary:
+*` is never stored. The shell can later adapt its 64-entry/16 MiB queue and
+response conversion to this seam; this ticket does not edit shell code or its
+`session-state-v1.txt` format. The current shell file contains no cache records,
+so adopting the policy does not require changing that file's existing records.
+
+Responses use RFC 9111 Age calculations from request/response times, Date and
+Age. Shared caches prefer `s-maxage`; both modes then use `max-age`, Expires,
+or a 10%-of-Date-minus-Last-Modified heuristic capped at one day. Invalid or
+duplicate freshness information is stale. `no-store` prevents admission,
+`no-cache` forces validation, and stale `must-revalidate` responses are never
+served without validation. Shared caches reject `private` and unauthorised
+responses unless an explicit shared-cache directive permits admission. ETag
+and Last-Modified generate conditional fields; matching 304 metadata updates
+the stored response while keeping its body. Successful unsafe methods remove
+all variants of the target URI.
+
+Default and hard ceilings mirror the shell: 64 entries, 16 MiB aggregate and
+8 MiB body per entry. Cache keys are capped at 8 KiB, request/response headers
+at 64 KiB each, and Vary at 32 fields. The policy checks lengths before it
+copies metadata or inserts an entry. Transport remains responsible for its
+own response-body allocation cap. This policy deliberately handles complete
+200 GET responses; the shell integration can add other cacheable statuses and
+methods as a separate measured ticket.
+
+NET-10 final gate used fixed base `dc184d24c76005003ff7cb874bb6df16bcb34afd`
+and local implementation commit `6392f42`. The net build tree held that base
+plus the six changed files under `REFRESH-HOLD`. Two artifact-clean, `--locked`
+Windows runs under the shared build slot produced identical results:
+
+| Gate | NET-9 before | NET-10 run 1 | NET-10 run 2 |
+|---|---:|---:|---:|
+| Net lane nextest | 281 pass / 0 fail / 0 skip | 293 / 0 / 0 | 293 / 0 / 0 |
+| Net lane doctests | 0 pass / 0 fail | 0 / 0 | 0 / 0 |
+| Workspace nextest | 1327 pass / 0 fail / 3 skip | 1357 / 0 / 3 | 1357 / 0 / 3 |
+| Workspace doctests | 2 pass / 0 fail | 2 / 0 | 2 / 0 |
+| Pinned URL WPT | 864 pass / 0 fail / 0 timeout / 32 unsupported | 864 / 0 / 0 / 32 | 864 / 0 / 0 / 32 |
+
+The 12 new focused cache tests all pass. All 20 workspace packages rebuilt in
+each run. The 417 tracked source/input hashes matched the Mac worktree and
+stayed stable before, between, and after runs; source manifest SHA-256 is
+`e224acebfbe043c7d820df2e264d1bad2c74434b106acf7a4b457372aac99d35`.
+Pinned URL stdout SHA-256 stayed
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+PSL regeneration, TLS/Brotli fixture pins, dependency feature checks, and
+nextest leak-notice checks passed. Canonical logs, results, source manifests,
+recipe and input hashes are in the integrator checkout's
+`.agents/net/net10-final-evidence/`, `net10_gate.py`, and `net10-inputs.json`.
+This ticket stops at the cache policy and storage seam; shell adoption remains
+with the integrator.
