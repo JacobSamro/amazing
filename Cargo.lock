@@ -90,6 +90,7 @@ dependencies = [
  "amazing-media",
  "amazing-net",
  "amazing-paint",
+ "amazing-svg",
  "amazing-text",
  "amazing-text-provider",
  "amazing-webrtc",
