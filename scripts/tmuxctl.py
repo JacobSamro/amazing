@@ -189,6 +189,7 @@ LANE_GRANTS.setdefault("js-runtime", []).extend([
     # plus switching string/string_units/to_dom_string to the lossless
     # binding_* facade (drops the lone-surrogate TypeError). Nothing else.
     "crates/amazing/src/runtime_binding_host.rs",
+    "crates/amazing/src/driver_tests.rs",
     "crates/amazing/src/cmd/wpt_harness.rs",
     "crates/amazing/src/cmd/js.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
@@ -267,6 +268,8 @@ LANE_GRANTS_REWRITE = {
     "layout": ["crates/amazing/tests/phase5_flex_grid.rs"],
     "js-runtime": [
         "crates/amazing/src/runtime_binding_host.rs",
+        # The lone-surrogate driver test flips from "rejects" to a round trip.
+        "crates/amazing/src/driver_tests.rs",
         "crates/amazing/src/cmd/wpt_harness.rs",
         "crates/amazing/src/cmd/js.rs",
         "crates/amazing-shell-gpui/src/dom_runtime.rs",
