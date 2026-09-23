@@ -27,3 +27,24 @@ trace is exact but its baked frame build takes about twice full repaint time.
    sprite API has no matrix field. COMP-4 draws axis-aligned tile sprites
    directly and uses a CPU-composed image for rotation, perspective, rounded
    clips, blend modes and effect passes.
+
+## COMP-6 animation selection
+
+The native compositor unit harness projects timing and event assertions from
+three files at WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`:
+
+- `web-animations/timing-model/animation-effects/simple-iteration-progress.html`
+  and its paired `current-iteration.html`: before/after fill, fractional
+  iterations, iteration start, and the two-iteration spec timing example.
+- `css/css-animations/animation-iteration-event-001.html`: a seven-iteration,
+  one-second animation with a negative four-second delay emits iteration
+  elapsed times five and six seconds, then an end event.
+- `css/css-transitions/event-dispatch.tentative.html`: run/start/end order and
+  elapsed times for a delayed transition; cancellation and negative-delay
+  elapsed times are covered by additional native tests.
+
+These are projected native assertions, not an unmodified browser WPT run. The
+shell does not yet install CSS Animation/Transition DOM event or Web Animations
+bindings. Integrator-assist must connect the compositor's typed style and
+keyframe inputs to CSS-14, apply main-thread updates, and dispatch returned
+events and promise signals before the unmodified selections are measurable.

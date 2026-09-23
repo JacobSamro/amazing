@@ -1,5 +1,11 @@
 //! Stateless Web Animations timing and compositor-owned property animations.
+mod css;
+mod values;
+mod web;
 use crate::{Compositor, EffectId, Matrix4, TransformId, TreeError};
+pub use css::*;
+pub use values::*;
+pub use web::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
@@ -130,64 +136,20 @@ pub struct Timing {
 impl Timing {
     pub fn valid(&self) -> bool {
         self.delay_ms.is_finite()
-            && self.duration_ms.is_finite()
-            && self.duration_ms > 0.
-            && self.iterations.is_finite()
+            && !self.duration_ms.is_nan()
+            && self.duration_ms >= 0.
+            && !self.iterations.is_nan()
             && self.iterations >= 0.
-            && (self.duration_ms * self.iterations).is_finite()
             && self.easing.valid()
     }
     pub fn progress(&self, elapsed_ms: f64) -> Option<f64> {
-        if !self.valid() || !elapsed_ms.is_finite() {
-            return None;
+        EffectTiming {
+            timing: self.clone(),
+            end_delay_ms: 0.,
+            iteration_start: 0.,
         }
-        let active = self.duration_ms * self.iterations;
-        let local = elapsed_ms - self.delay_ms;
-        let (time, at_end, before_phase) = if local < 0. {
-            if !matches!(self.fill, Fill::Backwards | Fill::Both) {
-                return None;
-            }
-            (0., false, true)
-        } else if local >= active {
-            if !matches!(self.fill, Fill::Forwards | Fill::Both) {
-                return None;
-            }
-            (active, true, false)
-        } else {
-            (local, false, false)
-        };
-        if self.iterations == 0. {
-            let reverse = matches!(
-                self.direction,
-                Direction::Reverse | Direction::AlternateReverse
-            );
-            return Some(
-                self.easing
-                    .apply_with_before(f64::from(reverse), before_phase && !reverse),
-            );
-        }
-        let exact = time / self.duration_ms;
-        let (iteration, simple) = if at_end {
-            let fractional = self.iterations.fract();
-            if fractional == 0. {
-                (self.iterations as u64 - 1, 1.)
-            } else {
-                (self.iterations.floor() as u64, fractional)
-            }
-        } else {
-            (exact.floor() as u64, exact.fract())
-        };
-        let reverse = match self.direction {
-            Direction::Normal => false,
-            Direction::Reverse => true,
-            Direction::Alternate => iteration % 2 == 1,
-            Direction::AlternateReverse => iteration % 2 == 0,
-        };
-        let before_flag = (before_phase && !reverse) || (at_end && reverse);
-        Some(
-            self.easing
-                .apply_with_before(if reverse { 1. - simple } else { simple }, before_flag),
-        )
+        .sample(elapsed_ms)
+        .map(|sample| sample.progress)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq)]

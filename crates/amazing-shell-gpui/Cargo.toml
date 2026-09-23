@@ -35,6 +35,7 @@ path = "src/compositor_presenter.rs"
 [[bin]]
 name = "amazing-compositor-proof"
 path = "src/bin/compositor_proof.rs"
+test = false
 
 [profile.release]
 opt-level = 3
