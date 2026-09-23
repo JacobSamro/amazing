@@ -932,5 +932,32 @@ and executable SHA256
 `823aedf95016aac3ee98fc5ffaedcc0e245385070d96e1f8388180bab9e8e57f`.
 The gate uses `amazing layout` fragment geometry, not rendered pixels.
 Windows layout nextest passed **233/233** and layout doctests **0/0**.
-The 46-file source manifest matched the Windows tree exactly. Retained render
-and workspace gates are recorded in the ticket report and evidence directory.
+The 46-file source manifest matched the Windows tree exactly before and after
+the workspace gate and after the retained sweep.
+
+All retained pinned WPT selections ran twice before and after from immutable
+executables with stable per-case classifications and actual/reference/diff
+hashes. Every selection has raw **+0/−0** and zero changed image hashes:
+
+| Selection | Before → after |
+| --- | --- |
+| Broad flex/grid | 83/200 → 83/200 |
+| Focused flex/grid | 24/24 → 24/24 |
+| Geometry | 42/61 → 42/61 |
+| Tables | 10/12 → 10/12 |
+| Floats | 6/8 → 6/8 |
+| Block collapse | 9/9 → 9/9 |
+| Position | 12/12 → 12/12 |
+| Text flow | 14/16 → 14/16 |
+| Contents | 6/6 → 6/6 |
+| Paint compositing | 24/24 → 24/24 |
+| Images | 12/12 → 12/12 |
+
+The source-verified Windows workspace gate passed **1632/1632** nextest tests
+with 3 skipped and workspace doctests **2/2**. The 44 raw retained reports,
+comparison, geometry runs and workspace logs are under
+`crates/amazing-layout/evidence/layout9/`. No Mac build or test was run.
+
+CSS-9 merged on `dev` as `e0adf15` after this fixed-base LAYOUT-9 gate.
+LAYOUT-10 will re-measure the four named calc cases and two LAYOUT-6 logical
+size exceptions on current `dev`; this ticket did not start that work.

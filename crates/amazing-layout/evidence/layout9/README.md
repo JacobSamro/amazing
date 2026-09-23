@@ -18,7 +18,7 @@ not use rendered pixels or the SVG paint implementation. The dynamic WPT case
 is frozen into separate static documents so this gate can run before DOM script
 mutation support lands.
 
-Baseline: 0/12, executable SHA256
+Baseline: 0/12 on both repeats, executable SHA256
 `8c6dc33954f199cb7088f9ad010d4979af51912c12414050381cd4d9769ce238`,
 selection SHA256
 `1cd090b30156ca3029f553e464bd80886d68ed27e159d1f53aeb831046109ba8`.
@@ -32,3 +32,21 @@ its viewport in `LayoutBox.content_box`. The renderer receives that root,
 viewport width/height and the caller's device-pixel ratio. SVG descendants
 remain in the DOM and do not generate CSS boxes. See the routed request in
 `.agents/layout/questions.md` for `display_list.rs::control_commands`.
+
+## Retained and workspace gates
+
+`reports/` contains 44 complete pinned WPT render reports: baseline/final,
+two repeats, broad plus ten retained selections. `summarize.py` requires the
+per-case classifications and actual/reference/diff hashes to match between
+repeats, then writes `retained-summary.json`. Every retained selection has
+**zero gains, zero losses and zero changed image hashes** between baseline and
+candidate. Broad is 83/200 on both sides; geometry is 42/61. The renderer
+executables are the baseline/final hashes above. The unchanged static image
+adapter has SHA256
+`484f3d713e2d3734ed6719ac18f2534a1c0b772f2cc4b6513fed20371a227587`.
+
+`workspace-gate.json` and `workspace-gate.log` record the win-001 build-slot
+run: 1632/1632 nextest passes, 3 skipped, and 2/2 workspace doctests. The
+46-file `final-sources.json` manifest matched the Windows tree before and
+after the gate and again after the retained sweep. No build or test ran on
+the Mac.
