@@ -287,11 +287,6 @@ function Get-ReftestLink {
     return [pscustomobject]@{ supported = $false; detail = "no upstream rel=match or rel=mismatch link" }
 }
 
-function Test-RequiresXmlParser {
-    param([string]$Path)
-    return @(".xht", ".xhtml") -contains [IO.Path]::GetExtension($Path).ToLowerInvariant()
-}
-
 function Compare-Ppm {
     param(
         [string]$ActualPath,
@@ -371,21 +366,9 @@ foreach ($test in @($manifest.tests)) {
                 id = $id; classification = $classification; expected = $expected
                 detail = "test is absent from the pinned checkout"
             }
-        } elseif (Test-RequiresXmlParser $testPath) {
-            $classification = "unsupported"
-            $result = [ordered]@{
-                id = $id; classification = $classification; expected = $expected
-                detail = "XHTML/XML parser mode is not implemented"
-            }
         } else {
             $reftest = Get-ReftestLink $testPath
-            if ($reftest.supported -and (Test-RequiresXmlParser $reftest.reference_path)) {
-                $classification = "unsupported"
-                $result = [ordered]@{
-                    id = $id; classification = $classification; expected = $expected
-                    detail = "XHTML/XML reference parser mode is not implemented"
-                }
-            } elseif (-not $reftest.supported -or -not (Test-Path -LiteralPath $reftest.reference_path -PathType Leaf)) {
+            if (-not $reftest.supported -or -not (Test-Path -LiteralPath $reftest.reference_path -PathType Leaf)) {
                 $classification = "unsupported"
                 $detail = if (-not $reftest.supported) { $reftest.detail } else { "upstream reference is absent from the pinned checkout" }
                 $result = [ordered]@{ id = $id; classification = $classification; expected = $expected; detail = $detail }

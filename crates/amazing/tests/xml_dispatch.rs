@@ -128,11 +128,11 @@ fn unloaded_external_dtd_entities_have_a_distinct_unsupported_exit() {
 #[test]
 fn xml_scripts_handlers_and_domrun_are_not_executed_while_html_scripts_still_run() {
     let fixture = Fixture::new();
-    let source = r#"<html xmlns="http://www.w3.org/1999/xhtml"><head>
+    let source = r##"<html xmlns="http://www.w3.org/1999/xhtml"><head>
 <style>html, body { margin: 0; }</style></head><body>
 <div id="target" style="width:16px;height:16px;background:red"></div>
 <script>document.querySelector("#target").setAttribute("style", "width:16px;height:16px;background:lime");</script>
-</body></html>"#;
+</body></html>"##;
     let xml = fixture.write("script.xhtml", source);
     let xml_output = fixture.path("xml-script.ppm");
     let result = render(&xml, &xml_output);
