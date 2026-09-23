@@ -10,7 +10,6 @@ fn unsupported_color_spaces_preserve_the_existing_cascade_winner() {
         "canvastext",
         "oklch(0% 0 0)",
         "color(xyz-d65 0 0 0)",
-        "hsl(0 100% 50%)",
         "color(from currentcolor rec2020 r g b)",
     ] {
         let sheet = parse_stylesheet(&format!(

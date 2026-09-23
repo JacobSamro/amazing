@@ -714,10 +714,16 @@ fn match_rightward(dom: &Dom, el: NodeIdx, sel: &Selector, pos: usize, scope: Op
                 }
                 false
             },
-            Combinator::NextSibling => dom
-                .get(el)
-                .prev_sibling
-                .is_some_and(|sib| match_rightward(dom, sib, sel, pos - 1, scope)),
+            Combinator::NextSibling => {
+                let mut sibling = dom.get(el).prev_sibling;
+                while let Some(node) = sibling {
+                    if dom.name(node).is_some() {
+                        return match_rightward(dom, node, sel, pos - 1, scope);
+                    }
+                    sibling = dom.get(node).prev_sibling;
+                }
+                false
+            },
             Combinator::LaterSibling => {
                 let mut sib = dom.get(el).prev_sibling;
                 while let Some(s) = sib {
@@ -1016,6 +1022,9 @@ mod tests {
         assert!(!check(first, ":has(> span)"));
         assert!(check(second, ":not(:dir(rtl)) + div"));
         assert!(check(child, ":dir(rtl)"));
+        dom.create_text(body, "\n");
+        let next = dom.create_element(body, "div");
+        assert!(matches(&dom, next, &parse_selector(":not(:dir(ltr)) + div").unwrap()));
     }
 
     #[test]
@@ -1029,10 +1038,33 @@ mod tests {
         }
         let matches_text = |el, text| matches(&dom, el, &parse_selector(text).unwrap());
         assert!(matches_text(elements[3], ":nth-child(3 of/*comment*/target)"));
+        assert!(matches_text(elements[3], ":nth-child(3 of/* my comment */target)"));
         assert!(!matches_text(elements[2], ":nth-child(3 of target)"));
+        dom.set_attrs(elements[0], vec![("class".into(), "target".into()), ("target".into(), "".into())]);
+        dom.set_attrs(elements[2], vec![("class".into(), "target".into()), ("target".into(), "".into())]);
+        dom.set_attrs(elements[3], vec![("class".into(), "target".into()), ("target".into(), "".into())]);
+        let matches_text = |el, text| matches(&dom, el, &parse_selector(text).unwrap());
+        assert!(matches_text(elements[3], ":nth-child(3 of.target)"));
+        assert!(matches_text(elements[3], ":nth-child(3 of[target])"));
         assert!(matches_text(elements[3], ":nth-last-child(1 of target, .missing)"));
         assert_eq!(parse_selector(":nth-child(3 of target)").unwrap().specificity(),
             Specificity { a: 0, b: 1, c: 1 });
+    }
+
+    #[test]
+    fn nth_last_child_of_complex_selector_list() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        let paragraphs: Vec<_> = (0..9).map(|_| {
+            let paragraph = dom.create_element(body, "p");
+            dom.create_text(body, "\n");
+            paragraph
+        }).collect();
+        let selector = parse_selector("p:nth-last-child(4n of html:root>body>p+p:not(empty), :not(*), p:not(p), span, .notthere)").unwrap();
+        for (index, paragraph) in paragraphs.into_iter().enumerate() {
+            assert_eq!(matches(&dom, paragraph, &selector), index == 1 || index == 5, "p {index}");
+        }
     }
 
     #[test]

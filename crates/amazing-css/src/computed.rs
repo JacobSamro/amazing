@@ -792,6 +792,10 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 })
                 .collect()
         }
+        "margin-inline" if (1..=2).contains(&parts.len()) => vec![
+            ("margin-inline-start".to_owned(), parts[0].to_owned()),
+            ("margin-inline-end".to_owned(), parts[parts.len() - 1].to_owned()),
+        ],
         "inset" if !parts.is_empty() => SIDES
             .iter()
             .enumerate()
@@ -1264,13 +1268,11 @@ fn expand_radius_axis(tokens: &[Token]) -> Option<[String; 4]> {
     let components = top_level_components(tokens)?;
     if components.is_empty()
         || components.len() > 4
-        || !components
-            .iter()
-            .all(|component| valid_radius_component(component))
+        || !components.iter().all(|component| radius_component(component).is_some())
     {
         return None;
     }
-    let values = components.into_iter().map(serialize).collect::<Vec<_>>();
+    let values = components.into_iter().map(radius_component).collect::<Option<Vec<_>>>()?;
     Some(match values.as_slice() {
         [one] => [one.clone(), one.clone(), one.clone(), one.clone()],
         [top_left, top_right] => [
@@ -1301,18 +1303,24 @@ fn valid_radius_pair(value: &str) -> bool {
         (1..=2).contains(&components.len())
             && components
                 .iter()
-                .all(|component| valid_radius_component(component))
+                .all(|component| radius_component(component).is_some())
     })
 }
 
-fn valid_radius_component(tokens: &[Token]) -> bool {
+fn radius_component(tokens: &[Token]) -> Option<String> {
     match trim_tokens(tokens) {
-        [Token::Number(value)] => value.is_finite() && *value == 0.0,
-        [Token::Percentage(value)] => value.is_finite() && *value >= 0.0,
+        [Token::Number(value)] if value.is_finite() && *value == 0.0 => Some("0".into()),
+        [Token::Percentage(value)] if value.is_finite() && *value >= 0.0 => Some(serialize(tokens)),
         [Token::Dimension(value, unit)] => {
-            value.is_finite() && *value >= 0.0 && unit.eq_ignore_ascii_case("px")
+            (value.is_finite() && *value >= 0.0 && unit.eq_ignore_ascii_case("px"))
+                .then(|| serialize(tokens))
         }
-        _ => false,
+        _ => {
+            let text = serialize(tokens);
+            let inside = text.trim().strip_prefix("calc(")?.strip_suffix(')')?;
+            let pixels = inside.strip_suffix("px")?.trim().parse::<f32>().ok()?;
+            pixels.is_finite().then(|| format!("{}px", pixels.max(0.0)))
+        },
     }
 }
 
@@ -2649,10 +2657,25 @@ fn compute_normal_value(
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
     } else if matches!(property.name, "opacity" | "fill-opacity") {
         computed_opacity(&computed).unwrap_or_else(|| property.initial.to_owned())
+    } else if matches!(property.name, "color" | "background-color"
+        | "border-top-color" | "border-right-color" | "border-bottom-color" | "border-left-color") {
+        normalized_extended_color(&computed).unwrap_or(computed)
     } else {
         computed
     };
     (computed, inherits)
+}
+
+fn normalized_extended_color(value: &str) -> Option<String> {
+    let lower = value.trim().to_ascii_lowercase();
+    if !["hsl(", "hsla(", "hwb(", "lch(", "color("].iter()
+        .any(|prefix| lower.starts_with(prefix))
+        && !matches!(lower.as_str(), "buttonface" | "threedface" | "buttonborder" | "threedlightshadow")
+    {
+        return None;
+    }
+    let [r, g, b, a] = crate::color::parse_css_color(value)?;
+    Some(format!("#{r:02x}{g:02x}{b:02x}{a:02x}"))
 }
 
 fn computed_opacity(value: &str) -> Option<String> {

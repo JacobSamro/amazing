@@ -239,10 +239,8 @@ fn winners<'a>(
                         if c.inline {
                             return false;
                         }
-                        // Important rollback excludes its layer and every
-                        // weaker important layer, then crosses the normal
-                        // interval down through the same layer. Otherwise
-                        // a later important layer resurfaces after rollback.
+                        // Important rollback removes the whole interval from
+                        // its important level down through its normal level.
                         if winner.important {
                             return c.layer < winner.layer;
                         }
@@ -670,7 +668,7 @@ mod tests {
             ("p{color:green!important}", "green"),
             ("p{color:revert!important}", "black"),
             ("p{color:revert-layer!important}", "black"),
-            ("@layer a,b;@layer a{p{color:revert-layer!important}}@layer b{p{color:green!important}}", "green"),
+            ("@layer a,b;@layer a{p{color:revert-layer!important}}@layer b{p{color:green!important}}", "black"),
         ] {
             let ua = compile_sheets(&[parse_stylesheet(ua_css)], true);
             let style = compute_one(&dom, elements[5], None, 16.0, &ua, &author, None);

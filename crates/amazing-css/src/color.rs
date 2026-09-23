@@ -43,9 +43,16 @@ pub fn parse_css_color(input: &str) -> Option<[u8; 4]> {
     let (name_raw, inner) = split_function(s)?;
     match name_raw.to_ascii_lowercase().as_str() {
         "rgb" | "rgba" => parse_rgb_args(inner),
+        "hsl" | "hsla" => advanced::hsl(inner),
+        "hwb" => advanced::hwb(inner),
+        "color" => advanced::predefined_rgb(inner),
+        "lch" => advanced::lch(inner),
         _ => None,
     }
 }
+
+#[path = "color_advanced.rs"]
+mod advanced;
 
 // ---------------------------------------------------------------------------
 // hex forms
@@ -274,6 +281,13 @@ const NAMED: &[(&str, [u8; 4])] = &[
 ];
 
 fn lookup_named(lower: &str) -> Option<[u8; 4]> {
+    // Deterministic platform palette for the currently supported system
+    // colors. Deprecated aliases share the corresponding modern role.
+    match lower {
+        "buttonface" | "threedface" => return Some([240, 240, 240, 255]),
+        "buttonborder" | "threedlightshadow" => return Some([128, 128, 128, 255]),
+        _ => {},
+    }
     NAMED.iter().find(|(n, _)| *n == lower).map(|(_, c)| *c)
 }
 
