@@ -3,6 +3,7 @@
 use crate::host::{BindingHost, InterfaceBrand, Operation as O};
 use amazing_dom::{custom_elements::{CustomElementDefinition, CustomElementReaction,
     CustomElementState, LifecycleCallbacks}, Dom, DomError, NodeIdx};
+use std::collections::VecDeque;
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::CustomElementRegistryDefine | O::CustomElementRegistryGet
@@ -211,7 +212,9 @@ pub(crate) fn deliver_custom_element_reactions_for_created<H: BindingHost>(host:
     loop {
         let reactions = host.with_dom(|dom| Ok(dom.take_custom_element_reactions()))?;
         if reactions.is_empty() { return Ok(()); }
-        for reaction in reactions {
+        let mut reactions: VecDeque<_> = reactions.into();
+        while let Some(reaction) = reactions.pop_front() {
+            let upgrade = matches!(reaction, CustomElementReaction::Upgrade { .. });
             let result = match reaction {
                 CustomElementReaction::Upgrade { element, definition } => {
                     let state = host.with_dom(|dom| Ok(dom.custom_element_state(element)))?;
@@ -259,6 +262,12 @@ pub(crate) fn deliver_custom_element_reactions_for_created<H: BindingHost>(host:
                 }
             };
             if let Err(error) = result { let _ = host.report_custom_element_exception(error); }
+            let fresh = host.with_dom(|dom| Ok(dom.take_custom_element_reactions()))?;
+            if upgrade {
+                for reaction in fresh.into_iter().rev() { reactions.push_front(reaction); }
+            } else {
+                reactions.extend(fresh);
+            }
         }
     }
 }

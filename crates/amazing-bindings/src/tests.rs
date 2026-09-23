@@ -1451,3 +1451,23 @@ fn custom_element_definition_running_and_callback_extraction_order() {
     assert_eq!(call(&mut h, O::CustomElementRegistryDefine, registry,
         &[str_value("x-running"), constructor]), V::Undefined);
 }
+
+// Pinned WPT custom-elements/custom-element-reaction-queue.html: each
+// element's reactions run after its upgrade before the next element's.
+#[test]
+fn custom_element_upgrade_drains_each_element_reactions_in_order() {
+    let mut h = Host::default();
+    let registry = crate::registry_for_document(&mut h, NodeIdx(0)).unwrap();
+    let html = h.dom.create_element(NodeIdx(0), "html");
+    let first = h.dom.create_element(html, "x-ordered");
+    let second = h.dom.create_element(html, "x-ordered");
+    h.dom.set_attribute(first, "title", "a").unwrap();
+    h.dom.set_attribute(second, "title", "b").unwrap();
+    let constructor = V::Dictionary(vec![("__constructor", V::Bool(true)),
+        ("prototype", V::Dictionary(vec![("attributeChangedCallback", V::Callable(31)),
+            ("connectedCallback", V::Callable(32))])),
+        ("observedAttributes", V::Array(vec![str_value("title")]))]);
+    call(&mut h, O::CustomElementRegistryDefine, registry,
+        &[str_value("x-ordered"), constructor]);
+    assert_eq!(h.calls, [31, 32, 31, 32]);
+}
