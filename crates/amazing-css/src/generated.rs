@@ -403,6 +403,17 @@ struct State {
     quote_depth: usize,
 }
 
+// A popped reset can leave an empty entry in the map. Presence in the map is
+// not the same as having a counter in scope. Implicitly instantiated counters
+// remain available to following siblings, unlike explicit resets.
+fn ensure_counter(state: &mut State, name: &str) {
+    let values = state.counters.entry(name.to_owned()).or_default();
+    if values.is_empty() {
+        values.push(0);
+        state.reversed.entry(name.to_owned()).or_default().push(false);
+    }
+}
+
 fn evaluate(
     items: &[Item],
     dom: &Dom,
@@ -421,25 +432,22 @@ fn evaluate(
                 .map(|(_, value)| value.clone())
                 .or_else(|| fallback.clone())
                 .unwrap_or_default(),
-            Item::Counter(name, style) => format_counter(
-                *state
-                    .counters
-                    .get(name)
-                    .and_then(|v| v.last())
-                    .unwrap_or(&0),
-                style,
-            ),
-            Item::Counters(name, separator, style) => state
-                .counters
-                .get(name)
-                .map(|values| {
+            Item::Counter(name, style) => {
+                ensure_counter(state, name);
+                let number = state.counters.get(name).and_then(|v| v.last()).copied().unwrap_or(0);
+                format_counter(number, style)
+            }
+            Item::Counters(name, separator, style) => {
+                ensure_counter(state, name);
+                state.counters.get(name).filter(|values| !values.is_empty()).map(|values| {
                     values
                         .iter()
                         .map(|value| format_counter(*value, style))
                         .collect::<Vec<_>>()
                         .join(separator)
                 })
-                .unwrap_or_else(|| "0".into()),
+                .unwrap_or_else(|| "0".into())
+            }
             Item::Image(url) => {
                 runs.push(ContentRun::Image(url.clone()));
                 continue;
@@ -519,22 +527,18 @@ fn apply_counters(
         increments.push(("list-item".into(), step));
     }
     for (name, value) in increments {
-        *state
-            .counters
-            .entry(name)
-            .or_insert_with(|| vec![0])
-            .last_mut()
-            .unwrap() += value;
+        ensure_counter(state, &name);
+        if let Some(current) = state.counters.get_mut(&name).and_then(|values| values.last_mut()) {
+            *current = current.saturating_add(value);
+        }
     }
     for (name, value) in
         parse_counter_ops(style.get("counter-set").unwrap_or("none"), 0, false).unwrap_or_default()
     {
-        *state
-            .counters
-            .entry(name)
-            .or_insert_with(|| vec![0])
-            .last_mut()
-            .unwrap() = value;
+        ensure_counter(state, &name);
+        if let Some(current) = state.counters.get_mut(&name).and_then(|values| values.last_mut()) {
+            *current = value;
+        }
     }
     pushed
 }
