@@ -279,6 +279,7 @@ struct Entry {
     h2_stream: Option<u32>,
     h2_pending: Vec<u8>,
     body_total: usize,
+    paused: bool,
 }
 
 pub struct Dispatcher<R = StdResolver, C = StdConnector> {
@@ -423,6 +424,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 h2_stream: None,
                 h2_pending: Vec::new(),
                 body_total: 0,
+                paused: false,
             },
         );
         Ok(id)
@@ -441,6 +443,12 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         } else {
             false
         }
+    }
+    /// Pause socket reads for a consumer that has exhausted body credit.
+    pub fn set_paused(&mut self, id: RequestId, paused: bool) -> bool {
+        let Some(entry) = self.active.get_mut(&id) else { return false; };
+        entry.paused = paused;
+        true
     }
     pub fn buffered_bytes(&self) -> usize {
         self.active
@@ -481,6 +489,10 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                     id,
                     error: DispatchError::Timeout,
                 });
+                continue;
+            }
+            if entry.paused {
+                self.active.insert(id, entry);
                 continue;
             }
             let result = self.advance(id, &mut entry, &mut remaining, &mut events);

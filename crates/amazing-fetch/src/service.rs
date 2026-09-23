@@ -10,10 +10,31 @@ use crate::{
     HeaderList, HttpUrl, InternalResponse, Origin, SecurityContext,
 };
 use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent, WebSocketEvent, WebSocketId};
-use std::{collections::BTreeMap, time::Instant};
+use std::{collections::{BTreeMap, VecDeque}, time::Instant};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ServiceId(pub u64);
+
+/// Script-visible response metadata after Fetch policy has accepted the head.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApiResponseHead {
+    pub status: u16,
+    pub reason: String,
+    pub headers: Vec<(String, String)>,
+    pub final_url: String,
+    pub response_type: crate::api::ApiResponseType,
+}
+impl ApiResponseHead {
+    fn from_response(response: &ApiResponse) -> Self {
+        Self {
+            status: response.status,
+            reason: response.status_text.clone(),
+            headers: response.headers.raw_entries().to_vec(),
+            final_url: response.url.clone(),
+            response_type: response.response_type,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct ClientContext {
@@ -75,6 +96,10 @@ impl Default for ClientContext {
 
 #[derive(Debug)]
 pub enum ServiceEvent {
+    ResponseHead { id: ServiceId, head: ApiResponseHead },
+    BodyChunk { id: ServiceId, bytes: Vec<u8> },
+    StreamFinished { id: ServiceId },
+    StreamFailed { id: ServiceId, error: ApiError },
     /// Dispatcher event for an embedding-owned consumer such as `Xhr`.
     /// The consumer advances its pending handle with `on_dispatch_event`.
     ExternalNetwork(NetEvent),
@@ -107,6 +132,76 @@ struct Task {
     body: Vec<u8>,
 }
 
+const INITIAL_STREAM_CREDIT: usize = 64 * 1024;
+struct StreamTask {
+    credit: usize,
+    head_emitted: bool,
+    body_visible: bool,
+    sniff_prefix: Vec<u8>,
+    deferred_head: Option<(crate::Request, InternalResponse)>,
+    chunks: VecDeque<Vec<u8>>,
+    terminal: Option<Result<(), ApiError>>,
+}
+impl StreamTask {
+    fn new() -> Self {
+        Self { credit: INITIAL_STREAM_CREDIT, head_emitted: false, body_visible: true,
+            sniff_prefix: Vec::new(), deferred_head: None,
+            chunks: VecDeque::new(), terminal: None }
+    }
+    fn flush(&mut self, id: ServiceId, output: &mut Vec<ServiceEvent>) -> bool {
+        while self.credit > 0 {
+            let Some(mut chunk) = self.chunks.pop_front() else { break; };
+            let count = self.credit.min(chunk.len());
+            let rest = chunk.split_off(count);
+            self.credit -= count;
+            output.push(ServiceEvent::BodyChunk { id, bytes: chunk });
+            if !rest.is_empty() { self.chunks.push_front(rest); }
+        }
+        if self.chunks.is_empty() {
+            if let Some(terminal) = self.terminal.take() {
+                match terminal {
+                    Ok(()) => output.push(ServiceEvent::StreamFinished { id }),
+                    Err(error) => output.push(ServiceEvent::StreamFailed { id, error }),
+                }
+                return true;
+            }
+        }
+        false
+    }
+}
+
+fn validated_stream_head(task: &Task, event: &NetEvent) -> Option<ApiResponseHead> {
+    let NetEvent::Head { status, reason, headers, .. } = event else { return None; };
+    if !task.pending.is_main() || task.revalidating || !task.pending.policy().integrity.is_empty() {
+        return None;
+    }
+    if (300..400).contains(status) && headers.get("location").is_some() { return None; }
+    let mut policy = task.pending.policy().clone();
+    if policy.prepare().ok()?.taint == crate::ResponseType::Opaque { return None; }
+    let mut fields = HeaderList::default();
+    for (name, value) in headers.iter() { fields.append(name, value).ok()?; }
+    let internal = InternalResponse { status: *status, status_text: reason.clone(),
+        headers: fields, body: Some(Vec::new()) };
+    let filtered = filter_response(&policy, &internal).ok()?;
+    let response = ApiResponse::from_policy(filtered).ok()?;
+    Some(ApiResponseHead::from_response(&response))
+}
+
+fn opaque_stream_head(task: &Task, event: &NetEvent)
+    -> Option<(crate::Request, InternalResponse)> {
+    let NetEvent::Head { status, reason, headers, .. } = event else { return None; };
+    if !task.pending.is_main() || task.revalidating || !task.pending.policy().integrity.is_empty() {
+        return None;
+    }
+    if (300..400).contains(status) && headers.get("location").is_some() { return None; }
+    let mut policy = task.pending.policy().clone();
+    if policy.prepare().ok()?.taint != crate::ResponseType::Opaque { return None; }
+    let mut fields = HeaderList::default();
+    for (name, value) in headers.iter() { fields.append(name, value).ok()?; }
+    Some((policy, InternalResponse { status: *status, status_text: reason.clone(),
+        headers: fields, body: Some(Vec::new()) }))
+}
+
 pub struct NetworkService {
     pub dispatcher: Dispatcher,
     pub cookies: CookieStore,
@@ -114,6 +209,7 @@ pub struct NetworkService {
     pub preflight_cache: crate::PreflightCache,
     next_id: u64,
     active: BTreeMap<ServiceId, Task>,
+    streams: BTreeMap<ServiceId, StreamTask>,
     websockets: BTreeMap<ServiceId, WebSocketId>,
     prefer_websocket: bool,
     ready: Vec<ServiceEvent>,
@@ -137,6 +233,7 @@ impl NetworkService {
             preflight_cache: crate::PreflightCache::default(),
             next_id: 1,
             active: BTreeMap::new(),
+            streams: BTreeMap::new(),
             websockets: BTreeMap::new(),
             prefer_websocket: false,
             ready: Vec::new(),
@@ -234,6 +331,67 @@ impl NetworkService {
         context: ClientContext,
     ) -> Result<ServiceId, ApiError> {
         self.start_at(request, context, Instant::now())
+    }
+    /// Start a streamed response. The first 64 KiB of decoded body has credit;
+    /// callers grant more after consuming chunks. The buffered `start`/`step`
+    /// contract remains available to existing consumers.
+    pub fn start_stream(&mut self, request: ApiRequest, context: ClientContext)
+        -> Result<ServiceId, ApiError> {
+        self.start_stream_at(request, context, Instant::now())
+    }
+    pub fn start_stream_at(&mut self, request: ApiRequest, context: ClientContext,
+        now: Instant) -> Result<ServiceId, ApiError> {
+        let id = self.start_at(request, context, now)?;
+        self.streams.insert(id, StreamTask::new());
+        Ok(id)
+    }
+    pub fn grant_credit(&mut self, id: ServiceId, bytes: usize) -> bool {
+        let Some(stream) = self.streams.get_mut(&id) else { return false; };
+        stream.credit = stream.credit.saturating_add(bytes);
+        true
+    }
+    pub fn cancel(&mut self, id: ServiceId) -> bool {
+        if !self.streams.contains_key(&id) { return self.abort(id); }
+        if self.abort(id) { return true; }
+        let Some(stream) = self.streams.get_mut(&id) else { return false; };
+        stream.chunks.clear();
+        stream.terminal = Some(Err(ApiError::Aborted));
+        true
+    }
+    fn finish_stream(&mut self, id: ServiceId, result: Result<ApiResponse, ApiError>,
+        output: &mut Vec<ServiceEvent>) {
+        let Some(stream) = self.streams.get_mut(&id) else { return; };
+        match result {
+            Ok(mut response) => {
+                if !stream.head_emitted {
+                    output.push(ServiceEvent::ResponseHead { id,
+                        head: ApiResponseHead::from_response(&response) });
+                    stream.head_emitted = true;
+                    match response.body.bytes() {
+                        Ok(bytes) if !bytes.is_empty() => stream.chunks.push_back(bytes),
+                        Ok(_) => {},
+                        Err(error) => { stream.terminal = Some(Err(error)); return; }
+                    }
+                }
+                stream.terminal = Some(Ok(()));
+            }
+            Err(error) => {
+                stream.chunks.clear();
+                stream.terminal = Some(Err(error));
+            }
+        }
+    }
+    fn flush_streams(&mut self, output: &mut Vec<ServiceEvent>) {
+        let mut completed = Vec::new();
+        for (id, stream) in &mut self.streams {
+            if stream.flush(*id, output) { completed.push(*id); }
+        }
+        for id in completed { self.streams.remove(&id); }
+        for (id, task) in &self.active {
+            if let Some(stream) = self.streams.get(id) {
+                self.dispatcher.set_paused(task.pending.id(), stream.head_emitted && stream.credit == 0);
+            }
+        }
     }
     /// Deterministic clock entry point for the event-loop driver and tests.
     pub fn start_at(
@@ -387,7 +545,15 @@ impl NetworkService {
         Ok(id)
     }
     pub fn step(&mut self, budget: usize, now: Instant) -> Vec<ServiceEvent> {
-        let mut result = std::mem::take(&mut self.ready);
+        let mut result = Vec::new();
+        for event in std::mem::take(&mut self.ready) {
+            match event {
+                ServiceEvent::Finished { id, result: outcome } if self.streams.contains_key(&id) =>
+                    self.finish_stream(id, outcome, &mut result),
+                other => result.push(other),
+            }
+        }
+        self.flush_streams(&mut result);
         // A close event can precede the nonblocking write of its reply. Keep
         // stepping dispatcher-owned sockets after removing the service id.
         let wire_websockets = self.dispatcher.websockets_in_flight() != 0;
@@ -426,6 +592,39 @@ impl NetworkService {
             let mut finished = None;
             let cookies = &mut self.cookies;
             if let Some(task) = self.active.get_mut(&id) {
+                if let Some(stream) = self.streams.get_mut(&id) {
+                    if !stream.head_emitted {
+                        if let Some(head) = validated_stream_head(task, &event) {
+                            stream.head_emitted = true;
+                            result.push(ServiceEvent::ResponseHead { id, head });
+                        } else if stream.deferred_head.is_none() {
+                            stream.deferred_head = opaque_stream_head(task, &event);
+                        }
+                    }
+                    if !stream.head_emitted {
+                        if let (Some((policy, internal)), NetEvent::Body { bytes, .. }) =
+                            (&stream.deferred_head, &event) {
+                            let needed = 1024_usize.saturating_sub(stream.sniff_prefix.len());
+                            stream.sniff_prefix.extend_from_slice(&bytes[..bytes.len().min(needed)]);
+                            if stream.sniff_prefix.len() == 1024 {
+                                let mut probe = internal.clone();
+                                probe.body = Some(stream.sniff_prefix.clone());
+                                if let Ok(response) = filter_response(policy, &probe)
+                                    .map_err(ApiError::Network).and_then(ApiResponse::from_policy) {
+                                    let head = ApiResponseHead::from_response(&response);
+                                    stream.body_visible = head.response_type != crate::api::ApiResponseType::Opaque;
+                                    stream.head_emitted = true;
+                                    result.push(ServiceEvent::ResponseHead { id, head });
+                                }
+                            }
+                        }
+                    }
+                    if stream.head_emitted && stream.body_visible {
+                        if let NetEvent::Body { bytes, .. } = &event {
+                            if !bytes.is_empty() { stream.chunks.push_back(bytes.clone()); }
+                        }
+                    }
+                }
                 if task.pending.is_main() {
                     match &event {
                         NetEvent::Head {
@@ -504,7 +703,7 @@ impl NetworkService {
                 );
             }
             let wire_done = matches!(&event, NetEvent::Done { .. });
-            result.push(ServiceEvent::Network { id, event });
+            if !self.streams.contains_key(&id) { result.push(ServiceEvent::Network { id, event }); }
             if let Some(mut outcome) = finished {
                 if let Some(task) = self.active.remove(&id) {
                     if task.revalidating && wire_done {
@@ -561,10 +760,11 @@ impl NetworkService {
                         }
                     }
                 }
-                result.push(ServiceEvent::Finished {
-                    id,
-                    result: outcome,
-                });
+                if self.streams.contains_key(&id) {
+                    self.finish_stream(id, outcome, &mut result);
+                } else {
+                    result.push(ServiceEvent::Finished { id, result: outcome });
+                }
             }
         }
         for event in self.dispatcher.step_websockets(budget - http_budget, now) {
@@ -588,6 +788,7 @@ impl NetworkService {
                 result.push(ServiceEvent::WebSocket { id, event });
             }
         }
+        self.flush_streams(&mut result);
         result
     }
     pub fn abort(&mut self, id: ServiceId) -> bool {
