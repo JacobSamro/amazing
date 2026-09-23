@@ -991,25 +991,29 @@ impl Interpreter {
     }
 
     pub fn run_script(&mut self, source: &str) -> Result<JsValue, Throw> {
-        let p = crate::parse_script(source).map_err(|e| Throw::syntax_error(e.to_string()))?;
+        let p = crate::parse_script(source).map_err(|e| self.normalize_throw(Throw::syntax_error(e.to_string())))?;
         self.run_program(&p)
     }
 
     pub fn run_script_with_backend(&mut self, source: &str, backend: ExecutionBackend) -> Result<JsValue, Throw> {
-        let p = crate::parse_script(source).map_err(|e| Throw::syntax_error(e.to_string()))?;
+        let p = crate::parse_script(source).map_err(|e| self.normalize_throw(Throw::syntax_error(e.to_string())))?;
         self.run_program_with_backend(&p, backend)
     }
 
     pub fn run_program_with_backend(&mut self, p: &ast::Program, backend: ExecutionBackend) -> Result<JsValue, Throw> {
-        match backend {
+        (match backend {
             ExecutionBackend::TreeWalk => self.run_program(p),
             ExecutionBackend::Bytecode => vm::compile(p)
                 .map_err(|error| Throw::type_error(error.to_string()))?
                 .run(self, vm::DEFAULT_INSTRUCTION_LIMIT),
-        }
+        }).map_err(|th| self.normalize_throw(th))
     }
 
     pub fn run_program(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
+        self.run_program_inner(p).map_err(|th| self.normalize_throw(th))
+    }
+
+    fn run_program_inner(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
         if std::env::var_os("AMAZING_JS_VM").is_some() {
             match vm::compile(p) {
                 Ok(code) => {
@@ -1550,6 +1554,7 @@ impl Interpreter {
         let mut out = match self.exec_stmts(&t.block.body, &e) {
             Ok(x) => Ok(x),
             Err(th) => {
+                let th = self.normalize_throw(th);
                 if let Some(c) = &t.catch {
                     let ce = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                     if let Some(p) = &c.param {
@@ -1665,6 +1670,26 @@ impl Interpreter {
                                 Some(units) => PropertyKey::String(crate::value::JsString::from_units(units.clone())),
                                 None => self.prop_key(&p.key, env)?,
                             };
+                            if let ast::PropValue::Method(method) = &p.value {
+                                if matches!(method.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
+                                    let function_value = self.method_value(method, env);
+                                    let JsValue::Object(function_object) = function_value else { unreachable!() };
+                                    let function = function_object.borrow().func.clone().unwrap();
+                                    let JsValue::Object(object) = &o else { unreachable!() };
+                                    let mut property = object.borrow().own_prop(&k).cloned()
+                                        .filter(|property| property.getter.is_some() || property.setter.is_some())
+                                        .unwrap_or(Property {
+                                            value: JsValue::Undefined, writable: false,
+                                            enumerable: true, configurable: true,
+                                            getter: None, setter: None,
+                                        });
+                                    if method.kind == ast::MethodKind::Get { property.getter = Some(Box::new(function)); }
+                                    else { property.setter = Some(Box::new(function)); }
+                                    object.borrow_mut().define(&k, property)
+                                        .map_err(|_| Throw::type_error("could not define object accessor"))?;
+                                    continue;
+                                }
+                            }
                             let v = match &p.value {
                                 ast::PropValue::Shorthand(i) => env
                                     .resolve(&i.name)
@@ -1672,39 +1697,11 @@ impl Interpreter {
                                 ast::PropValue::Init(x) => self.eval_expr(x, env)?,
                                 ast::PropValue::Method(m) => self.method_value(m, env),
                             };
-                            if let ast::PropValue::Method(method) = &p.value {
-                                if matches!(method.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
-                                    let JsValue::Object(object) = &o else { unreachable!() };
-                                    let JsValue::Object(function) = v else { unreachable!() };
-                                    let function = function.borrow().func.clone().unwrap();
-                                    let mut property = object.borrow().own_prop(&k).cloned().unwrap_or(Property {
-                                        value: JsValue::Undefined,
-                                        writable: false,
-                                        enumerable: true,
-                                        configurable: true,
-                                        getter: None,
-                                        setter: None,
-                                    });
-                                    if method.kind == ast::MethodKind::Get {
-                                        property.getter = Some(Box::new(function));
-                                    } else {
-                                        property.setter = Some(Box::new(function));
-                                    }
-                                    object.borrow_mut().define(&k, property).unwrap();
-                                    continue;
-                                }
-                            }
-                            // A later data definition replaces an earlier accessor
-                            // in the same literal; assignment would invoke its setter.
-                            if let JsValue::Object(object) = &o {
-                                if object.borrow().own_prop(&k).is_some_and(|property| {
-                                    property.getter.is_some() || property.setter.is_some()
-                                }) {
-                                    object.borrow_mut().define(&k, Property::data(v)).unwrap();
-                                    continue;
-                                }
-                            }
-                            self.set_prop(&o, &k, v)?;
+                            // Object-literal PropertyDefinition uses CreateDataProperty,
+                            // which replaces a preceding accessor of the same name.
+                            let JsValue::Object(object) = &o else { unreachable!() };
+                            object.borrow_mut().define(&k, Property::data(v))
+                                .map_err(|_| Throw::type_error("could not define object property"))?;
                         }
                     }
                 }
@@ -1847,6 +1844,7 @@ impl Interpreter {
                     let o = self.eval_expr(obj, env)?;
                     let k = self.member_key(prop, env)?;
                     if let JsValue::Object(o) = o {
+                        if let Some(deleted) = binary_delete_index(&o, &k) { return Ok(JsValue::Bool(deleted)); }
                         if let Some(deleted) = match k.as_string() {
                             Some(name) => self.legacy_delete(&o, name)?,
                             None => None,
@@ -1968,6 +1966,7 @@ impl Interpreter {
                 let k = self.to_property_key(&a)?;
                 match b {
                     JsValue::Object(o) => Ok(JsValue::Bool(match k.as_string() {
+                        _ if binary_index_descriptor(&o, &k).is_some() => binary_index_descriptor(&o, &k).flatten().is_some(),
                         Some(name) => self.legacy_has_property(&o, name)?,
                         None => o.borrow().has_property(&k),
                     })),
@@ -2321,7 +2320,7 @@ impl Interpreter {
         this: JsValue,
         args: Vec<JsValue>,
     ) -> Result<JsValue, Throw> {
-        self.call_value_with_new_target(f, this, args, None)
+        self.call_value_with_new_target(f, this, args, None).map_err(|th| self.normalize_throw(th))
     }
 
     fn call_value_with_new_target(
@@ -3102,6 +3101,7 @@ impl Interpreter {
         let k = text.as_deref().unwrap_or("");
         match v {
             JsValue::Object(o) => {
+                if let Some(result) = binary_get_index(self, o, key) { return result; }
                 if key.as_string().is_some() {
                 if let Some(node) = Self::dom_dataset_id(o) {
                     let name = Self::dataset_attribute_name(k);
@@ -3188,6 +3188,7 @@ impl Interpreter {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("cannot set property on primitive")),
         };
+        if let Some(result) = binary_set_index(self, &o, &key, x.clone()) { return result; }
         if let Some(name) = key.as_string() {
         if let Some(node) = Self::dom_style_id(&o) {
             let value = self.to_string(&x)?;
@@ -3268,6 +3269,10 @@ impl Interpreter {
     }
     fn enumerable_keys(&mut self, v: &JsValue) -> Result<Vec<crate::value::JsString>, Throw> {
         match v {
+            JsValue::Object(o) if binary_own_keys(o).is_some() => Ok(binary_own_keys(o).unwrap().into_iter().filter_map(|key| match key {
+                PropertyKey::String(name) if binary_index_descriptor(o, &PropertyKey::String(name.clone())).flatten().is_some()
+                    || o.borrow().own_prop(&name).is_some_and(|p| p.enumerable) => Some(name), _ => None,
+            }).collect()),
             JsValue::Object(o) => self.legacy_own_keys(o, true),
             JsValue::Str(s) => Ok((0..s.len()).map(|i| i.to_string().into()).collect()),
             _ => Ok(Vec::new()),
@@ -3275,6 +3280,7 @@ impl Interpreter {
     }
     fn own_property_keys(&mut self, v: &JsValue) -> Result<Vec<PropertyKey>, Throw> {
         match v {
+            JsValue::Object(object) if binary_own_keys(object).is_some() => Ok(binary_own_keys(object).unwrap()),
             JsValue::Object(object) => {
                 let strings = self.legacy_own_keys(object, false)?
                     .into_iter().map(PropertyKey::String);
@@ -3303,6 +3309,7 @@ impl Interpreter {
         Ok(keys)
     }
     fn array_length(&self, v: &JsValue) -> usize {
+        if let JsValue::Object(o) = v { if let Some(BinaryState::View(view)) = binary_state(o) { if view.kind.is_some() { return binary_length(&view); } } }
         match v {
             JsValue::Object(o) => match o.borrow().get_own("length") {
                 Some(JsValue::Num(n)) if n >= 0.0 => n as usize,
@@ -3712,5 +3719,6 @@ include!("builtins_std_reflect.rs");
 include!("builtins_std_collections.rs");
 include!("builtins_std_collection_iter.rs");
 include!("builtins_std_iterator.rs");
+include!("builtins_binary.rs");
 include!("interp_regexp.rs");
 include!("interp_tests.rs");
