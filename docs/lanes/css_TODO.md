@@ -1,5 +1,40 @@
 # CSS lane decision map
 
+## CSS-10 — SVG presentation attributes (fixed base `4f51acd`)
+
+SVG 2 §6.6 presentation attributes on SVG namespace elements enter the
+ordinary document cascade at the presentational-hint origin. The attribute
+collector validates CSS property values and SVG unitless length and transform
+syntax before constructing declarations. `patternTransform` and
+`gradientTransform` map to `transform` only on their respective elements.
+The standalone paint API and document cascade share the candidate resolver,
+and `StyledDom::source` exposes the winning origin or inherited/initial source.
+SVG-specific longhands have typed computed values and inherited metadata.
+
+Specification pin: SVG Working Group `svgwg` revision
+`513eb752b75f4250ce68edf28e7817d66726c840`, SVG 2
+[`styling.html` §6.6](https://svgwg.org/svg2-draft/styling.html) and
+[`propidx.html`](https://svgwg.org/svg2-draft/propidx.html). WPT render
+selection pin: `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+
+Fixed-base evidence on win-001: CSS nextest 198/198 and CSS doctests 0/0;
+workspace nextest 1,640/1,640 with 3 skipped and workspace doctests
+2/2. All nine pinned render selections ran twice on both baseline and
+candidate. Cascade was 59 pass / 11 mismatch / 2 unsupported on both;
+the eight downstream selections had zero pass losses. All 36 reports were
+stable by per-case classification, differing pixels, and
+actual/reference/diff image hashes, with no render errors or changes.
+The fixed base is `4f51acd3ebe04c5941f31f1e479042f16b1f3c0b`; the
+baseline and candidate executable SHA256 values were
+`f482b1eeae3456be2e72012bd10ab0765e28e85cdb184e82540a9a9992a787d1`
+and `ed755155c625fbb9109377043f6b36fda5c2c6fb006cb3bff925c7382c1f399e`.
+The cascade per-case projection SHA256 was
+`616fe54f74d75858bab70845becd504f6689b58418de1543acb69cb68990df05`
+on both builds. The 59/11/2 fixed-base count supersedes the brief's
+56/14/2 snapshot after sibling work advanced; no CSS-owned files changed
+between this base and `origin/dev` at `6de1d934`.
+
+
 ## CSS-9 — logical sizing and unresolved CSS math (fixed base `bc8aa455`)
 
 The cascade maps logical sizing (`inline-size`, `block-size`, and their

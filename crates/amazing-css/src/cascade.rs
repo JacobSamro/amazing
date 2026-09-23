@@ -31,11 +31,17 @@ use std::collections::{BTreeMap, HashMap};
 #[derive(Debug, Default)]
 pub struct StyledDom {
     styles: HashMap<u32, ComputedStyle>,
+    sources: HashMap<u32, BTreeMap<String, ElementStyleSource>>,
 }
 
 impl StyledDom {
     pub fn get(&self, idx: NodeIdx) -> Option<&ComputedStyle> {
         self.styles.get(&idx.0)
+    }
+
+    /// Winning origin for a computed property on this document element.
+    pub fn source(&self, idx: NodeIdx, property: &str) -> Option<ElementStyleSource> {
+        self.sources.get(&idx.0)?.get(&property.to_ascii_lowercase()).copied()
     }
 
     /// The properties of `idx` whose computed value differs from its parent
@@ -90,7 +96,7 @@ fn style_subtree(
     out: &mut StyledDom,
 ) {
     if dom.name(node).is_some() {
-        let style = compute_one(
+        let (style, sources) = compute_one(
             dom,
             node,
             parent_style,
@@ -121,6 +127,7 @@ fn style_subtree(
             );
         }
         out.styles.insert(node.0, style);
+        out.sources.insert(node.0, sources);
     } else {
         // Text/comment/document nodes carry no style; children of the
         // document node inherit from nothing.
@@ -262,7 +269,7 @@ fn compute_one(
     ua_rules: &[CompiledRule],
     author_rules: &[CompiledRule],
     body_link: Option<&str>,
-) -> ComputedStyle {
+) -> (ComputedStyle, BTreeMap<String, ElementStyleSource>) {
     /// One declaration after shorthand expansion, flattened with the
     /// cascade metadata inherited from its source.
     struct FlatDecl {
@@ -358,6 +365,32 @@ fn compute_one(
         candidates.entry(&d.prop).or_default().push(cand);
     }
 
+    resolve_candidate_pool(candidates, parent_style, root_font_px)
+}
+
+fn source_map(
+    selected: &BTreeMap<&str, Candidate<'_>>,
+    parent: Option<&ComputedStyle>,
+) -> BTreeMap<String, ElementStyleSource> {
+    crate::computed::known_properties().map(|property| {
+        let source = if parent.is_some() && crate::computed::is_inherited_property(property) {
+            ElementStyleSource::Inherited
+        } else { ElementStyleSource::Initial };
+        (property.to_owned(), source)
+    }).chain(selected.iter().map(|(property, candidate)| {
+        let source = if candidate.inline { ElementStyleSource::Inline }
+            else if candidate.origin == Origin::Author { ElementStyleSource::Author }
+            else if candidate.origin == Origin::Hint { ElementStyleSource::PresentationHint }
+            else { ElementStyleSource::Initial };
+        ((*property).to_owned(), source)
+    })).collect()
+}
+
+fn resolve_candidate_pool<'a>(
+    mut candidates: BTreeMap<&'a str, Vec<Candidate<'a>>>,
+    parent_style: Option<&ComputedStyle>,
+    root_font_px: f32,
+) -> (ComputedStyle, BTreeMap<String, ElementStyleSource>) {
     let mut champs = winners(&candidates, None);
 
     // Logical properties map with the element's COMPUTED axes, not the raw
@@ -442,6 +475,7 @@ fn compute_one(
     }
     champs = winners(&candidates, Some(&provisional));
 
+    let sources = source_map(&champs, parent_style);
     let author_properties: Vec<_> = champs.iter()
         .filter(|(_, candidate)| candidate.author_declaration)
         .map(|(property, _)| *property)
@@ -475,7 +509,24 @@ fn compute_one(
             style.mirror_logical(&logical, physicals[index]);
         }
     }
-    style
+    let mut sources = sources;
+    for (logical, horizontal, vertical_name) in [
+        ("inline-size", "width", "height"), ("block-size", "height", "width"),
+        ("min-inline-size", "min-width", "min-height"), ("min-block-size", "min-height", "min-width"),
+        ("max-inline-size", "max-width", "max-height"), ("max-block-size", "max-height", "max-width"),
+    ] {
+        if let Some(source) = sources.get(if vertical { vertical_name } else { horizontal }).copied() { sources.insert(logical.into(), source); }
+    }
+    for family in ["margin", "padding", "inset"] {
+        for (axis, edge) in [("inline", "start"), ("inline", "end"), ("block", "start"), ("block", "end")] {
+            let logical = format!("{family}-{axis}-{edge}");
+            let margin = format!("margin-{axis}-{edge}");
+            let side = physical_margin_for(&margin, rtl, writing_mode).strip_prefix("margin-").unwrap();
+            let physical = if family == "inset" { side.to_owned() } else { format!("{family}-{side}") };
+            if let Some(source) = sources.get(&physical).copied() { sources.insert(logical, source); }
+        }
+    }
+    (style, sources)
 }
 
 /// Origin of the declaration that supplied a standalone paint property.
@@ -530,7 +581,14 @@ pub fn compute_element_paint_style(
         (inline, Origin::Author, true),
     ] {
         for declaration in declarations {
-            for (property, value) in computed::expand_declaration(&declaration.property, &declaration.value) {
+            let normalized = if origin == Origin::Hint {
+                if declaration.important { continue; }
+                crate::svg_presentation::normalize(&declaration.property, &declaration.value, "rect")
+            } else {
+                Some((declaration.property.clone(), declaration.value.clone()))
+            };
+            let Some((name, value)) = normalized else { continue; };
+            for (property, value) in computed::expand_declaration(&name, &value) {
                 pool.push((property, value, origin, is_inline, declaration.important && origin != Origin::Hint));
             }
         }
@@ -549,20 +607,8 @@ pub fn compute_element_paint_style(
             proximity: usize::MAX,
         });
     }
-    let selected = winners(&candidates, None);
-    let provisional = computed::resolve_with_root(parent, selected.iter().map(|(name, candidate)| ((*name).to_owned(), candidate.value.to_owned())).collect(), 16.0);
-    let selected = winners(&candidates, Some(&provisional));
-    let mut computed = computed::resolve_with_root(parent, selected.iter().map(|(name, candidate)| ((*name).to_owned(), candidate.value.to_owned())).collect(), 16.0);
-    for (property, candidate) in &selected {
-        if candidate.author_declaration { computed.mark_author_specified(property); }
-    }
-    let source = |property: &str, inherited: bool| match selected.get(property) {
-        Some(candidate) if candidate.inline => ElementStyleSource::Inline,
-        Some(candidate) if candidate.origin == Origin::Author => ElementStyleSource::Author,
-        Some(_) => ElementStyleSource::PresentationHint,
-        None if inherited && parent.is_some() => ElementStyleSource::Inherited,
-        None => ElementStyleSource::Initial,
-    };
+    let (computed, sources) = resolve_candidate_pool(candidates, parent, 16.0);
+    let source = |property: &str, _inherited: bool| sources.get(property).copied().unwrap_or(ElementStyleSource::Initial);
     let color_css = computed.get("color").unwrap_or("black");
     let color = match crate::color::parse_css_color(color_css) {
         Some(value) => ElementStyleValue::Supported { value, source: source("color", true) },
@@ -721,7 +767,7 @@ mod tests {
             ("@layer a,b;@layer a{p{color:revert-layer!important}}@layer b{p{color:green!important}}", "black"),
         ] {
             let ua = compile_sheets(&[parse_stylesheet(ua_css)], true);
-            let style = compute_one(&dom, elements[5], None, 16.0, &ua, &author, None);
+            let (style, _) = compute_one(&dom, elements[5], None, 16.0, &ua, &author, None);
             assert_eq!(style.get("color"), Some(expected));
         }
     }
