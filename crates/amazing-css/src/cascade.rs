@@ -25,7 +25,7 @@ use crate::computed::{self, ComputedStyle, Rollback};
 use crate::parser::{Declaration, Stylesheet, parse_declarations, parse_stylesheet};
 use crate::selectors::{PseudoElement, Selector, Specificity, parse_selector};
 use amazing_dom::{Dom, NodeIdx};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// Computed styles for a whole document, keyed by arena index.
 #[derive(Debug, Default)]
@@ -33,6 +33,7 @@ pub struct StyledDom {
     styles: HashMap<u32, ComputedStyle>,
     sources: HashMap<u32, BTreeMap<String, ElementStyleSource>>,
     pseudo_styles: HashMap<(u32, PseudoElement), ComputedStyle>,
+    matched_pseudos: HashSet<(u32, PseudoElement)>,
     pub(crate) generated: HashMap<(u32, PseudoElement), crate::generated::GeneratedContent>,
 }
 
@@ -44,6 +45,12 @@ impl StyledDom {
     /// Computed style of a generated or applicable pseudo-element.
     pub fn get_pseudo(&self, idx: NodeIdx, pseudo: PseudoElement) -> Option<&ComputedStyle> {
         self.pseudo_styles.get(&(idx.0, pseudo))
+    }
+
+    /// Whether a stylesheet selector matched this element's pseudo-element.
+    /// A matched selector may still produce no box (for example `content: none`).
+    pub fn pseudo_matched(&self, idx: NodeIdx, pseudo: PseudoElement) -> bool {
+        self.matched_pseudos.contains(&(idx.0, pseudo))
     }
 
     /// Resolved text/image runs and optional accessible alt text.
@@ -154,6 +161,15 @@ fn style_subtree(
             if !*requested
                 && !(pseudo == PseudoElement::Marker && style.get("display") == Some("list-item"))
             {
+                continue;
+            }
+            let matched = ua_rules.iter().chain(author_rules.iter()).any(|rule| {
+                rule.targets(pseudo) && rule.matching(dom, node, Some(pseudo)).is_some()
+            });
+            if matched {
+                out.matched_pseudos.insert((node.0, pseudo));
+            }
+            if matches!(pseudo, PseudoElement::FirstLine | PseudoElement::FirstLetter) && !matched {
                 continue;
             }
             let (pseudo_style, _) = compute_one(
@@ -1365,6 +1381,29 @@ mod tests {
             Some("green")
         );
         assert_eq!(styles.get(p).unwrap().get("color"), Some("black"));
+    }
+
+    #[test]
+    fn first_line_and_letter_only_exist_on_matching_originators() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let first = dom.create_element(body, "p");
+        dom.set_attrs(first, vec![("class".into(), "chosen".into())]);
+        let child = dom.create_element(first, "span");
+        let other = dom.create_element(body, "p");
+        let css = parse_stylesheet("p.chosen::first-line { color: red } p.chosen::first-letter { color: blue } p.chosen::before { content: none }");
+        let styled = compute(&dom, &[css]);
+        for pseudo in [PseudoElement::FirstLine, PseudoElement::FirstLetter] {
+            assert!(styled.pseudo_matched(first, pseudo));
+            assert!(styled.get_pseudo(first, pseudo).is_some());
+            assert!(!styled.pseudo_matched(child, pseudo));
+            assert!(styled.get_pseudo(child, pseudo).is_none());
+            assert!(!styled.pseudo_matched(other, pseudo));
+            assert!(styled.get_pseudo(other, pseudo).is_none());
+        }
+        assert!(styled.pseudo_matched(first, PseudoElement::Before));
+        assert!(styled.get_pseudo(first, PseudoElement::Before).is_none());
     }
 
     #[test]

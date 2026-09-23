@@ -1173,7 +1173,10 @@ and add type specificity. `StyledDom::get_pseudo` returns the computed style
 inheriting from its originating element, while `generated_content` returns
 resolved text/image runs and optional alternative text for layout. Before and
 after are omitted when `content` does not create a box. Marker is limited to
-list items that create a marker box.
+list items that create a marker box. First-line and first-letter styles are
+computed only for elements whose pseudo selector matches. `pseudo_matched`
+exposes that selector result separately from box creation, so layout can
+propagate first formatted line styling without splitting unrelated text.
 
 The `content`, `quotes`, `counter-reset`, `counter-increment`, and `counter-set`
 properties now have parsed grammars. Evaluation walks document order, handles
