@@ -28,13 +28,29 @@ impl Dom {
     /// Core node clone, including namespaces and exact CharacterData code units.
     pub fn clone_node(&mut self, node: NodeIdx, deep: bool) -> Result<NodeIdx, DomError> {
         self.check_node(node)?;
+        let document = self.get(node).owner_document;
+        self.clone_node_into(node, deep, document)
+    }
+    /// Clone directly into the target document, without an intervening adopt.
+    pub fn import_node(&mut self, document: NodeIdx, node: NodeIdx, deep: bool)
+        -> Result<NodeIdx, DomError> {
+        self.check_node(document)?;
+        self.check_node(node)?;
+        if !matches!(self.get(document).kind, NodeKind::Document)
+            || matches!(self.get(node).kind, NodeKind::Document) || self.is_shadow_root(node) {
+            return Err(DomError::NotSupportedError);
+        }
+        self.clone_node_into(node, deep, document)
+    }
+    fn clone_node_into(&mut self, node: NodeIdx, deep: bool, document: NodeIdx)
+        -> Result<NodeIdx, DomError> {
         if self.is_shadow_root(node) { return Err(DomError::NotSupportedError); }
         let copy = self.alloc_unattached(self.get(node).kind.clone());
         if let NodeKind::Attr { owner_element, .. } = &mut self.nodes[copy.0 as usize].kind {
             *owner_element = None;
         }
         if !matches!(self.get(node).kind, NodeKind::Document) {
-            self.nodes[copy.0 as usize].owner_document = self.get(node).owner_document;
+            self.nodes[copy.0 as usize].owner_document = document;
         }
         self.nodes[copy.0 as usize].namespaced_attributes =
             self.get(node).namespaced_attributes.clone();
@@ -48,7 +64,8 @@ impl Dom {
                 if let Some(contents) = self.template_contents(node) {
                     let children: Vec<_> = self.children(contents).collect();
                     for child in children {
-                        let child = self.clone_node(child, true)?;
+                        let inert = self.get(copy_contents).owner_document;
+                        let child = self.clone_node_into(child, true, inert)?;
                         self.pre_insert(child, copy_contents, None)?;
                     }
                 }
@@ -57,7 +74,10 @@ impl Dom {
         if deep && !self.is_html_template(node) {
             let children: Vec<_> = self.children(node).collect();
             for child in children {
-                let child = self.clone_node(child, true)?;
+                let child_document = if matches!(self.get(node).kind, NodeKind::Document) {
+                    copy
+                } else { document };
+                let child = self.clone_node_into(child, true, child_document)?;
                 self.pre_insert(child, copy, None)?;
             }
         }
@@ -72,7 +92,7 @@ impl Dom {
                 copy_data.keep_custom_element_registry_null = data.keep_custom_element_registry_null;
                 let children: Vec<_> = self.children(root).collect();
                 for child in children {
-                    let child = self.clone_node(child, true)?;
+                    let child = self.clone_node_into(child, true, document)?;
                     self.pre_insert(child, copy_root, None)?;
                 }
             }

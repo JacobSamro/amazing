@@ -5,7 +5,7 @@ pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::DocumentImplementation | O::ImplementationCreateDocumentType
         | O::ImplementationCreateDocument | O::ImplementationCreateHTMLDocument
         | O::ImplementationHasFeature | O::CreateElement | O::CreateElementNS
-        | O::CreateProcessingInstruction)
+        | O::CreateProcessingInstruction | O::DocumentAdoptNode | O::DocumentImportNode)
 }
 
 fn invalid_character<H: BindingHost>(host: &mut H) -> H::Error {
@@ -91,6 +91,31 @@ pub(crate) fn invoke<H: BindingHost>(
         let data = host.to_dom_string(data_arg)?;
         let node = host.with_dom(|dom| dom.create_processing_instruction_in(doc, &target, &data))?;
         return host.wrap_node(node);
+    }
+    if matches!(op, O::DocumentAdoptNode | O::DocumentImportNode) {
+        let doc = document(host, &receiver)?;
+        let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
+        let node = host.node_brand(value).ok_or_else(|| host.type_error("Expected a Node"))?;
+        if op == O::DocumentAdoptNode {
+            let adopted = host.with_dom(|dom| dom.adopt(node, doc))?;
+            return host.wrap_node(adopted);
+        }
+        let deep = if let Some(value) = args.get(1).filter(|value| !host.is_undefined(value)) {
+            if host.same_value(value, &host.boolean(true)) { true }
+            else if host.same_value(value, &host.boolean(false)) { false }
+            else if host.is_nullish(value) { true }
+            else if host.string_units(value).is_some() { host.to_boolean(value) }
+            else {
+                let self_only = host.get_property(value, "selfOnly")?;
+                let registry = host.get_property(value, "customElementRegistry")?;
+                if !host.is_nullish(&registry) {
+                    return host.with_dom::<H::Value>(|_| Err(DomError::NotSupportedError));
+                }
+                !host.to_boolean(&self_only)
+            }
+        } else { false };
+        let imported = host.with_dom(|dom| dom.import_node(doc, node, deep))?;
+        return host.wrap_node(imported);
     }
     let associated = implementation_document(host, &receiver)?;
     match op {

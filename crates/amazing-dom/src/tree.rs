@@ -347,9 +347,9 @@ impl Dom {
     pub fn adopt(&mut self, node: NodeIdx, document: NodeIdx) -> Result<NodeIdx, DomError> {
         self.check_node(node)?;
         self.check_node(document)?;
+        if self.is_shadow_root(node) { return Err(DomError::HierarchyRequestError); }
         if !matches!(self.get(document).kind, NodeKind::Document)
-            || matches!(self.get(node).kind, NodeKind::Document) || self.is_shadow_root(node)
-        {
+            || matches!(self.get(node).kind, NodeKind::Document) {
             return Err(DomError::NotSupportedError);
         }
         self.adopt_internal(node, document);
@@ -367,9 +367,17 @@ impl Dom {
             return;
         }
         self.custom_element_adopted(node, old_document, document);
-        for id in self.shadow_including_tree_order(node) {
+        let descendants = self.shadow_including_tree_order(node);
+        let owners: std::collections::HashSet<_> = descendants.iter().copied().collect();
+        for id in descendants {
             self.nodes[id.0 as usize].owner_document = document;
             self.adopt_template_contents(id, document);
+        }
+        for entry in &mut self.nodes {
+            if matches!(&entry.kind, NodeKind::Attr { owner_element: Some(owner), .. }
+                if owners.contains(owner)) {
+                entry.owner_document = document;
+            }
         }
     }
     fn insertion_nodes(&self, node: NodeIdx) -> Vec<NodeIdx> {
