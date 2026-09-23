@@ -261,7 +261,7 @@ fn is_out_of_flow(style: &ComputedStyle) -> bool {
 }
 
 fn is_atomic_inline_container(style: &ComputedStyle) -> bool {
-    matches!(style.get("display"), Some("inline-flex" | "inline-grid"))
+    matches!(style.get("display"), Some("inline-flex" | "inline-grid" | "inline-block" | "inline flow-root"))
         && crate::floats::side(style).is_none()
 }
 
@@ -277,10 +277,13 @@ fn push_atomic_inline(
 ) {
     let mut box_ = build_element(dom, styled, child, parent_font, fonts, replaced);
     box_.inline_atomic = true;
+    let vertical_align = box_.style.get("vertical-align").unwrap_or("baseline").to_owned();
     positioned.push(box_);
     inlines.push(InlineNode::Atomic {
         node: child,
         size: crate::IntrinsicSize { width: 0.0, height: 0.0 },
+        baseline_offset: 0.0,
+        vertical_align,
     });
 }
 
@@ -1166,14 +1169,14 @@ fn classify_children(
                         ));
                         continue;
                     }
-                    flush_anonymous_into(&mut items, &mut run, font_size, fonts);
+                    flush_anonymous_into(&mut items, &mut run, &mut positioned, font_size, fonts);
                     items.push(build_element(
                         dom, styled, child, entry.parent_font, fonts, replaced,
                     ));
                 }
             }
         }
-        flush_anonymous_into(&mut items, &mut run, font_size, fonts);
+        flush_anonymous_into(&mut items, &mut run, &mut positioned, font_size, fonts);
         let flow = if own_display == Display::Grid {
             Flow::Grid(items)
         } else {
@@ -1253,7 +1256,7 @@ fn classify_children(
                     ) =>
                     {
                         // Flush pending inline content into an anonymous block.
-                        flush_anonymous_into(&mut blocks, &mut inlines, font_size, fonts);
+                        flush_anonymous_into(&mut blocks, &mut inlines, &mut positioned, font_size, fonts);
                         blocks.push(build_element(
                             dom, styled, child, entry.parent_font, fonts, replaced,
                         ));
@@ -1293,7 +1296,7 @@ fn classify_children(
     // IS an inline formatting context — keep the items directly. Otherwise
     // the remainder becomes one last anonymous block.
     if !inlines.is_empty() && !blocks.is_empty() {
-        flush_anonymous_into(&mut blocks, &mut inlines, font_size, fonts);
+        flush_anonymous_into(&mut blocks, &mut inlines, &mut positioned, font_size, fonts);
     }
     if blocks.is_empty() && !has_renderable_inline_content(&inlines) {
         inlines.clear();
@@ -1311,6 +1314,7 @@ fn classify_children(
 fn flush_anonymous_into(
     blocks: &mut Vec<LayoutBox>,
     inlines: &mut Vec<InlineNode>,
+    positioned: &mut Vec<LayoutBox>,
     font_size: f32,
     fonts: &FontSource,
 ) {
@@ -1327,6 +1331,21 @@ fn flush_anonymous_into(
         font_size,
         lh,
     );
+    // Atomic inline boxes belong to the inline run that owns their placeholder.
+    // When a block sibling forces an anonymous wrapper, keeping them on the
+    // original parent leaves the placeholder at zero size and paints their
+    // descendants at the unplaced origin.
+    let mut remaining = Vec::with_capacity(positioned.len());
+    for child in positioned.drain(..) {
+        if child.inline_atomic && taken.iter().any(|item| {
+            matches!(item, InlineNode::Atomic { node, .. } if Some(*node) == child.node)
+        }) {
+            anon.positioned.push(child);
+        } else {
+            remaining.push(child);
+        }
+    }
+    *positioned = remaining;
     anon.flow = Flow::Inlines(taken);
     blocks.push(anon);
 }
@@ -1442,7 +1461,7 @@ fn flatten_inline(
                     ) =>
                     {
                         // Hoist: end the current inline run here.
-                        flush_anonymous_into(blocks_out, inlines, parent_font_px, fonts);
+                        flush_anonymous_into(blocks_out, inlines, positioned_out, parent_font_px, fonts);
                         blocks_out.push(build_element(
                             dom,
                             styled,

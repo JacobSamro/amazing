@@ -44,7 +44,7 @@
 //!   `max(0, child − parent)` inside the parent (the collapsed excess does
 //!   not propagate above the parent's border edge); sibling signed collapse
 //!   and direct empty-block collapse-through are modeled
-//! - non-replaced inline-block and inline-table outer flow remains blockified;
+//! - non-replaced inline-table outer flow remains blockified;
 //!   table internals use CSS table formatting; `list-item` renders without markers
 //! - no min/max-width clamping or intrinsic width keywords, no `box-sizing`
 //!   (content-box always), no text-align beyond left
@@ -302,7 +302,7 @@ pub enum InlineNode {
         replaced: Box<replaced::InlineReplaced>,
     },
     /// An inline formatting-context placeholder for a flex/grid subtree.
-    Atomic { node: NodeIdx, size: IntrinsicSize },
+    Atomic { node: NodeIdx, size: IntrinsicSize, baseline_offset: f32, vertical_align: String },
 }
 
 /// One laid-out line of an inline formatting context.
@@ -473,6 +473,10 @@ fn has_floats(layout: &LayoutBox) -> bool {
 }
 
 fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
+    for child in layout.positioned.iter_mut().filter(|child| child.inline_atomic) {
+        apply_shaped_text(child, text);
+    }
+    block::refresh_atomic_inline_metrics(layout);
     if let Flow::Inlines(items) = &layout.flow {
         let first_style = items.iter().find_map(|item| match item {
             InlineNode::Text { style, .. } => Some(style),
@@ -578,7 +582,9 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
         Flow::Inlines(_) | Flow::Empty => {}
     }
     for child in &mut layout.positioned {
-        apply_shaped_text(child, text);
+        if !child.inline_atomic {
+            apply_shaped_text(child, text);
+        }
     }
     block::place_atomic_inlines(layout);
 }

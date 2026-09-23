@@ -193,7 +193,7 @@ fn layout_block_in_context(
     match values::resolve_extent(&b.style, "width", font_px, cbw) {
         MaybeLen::Px(w) => {
             let fixed = bl + pl + w + pr + br_;
-            if floating {
+            if floating || b.inline_atomic {
                 b.margin.left = Some(b.margin.left.unwrap_or(0.0));
                 b.margin.right = Some(b.margin.right.unwrap_or(0.0));
             } else {
@@ -226,7 +226,7 @@ fn layout_block_in_context(
         MaybeLen::Auto => {
             if let Some(size) = b.replaced_size {
                 content_w = size.width;
-            } else if floating {
+            } else if floating || (b.inline_atomic && is_inline_block(&b.style)) {
                 let chrome = bl + pl + pr + br_;
                 let available =
                     (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
@@ -280,10 +280,10 @@ fn layout_block_in_context(
         Flow::Inlines(_) | Flow::Empty => {}
     }
 
-    // Atomic inline flex/grid descendants have their own formatting context,
+    // Atomic inline descendants have their own formatting context,
     // but their outer boxes take part in this box's line breaking.
     if matches!(b.flow, Flow::Inlines(_)) {
-        layout_atomic_inlines(b, content_w, fonts);
+        layout_atomic_inlines(b, content_w, fonts, text);
     }
 
     // --- children ------------------------------------------------------
@@ -419,24 +419,38 @@ fn layout_block_in_context(
     b.border_box.h + b.margin.top.unwrap_or(0.0) + b.margin.bottom.unwrap_or(0.0)
 }
 
-fn layout_atomic_inlines(parent: &mut LayoutBox, available: f32, fonts: &FontSource) {
-    let Flow::Inlines(items) = &mut parent.flow else { return };
+fn layout_atomic_inlines(parent: &mut LayoutBox, available: f32, fonts: &FontSource, text: Option<&dyn amazing_text::TextSystem>) {
     for child in parent.positioned.iter_mut().filter(|child| child.inline_atomic) {
-        let margin = values::resolve_margins(&child.style, child.font_size, available);
-        let outer_width = if matches!(values::resolve_extent(&child.style, "width", child.font_size, available), MaybeLen::Auto) {
+        let inline_block = is_inline_block(&child.style);
+        let outer_width = if inline_block {
+            available
+        } else if matches!(values::resolve_extent(&child.style, "width", child.font_size, available), MaybeLen::Auto) {
             let min = crate::flex::min_content_width(child, fonts);
             let max = crate::flex::max_content_width(child, fonts).max(min);
             min.max(available).min(max)
         } else {
             available
         };
-        layout_block(child, 0.0, 0.0, outer_width, fonts);
+        layout_block_in_context(child, 0.0, 0.0, outer_width, fonts, &mut FloatContext::default(), text, false);
+    }
+    refresh_atomic_inline_metrics(parent);
+}
+
+pub(crate) fn refresh_atomic_inline_metrics(parent: &mut LayoutBox) {
+    let Flow::Inlines(items) = &mut parent.flow else { return };
+    for child in parent.positioned.iter().filter(|child| child.inline_atomic) {
+        let margin = child.margin;
         let width = child.border_box.w + margin.left.unwrap_or(0.0) + margin.right.unwrap_or(0.0);
         let height = child.border_box.h + margin.top.unwrap_or(0.0) + margin.bottom.unwrap_or(0.0);
-        if let Some(InlineNode::Atomic { size, .. }) = items.iter_mut().find(|item| {
+        if let Some(InlineNode::Atomic { size, baseline_offset, .. }) = items.iter_mut().find(|item| {
             matches!(item, InlineNode::Atomic { node, .. } if Some(*node) == child.node)
         }) {
             *size = crate::IntrinsicSize { width, height };
+            *baseline_offset = if is_inline_block(&child.style) {
+                inline_block_baseline(child) - child.border_box.y + margin.top.unwrap_or(0.0)
+            } else {
+                height
+            };
         }
     }
 }
@@ -446,11 +460,47 @@ pub(crate) fn place_atomic_inlines(parent: &mut LayoutBox) {
         let Some((line, fragment)) = parent.lines.iter().find_map(|line| {
             line.replaced.iter().find(|fragment| Some(fragment.node) == child.node).map(|fragment| (line, fragment))
         }) else { continue };
-        let baseline = crate::flex::first_baseline(child) - child.border_box.y;
+        let baseline = if is_inline_block(&child.style) {
+            inline_block_baseline(child) - child.border_box.y
+        } else {
+            crate::flex::first_baseline(child) - child.border_box.y
+        };
         let x = fragment.x + child.margin.left.unwrap_or(0.0);
-        let y = line.baseline - baseline;
-        crate::flex::translate(child, x - child.border_box.x, y - child.border_box.y);
+        let y = if is_inline_block(&child.style) {
+            fragment.y + child.margin.top.unwrap_or(0.0)
+        } else {
+            line.baseline - baseline
+        };
+        crate::flex::translate_after_positioning(child, x - child.border_box.x, y - child.border_box.y);
     }
+}
+
+fn is_inline_block(style: &ComputedStyle) -> bool {
+    matches!(style.get("display"), Some("inline-block" | "inline flow-root"))
+}
+
+fn inline_block_baseline(box_: &LayoutBox) -> f32 {
+    let overflow_visible = ["overflow-x", "overflow-y"].into_iter().all(|property| {
+        box_.style.get(property).is_none_or(|value| value.eq_ignore_ascii_case("visible"))
+    });
+    if overflow_visible {
+        if let Some(baseline) = last_in_flow_baseline(box_) {
+            return baseline;
+        }
+    }
+    box_.border_box.y + box_.border_box.h + box_.margin.bottom.unwrap_or(0.0)
+}
+
+fn last_in_flow_baseline(box_: &LayoutBox) -> Option<f32> {
+    if let Some(line) = box_.lines.last() {
+        return Some(line.baseline);
+    }
+    if let Flow::Blocks(children) = &box_.flow {
+        return children.iter().rev()
+            .filter(|child| floats::side(&child.style).is_none())
+            .find_map(last_in_flow_baseline);
+    }
+    None
 }
 
 fn pt(b: &LayoutBox) -> f32 {

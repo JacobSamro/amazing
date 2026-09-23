@@ -1090,6 +1090,30 @@ pub(crate) fn translate(b: &mut LayoutBox, dx: f32, dy: f32) {
     }
 }
 
+/// Move an atomic inline after shaping has changed its inline position.
+/// Absolute descendants were already placed against the pre-shaping position;
+/// move them with the atomic subtree. Fixed descendants remain viewport-based.
+pub(crate) fn translate_after_positioning(b: &mut LayoutBox, dx: f32, dy: f32) {
+    translate(b, dx, dy);
+    translate_absolute_descendants(b, dx, dy);
+}
+
+fn translate_absolute_descendants(b: &mut LayoutBox, dx: f32, dy: f32) {
+    if let Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) = &mut b.flow {
+        for child in children {
+            translate_absolute_descendants(child, dx, dy);
+        }
+    }
+    for child in &mut b.positioned {
+        if child.inline_atomic {
+            translate_absolute_descendants(child, dx, dy);
+        } else if !child.style.get("position").is_some_and(|value| value.eq_ignore_ascii_case("fixed")) {
+            translate(child, dx, dy);
+            translate_absolute_descendants(child, dx, dy);
+        }
+    }
+}
+
 fn shift(r: Rect, dx: f32, dy: f32) -> Rect {
     Rect { x: r.x + dx, y: r.y + dy, w: r.w, h: r.h }
 }
@@ -1130,6 +1154,19 @@ pub(crate) fn min_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
 pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
     match &b.flow {
         Flow::Inlines(items) => inline_run_width(items, fonts),
+        Flow::Flex(children) if matches!(
+            ContainerSpec::of(&b.style, b.font_size, 0.0, None).direction,
+            Direction::Row | Direction::RowReverse
+        ) => {
+            let gap = parse_gaps(&b.style, b.font_size, 0.0).1;
+            let items = children.iter().map(|child| {
+                let margin = values::resolve_margins(&child.style, child.font_size, 0.0);
+                max_content_width(child, fonts)
+                    + margin.left.unwrap_or(0.0)
+                    + margin.right.unwrap_or(0.0)
+            }).sum::<f32>();
+            items + gap * children.len().saturating_sub(1) as f32
+        }
         Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => children
             .iter()
             .map(|child| {

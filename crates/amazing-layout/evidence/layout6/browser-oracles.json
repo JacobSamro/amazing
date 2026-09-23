@@ -1,0 +1,427 @@
+{
+  "schema": 1,
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "runs": [
+    {
+      "id": 5182906107691008,
+      "browser_name": "chrome",
+      "browser_version": "154.0.8016.0",
+      "os_name": "linux",
+      "os_version": "22.04",
+      "revision": "c2a2fce69e",
+      "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "results_url": "https://storage.googleapis.com/wptd/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/chrome-154.0.8016.0-linux-22.04-ccb165b474-summary_v2.json.gz",
+      "created_at": "2026-08-23T21:44:31.026652Z",
+      "time_start": "2026-08-23T19:36:45.68Z",
+      "time_end": "2026-08-23T21:22:02.168Z",
+      "raw_results_url": "https://storage.googleapis.com/wptd-results/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/chrome-154.0.8016.0-linux-22.04-ccb165b474/report.json",
+      "labels": [
+        "canary",
+        "chrome",
+        "experimental",
+        "master",
+        "taskcluster",
+        "user:chromium-wpt-export-bot"
+      ]
+    },
+    {
+      "id": 5141363439173632,
+      "browser_name": "safari",
+      "browser_version": "26.6 (21624.4.5.11.5)",
+      "os_name": "mac",
+      "os_version": "26.6",
+      "revision": "c2a2fce69e",
+      "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+      "results_url": "https://storage.googleapis.com/wptd/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/safari-26.6__21624.4.5.11.5_-mac-26.6-9035373df3-summary_v2.json.gz",
+      "created_at": "2026-08-24T05:00:15.42759Z",
+      "time_start": "2026-08-24T01:56:23.584Z",
+      "time_end": "2026-08-24T04:34:43.905Z",
+      "raw_results_url": "https://storage.googleapis.com/wptd-results/c2a2fce69e5c2509d9dc28440ec8b42532e5c293/safari-26.6__21624.4.5.11.5_-mac-26.6-9035373df3/report.json",
+      "labels": [
+        "github-actions",
+        "master",
+        "safari",
+        "stable"
+      ]
+    }
+  ],
+  "queries": [
+    "https://wpt.fyi/api/search?run_ids=5182906107691008%2C5141363439173632&q=%2Fcss%2FCSS2%2Fabspos%2Fstatic-inside-inline-block",
+    "https://wpt.fyi/api/search?run_ids=5182906107691008%2C5141363439173632&q=%2Fcss%2FCSS2%2Fbox-display%2Finline-block-after-block-in-inline-with-intervening-float",
+    "https://wpt.fyi/api/search?run_ids=5182906107691008%2C5141363439173632&q=%2Fcss%2FCSS2%2Fnormal-flow%2Finline-block-",
+    "https://wpt.fyi/api/search?run_ids=5182906107691008%2C5141363439173632&q=%2Fcss%2FCSS2%2Fvisudet%2Finline-block-baseline-",
+    "https://wpt.fyi/api/search?run_ids=5182906107691008%2C5141363439173632&q=%2Fcss%2Fcss-display%2Frun-in%2Frun-in-",
+    "https://wpt.fyi/api/search?run_ids=5182906107691008%2C5141363439173632&q=%2Fcss%2Fcss-flexbox%2Fflexbox-baseline-multi-item-horiz-"
+  ],
+  "tests": [
+    {
+      "id": "css__CSS2__abspos__static-inside-inline-block.html",
+      "path": "/css/CSS2/abspos/static-inside-inline-block.html",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__box-display__inline-block-after-block-in-inline-with-intervening-float.html",
+      "path": "/css/CSS2/box-display/inline-block-after-block-in-inline-with-intervening-float.html",
+      "statuses": [
+        "P",
+        "F"
+      ],
+      "consensus_pass": false
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-000.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-000.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-height-001.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-height-001.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-height-002.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-height-002.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-height-001.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-non-replaced-height-001.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-height-002.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-non-replaced-height-002.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-width-001.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-non-replaced-width-001.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-width-002.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-non-replaced-width-002.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-width-003.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-non-replaced-width-003.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-non-replaced-width-004.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-non-replaced-width-004.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-valign-001.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-valign-001.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-valign-002.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-valign-002.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-width-001a.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-width-001a.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-width-001b.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-width-001b.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-width-002a.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-width-002a.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-width-002b.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-width-002b.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-zorder-001.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-zorder-001.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-zorder-002.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-zorder-002.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-zorder-003.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-zorder-003.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-zorder-004.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-zorder-004.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__normal-flow__inline-block-zorder-005.xht",
+      "path": "/css/CSS2/normal-flow/inline-block-zorder-005.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-001.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-001.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-002.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-002.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-003.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-003.xht",
+      "statuses": [
+        "F",
+        "F"
+      ],
+      "consensus_pass": false
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-004.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-004.xht",
+      "statuses": [
+        "F",
+        "F"
+      ],
+      "consensus_pass": false
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-005.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-005.xht",
+      "statuses": [
+        "F",
+        "F"
+      ],
+      "consensus_pass": false
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-006.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-006.xht",
+      "statuses": [
+        "F",
+        "F"
+      ],
+      "consensus_pass": false
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-010.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-010.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-011.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-011.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-012.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-012.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-013.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-013.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-014.xht",
+      "path": "/css/CSS2/visudet/inline-block-baseline-014.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-015.html",
+      "path": "/css/CSS2/visudet/inline-block-baseline-015.html",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__CSS2__visudet__inline-block-baseline-016.html",
+      "path": "/css/CSS2/visudet/inline-block-baseline-016.html",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__css-display__run-in__run-in-contains-inline-block-001.xht",
+      "path": "/css/css-display/run-in/run-in-contains-inline-block-001.xht",
+      "statuses": [
+        "F",
+        "F"
+      ],
+      "consensus_pass": false
+    },
+    {
+      "id": "css__css-display__run-in__run-in-inline-block-between-001.xht",
+      "path": "/css/css-display/run-in/run-in-inline-block-between-001.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__css-display__run-in__run-in-inline-block-between-002.xht",
+      "path": "/css/css-display/run-in/run-in-inline-block-between-002.xht",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__css-display__run-in__run-in-inline-block-between-003.xht",
+      "path": "/css/css-display/run-in/run-in-inline-block-between-003.xht",
+      "statuses": [
+        "F",
+        "F"
+      ],
+      "consensus_pass": false
+    },
+    {
+      "id": "css__css-flexbox__flexbox-baseline-multi-item-horiz-001a.html",
+      "path": "/css/css-flexbox/flexbox-baseline-multi-item-horiz-001a.html",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    },
+    {
+      "id": "css__css-flexbox__flexbox-baseline-multi-item-horiz-001b.html",
+      "path": "/css/css-flexbox/flexbox-baseline-multi-item-horiz-001b.html",
+      "statuses": [
+        "P",
+        "P"
+      ],
+      "consensus_pass": true
+    }
+  ]
+}
