@@ -9,6 +9,7 @@
 
 mod parser;
 mod unicode_casefold;
+mod unicode_sets;
 mod vm;
 
 use std::fmt;
@@ -49,12 +50,12 @@ pub struct Flags {
 }
 impl Flags {
     pub fn parse(text: &str) -> Result<Self, Error> {
-        Self::parse_inner(text, false)
+        Self::parse_inner(text)
     }
     fn parse_utf16(text: &str) -> Result<Self, Error> {
-        Self::parse_inner(text, true)
+        Self::parse_inner(text)
     }
-    fn parse_inner(text: &str, allow_unicode_sets: bool) -> Result<Self, Error> {
+    fn parse_inner(text: &str) -> Result<Self, Error> {
         let mut f = Self::default();
         for c in text.chars() {
             let slot = match c {
@@ -63,7 +64,7 @@ impl Flags {
                 'm' => &mut f.multiline,
                 's' => &mut f.dot_all,
                 'u' => &mut f.unicode,
-                'v' if allow_unicode_sets => &mut f.unicode_sets,
+                'v' => &mut f.unicode_sets,
                 'y' => &mut f.sticky,
                 _ => return Err(Error::Syntax(format!("unsupported RegExp flag {c:?}"))),
             };

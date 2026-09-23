@@ -1,4 +1,4 @@
-use crate::parser::{Class, Member, Node};
+use crate::parser::{Class, Member, Node, SetExpr};
 use crate::{
     advance_index, canonical, line, point, space, word, Error, Flags, Match, MAX_CODE, MAX_STACK,
     MAX_STEPS,
@@ -17,6 +17,7 @@ enum Op {
     Char(u32),
     Any,
     Class(Rc<FoldedClass>),
+    Set(Rc<CompiledSet>),
     Start,
     End,
     Boundary(bool),
@@ -34,6 +35,135 @@ enum Op {
 struct FoldedClass {
     class: Class,
     folded: Vec<u32>,
+}
+#[derive(Debug, Clone)]
+struct CompiledSet {
+    expression: SetExpr,
+    strings: HashMap<u32, Vec<Vec<u32>>>,
+    empty: bool,
+}
+impl CompiledSet {
+    fn new(expression: &SetExpr, flags: Flags) -> Self {
+        fn collect(expression: &SetExpr, out: &mut Vec<Vec<u32>>) {
+            match expression {
+                SetExpr::String(s) => out.push(s.clone()),
+                SetExpr::Property(name, _) => {
+                    out.extend(crate::unicode_sets::strings(name).iter().cloned())
+                }
+                SetExpr::Union(terms) | SetExpr::Intersect(terms) => {
+                    for term in terms {
+                        collect(term, out);
+                    }
+                }
+                SetExpr::Subtract(left, right) => {
+                    collect(left, out);
+                    collect(right, out);
+                }
+                SetExpr::Complement(term) => collect(term, out),
+                SetExpr::Char(_) => {}
+            }
+        }
+        let mut candidates = Vec::new();
+        collect(expression, &mut candidates);
+        candidates.sort();
+        candidates.dedup();
+        let empty = candidates.iter().any(|s| s.is_empty()) && expression.contains(&[], flags);
+        let mut strings: HashMap<u32, Vec<Vec<u32>>> = HashMap::new();
+        for sequence in candidates {
+            if sequence.len() > 1 && expression.contains(&sequence, flags) {
+                strings
+                    .entry(canonical(sequence[0], flags))
+                    .or_default()
+                    .push(sequence);
+            }
+        }
+        for sequences in strings.values_mut() {
+            sequences.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        }
+        Self {
+            expression: expression.clone(),
+            strings,
+            empty,
+        }
+    }
+    fn ends(&self, input: &[u16], pos: usize, flags: Flags) -> Vec<usize> {
+        let mut ends = Vec::new();
+        if let Some((first, end)) = point(input, pos, true) {
+            if let Some(strings) = self.strings.get(&canonical(first, flags)) {
+                for sequence in strings {
+                    let mut index = pos;
+                    let mut matched = true;
+                    for expected in sequence {
+                        if let Some((actual, next)) = point(input, index, true) {
+                            if canonical(actual, flags) == canonical(*expected, flags) {
+                                index = next;
+                            } else {
+                                matched = false;
+                                break;
+                            }
+                        } else {
+                            matched = false;
+                            break;
+                        }
+                    }
+                    if matched {
+                        ends.push(index);
+                    }
+                }
+            }
+            if self.expression.contains(&[first], flags) {
+                ends.push(end);
+            }
+        }
+        if self.empty {
+            ends.push(pos);
+        }
+        ends
+    }
+}
+impl SetExpr {
+    fn contains(&self, sequence: &[u32], flags: Flags) -> bool {
+        match self {
+            Self::Char(member) => match sequence {
+                [c] => match member {
+                    Member::Range(lo, hi) => {
+                        let folded = canonical(*c, flags);
+                        (*lo..=*hi).contains(&folded)
+                            || (flags.ignore_case
+                                && crate::unicode_casefold::PAIRS.iter().any(|&(a, b)| {
+                                    (*lo..=*hi).contains(&a) && canonical(a, flags) == folded
+                                        || (*lo..=*hi).contains(&b) && canonical(b, flags) == folded
+                                }))
+                    }
+                    Member::Digit(invert) => (48..=57).contains(c) != *invert,
+                    Member::Word(invert) => word(*c, flags) != *invert,
+                    Member::Space(invert) => space(*c) != *invert,
+                },
+                _ => false,
+            },
+            Self::String(s) => {
+                s.len() == sequence.len()
+                    && s.iter()
+                        .zip(sequence)
+                        .all(|(a, b)| canonical(*a, flags) == canonical(*b, flags))
+            }
+            Self::Property(name, invert) => {
+                if *invert {
+                    sequence.len() == 1 && !crate::unicode_sets::contains(name, sequence)
+                } else {
+                    crate::unicode_sets::contains(name, sequence)
+                }
+            }
+            Self::Union(terms) => terms.iter().any(|term| term.contains(sequence, flags)),
+            Self::Intersect(terms) => {
+                !terms.is_empty() && terms.iter().all(|term| term.contains(sequence, flags))
+            }
+            Self::Subtract(left, right) => {
+                left.contains(sequence, flags) && !right.contains(sequence, flags)
+            }
+            Self::Complement(term) => sequence.len() == 1 && !term.contains(sequence, flags),
+        }
+    }
 }
 impl FoldedClass {
     fn new(class: &Class, flags: Flags) -> Self {
@@ -173,6 +303,9 @@ impl Compiler {
                     prepared
                 };
                 self.emit(Op::Class(prepared))?;
+            }
+            Node::Set(expression) => {
+                self.emit(Op::Set(Rc::new(CompiledSet::new(expression, self.flags))))?;
             }
             Node::Start => {
                 self.emit(Op::Start)?;
@@ -403,6 +536,28 @@ fn run(
                     } else {
                         success = false;
                     }
+                } else {
+                    success = false;
+                }
+            }
+            Op::Set(set) => {
+                let ends = set.ends(input, state.pos, flags);
+                if let Some((&first, alternatives)) = ends.split_first() {
+                    for &end in alternatives.iter().rev() {
+                        if budget.saved >= MAX_STACK
+                            || budget.slots + state.captures.len() + state.marks.len() + 3
+                                > 1_048_576
+                        {
+                            return Err(Error::Limit("backtracking storage"));
+                        }
+                        let mut alternative = state.clone();
+                        alternative.pos = end;
+                        alternative.pc += 1;
+                        stack.push(alternative);
+                        budget.saved += 1;
+                        budget.slots += state.captures.len() + state.marks.len() + 3;
+                    }
+                    state.pos = first;
                 } else {
                     success = false;
                 }

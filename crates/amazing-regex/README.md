@@ -7,9 +7,8 @@ operation. The JavaScript interpreter owns RegExp objects and `lastIndex`.
 
 ## Supported surface
 
-- Flags `g`, `i`, `m`, `s`, `u`, `y` on the existing `new` API. The lossless
-  `new_utf16` API also accepts `v` for the supported simple-pattern subset;
-  duplicate, unknown, and combined `u`/`v` flags are rejected.
+- Flags `g`, `i`, `m`, `s`, `u`, `v`, `y` on both constructors; duplicate,
+  unknown, and combined `u`/`v` flags are rejected.
 - Literals, dot, character classes, negation, ranges, digit/word/space escapes,
   hexadecimal and Unicode escapes, control escapes and word boundaries.
 - Alternation, capturing and noncapturing groups, decimal backreferences,
@@ -24,6 +23,10 @@ operation. The JavaScript interpreter owns RegExp objects and `lastIndex`.
 - Unicode `i` canonicalization uses the C/S mappings from Unicode 17.0.0.
   Legacy `i` uses Rust's single-character uppercase mapping with ECMAScript's
   non-ASCII-to-ASCII restriction.
+- UnicodeSets `v` classes support nested classes, union, intersection (`&&`),
+  subtraction (`--`), class strings (`\q{...}`), and code-point ranges. String
+  alternatives match longest first and backtrack when later atoms fail.
+  Unicode 17.0 emoji properties of strings and `ASCII_Hex_Digit` are supported.
 
 `Regex::new` remains a convenience constructor for Rust strings; `new_utf16`
 accepts JS strings with unpaired surrogates. `Regex::exec` searches
@@ -52,9 +55,9 @@ callbacks. It is a shell integration probe, not a DOM conformance run.
 This is not full ECMAScript conformance. Unsupported pattern forms produce an
 error rather than being silently interpreted as a different regex:
 
-- Named captures/references, lookbehind, inline flag modifiers, Unicode property
-  escapes, `d` indices, `v` set operations/string properties. Simple `v`
-  patterns use Unicode code-point semantics; unsupported set syntax is rejected.
+- Named captures/references, lookbehind, inline flag modifiers, most Unicode
+  character property escapes, and `d` indices. Unsupported properties are
+  rejected explicitly.
 - Annex B octal/decimal escape fallbacks, incomplete hex/Unicode escapes,
   quantified lookahead and legacy class-range escape exceptions. Some otherwise
   valid legacy identity escapes (`\p`, `\P`, `\k`) are conservatively rejected.
@@ -93,6 +96,9 @@ or exact heap-byte guarantee. Matching is backtracking, not linear-time.
 To regenerate, strip `#` comments, split nonempty rows on `;`, retain statuses
 `C` and `S`, parse source/target as hexadecimal integers, and sort by source.
 The accompanying `UNICODE_LICENSE.txt` contains the Unicode data license.
+The two `data/emoji-*-17.0.txt` files are pinned copies of Unicode's
+[Emoji 17.0 data](https://www.unicode.org/Public/17.0.0/emoji/); the same
+license applies. `RGI_Emoji` is the union of the six listed property sets.
 
 Semantics follow the [ECMA-262 RegExp algorithms](https://tc39.es/ecma262/multipage/text-processing.html#sec-regexp-regular-expression-objects)
 and [regex literal grammar](https://tc39.es/ecma262/multipage/ecmascript-language-lexical-grammar.html#sec-literals-regular-expression-literals).
