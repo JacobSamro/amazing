@@ -38,6 +38,7 @@ enum Shape {
     Ellipse(f64, f64, f64, f64),
     Outline(Vec<(f64, f64)>),
     Stroke(Stroke),
+    Image { pixels: Image, rect: [f64; 4] },
 }
 struct Stroke {
     points: Vec<(f64, f64)>,
@@ -219,11 +220,22 @@ pub fn render_svg(
                         Some(host) => point_on_stroke(host, x as f64 + 0.5, y as f64 + 0.5),
                         None => point_on_stroke(stroke, px, py),
                     },
+                    Shape::Image { rect: [rx, ry, w, h], .. } => {
+                        px >= *rx && px < rx + w && py >= *ry && py < ry + h
+                    }
                 };
                 if contains(&item.shape) && item.clip.as_ref().is_none_or(contains) {
+                    let color = if let Shape::Image { pixels, rect: [rx, ry, w, h] } = &item.shape {
+                        let ix = (((px - rx) / w) * f64::from(pixels.width)) as usize;
+                        let iy = (((py - ry) / h) * f64::from(pixels.height)) as usize;
+                        let at = (iy * pixels.width as usize + ix) * 4;
+                        pixels.pixels[at..at + 4].try_into().unwrap()
+                    } else {
+                        item.color
+                    };
                     blend(
                         &mut image.pixels[(y as usize * width as usize + x as usize) * 4..][..4],
-                        item.color,
+                        color,
                     );
                 }
             }
@@ -338,6 +350,10 @@ fn visit_dom(
         } else {
             append_ahem_text(dom, node, &attrs, styles.get(node), scene, stack);
         }
+        return Ok(());
+    }
+    if name == "image" && !root {
+        append_embedded_image(&attrs, scene, stack, max_bytes)?;
         return Ok(());
     }
     if name == "path" && attrs.contains_key("marker-mid") {
@@ -742,6 +758,59 @@ fn mask_regions(dom: &Dom, style: &str, bounds: [f64; 4]) -> Vec<[f64; 4]> {
     }).take(MAX_SHAPES).collect()
 }
 
+fn append_embedded_image(
+    attrs: &Attrs,
+    scene: &mut Option<SvgDocument>,
+    stack: &[Frame],
+    max_bytes: usize,
+) -> Result<(), DecodeError> {
+    let Some(parent) = stack.last() else { return Err(DecodeError::InvalidImage) };
+    let Some(href) = attrs.get("href").or_else(|| attrs.get("xlink:href")) else { return Ok(()) };
+    let Some(encoded) = href.strip_prefix("data:image/svg+xml,") else { return Ok(()) };
+    if encoded.len() > max_bytes.min(4096) { return Err(DecodeError::InputLimit); }
+    let mut bytes = Vec::with_capacity(encoded.len());
+    let mut input = encoded.as_bytes().iter().copied();
+    while let Some(byte) = input.next() {
+        if byte == b'%' {
+            let high = input.next().and_then(|n| (n as char).to_digit(16));
+            let low = input.next().and_then(|n| (n as char).to_digit(16));
+            let (Some(high), Some(low)) = (high, low) else { return Err(DecodeError::InvalidImage) };
+            bytes.push(((high << 4) | low) as u8);
+        } else {
+            bytes.push(byte);
+        }
+    }
+    let source = std::str::from_utf8(&bytes).map_err(|_| DecodeError::InvalidImage)?;
+    let mut embedded = parse(source)?;
+    let [basis_x, basis_y] = parent.viewport;
+    let x = length_value(attrs, "x", 0.0, basis_x)?;
+    let y = length_value(attrs, "y", 0.0, basis_y)?;
+    let width = length_value(attrs, "width", 0.0, basis_x)?;
+    let height = length_value(attrs, "height", 0.0, basis_y)?;
+    if width <= 0.0 || height <= 0.0 { return Ok(()); }
+    let (pixel_width, pixel_height) = (width.ceil(), height.ceil());
+    if pixel_width > u32::MAX as f64 || pixel_height > u32::MAX as f64 {
+        return Err(DecodeError::GeometryLimit);
+    }
+    if let Some(aspect) = attrs.get("preserveAspectRatio") {
+        validate_aspect(aspect)?;
+        embedded.aspect = aspect.clone();
+    }
+    let mut limits = DecodeLimits::default();
+    limits.max_input_bytes = limits.max_input_bytes.min(max_bytes);
+    let pixels = render_svg(&embedded, pixel_width as u32, pixel_height as u32, 1.0, limits)?;
+    let scene = scene.as_mut().ok_or(DecodeError::InvalidImage)?;
+    if scene.items.len() >= MAX_SHAPES { return Err(DecodeError::AllocationLimit); }
+    scene.items.push(Item {
+        inverse: parent.matrix.inverse()?,
+        shape: Shape::Image { pixels, rect: [x, y, width, height] },
+        clip: None,
+        color: [0; 4],
+        clips: parent.clips.clone(),
+    });
+    Ok(())
+}
+
 fn parse(mut text: &str) -> Result<SvgDocument, DecodeError> {
     let mut scene = None;
     let mut stack: Vec<Frame> = Vec::new();
@@ -832,10 +901,6 @@ fn append_element(
         if width <= 0.0 || height <= 0.0 || width > u32::MAX as f64 || height > u32::MAX as f64 {
             return Err(DecodeError::GeometryLimit);
         }
-        // Fractional intrinsic viewport support is deferred rather than rounded silently.
-        if width.fract() != 0.0 || height.fract() != 0.0 {
-            return Err(DecodeError::UnsupportedSvg);
-        }
         let view = declared_view.unwrap_or([0.0, 0.0, width, height]);
         let aspect = attrs
             .get("preserveAspectRatio")
@@ -846,8 +911,8 @@ fn append_element(
             return Err(DecodeError::UnsupportedSvg);
         }
         *scene = Some(SvgDocument {
-            width: width as u32,
-            height: height as u32,
+            width: width.ceil() as u32,
+            height: height.ceil() as u32,
             view,
             aspect: aspect.to_owned(),
             items: Vec::new(),

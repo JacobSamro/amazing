@@ -135,6 +135,18 @@ mod dom_model_tests {
     }
 
     #[test]
+    fn embedded_svg_image_keeps_non_scaling_stroke_in_host_pixels() {
+        for (size, source_size) in [(200, "50"), (100, "0.5")] {
+            let source = format!("<svg xmlns='http://www.w3.org/2000/svg' width='{source_size}' height='{source_size}' viewBox='0 0 {source_size} {source_size}' stroke='black' stroke-width='1px'><polyline vector-effect='non-scaling-stroke' points='{source_size} 0 0 {source_size}'/></svg>");
+            let encoded = source.replace('<', "%3C").replace('>', "%3E");
+            let actual = render_inline_svg(&format!("<svg width='{size}' height='{size}'><image width='{size}' height='{size}' preserveAspectRatio='none' href=\"data:image/svg+xml,{encoded}\"></image></svg>"), size, size, "");
+            let reference = render_inline_svg(&format!("<svg width='{size}' height='{size}'><line x1='{size}' y1='0' x2='0' y2='{size}' stroke='black' stroke-width='1px'></line></svg>"), size, size, "");
+            assert_eq!(actual.pixels, reference.pixels, "source size {source_size}");
+            assert!(actual.pixels.chunks_exact(4).any(|pixel| pixel[3] != 0));
+        }
+    }
+
+    #[test]
     fn path_length_calibrates_circle_dashes_without_erasing_stroke() {
         let image = render_inline_svg("<svg width='100' height='100' viewBox='-20 -20 40 40' fill='none'><circle r='18' pathLength='100' stroke='green' stroke-width='1' stroke-dasharray='50 50'></circle></svg>", 100, 100, "");
         let painted = image.pixels.chunks_exact(4).filter(|pixel| pixel[3] != 0).count();
