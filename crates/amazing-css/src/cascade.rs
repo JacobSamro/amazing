@@ -22,16 +22,19 @@
 //!   and transitions have no input seam yet
 
 use crate::computed::{self, ComputedStyle, Rollback};
-use crate::parser::{parse_declarations, parse_stylesheet, Declaration, Stylesheet};
-use crate::selectors::{parse_selector, Specificity, Selector};
+use crate::parser::{Declaration, Stylesheet, parse_declarations, parse_stylesheet};
+use crate::selectors::{PseudoElement, Selector, Specificity, parse_selector};
 use amazing_dom::{Dom, NodeIdx};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// Computed styles for a whole document, keyed by arena index.
 #[derive(Debug, Default)]
 pub struct StyledDom {
     styles: HashMap<u32, ComputedStyle>,
     sources: HashMap<u32, BTreeMap<String, ElementStyleSource>>,
+    pseudo_styles: HashMap<(u32, PseudoElement), ComputedStyle>,
+    matched_pseudos: HashSet<(u32, PseudoElement)>,
+    pub(crate) generated: HashMap<(u32, PseudoElement), crate::generated::GeneratedContent>,
 }
 
 impl StyledDom {
@@ -39,21 +42,51 @@ impl StyledDom {
         self.styles.get(&idx.0)
     }
 
+    /// Computed style of a generated or applicable pseudo-element.
+    pub fn get_pseudo(&self, idx: NodeIdx, pseudo: PseudoElement) -> Option<&ComputedStyle> {
+        self.pseudo_styles.get(&(idx.0, pseudo))
+    }
+
+    /// Whether a stylesheet selector matched this element's pseudo-element.
+    /// A matched selector may still produce no box (for example `content: none`).
+    pub fn pseudo_matched(&self, idx: NodeIdx, pseudo: PseudoElement) -> bool {
+        self.matched_pseudos.contains(&(idx.0, pseudo))
+    }
+
+    /// Resolved text/image runs and optional accessible alt text.
+    pub fn generated_content(
+        &self,
+        idx: NodeIdx,
+        pseudo: PseudoElement,
+    ) -> Option<&crate::generated::GeneratedContent> {
+        self.generated.get(&(idx.0, pseudo))
+    }
+
     /// Winning origin for a computed property on this document element.
     pub fn source(&self, idx: NodeIdx, property: &str) -> Option<ElementStyleSource> {
-        self.sources.get(&idx.0)?.get(&property.to_ascii_lowercase()).copied()
+        self.sources
+            .get(&idx.0)?
+            .get(&property.to_ascii_lowercase())
+            .copied()
     }
 
     /// The properties of `idx` whose computed value differs from its parent
     /// element's — the readable "delta" view used by the CLI demo. Elements
     /// without a styled parent element report everything.
-    pub fn delta_from_parent(&self, idx: NodeIdx, parent: Option<NodeIdx>) -> Vec<(String, String)> {
+    pub fn delta_from_parent(
+        &self,
+        idx: NodeIdx,
+        parent: Option<NodeIdx>,
+    ) -> Vec<(String, String)> {
         let style = match self.get(idx) {
             Some(s) => s,
             None => return Vec::new(),
         };
         match parent.and_then(|p| self.get(p)) {
-            None => style.iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect(),
+            None => style
+                .iter()
+                .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                .collect(),
             Some(pstyle) => style
                 .iter()
                 .filter(|(k, v)| pstyle.get(k) != Some(*v))
@@ -71,6 +104,12 @@ pub fn compute(dom: &Dom, author_sheets: &[Stylesheet]) -> StyledDom {
     let author_rules = compile_sheets(author_sheets, false);
 
     let body_link = hints::body_link(dom);
+    let pseudo_targets = PseudoElement::STYLED.map(|pseudo| {
+        ua_rules
+            .iter()
+            .chain(author_rules.iter())
+            .any(|rule| rule.targets(pseudo))
+    });
     let mut out = StyledDom::default();
     style_subtree(
         dom,
@@ -80,8 +119,10 @@ pub fn compute(dom: &Dom, author_sheets: &[Stylesheet]) -> StyledDom {
         &ua_rules,
         &author_rules,
         body_link.as_deref(),
+        &pseudo_targets,
         &mut out,
     );
+    crate::generated::resolve_document(dom, &mut out);
     out
 }
 
@@ -93,6 +134,7 @@ fn style_subtree(
     ua_rules: &[CompiledRule],
     author_rules: &[CompiledRule],
     body_link: Option<&str>,
+    pseudo_targets: &[bool; 5],
     out: &mut StyledDom,
 ) {
     if dom.name(node).is_some() {
@@ -104,6 +146,7 @@ fn style_subtree(
             ua_rules,
             author_rules,
             body_link,
+            None,
         );
         let descendant_root_font_px = if dom.name(node) == Some("html") {
             style
@@ -114,6 +157,47 @@ fn style_subtree(
         } else {
             root_font_px
         };
+        for (pseudo, requested) in PseudoElement::STYLED.into_iter().zip(pseudo_targets) {
+            if !*requested
+                && !(pseudo == PseudoElement::Marker && style.get("display") == Some("list-item"))
+            {
+                continue;
+            }
+            let matched = ua_rules.iter().chain(author_rules.iter()).any(|rule| {
+                rule.targets(pseudo) && rule.matching(dom, node, Some(pseudo)).is_some()
+            });
+            if matched {
+                out.matched_pseudos.insert((node.0, pseudo));
+            }
+            if matches!(pseudo, PseudoElement::FirstLine | PseudoElement::FirstLetter) && !matched {
+                continue;
+            }
+            let (pseudo_style, _) = compute_one(
+                dom,
+                node,
+                Some(&style),
+                descendant_root_font_px,
+                ua_rules,
+                author_rules,
+                body_link,
+                Some(pseudo),
+            );
+            let has_content =
+                !matches!(pseudo_style.get("content"), None | Some("normal" | "none"));
+            let visible = style.get("display") != Some("none");
+            let applies = match pseudo {
+                PseudoElement::Before | PseudoElement::After => has_content,
+                PseudoElement::Marker => style.get("display") == Some("list-item")
+                    && pseudo_style.get("content") != Some("none")
+                    && (has_content || pseudo_style.get("list-style-type") != Some("none")
+                        || pseudo_style.get("list-style-image") != Some("none")),
+                PseudoElement::FirstLine | PseudoElement::FirstLetter => visible,
+                _ => false,
+            };
+            if applies && pseudo_style.get("display") != Some("none") && visible {
+                out.pseudo_styles.insert((node.0, pseudo), pseudo_style);
+            }
+        }
         for child in dom.children(node) {
             style_subtree(
                 dom,
@@ -123,6 +207,7 @@ fn style_subtree(
                 ua_rules,
                 author_rules,
                 body_link,
+                pseudo_targets,
                 out,
             );
         }
@@ -140,6 +225,7 @@ fn style_subtree(
                 ua_rules,
                 author_rules,
                 body_link,
+                pseudo_targets,
                 out,
             );
         }
@@ -152,18 +238,23 @@ fn style_subtree(
 
 #[path = "cascade_context.rs"]
 mod context;
-use context::{compile_sheets, CompiledRule};
+use context::{CompiledRule, compile_sheets};
 
 #[path = "presentational_hints.rs"]
 mod hints;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Origin { Ua, Hint, Author }
+enum Origin {
+    Ua,
+    Hint,
+    Author,
+}
 
 /// One declaration competing for a property during the cascade.
 #[derive(Clone, Copy)]
 struct Candidate<'a> {
     value: &'a str,
+    base_url: Option<&'a str>,
     important: bool,
     inline: bool,
     origin: Origin,
@@ -185,7 +276,11 @@ fn beats(new: &Candidate<'_>, cur: &Candidate<'_>) -> bool {
     }
     if new.origin != cur.origin {
         // Normal origin order: author beats UA. Important reverses it.
-        return if new.important { new.origin < cur.origin } else { new.origin > cur.origin };
+        return if new.important {
+            new.origin < cur.origin
+        } else {
+            new.origin > cur.origin
+        };
     }
     if new.inline != cur.inline {
         return new.inline;
@@ -269,12 +364,14 @@ fn compute_one(
     ua_rules: &[CompiledRule],
     author_rules: &[CompiledRule],
     body_link: Option<&str>,
+    pseudo: Option<PseudoElement>,
 ) -> (ComputedStyle, BTreeMap<String, ElementStyleSource>) {
     /// One declaration after shorthand expansion, flattened with the
     /// cascade metadata inherited from its source.
     struct FlatDecl {
         prop: String,
         value: String,
+        base_url: Option<String>,
         important: bool,
         inline: bool,
         origin: Origin,
@@ -292,27 +389,39 @@ fn compute_one(
     // even though the computed map is flat.
     let mut pool: Vec<FlatDecl> = Vec::new();
     let mut source_order = 0u64;
-    for (prop, value) in hints::collect(dom, el, body_link) {
+    for (prop, value) in if pseudo.is_none() {
+        hints::collect(dom, el, body_link)
+    } else {
+        Vec::new()
+    } {
         source_order += 1;
         for (prop, value) in computed::expand_declaration(&prop, &value) {
             pool.push(FlatDecl {
-                prop, value, important: false, inline: false,
-                origin: Origin::Hint, author_declaration: false,
-                spec: Specificity::default(), order: source_order,
-                layer: usize::MAX, proximity: usize::MAX,
+                prop,
+                value,
+                base_url: None,
+                important: false,
+                inline: false,
+                origin: Origin::Hint,
+                author_declaration: false,
+                spec: Specificity::default(),
+                order: source_order,
+                layer: usize::MAX,
+                proximity: usize::MAX,
             });
         }
     }
     for rule in ua_rules.iter().chain(author_rules.iter()) {
-        let Some((specificity, proximity)) = rule.matching(dom, el) else { continue; };
+        let Some((specificity, proximity)) = rule.matching(dom, el, pseudo) else {
+            continue;
+        };
         for decl in &rule.decls {
             source_order += 1;
-            for (property, value) in
-                computed::expand_declaration(&decl.property, &decl.value)
-            {
+            for (property, value) in computed::expand_declaration(&decl.property, &decl.value) {
                 pool.push(FlatDecl {
                     prop: property,
                     value,
+                    base_url: rule.base_url.clone(),
                     important: decl.important,
                     inline: false,
                     origin: if rule.ua { Origin::Ua } else { Origin::Author },
@@ -326,15 +435,20 @@ fn compute_one(
         }
     }
     // Inline style="": author origin, beats every sheet rule.
-    let inline_decls = attr_of(dom, el, "style")
-        .map(parse_declarations)
-        .unwrap_or_default();
+    let inline_decls = if pseudo.is_none() {
+        attr_of(dom, el, "style")
+            .map(parse_declarations)
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     for decl in &inline_decls {
         source_order += 1;
         for (property, value) in computed::expand_declaration(&decl.property, &decl.value) {
             pool.push(FlatDecl {
                 prop: property,
                 value,
+                base_url: None,
                 important: decl.important,
                 inline: true,
                 origin: Origin::Author,
@@ -353,6 +467,7 @@ fn compute_one(
     for d in &pool {
         let cand = Candidate {
             value: &d.value,
+            base_url: d.base_url.as_deref(),
             important: d.important,
             inline: d.inline,
             origin: d.origin,
@@ -372,18 +487,28 @@ fn source_map(
     selected: &BTreeMap<&str, Candidate<'_>>,
     parent: Option<&ComputedStyle>,
 ) -> BTreeMap<String, ElementStyleSource> {
-    crate::computed::known_properties().map(|property| {
-        let source = if parent.is_some() && crate::computed::is_inherited_property(property) {
-            ElementStyleSource::Inherited
-        } else { ElementStyleSource::Initial };
-        (property.to_owned(), source)
-    }).chain(selected.iter().map(|(property, candidate)| {
-        let source = if candidate.inline { ElementStyleSource::Inline }
-            else if candidate.origin == Origin::Author { ElementStyleSource::Author }
-            else if candidate.origin == Origin::Hint { ElementStyleSource::PresentationHint }
-            else { ElementStyleSource::Initial };
-        ((*property).to_owned(), source)
-    })).collect()
+    crate::computed::known_properties()
+        .map(|property| {
+            let source = if parent.is_some() && crate::computed::is_inherited_property(property) {
+                ElementStyleSource::Inherited
+            } else {
+                ElementStyleSource::Initial
+            };
+            (property.to_owned(), source)
+        })
+        .chain(selected.iter().map(|(property, candidate)| {
+            let source = if candidate.inline {
+                ElementStyleSource::Inline
+            } else if candidate.origin == Origin::Author {
+                ElementStyleSource::Author
+            } else if candidate.origin == Origin::Hint {
+                ElementStyleSource::PresentationHint
+            } else {
+                ElementStyleSource::Initial
+            };
+            ((*property).to_owned(), source)
+        }))
+        .collect()
 }
 
 fn resolve_candidate_pool<'a>(
@@ -407,7 +532,10 @@ fn resolve_candidate_pool<'a>(
     champs = winners(&candidates, Some(&provisional));
     let provisional = computed::resolve_with_root(
         parent_style,
-        champs.iter().map(|(p, c)| ((*p).to_owned(), c.value.to_owned())).collect(),
+        champs
+            .iter()
+            .map(|(p, c)| ((*p).to_owned(), c.value.to_owned()))
+            .collect(),
         root_font_px,
     );
     let rtl = provisional
@@ -415,7 +543,10 @@ fn resolve_candidate_pool<'a>(
         .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
     let writing_mode = provisional.get("writing-mode").unwrap_or("horizontal-tb");
     for logical in [
-        "margin-inline-start", "margin-inline-end", "margin-block-start", "margin-block-end",
+        "margin-inline-start",
+        "margin-inline-end",
+        "margin-block-start",
+        "margin-block-end",
     ] {
         if let Some(values) = candidates.get(logical).cloned() {
             let physical = physical_margin_for(logical, rtl, writing_mode);
@@ -426,104 +557,302 @@ fn resolve_candidate_pool<'a>(
     // Both candidates keep their original specificity, layer, and source order.
     let vertical = !writing_mode.eq_ignore_ascii_case("horizontal-tb");
     for (logical, horizontal, vertical_name) in [
-        ("inline-size", "width", "height"), ("block-size", "height", "width"),
+        ("inline-size", "width", "height"),
+        ("block-size", "height", "width"),
         ("min-inline-size", "min-width", "min-height"),
         ("min-block-size", "min-height", "min-width"),
         ("max-inline-size", "max-width", "max-height"),
         ("max-block-size", "max-height", "max-width"),
     ] {
         if let Some(values) = candidates.get(logical).cloned() {
-            candidates.entry(if vertical { vertical_name } else { horizontal }).or_default().extend(values);
+            candidates
+                .entry(if vertical { vertical_name } else { horizontal })
+                .or_default()
+                .extend(values);
         }
     }
     for (family, physicals) in [
-        ("padding", ["padding-top", "padding-right", "padding-bottom", "padding-left"]),
+        (
+            "padding",
+            [
+                "padding-top",
+                "padding-right",
+                "padding-bottom",
+                "padding-left",
+            ],
+        ),
         ("inset", ["top", "right", "bottom", "left"]),
     ] {
-        for (axis, edge) in [("inline", "start"), ("inline", "end"), ("block", "start"), ("block", "end")] {
+        for (axis, edge) in [
+            ("inline", "start"),
+            ("inline", "end"),
+            ("block", "start"),
+            ("block", "end"),
+        ] {
             let logical = format!("{family}-{axis}-{edge}");
             if let Some(values) = candidates.get(logical.as_str()).cloned() {
                 let margin = format!("margin-{axis}-{edge}");
                 let index = match physical_margin_for(&margin, rtl, writing_mode) {
-                    "margin-top" => 0, "margin-right" => 1, "margin-bottom" => 2, _ => 3,
+                    "margin-top" => 0,
+                    "margin-right" => 1,
+                    "margin-bottom" => 2,
+                    _ => 3,
                 };
-                candidates.entry(physicals[index]).or_default().extend(values);
+                candidates
+                    .entry(physicals[index])
+                    .or_default()
+                    .extend(values);
             }
         }
     }
     // Resolve logical border candidates against the same computed axes as margins.
     for (logical, margin, physicals) in [
-        ("border-inline-start-width", "margin-inline-start", ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"]),
-        ("border-inline-start-style", "margin-inline-start", ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"]),
-        ("border-inline-start-color", "margin-inline-start", ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"]),
-        ("border-inline-end-width", "margin-inline-end", ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"]),
-        ("border-inline-end-style", "margin-inline-end", ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"]),
-        ("border-inline-end-color", "margin-inline-end", ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"]),
-        ("border-block-start-width", "margin-block-start", ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"]),
-        ("border-block-start-style", "margin-block-start", ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"]),
-        ("border-block-start-color", "margin-block-start", ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"]),
-        ("border-block-end-width", "margin-block-end", ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"]),
-        ("border-block-end-style", "margin-block-end", ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"]),
-        ("border-block-end-color", "margin-block-end", ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"]),
+        (
+            "border-inline-start-width",
+            "margin-inline-start",
+            [
+                "border-top-width",
+                "border-right-width",
+                "border-bottom-width",
+                "border-left-width",
+            ],
+        ),
+        (
+            "border-inline-start-style",
+            "margin-inline-start",
+            [
+                "border-top-style",
+                "border-right-style",
+                "border-bottom-style",
+                "border-left-style",
+            ],
+        ),
+        (
+            "border-inline-start-color",
+            "margin-inline-start",
+            [
+                "border-top-color",
+                "border-right-color",
+                "border-bottom-color",
+                "border-left-color",
+            ],
+        ),
+        (
+            "border-inline-end-width",
+            "margin-inline-end",
+            [
+                "border-top-width",
+                "border-right-width",
+                "border-bottom-width",
+                "border-left-width",
+            ],
+        ),
+        (
+            "border-inline-end-style",
+            "margin-inline-end",
+            [
+                "border-top-style",
+                "border-right-style",
+                "border-bottom-style",
+                "border-left-style",
+            ],
+        ),
+        (
+            "border-inline-end-color",
+            "margin-inline-end",
+            [
+                "border-top-color",
+                "border-right-color",
+                "border-bottom-color",
+                "border-left-color",
+            ],
+        ),
+        (
+            "border-block-start-width",
+            "margin-block-start",
+            [
+                "border-top-width",
+                "border-right-width",
+                "border-bottom-width",
+                "border-left-width",
+            ],
+        ),
+        (
+            "border-block-start-style",
+            "margin-block-start",
+            [
+                "border-top-style",
+                "border-right-style",
+                "border-bottom-style",
+                "border-left-style",
+            ],
+        ),
+        (
+            "border-block-start-color",
+            "margin-block-start",
+            [
+                "border-top-color",
+                "border-right-color",
+                "border-bottom-color",
+                "border-left-color",
+            ],
+        ),
+        (
+            "border-block-end-width",
+            "margin-block-end",
+            [
+                "border-top-width",
+                "border-right-width",
+                "border-bottom-width",
+                "border-left-width",
+            ],
+        ),
+        (
+            "border-block-end-style",
+            "margin-block-end",
+            [
+                "border-top-style",
+                "border-right-style",
+                "border-bottom-style",
+                "border-left-style",
+            ],
+        ),
+        (
+            "border-block-end-color",
+            "margin-block-end",
+            [
+                "border-top-color",
+                "border-right-color",
+                "border-bottom-color",
+                "border-left-color",
+            ],
+        ),
     ] {
         if let Some(values) = candidates.get(logical).cloned() {
             let index = match physical_margin_for(margin, rtl, writing_mode) {
-                "margin-top" => 0, "margin-right" => 1, "margin-bottom" => 2, _ => 3,
+                "margin-top" => 0,
+                "margin-right" => 1,
+                "margin-bottom" => 2,
+                _ => 3,
             };
-            candidates.entry(physicals[index]).or_default().extend(values);
+            candidates
+                .entry(physicals[index])
+                .or_default()
+                .extend(values);
         }
     }
     champs = winners(&candidates, Some(&provisional));
 
     let sources = source_map(&champs, parent_style);
-    let author_properties: Vec<_> = champs.iter()
+    let author_properties: Vec<_> = champs
+        .iter()
         .filter(|(_, candidate)| candidate.author_declaration)
         .map(|(property, _)| *property)
+        .collect();
+    let url_bases: Vec<_> = ["content", "list-style-image"]
+        .into_iter()
+        .map(|property| (property, champs.get(property).copied()))
         .collect();
     let cascaded = champs
         .into_iter()
         .map(|(property, candidate)| (property.to_owned(), candidate.value.to_owned()))
         .collect();
     let mut style = computed::resolve_with_root(parent_style, cascaded, root_font_px);
+    for (property, winner) in url_bases {
+        let base = match winner {
+            Some(candidate) if candidate.value.trim().eq_ignore_ascii_case("inherit") ||
+                (property == "list-style-image" && candidate.value.trim().eq_ignore_ascii_case("unset")) => {
+                parent_style.and_then(|parent| parent.url_base(property))
+            }
+            Some(candidate) if candidate.value.trim().eq_ignore_ascii_case("initial") => None,
+            Some(candidate) => candidate.base_url,
+            None if property == "list-style-image" => parent_style.and_then(|parent| parent.url_base(property)),
+            None => None,
+        };
+        style.set_url_base(property, base);
+    }
     for property in author_properties {
         style.mark_author_specified(property);
     }
     for (logical, horizontal, vertical_name) in [
-        ("inline-size", "width", "height"), ("block-size", "height", "width"),
-        ("min-inline-size", "min-width", "min-height"), ("min-block-size", "min-height", "min-width"),
-        ("max-inline-size", "max-width", "max-height"), ("max-block-size", "max-height", "max-width"),
+        ("inline-size", "width", "height"),
+        ("block-size", "height", "width"),
+        ("min-inline-size", "min-width", "min-height"),
+        ("min-block-size", "min-height", "min-width"),
+        ("max-inline-size", "max-width", "max-height"),
+        ("max-block-size", "max-height", "max-width"),
     ] {
         style.mirror_logical(logical, if vertical { vertical_name } else { horizontal });
     }
     for (family, physicals) in [
-        ("margin", ["margin-top", "margin-right", "margin-bottom", "margin-left"]),
-        ("padding", ["padding-top", "padding-right", "padding-bottom", "padding-left"]),
+        (
+            "margin",
+            ["margin-top", "margin-right", "margin-bottom", "margin-left"],
+        ),
+        (
+            "padding",
+            [
+                "padding-top",
+                "padding-right",
+                "padding-bottom",
+                "padding-left",
+            ],
+        ),
         ("inset", ["top", "right", "bottom", "left"]),
     ] {
-        for (axis, edge) in [("inline", "start"), ("inline", "end"), ("block", "start"), ("block", "end")] {
+        for (axis, edge) in [
+            ("inline", "start"),
+            ("inline", "end"),
+            ("block", "start"),
+            ("block", "end"),
+        ] {
             let logical = format!("{family}-{axis}-{edge}");
             let margin = format!("margin-{axis}-{edge}");
             let index = match physical_margin_for(&margin, rtl, writing_mode) {
-                "margin-top" => 0, "margin-right" => 1, "margin-bottom" => 2, _ => 3,
+                "margin-top" => 0,
+                "margin-right" => 1,
+                "margin-bottom" => 2,
+                _ => 3,
             };
             style.mirror_logical(&logical, physicals[index]);
         }
     }
     let mut sources = sources;
     for (logical, horizontal, vertical_name) in [
-        ("inline-size", "width", "height"), ("block-size", "height", "width"),
-        ("min-inline-size", "min-width", "min-height"), ("min-block-size", "min-height", "min-width"),
-        ("max-inline-size", "max-width", "max-height"), ("max-block-size", "max-height", "max-width"),
+        ("inline-size", "width", "height"),
+        ("block-size", "height", "width"),
+        ("min-inline-size", "min-width", "min-height"),
+        ("min-block-size", "min-height", "min-width"),
+        ("max-inline-size", "max-width", "max-height"),
+        ("max-block-size", "max-height", "max-width"),
     ] {
-        if let Some(source) = sources.get(if vertical { vertical_name } else { horizontal }).copied() { sources.insert(logical.into(), source); }
+        if let Some(source) = sources
+            .get(if vertical { vertical_name } else { horizontal })
+            .copied()
+        {
+            sources.insert(logical.into(), source);
+        }
     }
     for family in ["margin", "padding", "inset"] {
-        for (axis, edge) in [("inline", "start"), ("inline", "end"), ("block", "start"), ("block", "end")] {
+        for (axis, edge) in [
+            ("inline", "start"),
+            ("inline", "end"),
+            ("block", "start"),
+            ("block", "end"),
+        ] {
             let logical = format!("{family}-{axis}-{edge}");
             let margin = format!("margin-{axis}-{edge}");
-            let side = physical_margin_for(&margin, rtl, writing_mode).strip_prefix("margin-").unwrap();
-            let physical = if family == "inset" { side.to_owned() } else { format!("{family}-{side}") };
-            if let Some(source) = sources.get(&physical).copied() { sources.insert(logical, source); }
+            let side = physical_margin_for(&margin, rtl, writing_mode)
+                .strip_prefix("margin-")
+                .unwrap();
+            let physical = if family == "inset" {
+                side.to_owned()
+            } else {
+                format!("{family}-{side}")
+            };
+            if let Some(source) = sources.get(&physical).copied() {
+                sources.insert(logical, source);
+            }
         }
     }
     (style, sources)
@@ -543,8 +872,14 @@ pub enum ElementStyleSource {
 /// their computed CSS text so consumers can decline rendering explicitly.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ElementStyleValue<T> {
-    Supported { value: T, source: ElementStyleSource },
-    Unsupported { css: String, source: ElementStyleSource },
+    Supported {
+        value: T,
+        source: ElementStyleSource,
+    },
+    Unsupported {
+        css: String,
+        source: ElementStyleSource,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -582,14 +917,28 @@ pub fn compute_element_paint_style(
     ] {
         for declaration in declarations {
             let normalized = if origin == Origin::Hint {
-                if declaration.important { continue; }
-                crate::svg_presentation::normalize(&declaration.property, &declaration.value, "rect")
+                if declaration.important {
+                    continue;
+                }
+                crate::svg_presentation::normalize(
+                    &declaration.property,
+                    &declaration.value,
+                    "rect",
+                )
             } else {
                 Some((declaration.property.clone(), declaration.value.clone()))
             };
-            let Some((name, value)) = normalized else { continue; };
+            let Some((name, value)) = normalized else {
+                continue;
+            };
             for (property, value) in computed::expand_declaration(&name, &value) {
-                pool.push((property, value, origin, is_inline, declaration.important && origin != Origin::Hint));
+                pool.push((
+                    property,
+                    value,
+                    origin,
+                    is_inline,
+                    declaration.important && origin != Origin::Hint,
+                ));
             }
         }
     }
@@ -597,6 +946,7 @@ pub fn compute_element_paint_style(
     for (order, (property, value, origin, is_inline, important)) in pool.iter().enumerate() {
         candidates.entry(property).or_default().push(Candidate {
             value,
+            base_url: None,
             important: *important,
             inline: *is_inline,
             origin: *origin,
@@ -608,11 +958,22 @@ pub fn compute_element_paint_style(
         });
     }
     let (computed, sources) = resolve_candidate_pool(candidates, parent, 16.0);
-    let source = |property: &str, _inherited: bool| sources.get(property).copied().unwrap_or(ElementStyleSource::Initial);
+    let source = |property: &str, _inherited: bool| {
+        sources
+            .get(property)
+            .copied()
+            .unwrap_or(ElementStyleSource::Initial)
+    };
     let color_css = computed.get("color").unwrap_or("black");
     let color = match crate::color::parse_css_color(color_css) {
-        Some(value) => ElementStyleValue::Supported { value, source: source("color", true) },
-        None => ElementStyleValue::Unsupported { css: color_css.to_owned(), source: source("color", true) },
+        Some(value) => ElementStyleValue::Supported {
+            value,
+            source: source("color", true),
+        },
+        None => ElementStyleValue::Unsupported {
+            css: color_css.to_owned(),
+            source: source("color", true),
+        },
     };
     let fill_css = computed.get("fill").unwrap_or("black");
     let fill_value = if fill_css.eq_ignore_ascii_case("none") {
@@ -623,17 +984,35 @@ pub fn compute_element_paint_style(
         crate::color::parse_css_color(fill_css).map(ElementFill::Color)
     };
     let fill = match fill_value {
-        Some(value) => ElementStyleValue::Supported { value, source: source("fill", true) },
-        None => ElementStyleValue::Unsupported { css: fill_css.to_owned(), source: source("fill", true) },
+        Some(value) => ElementStyleValue::Supported {
+            value,
+            source: source("fill", true),
+        },
+        None => ElementStyleValue::Unsupported {
+            css: fill_css.to_owned(),
+            source: source("fill", true),
+        },
     };
     let alpha = |property: &str, inherited: bool| {
         let css = computed.get(property).unwrap_or("1");
         match css.parse::<f32>() {
-            Ok(value) if value.is_finite() => ElementStyleValue::Supported { value, source: source(property, inherited) },
-            _ => ElementStyleValue::Unsupported { css: css.to_owned(), source: source(property, inherited) },
+            Ok(value) if value.is_finite() => ElementStyleValue::Supported {
+                value,
+                source: source(property, inherited),
+            },
+            _ => ElementStyleValue::Unsupported {
+                css: css.to_owned(),
+                source: source(property, inherited),
+            },
         }
     };
-    ElementPaintStyle { color, fill, fill_opacity: alpha("fill-opacity", true), opacity: alpha("opacity", false), computed }
+    ElementPaintStyle {
+        color,
+        fill,
+        fill_opacity: alpha("fill-opacity", true),
+        opacity: alpha("opacity", false),
+        computed,
+    }
 }
 
 fn physical_margin_for(logical: &str, rtl: bool, writing_mode: &str) -> &'static str {
@@ -681,6 +1060,7 @@ address, article, aside, blockquote, details, dialog, div, dl, fieldset,
 figcaption, figure, footer, form, header, hgroup, main, menu, nav, ol, p,
 pre, section, ul { display: block; }
 blockquote, figure, menu, ol, p, pre, address, dl, ul { margin: 1em 0; }
+ol, ul, menu { counter-reset: list-item; }
 dd { display: block; margin: 0 0 0 40px; }
 dt { display: block; }
 
@@ -759,17 +1139,271 @@ mod tests {
     #[test]
     fn ua_important_reverses_origin_order_and_ua_revert_defaults() {
         let (dom, elements) = fixture();
-        let author = compile_sheets(&[parse_stylesheet("p{color:red!important;display:flex}")], false);
+        let author = compile_sheets(
+            &[parse_stylesheet("p{color:red!important;display:flex}")],
+            false,
+        );
         for (ua_css, expected) in [
             ("p{color:green!important}", "green"),
             ("p{color:revert!important}", "black"),
             ("p{color:revert-layer!important}", "black"),
-            ("@layer a,b;@layer a{p{color:revert-layer!important}}@layer b{p{color:green!important}}", "black"),
+            (
+                "@layer a,b;@layer a{p{color:revert-layer!important}}@layer b{p{color:green!important}}",
+                "black",
+            ),
         ] {
             let ua = compile_sheets(&[parse_stylesheet(ua_css)], true);
-            let (style, _) = compute_one(&dom, elements[5], None, 16.0, &ua, &author, None);
+            let (style, _) = compute_one(&dom, elements[5], None, 16.0, &ua, &author, None, None);
             assert_eq!(style.get("color"), Some(expected));
         }
+    }
+
+    #[test]
+    fn pseudo_styles_content_and_counter_flow() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let ol = dom.create_element(body, "ol");
+        let first = dom.create_element(ol, "li");
+        dom.set_attrs(first, vec![("data-label".into(), "Alpha".into())]);
+        let second = dom.create_element(ol, "li");
+        let css = parse_stylesheet(
+            r#"
+            body { color: blue; quotes: "[" "]"; }
+            li { counter-increment: chapter; }
+            li::before { content: open-quote attr(data-label) " " counter(chapter) "/" counter(list-item) close-quote; color: red; }
+            li::after { content: url("icon.svg") / "icon"; }
+            li::marker { color: green; }
+        "#,
+        );
+        let styles = compute(&dom, &[css]);
+        assert_eq!(styles.get(first).unwrap().get("color"), Some("blue"));
+        assert_eq!(
+            styles
+                .get_pseudo(first, PseudoElement::Before)
+                .unwrap()
+                .get("color"),
+            Some("red")
+        );
+        assert_eq!(
+            styles
+                .generated_content(first, PseudoElement::Before)
+                .unwrap()
+                .text(),
+            "[Alpha 1/1]"
+        );
+        assert_eq!(
+            styles
+                .generated_content(second, PseudoElement::Before)
+                .unwrap()
+                .text(),
+            "[ 2/2]"
+        );
+        assert_eq!(
+            styles
+                .generated_content(first, PseudoElement::Marker)
+                .unwrap()
+                .text(),
+            "1. "
+        );
+        let after = styles
+            .generated_content(first, PseudoElement::After)
+            .unwrap();
+        assert_eq!(
+            after.runs,
+            vec![crate::generated::ContentRun::Image("icon.svg".into())]
+        );
+        assert_eq!(after.alt_text.as_deref(), Some("icon"));
+    }
+
+    #[test]
+    fn marker_generation_respects_list_style_type_and_content_none() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let ul = dom.create_element(body, "ul");
+        let bullet = dom.create_element(ul, "li");
+        let suppressed = dom.create_element(ul, "li");
+        dom.set_attrs(suppressed, vec![("class".into(), "suppressed".into())]);
+        let css = parse_stylesheet("li.suppressed { list-style-type: none }");
+        let styled = compute(&dom, &[css]);
+        assert_eq!(styled.generated_content(bullet, PseudoElement::Marker).unwrap().text(), "• ");
+        assert!(styled.get_pseudo(suppressed, PseudoElement::Marker).is_none());
+    }
+
+    #[test]
+    fn generated_images_use_winning_stylesheet_url_and_inherited_marker_image() {
+        use crate::generated::ContentRun;
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let list = dom.create_element(body, "ul");
+        let item = dom.create_element(list, "li");
+        let mut first = parse_stylesheet("li::before { content: url(icons/old.svg) } ul { list-style-image: url(../marks/bullet.svg) }");
+        first.base_url = Some("https://example.test/css/theme/site.css".into());
+        let mut second = parse_stylesheet("li::before { content: url(../new.svg) }");
+        second.base_url = Some("https://example.test/overrides/over.css".into());
+        let styled = compute(&dom, &[first, second]);
+        assert_eq!(styled.generated_content(item, PseudoElement::Before).unwrap().runs,
+            vec![ContentRun::Image("https://example.test/new.svg".into())]);
+        assert_eq!(styled.generated_content(item, PseudoElement::Marker).unwrap().runs,
+            vec![ContentRun::Image("https://example.test/css/marks/bullet.svg".into())]);
+    }
+
+    #[test]
+    fn pseudo_counter_operations_and_hidden_subtrees() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let first = dom.create_element(body, "p");
+        dom.set_attrs(first, vec![("class".into(), "first".into())]);
+        let hidden = dom.create_element(body, "p");
+        dom.set_attrs(hidden, vec![("class".into(), "hidden".into())]);
+        let last = dom.create_element(body, "p");
+        let css = parse_stylesheet(
+            "body { counter-reset: n } p.hidden { display: none; counter-increment: n } p::before { counter-increment: n; content: counter(n) } p.first::after { content: counter(n) }",
+        );
+        let styles = compute(&dom, &[css]);
+        assert_eq!(
+            styles
+                .generated_content(first, PseudoElement::Before)
+                .unwrap()
+                .text(),
+            "1"
+        );
+        assert_eq!(
+            styles
+                .generated_content(first, PseudoElement::After)
+                .unwrap()
+                .text(),
+            "1"
+        );
+        assert!(
+            styles
+                .generated_content(hidden, PseudoElement::Before)
+                .is_none()
+        );
+        assert_eq!(
+            styles
+                .generated_content(last, PseudoElement::Before)
+                .unwrap()
+                .text(),
+            "2"
+        );
+    }
+
+    #[test]
+    fn nested_and_reversed_list_counters_follow_document_order() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let outer = dom.create_element(body, "ol");
+        let one = dom.create_element(outer, "li");
+        let inner = dom.create_element(one, "ol");
+        let nested = dom.create_element(inner, "li");
+        let two = dom.create_element(outer, "li");
+        let reverse = dom.create_element(body, "ol");
+        dom.set_attrs(reverse, vec![("reversed".into(), "".into())]);
+        let r1 = dom.create_element(reverse, "li");
+        let r2 = dom.create_element(reverse, "li");
+        let css = parse_stylesheet(
+            "li::before { content: counters(list-item, '.') } li::after { content: counter(list-item, upper-roman) }",
+        );
+        let styles = compute(&dom, &[css]);
+        for (node, expected) in [
+            (one, "1"),
+            (nested, "1.1"),
+            (two, "2"),
+            (r1, "2"),
+            (r2, "1"),
+        ] {
+            assert_eq!(
+                styles
+                    .generated_content(node, PseudoElement::Before)
+                    .unwrap()
+                    .text(),
+                expected
+            );
+        }
+        assert_eq!(
+            styles
+                .generated_content(two, PseudoElement::After)
+                .unwrap()
+                .text(),
+            "II"
+        );
+    }
+
+    #[test]
+    fn generated_content_attribute_fallback_and_unquoted_url() {
+        let (dom, elements) = fixture();
+        let p = elements[5];
+        let css = parse_stylesheet(
+            "p::before { content: attr(missing, 'fallback') } p::after { content: url(icon.svg) / attr(id) }",
+        );
+        let styles = compute(&dom, &[css]);
+        assert_eq!(
+            styles
+                .generated_content(p, PseudoElement::Before)
+                .unwrap()
+                .text(),
+            "fallback"
+        );
+        let after = styles.generated_content(p, PseudoElement::After).unwrap();
+        assert_eq!(
+            after.runs,
+            vec![crate::generated::ContentRun::Image("icon.svg".into())]
+        );
+        assert_eq!(after.alt_text.as_deref(), Some("intro"));
+    }
+
+    #[test]
+    fn pseudo_box_generation_and_selector_specificity() {
+        let (dom, elements) = fixture();
+        let p = elements[5];
+        let css = parse_stylesheet(
+            "p::before { content: none } p:before { color: red } p::after { content: 'x' } p::first-letter { color: green }",
+        );
+        let styles = compute(&dom, &[css]);
+        assert!(styles.get_pseudo(p, PseudoElement::Before).is_none());
+        assert_eq!(
+            styles
+                .generated_content(p, PseudoElement::After)
+                .unwrap()
+                .text(),
+            "x"
+        );
+        assert_eq!(
+            styles
+                .get_pseudo(p, PseudoElement::FirstLetter)
+                .unwrap()
+                .get("color"),
+            Some("green")
+        );
+        assert_eq!(styles.get(p).unwrap().get("color"), Some("black"));
+    }
+
+    #[test]
+    fn first_line_and_letter_only_exist_on_matching_originators() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let first = dom.create_element(body, "p");
+        dom.set_attrs(first, vec![("class".into(), "chosen".into())]);
+        let child = dom.create_element(first, "span");
+        let other = dom.create_element(body, "p");
+        let css = parse_stylesheet("p.chosen::first-line { color: red } p.chosen::first-letter { color: blue } p.chosen::before { content: none }");
+        let styled = compute(&dom, &[css]);
+        for pseudo in [PseudoElement::FirstLine, PseudoElement::FirstLetter] {
+            assert!(styled.pseudo_matched(first, pseudo));
+            assert!(styled.get_pseudo(first, pseudo).is_some());
+            assert!(!styled.pseudo_matched(child, pseudo));
+            assert!(styled.get_pseudo(child, pseudo).is_none());
+            assert!(!styled.pseudo_matched(other, pseudo));
+            assert!(styled.get_pseudo(other, pseudo).is_none());
+        }
+        assert!(styled.pseudo_matched(first, PseudoElement::Before));
+        assert!(styled.get_pseudo(first, PseudoElement::Before).is_none());
     }
 
     #[test]
@@ -837,9 +1471,7 @@ mod tests {
         let styled = compute(&dom, &[sheet]);
         assert_eq!(styled.get(els[5]).unwrap().get("color"), Some("green"));
         // And an author !important beats a UA declaration for the same prop:
-        let sheet = parse_stylesheet(
-            "p { text-decoration: underline wavy !important }",
-        );
+        let sheet = parse_stylesheet("p { text-decoration: underline wavy !important }");
         // UA gives links underlined text-decoration only for a:link; p has
         // initial none — author important wins over nothing to do here, so
         // just confirm it landed.
@@ -857,10 +1489,13 @@ mod tests {
         let html = dom.create_element(doc, "html");
         let body = dom.create_element(html, "body");
         let p = dom.create_element(body, "p");
-        dom.set_attrs(p, vec![
-            ("id".into(), "x".into()),
-            ("style".into(), "color: purple".into()),
-        ]);
+        dom.set_attrs(
+            p,
+            vec![
+                ("id".into(), "x".into()),
+                ("style".into(), "color: purple".into()),
+            ],
+        );
         let sheet = parse_stylesheet("#x { color: gold } p { background-color: silver }");
         let styled = compute(&dom, &[sheet]);
         let st = styled.get(p).unwrap();
@@ -872,10 +1507,13 @@ mod tests {
         let styled = compute(&dom, &[sheet]);
         assert_eq!(styled.get(p).unwrap().get("color"), Some("olive"));
         // …but inline !important beats it back.
-        dom.set_attrs(p, vec![
-            ("id".into(), "x".into()),
-            ("style".into(), "color: purple !important".into()),
-        ]);
+        dom.set_attrs(
+            p,
+            vec![
+                ("id".into(), "x".into()),
+                ("style".into(), "color: purple !important".into()),
+            ],
+        );
         let styled = compute(&dom, &[parse_stylesheet("#x { color: olive !important }")]);
         assert_eq!(styled.get(p).unwrap().get("color"), Some("purple"));
     }
@@ -923,8 +1561,7 @@ mod tests {
             root,
             vec![(
                 "style".into(),
-                "writing-mode:vertical-rl;text-orientation:upright;text-combine-upright:all"
-                    .into(),
+                "writing-mode:vertical-rl;text-orientation:upright;text-combine-upright:all".into(),
             )],
         );
         let child = dom.create_element(root, "span");
@@ -947,7 +1584,10 @@ mod tests {
         dom.set_attrs(paragraph, vec![("style".into(), "font-size:2rem".into())]);
         let styled = compute(&dom, &[]);
 
-        assert_eq!(styled.get(paragraph).unwrap().get("font-size"), Some("40px"));
+        assert_eq!(
+            styled.get(paragraph).unwrap().get("font-size"),
+            Some("40px")
+        );
     }
 
     #[test]
@@ -957,7 +1597,10 @@ mod tests {
         let sheet = parse_stylesheet("h1 { font-weight: normal } h1::before { font-size: 9px }");
         let styled = compute(&dom, &[sheet]);
         // First rule still applies (it was a separate qualified rule)…
-        assert_eq!(styled.get(els[2]).unwrap().get("font-weight"), Some("normal"));
+        assert_eq!(
+            styled.get(els[2]).unwrap().get("font-weight"),
+            Some("normal")
+        );
         // …and there was never a 9px anywhere.
         assert_ne!(styled.get(els[2]).unwrap().get("font-size"), Some("9px"));
 
@@ -992,7 +1635,10 @@ mod tests {
         let (mut dom, els) = fixture(); // [html, head, title, body, h1, p, a]
         dom.set_attrs(
             els[5],
-            vec![("id".into(), "intro".into()), ("style".into(), "color: red".into())],
+            vec![
+                ("id".into(), "intro".into()),
+                ("style".into(), "color: red".into()),
+            ],
         );
         let styled = compute(&dom, &[]);
 
@@ -1001,7 +1647,11 @@ mod tests {
 
         let body_delta = styled.delta_from_parent(els[3], Some(els[0]));
         // body differs from html by display/margin; font props are equal.
-        assert!(body_delta.iter().any(|(k, v)| k == "margin-top" && v == "8px"));
+        assert!(
+            body_delta
+                .iter()
+                .any(|(k, v)| k == "margin-top" && v == "8px")
+        );
         assert!(body_delta.iter().all(|(k, _)| k != "font-family"));
 
         // p vs body: color override + UA margin difference. Both are
@@ -1037,10 +1687,7 @@ mod tests {
     #[test]
     fn later_declarations_win_within_one_rule() {
         let (dom, els) = fixture();
-        let styled = compute(
-            &dom,
-            &[parse_stylesheet("p { color:red; color:green }")],
-        );
+        let styled = compute(&dom, &[parse_stylesheet("p { color:red; color:green }")]);
         assert_eq!(styled.get(els[5]).unwrap().get("color"), Some("green"));
     }
 
@@ -1049,7 +1696,10 @@ mod tests {
         let (mut dom, els) = fixture();
         dom.set_attrs(
             els[5],
-            vec![("id".into(), "intro".into()), ("class".into(), "target".into())],
+            vec![
+                ("id".into(), "intro".into()),
+                ("class".into(), "target".into()),
+            ],
         );
         let styled = compute(
             &dom,

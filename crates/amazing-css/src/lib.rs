@@ -28,7 +28,6 @@
 //! - implicit scope requires callers to preserve sheet identity and populate
 //!   `Stylesheet::scope_root`; ownerless sheets use the document default
 //! - CSS nesting (`&`) and layer-qualified imports remain unsupported
-//! - pseudo-elements invalidate their rule (nothing can paint them yet)
 //! - presentational HTML attributes and `<style media>` are ignored
 //!
 //! This crate depends only on `amazing-dom` (+ `amazing-common`) per the
@@ -40,17 +39,18 @@
 
 pub mod cascade;
 pub mod color;
-mod math;
 mod computed;
+pub mod generated;
+mod math;
 pub mod parser;
 pub mod selectors;
-pub mod syntax;
 mod svg_presentation;
+pub mod syntax;
 pub mod values;
 
 pub use cascade::{
-    ElementFill, ElementPaintStyle, ElementStyleSource, ElementStyleValue, StyledDom,
-    compute, compute_element_paint_style,
+    ElementFill, ElementPaintStyle, ElementStyleSource, ElementStyleValue, StyledDom, compute,
+    compute_element_paint_style,
 };
 pub use computed::ComputedStyle;
 pub use parser::{

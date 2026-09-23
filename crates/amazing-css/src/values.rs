@@ -161,7 +161,10 @@ pub struct Subgrid {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubgridLineNames {
     Names(Vec<String>),
-    Repeat { count: SubgridRepeatCount, names: Vec<Vec<String>> },
+    Repeat {
+        count: SubgridRepeatCount,
+        names: Vec<Vec<String>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,9 +184,17 @@ pub enum Transform {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SvgPaint { None, CurrentColor, Color([u8; 4]), Url(String) }
+pub enum SvgPaint {
+    None,
+    CurrentColor,
+    Color([u8; 4]),
+    Url(String),
+}
 #[derive(Debug, Clone, PartialEq)]
-pub enum SvgResource { None, Url(String) }
+pub enum SvgResource {
+    None,
+    Url(String),
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComputedValue {
@@ -246,7 +257,9 @@ fn integer(css: &str) -> Option<i32> {
 pub(crate) fn display_canonical(css: &str) -> Option<&'static str> {
     let tokens = tokenize(css);
     let words = significant(&tokens);
-    let [Token::Ident(outer), Token::Ident(inner)] = words.as_slice() else { return None };
+    let [Token::Ident(outer), Token::Ident(inner)] = words.as_slice() else {
+        return None;
+    };
     let outer = outer.to_ascii_lowercase();
     let inner = inner.to_ascii_lowercase();
     match (outer.as_str(), inner.as_str()) {
@@ -280,6 +293,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         return crate::svg_presentation::parse_property(property, css);
     }
     match property {
+        "content" | "counter-reset" | "counter-increment" | "counter-set" | "quotes" => {
+            return crate::generated::valid_property(property, css).then_some(V::Unparsed);
+        }
         "font-feature-settings" | "font-variant-ligatures" => {
             return crate::computed::canonical_font_feature_value(property, css)
                 .map(|_| V::Unparsed);
@@ -295,7 +311,11 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
             return Display::parse(display_canonical(css).unwrap_or(css)).map(V::Display);
         }
         "grid-template-columns" | "grid-template-rows" => {
-            return Some(crate::computed::parse_subgrid(css).map(V::Subgrid).unwrap_or(V::Unparsed));
+            return Some(
+                crate::computed::parse_subgrid(css)
+                    .map(V::Subgrid)
+                    .unwrap_or(V::Unparsed),
+            );
         }
         "position" => keyword!(Position),
         "float" => keyword!(Float),
@@ -338,9 +358,11 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
                     [Token::Function(name), ..]
                         if !matches!(name.to_ascii_lowercase().as_str(), "rgb" | "rgba") =>
                     {
-                        Some(crate::color::parse_css_color(css)
-                            .map(|rgba| V::Color(Color::Rgba(rgba)))
-                            .unwrap_or(V::Unparsed))
+                        Some(
+                            crate::color::parse_css_color(css)
+                                .map(|rgba| V::Color(Color::Rgba(rgba)))
+                                .unwrap_or(V::Unparsed),
+                        )
                     }
                     [Token::Ident(name)] if known_color_keyword(name) => Some(
                         crate::color::parse_css_color(css)
@@ -459,7 +481,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         return Some(V::Unparsed);
     }
     if (margin || inset || size || padding) && crate::math::length_percentage(css, true) {
-        return Some(V::LengthPercentageExpression(crate::syntax::serialize(&tokenize(css))));
+        return Some(V::LengthPercentageExpression(crate::syntax::serialize(
+            &tokenize(css),
+        )));
     }
     let length = LengthPercentage::parse(css)?;
     if (border || property == "letter-spacing") && matches!(length, LengthPercentage::Percentage(_))

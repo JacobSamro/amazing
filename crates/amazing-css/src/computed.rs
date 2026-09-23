@@ -27,6 +27,7 @@ pub struct ComputedStyle {
     root_font_px: f64,
     effective_zoom: f64,
     author_specified: BTreeSet<String>,
+    url_bases: BTreeMap<String, String>,
 }
 
 impl Default for ComputedStyle {
@@ -39,11 +40,23 @@ impl Default for ComputedStyle {
             root_font_px: 16.0,
             effective_zoom: 1.0,
             author_specified: BTreeSet::new(),
+            url_bases: BTreeMap::new(),
         }
     }
 }
 
 impl ComputedStyle {
+    /// Source stylesheet URL of a winning URL-bearing property.
+    pub fn url_base(&self, property: &str) -> Option<&str> {
+        self.url_bases.get(property).map(String::as_str)
+    }
+
+    pub(crate) fn set_url_base(&mut self, property: &str, base: Option<&str>) {
+        self.url_bases.remove(property);
+        if let Some(base) = base {
+            self.url_bases.insert(property.to_owned(), base.to_owned());
+        }
+    }
     /// Product of this element's zoom and its ancestors' zoom values.
     /// CSS Viewport applies this at the used-value stage, while computed
     /// lengths and `get()` remain unscaled for CSSOM-style consumers.
@@ -168,6 +181,7 @@ impl ComputedStyle {
             // Layout-time synthesis replaces this value, not an author rule.
             self.author_specified.remove(&longhand);
             self.relative_colors.remove(&longhand);
+            self.url_bases.remove(&longhand);
             self.props.insert(longhand, expanded);
         }
         let next_zoom = self.get("zoom").and_then(used_zoom_factor).unwrap_or(1.0);
@@ -220,6 +234,8 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "background-attachment", initial: "scroll", inherited: false },
     PropertyMetadata { name: "aspect-ratio", initial: "auto", inherited: false },
     PropertyMetadata { name: "border-spacing", initial: "0px", inherited: true },
+    PropertyMetadata { name: "content", initial: "normal", inherited: false },
+    PropertyMetadata { name: "counter-increment", initial: "none", inherited: false },
     PropertyMetadata { name: "counter-reset", initial: "none", inherited: false },
     PropertyMetadata { name: "counter-set", initial: "none", inherited: false },
     PropertyMetadata {
@@ -2699,6 +2715,7 @@ pub(crate) fn resolve_with_root(
         root_font_px: f64::from(root_font_px),
         effective_zoom: 1.0,
         author_specified: BTreeSet::new(),
+        url_bases: parent.map(|parent| parent.url_bases.clone()).unwrap_or_default(),
     };
     style.resolve_relative_colors();
     let local_zoom = style.props.get("zoom").and_then(|value| used_zoom_factor(value)).unwrap_or(1.0);

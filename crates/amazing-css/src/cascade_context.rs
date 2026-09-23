@@ -1,7 +1,9 @@
 //! Compile layer order across sheets and find applicable scope instances.
 use super::*;
 use crate::parser::{LayerName, Scope};
-use crate::selectors::{Combinator, Compound, Pseudo, Simple, matches_in_scope};
+use crate::selectors::{
+    Combinator, Compound, Pseudo, PseudoElement, Simple, matches_in_scope, matches_pseudo_in_scope,
+};
 
 pub(super) struct CompiledRule {
     selectors: Vec<(Selector, Specificity)>,
@@ -10,6 +12,7 @@ pub(super) struct CompiledRule {
     pub(super) layer: usize,
     scopes: Vec<CompiledScope>,
     owner: Option<NodeIdx>,
+    pub(super) base_url: Option<String>,
 }
 struct CompiledScope {
     start: Option<Vec<Selector>>,
@@ -77,6 +80,7 @@ pub(super) fn compile_sheets(sheets: &[Stylesheet], ua: bool) -> Vec<CompiledRul
                             ua,
                             layer: 0,
                             owner: sheet.scope_root,
+                            base_url: sheet.base_url.clone(),
                         },
                     ));
                 }
@@ -143,12 +147,27 @@ fn compile_scope(scope: &Scope, nested: bool) -> Option<CompiledScope> {
 }
 
 impl CompiledRule {
-    pub(super) fn matching(&self, dom: &Dom, el: NodeIdx) -> Option<(Specificity, usize)> {
+    pub(super) fn targets(&self, pseudo: PseudoElement) -> bool {
+        self.selectors
+            .iter()
+            .any(|(selector, _)| selector.pseudo_element() == Some(pseudo))
+    }
+
+    pub(super) fn matching(
+        &self,
+        dom: &Dom,
+        el: NodeIdx,
+        pseudo: Option<PseudoElement>,
+    ) -> Option<(Specificity, usize)> {
+        let matches_target = |sel: &Selector, scope| match pseudo {
+            Some(kind) => matches_pseudo_in_scope(dom, el, sel, kind, scope),
+            None => matches_in_scope(dom, el, sel, scope),
+        };
         if self.scopes.is_empty() {
             return self
                 .selectors
                 .iter()
-                .filter(|(s, _)| matches_in_scope(dom, el, s, None))
+                .filter(|(s, _)| matches_target(s, None))
                 .map(|(_, spec)| (*spec, usize::MAX))
                 .max();
         }
@@ -199,7 +218,7 @@ impl CompiledRule {
         for root in instances.into_iter().flatten() {
             let proximity = ancestors.iter().position(|n| *n == root)?;
             for (selector, spec) in &self.selectors {
-                if matches_in_scope(dom, el, selector, Some(root))
+                if matches_target(selector, Some(root))
                     && best.is_none_or(|(s, p)| *spec > s || (*spec == s && proximity < p))
                 {
                     best = Some((*spec, proximity));
