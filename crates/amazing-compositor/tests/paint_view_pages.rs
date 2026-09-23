@@ -1,6 +1,7 @@
 use amazing_compositor::{
     baked_paint_view_compositor, paint_view_metadata, CompositingReasons, Compositor, PaintChunk,
-    Positioning, Presenter, Rect, ReferenceCpuPresenter, ScrollId, StickyConstraint,
+    PaintViewRasterMode, PaintViewSource, Positioning, Presenter, Rect, ReferenceCpuPresenter,
+    ScrollId, StickyConstraint,
 };
 use amazing_paint::controls::NoControls;
 use amazing_paint::display_list_view::DisplayListView;
@@ -51,6 +52,130 @@ fn pinned_real_pages_match_full_painter() {
         "body{margin:0;background:white;color:#223}header{position:fixed;top:0;background:#aaf}main{width:72px;padding-top:18px}p{margin:12px 0}");
     compare("effects-scroller", EFFECTS_PAGE,
         "body{margin:0;background:white}.fixed{position:fixed;left:2px;top:2px;background:red}.scroller{width:80px;height:52px;overflow:scroll;background:#ddd}.moving{will-change:transform;transform:translate(3px,4px);background:blue;width:30px;height:22px}.fade{opacity:.5;background:green;width:30px;height:22px}");
+}
+
+#[test]
+fn raw_real_pages_match_full_painter() {
+    for (name, html, css) in [
+        ("z-equivalence", REFTEST_RED_BLUE, ""),
+        ("inherited-variable", REFTEST_COLORS, ""),
+        ("article", LONG_ARTICLE, "body{margin:0;background:white;color:#223}main{width:72px}p{margin:12px 0}"),
+        ("effects", EFFECTS_PAGE, "body{margin:0;background:white}.fixed{position:fixed;left:2px;top:2px;background:red}.scroller{width:80px;height:52px;overflow:scroll;background:#ddd}.moving{will-change:transform;transform:translate(3px,4px);background:blue;width:30px;height:22px}.fade{opacity:.5;background:green;width:30px;height:22px}"),
+    ] {
+        let text = FallbackTextSystem::new();
+        let root = amazing_layout::layout_document_with_text(html, css, VIEWPORT as f32, &text);
+        let view = DisplayListView::new(&root, VIEWPORT, VIEWPORT, &text, &NoImages, &NoControls);
+        let source = PaintViewSource::new(&view);
+        assert_eq!(source.mode(), PaintViewRasterMode::RawLocal, "{name}");
+        let mut compositor = source.compositor(VIEWPORT, VIEWPORT).unwrap();
+        let frame = source.build_frame(&mut compositor, VIEWPORT, VIEWPORT).unwrap();
+        let actual = ReferenceCpuPresenter::default().present(&frame).unwrap();
+        let expected = paint_document_with_text_resources_and_controls(&root, VIEWPORT, VIEWPORT, &text, &NoImages, &NoControls);
+        if actual.pixels != expected.pixels {
+            let mismatch = actual.pixels.chunks_exact(4).zip(expected.pixels.chunks_exact(4)).enumerate().find(|(_, (a, b))| a != b).unwrap();
+            panic!("{name} raw parity at ({}, {}): {:?} vs {:?}", mismatch.0 % VIEWPORT as usize, mismatch.0 / VIEWPORT as usize, mismatch.1.0, mismatch.1.1);
+        }
+    }
+}
+
+#[test]
+fn retained_real_page_property_trace() {
+    const SIZE: u32 = 512;
+    let html = format!("{EFFECTS_PAGE}<main>{LONG_ARTICLE}</main>");
+    let css = "body{margin:0;background:white;color:#223}.fixed{position:fixed;left:2px;top:2px;background:red}.scroller{width:300px;height:180px;overflow:scroll;background:#ddd}.moving{will-change:transform;transform:translate(3px,4px);background:blue;width:120px;height:80px}.fade{opacity:.5;background:green;width:120px;height:80px}main{width:220px}p{margin:12px 0}";
+    let text = FallbackTextSystem::new();
+    let root = amazing_layout::layout_document_with_text(&html, css, SIZE as f32, &text);
+    let view = DisplayListView::new(&root, SIZE, SIZE, &text, &NoImages, &NoControls);
+    let source = PaintViewSource::new(&view);
+    assert_eq!(source.mode(), PaintViewRasterMode::RawLocal);
+    let scroll = ScrollId(1);
+    let transform = amazing_compositor::TransformId(1);
+    let effect = amazing_compositor::EffectId(2);
+    let mut compositor = source.compositor(SIZE, SIZE).unwrap();
+    let bounds = compositor.trees().scroll(scroll).unwrap().container;
+    compositor
+        .set_scroll_contents(
+            scroll,
+            Rect::new(bounds.x, bounds.y, bounds.w, bounds.h + 100.),
+        )
+        .unwrap();
+    let initial = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
+    assert!(!initial.resources.uploads.is_empty());
+    println!("scenario,frames,full_paint_us,retained_build_us,uploads");
+    for scenario in ["scroll", "transform", "opacity"] {
+        let mut full_us = 0;
+        let mut retained_us = 0;
+        let mut uploads = 0;
+        for index in 0..20 {
+            let start = Instant::now();
+            let _ = paint_document_with_text_resources_and_controls(
+                &root,
+                SIZE,
+                SIZE,
+                &text,
+                &NoImages,
+                &NoControls,
+            );
+            full_us += start.elapsed().as_micros();
+            match scenario {
+                "scroll" => compositor
+                    .set_scroll(scroll, (0., (index + 1) as f32))
+                    .unwrap(),
+                "transform" => compositor
+                    .set_transform(
+                        transform,
+                        amazing_compositor::Matrix4::translation((index + 1) as f32, 4., 0.),
+                    )
+                    .unwrap(),
+                "opacity" => compositor
+                    .set_opacity(effect, 0.5 + index as f32 / 100.)
+                    .unwrap(),
+                _ => unreachable!(),
+            }
+            let start = Instant::now();
+            let frame = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
+            retained_us += start.elapsed().as_micros();
+            uploads += frame.resources.uploads.len();
+        }
+        println!("{scenario},20,{full_us},{retained_us},{uploads}");
+        assert_eq!(uploads, 0, "{scenario} rerasterized retained tiles");
+        assert!(
+            retained_us * 10 <= full_us,
+            "{scenario} retained frame exceeded 10% of full paint"
+        );
+    }
+    compositor.invalidate_item(0);
+    assert!(compositor.dirty_tiles() > 0);
+    let _damaged = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
+    assert_eq!(compositor.dirty_tiles(), 0);
+}
+
+#[test]
+fn control_uses_baked_fallback_with_parity() {
+    let text = FallbackTextSystem::new();
+    let root = amazing_layout::layout_document_with_text(
+        "<body><input type='checkbox'></body>",
+        "body{margin:0;background:white}",
+        VIEWPORT as f32,
+        &text,
+    );
+    let view = DisplayListView::new(&root, VIEWPORT, VIEWPORT, &text, &NoImages, &NoControls);
+    let source = PaintViewSource::new(&view);
+    assert_eq!(source.mode(), PaintViewRasterMode::BakedFallback);
+    let mut compositor = source.compositor(VIEWPORT, VIEWPORT).unwrap();
+    let frame = source
+        .build_frame(&mut compositor, VIEWPORT, VIEWPORT)
+        .unwrap();
+    let actual = ReferenceCpuPresenter::default().present(&frame).unwrap();
+    let expected = paint_document_with_text_resources_and_controls(
+        &root,
+        VIEWPORT,
+        VIEWPORT,
+        &text,
+        &NoImages,
+        &NoControls,
+    );
+    assert_eq!(actual.pixels, expected.pixels);
 }
 
 #[test]
