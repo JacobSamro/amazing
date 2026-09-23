@@ -211,6 +211,45 @@ with **3 skipped** across 43 binaries; separate doctests passed **2/2** with
 and stayed under `REFRESH-HOLD` until both commands finished. Counts and
 artifact identity are recorded in the ticket report and `xml-evidence/`.
 
+## IA-HTML2 — driver document byte decoding
+
+On fixed dev base `2021707`, the driver now passes local document bytes and
+HTTP response body bytes to merged `amazing_html::parse_bytes`, with the actual
+HTTP Content-Type charset label. XML selection happens first and still feeds
+caller-decoded Unicode to `parse_xml`. XML parse failures and Unsupported stay
+fatal, with no HTML fallback or XML script execution. Native GUI HTML loading
+also takes response bytes; local file metadata synthesized by amazing-net is
+not treated as an HTTP charset. Scripts, stylesheets, and fragments retain their
+existing text paths. This adopts HTML-2's four-decoder subset, not full WHATWG
+Encoding coverage.
+
+The pinned 12-case raw-byte driver selection compares revision `2021707`
+(`before.exe` SHA-256 `5ced7c78b96e08cc6ac3b55fb60dbd849374bc80e4051e72604f309a476fb732`)
+with `43c83d40bf07b2468cc5ec9c2aee5c722ded49ff` (`after.exe` SHA-256
+`7c65ce68a30c1fde27f8ece0e77d6cc5dcababfdc427691b21eb3fe7636f18da`).
+Both runs of each executable agree exactly: BEFORE projection SHA-256
+`fdb548e3fc3973ab31cda1eac2fccc1ef92ccb4a359869d35a866c6fc3df1461`,
+AFTER projection SHA-256
+`fcf731df6b539e06f7593b22dab3cd6264a949f96906e7cd07f9c8c49fa79f01`.
+Seven HTML outputs change: BOM removal, meta and default windows-1252,
+UTF-16LE/BE, HTTP transport label over meta, and BOM over HTTP transport.
+Malformed UTF-8 replacement and four XML controls remain byte-identical in
+their output, with zero changed exit classifications across all 12 cases.
+The selection contains no Unsupported case; the separate scoped XML dispatch
+tests exercise exit 3 for an external-DTD entity. This is a fixed-base lane
+gate, not evidence for later dev merges or a browser-wide conformance rate.
+Raw reports, input hashes, actual transport labels, and comparison are in
+`tests/wpt-integrator-assist/html2-evidence/`.
+
+Scoped win-001 nextest passed **112/112** with 3 skipped; the separate scoped
+doctest invocation found no library target in the binary `amazing` package.
+Final fixed-base workspace nextest passed **1322/1322** with 3 skipped, and
+separate workspace doctests passed **2/2** with no failures. Both workspace
+commands used the primary shared build-slot wrapper under `REFRESH-HOLD`, then
+the hold was released. All 944 tracked HEAD source/input paths in the committed
+manifest matched SHA-256 on the Windows lane tree after the gates. These
+measurements do not substitute for co-integrator merged-head preflight.
+
 ## IA-2 proposal — shell/driver URL migration
 
 Follow the caller inventory and persisted-key concerns in
@@ -227,11 +266,15 @@ must not be folded into this command extraction.
 
 ## DOM-5 driver adoption — mapping checkpoint
 
-Authorized alongside IA-XML, but checkpointed separately. Inspected the actual
+Mapped alongside IA-XML, but checkpointed separately. Inspected the actual
 `BindingHost`, `InterfaceDefinition`, `Member`, `Operation`, `install/INTERFACES`
 and `invoke` seam at DOM checkpoint `2b917f8` (including `afa9ad5`), read-only in
-the DOM lane. The runtime owns the `BindingHost` implementation; the driver must
-not create a parallel binding trait or wrapper cache.
+the DOM lane. The final ownership decision is a backend-neutral
+`amazing_bindings::host::BindingHost` trait drafted by dom-bindings and reviewed
+by js-runtime, with a driver-local `RuntimeBindingHost` in `crates/amazing`.
+The driver must not create a parallel trait or wrapper cache. Begin only after
+js-runtime accepts the final trait text, and after the separate JS-4 scheduling
+and streamed document loading driver tickets.
 
 Driver changes required once the runtime adapter is supplied:
 
@@ -249,16 +292,30 @@ Driver changes required once the runtime adapter is supplied:
   live and same-object. UTF-16 conversion/coercion stays outside DOM borrows;
   constructors, methods and accessors forward the supplied `Operation`.
 
-Requested dependency merge through co-integrator, without blocking acceptance
-of native-only lower-crate evidence on later driver WPT installation. The current
-runtime source has no `BindingHost` adapter/installer. The existing driver →
-`amazing-js` dependency may suffice if the runtime exposes installation. If it
-requires direct binding types, the exact additional edge is driver `amazing` →
-`amazing-bindings`; manifest/lock updates are routed, not made speculatively.
+The driver alone has both `amazing-js` and `amazing-bindings` dependencies.
+This map does not implement or validate the future installer.
 
 Validation after dependencies land must show an API is visible in actual driver
 WPT execution, mutations reach the parsed arena, factory/query/new-interface
 node identity agrees, and a retained `childNodes` object updates after mutation.
 Use a newly installed API (for example Text construction or append) and report
 measured before/after separately from native DOM/binding counts. This map earns
-no WPT credit and does not suspend the active no-fallback/no-scripting XML work.
+no WPT credit; the completed XML no-fallback/no-scripting behavior remains a
+regression requirement.
+
+## Queued after IA-HTML2
+
+1. JS-4 scheduling adapter: merged dependency `d42609d`, contingent on
+   dom-bindings landing `crates/amazing/tests/js4_event_loop_adapter.rs` as the
+   reference proof. Use `new_with_external_scheduler(js_capacity)`; after every
+   interpreter entry, drain `take_scheduling_requests` and enqueue every request
+   FIFO into `EventLoop` before any other JS entry. Never drop a taken request
+   after downstream failure. Separate driver ticket, not part of IA-HTML2.
+2. Streamed document loading: NET-9 `fetch_stream` on dev `dc184d2` supplies
+   decoded byte chunks and drop cancellation; HTML-3 `IncrementalParser` takes
+   already-decoded Unicode via `push_chunk` and `finish`. Bridge the byte and
+   encoding boundaries under HTML-2's four-decoder limit, without a full-body
+   buffer or lower-crate edits. Full queued brief is in
+   `.agents/co-integrator/ia-streaming-queued-20260923.md`.
+3. BindingHost driver installation, after js-runtime accepts the final trait
+   text, using the ownership decision above.
