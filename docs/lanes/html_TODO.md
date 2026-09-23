@@ -419,3 +419,34 @@ matched on Mac and Windows before and after the gates. Package nextest passed
 workspace nextest passed **1591/1591** with 3 skipped, and separate shared-slot
 workspace doctests passed **2/2**. Two new tests account for the package increase
 from HTML-10's 119. No push or PR; the lane stops for co-integrator preflight.
+
+## HTML-12 — pending table-character tokens
+
+The tree builder now buffers adjacent character tokens in the `in table text`
+insertion mode. On the next non-character token or EOF it tests the complete
+run: whitespace-only text stays under the current table-family element; a run
+with any other scalar is passed once through the in-body rules with foster
+parenting, so all characters land before the relevant table in source order.
+It then reprocesses the trigger in the saved table, tbody, or tr mode. A single
+combined run preserves adjacent-text coalescing. No template, scripting,
+quirks, tokenizer, DOM, driver, or manifest behavior was widened.
+
+Independent DOM tree oracles and pre-edit source/lock hashes are in
+`.agents/html/html12-fixtures.md`. The fixed-base Windows probe selected one
+test (1 passed, 121 skipped) before implementation. Splitting `<table> A`
+after the space gave `"A"` before the table and `" "` inside it, whereas
+one-shot parsing gave one `" A"` node before the table. Tbody, nested-table
+and EOF examples also differed. The exact trees are in `html12-baseline.log`.
+Two new tests assert table, tbody, tr, nested-table, reference, whitespace-only,
+EOF and coalescing trees, every scalar split, and multiple chunks within a
+character reference and across non-ASCII scalars.
+
+The fixed final base was `bbec0c9`. After an HTML-only Windows refresh and
+source re-sync, a 305-input Rust source, Cargo manifest and root lockfile
+SHA-256 manifest (`edf1911bed55c7ed291ffefcd0c02ebb088afdcf6a83013ca2f5b7fc61b802fc`)
+matched on Mac and Windows before and after the gates. Package nextest passed
+**123/123 twice**, and separate package doctest passed **1/1**. Shared-slot
+workspace nextest passed **1631/1631** with 3 skipped; a separate workspace
+doctest command under the same slot passed **2/2**. The two new unit tests
+account for the package increase from HTML-11's 121. No push or PR; the lane
+stops for co-integrator preflight.
