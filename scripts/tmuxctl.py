@@ -225,6 +225,11 @@ LANE_GRANTS.setdefault("html", []).append("Cargo.lock")
 # JS-10: the Test262 host's module capability. ADDED LINES ONLY.
 LANE_GRANTS.setdefault("js-lang", []).append("crates/amazing-js/examples/test262_host.rs")
 LANE_GRANTS.setdefault("js-binary", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
+# JSB-1: integer-indexed exotic hooks. ADDED LINES ONLY: early-return calls into
+# builtins_binary's binary_get_index / binary_set_index / binary_own_keys /
+# binary_index_descriptor (and define/delete/has) at the top of the matching
+# interp.rs property paths; one Exotic variant (and forced match arms) in value.rs.
+LANE_GRANTS["js-binary"].append("crates/amazing-js/src/value.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
