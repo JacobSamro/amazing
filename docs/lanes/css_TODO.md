@@ -1285,3 +1285,15 @@ pseudo content, root font sizing and conservative fallbacks. DOM-21 will
 supply the journal and generation mapping; the driver has not adopted this
 opt-in seam yet. Linux CSS 250/250; Windows CSS and workspace nextest plus
 doctests passed on the exact source commit.
+
+## CSS-16 animation origin (IA-ANIMATIONS handoff)
+
+Commit `3a8351c` exposes `compute_with_animations(dom, sheets, &AnimatedValues)`.
+`AnimatedValues` holds validated, typed longhand samples per node and retains
+animation and transition values independently. Animation samples override
+normal author declarations, including inline styles, while important author
+values override animations. Transitions override all other origins. Author
+`revert` can expose an animation sample. `ComputedStyle::get()` and `typed()`
+show the winning value; `StyledDom::source()` reports its origin. The compositor
+or driver must serialize its `AnimationValue` samples into the CSS insertion
+API and route main-thread property updates at the rendering-update boundary.
