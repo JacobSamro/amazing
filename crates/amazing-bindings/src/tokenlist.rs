@@ -3,7 +3,7 @@ use amazing_dom::{DomError, NodeIdx, NodeKind};
 
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::ElementClassList | O::ElementClassName | O::ElementSetClassName
-        | O::TokenListLength | O::TokenListItem | O::TokenListSupportedIndices | O::TokenListIndexedGetter | O::TokenListContains
+        | O::TokenListLength | O::TokenListItem | O::TokenListIndexedGetter | O::TokenListContains
         | O::TokenListAdd | O::TokenListRemove | O::TokenListToggle
         | O::TokenListReplace | O::TokenListSupports | O::TokenListValue
         | O::TokenListSetValue)
@@ -40,6 +40,11 @@ fn tokens(units: &[u16]) -> Vec<Vec<u16>> {
         if !result.iter().any(|existing| existing == token) { result.push(token.to_vec()); }
     }
     result
+}
+pub(crate) fn supported_index_count<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<u32, H::Error> {
+    let element = element(host, receiver, true)?;
+    let count = tokens(&class_value(host, element)?).len();
+    Ok(u32::try_from(count).expect("DOMTokenList length exceeds u32"))
 }
 fn serialize(tokens: &[Vec<u16>]) -> Vec<u16> {
     let mut result = Vec::new();
@@ -83,9 +88,6 @@ pub(crate) fn invoke<H: BindingHost>(
     let original = class_value(host, element)?;
     let mut current = tokens(&original);
     if op == O::TokenListLength { return Ok(host.number(current.len() as f64)); }
-    if op == O::TokenListSupportedIndices {
-        return host.create_array((0..current.len()).map(|index| host.number(index as f64)).collect());
-    }
     if matches!(op, O::TokenListItem | O::TokenListIndexedGetter) {
         let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
         let number = host.to_number(value)?;

@@ -231,19 +231,14 @@ fn call(h: &mut Host, op: O, receiver: V, args: &[V]) -> V {
 fn mock_legacy_get(h: &mut Host, receiver: V, key: &str) -> V {
     let hooks = h.legacy.iter().find(|(brand, _)| h.platform_object(&receiver, *brand).is_some()).unwrap().1;
     if let Ok(index) = key.parse::<u32>() {
-        let supported = call(h, hooks.supported_indices, receiver.clone(), &[]);
-        if let V::Array(indices) = supported {
-            if indices.contains(&V::Number(index as f64)) {
-                return call(h, hooks.indexed_getter, receiver, &[V::Number(index as f64)]);
-            }
+        if index < crate::supported_index_count(h, hooks.supported_index_count, &receiver).unwrap() {
+            return call(h, hooks.indexed_getter, receiver, &[V::Number(index as f64)]);
         }
     }
     if let Some(names_op) = hooks.supported_names {
-        let supported = call(h, names_op, receiver.clone(), &[]);
-        if let V::Array(names) = supported {
-            if names.contains(&str_value(key)) {
-                return call(h, hooks.named_getter.unwrap(), receiver, &[str_value(key)]);
-            }
+        let supported = crate::supported_names(h, names_op, &receiver).unwrap();
+        if supported.contains(&key.encode_utf16().collect()) {
+            return call(h, hooks.named_getter.unwrap(), receiver, &[str_value(key)]);
         }
     }
     V::Undefined
@@ -251,13 +246,11 @@ fn mock_legacy_get(h: &mut Host, receiver: V, key: &str) -> V {
 fn mock_legacy_keys(h: &mut Host, receiver: V) -> Vec<String> {
     let hooks = h.legacy.iter().find(|(brand, _)| h.platform_object(&receiver, *brand).is_some()).unwrap().1;
     let mut keys = Vec::new();
-    if let V::Array(indices) = call(h, hooks.supported_indices, receiver.clone(), &[]) {
-        for value in indices { if let V::Number(index) = value { keys.push((index as u32).to_string()); } }
-    }
+    let count = crate::supported_index_count(h, hooks.supported_index_count, &receiver).unwrap();
+    keys.extend((0..count).map(|index| index.to_string()));
     if let Some(names) = hooks.supported_names {
-        if let V::Array(values) = call(h, names, receiver, &[]) {
-            for value in values { if let V::String(units) = value { keys.push(String::from_utf16(&units).unwrap()); } }
-        }
+        let values = crate::supported_names(h, names, &receiver).unwrap();
+        for units in values { keys.push(String::from_utf16(&units).unwrap()); }
     }
     keys
 }
@@ -745,6 +738,9 @@ fn html_collection_binding_and_legacy_hooks_are_live() {
     assert_eq!(h.legacy[0].0, InterfaceBrand::COLLECTION);
     assert_eq!(h.legacy[0].1.named_getter, Some(O::HTMLCollectionNamedGetter));
     assert!(h.legacy[0].1.unenumerable_names);
+    assert!(h.legacy.iter().all(|(_, hooks)| !hooks.override_builtins
+        && hooks.indexed_setter.is_none() && hooks.named_setter.is_none()
+        && hooks.named_deleter.is_none()));
     assert!(h.iterables.contains(&(Interface::NodeList, IterableKind::Values)));
     assert!(h.iterables.contains(&(Interface::DOMTokenList, IterableKind::Values)));
     let root = h.dom.create_element(NodeIdx(0), "div");
@@ -770,10 +766,10 @@ fn html_collection_binding_and_legacy_hooks_are_live() {
     assert_eq!(mock_legacy_get(&mut h, collection.clone(), "0"), V::Node(first));
     assert_eq!(mock_legacy_get(&mut h, collection.clone(), "first"), V::Node(first));
     assert_eq!(mock_legacy_keys(&mut h, collection.clone()), vec!["0", "first"]);
-    assert_eq!(call(&mut h, O::HTMLCollectionSupportedNames, collection.clone(), &[]), V::Array(vec![str_value("first")]));
+    assert_eq!(crate::supported_names(&mut h, O::HTMLCollectionSupportedNames, &collection).unwrap(), vec!["first".encode_utf16().collect::<Vec<_>>()]);
     let second = h.dom.create_element(root, "b");
     h.dom.set_attribute(second, "name", "named").unwrap();
-    assert_eq!(call(&mut h, O::HTMLCollectionSupportedIndices, collection.clone(), &[]), V::Array(vec![V::Number(0.), V::Number(1.)]));
+    assert_eq!(crate::supported_index_count(&mut h, O::HTMLCollectionSupportedIndexCount, &collection).unwrap(), 2);
     assert_eq!(call(&mut h, O::HTMLCollectionNamedItem, collection.clone(), &[str_value("named")]), V::Node(second));
     h.dom.detach(first);
     assert_eq!(call(&mut h, O::HTMLCollectionItem, collection.clone(), &[V::Number(0.)]), V::Node(second));

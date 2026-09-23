@@ -196,7 +196,7 @@ pub enum Operation {
     HTMLSetTranslate,
     TokenListLength,
     TokenListItem,
-    TokenListSupportedIndices,
+    TokenListSupportedIndexCount,
     TokenListIndexedGetter,
     TokenListContains,
     TokenListAdd,
@@ -279,7 +279,7 @@ pub enum Operation {
     CreateElementNS,
     NodeListLength,
     NodeListItem,
-    NodeListSupportedIndices,
+    NodeListSupportedIndexCount,
     NodeListIndexedGetter,
     ElementChildren,
     DocumentChildren,
@@ -293,7 +293,7 @@ pub enum Operation {
     HTMLCollectionLength,
     HTMLCollectionItem,
     HTMLCollectionNamedItem,
-    HTMLCollectionSupportedIndices,
+    HTMLCollectionSupportedIndexCount,
     HTMLCollectionSupportedNames,
     HTMLCollectionIndexedGetter,
     HTMLCollectionNamedGetter,
@@ -402,10 +402,16 @@ pub enum HostCallPolicy {
 /// visibility rules. No indexed or named properties are preinstalled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LegacyPlatformHooks {
-    pub supported_indices: Operation,
+    /// Routed through `supported_index_count`, returning a native count.
+    pub supported_index_count: Operation,
+    /// Routed through `supported_names`, returning UTF-16 names in spec order.
     pub supported_names: Option<Operation>,
     pub indexed_getter: Operation,
+    pub indexed_setter: Option<Operation>,
     pub named_getter: Option<Operation>,
+    pub named_setter: Option<Operation>,
+    pub named_deleter: Option<Operation>,
+    pub override_builtins: bool,
     pub unenumerable_names: bool,
 }
 

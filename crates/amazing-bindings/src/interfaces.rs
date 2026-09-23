@@ -624,22 +624,28 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<(), H::Error> {
         host.install_interface(definition)?;
     }
     host.define_legacy_platform_object(InterfaceBrand::COLLECTION, LegacyPlatformHooks {
-        supported_indices: O::HTMLCollectionSupportedIndices,
+        supported_index_count: O::HTMLCollectionSupportedIndexCount,
         supported_names: Some(O::HTMLCollectionSupportedNames),
         indexed_getter: O::HTMLCollectionIndexedGetter,
+        indexed_setter: None,
         named_getter: Some(O::HTMLCollectionNamedGetter),
+        named_setter: None,
+        named_deleter: None,
+        override_builtins: false,
         unenumerable_names: true,
     })?;
     for brand in [InterfaceBrand::NODE_LIST, InterfaceBrand::STATIC_NODE_LIST] {
         host.define_legacy_platform_object(brand, LegacyPlatformHooks {
-            supported_indices: O::NodeListSupportedIndices, supported_names: None,
-            indexed_getter: O::NodeListIndexedGetter, named_getter: None,
+            supported_index_count: O::NodeListSupportedIndexCount, supported_names: None,
+            indexed_getter: O::NodeListIndexedGetter, indexed_setter: None, named_getter: None,
+            named_setter: None, named_deleter: None, override_builtins: false,
             unenumerable_names: false,
         })?;
     }
     host.define_legacy_platform_object(InterfaceBrand::DOM_TOKEN_LIST, LegacyPlatformHooks {
-        supported_indices: O::TokenListSupportedIndices, supported_names: None,
-        indexed_getter: O::TokenListIndexedGetter, named_getter: None,
+        supported_index_count: O::TokenListSupportedIndexCount, supported_names: None,
+        indexed_getter: O::TokenListIndexedGetter, indexed_setter: None, named_getter: None,
+        named_setter: None, named_deleter: None, override_builtins: false,
         unenumerable_names: false,
     })?;
     host.define_iterable(I::NodeList, IterableKind::Values)?;

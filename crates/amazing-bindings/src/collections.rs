@@ -1,13 +1,61 @@
 use crate::host::{BindingHost, InterfaceBrand, Operation as O};
 use amazing_dom::{collection::CollectionFilter, DomError, NodeKind};
 
-pub(crate) fn handles(op: O) -> bool { matches!(op, O::NodeListLength | O::NodeListItem | O::NodeListSupportedIndices | O::NodeListIndexedGetter
+pub(crate) fn handles(op: O) -> bool { matches!(op, O::NodeListLength | O::NodeListItem | O::NodeListIndexedGetter
     | O::ElementChildren | O::DocumentChildren | O::FragmentChildren | O::ElementGetElementsByTagName | O::ElementGetElementsByTagNameNS
     | O::ElementGetElementsByClassName | O::DocumentGetElementsByTagName
     | O::DocumentGetElementsByTagNameNS | O::DocumentGetElementsByClassName
     | O::HTMLCollectionLength | O::HTMLCollectionItem | O::HTMLCollectionNamedItem
-    | O::HTMLCollectionSupportedIndices | O::HTMLCollectionSupportedNames
     | O::HTMLCollectionIndexedGetter | O::HTMLCollectionNamedGetter) }
+
+fn collection_slot<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<usize, H::Error> {
+    let key = host.platform_object(receiver, InterfaceBrand::COLLECTION)
+        .ok_or_else(|| host.type_error("Expected an HTMLCollection"))?;
+    if key.arena != host.node_platform_key(host.current_document()).arena || key.generation != 1 {
+        return Err(host.type_error("Invalid HTMLCollection"));
+    }
+    Ok(key.slot as usize)
+}
+
+fn node_list_length<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<usize, H::Error> {
+    let live = host.platform_object(receiver, InterfaceBrand::NODE_LIST);
+    let static_list = host.platform_object(receiver, InterfaceBrand::STATIC_NODE_LIST);
+    let key = live.or(static_list).ok_or_else(|| host.type_error("Expected a NodeList"))?;
+    if key.arena != host.node_platform_key(host.current_document()).arena || key.generation != 1 {
+        return Err(host.type_error("Invalid NodeList"));
+    }
+    let parent = if live.is_some() { Some(host.node_from_platform_key(key)
+        .ok_or_else(|| host.type_error("Invalid NodeList"))?) } else { None };
+    host.with_dom(|dom| match parent {
+        Some(parent) => Ok(dom.children(parent).count()),
+        None => dom.static_node_list(key.slot as usize).map(|nodes| nodes.len())
+            .ok_or(amazing_dom::DomError::InvalidStateError),
+    })
+}
+
+pub(crate) fn supported_index_count<H: BindingHost>(
+    host: &mut H, op: O, receiver: &H::Value,
+) -> Result<u32, H::Error> {
+    let count = match op {
+        O::HTMLCollectionSupportedIndexCount => {
+            let slot = collection_slot(host, receiver)?;
+            host.with_dom(|dom| dom.collection_length(slot))?
+        }
+        O::NodeListSupportedIndexCount => node_list_length(host, receiver)?,
+        _ => return Err(host.type_error("Expected a supported index count hook")),
+    };
+    Ok(u32::try_from(count).expect("DOM collection length exceeds u32"))
+}
+
+pub(crate) fn supported_names<H: BindingHost>(
+    host: &mut H, op: O, receiver: &H::Value,
+) -> Result<Vec<Vec<u16>>, H::Error> {
+    if op != O::HTMLCollectionSupportedNames {
+        return Err(host.type_error("Expected a supported names hook"));
+    }
+    let slot = collection_slot(host, receiver)?;
+    host.with_dom(|dom| dom.collection_names(slot))
+}
 
 fn index<H: BindingHost>(host: &mut H, arg: Option<&H::Value>) -> Result<usize, H::Error> {
     let arg = arg.ok_or_else(|| host.type_error("Not enough arguments"))?;
@@ -56,26 +104,11 @@ pub(crate) fn invoke<H: BindingHost>(
         return host.wrap_platform_object(key, InterfaceBrand::COLLECTION);
     }
     if matches!(op, O::HTMLCollectionLength | O::HTMLCollectionItem | O::HTMLCollectionNamedItem
-        | O::HTMLCollectionSupportedIndices | O::HTMLCollectionSupportedNames
         | O::HTMLCollectionIndexedGetter | O::HTMLCollectionNamedGetter) {
-        let key = host.platform_object(&receiver, InterfaceBrand::COLLECTION)
-            .ok_or_else(|| host.type_error("Expected an HTMLCollection"))?;
-        if key.arena != host.node_platform_key(host.current_document()).arena || key.generation != 1 {
-            return Err(host.type_error("Invalid HTMLCollection"));
-        }
-        let slot = key.slot as usize;
+        let slot = collection_slot(host, &receiver)?;
         if op == O::HTMLCollectionLength {
             let len = host.with_dom(|dom| dom.collection_length(slot))?;
             return Ok(host.number(len as f64));
-        }
-        if op == O::HTMLCollectionSupportedIndices {
-            let len = host.with_dom(|dom| dom.collection_length(slot))?;
-            return host.create_array((0..len).map(|i| host.number(i as f64)).collect());
-        }
-        if op == O::HTMLCollectionSupportedNames {
-            let names = host.with_dom(|dom| dom.collection_names(slot))?;
-            let values = names.iter().map(|name| host.string(name)).collect::<Result<Vec<_>, _>>()?;
-            return host.create_array(values);
         }
         let node = if matches!(op, O::HTMLCollectionItem | O::HTMLCollectionIndexedGetter) {
             let position = index(host, args.first())?;
@@ -95,14 +128,9 @@ pub(crate) fn invoke<H: BindingHost>(
     }
     let parent = if live.is_some() { Some(host.node_from_platform_key(key)
         .ok_or_else(|| host.type_error("Invalid NodeList"))?) } else { None };
-    if matches!(op, O::NodeListLength | O::NodeListSupportedIndices) {
-        let length = host.with_dom(|dom| match parent {
-            Some(parent) => Ok(dom.children(parent).count()),
-            None => dom.static_node_list(key.slot as usize).map(|nodes| nodes.len())
-                .ok_or(amazing_dom::DomError::InvalidStateError),
-        })?;
-        return if op == O::NodeListLength { Ok(host.number(length as f64)) }
-            else { host.create_array((0..length).map(|index| host.number(index as f64)).collect()) };
+    if op == O::NodeListLength {
+        let length = node_list_length(host, &receiver)?;
+        return Ok(host.number(length as f64));
     }
     let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
     let number = host.to_number(value)?;

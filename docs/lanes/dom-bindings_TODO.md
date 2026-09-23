@@ -1225,11 +1225,13 @@ not attributed as a DOM-7 conformance improvement.
 
 `HTMLCollection` uses the native owner/filter collection slot as a private key. The runtime must consult the registered hooks during `[[Get]]`, `[[GetOwnProperty]]` and `[[OwnPropertyKeys]]`, applying WebIDL named-property visibility and the `LegacyUnenumerableNamedProperties` rule. It must not materialize keys as ordinary own properties. Supported names are returned in tree order, with each element’s ID before its HTML `name`; `namedItem` finds the first element in tree order whose ID or HTML name matches. Indexed getters use currently supported indices. Every hook call runs outside `with_dom`, then binds a short native borrow. `NodeList` iterable registration needs runtime iterator state with live indexed reads. The mock exercises dynamic key resolution after mutation. This is an additive proposal for js-runtime, not a runtime implementation.
 
+The js-runtime review is incorporated: all four registered legacy objects set `override_builtins: false` and expose optional `indexed_setter`, `named_setter`, and `named_deleter` slots (currently `None` for these read-only objects). The supported index hook dispatches through `supported_index_count(host, operation, receiver) -> Result<u32, H::Error>`; the runtime treats `0..count` as the supported indices. The names hook dispatches through `supported_names(host, operation, receiver) -> Result<Vec<Vec<u16>>, H::Error>`, preserving UTF-16 units and spec order. These typed functions return native values; the generic `invoke` entry point handles getter operations returning JS values, and the runtime converts keys only for `[[OwnPropertyKeys]]`. Every callback starts outside a DOM borrow and acquires only its own short borrow. Optional setter/deleter operations remain available for future mutable legacy interfaces.
+
 Exact `host.rs` diff on the fixed base:
 
 ```diff
 diff --git a/crates/amazing-bindings/src/host.rs b/crates/amazing-bindings/src/host.rs
-index 81848d9..1c642d8 100644
+index 81848d9..6d21c52 100644
 --- a/crates/amazing-bindings/src/host.rs
 +++ b/crates/amazing-bindings/src/host.rs
 @@ -51,6 +51,72 @@ pub enum Interface {
@@ -1327,7 +1329,7 @@ index 81848d9..1c642d8 100644
 +    HTMLSetTranslate,
      TokenListLength,
      TokenListItem,
-+    TokenListSupportedIndices,
++    TokenListSupportedIndexCount,
 +    TokenListIndexedGetter,
      TokenListContains,
      TokenListAdd,
@@ -1336,7 +1338,7 @@ index 81848d9..1c642d8 100644
      CreateElementNS,
      NodeListLength,
      NodeListItem,
-+    NodeListSupportedIndices,
++    NodeListSupportedIndexCount,
 +    NodeListIndexedGetter,
 +    ElementChildren,
 +    DocumentChildren,
@@ -1350,14 +1352,14 @@ index 81848d9..1c642d8 100644
 +    HTMLCollectionLength,
 +    HTMLCollectionItem,
 +    HTMLCollectionNamedItem,
-+    HTMLCollectionSupportedIndices,
++    HTMLCollectionSupportedIndexCount,
 +    HTMLCollectionSupportedNames,
 +    HTMLCollectionIndexedGetter,
 +    HTMLCollectionNamedGetter,
      CreateNodeIterator,
      CreateTreeWalker,
      TraversalRoot,
-@@ -294,6 +396,22 @@ pub enum HostCallPolicy {
+@@ -294,6 +396,28 @@ pub enum HostCallPolicy {
      CallAndConstruct,
  }
 
@@ -1367,10 +1369,16 @@ index 81848d9..1c642d8 100644
 +/// visibility rules. No indexed or named properties are preinstalled.
 +#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 +pub struct LegacyPlatformHooks {
-+    pub supported_indices: Operation,
++    /// Routed through `supported_index_count`, returning a native count.
++    pub supported_index_count: Operation,
++    /// Routed through `supported_names`, returning UTF-16 names in spec order.
 +    pub supported_names: Option<Operation>,
 +    pub indexed_getter: Operation,
++    pub indexed_setter: Option<Operation>,
 +    pub named_getter: Option<Operation>,
++    pub named_setter: Option<Operation>,
++    pub named_deleter: Option<Operation>,
++    pub override_builtins: bool,
 +    pub unenumerable_names: bool,
 +}
 +
@@ -1380,7 +1388,7 @@ index 81848d9..1c642d8 100644
  /// The binding layer declares this trait. The driver implements it using the
  /// runtime's backend-neutral capabilities and its same parsed DOM arena.
  ///
-@@ -354,6 +472,12 @@ pub trait BindingHost: Sized {
+@@ -354,6 +478,12 @@ pub trait BindingHost: Sized {
          enumerable: bool,
          configurable: bool,
      ) -> Result<(), Self::Error>;
@@ -1393,7 +1401,7 @@ index 81848d9..1c642d8 100644
      fn get_property(
          &mut self,
          object: &Self::Value,
-@@ -443,6 +567,9 @@ pub trait BindingHost: Sized {
+@@ -443,6 +573,9 @@ pub trait BindingHost: Sized {
      fn is_undefined(&self, value: &Self::Value) -> bool;
      fn is_nullish(&self, value: &Self::Value) -> bool;
      fn to_boolean(&self, value: &Self::Value) -> bool;
