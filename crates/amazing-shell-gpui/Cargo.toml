@@ -9,6 +9,7 @@ rust-version = "1.89"
 [dependencies]
 amazing-css = { path = "../amazing-css" }
 amazing-dom = { path = "../amazing-dom" }
+amazing-fetch = { path = "../amazing-fetch" }
 amazing-html = { path = "../amazing-html" }
 amazing-js = { path = "../amazing-js" }
 amazing-layout = { path = "../amazing-layout" }
