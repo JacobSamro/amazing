@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "layout12-css12-font-ligature"
+  },
+  "sparse_paths": [
+    "css/css-fonts"
+  ],
+  "tests": [
+    {
+      "id": "css-fonts__font-variant-ligatures-11.optional.html",
+      "test": "css/css-fonts/font-variant-ligatures-11.optional.html"
+    }
+  ]
+}

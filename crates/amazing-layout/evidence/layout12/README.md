@@ -17,6 +17,13 @@ before the final renderer was frozen.
 
 `retained-before/` and `retained-after/` each contain two raw reports for ten
 selections. Every selection retained its pass count and actual hashes. The
-image selection uses the pinned image-capable executable recorded by the
-existing `layout5/run-final.ps1` runner. Windows nextest/doctest counts are
-recorded in `gate-summary.json` and the lane report.
+image selection uses the same pinned image-capable executable as LAYOUT-11.
+
+CSS-12 then landed at `7a1e31e`. `font-before.json` uses CSS-12 without the
+layout font mapper; `font-after.json` uses the rebased LAYOUT-12 source. The
+pinned ligature reftest moves 0/1 to 1/1, or 424 differing pixels to zero.
+`font-source.json` records both source archives and distinct executable hashes.
+The first candidate build reused the baseline executable because extraction
+preserved file times; it was discarded and rebuilt with fresh file times.
+`win002-gate/` contains the raw Windows nextest and doctest logs for the
+rebased source. Counts are in `gate-summary.json` and the lane report.

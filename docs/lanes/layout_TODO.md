@@ -1095,8 +1095,14 @@ Two flex pseudo-element mismatches are blocked at
 `::after`; CSS-13 owns computed pseudo styles and LAYOUT-13 owns generated
 boxes. The exact cross-lane request is in `.agents/layout/questions.md`.
 
-CSS-12 computed `font-feature-settings` and `font-variant-ligatures` had not
-landed on dev by this fixed-base gate. The saved LAYOUT-11 font-feature stash
-remains pending for the next ticket after CSS-12. Evidence, source/executable
-hashes, and the seven exact case IDs are under
+CSS-12 then landed locally as `7a1e31e`. The saved LAYOUT-11 feature mapper was
+restored and rebased onto it. `box_tree.rs::text_style` now passes computed
+`font-feature-settings` and `font-variant-ligatures` into `TextStyle.features`;
+explicit feature settings override variant defaults, while required ligatures
+stay enabled under `none`. The pinned `font-variant-ligatures-11.optional`
+reftest moved **0/1 → 1/1** on the CSS-12-only/combined comparison, from 424
+differing pixels to zero. The source-verified Windows final gate on win-002
+passed layout **238/238** nextest and **0/0** doctests, plus workspace
+**1843/1843** nextest (5 skipped) and **2/2** doctests. Evidence,
+source/executable hashes, and the seven broad gain IDs are under
 `crates/amazing-layout/evidence/layout12/`.

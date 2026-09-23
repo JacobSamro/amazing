@@ -1,0 +1,38 @@
+{
+  "css12_base": "7a1e31e",
+  "layout_source_commit": "bb8a654037e3b26201d8ad4ab51c70cdeb2131fa",
+  "base_archive_sha256": "1e538ef9b0ae2f13297b7931fcbe6ca1f8ca852e7031a8561e10a356ee13f002",
+  "candidate_source_archive_sha256": "c63e19be976dffc58aacade86cc6fc3bdb5808f1b1f9a25aa18433d532f3cf2b",
+  "renderer_before_sha256": "f00479d90d1e7077c1e6e1ca14f6c5682959d7975ebeb9700d382bfdc57ba9cb",
+  "renderer_after_sha256": "b15f7ad4a8a048acbd8f188d663c838b20244296d3e11ab65a189fcee86a1204",
+  "files": [
+    {
+      "path": "crates/amazing-layout/src/block.rs",
+      "sha256": "746302f4e0269eed07ebbf4720dd313d0a29d9af3207ea867a54835b97a3a07c"
+    },
+    {
+      "path": "crates/amazing-layout/src/box_tree.rs",
+      "sha256": "b4e50a252f0b402f2a69e8d9cb19511e99bc4c955a62b993fa7bbee5e80f7ad6"
+    },
+    {
+      "path": "crates/amazing-layout/src/font_features.rs",
+      "sha256": "d096f4a729a81b46be43cb26f671dab87f45cbd015dbe3c3535c8301b96b02bd"
+    },
+    {
+      "path": "crates/amazing-layout/src/inline.rs",
+      "sha256": "d44a435efcce462d21ee72247c5d149ef910a4ea5f155f7d1c26e0f990b9256d"
+    },
+    {
+      "path": "crates/amazing-layout/src/inline_replaced_tests.rs",
+      "sha256": "fe513015651b7ab6e42f602669e37fdfebd093e7217f129ca8d1ac377193c009"
+    },
+    {
+      "path": "crates/amazing-layout/src/lib.rs",
+      "sha256": "fdfbb4abe032e1926e6b93ed2c99cf58e4566bd0f39f06b6a44e7d68326e78c5"
+    },
+    {
+      "path": "crates/amazing-layout/src/position.rs",
+      "sha256": "6486eb566ff9887064c989b0d928ac3fa786174ecb94a0d967dd68c8214bf489"
+    }
+  ]
+}

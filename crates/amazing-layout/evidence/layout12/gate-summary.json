@@ -250,5 +250,42 @@
       "changed_actual_hashes": 0
     }
   ],
-  "windows_gate": null
+  "windows_gate": {
+    "host": "win-002",
+    "layout_nextest": {
+      "passed": 238,
+      "skipped": 0
+    },
+    "layout_doctests": {
+      "passed": 0
+    },
+    "workspace_nextest": {
+      "passed": 1843,
+      "skipped": 5
+    },
+    "workspace_doctests": {
+      "passed": 2
+    }
+  },
+  "font": {
+    "css12_base": "7a1e31e",
+    "before": {
+      "pass": 0,
+      "mismatch": 1,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after": {
+      "pass": 1,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "differing_pixels_before": 424,
+    "differing_pixels_after": 0
+  }
 }
