@@ -1,5 +1,23 @@
 //! Page resource loading and stylesheet collection.
 use crate::cmd::js::resolve_script_url;
+
+fn load_resource(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
+    if url.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:")) {
+        let parsed = amazing_net::ParsedUrl::parse(url).map_err(|error| format!("{error:?}"))?;
+        let data = amazing_fetch::process_data_url(&parsed)
+            .ok_or_else(|| "invalid data URL".to_owned())?;
+        return (data.body.len() <= max_bytes)
+            .then_some(data.body)
+            .ok_or_else(|| "resource size limit".to_owned());
+    }
+    let options = amazing_net::FetchOptions {
+        max_response_bytes: max_bytes,
+        ..amazing_net::FetchOptions::default()
+    };
+    amazing_net::fetch(url, &options)
+        .map(|response| response.body)
+        .map_err(|error| error.to_string())
+}
 struct PageImage {
     node: amazing_dom::NodeIdx,
     image: amazing_media::Image,
@@ -73,12 +91,8 @@ pub(crate) fn load_page_text(css: &str, page: &str) -> PageText {
                 },
             };
             let resolved = resolve_font_url(page, &source.url);
-            let fetch_options = amazing_net::FetchOptions {
-                max_response_bytes: MAX_PAGE_FONT_BYTES,
-                ..amazing_net::FetchOptions::default()
-            };
-            let bytes = match amazing_net::fetch(&resolved, &fetch_options) {
-                Ok(response) => response.body,
+            let bytes = match load_resource(&resolved, MAX_PAGE_FONT_BYTES) {
+                Ok(bytes) => bytes,
                 Err(error) => {
                     errors.push(format!("{}: {error}", source.url));
                     continue;
@@ -219,6 +233,34 @@ impl amazing_paint::ImageProvider for PageMedia {
     }
 }
 
+/// Paint access to the live document and its computed styles for inline SVG.
+pub(crate) struct PagePaint<'a> {
+    pub(crate) media: &'a PageMedia,
+    pub(crate) dom: &'a amazing_dom::Dom,
+    pub(crate) styles: &'a amazing_css::StyledDom,
+}
+
+impl amazing_paint::ImageProvider for PagePaint<'_> {
+    fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
+        amazing_paint::ImageProvider::image(self.media, node)
+    }
+
+    fn svg(&self, node: amazing_dom::NodeIdx, width: u32, height: u32, dpr: f32) -> Option<amazing_media::Image> {
+        if self.dom.namespace(node) != Some(amazing_dom::Namespace::Svg)
+            || self.dom.name(node) != Some("svg")
+        {
+            return None;
+        }
+        let limits = amazing_image::DecodeLimits::default();
+        let document = amazing_image::svg::from_dom(self.dom, self.styles, node, width, height, limits).ok()?;
+        amazing_image::svg::render_svg(&document, width, height, dpr, limits).ok()
+    }
+
+    fn device_scale(&self) -> f32 {
+        1.0
+    }
+}
+
 pub(crate) fn load_page_media(dom: &amazing_dom::Dom, page: &str) -> PageMedia {
     fn walk(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, page: &str, media: &mut PageMedia) {
         if dom.name(node) == Some("img") {
@@ -229,10 +271,9 @@ pub(crate) fn load_page_media(dom: &amazing_dom::Dom, page: &str) -> PageMedia {
                 .filter(|value| !value.trim().is_empty());
             if let Some(source) = source {
                 let resolved = resolve_script_url(page, source);
-                match amazing_net::fetch(&resolved, &amazing_net::FetchOptions::default())
-                    .map_err(|error| error.to_string())
-                    .and_then(|response| {
-                        amazing_media::decode_image(&response.body)
+                match load_resource(&resolved, 16 * 1024 * 1024)
+                    .and_then(|bytes| {
+                        amazing_image::decode(&bytes, Default::default())
                             .map_err(|error| error.to_string())
                     }) {
                     Ok(image) => {
@@ -305,11 +346,9 @@ pub(crate) fn collect_author_css(
                 .map(|(_, value)| value)
         {
             let url = resolve_script_url(page, href);
-            let response = amazing_net::fetch(&url, &amazing_net::FetchOptions::default())
+            let response = load_resource(&url, 16 * 1024 * 1024)
                 .map_err(|error| format!("stylesheet {href}: {error}"))?;
-            let source = response
-                .text()
-                .ok_or_else(|| format!("stylesheet {href} was not text"))?;
+            let source = String::from_utf8_lossy(&response).into_owned();
             let mut sheet = amazing_css::parse_stylesheet(&source);
             sheet.scope_root = dom.get(node).parent;
             out.push((source, sheet));
@@ -326,6 +365,18 @@ pub(crate) fn collect_author_css(
 mod tests {
     use super::*;
     use amazing_layout::ReplacedElementProvider;
+
+    #[test]
+    fn data_urls_supply_image_and_stylesheet_bytes() {
+        let dom = amazing_html::parse("<link rel='stylesheet' href='data:text/css,body%7Bcolor%3Ared%7D'><img src='data:image/x-portable-pixmap,P6%0A1%201%0A255%0A%FF%00%00'>");
+        let media = load_page_media(&dom, "C:/pages/test.html");
+        assert_eq!(media.images.len(), 1, "{:?}", media.warnings);
+        assert_eq!((media.images[0].image.width, media.images[0].image.height), (1, 1));
+        let mut sheets = Vec::new();
+        collect_author_css(&dom, amazing_dom::NodeIdx(0), "C:/pages/test.html", &mut sheets).unwrap();
+        assert_eq!(sheets.len(), 1);
+        assert_eq!(sheets[0].0, "body{color:red}");
+    }
 
     #[test]
     fn image_intrinsic_size_ignores_html_and_css_dimensions() {

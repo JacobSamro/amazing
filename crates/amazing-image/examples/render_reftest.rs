@@ -22,6 +22,35 @@ impl amazing_paint::ImageProvider for Resources {
         self.0.get(&n.0).map(|v| &v.image)
     }
 }
+struct PaintResources<'a> {
+    resources: &'a Resources,
+    dom: &'a Dom,
+    styles: &'a amazing_css::StyledDom,
+}
+impl amazing_paint::ImageProvider for PaintResources<'_> {
+    fn image(&self, node: NodeIdx) -> Option<&amazing_media::Image> {
+        amazing_paint::ImageProvider::image(self.resources, node)
+    }
+    fn background_image(&self, node: NodeIdx, url: &str) -> Option<&amazing_media::Image> {
+        amazing_paint::ImageProvider::background_image(self.resources, node, url)
+    }
+    fn svg(&self, node: NodeIdx, width: u32, height: u32, dpr: f32) -> Option<amazing_media::Image> {
+        if self.dom.namespace(node) != Some(amazing_dom::Namespace::Svg)
+            || self.dom.name(node) != Some("svg")
+        {
+            return None;
+        }
+        let limits = amazing_image::DecodeLimits::default();
+        let document = amazing_image::svg::from_dom(self.dom, self.styles, node, width, height, limits).ok()?;
+        amazing_image::svg::render_svg(&document, width, height, dpr, limits).ok()
+    }
+    fn device_scale(&self) -> f32 { 1.0 }
+    fn presentation(&self, node: NodeIdx) -> amazing_paint::image::ImagePresentation {
+        self.styles.get(node)
+            .map(amazing_paint::image::ImagePresentation::from_style)
+            .unwrap_or_default()
+    }
+}
 fn attr<'a>(dom: &'a Dom, n: NodeIdx, key: &str) -> Option<&'a str> {
     dom.attrs_of(n)?
         .iter()
@@ -39,6 +68,19 @@ fn resolve(page: &Path, source: &str) -> PathBuf {
     page.parent()
         .unwrap()
         .join(source.split('#').next().unwrap_or(source))
+}
+fn read_resource(page: &Path, source: &str) -> Option<Vec<u8>> {
+    const MAX_BYTES: u64 = 16 * 1024 * 1024;
+    if source.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:")) {
+        let url = amazing_net::ParsedUrl::parse(source).ok()?;
+        let data = amazing_fetch::process_data_url(&url)?;
+        return (data.body.len() as u64 <= MAX_BYTES).then_some(data.body);
+    }
+    let path = resolve(page, source);
+    if std::fs::metadata(&path).ok()?.len() > MAX_BYTES {
+        return None;
+    }
+    std::fs::read(path).ok()
 }
 fn visit(dom: &Dom, n: NodeIdx, f: &mut impl FnMut(NodeIdx)) {
     f(n);
@@ -69,7 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         } else if dom.name(n) == Some("link") && attr(&dom, n, "rel") == Some("stylesheet") {
             if let Some(href) = attr(&dom, n, "href") {
-                if let Ok(text) = std::fs::read_to_string(resolve(page, href)) {
+                if let Some(text) = read_resource(page, href).map(|bytes| String::from_utf8_lossy(&bytes).into_owned()) {
                     css.push_str(&text);
                     css.push('\n');
                 }
@@ -85,11 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let Some(src) = attr(&dom, n, "src") else {
             return;
         };
-        let path = resolve(page, src);
-        if std::fs::metadata(&path).map_or(true, |m| m.len() > 16 * 1024 * 1024) {
-            return;
-        }
-        let Ok(bytes) = std::fs::read(path) else {
+        let Some(bytes) = read_resource(page, src) else {
             return;
         };
         let image = if std::env::var_os("AMAZING_IMAGE_BASELINE").is_some() {
@@ -126,9 +164,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for layer in amazing_paint::background::BackgroundPlan::from_style(style).layers {
             let Some(url) = layer.url else { continue; };
             if attempted_backgrounds.len() >= 256 || !attempted_backgrounds.insert(url.clone()) { continue; }
-            let path = resolve(page, &url);
-            if std::fs::metadata(&path).map_or(true, |m| m.len() > 16 * 1024 * 1024) { continue; }
-            let Some(image) = std::fs::read(path).ok().and_then(|bytes| amazing_image::decode(&bytes, Default::default()).ok()) else { continue; };
+            let Some(image) = read_resource(page, &url).and_then(|bytes| amazing_image::decode(&bytes, Default::default()).ok()) else { continue; };
             if retained.saturating_add(image.pixels.len()) > 128 * 1024 * 1024 { continue; }
             retained += image.pixels.len();
             resources.1.insert(url, image);
@@ -144,12 +180,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &resources,
     );
     let glyphs = amazing_paint::RectInkProvider;
-    let images = amazing_paint::image::StyledImages {
-        images: &resources,
-        styles: &styles,
-    };
+    let paint_resources = PaintResources { resources: &resources, dom: &dom, styles: &styles };
     let surface = amazing_paint::paint_document_with_resources(
-        &root, width, height, &fonts, &glyphs, &images,
+        &root, width, height, &fonts, &glyphs, &paint_resources,
     );
     surface.save_ppm(&args[3])?;
     Ok(())
