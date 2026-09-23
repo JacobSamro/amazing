@@ -81,3 +81,39 @@ Rebase update: TEXT-2 alone was replayed onto `origin/dev`
 TEXT-1. The provider and workspace gates were repeated on that head in the
 text lane's refreshed Windows tree: provider nextest 35/35, pinned decoder
 1/1, workspace nextest 1753/1753 (4 skipped), and workspace doctests 2/2.
+
+## TEXT-3: synthesis, feature shaping, fallback, and pending loads
+
+Fixed implementation base: `e2d7ad6ef21b013f0576a6065408a036caf8c3f4`.
+Keep synthetic weight and style in the selected face's raster request. A normal
+face is sheared by 14 degrees for italic or oblique requests only when synthesis
+is enabled; a slanted face is never sheared again. Swash outline emboldening
+uses a size-relative stroke offset. Installed fallback selects the closest face
+within each generic alias after exhausting the requested named families.
+Private-use characters remain restricted to explicitly listed named families.
+
+`TextStyle.features` already reaches HarfRust. A synthetic GSUB font now proves
+on and off behavior for `liga`, `clig`, `dlig`, `hlig`, and `calt` at the provider
+boundary. Layout still owns the computed CSS property handoff into this vector.
+The read-only `pending_font_loads()` reports zero while font registration is
+synchronous; the driver can use it for DOM-17 and later connect async loading.
+Net has supplied `FontRequest::new` and `NetworkService::start_font` for the
+caller-owned URL loader, which remains outside the text provider.
+
+Evidence: `crates/amazing-text-provider/evidence/text3-gate-summary.json`
+links the Windows reports at WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. The frozen 15-case font
+selection stayed at 11 pass and 4 mismatch from the freshly measured before
+run to the candidate, with zero classification losses. Synthetic italic and
+the already mismatching ligatures case changed actual pixels. Retained text
+flow stayed 14/16, shaping 12/12, and vertical/ruby 11/20 against the TEXT-2
+reports. The refreshed Windows tree had no intervening changes to either text
+crate; its base was `6bec0a06626673d690ff0442c6c2706dbc85b2e4`.
+Provider nextest passed 48/48 plus pinned decoder 1/1; workspace nextest
+passed 1781/1781 with four skipped tests, and workspace doctests passed 2/2.
+
+Remaining font selection mismatches: the ligatures case requires the layout
+computed-feature handoff, and the PUA primary-font case needs page-path
+diagnosis. The two first-available-font cases use a web font without U+0020;
+the provider's metric selection currently chooses the first face without
+checking space coverage, and page `@font-face` registration is still pending.
