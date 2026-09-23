@@ -722,6 +722,16 @@ impl TextSystem for FallbackTextSystem {
                     kind: BreakKind::Allowed,
                 });
             }
+            if ch == '\u{fffc}' {
+                for boundary in [start, offset] {
+                    if object_break_allowed(paragraph.text, boundary, fallback_object_break_class) {
+                        shaped.breaks.push(BreakOpportunity {
+                            offset: boundary,
+                            kind: BreakKind::Allowed,
+                        });
+                    }
+                }
+            }
         }
         if !paragraph.text.is_empty() {
             shaped.breaks.push(BreakOpportunity {
@@ -730,8 +740,15 @@ impl TextSystem for FallbackTextSystem {
             });
         }
         shaped.breaks.retain(|opportunity| {
-            opportunity.kind == BreakKind::Mandatory
-                || style_at_break(paragraph.text, paragraph.spans, opportunity.offset)
+            if opportunity.kind == BreakKind::Mandatory {
+                return true;
+            }
+            let offset = opportunity.offset;
+            let adjacent_object = paragraph.text[..offset].ends_with('\u{fffc}')
+                || paragraph.text[offset..].starts_with('\u{fffc}');
+            (!adjacent_object
+                || object_break_allowed(paragraph.text, offset, fallback_object_break_class))
+                && style_at_break(paragraph.text, paragraph.spans, offset)
                     .is_none_or(|style| white_space_wraps(style.white_space))
         });
         shaped.breaks.sort_by_key(|opportunity| opportunity.offset);
@@ -1005,6 +1022,84 @@ fn is_mandatory_break(ch: char) -> bool {
     )
 }
 
+/// The UAX #14 classes that affect LB20 contingent breaks at U+FFFC.
+/// A font provider can supply its Unicode line-break classifier; the fallback
+/// uses the small punctuation classifier below without adding a dependency.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ObjectBreakClass {
+    Other,
+    Opening,
+    Space,
+    LeftProhibited,
+    RightProhibited,
+    BothProhibited,
+}
+
+/// Apply LB20 only after the higher-priority UAX #14 neighbor rules.
+pub fn object_break_allowed(
+    text: &str,
+    offset: usize,
+    class: impl Fn(char) -> ObjectBreakClass,
+) -> bool {
+    const OBJECT: char = '\u{fffc}';
+    if offset == 0 || offset >= text.len() {
+        return false;
+    }
+    let left = text[..offset].chars().next_back().unwrap();
+    let right = text[offset..].chars().next().unwrap();
+    if left != OBJECT && right != OBJECT {
+        return false;
+    }
+    if matches!(
+        class(left),
+        ObjectBreakClass::LeftProhibited | ObjectBreakClass::BothProhibited
+    ) || matches!(
+        class(right),
+        ObjectBreakClass::RightProhibited
+            | ObjectBreakClass::BothProhibited
+            | ObjectBreakClass::Space
+    ) {
+        return false;
+    }
+    // LB14: OP SP* × CB, including spaces between the opening punctuation
+    // and the inline object.
+    if right == OBJECT
+        && text[..offset]
+            .chars()
+            .rev()
+            .find(|ch| class(*ch) != ObjectBreakClass::Space)
+            .is_some_and(|ch| class(ch) == ObjectBreakClass::Opening)
+    {
+        return false;
+    }
+    true
+}
+
+fn fallback_object_break_class(ch: char) -> ObjectBreakClass {
+    match ch {
+        '\u{0020}' | '\t' => ObjectBreakClass::Space,
+        '(' | '[' | '{' | '\u{201a}' | '\u{201e}' | '\u{3008}' | '\u{300a}' | '\u{300c}'
+        | '\u{300e}' | '\u{3010}' | '\u{ff08}' | '\u{ff3b}' | '\u{ff5b}' => {
+            ObjectBreakClass::Opening
+        }
+        '"'
+        | '\''
+        | '\u{00ab}'
+        | '\u{00bb}'
+        | '\u{2018}'..='\u{201f}'
+        | '\u{00a0}'
+        | '\u{202f}'
+        | '\u{2060}'
+        | '\u{feff}'
+        | '\u{200d}' => ObjectBreakClass::BothProhibited,
+        ')' | ']' | '}' | '!' | '?' | ',' | '.' | ':' | ';' | '/' | '\u{3001}' | '\u{3002}'
+        | '\u{3009}' | '\u{300b}' | '\u{300d}' | '\u{300f}' | '\u{3011}' | '\u{ff09}'
+        | '\u{ff3d}' | '\u{ff5d}' | '\u{200b}' | '\n' | '\r' | '\u{000b}' | '\u{000c}'
+        | '\u{0085}' | '\u{2028}' | '\u{2029}' => ObjectBreakClass::RightProhibited,
+        _ => ObjectBreakClass::Other,
+    }
+}
+
 fn is_default_ignorable(ch: char) -> bool {
     matches!(
         ch as u32,
@@ -1027,6 +1122,67 @@ fn white_space_wraps(white_space: WhiteSpace) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fallback_allowed_offsets(text: &str, style: TextStyle) -> Vec<usize> {
+        let spans = [TextSpan {
+            range: 0..text.len(),
+            source: 0,
+            style,
+            boundary_before: ShapingBoundary::Continue,
+        }];
+        FallbackTextSystem::new()
+            .shape(Paragraph {
+                text,
+                spans: &spans,
+                sources: &[],
+                bidi_scopes: &[],
+                base_direction: Direction::LeftToRight,
+            })
+            .unwrap()
+            .breaks
+            .into_iter()
+            .filter(|op| op.kind == BreakKind::Allowed)
+            .map(|op| op.offset)
+            .collect()
+    }
+
+    #[test]
+    fn fallback_lb20_breaks_around_atomic_inlines_with_neighbor_guards() {
+        assert_eq!(
+            fallback_allowed_offsets("a\u{fffc}b", TextStyle::default()),
+            vec![1, 4]
+        );
+        assert_eq!(
+            fallback_allowed_offsets("\u{fffc}\u{fffc}\u{fffc}", TextStyle::default()),
+            vec![3, 6]
+        );
+        assert!(
+            fallback_allowed_offsets(
+                "\u{fffc}\u{fffc}",
+                TextStyle {
+                    white_space: WhiteSpace::NoWrap,
+                    ..TextStyle::default()
+                }
+            )
+            .is_empty()
+        );
+        for prefix in ["「", "「 ", "\"", "\u{00a0}", "\u{2060}", "\u{200d}"] {
+            let text = format!("{prefix}\u{fffc}");
+            assert!(
+                !fallback_allowed_offsets(&text, TextStyle::default()).contains(&prefix.len()),
+                "{prefix:?}"
+            );
+        }
+        for suffix in [
+            "」", ")", "!", ",", "/", "\"", "\u{00a0}", "\u{2060}", "\u{200d}", " ", "\u{200b}",
+        ] {
+            let text = format!("\u{fffc}{suffix}");
+            assert!(
+                !fallback_allowed_offsets(&text, TextStyle::default()).contains(&3),
+                "{suffix:?}"
+            );
+        }
+    }
 
     #[test]
     fn fallback_shapes_utf8_clusters_and_rasterizes_the_returned_glyph() {
