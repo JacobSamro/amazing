@@ -1,5 +1,46 @@
 # CSS lane decision map
 
+## CSS-11 — standardized CSS zoom and cascade retriage (fixed base `cb3064b`)
+
+`zoom` accepts a nonnegative number or percentage, computes percentages to
+numbers, and defaults to 1. It is not inherited as a computed property.
+`ComputedStyle::effective_zoom()` multiplies this element's used zoom with
+its ancestors'; zero has used zoom 1 for compatibility. Computed lengths
+remain unscaled. `scale_used_length(px)` provides the used-value boundary
+that layout and paint must adopt for absolute lengths and replaced natural
+sizes. Percentages and `auto` do not scale. The pinned specification is
+CSS Viewport Module Level 1 §4, CSSWG drafts `main` revision
+`d3e4fc5eced2be0f70c1ba9cb7d23d3c54e2dec6`.
+
+Win-001 fixed-base evidence: CSS nextest 201/201, doctests 0/0;
+workspace nextest 1,706/1,706 with 3 skipped, doctests 2/2. The
+72-case cascade corpus and eight downstream render selections ran twice
+before and after with identical per-case classifications, differing-pixel
+counts, and image hashes: zero changed cases or pass losses. Cascade stayed
+59 pass / 11 mismatch / 2 unsupported. The additional pinned two-case
+CSS Viewport zoom selection (`basic.html`, `inherited.html`) was 0 pass /
+2 mismatch on both baseline and candidate, each with 30,000 differing
+pixels; layout has not adopted the CSS used-zoom API. All 40 render runs
+had no errors, timeouts, or crashes. WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+
+Baseline and candidate executable SHA256 values:
+`8c9bfae737f84eb752c89c7edeb79911435deef467c8c2c7702df4a50f0a4c8c`
+and `200c971f38f784e27846c8875d3eeff75cef40e68bf9246265893e13e426d711`.
+The cascade projection SHA256 was
+`616fe54f74d75858bab70845becd504f6689b58418de1543acb69cb68990df05`
+on both builds. No CSS-owned files changed between the fixed base and
+`origin/dev` at `8f2695d`.
+
+The prior 59/11/2 cascade evidence contains no remaining CSS-owned first
+blocker: eight `css-fonts` mismatches are text provider/font matching, one
+`revert-layer-011` needs sampled registered-property animation, one
+`all-prop-002` needs nested inline/block box layout, and
+`calc-border-radius-1` needs layout/paint used-value radius resolution after
+CSS already retains the typed math. These are routed in `questions.md` or
+the integrator backlog. CSS-11 adds no speculative cross-lane fix.
+
+
 ## CSS-10 — SVG presentation attributes (fixed base `4f51acd`)
 
 SVG 2 §6.6 presentation attributes on SVG namespace elements enter the
