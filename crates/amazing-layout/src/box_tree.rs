@@ -557,7 +557,7 @@ fn text_style(
         line_break,
         overflow_wrap,
         language: inherited_attribute(dom, owner, "lang").map(str::to_owned),
-        features: Vec::new(),
+        features: crate::font_features::from_style(style),
         variations: Vec::new(),
         synthesis: amazing_text::FontSynthesis::default(),
     }

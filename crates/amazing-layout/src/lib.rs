@@ -84,6 +84,7 @@ mod svg_tests;
 
 mod floats;
 pub mod font;
+mod font_features;
 pub mod grid;
 mod grid_algorithm;
 pub mod inline;
