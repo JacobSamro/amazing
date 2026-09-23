@@ -3,6 +3,7 @@
 //! deferred behind its provider seam. This policy model has no live dispatcher.
 #![forbid(unsafe_code)]
 pub mod api;
+pub mod xhr;
 pub mod cache;
 pub mod cookies;
 mod cors;
