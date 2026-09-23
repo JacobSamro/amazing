@@ -1,6 +1,18 @@
 # HTML lane decision map
 
-## HTML-1 — parser ready; render integration pending
+## HTML-1 — checkpointed for daily stand-down; render integration pending
+
+Parser source `868d296` and evidence `8f15980` landed through `c4b6757`;
+Mac lane ancestry was verified and lane/html rebased cleanly to that merge.
+IA-1 was subsequently reported merged as `9bf1224`, but its authoritative
+checks are **UNRUN**; no gate was active. IA XML dispatch and the integrated
+cascade boundary remain pending owner confirmation. No new parser ticket.
+
+Daily stand-down: no SSH/SCP until the primary recovery broadcast and no lane
+work until resumed. HTML Windows source tree AND target reservation have been
+explicitly released; no HTML REFRESH-HOLD remains. Coordinate a new reservation
+before any future Windows gate. The exact restart procedure is recorded in the
+shared HTML report; first read current primary/co-integrator/IA status locally.
 
 Implementation gate revision: `868d296`, based on `origin/dev` `11dd8a8`.
 DOM expanded-name APIs were verified in `74e3c50` before adoption. The earlier
@@ -37,7 +49,16 @@ Both namespace merge issues and all DOM seam requests are now resolved.
 - References: [XML 1.0 Fifth Edition](https://www.w3.org/TR/xml/) and
   [Namespaces in XML 1.0 Third Edition](https://www.w3.org/TR/xml-names/).
 
-### Measured Windows evidence
+### Historical Windows evidence — predates the SSH outage
+
+No build or test was run by this resumed HTML agent. The measurements below
+predate the fleet SSH outage and are not current integrated-head evidence.
+Co-integrator separately reported authoritative `c4b6757` workspace nextest
+**1229 passed / 0 failed / 3 skipped**, explicit workspace doctests **2 passed /
+0 failed**, and **193 tracked Rust/manifest/lock hashes** matching before and
+after, with incremental disabled after the HTML-only refresh. That reported
+pre-outage gate is distinct from the source-checkpoint gate below and does not
+validate `9bf1224` or subsequent XML dispatch.
 
 After rebase and source re-sync following the integrator refresh, **370 tracked
 crate/workspace files matched SHA256 before and after the successful gate**.
@@ -77,21 +98,49 @@ companion xhtml-fatal.xhtml must return failure, never a recovered HTML DOM.
 - [ ] Git-free render runner/root mapping and removal of blanket XML exclusions.
 - [ ] Two stable actual cascade before/after render runs and final integrated gate.
 
-Co-integrator owns integration. Its queued IA XML task requires parse_xml on dev,
-so the parser dependency can be staged first without marking HTML-1 complete.
-The XML dispatch follow-up is still queued behind IA-1; current dev has no
-parse_xml driver calls and its render runner still excludes XHTML and invokes
-Git. Those owner changes must land before the final render gate. No server Git,
-no push/PR, no next ticket. Readiness and current owner requests are in the lane's
-status/report/questions files.
+Co-integrator owns integration. The parser dependency has landed; do not request
+its merge again or redo parser implementation. IA-XML was activated after that
+merge and must preserve IA-1 frozen sweeps. Verify the owner's actual landed
+symbols and exact integration revision on resume before claiming dispatch or
+runner completion. After recovery and owner coordination, remaining evidence is
+actual cascade before/after measurement, twice-stable pinned classifications and
+pixel hashes, and final integrated workspace nextest plus separate doctests.
+No server Git, no push/PR, and no next ticket. Historical parser counts are not
+render passes; both external-DTD Unsupported limitations remain.
 
-## Proposed HTML-2 — strict XML byte input
+## HTML-2 — bounded HTML byte input
 
-Add BOM/encoding detection and strict UTF-8/UTF-16 decoding with declaration
-consistency tests. The declaration test accepts decoded text declaring UTF-16
-while the CLI only reads UTF-8: decoding is a concrete missing boundary before
-streaming. Incremental parsing should follow with chunk-split tests once decoder
-ownership is settled. No HTML-2 work has started.
+The HTML parser now has `parse_bytes(&[u8], Option<&str>) -> Dom` beside the
+unchanged `parse(&str) -> Dom`. `encoding::decode` also returns decoded text,
+selected encoding and the source of that choice. This is an owned crate seam;
+the browser CLI still calls `String::from_utf8_lossy` before `parse`, so product
+adoption needs an integrator-owned driver change.
+
+The initial slice uses WHATWG precedence: leading UTF-8/UTF-16 BOM, supported
+transport charset label, a 1024-byte HTML meta prescan, then windows-1252
+fallback. It recognizes plain `<meta charset>` and `http-equiv=content-type`
+with a `content` charset, and handles the UTF-16 XML preamble. A UTF-16 meta
+declaration maps to UTF-8 per HTML. Invalid UTF-8 and UTF-16 sequences decode
+with U+FFFD; the BOM is consumed. The supported decoders are UTF-8, UTF-16LE,
+UTF-16BE and windows-1252. Accepted labels are explicitly enumerated in
+`encoding.rs`, including UTF-8 aliases and ISO-8859-1/ASCII aliases that map
+to windows-1252. Other labels do not claim coverage. The complete Encoding
+label/decoder table and full HTML prescan/reparse algorithm remain future work.
+
+Final HTML-2 gate at `579874a` (base `ffb143b`), after an HTML-only Windows
+refresh and source re-sync: `amazing-html` nextest **91 passed / 0 failed /
+0 skipped** twice; separate package doctest **1 passed / 0 failed**. Seven
+byte-input unit cases are new, compared with the previous measured HTML crate
+gate of 84 unit tests and 1 doctest. The ten-case projection of seven new
+byte tests plus three existing `parse` tests matched across both final runs,
+SHA256 `248db09cc4ef101ccf2ef9fc41707ee5635a07152634dbaf975fe96996a8a3e0`.
+Final full workspace nextest **1269 passed / 0 failed / 3 skipped**; separate
+workspace doctests **2 passed / 0 failed**. Root lock and both owned source
+hashes matched before and after that gate. This count is for the complete
+rebased workspace, not an attributed HTML-only workspace delta.
+
+This ticket does not change XML byte handling or the HTML-1 XML cascade. Its
+strict XML byte-input idea remains a separate possible ticket after HTML-2.
 
 The pinned sample has two measured DTD-entity blockers and no UTF-8 input
 failures among 14 files. A bounded XHTML entity policy is a separate decision;
