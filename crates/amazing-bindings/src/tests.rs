@@ -1,5 +1,5 @@
 use super::*;
-use crate::host::{AbortHost, BindingHost, CallbackId, DocumentField, DocumentHost, FragmentContext, FragmentParser, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, OptionalHookInstall, PlatformKey, SelectorEngine, UrlReflection};
+use crate::host::{AbortHost, BindingHost, CallbackId, DocumentField, DocumentHost, FormAttribute as F, FragmentContext, FragmentParser, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, OptionalHookInstall, PlatformKey, SelectorEngine, UrlReflection};
 use amazing_dom::NodeKind;
 use amazing_fetch::api::{Blob, BlobPart, File, FormData};
 use amazing_net::url::{UrlSearchParams, UrlWithSearchParams};
@@ -1793,6 +1793,29 @@ fn select_and_validity_bindings_follow_live_dom() {
     assert_eq!(call(&mut h, O::ControlCheckValidity, V::Node(input), &[]), V::Bool(false));
     call(&mut h, O::InputSetValue, V::Node(input), &[str_value("filled")]);
     assert_eq!(call(&mut h, O::ControlCheckValidity, V::Node(input), &[]), V::Bool(true));
+}
+
+#[test]
+fn reflected_form_attributes_feed_validation_and_preserve_webidl_rules() {
+    let mut h = Host::default();
+    let form = h.dom.create_element(NodeIdx(0), "form");
+    let input = h.dom.create_element(form, "input");
+    call(&mut h, O::FormAttributeSet(F::Required), V::Node(input), &[V::Bool(true)]);
+    assert_eq!(call(&mut h, O::ControlCheckValidity, V::Node(input), &[]), V::Bool(false));
+    call(&mut h, O::FormAttributeSet(F::Required), V::Node(input), &[V::Bool(false)]);
+    assert_eq!(call(&mut h, O::ControlCheckValidity, V::Node(input), &[]), V::Bool(true));
+    call(&mut h, O::FormAttributeSet(F::Pattern), V::Node(input), &[str_value("[A-Z]+")]);
+    assert_eq!(h.dom.get_attribute_ns(input, None, "pattern"), Some("[A-Z]+"));
+    assert_eq!(call(&mut h, O::FormAttributeGet(F::MaxLength), V::Node(input), &[]), V::Number(-1.));
+    assert!(crate::invoke(&mut h, O::FormAttributeSet(F::MaxLength), V::Node(input), &[V::Number(-1.)]).is_err());
+    call(&mut h, O::FormAttributeSet(F::MaxLength), V::Node(input), &[V::Number(7.)]);
+    assert_eq!(call(&mut h, O::FormAttributeGet(F::MaxLength), V::Node(input), &[]), V::Number(7.));
+    call(&mut h, O::FormAttributeSet(F::Method), V::Node(form), &[str_value("POST")]);
+    assert_eq!(call(&mut h, O::FormAttributeGet(F::Method), V::Node(form), &[]), str_value("post"));
+    let option = h.dom.create_element(form, "option");
+    let text = h.dom.create_text(option, "  Example  label ");
+    assert_ne!(option, text);
+    assert_eq!(call(&mut h, O::FormAttributeGet(F::Label), V::Node(option), &[]), str_value("Example label"));
 }
 
 // WPT pin 53bc812da2ed81179ebd1ba76b2d197cc4747d12:

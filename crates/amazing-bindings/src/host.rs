@@ -173,7 +173,18 @@ pub enum Interface {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FormAttribute {
+    Accept, Alpha, Alt, Autocomplete, DirName, Disabled, FormAction,
+    FormEnctype, FormMethod, FormNoValidate, FormTarget, Height, Max,
+    MaxLength, Min, MinLength, Multiple, Name, Pattern, Placeholder,
+    ReadOnly, Required, Size, Src, Step, Width, Action, AcceptCharset,
+    Enctype, Encoding, Method, NoValidate, Target, Rel, RelList,
+    Cols, Rows, Wrap, Label, Value, Command, HtmlFor,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    FormAttributeGet(FormAttribute), FormAttributeSet(FormAttribute),
     URLConstructor, URLCanParse, URLParse, URLHref, URLSetHref,
     URLOrigin, URLProtocol, URLSetProtocol, URLUsername, URLSetUsername,
     URLPassword, URLSetPassword, URLHost, URLSetHost, URLHostname,

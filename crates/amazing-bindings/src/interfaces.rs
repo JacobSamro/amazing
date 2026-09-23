@@ -1,5 +1,5 @@
 use crate::host::{
-    BindingHost, Interface as I, InterfaceBrand, InterfaceDefinition as D, IterableKind, LegacyPlatformHooks, Member, MemberKind as K, Operation as O, OptionalHookInstall,
+    BindingHost, FormAttribute as F, Interface as I, InterfaceBrand, InterfaceDefinition as D, IterableKind, LegacyPlatformHooks, Member, MemberKind as K, Operation as O, OptionalHookInstall,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,6 +34,12 @@ const fn setter(name: &'static str, operation: O) -> Member {
         operation,
         kind: K::Setter,
     }
+}
+const fn form_get(name: &'static str, attr: F) -> Member {
+    getter(name, O::FormAttributeGet(attr))
+}
+const fn form_set(name: &'static str, attr: F) -> Member {
+    setter(name, O::FormAttributeSet(attr))
 }
 const NODE: &[Member] = &[
     getter("nodeType", O::NodeType),
@@ -447,6 +453,29 @@ const IMAGE: &[Member] = &[
     getter("loading", O::ImageLoading), setter("loading", O::ImageSetLoading),
 ];
 const INPUT: &[Member] = &[
+    form_get("accept", F::Accept), form_set("accept", F::Accept),
+    form_get("alpha", F::Alpha), form_set("alpha", F::Alpha),
+    form_get("alt", F::Alt), form_set("alt", F::Alt),
+    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    form_get("dirName", F::DirName), form_set("dirName", F::DirName),
+    form_get("formAction", F::FormAction), form_set("formAction", F::FormAction),
+    form_get("formEnctype", F::FormEnctype), form_set("formEnctype", F::FormEnctype),
+    form_get("formMethod", F::FormMethod), form_set("formMethod", F::FormMethod),
+    form_get("formNoValidate", F::FormNoValidate), form_set("formNoValidate", F::FormNoValidate),
+    form_get("formTarget", F::FormTarget), form_set("formTarget", F::FormTarget),
+    form_get("height", F::Height), form_set("height", F::Height),
+    form_get("max", F::Max), form_set("max", F::Max),
+    form_get("maxLength", F::MaxLength), form_set("maxLength", F::MaxLength),
+    form_get("min", F::Min), form_set("min", F::Min),
+    form_get("minLength", F::MinLength), form_set("minLength", F::MinLength),
+    form_get("multiple", F::Multiple), form_set("multiple", F::Multiple),
+    form_get("pattern", F::Pattern), form_set("pattern", F::Pattern),
+    form_get("readOnly", F::ReadOnly), form_set("readOnly", F::ReadOnly),
+    form_get("required", F::Required), form_set("required", F::Required),
+    form_get("size", F::Size), form_set("size", F::Size),
+    form_get("src", F::Src), form_set("src", F::Src),
+    form_get("step", F::Step), form_set("step", F::Step),
+    form_get("width", F::Width), form_set("width", F::Width),
     getter("type", O::InputType), setter("type", O::InputSetType),
     getter("name", O::ElementName), setter("name", O::ElementSetName),
     getter("disabled", O::ElementDisabled), setter("disabled", O::ElementSetDisabled),
@@ -468,11 +497,23 @@ const INPUT: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const FORM: &[Member] = &[
+    form_get("acceptCharset", F::AcceptCharset), form_set("acceptCharset", F::AcceptCharset),
+    form_get("action", F::Action), form_set("action", F::Action),
+    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    form_get("enctype", F::Enctype), form_set("enctype", F::Enctype),
+    form_get("encoding", F::Encoding), form_set("encoding", F::Encoding),
+    form_get("method", F::Method), form_set("method", F::Method),
+    form_get("name", F::Name), form_set("name", F::Name),
+    form_get("noValidate", F::NoValidate), form_set("noValidate", F::NoValidate),
+    form_get("target", F::Target), form_set("target", F::Target),
+    form_get("rel", F::Rel), form_set("rel", F::Rel),
+    form_get("relList", F::RelList),
     getter("elements", O::FormElements), getter("length", O::FormLength),
     method("reset", O::FormReset, 0), method("checkValidity", O::FormCheckValidity, 0),
     method("reportValidity", O::FormReportValidity, 0),
 ];
 const FORM_CONTROL: &[Member] = &[
+    form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
     getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
@@ -491,6 +532,14 @@ const IFRAME: &[Member] = &[
     getter("sandbox", O::IFrameSandbox),
 ];
 const BUTTON: &[Member] = &[
+    form_get("command", F::Command), form_set("command", F::Command),
+    form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
+    form_get("formAction", F::FormAction), form_set("formAction", F::FormAction),
+    form_get("formEnctype", F::FormEnctype), form_set("formEnctype", F::FormEnctype),
+    form_get("formMethod", F::FormMethod), form_set("formMethod", F::FormMethod),
+    form_get("formNoValidate", F::FormNoValidate), form_set("formNoValidate", F::FormNoValidate),
+    form_get("formTarget", F::FormTarget), form_set("formTarget", F::FormTarget),
+    form_get("value", F::Value), form_set("value", F::Value),
     getter("type", O::ButtonType), setter("type", O::ButtonSetType),
     getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
@@ -499,6 +548,18 @@ const BUTTON: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const TEXTAREA: &[Member] = &[
+    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    form_get("cols", F::Cols), form_set("cols", F::Cols),
+    form_get("dirName", F::DirName), form_set("dirName", F::DirName),
+    form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
+    form_get("maxLength", F::MaxLength), form_set("maxLength", F::MaxLength),
+    form_get("minLength", F::MinLength), form_set("minLength", F::MinLength),
+    form_get("name", F::Name), form_set("name", F::Name),
+    form_get("placeholder", F::Placeholder), form_set("placeholder", F::Placeholder),
+    form_get("readOnly", F::ReadOnly), form_set("readOnly", F::ReadOnly),
+    form_get("required", F::Required), form_set("required", F::Required),
+    form_get("rows", F::Rows), form_set("rows", F::Rows),
+    form_get("wrap", F::Wrap), form_set("wrap", F::Wrap),
     getter("form", O::FormControlForm), getter("value", O::TextAreaValue), setter("value", O::TextAreaSetValue),
     getter("defaultValue", O::TextAreaDefaultValue), setter("defaultValue", O::TextAreaSetDefaultValue),
     getter("selectionStart", O::InputSelectionStart), setter("selectionStart", O::InputSetSelectionStart),
@@ -511,6 +572,11 @@ const TEXTAREA: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const SELECT: &[Member] = &[
+    form_get("autocomplete", F::Autocomplete), form_set("autocomplete", F::Autocomplete),
+    form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
+    form_get("name", F::Name), form_set("name", F::Name),
+    form_get("required", F::Required), form_set("required", F::Required),
+    form_get("size", F::Size), form_set("size", F::Size),
     getter("form", O::FormControlForm), getter("value", O::SelectValue), setter("value", O::SelectSetValue),
     getter("selectedIndex", O::SelectSelectedIndex), setter("selectedIndex", O::SelectSetSelectedIndex),
     getter("options", O::SelectOptions), getter("length", O::SelectLength),
@@ -522,10 +588,19 @@ const SELECT: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const OPTION: &[Member] = &[
+    form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
+    form_get("label", F::Label), form_set("label", F::Label),
     getter("value", O::OptionValue), setter("value", O::OptionSetValue),
     getter("selected", O::OptionSelected), setter("selected", O::OptionSetSelected),
     getter("defaultSelected", O::OptionDefaultSelected), setter("defaultSelected", O::OptionSetDefaultSelected),
     getter("text", O::OptionText), setter("text", O::OptionSetText),
+];
+const OPTGROUP: &[Member] = &[
+    form_get("disabled", F::Disabled), form_set("disabled", F::Disabled),
+    form_get("label", F::Label), form_set("label", F::Label),
+];
+const LABEL: &[Member] = &[
+    form_get("htmlFor", F::HtmlFor), form_set("htmlFor", F::HtmlFor),
 ];
 const VALIDITY: &[Member] = &[
     getter("valueMissing", O::ValidityValueMissing), getter("typeMismatch", O::ValidityTypeMismatch),
@@ -674,9 +749,9 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLButtonElement, name: "HTMLButtonElement", parent: Some(I::HTMLElement), constructor: None, members: BUTTON },
     D { interface: I::HTMLSelectElement, name: "HTMLSelectElement", parent: Some(I::HTMLElement), constructor: None, members: SELECT },
     D { interface: I::HTMLOptionElement, name: "HTMLOptionElement", parent: Some(I::HTMLElement), constructor: None, members: OPTION },
-    D { interface: I::HTMLOptGroupElement, name: "HTMLOptGroupElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLOptGroupElement, name: "HTMLOptGroupElement", parent: Some(I::HTMLElement), constructor: None, members: OPTGROUP },
     D { interface: I::HTMLTextAreaElement, name: "HTMLTextAreaElement", parent: Some(I::HTMLElement), constructor: None, members: TEXTAREA },
-    D { interface: I::HTMLLabelElement, name: "HTMLLabelElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLLabelElement, name: "HTMLLabelElement", parent: Some(I::HTMLElement), constructor: None, members: LABEL },
     D { interface: I::HTMLFieldSetElement, name: "HTMLFieldSetElement", parent: Some(I::HTMLElement), constructor: None, members: FORM_CONTROL },
     D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDataListElement, name: "HTMLDataListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
