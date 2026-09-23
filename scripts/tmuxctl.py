@@ -87,7 +87,7 @@ LANE_PATHS = {
     # half. ast.rs is the contract: js-lang owns it and only adds to it.
     "js-lang": [
         "crates/amazing-js/src/lexer.rs",
-        "crates/amazing-js/src/parser.rs",
+        "crates/amazing-js/src/parser",  # parser.rs plus any parser_* split
         "crates/amazing-js/src/ast.rs",
         "crates/amazing-js/src/tokens.rs",
         "crates/amazing-regex/",
