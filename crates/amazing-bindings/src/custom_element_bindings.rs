@@ -204,6 +204,10 @@ fn callback_value<H: BindingHost>(host: &mut H, callback: amazing_dom::events::C
 /// Drain reactions after a [CEReactions] boundary or parser task. The driver
 /// can call this after native parser mutations as well.
 pub fn deliver_custom_element_reactions<H: BindingHost>(host: &mut H) -> Result<(), H::Error> {
+    deliver_custom_element_reactions_for_created(host, None)
+}
+pub(crate) fn deliver_custom_element_reactions_for_created<H: BindingHost>(host: &mut H,
+    created: Option<NodeIdx>) -> Result<(), H::Error> {
     loop {
         let reactions = host.with_dom(|dom| Ok(dom.take_custom_element_reactions()))?;
         if reactions.is_empty() { return Ok(()); }
@@ -223,8 +227,16 @@ pub fn deliver_custom_element_reactions<H: BindingHost>(host: &mut H) -> Result<
                         Err(_) => false,
                     };
                     let finish = host.with_dom(|dom| dom.finish_custom_element_upgrade(element, definition, same));
-                    if let Err(error) = constructed { let _ = host.report_custom_element_exception(error); }
-                    finish
+                    if created == Some(element) {
+                        constructed?;
+                        finish?;
+                        Ok(())
+                    } else {
+                        if let Err(error) = constructed {
+                            let _ = host.report_custom_element_exception(error);
+                            Ok(())
+                        } else { finish }
+                    }
                 }
                 CustomElementReaction::Connected { element, callback }
                 | CustomElementReaction::Disconnected { element, callback }

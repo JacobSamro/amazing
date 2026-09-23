@@ -28,6 +28,7 @@ struct Host {
     custom_elements_global: bool,
     promises: Vec<(u64, Option<V>, Option<V>)>,
     custom_element_errors: Vec<String>,
+    fail_custom_element_constructor: bool,
     skip_optional_hooks: bool,
     fail_class_string: Option<Interface>,
     constants: Vec<(&'static str, u16)>,
@@ -192,6 +193,7 @@ impl BindingHost for Host {
     }
     fn construct_custom_element(&mut self, _constructor: &V, definition: usize, element: NodeIdx)
         -> Result<V, String> {
+        if self.fail_custom_element_constructor { return Err("constructor failed".into()); }
         assert_eq!(self.with_dom(|dom| dom.custom_element_super(definition))?, element);
         Ok(V::Node(element))
     }
@@ -1402,4 +1404,19 @@ fn custom_element_creation_handles_is_and_disable_shadow() {
     let host = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)), &[str_value("x-no-shadow")]));
     assert_eq!(invoke(&mut h, O::ElementAttachShadow, V::Node(host),
         &[V::Dictionary(vec![("mode", str_value("open"))])]), Err("NotSupportedError".into()));
+}
+
+// Pinned WPT custom-elements/customized-built-in-constructor-exceptions.html
+// and Document-createElement-customized-builtins.html constructor error port.
+#[test]
+fn synchronous_custom_element_creation_propagates_constructor_failure() {
+    let mut h = Host::default();
+    let registry = crate::registry_for_document(&mut h, NodeIdx(0)).unwrap();
+    let constructor = V::Dictionary(vec![("__constructor", V::Bool(true)),
+        ("prototype", V::Dictionary(vec![]))]);
+    call(&mut h, O::CustomElementRegistryDefine, registry,
+        &[str_value("x-fail"), constructor]);
+    h.fail_custom_element_constructor = true;
+    assert_eq!(invoke(&mut h, O::CreateElement, V::Node(NodeIdx(0)), &[str_value("x-fail")]),
+        Err("constructor failed".into()));
 }

@@ -133,15 +133,14 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
 ) -> Result<H::Value, H::Error> {
     host.with_dom(|dom| { dom.custom_element_push_reaction_frame(); Ok(()) })?;
     let result = invoke_inner(host, operation, receiver, args);
-    if matches!(operation, O::CreateElement | O::CreateElementNS) {
-        if let Ok(value) = &result {
-            if let Some(node) = host.node_brand(value) {
-                host.with_dom(|dom| { dom.queue_custom_element_upgrade(node); Ok(()) })?;
-            }
-        }
+    let created = if matches!(operation, O::CreateElement | O::CreateElementNS) {
+        result.as_ref().ok().and_then(|value| host.node_brand(value))
+    } else { None };
+    if let Some(node) = created {
+        host.with_dom(|dom| { dom.queue_custom_element_upgrade(node); Ok(()) })?;
     }
     host.with_dom(|dom| { dom.custom_element_pop_reaction_frame(); Ok(()) })?;
-    let delivered = crate::custom_element_bindings::deliver_custom_element_reactions(host);
+    let delivered = crate::custom_element_bindings::deliver_custom_element_reactions_for_created(host, created);
     match result { Err(error) => Err(error), Ok(value) => { delivered?; Ok(value) } }
 }
 
