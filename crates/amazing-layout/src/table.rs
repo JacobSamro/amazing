@@ -181,12 +181,14 @@ fn spacing(b: &LayoutBox) -> (f32, f32) {
         .split_whitespace();
     let x = parts
         .next()
-        .and_then(|v| values::parse_len(v, b.font_size, 0.0))
+        .and_then(|v| values::used_length_percentage(&b.style, v, b.font_size, b.font_size * 0.6))
+        .and_then(|length| length.resolve(Some(0.0)))
         .unwrap_or(0.0)
         .max(0.0);
     let y = parts
         .next()
-        .and_then(|v| values::parse_len(v, b.font_size, 0.0))
+        .and_then(|v| values::used_length_percentage(&b.style, v, b.font_size, b.font_size * 0.6))
+        .and_then(|length| length.resolve(Some(0.0)))
         .unwrap_or(x)
         .max(0.0);
     (x, y)

@@ -216,7 +216,7 @@ impl TrackSize {
 }
 
 /// Parse one track-size component value.
-fn parse_track_size(s: &str, font_px: f32, content_w: f32) -> TrackSize {
+fn parse_track_size(s: &str, font_px: f32, content_w: f32, zoom: f32) -> TrackSize {
     let s = s.trim();
     // Lowercase first so `FR`/`Auto` spellings parse identically.
     let lower = s.to_ascii_lowercase();
@@ -225,8 +225,8 @@ fn parse_track_size(s: &str, font_px: f32, content_w: f32) -> TrackSize {
         .and_then(|value| value.strip_suffix(')'))
         && let Some((minimum, maximum)) = inner.split_once(',')
     {
-        let min = parse_track_breadth(minimum, font_px, content_w);
-        let mut max = parse_track_breadth(maximum, font_px, content_w);
+        let min = parse_track_breadth(minimum, font_px, content_w, zoom);
+        let mut max = parse_track_breadth(maximum, font_px, content_w, zoom);
         if matches!(min, TrackBreadth::Fr(_)) {
             return TrackSize::Auto;
         }
@@ -248,13 +248,11 @@ fn parse_track_size(s: &str, font_px: f32, content_w: f32) -> TrackSize {
         "min-content" | "max-content" => return TrackSize::Content,
         _ => {}
     }
-    match MaybeLen::parse(s, font_px, content_w) {
-        Some(MaybeLen::Px(v)) => TrackSize::Px(v.max(0.0)),
-        _ => TrackSize::Auto, // unparseable → treated as auto
-    }
+    zoomed_track_length(s, font_px, content_w, zoom)
+        .map_or(TrackSize::Auto, |value| TrackSize::Px(value.max(0.0)))
 }
 
-fn parse_track_breadth(s: &str, font_px: f32, content_w: f32) -> TrackBreadth {
+fn parse_track_breadth(s: &str, font_px: f32, content_w: f32, zoom: f32) -> TrackBreadth {
     let s = s.trim();
     let lower = s.to_ascii_lowercase();
     if let Some(factor) = lower.strip_suffix("fr")
@@ -265,13 +263,15 @@ fn parse_track_breadth(s: &str, font_px: f32, content_w: f32) -> TrackBreadth {
     match lower.as_str() {
         "auto" => TrackBreadth::Auto,
         "min-content" | "max-content" => TrackBreadth::Content,
-        _ => MaybeLen::parse(s, font_px, content_w).map_or(TrackBreadth::Auto, |value| {
-            match value {
-                MaybeLen::Px(value) => TrackBreadth::Px(value.max(0.0)),
-                MaybeLen::Auto => TrackBreadth::Auto,
-            }
-        }),
+        _ => zoomed_track_length(s, font_px, content_w, zoom)
+            .map_or(TrackBreadth::Auto, |value| TrackBreadth::Px(value.max(0.0))),
     }
+}
+
+fn zoomed_track_length(s: &str, font_px: f32, basis: f32, zoom: f32) -> Option<f32> {
+    let mut length = values::parse_length_percentage(s, font_px / zoom, font_px * 0.6 / zoom)?;
+    length.px *= zoom;
+    length.resolve(Some(basis))
 }
 
 /// Splits a declaration value into top-level whitespace-separated tokens,
@@ -340,6 +340,7 @@ fn contains_nested_repeat(value: &str) -> bool {
 struct RepeatCtx {
     font_px: f32,
     content_w: f32,
+    zoom: f32,
     repeat_available: Option<f32>,
     gap: f32,
     /// Definite px already consumed by tracks emitted before this repeat.
@@ -360,7 +361,7 @@ fn parse_track_list(value: &str, ctx: &RepeatCtx, allow_auto_fill: bool) -> Vec<
         if (token.starts_with('[') && token.ends_with(']')) || lower.starts_with("repeat(") {
             continue;
         }
-        let fixed = [parse_track_size(token, ctx.font_px, ctx.content_w)];
+        let fixed = [parse_track_size(token, ctx.font_px, ctx.content_w, ctx.zoom)];
         if let Some(sizes) = fixed
             .iter()
             .map(|size| size.repeat_size())
@@ -395,6 +396,7 @@ fn parse_track_list(value: &str, ctx: &RepeatCtx, allow_auto_fill: bool) -> Vec<
                             &RepeatCtx {
                                 font_px: ctx.font_px,
                                 content_w: ctx.content_w,
+                                zoom: ctx.zoom,
                                 repeat_available: ctx.repeat_available,
                                 gap: ctx.gap,
                                 fixed_before: ctx.fixed_before,
@@ -438,6 +440,7 @@ fn parse_track_list(value: &str, ctx: &RepeatCtx, allow_auto_fill: bool) -> Vec<
                     &RepeatCtx {
                         font_px: ctx.font_px,
                         content_w: ctx.content_w,
+                        zoom: ctx.zoom,
                         repeat_available: ctx.repeat_available,
                         gap: ctx.gap,
                         fixed_before: ctx.fixed_before,
@@ -448,7 +451,7 @@ fn parse_track_list(value: &str, ctx: &RepeatCtx, allow_auto_fill: bool) -> Vec<
             }
             continue;
         }
-        out.push(parse_track_size(&tok, ctx.font_px, ctx.content_w));
+        out.push(parse_track_size(&tok, ctx.font_px, ctx.content_w, ctx.zoom));
     }
     out
 }
@@ -583,7 +586,8 @@ fn pack_pair(mode: Pack, free: f32, n: usize) -> (f32, f32) {
 /// `gap: r c` / `row-gap` / `column-gap`. Percentages resolve against the
 /// content width for both axes (flex.rs precedent, documented).
 fn parse_gaps(style: &ComputedStyle, font_px: f32, content_w: f32) -> (f32, f32) {
-    let px = |s: &str| MaybeLen::parse(s, font_px, content_w).map_or(0.0, |m| m.unwrap_or(0.0));
+    let px = |s: &str| values::parse_used_maybe_len(style, s, font_px, content_w)
+        .map_or(0.0, |m| m.unwrap_or(0.0));
     let mut row_gap = 0.0f32;
     let mut col_gap = 0.0f32;
     if let Some(v) = style.get("gap") {
@@ -645,6 +649,7 @@ impl GridSpec {
         let ctx_cols = RepeatCtx {
             font_px,
             content_w,
+            zoom: style.effective_zoom() as f32,
             repeat_available: Some(content_w),
             gap: col_gap,
             fixed_before: 0.0,
@@ -652,6 +657,7 @@ impl GridSpec {
         let ctx_rows = RepeatCtx {
             font_px,
             content_w: definite_height.unwrap_or(content_w),
+            zoom: style.effective_zoom() as f32,
             repeat_available: definite_height,
             gap: row_gap,
             fixed_before: 0.0,
@@ -1932,7 +1938,7 @@ fn flow_tolerance(style: &ComputedStyle, font_px: f32, basis: f32) -> f32 {
     match style.get("flow-tolerance") {
         Some(value) if value.eq_ignore_ascii_case("infinite") => f32::INFINITY,
         Some(value) if !value.eq_ignore_ascii_case("normal") =>
-            MaybeLen::parse(value, font_px, basis).and_then(|v| match v {
+            values::parse_used_maybe_len(style, value, font_px, basis).and_then(|v| match v {
                 MaybeLen::Px(px) => Some(px.max(0.0)),
                 MaybeLen::Auto => None,
             }).unwrap_or(font_px),
@@ -2528,20 +2534,22 @@ mod tests {
 
     #[test]
     fn track_size_parsing_forms() {
-        assert_eq!(parse_track_size("1fr", 16.0, 400.0), TrackSize::Fr(1.0));
-        assert_eq!(parse_track_size("2.5FR", 16.0, 400.0), TrackSize::Fr(2.5));
-        assert_eq!(parse_track_size("auto", 16.0, 400.0), TrackSize::Auto);
+        assert_eq!(parse_track_size("1fr", 16.0, 400.0, 1.0), TrackSize::Fr(1.0));
+        assert_eq!(parse_track_size("2.5FR", 16.0, 400.0, 1.0), TrackSize::Fr(2.5));
+        assert_eq!(parse_track_size("auto", 16.0, 400.0, 1.0), TrackSize::Auto);
         assert_eq!(
-            parse_track_size("min-content", 16.0, 400.0),
+            parse_track_size("min-content", 16.0, 400.0, 1.0),
             TrackSize::Content
         );
         assert_eq!(
-            parse_track_size("max-content", 16.0, 400.0),
+            parse_track_size("max-content", 16.0, 400.0, 1.0),
             TrackSize::Content
         );
-        assert_eq!(parse_track_size("25px", 16.0, 400.0), TrackSize::Px(25.0));
-        assert_eq!(parse_track_size("50%", 16.0, 400.0), TrackSize::Px(200.0));
-        assert_eq!(parse_track_size("nonsense", 16.0, 400.0), TrackSize::Auto);
+        assert_eq!(parse_track_size("25px", 16.0, 400.0, 1.0), TrackSize::Px(25.0));
+        assert_eq!(parse_track_size("50%", 16.0, 400.0, 1.0), TrackSize::Px(200.0));
+        assert_eq!(parse_track_size("nonsense", 16.0, 400.0, 1.0), TrackSize::Auto);
+        assert_eq!(parse_track_size("25px", 32.0, 400.0, 2.0), TrackSize::Px(50.0));
+        assert_eq!(parse_track_size("50%", 32.0, 400.0, 2.0), TrackSize::Px(200.0));
     }
 
     #[test]
@@ -2549,6 +2557,7 @@ mod tests {
         let ctx = RepeatCtx {
             font_px: 16.0,
             content_w: 400.0,
+            zoom: 1.0,
             repeat_available: Some(400.0),
             gap: 0.0,
             fixed_before: 0.0,

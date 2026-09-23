@@ -28,20 +28,20 @@ fn attr<'a>(dom: &'a Dom, node: NodeIdx, name: &str) -> Option<&'a str> {
         .map(|(_, value)| value.as_str())
 }
 
-fn svg_length(raw: &str, font: f32, basis: Option<f32>) -> Option<f32> {
+fn svg_length(style: &ComputedStyle, raw: &str, font: f32, basis: Option<f32>) -> Option<f32> {
     let raw = raw.trim();
     // SVG presentation lengths permit unitless user units, unlike CSS lengths.
     let unitless = raw.parse::<f32>().ok();
     let value = if let Some(number) = unitless {
-        number
+        style.scale_used_length(number as f64) as f32
     } else {
-        values::parse_length_percentage(raw, font, font * 0.6)?.resolve(basis)?
+        values::used_length_percentage(style, raw, font, font * 0.6)?.resolve(basis)?
     };
     (value.is_finite() && value > 0.0).then_some(value)
 }
 
-fn css_length(raw: &str, font: f32, basis: Option<f32>) -> Option<f32> {
-    values::parse_length_percentage(raw, font, font * 0.6)?
+fn css_length(style: &ComputedStyle, raw: &str, font: f32, basis: Option<f32>) -> Option<f32> {
+    values::used_length_percentage(style, raw, font, font * 0.6)?
         .resolve(basis)
         .filter(|value| value.is_finite() && *value >= 0.0)
 }
@@ -82,28 +82,28 @@ impl SvgSizing {
         let author_width = style.is_author_specified("width");
         let author_height = style.is_author_specified("height");
         let width = match style.get("width").filter(|_| author_width) {
-            Some(css) => css_length(css, font, width_basis),
+            Some(css) => css_length(style, css, font, width_basis),
             None => self
                 .width
                 .as_deref()
-                .and_then(|raw| svg_length(raw, font, width_basis)),
+                .and_then(|raw| svg_length(style, raw, font, width_basis)),
         };
         let height = match style.get("height").filter(|_| author_height) {
-            Some(css) => css_length(css, font, height_basis),
+            Some(css) => css_length(style, css, font, height_basis),
             None => self
                 .height
                 .as_deref()
-                .and_then(|raw| svg_length(raw, font, height_basis)),
+                .and_then(|raw| svg_length(style, raw, font, height_basis)),
         };
         let dimensions_ratio = (!author_width && !author_height)
             .then(|| {
                 self.width
                     .as_deref()
-                    .and_then(|raw| svg_length(raw, font, None))
+                    .and_then(|raw| svg_length(style, raw, font, None))
                     .zip(
                         self.height
                             .as_deref()
-                            .and_then(|raw| svg_length(raw, font, None)),
+                            .and_then(|raw| svg_length(style, raw, font, None)),
                     )
                     .map(|(w, h)| w / h)
             })
@@ -113,13 +113,16 @@ impl SvgSizing {
             (Some(w), Some(h), _) => (w, h),
             (Some(w), None, Some(r)) => (w, w / r),
             (None, Some(h), Some(r)) => (h * r, h),
-            (Some(w), None, None) => (w, 150.0),
-            (None, Some(h), None) => (300.0, h),
+            (Some(w), None, None) => (w, style.scale_used_length(150.0) as f32),
+            (None, Some(h), None) => (style.scale_used_length(300.0) as f32, h),
             (None, None, Some(r)) => {
-                let w = width_basis.unwrap_or(300.0);
+                let w = width_basis.unwrap_or(style.scale_used_length(300.0) as f32);
                 (w, w / r)
             }
-            (None, None, None) => (300.0, 150.0),
+            (None, None, None) => (
+                style.scale_used_length(300.0) as f32,
+                style.scale_used_length(150.0) as f32,
+            ),
         };
         IntrinsicSize {
             width: width.max(0.0),

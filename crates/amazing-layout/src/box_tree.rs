@@ -102,14 +102,9 @@ fn build_element(
         && (crate::floats::side(&style).is_some() || is_out_of_flow(&style)) {
         style.set("display", "block");
     }
-    let font_size =
-        values::resolve_font_size(style.get("font-size").unwrap_or("medium"), parent_font_px);
+    let font_size = values::resolve_used_font_size(&style, parent_font_px);
     let normal_lh = fonts.scaled_metrics(font_size).line_height;
-    let line_height = values::resolve_line_height(
-        style.get("line-height").unwrap_or("normal"),
-        font_size,
-        normal_lh,
-    );
+    let line_height = values::resolve_used_line_height(&style, font_size, normal_lh);
     let display = parse_display(&style);
     let mut box_ = LayoutBox::new(Some(idx), display, style, font_size, line_height);
     if crate::svg::is_outer(dom, idx) {
@@ -117,7 +112,10 @@ fn build_element(
         box_.svg_sizing = Some(crate::svg::SvgSizing::from_dom(dom, idx));
         return box_;
     }
-    box_.replaced_size = replaced.intrinsic_size(idx);
+    box_.replaced_size = replaced.intrinsic_size(idx).map(|size| crate::IntrinsicSize {
+        width: box_.style.scale_used_length(size.width as f64) as f32,
+        height: box_.style.scale_used_length(size.height as f64) as f32,
+    });
     if matches!(dom.name(idx), Some("td" | "th")) {
         box_.table_colspan = table_span(attribute(dom, idx, "colspan"), 1000, false);
         box_.table_rowspan = table_span(attribute(dom, idx, "rowspan"), 65534, true);
@@ -245,10 +243,7 @@ fn formatting_children(
                 if contents_suppresses_subtree(dom, child.node) {
                     continue;
                 }
-                let font_size = values::resolve_font_size(
-                    style.get("font-size").unwrap_or("medium"),
-                    child.parent_font,
-                );
+                let font_size = values::resolve_used_font_size(&style, child.parent_font);
                 let start = pending.len();
                 pending.extend(dom.children(child.node).map(|node| FormattingChild {
                     node,
@@ -581,7 +576,8 @@ fn inline_text(
     let padding = |property: &str| {
         style
             .get(property)
-            .and_then(|value| values::parse_len(value, font_size, font_size))
+            .and_then(|value| values::used_length_percentage(style, value, font_size, font_size * 0.6))
+            .and_then(|length| length.resolve(Some(font_size)))
             .unwrap_or(0.0)
             .max(0.0)
     };
@@ -675,10 +671,7 @@ fn ruby_text(
     segment_budget: &mut usize,
 ) -> RubyText {
     let style = styled.get(owner).cloned().unwrap_or_default();
-    let font_size = values::resolve_font_size(
-        style.get("font-size").unwrap_or("medium"),
-        parent_font_size,
-    );
+    let font_size = values::resolve_used_font_size(&style, parent_font_size);
     let mut segments = Vec::new();
     collect_ruby_text(
         dom,
@@ -751,10 +744,7 @@ fn empty_ruby_text(
     parent_font_size: f32,
 ) -> RubyText {
     let style = styled.get(owner).cloned().unwrap_or_default();
-    let font_size = values::resolve_font_size(
-        style.get("font-size").unwrap_or("medium"),
-        parent_font_size,
-    );
+    let font_size = values::resolve_used_font_size(&style, parent_font_size);
     RubyText {
         node: owner,
         text: String::new(),
@@ -1272,10 +1262,7 @@ fn classify_children(
                         ));
                     }
                     _ => {
-                        let child_font_size = values::resolve_font_size(
-                            child_style.get("font-size").unwrap_or("medium"),
-                            entry.parent_font,
-                        );
+                        let child_font_size = values::resolve_used_font_size(&child_style, entry.parent_font);
                         let edge = boundary_between(
                             dom,
                             child,
@@ -1398,8 +1385,7 @@ fn flatten_inline(
     fonts: &FontSource,
     replaced: &dyn ReplacedElementProvider,
 ) {
-    let font_size =
-        values::resolve_font_size(style.get("font-size").unwrap_or("medium"), parent_font_px);
+    let font_size = values::resolve_used_font_size(&style, parent_font_px);
     let bidi_style = text_style(dom, idx, &style, font_size, true);
     let inline_start = inlines.len();
 
@@ -1482,10 +1468,7 @@ fn flatten_inline(
                         ));
                     }
                     _ => {
-                        let child_font_size = values::resolve_font_size(
-                            cs.get("font-size").unwrap_or("medium"),
-                            entry.parent_font,
-                        );
+                        let child_font_size = values::resolve_used_font_size(&cs, entry.parent_font);
                         let edge =
                             boundary_between(dom, child, &text_parent, entry.parent_font, &cs, child_font_size);
                         flatten_inline(
