@@ -246,7 +246,7 @@ mod windows {
 
     struct PageRuntime {
         host: Rc<RefCell<BrowserDomHost>>,
-        js: amazing_js::Interpreter,
+        js: crate::js_scheduler::DriverScheduler,
         layout: LayoutBox,
         media: PageMedia,
     }
@@ -398,13 +398,13 @@ mod windows {
                     }
                     let history_length = self.tab().history.len();
                     if let Some(runtime) = self.tab_mut().runtime.as_mut() {
-                        runtime.js.set_history_length(history_length);
+                        runtime.js.js.set_history_length(history_length);
                     }
                     let script_navigation = self
                         .tab_mut()
                         .runtime
                         .as_mut()
-                        .and_then(|runtime| runtime.js.take_navigation());
+                        .and_then(|runtime| runtime.js.js.take_navigation());
                     if let Some(url) = script_navigation
                         && url != input
                     {
@@ -562,17 +562,23 @@ mod windows {
                 .as_ref()
                 .and_then(|runtime| hit_test(&runtime.layout, x as f32, page_y as f32));
             let Some(node) = node else { return };
-            if let Some(runtime) = self.tab_mut().runtime.as_mut()
-                && let Err(error) = runtime.js.dispatch_dom_event(node.0, "click")
-            {
-                eprintln!("amazing gui: click handler failed: {}", error.describe());
-                return;
+            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
+                let dispatch = runtime.js.dispatch_dom_event(node.0, "click");
+                let checkpoint = runtime.js.pump_now(true);
+                if let Err(error) = dispatch {
+                    eprintln!("amazing gui: click handler failed: {}", error.describe());
+                    return;
+                }
+                if let Err(error) = checkpoint {
+                    eprintln!("amazing gui: click checkpoint failed: {}", error.describe());
+                    return;
+                }
             }
             let navigation = self
                 .tab_mut()
                 .runtime
                 .as_mut()
-                .and_then(|runtime| runtime.js.take_navigation());
+                .and_then(|runtime| runtime.js.js.take_navigation());
             if let Some(url) = navigation {
                 self.navigate(url, true);
                 return;
@@ -581,7 +587,7 @@ mod windows {
                 .tab_mut()
                 .runtime
                 .as_mut()
-                .and_then(|runtime| runtime.js.take_history_delta())
+                .and_then(|runtime| runtime.js.js.take_history_delta())
             {
                 self.apply_history_delta(delta);
                 return;
@@ -590,7 +596,7 @@ mod windows {
                 .tab_mut()
                 .runtime
                 .as_mut()
-                .and_then(|runtime| runtime.js.take_history_update())
+                .and_then(|runtime| runtime.js.js.take_history_update())
             {
                 self.apply_history_update(url, replace, state);
                 return;
@@ -599,7 +605,7 @@ mod windows {
                 .tab()
                 .runtime
                 .as_ref()
-                .map(|runtime| !runtime.js.last_event_default_prevented())
+                .map(|runtime| !runtime.js.js.last_event_default_prevented())
                 .unwrap_or(true);
             if default_allowed {
                 let href = self
@@ -621,7 +627,7 @@ mod windows {
 
         fn pump_timers(&mut self) {
             let fired = if let Some(runtime) = self.tab_mut().runtime.as_mut() {
-                match runtime.js.pump_timers() {
+                match runtime.js.pump_now(true) {
                     Ok(fired) => fired,
                     Err(error) => {
                         eprintln!("amazing gui: timer callback failed: {}", error.describe());
@@ -635,7 +641,7 @@ mod windows {
                 .tab_mut()
                 .runtime
                 .as_mut()
-                .and_then(|runtime| runtime.js.take_history_delta())
+                .and_then(|runtime| runtime.js.js.take_history_delta())
             {
                 self.apply_history_delta(delta);
                 return;
@@ -644,7 +650,7 @@ mod windows {
                 .tab_mut()
                 .runtime
                 .as_mut()
-                .and_then(|runtime| runtime.js.take_history_update())
+                .and_then(|runtime| runtime.js.js.take_history_update())
             {
                 self.apply_history_update(url, replace, state);
                 return;
@@ -653,7 +659,7 @@ mod windows {
                 .tab_mut()
                 .runtime
                 .as_mut()
-                .and_then(|runtime| runtime.js.take_navigation());
+                .and_then(|runtime| runtime.js.js.take_navigation());
             if let Some(url) = navigation {
                 self.navigate(url, true);
                 return;
@@ -696,9 +702,9 @@ mod windows {
                 }
                 let history_length = tab.history.len();
                 if let Some(runtime) = tab.runtime.as_mut() {
-                    runtime.js.set_location_url(&url);
-                    runtime.js.set_history_length(history_length);
-                    runtime.js.set_history_state(state);
+                    runtime.js.js.set_location_url(&url);
+                    runtime.js.js.set_history_length(history_length);
+                    runtime.js.js.set_history_state(state);
                 }
             }
             set_window_text(self.address, &url);
@@ -903,6 +909,7 @@ mod windows {
         };
         let host = Rc::new(RefCell::new(BrowserDomHost {
             dom: amazing_html::parse_bytes(&response.body, transport),
+            native_forwarded: false,
         }));
         let scripts = {
             let host_ref = host.borrow();
@@ -910,10 +917,10 @@ mod windows {
             collect_scripts(&host_ref.dom, NodeIdx(0), &mut scripts);
             scripts
         };
-        let mut js = amazing_js::Interpreter::new();
-        js.set_dom_host(host.clone());
-        js.set_location_url(input);
-        js.set_viewport_size(width, 700);
+        let mut js = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
+            .map_err(|error| error.describe())?;
+        js.js.set_location_url(input);
+        js.js.set_viewport_size(width, 700);
         let handlers = {
             let host_ref = host.borrow();
             let mut handlers = Vec::new();
@@ -954,6 +961,8 @@ mod windows {
             js.dispatch_dom_event(body, "load")
                 .map_err(|error| format!("body load listener failed: {}", error.describe()))?;
         }
+        js.pump_at(std::time::Duration::from_millis(16), true)
+            .map_err(|error| format!("page event loop failed: {}", error.describe()))?;
         css.clear();
         {
             let host_ref = host.borrow();
@@ -1537,7 +1546,7 @@ mod windows {
                 .as_mut()
                 .unwrap()
                 .js
-                .pump_timers()
+                .pump_now(true)
                 .expect("timer pump");
             state.repaint_runtime();
             let host = state.tab().runtime.as_ref().unwrap().host.clone();

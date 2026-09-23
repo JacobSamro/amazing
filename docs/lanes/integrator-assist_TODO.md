@@ -273,8 +273,8 @@ the DOM lane. The final ownership decision is a backend-neutral
 `amazing_bindings::host::BindingHost` trait drafted by dom-bindings and reviewed
 by js-runtime, with a driver-local `RuntimeBindingHost` in `crates/amazing`.
 The driver must not create a parallel trait or wrapper cache. Begin only after
-js-runtime accepts the final trait text, and after the separate JS-4 scheduling
-and streamed document loading driver tickets.
+js-runtime accepts the final trait text. The latest Stage-1 priority places
+this after JS-4 scheduling and before streamed document loading.
 
 Driver changes required once the runtime adapter is supplied:
 
@@ -292,8 +292,10 @@ Driver changes required once the runtime adapter is supplied:
   live and same-object. UTF-16 conversion/coercion stays outside DOM borrows;
   constructors, methods and accessors forward the supplied `Operation`.
 
-The driver alone has both `amazing-js` and `amazing-bindings` dependencies.
-This map does not implement or validate the future installer.
+The driver currently depends on `amazing-js`; its direct `amazing-bindings`
+dependency and installer belong to the future ticket. This map does not
+implement or validate that installer. Runtime string methods still wait for
+the JsString migration.
 
 Validation after dependencies land must show an API is visible in actual driver
 WPT execution, mutations reach the parsed arena, factory/query/new-interface
@@ -303,19 +305,51 @@ measured before/after separately from native DOM/binding counts. This map earns
 no WPT credit; the completed XML no-fallback/no-scripting behavior remains a
 regression requirement.
 
-## Queued after IA-HTML2
+## IA-JS4 — driver EventLoop scheduling adapter
 
-1. JS-4 scheduling adapter: merged dependency `d42609d`, contingent on
-   dom-bindings landing `crates/amazing/tests/js4_event_loop_adapter.rs` as the
-   reference proof. Use `new_with_external_scheduler(js_capacity)`; after every
-   interpreter entry, drain `take_scheduling_requests` and enqueue every request
-   FIFO into `EventLoop` before any other JS entry. Never drop a taken request
-   after downstream failure. Separate driver ticket, not part of IA-HTML2.
+Fixed dev base `c8c3c21` includes DOM-6's landed reference proof. Driver
+implementation `1f16fec356c957922fe5428a70fcf3f521268787` constructs each
+interpreter with `new_with_external_scheduler(4096)`, attaches the same parsed
+DOM, and registers one EventLoop global. Every page-facing entry in CLI,
+classic-script renderer, WPT worker, and native GUI goes through the shared
+driver scheduler: script, inline-handler installation, DOM event dispatch,
+Promise/queueMicrotask job, timer/frame callback. A taken outbox request remains
+driver-owned in FIFO until admitted; a downstream error blocks later JS entry
+without dropping it. Timer/frame maps retain core IDs and opaque JS callback
+tokens; callbacks receive Window and frames receive the core timestamp.
+
+BrowserDomHost forwards one pending native mutation request after release of
+the DOM borrow; the runtime acknowledges only successful admission. The DOM
+pending flag remains until EventLoop's mutation checkpoint, and re-arms after
+delivery. EventLoop steps drain newly emitted requests before `complete`, even
+after a thrown callback. Driver clock advance and rendering opportunities are
+explicit. The adapter is single-threaded and does not add BindingHost or a JS
+MutationObserver constructor; the native mutation proof uses a pre-registered
+DOM observer and is synthetic, not WPT credit. The checkpoint consumes native
+records; JS observer callback invocation remains for BindingHost installation.
+
+Five driver adapter tests passed twice with the same eight named trace outcomes
+and normalized SHA-256
+`4c6d28065fe67184cef9a69456d45ab1f2d9be8ad10afddfe702a4c84904eb59`.
+The DOM-6 reference proof passed 5/5. Scoped driver nextest passed **122/122**
+with 3 skipped; the binary package has no scoped library doctests. The scaffold
+WPT worker retained its expected pass and fail classifications. Fixed-base
+workspace nextest passed **1414/1414** with 3 skipped; separate workspace
+doctests passed **2/2**. Both full commands used the primary shared slot under
+REFRESH-HOLD, then the hold was released. All **1109/1109** tracked HEAD file
+hashes matched win-001 after the gate. Trace reports, exact commands, source
+manifest, and entry inventory are in `tests/wpt-integrator-assist/js4-evidence/`.
+This lane gate does not prove later dev merges; co-integrator owns merged-head
+preflight. No GPUI or lower-crate source was changed.
+
+## Queued after IA-JS4
+
+1. Driver-local RuntimeBindingHost installation, after js-runtime accepts the
+   final `amazing_bindings::host::BindingHost` trait text and string facade.
+   Use the ownership decision above; this ticket has not begun.
 2. Streamed document loading: NET-9 `fetch_stream` on dev `dc184d2` supplies
    decoded byte chunks and drop cancellation; HTML-3 `IncrementalParser` takes
    already-decoded Unicode via `push_chunk` and `finish`. Bridge the byte and
    encoding boundaries under HTML-2's four-decoder limit, without a full-body
    buffer or lower-crate edits. Full queued brief is in
    `.agents/co-integrator/ia-streaming-queued-20260923.md`.
-3. BindingHost driver installation, after js-runtime accepts the final trait
-   text, using the ownership decision above.

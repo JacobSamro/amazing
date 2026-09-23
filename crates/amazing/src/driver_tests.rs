@@ -6,6 +6,7 @@ use amazing_text::TextSystem;
 fn document_title_ignores_svg_title_elements() {
     let mut host = BrowserDomHost {
         dom: amazing_html::parse("<svg><title>foreign</title></svg>"),
+        native_forwarded: false,
     };
     assert_eq!(
         <BrowserDomHost as amazing_js::DomHost>::get_document_title(&host),

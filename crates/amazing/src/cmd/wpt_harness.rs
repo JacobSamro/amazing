@@ -305,29 +305,30 @@ fn execute(options: &Options) -> Result<(), String> {
     let html = source(&root, &file, options.scaffold)?;
     let host = Rc::new(RefCell::new(crate::BrowserDomHost {
         dom: amazing_html::parse(&html),
+        native_forwarded: false,
     }));
     let mut scripts = Vec::new();
     collect_scripts(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut scripts)?;
-    let mut js = Interpreter::new();
-    js.set_dom_host(host.clone());
-    js.set_viewport_size(options.width, options.height);
-    js.set_location_url(format!("http://web-platform.test/{}", options.test));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
+        .map_err(|error| error.describe())?;
+    scheduler.js.set_viewport_size(options.width, options.height);
+    scheduler.js.set_location_url(format!("http://web-platform.test/{}", options.test));
     // The engine's browser-global identity also supplies the standard self alias.
-    let global = JsValue::Object(js.global_obj.clone());
-    js.global_obj.borrow_mut().set_own("self", global.clone());
-    js.global_env
+    let global = JsValue::Object(scheduler.js.global_obj.clone());
+    scheduler.js.global_obj.borrow_mut().set_own("self", global.clone());
+    scheduler.js.global_env
         .declare_var("self", global)
         .map_err(|e| e.describe())?;
     // Native DOM listener methods currently require an explicit receiver.
     // Global event functions are Window operations even when called bare.
-    js.run_script("var addEventListener = window.addEventListener.bind(window); var removeEventListener = window.removeEventListener.bind(window); window.parent = window; window.top = window;")
+    scheduler.run_script("var addEventListener = window.addEventListener.bind(window); var removeEventListener = window.removeEventListener.bind(window); window.parent = window; window.top = window;")
         .map_err(|e| format!("window host initialization: {}", e.describe()))?;
-    install_callback(&mut js, "__amazing_result", result_callback)?;
-    install_callback(&mut js, "__amazing_complete", completion_callback)?;
+    install_callback(&mut scheduler.js, "__amazing_result", result_callback)?;
+    install_callback(&mut scheduler.js, "__amazing_complete", completion_callback)?;
     let mut handlers = Vec::new();
     crate::collect_inline_handlers(&host.borrow().dom, amazing_dom::NodeIdx(0), &mut handlers);
     for (node, event, body) in handlers {
-        js.install_inline_handler(node, &event, &body)
+        scheduler.install_inline_handler(node, &event, &body)
             .map_err(|e| e.describe())?;
     }
     let harness_path = root
@@ -359,13 +360,13 @@ fn execute(options: &Options) -> Result<(), String> {
             }
             None => (script.body, "inline script".into(), false),
         };
-        js.run_script(&text)
+        scheduler.run_script(&text)
             .map_err(|e| format!("{label}: {}", e.describe()))?;
         if harness {
             if installed {
                 return Err("duplicate harness script".into());
             }
-            js.run_script("add_result_callback(__amazing_result); add_completion_callback(__amazing_complete); setup({output:false});")
+            scheduler.run_script("add_result_callback(__amazing_result); add_completion_callback(__amazing_complete); setup({output:false});")
                 .map_err(|e| format!("callback installation: {}", e.describe()))?;
             installed = true;
         }
@@ -374,17 +375,16 @@ fn execute(options: &Options) -> Result<(), String> {
         return Err("no harness script loaded".into());
     }
     for event in ["DOMContentLoaded", "load"] {
-        js.dispatch_dom_event(0, event).map_err(|e| e.describe())?;
+        scheduler.dispatch_dom_event(0, event).map_err(|e| e.describe())?;
     }
     use amazing_js::DomHost;
     let body = host.borrow_mut().query_selector("body");
     if let Some(body) = body {
-        js.dispatch_dom_event(body, "load")
+        scheduler.dispatch_dom_event(body, "load")
             .map_err(|e| e.describe())?;
     }
     while !COMPLETE.get() {
-        js.drain_microtasks().map_err(|e| e.describe())?;
-        js.pump_timers().map_err(|e| e.describe())?;
+        scheduler.pump_now(true).map_err(|e| e.describe())?;
         std::thread::sleep(Duration::from_millis(1));
     }
     Ok(())

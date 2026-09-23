@@ -1,0 +1,22 @@
+{
+  "run": 1,
+  "source_revision": "1f16fec356c957922fe5428a70fcf3f521268787",
+  "fixed_base": "c8c3c21b369d300e41009948aa11819e3c602e43",
+  "command": "cargo nextest run -p amazing --bin amazing --locked -E \"test(js_scheduler::tests)\" --success-output immediate",
+  "tests_passed": 5,
+  "tests_failed": 0,
+  "selection_skipped": 11,
+  "outcomes": {
+    "downstream-fail-closed": "retained=1 executed=0",
+    "frame-cancel": "F1",
+    "mutation-batch": "M",
+    "native-capacity-one": "TypeError,P,M",
+    "native-rearm": "P,M,Q,M",
+    "thrown-callback": "A,P,B",
+    "thrown-script": "P",
+    "timer-promise-microtask": "A,P,Q,R,B"
+  },
+  "projection_sha256": "4c6d28065fe67184cef9a69456d45ab1f2d9be8ad10afddfe702a4c84904eb59",
+  "server_log_sha256": "57efb5c1138509a9c426ab2bb17e5bacde7b52550a98976406ebaa0ec798a00f",
+  "server_log": "target/diagnostics/ia-js4/final-trace-1.log"
+}
