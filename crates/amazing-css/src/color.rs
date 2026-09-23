@@ -288,7 +288,8 @@ fn lookup_named(lower: &str) -> Option<[u8; 4]> {
     // colors. Deprecated aliases share the corresponding modern role.
     match lower {
         "buttonface" | "threedface" => return Some([240, 240, 240, 255]),
-        "buttonborder" | "threedlightshadow" => return Some([128, 128, 128, 255]),
+        "buttonborder" | "inactiveborder" | "threedlightshadow" => return Some([128, 128, 128, 255]),
+        "canvastext" | "infotext" => return Some([0, 0, 0, 255]),
         _ => {},
     }
     NAMED.iter().find(|(n, _)| *n == lower).map(|(_, c)| *c)
@@ -340,6 +341,8 @@ mod tests {
         assert_eq!(parse_css_color("ReD"), Some([255, 0, 0, 255]));
         assert_eq!(parse_css_color("  gReEn "), Some([0, 128, 0, 255]));
         assert_eq!(parse_css_color("rebeccapurple"), Some([102, 51, 153, 255]));
+        assert_eq!(parse_css_color("InactiveBorder"), parse_css_color("ButtonBorder"));
+        assert_eq!(parse_css_color("InfoText"), parse_css_color("CanvasText"));
     }
 
     #[test]

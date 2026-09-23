@@ -157,6 +157,9 @@ pub enum Pseudo {
     Enabled,
     Disabled,
     Checked,
+    Required,
+    Optional,
+    Open,
 }
 
 // ---------------------------------------------------------------------------
@@ -450,6 +453,12 @@ impl<'t> SelParser<'t> {
     /// `i`/`s` flag.
     fn attribute(&mut self) -> Option<Simple> {
         self.skip_ws();
+        // `[|name]` explicitly selects a no-namespace attribute. Whitespace
+        // between the namespace separator and name is invalid grammar.
+        if matches!(self.peek(), Some(Token::Delim('|'))) {
+            self.pos += 1;
+            if !matches!(self.peek(), Some(Token::Ident(_))) { return None; }
+        }
         let name = match self.bump()? {
             Token::Ident(n) => n.to_ascii_lowercase(),
             _ => return None,
@@ -583,6 +592,9 @@ impl<'t> SelParser<'t> {
             "enabled" => Pseudo::Enabled,
             "disabled" => Pseudo::Disabled,
             "checked" => Pseudo::Checked,
+            "required" => Pseudo::Required,
+            "optional" => Pseudo::Optional,
+            "open" => Pseudo::Open,
             _ => return None, // unknown pseudo-class invalidates the selector
         };
         Some(Simple::Pseudo(pseudo))
@@ -1174,6 +1186,21 @@ fn matches_pseudo(dom: &Dom, el: NodeIdx, p: Pseudo) -> bool {
         Pseudo::Enabled => attr_of(dom, el, "disabled").is_none(),
         Pseudo::Disabled => attr_of(dom, el, "disabled").is_some(),
         Pseudo::Checked => attr_of(dom, el, "checked").is_some(),
+        Pseudo::Required => supports_required(dom, el) && attr_of(dom, el, "required").is_some(),
+        Pseudo::Optional => supports_required(dom, el) && attr_of(dom, el, "required").is_none(),
+        Pseudo::Open => matches!(dom.name(el), Some("details" | "dialog"))
+            && attr_of(dom, el, "open").is_some(),
+    }
+}
+
+fn supports_required(dom: &Dom, el: NodeIdx) -> bool {
+    match dom.name(el) {
+        Some("select" | "textarea") => true,
+        Some("input") => !attr_of(dom, el, "type").is_some_and(|kind| {
+            ["hidden", "range", "color", "submit", "image", "reset", "button"]
+                .iter().any(|excluded| kind.eq_ignore_ascii_case(excluded))
+        }),
+        _ => false,
     }
 }
 
@@ -1368,6 +1395,40 @@ mod tests {
             next,
             &parse_selector(":not(:dir(ltr)) + div").unwrap()
         ));
+    }
+
+    #[test]
+    fn required_and_optional_match_only_eligible_form_controls() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(html, "body");
+        let required = dom.create_element(body, "input");
+        dom.set_attrs(required, vec![("required".into(), "".into())]);
+        let optional = dom.create_element(body, "textarea");
+        let hidden = dom.create_element(body, "input");
+        dom.set_attrs(hidden, vec![("type".into(), "hidden".into())]);
+        let unrelated = dom.create_element(body, "p");
+        let check = |node, selector| matches(&dom, node, &parse_selector(selector).unwrap());
+        assert!(check(required, ":required"));
+        assert!(!check(required, ":optional"));
+        assert!(check(optional, ":optional"));
+        assert!(!check(optional, ":required"));
+        assert!(!check(hidden, ":optional"));
+        assert!(!check(unrelated, ":optional"));
+    }
+
+    #[test]
+    fn open_state_and_no_namespace_attribute_selector() {
+        let mut dom = Dom::new();
+        let html = dom.create_element(NodeIdx(0), "html");
+        let details = dom.create_element(html, "details");
+        dom.set_attrs(details, vec![("open".into(), "".into()), ("data-test".into(), "".into())]);
+        let other = dom.create_element(html, "div");
+        dom.set_attrs(other, vec![("open".into(), "".into())]);
+        assert!(matches(&dom, details, &parse_selector(":open").unwrap()));
+        assert!(!matches(&dom, other, &parse_selector(":open").unwrap()));
+        assert!(matches(&dom, details, &parse_selector("[|data-test]").unwrap()));
+        assert!(parse_selector("[| data-test]").is_none());
     }
 
     #[test]
