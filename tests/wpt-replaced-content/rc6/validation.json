@@ -1,0 +1,45 @@
+{
+  "fixed_base": "945ca38",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "manifest_sha256": "d794102ba14ea1258c71d099f7beb012cffd05f9a7b4de168c003d8d5435f2a3",
+  "wpt_before_and_after_counts_each_run": {
+    "pass": 4,
+    "mismatch": 0,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "wpt_projection_unchanged_across_before_and_both_after_runs": true,
+  "wpt_raw_pass_gain": 0,
+  "owned_before_matches": 0,
+  "owned_after_matches_each_run": 4,
+  "owned_after_noninert_each_run": 4,
+  "owned_pixels_different_from_blank_per_case": 4096,
+  "owned_repeat_stable": true,
+  "before_image_executable_sha256": "8b5dfcaeaaf37b438f05793a32e24b5a627fa08ef62e3239298c7f14ddf3723b",
+  "after_image_executable_sha256": "fb05f716d93ded335c33e9ada2fb9a11ed5a4c30d0c37e083b9eda43d33261eb",
+  "image_nextest": {
+    "passed": 21,
+    "failed": 0,
+    "skipped": 0
+  },
+  "image_doctests": {
+    "passed": 0,
+    "failed": 0
+  },
+  "workspace_nextest": {
+    "passed": 1441,
+    "failed": 0,
+    "skipped": 3
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "source_fixture_hashes": {
+    "count": 22,
+    "mac_windows_equal_before_and_after": true,
+    "unchanged_across_gate": true
+  }
+}

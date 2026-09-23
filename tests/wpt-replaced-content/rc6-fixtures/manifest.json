@@ -1,0 +1,30 @@
+{
+  "kind": "owned RC-6 CSS computation proof, not WPT",
+  "viewport": [
+    64,
+    64
+  ],
+  "blank": "blank.html",
+  "tests": [
+    {
+      "id": "wide-inherit",
+      "test": "wide-inherit.html",
+      "reference": "wide-inherit-ref.html"
+    },
+    {
+      "id": "wide-initial",
+      "test": "wide-initial.html",
+      "reference": "wide-initial-ref.html"
+    },
+    {
+      "id": "inherited-variable",
+      "test": "inherited-variable.html",
+      "reference": "inherited-variable-ref.html"
+    },
+    {
+      "id": "hint-inline-order",
+      "test": "hint-inline-order.html",
+      "reference": "hint-inline-order-ref.html"
+    }
+  ]
+}
