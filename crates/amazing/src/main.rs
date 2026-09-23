@@ -10,6 +10,7 @@ mod gpu;
 mod gui;
 mod js_scheduler;
 mod page;
+mod render_oracle;
 mod runtime_binding_host;
 #[cfg(test)]
 mod driver_tests;
