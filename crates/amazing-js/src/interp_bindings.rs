@@ -150,15 +150,10 @@ impl Interpreter {
         flags: BindingPropertyFlags,
     ) -> Result<(), Throw> {
         let owner = Self::binding_owner(owner)?;
+        let property = Property { value, writable: flags.writable, enumerable: flags.enumerable, configurable: flags.configurable, getter: None, setter: None };
+        if self.legacy_define(&owner, name, &property)? { return Ok(()); }
         Self::binding_can_define(&owner, name)?;
-        owner.borrow_mut().define(name, Property {
-            value,
-            writable: flags.writable,
-            enumerable: flags.enumerable,
-            configurable: flags.configurable,
-            getter: None,
-            setter: None,
-        }).map_err(|_| Throw::type_error("could not define property"))
+        owner.borrow_mut().define(name, property).map_err(|_| Throw::type_error("could not define property"))
     }
 
     /// Accessors are stored as runtime callables, independent of their body
@@ -182,19 +177,35 @@ impl Interpreter {
         let getter = callable(getter)?;
         let setter = callable(setter)?;
         let owner = Self::binding_owner(owner)?;
+        let property = Property { value: JsValue::Undefined, writable: false, enumerable, configurable, getter, setter };
+        if self.legacy_define(&owner, name, &property)? { return Ok(()); }
         Self::binding_can_define(&owner, name)?;
-        owner.borrow_mut().define(name, Property {
-            value: JsValue::Undefined,
-            writable: false,
-            enumerable,
-            configurable,
-            getter,
-            setter,
-        }).map_err(|_| Throw::type_error("could not define property"))
+        owner.borrow_mut().define(name, property).map_err(|_| Throw::type_error("could not define property"))
     }
 
     pub fn binding_get_property(&mut self, object: &JsValue, name: &str) -> Result<JsValue, Throw> {
         self.get_prop(object, name)
+    }
+
+    pub fn binding_get_own_property(&mut self, object: &JsValue, name: &str) -> Result<Option<Property>, Throw> {
+        let owner = Self::binding_owner(object)?;
+        self.legacy_own_property(&owner, name, false)
+    }
+
+    pub fn binding_own_property_keys(&mut self, object: &JsValue) -> Result<Vec<String>, Throw> {
+        let owner = Self::binding_owner(object)?;
+        self.legacy_own_keys(&owner, false)
+    }
+
+    pub fn binding_delete_property(&mut self, object: &JsValue, name: &str) -> Result<bool, Throw> {
+        let owner = Self::binding_owner(object)?;
+        match self.legacy_delete(&owner, name)? {
+            Some(deleted) => Ok(deleted),
+            None => {
+                let deleted = owner.borrow_mut().delete_own(name);
+                Ok(deleted)
+            }
+        }
     }
 
     pub fn binding_set_property(
@@ -207,6 +218,7 @@ impl Interpreter {
         // walk inherited setters. Installed interface members live on a
         // prototype, so honor the first inherited descriptor here.
         if let JsValue::Object(receiver) = object {
+            if self.legacy_set(receiver, name, value.clone())? { return Ok(()); }
             if receiver.borrow().own_prop(name).is_none() {
                 let mut cursor = receiver.borrow().proto.clone();
                 while let Some(prototype) = cursor {
