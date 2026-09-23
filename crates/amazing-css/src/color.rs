@@ -46,7 +46,10 @@ pub fn parse_css_color(input: &str) -> Option<[u8; 4]> {
         "hsl" | "hsla" => advanced::hsl(inner),
         "hwb" => advanced::hwb(inner),
         "color" => advanced::predefined_rgb(inner),
+        "lab" => advanced::lab(inner),
         "lch" => advanced::lch(inner),
+        "oklab" => advanced::oklab(inner),
+        "oklch" => advanced::oklch(inner),
         _ => None,
     }
 }

@@ -1,0 +1,1058 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "source": "https://wpt.fyi/api/search?run_ids=5182906107691008,5141363439173632&q=/css/",
+  "runs": [
+    {
+      "id": 5182906107691008,
+      "browser": "chrome",
+      "version": "154.0.8016.0",
+      "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+    },
+    {
+      "id": 5141363439173632,
+      "browser": "safari",
+      "version": "26.6 (21624.4.5.11.5)",
+      "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+    }
+  ],
+  "cases": {
+    "selectors__has-style-sharing-002.html": [
+      "P",
+      "P"
+    ],
+    "selectors__dir-style-03a.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-of-no-space-after-of.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-016.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-022.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-of-tagname.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-002.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-of-complex-selector.html": [
+      "P",
+      "P"
+    ],
+    "selectors__floating-first-letter-05d0.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-006.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-000.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-of-complex-selector-many-children-2.html": [
+      "P",
+      "P"
+    ],
+    "selectors__has-style-sharing-004.html": [
+      "P",
+      "P"
+    ],
+    "selectors__first-line-bidi-001.html": [
+      "P",
+      "P"
+    ],
+    "selectors__text-emphasis-visited-inheritance.html": [
+      "P",
+      "P"
+    ],
+    "selectors__dir-style-02a.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-of-classname.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-018.html": [
+      "P",
+      "F"
+    ],
+    "selectors__is-where-pseudo-elements.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-005.html": [
+      "P",
+      "P"
+    ],
+    "selectors__dir-style-01a.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-019.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-024.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-of-style-sharing-1.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-specificity-1.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-003.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-specificity-1.html": [
+      "P",
+      "P"
+    ],
+    "selectors__text-fill-color-visited-inheritance.html": [
+      "P",
+      "P"
+    ],
+    "selectors__child-indexed-no-parent.html": [
+      "P",
+      "P"
+    ],
+    "selectors__floating-first-letter-feff.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selector-required.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-020.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-009.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__details-open-pseudo-001.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-attr-many.html": [
+      "P",
+      "P"
+    ],
+    "selectors__not-links.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-specificity-2.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-of-nesting.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-of-complex-selector-many-children.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-of-compound-selector.html": [
+      "P",
+      "P"
+    ],
+    "selectors__has-style-sharing-007.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-014.html": [
+      "P",
+      "P"
+    ],
+    "selectors__has-style-sharing-001.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-012.html": [
+      "P",
+      "P"
+    ],
+    "selectors__first-letter-flag-001.html": [
+      "P",
+      "P"
+    ],
+    "selectors__is-where-visited.html": [
+      "P",
+      "F"
+    ],
+    "selectors__dir-selector-white-space-001.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-of-nesting.html": [
+      "P",
+      "P"
+    ],
+    "selectors__has-visited.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-and-nth-last-child.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-of-tagname.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-025.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-015.html": [
+      "P",
+      "P"
+    ],
+    "selectors__text-stroke-color-visited-inheritance.html": [
+      "P",
+      "P"
+    ],
+    "selectors__has-style-sharing-003.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-of-no-space-after-of.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-of-style-sharing-2.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-004.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-010.html": [
+      "P",
+      "P"
+    ],
+    "selectors__visited-nested.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-of-pseudo.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selector-structural-pseudo-root.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-017.html": [
+      "P",
+      "F"
+    ],
+    "selectors__selectors-4__lang-008.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-specificity-4.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-attr-white-space-001.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-011.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-023.html": [
+      "P",
+      "P"
+    ],
+    "selectors__first-line-bidi-002.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-of-complex-selector.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-of-compound-selector.html": [
+      "P",
+      "P"
+    ],
+    "selectors__invalidation__any-link-attribute-removal.html": [
+      "P",
+      "P"
+    ],
+    "selectors__has-style-sharing-006.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-001.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-last-child-specificity-3.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-021.html": [
+      "P",
+      "P"
+    ],
+    "selectors__has-style-sharing-005.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-specificity-4.html": [
+      "P",
+      "P"
+    ],
+    "selectors__selectors-4__lang-007.html": [
+      "P",
+      "P"
+    ],
+    "selectors__nth-child-of-classname.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklch-l-almost-0.html": [
+      "P",
+      "P"
+    ],
+    "css-color__xyz-d65-005.html": [
+      "P",
+      "P"
+    ],
+    "css-color__deprecated-sameas-017.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hwb-005.html": [
+      "P",
+      "P"
+    ],
+    "css-color__a98rgb-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__color-mix-currentcolor-002.html": [
+      "P",
+      "P"
+    ],
+    "css-color__deprecated-sameas-019.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hsl-003.html": [
+      "P",
+      "P"
+    ],
+    "css-color__lch-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__relative-currentcolor-rec2020-02.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklch-004.html": [
+      "P",
+      "P"
+    ],
+    "css-color__display-p3-linear-002.html": [
+      "P",
+      "P"
+    ],
+    "css-color__xyz-002.html": [
+      "P",
+      "P"
+    ],
+    "css-color__rgba-007.html": [
+      "P",
+      "P"
+    ],
+    "css-color__xyz-d50-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklch-009.html": [
+      "F",
+      "F"
+    ],
+    "css-color__background-color-rgb-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__srgb-linear-002.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hwb-003.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklch-003.html": [
+      "P",
+      "P"
+    ],
+    "css-color__xyz-d50-002.html": [
+      "P",
+      "P"
+    ],
+    "css-color__color-mix-percents-01.html": [
+      "P",
+      "P"
+    ],
+    "css-color__rgb-008.html": [
+      "P",
+      "P"
+    ],
+    "css-color__rgba-005.html": [
+      "P",
+      "P"
+    ],
+    "css-color__background-color-hsl-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklab-l-over-1-2.html": [
+      "P",
+      "P"
+    ],
+    "css-color__t424-hsl-values-b-12.html": [
+      "P",
+      "P"
+    ],
+    "css-color__deprecated-sameas-008.html": [
+      "P",
+      "P"
+    ],
+    "css-color__display-p3-linear-004.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hsl-006.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hsla-008.html": [
+      "P",
+      "P"
+    ],
+    "css-color__deprecated-sameas-010.html": [
+      "P",
+      "F"
+    ],
+    "css-color__a98rgb-004.html": [
+      "P",
+      "P"
+    ],
+    "css-color__lch-002.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hsla-004.html": [
+      "P",
+      "P"
+    ],
+    "css-color__relative-currentcolor-hsl-01.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hsla-003.html": [
+      "P",
+      "P"
+    ],
+    "css-color__display-p3-006.html": [
+      "P",
+      "F"
+    ],
+    "css-color__prophoto-rgb-004.html": [
+      "P",
+      "P"
+    ],
+    "css-color__lab-003.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hex-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__deprecated-sameas-012.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklch-l-over-1-2.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklab-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__deprecated-sameas-003.html": [
+      "P",
+      "F"
+    ],
+    "css-color__hwb-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__t424-hsl-values-b-4.html": [
+      "P",
+      "P"
+    ],
+    "css-color__lch-l-over-100-1.html": [
+      "P",
+      "P"
+    ],
+    "css-color__t424-hsl-values-b-1.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hwb-004.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklch-l-over-1-1.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hex-004.html": [
+      "P",
+      "P"
+    ],
+    "css-color__lab-008.html": [
+      "P",
+      "P"
+    ],
+    "css-color__rec2020-005.html": [
+      "P",
+      "P"
+    ],
+    "css-color__relative-currentcolor-rec2020-01.html": [
+      "P",
+      "P"
+    ],
+    "css-color__display-p3-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__contrast-color-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklab-006.html": [
+      "P",
+      "P"
+    ],
+    "css-color__t424-hsl-values-b-15.html": [
+      "P",
+      "P"
+    ],
+    "css-color__currentcolor-visited-fallback.html": [
+      "P",
+      "P"
+    ],
+    "css-color__prophoto-rgb-003.html": [
+      "P",
+      "P"
+    ],
+    "css-color__currentcolor-001.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklch-002.html": [
+      "P",
+      "P"
+    ],
+    "css-color__lch-009.html": [
+      "F",
+      "F"
+    ],
+    "css-color__oklch-005.html": [
+      "P",
+      "P"
+    ],
+    "css-color__rgba-002.html": [
+      "P",
+      "P"
+    ],
+    "css-color__deprecated-sameas-011.html": [
+      "P",
+      "F"
+    ],
+    "css-color__color-mix-currentcolor-003.html": [
+      "P",
+      "P"
+    ],
+    "css-color__xyz-d50-003.html": [
+      "P",
+      "P"
+    ],
+    "css-color__deprecated-sameas-020.html": [
+      "P",
+      "F"
+    ],
+    "css-color__deprecated-sameas-006.html": [
+      "P",
+      "F"
+    ],
+    "css-color__rec2020-004.html": [
+      "P",
+      "P"
+    ],
+    "css-color__hsla-005.html": [
+      "P",
+      "P"
+    ],
+    "css-color__predefined-007.html": [
+      "P",
+      "P"
+    ],
+    "css-color__oklab-l-almost-0.html": [
+      "P",
+      "P"
+    ],
+    "css-color__rgb-005.html": [
+      "P",
+      "P"
+    ],
+    "css-color__t424-hsl-values-b-2.html": [
+      "P",
+      "P"
+    ],
+    "css-color__currentcolor-003.html": [
+      "F",
+      "F"
+    ],
+    "css-color__relative-currentcolor-displayp3-01.html": [
+      "P",
+      "P"
+    ],
+    "css-color__t424-hsl-values-b-9.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-border-radius-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-max-height-block-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-min-width-block-intrinsic-1.html": [
+      "P",
+      "F"
+    ],
+    "css-values__ch-unit-008.html": [
+      "P",
+      "P"
+    ],
+    "css-values__vh-interpolate-px.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-invalid-range-clamping.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-size__calc-size-min-max-sizes-001.html": [
+      "P",
+      "F"
+    ],
+    "css-values__attr-in-slotted.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-in-media-queries-001.html": [
+      "P",
+      "P"
+    ],
+    "css-values__viewport-units-scrollbars-scroll-vw-003.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-rounding-003.html": [
+      "P",
+      "P"
+    ],
+    "css-values__max-unitless-zero-invalid.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-background-image-gradient-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-offsets-relative-bottom-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-size__calc-size-flex-006.html": [
+      "P",
+      "F"
+    ],
+    "css-values__vh-inherit.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-size__calc-size-min-max-sizes-004.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-height-block-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__viewport-units-scrollbars-scroll-vw-001.html": [
+      "P",
+      "F"
+    ],
+    "css-values__attr-in-max.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-width-block-intrinsic-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-transform-origin-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__attr-length-valid-zero-nofallback.html": [
+      "P",
+      "F"
+    ],
+    "css-values__attr-style-sharing-5.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-max-width-block-intrinsic-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__vh-interpolate-pct.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-offsets-relative-top-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__ex-calc-expression-001.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-size__calc-size-aspect-ratio-003.html": [
+      "P",
+      "F"
+    ],
+    "css-values__vh-em-inherit.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-offsets-absolute-left-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__vh-calc-support.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-offsets-relative-left-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__negative-calc-to-non-negative-integer.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-min-height-block-1.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-width-table-auto-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__attr-notype-fallback.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-size__calc-size-min-max-sizes-006.html": [
+      "P",
+      "F"
+    ],
+    "css-values__viewport-units-scrollbars-custom-001.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-in-calc.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-width-table-fixed-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-max-width-block-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__vh-zero-support.html": [
+      "P",
+      "P"
+    ],
+    "css-values__viewport-units-scrollbars-scroll-vhw-001.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-ch-ex-lang.html": [
+      "P",
+      "P"
+    ],
+    "css-values__vh-support-margin.html": [
+      "P",
+      "P"
+    ],
+    "css-values__attr-length-valid-zero.html": [
+      "P",
+      "F"
+    ],
+    "css-values__vh-calc-support-pct.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-rem-lang.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-padding-block-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__attr-length-valid.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-size__calc-size-grid-repeat.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-min-width-block-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__attr-length-invalid-cast.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-in-max.html": [
+      "P",
+      "P"
+    ],
+    "css-values__attr-color-invalid-cast.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-size__calc-size-aspect-ratio-005.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-text-indent-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__viewport-units-scrollbars-auto-vhw-001.html": [
+      "F",
+      "F"
+    ],
+    "css-values__vh-interpolate-vh.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-rounding-002.html": [
+      "P",
+      "P"
+    ],
+    "css-values__ch-unit-010.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-width-block-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-rounding-001.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-size__calc-size-aspect-ratio-001.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-size__calc-size-flex-001.html": [
+      "P",
+      "F"
+    ],
+    "css-values__viewport-units-001-print.html": [
+      "P",
+      ""
+    ],
+    "css-values__html-attr-case-insensitivity.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-in-media-queries-002.html": [
+      "P",
+      "P"
+    ],
+    "css-values__max-length-percent-001.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-background-linear-gradient-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-size__calc-size-flex-005.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-offsets-absolute-right-1.html": [
+      "P",
+      "P"
+    ],
+    "css-values__max-20-arguments.html": [
+      "P",
+      "P"
+    ],
+    "css-values__ch-unit-011.html": [
+      "P",
+      "P"
+    ],
+    "css-values__calc-size__calc-size-no-body-height-quirk-001.html": [
+      "P",
+      "F"
+    ],
+    "css-values__percentage-rem-low.html": [
+      "P",
+      "F"
+    ],
+    "css-values__attr-style-sharing-2.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-size__calc-size-min-max-sizes-002.html": [
+      "P",
+      "F"
+    ],
+    "css-values__calc-size__calc-size-min-max-sizes-003.html": [
+      "P",
+      "F"
+    ],
+    "css-cascade__scope-pseudo-element.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__all-prop-revert-visited.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__all-prop-001.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__scope-featureless.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__all-prop-revert-color.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__all-prop-initial-color.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__scope-implicit-006-print.html": [
+      "P",
+      ""
+    ],
+    "css-cascade__initial-background-color.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__initial-color-background-001.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__all-prop-unset-color.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__layer-stylesheet-sharing.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__scope-implicit-001-print.html": [
+      "P",
+      ""
+    ],
+    "css-cascade__all-prop-unset-visited.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__layer-stylesheet-sharing-important.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__scope-implicit-005-print.html": [
+      "P",
+      ""
+    ],
+    "css-cascade__important-prop.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__all-prop-inherit-color.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__all-prop-initial-visited.html": [
+      "P",
+      "P"
+    ],
+    "css-cascade__revert-layer-015.html": [
+      "P",
+      "P"
+    ]
+  },
+  "missing": []
+}

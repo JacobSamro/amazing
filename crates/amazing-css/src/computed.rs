@@ -23,6 +23,7 @@ pub struct ComputedStyle {
     props: BTreeMap<String, String>,
     typed: BTreeMap<String, ComputedValue>,
     custom: BTreeMap<String, CustomValue>,
+    relative_colors: BTreeMap<String, String>,
     root_font_px: f64,
     effective_zoom: f64,
     author_specified: BTreeSet<String>,
@@ -34,6 +35,7 @@ impl Default for ComputedStyle {
             props: BTreeMap::new(),
             typed: BTreeMap::new(),
             custom: BTreeMap::new(),
+            relative_colors: BTreeMap::new(),
             root_font_px: 16.0,
             effective_zoom: 1.0,
             author_specified: BTreeSet::new(),
@@ -121,6 +123,15 @@ impl ComputedStyle {
             .collect();
     }
 
+    fn resolve_relative_colors(&mut self) {
+        let Some(color) = self.props.get("color") else { return };
+        let Some([red, green, blue, alpha]) = crate::color::parse_css_color(color) else { return };
+        let resolved = format!("#{red:02x}{green:02x}{blue:02x}{alpha:02x}");
+        for property in self.relative_colors.keys() {
+            self.props.insert(property.clone(), resolved.clone());
+        }
+    }
+
     fn resolve_typed_units(&mut self) {
         let font = match self.typed.get("font-size") {
             Some(ComputedValue::LengthPercentage(values::LengthPercentage::Px(px))) => *px,
@@ -156,6 +167,7 @@ impl ComputedStyle {
             self.typed.insert(longhand.clone(), typed);
             // Layout-time synthesis replaces this value, not an author rule.
             self.author_specified.remove(&longhand);
+            self.relative_colors.remove(&longhand);
             self.props.insert(longhand, expanded);
         }
         let next_zoom = self.get("zoom").and_then(used_zoom_factor).unwrap_or(1.0);
@@ -410,6 +422,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
         initial: "serif",
         inherited: true,
     },
+    PropertyMetadata { name: "font-feature-settings", initial: "normal", inherited: true },
     PropertyMetadata {
         name: "font-size",
         initial: "medium",
@@ -430,6 +443,7 @@ const PROPERTIES: &[PropertyMetadata] = &[
         initial: "normal",
         inherited: true,
     },
+    PropertyMetadata { name: "font-variant-ligatures", initial: "normal", inherited: true },
     PropertyMetadata {
         name: "font-weight",
         initial: "normal",
@@ -1039,6 +1053,10 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         | "border-top-right-radius"
         | "border-bottom-right-radius"
         | "border-bottom-left-radius" => Vec::new(),
+        "font" if contains_var_function(value) => FONT_LONGHANDS
+            .iter()
+            .map(|name| ((*name).to_owned(), deferred(DEFERRED_FONT, value)))
+            .collect(),
         "font" => {
             expand_font_shorthand(value).unwrap_or_else(|| vec![(property, value.to_owned())])
         }
@@ -1183,6 +1201,7 @@ fn expand_basic_background(value: &str) -> Option<Vec<(String, String)>> {
 }
 
 const DEFERRED_BACKGROUND: &str = "amazing-internal-background";
+const DEFERRED_FONT: &str = "amazing-internal-font";
 const DEFERRED_BORDER_WIDTH: &str = "amazing-internal-border-side-width";
 const DEFERRED_BORDER_STYLE: &str = "amazing-internal-border-side-style";
 const DEFERRED_BORDER_COLOR: &str = "amazing-internal-border-side-color";
@@ -2274,19 +2293,16 @@ fn expand_flex_shorthand(parts: &[&str]) -> Option<(String, String, String)> {
     Some((grow, shrink, basis))
 }
 
+const FONT_LONGHANDS: &[&str] = &[
+    "font-family", "font-feature-settings", "font-size", "font-size-adjust", "font-stretch",
+    "font-style", "font-variant", "font-variant-ligatures", "font-weight",
+    "line-height",
+];
+
 fn expand_font_shorthand(value: &str) -> Option<Vec<(String, String)>> {
     if css_wide_keyword(value).is_some() {
         return Some(
-            [
-                "font-family",
-                "font-size",
-                "font-stretch",
-                "font-style",
-                "font-variant",
-                "font-weight",
-                "line-height",
-            ]
-            .into_iter()
+            FONT_LONGHANDS.iter().copied()
             .map(|property| (property.to_owned(), value.to_owned()))
             .collect(),
         );
@@ -2388,12 +2404,79 @@ fn expand_font_shorthand(value: &str) -> Option<Vec<(String, String)>> {
     Some(vec![
         ("font-style".into(), style),
         ("font-variant".into(), variant),
+        ("font-variant-ligatures".into(), "normal".into()),
+        ("font-feature-settings".into(), "normal".into()),
         ("font-weight".into(), weight),
         ("font-stretch".into(), stretch),
+        ("font-size-adjust".into(), "none".into()),
         ("font-size".into(), size),
         ("line-height".into(), line_height),
         ("font-family".into(), family),
     ])
+}
+
+/// Validate the two Fonts 4 feature grammars before a declaration enters the
+/// cascade, and serialize their computed values for public style consumers.
+pub(crate) fn canonical_font_feature_value(property: &str, value: &str) -> Option<String> {
+    let tokens = tokenize(value);
+    let significant: Vec<&Token> = tokens.iter().filter(|t| !matches!(t, Token::Whitespace)).collect();
+    if significant.len() == 1 {
+        if let Token::Ident(name) = significant[0] {
+            if name.eq_ignore_ascii_case("normal") ||
+                (property == "font-variant-ligatures" && name.eq_ignore_ascii_case("none")) {
+                return Some(name.to_ascii_lowercase());
+            }
+        }
+    }
+    if property == "font-variant-ligatures" {
+        let mut seen = [false; 4];
+        let mut result = Vec::new();
+        for token in significant {
+            let Token::Ident(name) = token else { return None };
+            let name = name.to_ascii_lowercase();
+            let category = match name.as_str() {
+                "common-ligatures" | "no-common-ligatures" => 0,
+                "discretionary-ligatures" | "no-discretionary-ligatures" => 1,
+                "historical-ligatures" | "no-historical-ligatures" => 2,
+                "contextual" | "no-contextual" => 3,
+                _ => return None,
+            };
+            if seen[category] { return None; }
+            seen[category] = true;
+            result.push(name);
+        }
+        return (!result.is_empty()).then(|| result.join(" "));
+    }
+    if property != "font-feature-settings" { return None; }
+    let mut result = Vec::new();
+    let mut position = 0;
+    while position < significant.len() {
+        let Token::Str(tag) = significant[position] else { return None };
+        if tag.len() != 4 || !tag.bytes().all(|c| (0x20..=0x7e).contains(&c)) {
+            return None;
+        }
+        position += 1;
+        let mut item = format!("\"{}\"", tag.replace('\\', "\\\\").replace('"', "\\\""));
+        if let Some(token) = significant.get(position) {
+            match token {
+                Token::Number(n) if n.is_finite() && *n >= 0.0 && n.fract() == 0.0 => {
+                    item.push_str(&format!(" {n}"));
+                    position += 1;
+                }
+                Token::Ident(keyword) if keyword.eq_ignore_ascii_case("on") || keyword.eq_ignore_ascii_case("off") => {
+                    item.push_str(if keyword.eq_ignore_ascii_case("on") { " on" } else { " off" });
+                    position += 1;
+                }
+                _ => {}
+            }
+        }
+        result.push(item);
+        if position == significant.len() { break; }
+        if !matches!(significant[position], Token::Comma) { return None; }
+        position += 1;
+        if position == significant.len() { return None; }
+    }
+    (!result.is_empty()).then(|| result.join(", "))
 }
 
 fn skip_css_whitespace(tokens: &[Token], position: &mut usize) {
@@ -2556,18 +2639,28 @@ pub(crate) fn resolve_with_root(
 
     let mut properties = BTreeMap::new();
     let mut inherited_typed = BTreeMap::new();
+    let mut relative_colors = BTreeMap::new();
     for property in PROPERTIES {
         let parent_value = parent.and_then(|style| style.get(property.name));
-        let (value, inherits) = match cascaded.remove(property.name) {
+        let specified = cascaded.remove(property.name);
+        let (mut value, inherits) = match specified.as_deref() {
             None => (default_value(*property, parent_value), property.inherited),
             Some(specified) => compute_normal_value(
                 *property,
-                &specified,
+                specified,
                 parent_value,
                 root_font_px,
                 &mut resolver,
             ),
         };
+        if relative_currentcolor_identity(&value) {
+            relative_colors.insert(property.name.to_owned(), value.clone());
+        } else if (specified.as_deref().is_some_and(|value| matches!(css_wide_keyword(value), Some(CssWide::Inherit | CssWide::Unset))) ||
+            (specified.is_none() && property.inherited)) &&
+            let Some(source) = parent.and_then(|parent| parent.relative_colors.get(property.name)) {
+            value = source.clone();
+            relative_colors.insert(property.name.to_owned(), source.clone());
+        }
         if inherits {
             if let Some(typed) = parent.and_then(|style| style.typed(property.name)) {
                 inherited_typed.insert(property.name.to_owned(), typed.clone());
@@ -2602,10 +2695,12 @@ pub(crate) fn resolve_with_root(
         props: properties,
         typed: BTreeMap::new(),
         custom: inherited_custom,
+        relative_colors,
         root_font_px: f64::from(root_font_px),
         effective_zoom: 1.0,
         author_specified: BTreeSet::new(),
     };
+    style.resolve_relative_colors();
     let local_zoom = style.props.get("zoom").and_then(|value| used_zoom_factor(value)).unwrap_or(1.0);
     style.effective_zoom = parent.map_or(1.0, |parent| parent.effective_zoom) * local_zoom;
     style.rebuild_typed();
@@ -2763,6 +2858,8 @@ fn compute_normal_value(
     };
     let computed = if property.name == "font-size" {
         computed_font_size(&computed, parent, root_font_px).unwrap_or(computed)
+    } else if matches!(property.name, "font-feature-settings" | "font-variant-ligatures") {
+        canonical_font_feature_value(property.name, &computed).unwrap_or(computed)
     } else if property.name == "display" {
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
     } else if matches!(property.name, "opacity" | "fill-opacity") {
@@ -2781,9 +2878,22 @@ fn compute_normal_value(
     (computed, inherits)
 }
 
+// A relative color that copies all channels from currentColor into the same
+// predefined RGB space has the same displayed color. Retain its source across
+// explicit inheritance so each element resolves currentColor against itself.
+fn relative_currentcolor_identity(value: &str) -> bool {
+    let lower = value.trim().to_ascii_lowercase();
+    let Some(inner) = lower.strip_prefix("color(").and_then(|value| value.strip_suffix(')')) else {
+        return false;
+    };
+    let words: Vec<_> = inner.split_ascii_whitespace().collect();
+    matches!(words.as_slice(), ["from", "currentcolor", "srgb" | "srgb-linear" | "display-p3" |
+        "display-p3-linear" | "a98-rgb" | "prophoto-rgb" | "rec2020", "r", "g", "b"])
+}
+
 fn normalized_extended_color(value: &str) -> Option<String> {
     let lower = value.trim().to_ascii_lowercase();
-    if !["hsl(", "hsla(", "hwb(", "lch(", "color("].iter()
+    if !["hsl(", "hsla(", "hwb(", "lab(", "lch(", "oklab(", "oklch(", "color("].iter()
         .any(|prefix| lower.starts_with(prefix))
         && !matches!(lower.as_str(), "buttonface" | "threedface" | "buttonborder" | "threedlightshadow")
     {
@@ -2837,6 +2947,10 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    if let Some(inner) = deferred_inner(value, DEFERRED_FONT) {
+        return expand_font_shorthand(inner).ok_or(())?.into_iter()
+            .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());
+    }
     if let Some(inner) = deferred_inner(value, DEFERRED_BACKGROUND) {
         return expand_basic_background(inner).ok_or(())?.into_iter()
             .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());

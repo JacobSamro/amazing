@@ -45,7 +45,7 @@ fn wide_keywords_and_variables_use_the_computed_resolver() {
 
 #[test]
 fn unsupported_paint_is_explicit() {
-    let style = paint(None, "", "fill: url(#gradient); color: lab(50% 0 0)", "");
+    let style = paint(None, "", "fill: url(#gradient); color: color(from currentcolor xyz x y z)", "");
     assert_eq!(style.fill, Value::Unsupported { css: "url(#gradient)".into(), source: Source::Author });
     assert!(matches!(style.color, Value::Unsupported { source: Source::Author, .. }));
     let child = paint(Some(&style.computed), "", "fill: currentcolor", "");

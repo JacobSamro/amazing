@@ -280,6 +280,10 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         return crate::svg_presentation::parse_property(property, css);
     }
     match property {
+        "font-feature-settings" | "font-variant-ligatures" => {
+            return crate::computed::canonical_font_feature_value(property, css)
+                .map(|_| V::Unparsed);
+        }
         "zoom" => {
             return match significant(&tokenize(css)).as_slice() {
                 [Token::Number(n)] if n.is_finite() && *n >= 0.0 => Some(V::Number(*n)),
