@@ -2501,7 +2501,7 @@ pub fn build(src: &str) -> Dom {
 pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
     let mut builder = TreeBuilder::new();
     builder.insert_and_push("html", Vec::new());
-    let virtual_context = matches!(context, "textarea" | "title" | "style" | "script" | "plaintext" | "select" | "option");
+    let virtual_context = matches!(context, "textarea" | "title" | "style" | "script" | "noscript" | "plaintext" | "select" | "option");
     if !virtual_context {
         builder.insert_and_push(context, Vec::new());
     }
@@ -2519,7 +2519,7 @@ pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
         }
     };
     let mut tokenizer = Tokenizer::new(src.chars().collect());
-    if matches!(context, "textarea" | "title" | "style" | "script" | "plaintext") {
+    if matches!(context, "textarea" | "title" | "style" | "script" | "noscript" | "plaintext") {
         tokenizer.enter_fragment_text_context(context);
     }
     loop {

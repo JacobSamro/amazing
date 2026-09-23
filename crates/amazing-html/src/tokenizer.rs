@@ -334,7 +334,7 @@ impl Tokenizer {
         self.state = match name {
             "plaintext" => State::PlainText,
             "textarea" | "title" => State::RcData,
-            "style" => State::RawText,
+            "style" | "noscript" => State::RawText,
             "script" => State::ScriptData,
             _ => return,
         };

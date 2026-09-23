@@ -84,11 +84,13 @@ pub fn parse(src: &str) -> Dom {
 /// Other contexts are rejected until their tokenizer/template
 /// initialization rules are implemented; callers never receive a plausible
 /// but context-insensitive tree.
+/// `noscript` uses this parser's fixed scripting-enabled RAWTEXT behavior;
+/// there is no scripting-disabled fragment mode.
 pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     let context = context.to_ascii_lowercase();
     let supported = [
         "div", "table", "tbody", "thead", "tfoot", "tr", "td", "th", "caption", "colgroup",
-        "textarea", "title", "style", "script", "plaintext", "select", "option",
+        "textarea", "title", "style", "script", "noscript", "plaintext", "select", "option",
     ];
     if !supported.contains(&context.as_str()) {
         return Err("unsupported HTML fragment context".into());
@@ -115,7 +117,7 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
             source.namespace(*node) == Some(Namespace::Html) && source.name(*node) == Some("html")
         })
         .ok_or_else(|| "fragment root was not constructed".to_owned())?;
-    let virtual_context = matches!(context.as_str(), "textarea" | "title" | "style" | "script" | "plaintext" | "select" | "option");
+    let virtual_context = matches!(context.as_str(), "textarea" | "title" | "style" | "script" | "noscript" | "plaintext" | "select" | "option");
     let mut fragment = Dom::new();
     if virtual_context {
         for child in source.children(root) {
