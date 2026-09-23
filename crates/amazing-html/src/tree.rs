@@ -1282,8 +1282,13 @@ impl TreeBuilder {
 
     fn initial(&mut self, tok: Token) {
         match tok {
-            Token::Doctype { name, force_quirks: _ } => {
-                self.dom.doctype = name;
+            Token::Doctype { name, public_id, system_id, force_quirks: _ } => {
+                self.dom.doctype = name.clone();
+                self.dom.append_child(NodeIdx(0), NodeKind::DocumentType {
+                    name: name.unwrap_or_default(),
+                    public_id: public_id.unwrap_or_default(),
+                    system_id: system_id.unwrap_or_default(),
+                });
                 self.mode = Mode::BeforeHtml;
             },
             Token::Characters(data) => {
@@ -2647,7 +2652,7 @@ mod tests {
     fn nesting_dump_shape() {
         assert_eq!(
             build_shape("<!DOCTYPE html><title>t</title><p>x"),
-            "(doc html[head[title[\"t\"]]body[p[\"x\"]]])"
+            "(doc <!DOCTYPE html>html[head[title[\"t\"]]body[p[\"x\"]]])"
         );
     }
 
@@ -2936,7 +2941,7 @@ mod tests {
     fn ordinary_end_tag_does_not_cross_special_element() {
         assert_eq!(
             build_shape("<!DOCTYPE html><span><button>foo</span>bar"),
-            "(doc html[head[]body[span[button[\"foobar\"]]]])"
+            "(doc <!DOCTYPE html>html[head[]body[span[button[\"foobar\"]]]])"
         );
         assert_eq!(
             build_shape("<b>A<cite>B<div>C</cite>D"),
@@ -2956,7 +2961,7 @@ mod tests {
     fn eof_in_head_text_mode_still_implies_body() {
         assert_eq!(
             build_shape("<!DOCTYPE html><style> EOF"),
-            "(doc html[head[style[\" EOF\"]]body[]])"
+            "(doc <!DOCTYPE html>html[head[style[\" EOF\"]]body[]])"
         );
     }
 
@@ -3024,7 +3029,7 @@ mod tests {
     fn in_head_splits_leading_whitespace_before_body_reprocessing() {
         assert_eq!(
             build_shape("<!DOCTYPE html><script> <!-- </script> --> </script> EOF"),
-            "(doc html[head[script[\" <!-- \"]]body[\"-->  EOF\"]])"
+            "(doc <!DOCTYPE html>html[head[script[\" <!-- \"]]body[\"-->  EOF\"]])"
         );
     }
 
@@ -3129,6 +3134,39 @@ mod tests {
     fn doctype_name_captured_into_dom() {
         let dom = build("<!DOCTYPE html><p>x");
         assert_eq!(dom.doctype.as_deref(), Some("html"));
-        assert_eq!(shape(&dom), "(doc html[head[]body[p[\"x\"]]])");
+        assert_eq!(shape(&dom), "(doc <!DOCTYPE html>html[head[]body[p[\"x\"]]])");
+    }
+
+    #[test]
+    fn doctype_identifiers_are_document_children() {
+        let cases = [
+            ("<!DOCTYPE html PUBLIC \"pub\">", "pub", ""),
+            ("<!DOCTYPE html SYSTEM 'sys'>", "", "sys"),
+            ("<!DOCTYPE Html PUBLIC 'p' \"s\"><p>x", "p", "s"),
+            ("<!DOCTYPE html PUBLIC '' \"\">", "", ""),
+            ("<!DOCTYPE html PUBLIC \"p\">", "p", ""),
+            ("<!DOCTYPE html PUBLIC\"p\">", "p", ""),
+            ("<!DOCTYPE html SYSTEM's'>", "", "s"),
+            ("<!DOCTYPE html PUBLIC nope>", "", ""),
+            ("<!DOCTYPE html SYSTEM nope>", "", ""),
+            ("<!DOCTYPE html PUBLIC \"partial", "partial", ""),
+            ("<!DOCTYPE html SYSTEM 'partial", "", "partial"),
+            ("<!DOCTYPE html PUBLIC \"p>tail", "p", ""),
+            ("<!DOCTYPE html SYSTEM \"s\"junk>", "", "s"),
+            ("<!DOCTYPE html PUBLIC 'a\0b'>", "a\u{FFFD}b", ""),
+        ];
+        for (input, expected_public, expected_system) in cases {
+            let dom = build(input);
+            let children: Vec<_> = dom.children(NodeIdx(0)).collect();
+            assert!(children.len() >= 2, "{input:?}");
+            assert_eq!(dom.document_doctype(NodeIdx(0)).unwrap(), Some(children[0]), "{input:?}");
+            assert!(matches!(dom.get(children[1]).kind, NodeKind::Element { ref name, .. } if name == "html"));
+            assert_eq!(dom.get(children[0]).kind, NodeKind::DocumentType {
+                name: "html".into(), public_id: expected_public.into(), system_id: expected_system.into(),
+            }, "{input:?}");
+            assert_eq!(dom.doctype.as_deref(), Some("html"));
+        }
+        assert_eq!(build_shape("<!DOCTYPE Html PUBLIC 'p' \"s\"><p>x"),
+            "(doc <!DOCTYPE html>html[head[]body[p[\"x\"]]])");
     }
 }

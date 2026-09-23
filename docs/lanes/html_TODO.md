@@ -450,3 +450,32 @@ workspace nextest passed **1631/1631** with 3 skipped; a separate workspace
 doctest command under the same slot passed **2/2**. The two new unit tests
 account for the package increase from HTML-11's 121. No push or PR; the lane
 stops for co-integrator preflight.
+
+## HTML-13 — preserve DOCTYPE public and system identifiers
+
+The HTML tokenizer now uses the WHATWG DOCTYPE public/system states instead of
+an all-at-once scanner. It preserves missing versus present-empty identifiers,
+quoted values, U+FFFD for null, and partial values on abrupt `>` or EOF.
+Malformed missing quotes and missing identifiers set the token's force-quirks
+flag; unexpected trailing data after a closed system identifier enters bogus
+DOCTYPE without forcing quirks. The initial tree mode appends the existing DOM
+`DocumentType` node before `html`, with empty strings for absent identifiers,
+while preserving the legacy `dom.doctype` name. XML parsing, DTD loading and
+full document quirks-mode behavior are outside this change.
+
+Independent expected triples and a fixed-base Windows pre-edit probe are in
+`.agents/html/html13-fixtures.md` and `html13-baseline.log`. The probe passed
+1 test with 123 filtered, showing all 14 cases lacked a DOM doctype node and
+lost identifiers. Focused tokenizer, parser and character-stream tests now
+check the identifier values, token force-quirks flags and DOM child order.
+
+At fixed base `58dd9cebe9d9f7be173bab9c7d73f3d68999f7b7`, the HTML-only
+Windows tree was refreshed again and owned files were re-synced. A 314-input
+tracked Rust source, Cargo manifest and root lockfile SHA-256 manifest
+(`b27370cd0b342d2b85893e98129e2663d203c20f56c2a5e30c9d73df85588ac5`)
+matched on Mac and Windows before and after the final gates, with zero
+mismatches. Package nextest passed **126/126 twice**, separate package doctest
+**1/1**, shared-slot workspace nextest **1647/1647** with 3 skipped, and
+separate shared-slot workspace doctests **2/2**. Three new tests account for
+the package increase from HTML-12's 123. No push or PR; the lane stops for
+co-integrator preflight. DOM-14 remains a separate queued ticket.
