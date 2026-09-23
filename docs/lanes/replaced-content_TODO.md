@@ -671,3 +671,11 @@ non-SVG nodes. Integrator-assist owns that adapter and WPT artifact. LAYOUT-9's
 The frozen 32 inline WPT outcomes are the conformance gate; these unit tests
 and paint seam alone receive no WPT credit. External before/after results,
 source hashes, workspace gate and final status belong in the RC-12 report.
+
+Primary integration decision after LAYOUT-9 merged: RC-12 lands on isolated unit
+evidence so IA-SVG can compile the driver adapter. The frozen 32-inline
+before/after WPT outcome and retained render checks are a joint IA-SVG gate
+after this merge; RC-12 claims no WPT gain from its fixtures. Fixed base
+`859bb53` includes LAYOUT-9 `ccea7b0` and HTML-13. Windows image and paint
+crate tests plus separate doctests passed after a fresh tree refresh and
+source audit. No RC-12 workspace or after-WPT result is claimed.

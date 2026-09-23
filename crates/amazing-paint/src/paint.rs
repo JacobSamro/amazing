@@ -502,7 +502,7 @@ fn paint_decorations(
     }
     paint_inset_box_shadow(surface, box_, text_color, clip);
     paint_borders(surface, box_, text_color, clip);
-    if let Some(node) = box_.node {
+    if let Some(node) = box_.svg_root {
         if let Some(svg) = svg_for_rect(images, node, &box_.content_box) {
             paint_image(
                 surface,
@@ -511,16 +511,16 @@ fn paint_decorations(
                 ImagePresentation::default(),
                 clip,
             );
-        } else if box_.replaced_size.is_some() {
-            if let Some(image) = images.image(node) {
-                paint_image(
-                    surface,
-                    &box_.content_box,
-                    image,
-                    ImagePresentation::from_style(&box_.style),
-                    clip,
-                );
-            }
+        }
+    } else if box_.replaced_size.is_some() {
+        if let Some(image) = box_.node.and_then(|node| images.image(node)) {
+            paint_image(
+                surface,
+                &box_.content_box,
+                image,
+                ImagePresentation::from_style(&box_.style),
+                clip,
+            );
         }
     }
     true
@@ -1924,6 +1924,24 @@ mod tests {
         assert_eq!(surface.get_pixel(1, 0), Some([255, 0, 0, 255]));
         assert_eq!(surface.get_pixel(2, 0), Some([0, 255, 0, 255]));
         assert_eq!(surface.get_pixel(3, 0), Some(WHITE));
+    }
+
+    #[test]
+    fn svg_root_paints_block_content_rect() {
+        let node = amazing_dom::NodeIdx(9);
+        let mut root = block(&[], 0.0, 0.0, 2.0, 1.0);
+        root.svg_root = Some(node);
+        let surface = paint_document_with_resources(
+            &root,
+            3,
+            1,
+            &FontSource::fallback(),
+            &RectInkProvider,
+            &OneSvg(node),
+        );
+        assert_eq!(surface.get_pixel(0, 0), Some([255, 0, 0, 255]));
+        assert_eq!(surface.get_pixel(1, 0), Some([0, 255, 0, 255]));
+        assert_eq!(surface.get_pixel(2, 0), Some(WHITE));
     }
 
     #[test]
