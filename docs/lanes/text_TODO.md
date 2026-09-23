@@ -186,3 +186,28 @@ Remaining clusters: `first-available-font-002`, PUA primary-font selection, and
 ligature variant mismatch need diagnosis; font-face reftest crashes await the
 DOM-17 `document.fonts.ready` work. Installed `local()` lookup currently covers
 known platform faces and the pinned WPT orientation fixture.
+
+## TEXT-7: exposed font-face cases and vertical orientation
+
+Implementation base: `5177362`, which includes DOM-17. That binding removes
+all six previous `document.fonts.ready.then(...)` page-script crashes: the
+font-face selection reaches rendering at 2 pass / 6 mismatch. TEXT-7 normalizes
+reversed descriptor ranges and fractional stretch endpoints, raising it to
+3 pass / 5 mismatch. Selected variable face axes now reach shaping and
+rasterization, with explicit variation settings taking precedence. The five
+remaining font-face mismatches need exact computed stretch percentage and
+oblique angle from layout for Fonts 4 section 5.2 face ranking.
+
+In mixed vertical text, UAX50 `Tr` codepoints are upright and receive `vert`.
+Sideways modes ignore `text-orientation: upright` during bidi analysis. These
+provider fixes raise the seven-case vertical selection from 2/7 to 5/7.
+Remaining failures are the Ahem vertical-lr inline placement and the complex
+`direction-upright` bidi/layout case. The retained vertical/ruby selection
+holds at 11/20 but has one gain and one **pending loss**:
+`text-combine-upright-line-breaking-rules-001` loses because
+`amazing-layout/src/inline.rs::split_atomic_units` inserts an allowed break
+before the combined U+FFFC object despite the provider's no-break boundary.
+LAYOUT-14 item 0 owns that fix; TEXT-7 must merge after it. Other ruby,
+text-combine, sideways flex, and orthogonal baseline mismatches are routed to
+layout. Evidence: `crates/amazing-text-provider/evidence/text7-gate-summary.json`
+at pinned WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.

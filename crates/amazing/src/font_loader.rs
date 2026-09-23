@@ -132,9 +132,14 @@ pub(super) fn descriptor_from_css(
                 .map(|part| part.strip_suffix("deg").unwrap_or(part).parse::<f32>())
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|_| "invalid font-style angle")?;
+            if angles.len() > 2 {
+                return Err("invalid font-style angle range".into());
+            }
+            let start = *angles.first().unwrap_or(&14.0);
+            let end = *angles.get(1).unwrap_or(&start);
             FontStyleDescriptor::Oblique {
-                min_degrees: *angles.first().unwrap_or(&14.0),
-                max_degrees: *angles.get(1).unwrap_or(angles.first().unwrap_or(&14.0)),
+                min_degrees: start.min(end),
+                max_degrees: start.max(end),
             }
         }
         _ => return Err("invalid font-style".into()),
@@ -223,7 +228,15 @@ fn descriptor_range(
         } else {
             part
         };
-        part.parse::<u16>().map_err(|_| "invalid descriptor range")
+        if percentage {
+            part.parse::<f32>()
+                .ok()
+                .filter(|value| value.is_finite() && *value >= 1.0 && *value <= 1000.0)
+                .map(|value| value.round() as u16)
+                .ok_or("invalid descriptor range")
+        } else {
+            part.parse::<u16>().map_err(|_| "invalid descriptor range")
+        }
     });
     let min = parts
         .next()
@@ -235,10 +248,13 @@ fn descriptor_range(
         .transpose()
         .map_err(str::to_owned)?
         .unwrap_or(min);
-    if parts.next().is_some() || min < 1 || max < min || max > 1000 {
+    if parts.next().is_some() || min < 1 || max < 1 || min > 1000 || max > 1000 {
         return Err("invalid descriptor range".into());
     }
-    Ok(FontDescriptorRange { min, max })
+    Ok(FontDescriptorRange {
+        min: min.min(max),
+        max: min.max(max),
+    })
 }
 
 fn parse_unicode_ranges(value: &str) -> Result<Vec<UnicodeRange>, String> {
@@ -345,7 +361,10 @@ impl PageFontLoader<'_> {
         let mut network_error = None;
         loop {
             for event in service.step(64, Instant::now()) {
-                if let ServiceEvent::Network { id: event_id, event } = &event
+                if let ServiceEvent::Network {
+                    id: event_id,
+                    event,
+                } = &event
                     && *event_id == id
                     && matches!(event, amazing_net::dispatch::NetEvent::Error { .. })
                 {
@@ -357,7 +376,8 @@ impl PageFontLoader<'_> {
                 } = event
                     && finished == id
                 {
-                    let mut response = result.map_err(|e| format!("font fetch: {e:?}; {network_error:?}"))?;
+                    let mut response =
+                        result.map_err(|e| format!("font fetch: {e:?}; {network_error:?}"))?;
                     if !(200..300).contains(&response.status) {
                         return Err(format!("HTTP {}", response.status));
                     }
@@ -451,6 +471,24 @@ mod tests {
     }
 
     #[test]
+    fn reversed_face_ranges_are_normalized_before_registration() {
+        let face = amazing_css::parse_font_faces("@font-face { font-family: Demo; src: url(a.ttf); font-weight: 900 100; font-stretch: 75% 62.5%; font-style: oblique 90deg -90deg; }").remove(0);
+        let descriptor = descriptor_from_css(face).unwrap();
+        assert_eq!(
+            descriptor.weight,
+            FontDescriptorRange { min: 100, max: 900 }
+        );
+        assert_eq!(descriptor.stretch, FontDescriptorRange { min: 63, max: 75 });
+        assert_eq!(
+            descriptor.style,
+            FontStyleDescriptor::Oblique {
+                min_degrees: -90.0,
+                max_degrees: 90.0
+            }
+        );
+    }
+
+    #[test]
     fn http_font_uses_stylesheet_base_and_cors_service() {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -459,7 +497,10 @@ mod tests {
             let (mut socket, _) = listener.accept().unwrap();
             let mut request = [0u8; 4096];
             let mut count = 0;
-            while !request[..count].windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+            while !request[..count]
+                .windows(4)
+                .any(|bytes| bytes == b"\r\n\r\n")
+            {
                 let read = socket.read(&mut request[count..]).unwrap();
                 assert!(read > 0 && count + read <= request.len());
                 count += read;
@@ -469,9 +510,24 @@ mod tests {
         });
         let base = format!("http://{address}/css/site.css");
         let document = format!("http://{address}/index.html");
-        let mut loader = PageFontLoader { stylesheet_url: &base, document_url: &document, warnings: Vec::new() };
-        let bytes = loader.load_url(FontFetchRequest { url: "font.ttf", cors_mode: true, max_bytes: 4 }).unwrap();
+        let mut loader = PageFontLoader {
+            stylesheet_url: &base,
+            document_url: &document,
+            warnings: Vec::new(),
+        };
+        let bytes = loader
+            .load_url(FontFetchRequest {
+                url: "font.ttf",
+                cors_mode: true,
+                max_bytes: 4,
+            })
+            .unwrap();
         server.join().unwrap();
-        assert_eq!(bytes.as_deref(), Some(b"font".as_slice()), "{:?}", loader.warnings);
+        assert_eq!(
+            bytes.as_deref(),
+            Some(b"font".as_slice()),
+            "{:?}",
+            loader.warnings
+        );
     }
 }

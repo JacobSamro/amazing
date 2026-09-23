@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod font_display;
+mod font_variations;
 pub use font_display::FontDisplayPeriods;
 
 use amazing_text::{
@@ -1557,7 +1558,7 @@ fn bidi_analysis(
         spans
             .iter()
             .filter(|span| {
-                span.style.writing_mode.is_vertical_flow()
+                span.style.writing_mode.uses_vertical_metrics()
                     && span.style.text_orientation == amazing_text::TextOrientation::Upright
             })
             .map(|span| amazing_text::BidiScope {
@@ -1752,8 +1753,8 @@ fn shape_range(
     catch_unwind(AssertUnwindSafe(|| {
         let face = HarfFontRef::new(&font.sfnt).map_err(|_| TextError::MalformedFont)?;
         let shaper_data = ShaperData::new(&face);
-        let variations = style
-            .variations
+        let resolved_variations = font_variations::for_face(font, style);
+        let variations = resolved_variations
             .iter()
             .map(|variation| Variation {
                 tag: Tag::new(&variation.tag),
@@ -1870,7 +1871,7 @@ fn shape_range(
                 direction,
                 writing_mode: style.writing_mode,
                 metrics,
-                variations: style.variations.clone(),
+                variations: resolved_variations.clone(),
                 synthesis: resolve_synthesis(
                     FontAttributes {
                         weight: style.weight,
@@ -1908,12 +1909,10 @@ fn cluster_orientation(
                     .or_else(|| unit.chars().next())
                     .unwrap_or('\u{fffd}');
                 match unicode_vo::char_orientation(character) {
-                    VerticalOrientation::Upright | VerticalOrientation::TransformedOrUpright => {
-                        GlyphOrientation::Upright
-                    }
-                    VerticalOrientation::Rotated | VerticalOrientation::TransformedOrRotated => {
-                        GlyphOrientation::SidewaysRight
-                    }
+                    VerticalOrientation::Upright
+                    | VerticalOrientation::TransformedOrUpright
+                    | VerticalOrientation::TransformedOrRotated => GlyphOrientation::Upright,
+                    VerticalOrientation::Rotated => GlyphOrientation::SidewaysRight,
                 }
             }
         },
@@ -2835,6 +2834,7 @@ mod tests {
                 ("A", GlyphOrientation::SidewaysRight),
                 ("漢", GlyphOrientation::Upright),
                 ("Ａ", GlyphOrientation::Upright),
+                ("（", GlyphOrientation::Upright),
                 ("\u{200d}漢", GlyphOrientation::Upright),
             ] {
                 assert_eq!(
@@ -2857,7 +2857,12 @@ mod tests {
     #[test]
     fn upright_vertical_text_forces_left_to_right_bidi_direction() {
         let text = "אב";
-        for mode in [WritingMode::VerticalRl, WritingMode::VerticalLr] {
+        for (mode, expected) in [
+            (WritingMode::VerticalRl, Direction::LeftToRight),
+            (WritingMode::VerticalLr, Direction::LeftToRight),
+            (WritingMode::SidewaysRl, Direction::RightToLeft),
+            (WritingMode::SidewaysLr, Direction::RightToLeft),
+        ] {
             let spans = [TextSpan {
                 range: 0..text.len(),
                 source: 0,
@@ -2871,7 +2876,7 @@ mod tests {
             }];
             assert_eq!(
                 bidi_directions(text, &spans, &spans, Direction::RightToLeft, &[]).unwrap(),
-                vec![Direction::LeftToRight]
+                vec![expected]
             );
         }
     }
