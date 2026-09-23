@@ -1,0 +1,1173 @@
+{
+  "git_head": "82d5574e2f38f8ccddfd6a336340ef513ee14467",
+  "files": [
+    {
+      "path": "Cargo.lock",
+      "sha256": "bf3037d0fce3ca9fc6810594dcf0433059385589f13cf39105d4c50df006cbd7"
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "01d7e036cca27826fa6267512e0602207a409abd4c0c0f149f32b2adecc6095f"
+    },
+    {
+      "path": "crates/amazing-bindings/Cargo.toml",
+      "sha256": "223e0e7421772dfc48ee507c595dccee53c0a37a5e7b30ec66c6ffbc0237ef6e"
+    },
+    {
+      "path": "crates/amazing-bindings/src/abort_bindings.rs",
+      "sha256": "103bced1a4f804d627f06f6696c8651887d1743c7f2ca47495a1725db2e282f2"
+    },
+    {
+      "path": "crates/amazing-bindings/src/attr_bindings.rs",
+      "sha256": "270e920b9e69fc802011a9f6c1c009c6e1129d44b5bf1bb82c7af3c701891c29"
+    },
+    {
+      "path": "crates/amazing-bindings/src/collections.rs",
+      "sha256": "b3f9b492c7ed58e5b2e511ff6fa8c677604c1330e02147b2834d43846346a5d3"
+    },
+    {
+      "path": "crates/amazing-bindings/src/custom_element_bindings.rs",
+      "sha256": "aea40fc5bbe203f3e9f3e3ba06198fef64858ee599f49c91b5fdeac9b2d20ad5"
+    },
+    {
+      "path": "crates/amazing-bindings/src/document_bindings.rs",
+      "sha256": "56d6c1dca810b0890a963d8b0aedd4d4371b2de70a49fb6914a85b53fc581761"
+    },
+    {
+      "path": "crates/amazing-bindings/src/dom_exception.rs",
+      "sha256": "7b7e058237bf1d841789c60a323fc1a37ef4fee70dffd52a1bf757a69bdd5e8f"
+    },
+    {
+      "path": "crates/amazing-bindings/src/element_reflection.rs",
+      "sha256": "1b6922c6235fe9286aa25b5156307e15aa40a48f725c1c9d9cec98f9a7bda3ee"
+    },
+    {
+      "path": "crates/amazing-bindings/src/event_bindings.rs",
+      "sha256": "3943931d20845a3042c346693b621618f53db6818bf79b09e1350a98103e7eab"
+    },
+    {
+      "path": "crates/amazing-bindings/src/factories.rs",
+      "sha256": "d4661a76d913ba0a559059e2f78dd9298fd1acbe4db43b3644977a78c5bf8e70"
+    },
+    {
+      "path": "crates/amazing-bindings/src/form_bindings.rs",
+      "sha256": "c642a1364da2ab933f827798b499e5d8383e53c235582ca8b637513b48896178"
+    },
+    {
+      "path": "crates/amazing-bindings/src/host.rs",
+      "sha256": "a762cd839df563aceb2d684ee63f35efafe4f4aad7943db9ab06334c8951bbe6"
+    },
+    {
+      "path": "crates/amazing-bindings/src/html_reflection.rs",
+      "sha256": "69c50a372c0c23bdce933c8cff94aa84526bbaa9099d6ab79eb224a3655cb712"
+    },
+    {
+      "path": "crates/amazing-bindings/src/interfaces.rs",
+      "sha256": "85ac99517310458cbd8ca02b947cd83a23e5f7fe94447d71ac8a0d14f2db72e6"
+    },
+    {
+      "path": "crates/amazing-bindings/src/invoke.rs",
+      "sha256": "4cab49486a83cd666d209e3811e0f35ebbe189e1105fe7ee7f8977a1a47b9985"
+    },
+    {
+      "path": "crates/amazing-bindings/src/lib.rs",
+      "sha256": "53aa2af156bd472d8a14c305ce65dd180479cafe5f2337cd62cfd698eec1d1de"
+    },
+    {
+      "path": "crates/amazing-bindings/src/markup_bindings.rs",
+      "sha256": "92be6e5649ebc742d86f24bba84ba314f3b4b5b12d79712d9062f1caca107cb8"
+    },
+    {
+      "path": "crates/amazing-bindings/src/mutation_bindings.rs",
+      "sha256": "ea3baf299d81532c423fb39fe945aea883ccfa0ccfe04bc2419e496e9dd31b46"
+    },
+    {
+      "path": "crates/amazing-bindings/src/range_bindings.rs",
+      "sha256": "41477887b11a69b964d48b93a8624ab6d8871f2dd1e36f792da94c3af6ba4fb2"
+    },
+    {
+      "path": "crates/amazing-bindings/src/shadow_bindings.rs",
+      "sha256": "d85a755ead72ea9b6407e04aef1ccfaa7374f515f5c772378432e7497bc6368c"
+    },
+    {
+      "path": "crates/amazing-bindings/src/tests.rs",
+      "sha256": "6026fdbd480aa76ec90e8586a0b1ca3ddfcff3d18ade6c9e3be14d5047f4861c"
+    },
+    {
+      "path": "crates/amazing-bindings/src/tokenlist.rs",
+      "sha256": "5461aba426056408480fddec4dcea6b81c23a202a13b4f47fa8f10817729e986"
+    },
+    {
+      "path": "crates/amazing-bindings/src/traversal_bindings.rs",
+      "sha256": "f46c0540d41d9901ad5c68996a82433b012c66e55806fac1c9c52c3aecd8415f"
+    },
+    {
+      "path": "crates/amazing-common/Cargo.toml",
+      "sha256": "d29a0c6be53988a4b0c23e428c47caa1faa27798b200f327e1e41ff1e603d637"
+    },
+    {
+      "path": "crates/amazing-common/src/lib.rs",
+      "sha256": "d07926f48544bb07f9813f77b02eaa1599013cef45d4a2b4ded9c011069e167e"
+    },
+    {
+      "path": "crates/amazing-css/Cargo.toml",
+      "sha256": "4b92f9361811a9b0b9ab4c1a5c58cc9428e439e72b18edc88ff1611aff817996"
+    },
+    {
+      "path": "crates/amazing-css/src/cascade.rs",
+      "sha256": "09aaaf651c37f3bc0e90a7be1389aae29ea430402be3d0fb41c2f3608ed4a147"
+    },
+    {
+      "path": "crates/amazing-css/src/cascade_context.rs",
+      "sha256": "d9cdde22e1b615a6d2b76dc9d4dacfa843e70c76b7865a9cde64063f4c372275"
+    },
+    {
+      "path": "crates/amazing-css/src/color.rs",
+      "sha256": "e30f4c34cd70edfb3e20fc14870736fb00fe5a1a7b52deda5b7d18cfba61a571"
+    },
+    {
+      "path": "crates/amazing-css/src/color_advanced.rs",
+      "sha256": "001a97965cad3c0970f453ee036a1f25c16323317303bcbc0f2864e37f55f83c"
+    },
+    {
+      "path": "crates/amazing-css/src/computed.rs",
+      "sha256": "51c8e2631f1fc0663006d7d1621fe70512a540d6a55373a848b31cf9c189605a"
+    },
+    {
+      "path": "crates/amazing-css/src/group_rules.rs",
+      "sha256": "114bb069349727d8cf49d090ed737caeda5d9fb859e741df2a0eaf8b19f9c22d"
+    },
+    {
+      "path": "crates/amazing-css/src/lib.rs",
+      "sha256": "58368aba5c66881250ab6a31e9ee721477a56714d8d5983caa14e3c5cf1057d9"
+    },
+    {
+      "path": "crates/amazing-css/src/math.rs",
+      "sha256": "a0bb9656f2a1dbf6c9f8f33e6d4dd80c251bb78737971450785dde20a6f10717"
+    },
+    {
+      "path": "crates/amazing-css/src/parser.rs",
+      "sha256": "70107c1fa2cdbe3e5537151c5d83050b47fb49327ab5edddc0439e9e00d96eb4"
+    },
+    {
+      "path": "crates/amazing-css/src/presentational_hints.rs",
+      "sha256": "eccf8ecae90126e0135c66149d7a250a8a812081355554a89775fb9efbd2a1f8"
+    },
+    {
+      "path": "crates/amazing-css/src/selectors.rs",
+      "sha256": "d0cc0e5b4abe7f309ae4e5ad0016b7caee760d83c1fc56acb3ba022be9c8ad85"
+    },
+    {
+      "path": "crates/amazing-css/src/svg_presentation.rs",
+      "sha256": "b548d6a755e287a1ce1b1a5296037470d51aa417ee3e87bb1798e33d44336201"
+    },
+    {
+      "path": "crates/amazing-css/src/syntax.rs",
+      "sha256": "bf816ca588fb7efd12b9b070f147bbfd6d238dd70194284cc5e0aa69fabfac01"
+    },
+    {
+      "path": "crates/amazing-css/src/values.rs",
+      "sha256": "85a79c7c4b1b9fc50d8013d8f5f8cbce4b678f6881cadacea59db2378d1e4ef5"
+    },
+    {
+      "path": "crates/amazing-dom/Cargo.toml",
+      "sha256": "6e857c787c0d795c15ea5dd62d4e4173da2c947462c32a7c2b4f0a00a397e2f2"
+    },
+    {
+      "path": "crates/amazing-dom/src/abort.rs",
+      "sha256": "52c4b7c57c675490795bd9ce1a3fe9d86b8f8e2c1c303f41053333d8b83a2ae3"
+    },
+    {
+      "path": "crates/amazing-dom/src/attr.rs",
+      "sha256": "e6e10bdf3407ccad6a5520950870f2a33ba7b09af99e7f1367761ab11daa4bd2"
+    },
+    {
+      "path": "crates/amazing-dom/src/collection.rs",
+      "sha256": "d9267a4b69312c8fef451686a5e923b2281046fc9316b5ffff72e8471b2618e4"
+    },
+    {
+      "path": "crates/amazing-dom/src/custom_elements.rs",
+      "sha256": "51d04ec1ce7061a4d771dfe16adfa021dcdb7eb2f551e1536918212e6da4e07f"
+    },
+    {
+      "path": "crates/amazing-dom/src/document_surface.rs",
+      "sha256": "06aa5be8b5af62a57148ebe806269d478d3ecd3a578a3203573705f6ceccc955"
+    },
+    {
+      "path": "crates/amazing-dom/src/event_loop.rs",
+      "sha256": "dc68c1d0973e5ddafa1c7c62f60cc084248f8b25604d1757e855c64f580cfb81"
+    },
+    {
+      "path": "crates/amazing-dom/src/event_loop_tests.rs",
+      "sha256": "3e61dbcd167c85a7c41fe0338724e13fba593fbf8911ba5dbebe01f480e31654"
+    },
+    {
+      "path": "crates/amazing-dom/src/events.rs",
+      "sha256": "d60d6de21e620e1d2fc7276d24aa9d8d9fa0c15ae87adea13552ed435121e10b"
+    },
+    {
+      "path": "crates/amazing-dom/src/events_tests.rs",
+      "sha256": "f4aad993006c6c715320aab970800afff8bd4158603897c43620c661bb627320"
+    },
+    {
+      "path": "crates/amazing-dom/src/forms.rs",
+      "sha256": "41e80b87a0064a262b8039cbd4ded735d58a08ded918cb3678c5a49d036f21eb"
+    },
+    {
+      "path": "crates/amazing-dom/src/lib.rs",
+      "sha256": "3148ff639e679f64377ffa41e2b5c2d27d0c629e759a6a270233bdbb40a192a7"
+    },
+    {
+      "path": "crates/amazing-dom/src/markup.rs",
+      "sha256": "538c088f366a2b64dc5f655eeb620bbaaaa9a7ba7d31a56eb422cd72b991ba02"
+    },
+    {
+      "path": "crates/amazing-dom/src/markup_tests.rs",
+      "sha256": "e8bda4a66ec9af947664c6980fd48d628c3fd6f670e0839601d6d97dfece38f4"
+    },
+    {
+      "path": "crates/amazing-dom/src/mutation.rs",
+      "sha256": "bcd416f8a987a2659622fb7b0829c67fec4043da7df975587d5b5f4c5d5f6638"
+    },
+    {
+      "path": "crates/amazing-dom/src/mutation_tests.rs",
+      "sha256": "8dfa119613535d56cdb2fa367be6851e577f86be1c1319648b5a0bc8607fc5a6"
+    },
+    {
+      "path": "crates/amazing-dom/src/namespace.rs",
+      "sha256": "b81cd5591f079efa0ffe1d1026a03e2c28163effb375ba0b0d2985cf4eaab3f6"
+    },
+    {
+      "path": "crates/amazing-dom/src/namespace_tests.rs",
+      "sha256": "2f0f6211559738cc306db83a7486c97f8d8d99dc0e4adaccb4852968a9e77e14"
+    },
+    {
+      "path": "crates/amazing-dom/src/node_mixins.rs",
+      "sha256": "c6769214ab4697014eddec2b47ae762e31feea82080ac36c7043b769a9d6f9c5"
+    },
+    {
+      "path": "crates/amazing-dom/src/node_mixins_tests.rs",
+      "sha256": "c3e0503d3f817334d333269d8fbe1d8a012744b4171c81aa7e15c751c007243f"
+    },
+    {
+      "path": "crates/amazing-dom/src/range.rs",
+      "sha256": "ba45b6f03ffd15e3f1f981f6fbccb55f3dce25c03fa36fae3fabecbda11d3d1a"
+    },
+    {
+      "path": "crates/amazing-dom/src/range_contents.rs",
+      "sha256": "6de57a011acc97a98ed6072368d7d2a27d2b5a9a831f45ea9907e3dd8bf585ee"
+    },
+    {
+      "path": "crates/amazing-dom/src/range_tests.rs",
+      "sha256": "72d19c791b9f37da88233c01a68c64f236248c603bb4bdd9cf71c211029dc630"
+    },
+    {
+      "path": "crates/amazing-dom/src/shadow.rs",
+      "sha256": "1589cfdba88cd1991d163de8b28d970bf8b82d0f995cb1c3c2d17409f44b18bd"
+    },
+    {
+      "path": "crates/amazing-dom/src/shadow_tests.rs",
+      "sha256": "ebf092c5a96b17db2eeec798b0e456b6bc9d0b85120ea0eb2da3dc5eabc85946"
+    },
+    {
+      "path": "crates/amazing-dom/src/template.rs",
+      "sha256": "b20876a912d0ba1ce6eff0024a33b672519987c055b0186f16d7d411811f09ce"
+    },
+    {
+      "path": "crates/amazing-dom/src/template_tests.rs",
+      "sha256": "f216e589bd46c997d158de3137eeae80c0462e8551f83be90904ec988135b5ef"
+    },
+    {
+      "path": "crates/amazing-dom/src/traversal.rs",
+      "sha256": "465a914540e36d6654e5d8d7808a27c5f387571b5ca4b60e4bd5f2db1a280287"
+    },
+    {
+      "path": "crates/amazing-dom/src/traversal_tests.rs",
+      "sha256": "7ac4a261488f53586956ac1711bea349ba78f68e0dd109ed4b20cde9219f77ab"
+    },
+    {
+      "path": "crates/amazing-dom/src/tree.rs",
+      "sha256": "528f98f93529c63040d8c84f92879fb8ad9521e30f4f22727ee825e4a6789a0a"
+    },
+    {
+      "path": "crates/amazing-dom/src/tree_tests.rs",
+      "sha256": "2f736402f145fb67a0e46aa43f1fbcebdd56e094a1b16519c98a098a574d42ca"
+    },
+    {
+      "path": "crates/amazing-encoding/Cargo.toml",
+      "sha256": "cbc4b97a04c21d44ce5d1a60b77152d74298b7a32153954c8e125d9735c5250c"
+    },
+    {
+      "path": "crates/amazing-encoding/src/lib.rs",
+      "sha256": "6b203cbe3b9c796234fc4fa5291b8d308a2964f1c03fc06fa6a635a75fa05b89"
+    },
+    {
+      "path": "crates/amazing-fetch/Cargo.toml",
+      "sha256": "648f02cebdd88f40419aafa465d352b1e5ccd14497a79d692621e588470b7a94"
+    },
+    {
+      "path": "crates/amazing-fetch/src/api/body.rs",
+      "sha256": "2a6d3e03c9b005926967976001eb92bb68e88b924439a95187428a3be6ebf0f0"
+    },
+    {
+      "path": "crates/amazing-fetch/src/api/headers.rs",
+      "sha256": "3674c25a7e4de010c3ca49875054b28e660385a41fcc82ebf1012c1f788a0845"
+    },
+    {
+      "path": "crates/amazing-fetch/src/api/json.rs",
+      "sha256": "49027ac48b874cea60e51271a7e7c870ffd608892f891522a30335be6e169370"
+    },
+    {
+      "path": "crates/amazing-fetch/src/api/mod.rs",
+      "sha256": "1cd70ca7e136cd6ad83ab26e0dd477113faa93c6d6cdd9ff920452f989702aaf"
+    },
+    {
+      "path": "crates/amazing-fetch/src/api/objects.rs",
+      "sha256": "b1bbcc5f368235a146b4080dd0079134115253c9f260e564973a4eb1f93ffed3"
+    },
+    {
+      "path": "crates/amazing-fetch/src/cache.rs",
+      "sha256": "fbfc7a870f02b979f2691c011a4926595e65e20d028c2c836896aec1a049eb2e"
+    },
+    {
+      "path": "crates/amazing-fetch/src/cookies.rs",
+      "sha256": "c778385f083c5f41b4a62f0abc50a44fac6488501b3e8ece8fd812f856acbb0e"
+    },
+    {
+      "path": "crates/amazing-fetch/src/cookies/date.rs",
+      "sha256": "05dc6af1bc1545ad2b62d3d8741ff6baae4d4e2c387b3804ed269e7f89569684"
+    },
+    {
+      "path": "crates/amazing-fetch/src/cookies/parse.rs",
+      "sha256": "64d839a930822a5a3513df6caf917bdf6f3b39a0ce77484d3991004379eba48c"
+    },
+    {
+      "path": "crates/amazing-fetch/src/cors.rs",
+      "sha256": "afd361ea6034c6134dbb6a975478dfaa2eaf1d0dcca227a7ffe33936a1276b46"
+    },
+    {
+      "path": "crates/amazing-fetch/src/csp.rs",
+      "sha256": "574afe15a4d92232c7467ab6c4bff0ae8d8eb2e03ae243b7a877233cacd0d41c"
+    },
+    {
+      "path": "crates/amazing-fetch/src/data_url.rs",
+      "sha256": "9596bb62cf9361e7e6f2bf625aa03763df90179fdac1f0f0919b7ba59d221621"
+    },
+    {
+      "path": "crates/amazing-fetch/src/headers.rs",
+      "sha256": "58a8978933aa2dcefa65d974792bd55ad97177cf412f8b54bb99deadad3edc4c"
+    },
+    {
+      "path": "crates/amazing-fetch/src/lib.rs",
+      "sha256": "fe4a992393129a1f83180e44b77ec16e1c1bf712c1533c96ddeea1a5e2cd034e"
+    },
+    {
+      "path": "crates/amazing-fetch/src/mime.rs",
+      "sha256": "4beb6f5df6297d72b74bede35638b2186162882c9fc4ed4f54a4b3e4bc2e980a"
+    },
+    {
+      "path": "crates/amazing-fetch/src/model.rs",
+      "sha256": "50db55f239189d8c69a4e9faf8fd9ab0da784c4303b54c27e64ce96012a74889"
+    },
+    {
+      "path": "crates/amazing-fetch/src/origin.rs",
+      "sha256": "a5d955581fbe160eef20dc09ca0ff04e44f2a2402e213244f9f031e38fd81b04"
+    },
+    {
+      "path": "crates/amazing-fetch/src/psl.rs",
+      "sha256": "9ecbec3d4d0496df8c068c3ab4fe4c0be0d89241bc863b3039dd9132180bfc22"
+    },
+    {
+      "path": "crates/amazing-fetch/src/redirect.rs",
+      "sha256": "0cb4b38c9b01bdc073c31c73730684d018addaf9569f32ac4d7e9d2d8da7e529"
+    },
+    {
+      "path": "crates/amazing-fetch/src/referrer.rs",
+      "sha256": "cca071497faa7bbb17e04ef430c63aabfe99033f3ba299a1ddcb490856cfb47b"
+    },
+    {
+      "path": "crates/amazing-fetch/src/security.rs",
+      "sha256": "d3fced89e700be1c31e51dde23f2c33ed66b72572938f9aa308041d2e0a58a1d"
+    },
+    {
+      "path": "crates/amazing-fetch/src/service.rs",
+      "sha256": "60f4dc2ef371c85019f4835eab1c0ec9c221b1904fdc2ca7d8180d1159175a0c"
+    },
+    {
+      "path": "crates/amazing-fetch/src/xhr.rs",
+      "sha256": "4ea854dec74811ae2ecc671f66c619784c69886dcb760821e6547a1ef377dfa6"
+    },
+    {
+      "path": "crates/amazing-html/Cargo.toml",
+      "sha256": "aa077f1909364842459d53ee54799651a2f3654d02f97a1d1f7aab893f4a8eeb"
+    },
+    {
+      "path": "crates/amazing-html/src/byte_stream.rs",
+      "sha256": "93e0754d3918bc66fe504910c5bac60810d16bd9bc73f9f728d8c2199674766d"
+    },
+    {
+      "path": "crates/amazing-html/src/byte_stream_tests.rs",
+      "sha256": "a685f679256758577ddd8e0c67096710eca23558eb3df32583f71ea4d1251856"
+    },
+    {
+      "path": "crates/amazing-html/src/custom_element_tests.rs",
+      "sha256": "67c1fdfac1f88d7ca22c37ce0b47395dc870d1d72d7c1a75ccb5bba5e1d89cf6"
+    },
+    {
+      "path": "crates/amazing-html/src/encoding.rs",
+      "sha256": "34a240dfc2a342f548294bde5195c2cfee021277356b60db4fc863f8a48aa4a7"
+    },
+    {
+      "path": "crates/amazing-html/src/entities.rs",
+      "sha256": "2ea5c46e3ed769fc794892a9757bc896a695deb7ba5129955d55090a4b854013"
+    },
+    {
+      "path": "crates/amazing-html/src/fragment_tests.rs",
+      "sha256": "57b31b0e5bc4299e48d6e4f166056a41bed3a0d00f2e7b97304502c2bc3cd1d8"
+    },
+    {
+      "path": "crates/amazing-html/src/fuzz_tests.rs",
+      "sha256": "dcab0256f256aab0ecd965ae88f6ccf388cceab42e1282bbb4b096ec6682a5ab"
+    },
+    {
+      "path": "crates/amazing-html/src/lib.rs",
+      "sha256": "2f694b5d6af3d045415112e220d7cc950377b9a9ac8c4e7fcf737f587f8bcb52"
+    },
+    {
+      "path": "crates/amazing-html/src/stream_tests.rs",
+      "sha256": "c6b5294eab61a636a533b96106b42e3cb7fc5fea89a53f88df28a68b1708e42a"
+    },
+    {
+      "path": "crates/amazing-html/src/tokenizer.rs",
+      "sha256": "13dbd1bf21180e92d14ac197cbe6fa42d2e36d5b47e172c14f54c1b1b3b672c1"
+    },
+    {
+      "path": "crates/amazing-html/src/tree.rs",
+      "sha256": "11924b468a2e41b1c1d46000918e83c6cb0a02a41e701bbd478e9860dfdf93fe"
+    },
+    {
+      "path": "crates/amazing-html/src/xml.rs",
+      "sha256": "98e3b15ab3d37775a8a610d0630daebe76741f84acac130a7a567563371a3cc0"
+    },
+    {
+      "path": "crates/amazing-html/src/xml_tests.rs",
+      "sha256": "27ebc4fd8ebfe55a5394bcdc3870e9714b861c71354af91494b14bd224c22260"
+    },
+    {
+      "path": "crates/amazing-image/Cargo.toml",
+      "sha256": "2735f1287840327d97e79fe79761d4737e5744d0b47ab5bcacfda6a131413948"
+    },
+    {
+      "path": "crates/amazing-image/src/lib.rs",
+      "sha256": "f01d86bd7b941f138efec1214154e64e22c2818588b9f43aa65d35eaa3f4cd3c"
+    },
+    {
+      "path": "crates/amazing-image/src/svg.rs",
+      "sha256": "0f013081938b43d064559c4d20ebab5613ed4051b0398d7831616e861d4a0eaf"
+    },
+    {
+      "path": "crates/amazing-image/src/svg_path.rs",
+      "sha256": "ce00cfe218a04d35a4e692b1f16c1beaf04ed7a1fc12f1f8fd56e0447acfbb6e"
+    },
+    {
+      "path": "crates/amazing-image/src/svg_polygon.rs",
+      "sha256": "796c630499070a25965c936d1dac9a62778d03623a6f3889d36f8a3fa5fbb209"
+    },
+    {
+      "path": "crates/amazing-image/src/svg_transform.rs",
+      "sha256": "c68146b5e4a459c420ebac4a694351929d140fa772f267ef30987b4316f9aba9"
+    },
+    {
+      "path": "crates/amazing-js/Cargo.toml",
+      "sha256": "93807591f8b91dbb268968f0fac7960ee6463b541c10e9d8c4be11511d9c8206"
+    },
+    {
+      "path": "crates/amazing-js/src/ast.rs",
+      "sha256": "ef5ed61d0a3753a5b64e8109a0f2c1f4606b48f342fc797e64ff8f48c341e891"
+    },
+    {
+      "path": "crates/amazing-js/src/env.rs",
+      "sha256": "dcfe73cdbef565e9884635a6615222dd99ab5527398b819c089082c47bd5fabb"
+    },
+    {
+      "path": "crates/amazing-js/src/errors.rs",
+      "sha256": "e655b3a4ebb44ae5d4781618560d7370b2f986aac6ef2e8a39beb5def281d1ca"
+    },
+    {
+      "path": "crates/amazing-js/src/interp.rs",
+      "sha256": "00161837630edb62c09c4024c0c405f0d678d82f15ef9334c80c10fd84cb2d7e"
+    },
+    {
+      "path": "crates/amazing-js/src/interp_bindings.rs",
+      "sha256": "da71a83ca52e93037f3a55f15fe6ef227668b94fdf97e33c30c682a21b1e609d"
+    },
+    {
+      "path": "crates/amazing-js/src/interp_builtins.rs",
+      "sha256": "6023417a8e96994bcece662540e1cce836d1c7cabfb8c70fa24d618e73af4274"
+    },
+    {
+      "path": "crates/amazing-js/src/interp_install.rs",
+      "sha256": "c21dab42e9c9ab744e2588e92d67da2a8d6ff7bf5c47b450ff0c76869cc3c18a"
+    },
+    {
+      "path": "crates/amazing-js/src/interp_legacy.rs",
+      "sha256": "fdcf6b93888b711d334b9e17ce59954b64064a462a05fba4f82337eb6c41466e"
+    },
+    {
+      "path": "crates/amazing-js/src/interp_regexp.rs",
+      "sha256": "a2842558644d38dd3513754475ddfbc9ddb39c34d1a4541432353e9dd13b6f7c"
+    },
+    {
+      "path": "crates/amazing-js/src/interp_tests.rs",
+      "sha256": "82589a53d30200a26a1553f3375afcc3f87e9f943fe7684f7bf653da5849c23c"
+    },
+    {
+      "path": "crates/amazing-js/src/lexer.rs",
+      "sha256": "5b905557febbc12e25af2a2eabb9398375bda73b1b0e6c05d8fa5676058c134d"
+    },
+    {
+      "path": "crates/amazing-js/src/lib.rs",
+      "sha256": "fa22d8f2f6a982123946a28793959c7475a0b90f90ed55a865c2a0e0339677dd"
+    },
+    {
+      "path": "crates/amazing-js/src/parser.rs",
+      "sha256": "4b59e5285e4c9c93ba50b2760e3ea02b1eb1bddb98139cbb2c00a109d35799f8"
+    },
+    {
+      "path": "crates/amazing-js/src/regexp_tests.rs",
+      "sha256": "d17ad59280bd57f5a8c7aab7168af13906ef0d4af23c74a61c79df1b83ebba6d"
+    },
+    {
+      "path": "crates/amazing-js/src/token_stream.rs",
+      "sha256": "2ac0c3d73d98e0eb16652575ccc921918e992074add1a9cf589fab838ad9acaf"
+    },
+    {
+      "path": "crates/amazing-js/src/tokens.rs",
+      "sha256": "23a5df506ca2525dc676227bd69d8e119ee59733763bbb63d91d8ac8a4ba334b"
+    },
+    {
+      "path": "crates/amazing-js/src/value.rs",
+      "sha256": "2e110264cc6b196878c57dae08a616b7a24f937a7464fb7717b295156ac4f89c"
+    },
+    {
+      "path": "crates/amazing-layout/Cargo.toml",
+      "sha256": "7a290bebc9ad41e9898feff4dd784df9ed37f439289bfeb069737cf6fbd2b519"
+    },
+    {
+      "path": "crates/amazing-layout/src/block.rs",
+      "sha256": "8823d285e5fe2ce80c1adbd1ca0d7659db6516fb8efc397a2cf09ad6fc17d3d5"
+    },
+    {
+      "path": "crates/amazing-layout/src/box_tree.rs",
+      "sha256": "acd04b25aa44d795d727e02b5166fec54a9c948f199ad94e6e5ec3b7b760f38f"
+    },
+    {
+      "path": "crates/amazing-layout/src/contents_tests.rs",
+      "sha256": "109e262560b3a757a1cf9ccd82e24ada67dc6cc4f57c86ecba0ab202650b05bb"
+    },
+    {
+      "path": "crates/amazing-layout/src/flex.rs",
+      "sha256": "3645675fe2f674800b66980ffedcf76c5727f9333b9a2e8de6c27b00aad61a08"
+    },
+    {
+      "path": "crates/amazing-layout/src/flex_algorithm.rs",
+      "sha256": "a8a9c40f342c5a3758015ffd980f91ad9453469789cd7a0471ea8a043e606130"
+    },
+    {
+      "path": "crates/amazing-layout/src/float_tests.rs",
+      "sha256": "7ab463058c107198bf0110a2783676552db0cb981e90779dbece88a64f07725e"
+    },
+    {
+      "path": "crates/amazing-layout/src/floats.rs",
+      "sha256": "1c7cd53cea0ca54dba0f72e3b8aa6e9b4d85df0cfbeb915c9dda0844a37dec44"
+    },
+    {
+      "path": "crates/amazing-layout/src/font.rs",
+      "sha256": "dd124fa71bf291808b4d4de5c10cc69b1bf0941e243af34f356506b85f1ffb01"
+    },
+    {
+      "path": "crates/amazing-layout/src/grid.rs",
+      "sha256": "af436fc22f4e3c728a947face6d49145e22d34feed63013cb5a1f0cb3a6e44e3"
+    },
+    {
+      "path": "crates/amazing-layout/src/grid_algorithm.rs",
+      "sha256": "6a9d0bf7cd348b1c512a31b80da5a6f2318b497764b9fcb91f557de37802c589"
+    },
+    {
+      "path": "crates/amazing-layout/src/inline.rs",
+      "sha256": "b9bc6d1b8cfac95f7c229723fc5a79ab28f03527c10e2d15ebe7e80dd1d257df"
+    },
+    {
+      "path": "crates/amazing-layout/src/inline_replaced_tests.rs",
+      "sha256": "d9cbc7d7bfd96a80bedbb1c89e9e877e1e833d8d8da26fc6f1e9455a2eae1a72"
+    },
+    {
+      "path": "crates/amazing-layout/src/lib.rs",
+      "sha256": "20bfb0e03296c21b8c493ec32db3b864b04d9d287ea72ddf2cb4f5647f327c35"
+    },
+    {
+      "path": "crates/amazing-layout/src/position.rs",
+      "sha256": "c53a2376fd66c76fdaa2be512e984fd61256080ffbe5d24cc0d736abdf79c8b0"
+    },
+    {
+      "path": "crates/amazing-layout/src/replaced.rs",
+      "sha256": "a2dce68101473999fa3dbaf01ac11d56937c25e7302de2c8f6afbef622e2239b"
+    },
+    {
+      "path": "crates/amazing-layout/src/svg.rs",
+      "sha256": "115b26914a43ad52deb03ca705b6d7842c6311dc37803eb9506d670cd23e824c"
+    },
+    {
+      "path": "crates/amazing-layout/src/svg_tests.rs",
+      "sha256": "c5864f5ee2bbf9a0a7f5a9d5f044af7148b8da5edfa1dd1aea0b5e16a4c7856f"
+    },
+    {
+      "path": "crates/amazing-layout/src/table.rs",
+      "sha256": "3ad36355086ce12841d8cf84dcc7408523168605f86e1632af639db4aa8cafd4"
+    },
+    {
+      "path": "crates/amazing-layout/src/table_decoration.rs",
+      "sha256": "48f9a829c01a31dca1e2445e2a0ebfc28c84514c8b3a720b45436f4ed41cd399"
+    },
+    {
+      "path": "crates/amazing-layout/src/table_tests.rs",
+      "sha256": "3d65f1f4e3db9f2ff11e4a629bb06cbe0415ed40407bf4040a476b8287edd2c1"
+    },
+    {
+      "path": "crates/amazing-layout/src/table_tree.rs",
+      "sha256": "833be9d96cf92a0dbc1b855e3f78ed7adbda5a0539a3d808deb495ee8d23332d"
+    },
+    {
+      "path": "crates/amazing-layout/src/values.rs",
+      "sha256": "d3f04d4cd1fc5774915c0520397e97d71803d0d93e16bcc6faebe76c8d3e6df3"
+    },
+    {
+      "path": "crates/amazing-media/Cargo.toml",
+      "sha256": "6b4bcc97a98aa2a6eb72499ac3a8efe3accf563233dc5c30f1803918eee5bf09"
+    },
+    {
+      "path": "crates/amazing-media/src/image_size.rs",
+      "sha256": "27d146adc9ada439cda47cb4d203ea243fa865d568619c5ce4ad4bc793571e1c"
+    },
+    {
+      "path": "crates/amazing-media/src/lib.rs",
+      "sha256": "e6754eebf0518e3771697a2d246060d43d1685c86cac9715e04d4f9eec2f75c0"
+    },
+    {
+      "path": "crates/amazing-net-brotli/Cargo.toml",
+      "sha256": "70afaecc65f0d5ac5570633f40105281b05ba91c0031d4a102445e1c9d0778e4"
+    },
+    {
+      "path": "crates/amazing-net-brotli/src/lib.rs",
+      "sha256": "ddbf3ce70ce7580fa1695e3e6bc5702d99bb8d45ecb98c6021d4384c0ada767f"
+    },
+    {
+      "path": "crates/amazing-net-brotli/src/tests.rs",
+      "sha256": "9874c6f77110d962f17ba116ce5ce42176a4ae6b87cbc91626a2c73a8859fe74"
+    },
+    {
+      "path": "crates/amazing-net-tls/Cargo.toml",
+      "sha256": "2a58cdbfd21914b7b6ab3301f6feca093aa7255df0d4319c4467f0a86b3aac2b"
+    },
+    {
+      "path": "crates/amazing-net-tls/src/lib.rs",
+      "sha256": "62aa5c21416796986449b64b7d8e09e497bf4bf0f1407309ae7fa0c721d0bdf2"
+    },
+    {
+      "path": "crates/amazing-net-tls/src/test_support.rs",
+      "sha256": "f1f90cc7c1d79134e5a35795bd9a581c5f71c43a6aefd58942fcb46ce0ba5a46"
+    },
+    {
+      "path": "crates/amazing-net/Cargo.toml",
+      "sha256": "f101d200218d8c9bff07ee1199cd8e607019af634299db87ebaa119a4502c036"
+    },
+    {
+      "path": "crates/amazing-net/src/coding.rs",
+      "sha256": "2dcd2db48157fbb62dec246d49004be3a163039bc3aa281fb015c00e4bca5a4b"
+    },
+    {
+      "path": "crates/amazing-net/src/coding/inflate.rs",
+      "sha256": "f725b6b2805cfcc4d2e2f0782b735ecd84d5a61d8a26d9dac94c96d5ef8d0743"
+    },
+    {
+      "path": "crates/amazing-net/src/coding/stream.rs",
+      "sha256": "5c934d73fade2900fc6a29202299beb5bec2d973cb71212927c70179be73c8a3"
+    },
+    {
+      "path": "crates/amazing-net/src/coding/tests.rs",
+      "sha256": "f5e7efa2168e6e60820e26965c08b778873fa9ee1d91b7b268c9eb262e3706e3"
+    },
+    {
+      "path": "crates/amazing-net/src/dispatch.rs",
+      "sha256": "cc2abf9248e467d21a9b2ca5260182b0e87b64337dac0d21647aa55c65be8ab6"
+    },
+    {
+      "path": "crates/amazing-net/src/dispatch/websocket.rs",
+      "sha256": "f803ba5e57d77ee3c846f6ed2dd139b0a5bd5811849c76334fd9139f42595b3c"
+    },
+    {
+      "path": "crates/amazing-net/src/fetch.rs",
+      "sha256": "49b128828ac936967c79a60b0fba1de69b5f0c28daf0c496878abe9ab716ccea"
+    },
+    {
+      "path": "crates/amazing-net/src/headers.rs",
+      "sha256": "24f1301772ad2b4ca6c53c1703dc484b0a71bfa0e8e2a296702b3f77e0b60a9e"
+    },
+    {
+      "path": "crates/amazing-net/src/http.rs",
+      "sha256": "709e5a6e3ec6aebd7dd7c08c19a9bf652d6330480258d4ffbf0b893fdb3f85d7"
+    },
+    {
+      "path": "crates/amazing-net/src/http2.rs",
+      "sha256": "5400d66a429a94c0f4f795755a2117ac897ccab0d68c44614db600beb05c9848"
+    },
+    {
+      "path": "crates/amazing-net/src/http2/connection.rs",
+      "sha256": "e73a61f9e4ca76548a7056cc4e58e4d4378cb9cc6977b6cee8d290a26a372271"
+    },
+    {
+      "path": "crates/amazing-net/src/http2/frame.rs",
+      "sha256": "3b9e5696d81afe0b75de35be1b35f33e3e9cfb400802a80ebca393e962393e03"
+    },
+    {
+      "path": "crates/amazing-net/src/http2/hpack.rs",
+      "sha256": "c97b3454ffcfdbab87ce25a930c330b43bdce9256fa9158453056299c7fc0d69"
+    },
+    {
+      "path": "crates/amazing-net/src/http2/hpack/tests.rs",
+      "sha256": "3e5b2fc37a9b7e9ff7e95eb640346f36c3649bc20021fd0ec6e9abfae037b6fb"
+    },
+    {
+      "path": "crates/amazing-net/src/http2/semantics.rs",
+      "sha256": "a33da30d33b0b31b8c67148381455e7e791ef69344d41fe9b42aa7f314766520"
+    },
+    {
+      "path": "crates/amazing-net/src/http2/tables.rs",
+      "sha256": "4b00dfb81eeb2d742677859c5c11ee61042597348dd3918f8587e9d16c7a0543"
+    },
+    {
+      "path": "crates/amazing-net/src/http2/tests.rs",
+      "sha256": "1a687b2085456f973cdba4d09ac7cdaabd3b952be660e333cbc802430428a03a"
+    },
+    {
+      "path": "crates/amazing-net/src/http_coding_tests.rs",
+      "sha256": "7d92e1814947aca1f0d047c07cf6d3988ef9cad74c332345421f6b2c4200a45f"
+    },
+    {
+      "path": "crates/amazing-net/src/lib.rs",
+      "sha256": "1aa22b65bec1083dd20d274a9602f66113c7e789790c5297afb0b6f21e54b0ae"
+    },
+    {
+      "path": "crates/amazing-net/src/response.rs",
+      "sha256": "aa13400f3d9b11620e8fff61c03f3a9df9b2bfdb8c077a4279526592ee8c73bb"
+    },
+    {
+      "path": "crates/amazing-net/src/stream.rs",
+      "sha256": "ddd561f3162e3a9d06a298e5d7a0e044a9af8557c05830b23699f2b27ff71f4d"
+    },
+    {
+      "path": "crates/amazing-net/src/url.rs",
+      "sha256": "91e2e4d44a2a1343cbd8107ab198d1039781d8f936c29eb47983d05929593d3d"
+    },
+    {
+      "path": "crates/amazing-net/src/url/encoding.rs",
+      "sha256": "3bd56f051bfa0412f087b46f59819f337d3d9fe9f7b26cfefdc02a5263a5d2ed"
+    },
+    {
+      "path": "crates/amazing-net/src/url/host.rs",
+      "sha256": "3f6f8278d1ba92c5de778f797565c956d11c9057bf7b8ffc5cac38ac0ba733bb"
+    },
+    {
+      "path": "crates/amazing-net/src/url/idna.rs",
+      "sha256": "d91050e275660f304aa17206a092fce1851e76da05b08adad4b540232ee180c2"
+    },
+    {
+      "path": "crates/amazing-net/src/url/idna_data.rs",
+      "sha256": "418123d891cd09cac115eefa1b33783e0eaf3391d0f75ef03b06dcb971df4cec"
+    },
+    {
+      "path": "crates/amazing-net/src/url/parsed.rs",
+      "sha256": "11522faf65c24de07c014dd3dd5f247fb6f71b84782f5c5a44a7bcaa6f194bcc"
+    },
+    {
+      "path": "crates/amazing-net/src/url/parser.rs",
+      "sha256": "e961b63fa28328c3f0ef722e8a2927331b077dede3d6c9f05a19cd49e64814ee"
+    },
+    {
+      "path": "crates/amazing-net/src/websocket.rs",
+      "sha256": "b1b6274a4b9299bacbaa54587eb8cb9ab48b3cd614018ad8eee3e63825da5d72"
+    },
+    {
+      "path": "crates/amazing-net/src/websocket/client.rs",
+      "sha256": "d78ef421451ca12f249f9c3f15769317beb3268ad0ce2df3e790186ba50ab5c5"
+    },
+    {
+      "path": "crates/amazing-net/src/websocket/frame.rs",
+      "sha256": "931347e56d437e1301ebd194d37e9d8f15b0de115915e162a18d0fe6f87cb1ce"
+    },
+    {
+      "path": "crates/amazing-net/src/websocket/handshake.rs",
+      "sha256": "956df8074a86c6231e882476c7f326e1685c71a4e701e2fc5c004141d1474411"
+    },
+    {
+      "path": "crates/amazing-net/src/websocket/tests.rs",
+      "sha256": "fe6744437e27e8536fcb0c22f3ea0a0c5a23fe15929894a5fac1ccd70f669180"
+    },
+    {
+      "path": "crates/amazing-net/src/websocket/utf8.rs",
+      "sha256": "e59e044385a6d317b7da041be354874f5ed731e687950adf146c585f18bb0ea9"
+    },
+    {
+      "path": "crates/amazing-paint/Cargo.toml",
+      "sha256": "1159d6deb4b97fabb656ffb6f6de166ba332a0a047c826b01e579329d493af99"
+    },
+    {
+      "path": "crates/amazing-paint/src/background.rs",
+      "sha256": "a5e1bcded59658cf01ddd24618da728138fb8c0f9b841d61283e36514a0bb826"
+    },
+    {
+      "path": "crates/amazing-paint/src/background_raster.rs",
+      "sha256": "e9cde6c7c088e4da535cc71a604e021dd7682ba4d80127d2d01de93b81f3cfdc"
+    },
+    {
+      "path": "crates/amazing-paint/src/background_tests.rs",
+      "sha256": "be212d4585ff5902df9ee444e69d21799c53adf7720f3a6f0d2352cf2c4fc235"
+    },
+    {
+      "path": "crates/amazing-paint/src/color.rs",
+      "sha256": "db37f2a72dbb6bf73c0d1c2a3cad940d3f2cf7e8c833a061a6ba2aa17d3b13db"
+    },
+    {
+      "path": "crates/amazing-paint/src/control_raster.rs",
+      "sha256": "8a579860d907fe140a295a3b478dd296c4b83f12b4b923f26d11c9cc2b385b79"
+    },
+    {
+      "path": "crates/amazing-paint/src/control_tests.rs",
+      "sha256": "8c7336522ca9e13a8ea2ac4bbf3db759835fefbda3c85b6c48251729f1320011"
+    },
+    {
+      "path": "crates/amazing-paint/src/controls.rs",
+      "sha256": "c6697b51fbbb4b2da067a86084855ff83854e537c8580f840ee55148890cffb4"
+    },
+    {
+      "path": "crates/amazing-paint/src/display_list.rs",
+      "sha256": "04eda7b683721da269fda564ded0a45a98d7e644505d255d535b7cd84d6f5a00"
+    },
+    {
+      "path": "crates/amazing-paint/src/image.rs",
+      "sha256": "c03608bffbcd5392f4072cec573cc738b27ba8aae56e0b429950e78722357043"
+    },
+    {
+      "path": "crates/amazing-paint/src/image_tests.rs",
+      "sha256": "ca48a27a51b017fe15898db8b3f3ecebbf038964c281f987aaa7591cecc2c55d"
+    },
+    {
+      "path": "crates/amazing-paint/src/lib.rs",
+      "sha256": "d8d864bb626f60f5badc5389feb2ff8a236f2aecaef1f31430895d362146884b"
+    },
+    {
+      "path": "crates/amazing-paint/src/paint.rs",
+      "sha256": "285ee012a49177f9a0cdffa6b0f3ccb15d24380a43cc35c9fd2124ffa611af42"
+    },
+    {
+      "path": "crates/amazing-paint/src/surface.rs",
+      "sha256": "0fca19883e76ea1406462ca5115f405714180615530c1dffa9781276fdea27a0"
+    },
+    {
+      "path": "crates/amazing-paint/src/text.rs",
+      "sha256": "80970f352cc939ae0c4e7d7ae2cff8967273b09a676f4e098a90530054542d85"
+    },
+    {
+      "path": "crates/amazing-regex/Cargo.toml",
+      "sha256": "cf5c10f7ec3fd575aff5284c07af67dbdfb20066a0c39a7808ce432334a08151"
+    },
+    {
+      "path": "crates/amazing-regex/src/lib.rs",
+      "sha256": "a166e530b8fa9223242c034b2ee8aad23e4ed033d0cd0471c773b55496448128"
+    },
+    {
+      "path": "crates/amazing-regex/src/parser.rs",
+      "sha256": "8e602abc12472530101a5240b3617f8ca4274e0a06aca4ae7140187cffae22bb"
+    },
+    {
+      "path": "crates/amazing-regex/src/tests.rs",
+      "sha256": "a711faa246242901ebb388964e46872403a6e805593d44b9d227c591af0bfa2a"
+    },
+    {
+      "path": "crates/amazing-regex/src/unicode_casefold.rs",
+      "sha256": "08a01f154a8d36eb34415040f423d4644546ed8a9961feb82424825a8113f66e"
+    },
+    {
+      "path": "crates/amazing-regex/src/vm.rs",
+      "sha256": "6c2f4a3628261a0d552fdd45005a77d82e7ce813291e10b76da42bd21c5de73e"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/Cargo.toml",
+      "sha256": "370b38599250b91836c7a5c86fe73521fd3897b35375e2f8083cefc443c8df53"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/audio_output.rs",
+      "sha256": "75de490af43a46c538eeb763ea0792a888d37568d2ebdd1e72edbfcf9c1d6c14"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/dom_runtime.rs",
+      "sha256": "fda24744c7254535849b5fe7404d84bdaf07eb5ffa5ffca96d0dcfe3c3a65c29"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/engine_viewport.rs",
+      "sha256": "89753fdc8ce5ca20745430554926e01184ccbf94f8dd60068bf22e535211b067"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/main.rs",
+      "sha256": "3ce617e1bb629f015a010acff86c11d8b7fb368b8ed2714d3778799d3d69154e"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/playback_clock.rs",
+      "sha256": "1d7789e1832f2e7eae32cfabae2a40dcf10c0d97540a8dc25e1e8357765e7c84"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/secure_video.rs",
+      "sha256": "06c07ec269dc17107294a8ab1f1bc2394cece9d07a33b2c57368697d7855f846"
+    },
+    {
+      "path": "crates/amazing-shell-gpui/src/session_state.rs",
+      "sha256": "0041bd3e12f4b08a5642447b70c414523105fe0bf4894990dfa74736161d41e5"
+    },
+    {
+      "path": "crates/amazing-svg/Cargo.toml",
+      "sha256": "30f0b1ee2baa9ea81c2becfaf694ed6ba7d7ce988fe5a5987f4013580f3c1b36"
+    },
+    {
+      "path": "crates/amazing-svg/src/lib.rs",
+      "sha256": "31f3be5f4835321a21ae2f47503c513ac43b3fdea42551b6616e61ab1629193d"
+    },
+    {
+      "path": "crates/amazing-text-provider/Cargo.toml",
+      "sha256": "d8b1303778b9f6941f34a44bcc03f4ffb4dba0635a4f6af55397b3e7a9f04378"
+    },
+    {
+      "path": "crates/amazing-text-provider/src/lib.rs",
+      "sha256": "d6cb7a49c6c636c6021f0969a6a8a91320e45384fd56b7c9fa49a616ad9515d3"
+    },
+    {
+      "path": "crates/amazing-text/Cargo.toml",
+      "sha256": "674396fe51516c8052d42badb616d16b93f6e83018a94c0ec15bf64468a70c12"
+    },
+    {
+      "path": "crates/amazing-text/src/lib.rs",
+      "sha256": "953822aa61a3b321c241b7ba860e133c613d11f9d6dc803c79aa9d49eb2b755d"
+    },
+    {
+      "path": "crates/amazing-webrtc-codecs/Cargo.toml",
+      "sha256": "573f4d5f893903b86899791735791841fd789af267ac9881bd8aec87b7e6a59f"
+    },
+    {
+      "path": "crates/amazing-webrtc-codecs/src/lib.rs",
+      "sha256": "103e5c6707c403aca399d9d7b1d7636ea72239bbe519dc0f0905665a897312e9"
+    },
+    {
+      "path": "crates/amazing-webrtc-crypto/Cargo.toml",
+      "sha256": "93f1e83e3179afd2af79d67fa1f3db50b41590e8c6e46994f719c13530d1c32e"
+    },
+    {
+      "path": "crates/amazing-webrtc-crypto/src/lib.rs",
+      "sha256": "c7dde71435a8092289ffb7f0bafc6538f01b0d5d62c65d01a560f98b699674e9"
+    },
+    {
+      "path": "crates/amazing-webrtc/Cargo.toml",
+      "sha256": "d268ee0cffe1c9ae803252526a43c759bfe0c8e243d2d04f38a3707c4471724c"
+    },
+    {
+      "path": "crates/amazing-webrtc/src/h264_rtp.rs",
+      "sha256": "6af79aeb6cd3c72f0db9a22c5297837ff9ccf42cd518c1d57a78a533eb3f2c0c"
+    },
+    {
+      "path": "crates/amazing-webrtc/src/jitter.rs",
+      "sha256": "228f63abb527028a92850f3a5f7f854558d695f47ad90b6f6c73dd7eb10a172d"
+    },
+    {
+      "path": "crates/amazing-webrtc/src/lib.rs",
+      "sha256": "f674610e636ebd95626e73153c44060f47b5f3be4a4358e34795448b7d71522d"
+    },
+    {
+      "path": "crates/amazing-webrtc/src/sync.rs",
+      "sha256": "e042f703cbbe326020c0ab77225cd72a2337a9313fb0f55d645f57cd79e6f34c"
+    },
+    {
+      "path": "crates/amazing-webrtc/src/turn.rs",
+      "sha256": "aa2ad221ae1f0910f5749a2211acaf98f48ced6bc495c17b89f32e305e76a111"
+    },
+    {
+      "path": "crates/amazing-webrtc/src/video.rs",
+      "sha256": "24bde291796e045a88427fa1e46ccdb8b4cc55a7d28eb26a66e698bc57b93bb3"
+    },
+    {
+      "path": "crates/amazing/Cargo.toml",
+      "sha256": "b148ea50b57ba5c6658e664590453fae9107ee079a7128b8852ab3dbcd33858e"
+    },
+    {
+      "path": "crates/amazing/src/browser_peer.rs",
+      "sha256": "ee6fec870084fc42b16bfa3826f122a73a4c7c408e6b62cd7b021bdb419751b9"
+    },
+    {
+      "path": "crates/amazing/src/cmd/gpu.rs",
+      "sha256": "afdc7fd0da71b17c9e9bf5f2e5bea2505a71e4504766f833b398976a39f7b4c9"
+    },
+    {
+      "path": "crates/amazing/src/cmd/js.rs",
+      "sha256": "444c833e1ef9138de41a83874d9c40754af4675c03117b12ae3760d8478c1e3c"
+    },
+    {
+      "path": "crates/amazing/src/cmd/launch.rs",
+      "sha256": "ab78f7f588c456dfd12f8ee382a1698ae59007f9c2c0e019a78c8cf088b90b4c"
+    },
+    {
+      "path": "crates/amazing/src/cmd/measure-wpt-dom.py",
+      "sha256": "588d0babafb82ba41159a9f0bc46cde944097ee1708ea266519ae8e41a582892"
+    },
+    {
+      "path": "crates/amazing/src/cmd/mod.rs",
+      "sha256": "96f9a5662af0648c3f4a9276aef643a2affa64db6a2173aed2e579cc11fa343f"
+    },
+    {
+      "path": "crates/amazing/src/cmd/net.rs",
+      "sha256": "41fdceaa54dc9fde612db486ed4715cc0d2a5ec848b0552c1b6abfe1451cc5cd"
+    },
+    {
+      "path": "crates/amazing/src/cmd/parse.rs",
+      "sha256": "73e0e675ff79a767cb3d24c7c711d205e808cae142c3da3e8aed6ab0b2a1e0fc"
+    },
+    {
+      "path": "crates/amazing/src/cmd/render.rs",
+      "sha256": "75df5fe629ec5d3b31c7d2bcdd452f0a18fe1e538c618da629a1bfac068d77ad"
+    },
+    {
+      "path": "crates/amazing/src/cmd/verify-wpt-harness.ps1",
+      "sha256": "82001cd5beb37b0bbdfaf0992be8304267017ecf3430b781ece72e7d59b8f39d"
+    },
+    {
+      "path": "crates/amazing/src/cmd/webrtc.rs",
+      "sha256": "e8b811afc7eda8aed06d4f74d54a27dc3352ad42bf33dc4fe6c0878b7242b0ac"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt.rs",
+      "sha256": "abc85cd57ffdd38a1a24c36723de259f299df0c40d949c2eb6eac7ee9d5f8b0f"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness.rs",
+      "sha256": "f042094be3511e7ca7ffb953ec8b4528420ab60bb89db75c64040567747a5ec4"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/error.html",
+      "sha256": "c9b6ecf7f5dabdce3534e03d38911b1b48b51d8cff8ae2a446cdf53c4e95f78d"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/escape-root.html",
+      "sha256": "6b85602168d5dcb8e6a790a7ee4eb87bac37218be754e30ba776c2111caa617b"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/escaping.html",
+      "sha256": "82aec8d8bce6405c52c2c2950ba7388aa537672fba085ac53ac8b9d584260f7b"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/fail.html",
+      "sha256": "bf3b028413b54fd316ea1ff2973b2217a308907fab0d625db1cdc2802c9cc266"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/hang.html",
+      "sha256": "c16346d21e91cd41e050aeae23c3ba2c96cf0578bbed4328c0db88b779b11b32"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/harness-error.html",
+      "sha256": "95db895040157f6de1ce491cce45d7b26175feef5bd7d18980598dd5b20ba4b0"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/harness-timeout.html",
+      "sha256": "24b9c4274e2e76936344e3887d106e5afa8de889e416ccf1c344e545cee3cdd4"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/ignored-script.html",
+      "sha256": "91d48984687220555fc150f2b583280fa389b9d4961c4702b857c310efbc7efd"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/missing-harness.html",
+      "sha256": "1c2dde42193b8823aa06cd6b7fda7bed97e9decb8cefa39f261d20777d2e4349"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/missing-script.html",
+      "sha256": "8975aab4e4288053fab9163822c4013862118cfb8e29289d1a84aecba28df382"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/other-statuses.html",
+      "sha256": "1a016fd7bb76bc94b5292340ee61e1fff283792a9f3cfebea794bc4a11012783"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/pass.html",
+      "sha256": "20640a6c604c5edaf8dae366263ec594ac00a58dd7df37e44395f591eeef39d9"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/scaffold-harness.js",
+      "sha256": "204a10bbbb1ae8b2eaf1ed6b97c0219edff51c769f29fec09c8f6f204974ca97"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/subtest-timeout.html",
+      "sha256": "8ba2996ea0ba07c4e32bdd4a6f04bcc055fd48619a0bb50449ba9183be8f21b0"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_fixtures/unsupported.html",
+      "sha256": "9092eb5cc9f5d095f04ee2d88d117f9ddcc6747224418bfdad89c3d13c72e0c8"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_results/dom-baseline-summary.json",
+      "sha256": "e1ad07d324e5c67836d667f0afec03aad7e5d4632d696f4f9d0fca972f1d8d5f"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_results/dom-baseline.jsonl",
+      "sha256": "3601e251023d0f34e0668c7e9b8d1b24df1fbca43391e0cff123ab51ee719f4c"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_results/dom-selection.jsonl",
+      "sha256": "5baad8e050b8b042b7b3b08464634ee028c868de9ebf217794b6cad7b00561ac"
+    },
+    {
+      "path": "crates/amazing/src/cmd/wpt_harness_results/upstream-proof.jsonl",
+      "sha256": "fda888792ad20e12b69ab4909e69896b98916b170c7ecf259cd79854ebe404bd"
+    },
+    {
+      "path": "crates/amazing/src/document.rs",
+      "sha256": "2d01b733a718ad3174e2568ccba4e96d8de8798d7614683936637e332682fc70"
+    },
+    {
+      "path": "crates/amazing/src/dom_host.rs",
+      "sha256": "f19a1c8791360eb70a3b3b29d648e71ea8ec16298b3bcdd52289f0e6958a44b0"
+    },
+    {
+      "path": "crates/amazing/src/driver_tests.rs",
+      "sha256": "5d30a548e6cdc11d24071af439a212f381aa54430e331d4cca32ee969af27fe0"
+    },
+    {
+      "path": "crates/amazing/src/gpu.rs",
+      "sha256": "0ef6fca29b9bb03cc750496f89242e18bc86c95af749c6b2f2afe757b2e87634"
+    },
+    {
+      "path": "crates/amazing/src/gui.rs",
+      "sha256": "caa4f3f28329a59b012b99b3ac36f4d39c60e30c541a2b0003c953438ac9719e"
+    },
+    {
+      "path": "crates/amazing/src/js_scheduler.rs",
+      "sha256": "2f685a37ce091ca46eed9daf2c382ca730fe471e5facf22f68fd4199bb760708"
+    },
+    {
+      "path": "crates/amazing/src/main.rs",
+      "sha256": "291bfdc183744d70dc856c4025f4e905a2b6f6d8c8927b0fee4532425b25bedb"
+    },
+    {
+      "path": "crates/amazing/src/page.rs",
+      "sha256": "d09f61172040d7240fd32592845a01fd5e4780bbb2fdefcc1c5c136121196059"
+    },
+    {
+      "path": "crates/amazing/src/runtime_binding_host.rs",
+      "sha256": "d2c658d3dd8107f04c3e1296b715a47037b636203cf97ad9f57cb39c1487d04f"
+    }
+  ]
+}

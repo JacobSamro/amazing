@@ -181,8 +181,8 @@ fn parse_align(v: Option<&str>, default: Pack) -> Pack {
 /// inline size for both axes (row-gap % against height unsupported → same
 /// base, documented).
 fn parse_gaps(style: &ComputedStyle, font_px: f32, content_w: f32) -> (f32, f32) {
-    let px =
-        |s: &str| MaybeLen::parse(s, font_px, content_w).map_or(0.0, |m| m.unwrap_or(0.0));
+    let px = |s: &str| values::parse_used_maybe_len(style, s, font_px, content_w)
+        .map_or(0.0, |m| m.unwrap_or(0.0));
     let mut row_gap = 0.0f32;
     let mut col_gap = 0.0f32;
     if let Some(v) = style.get("gap") {
@@ -236,7 +236,7 @@ impl ItemProps {
                     // One-value length form: `flex: 10em` → 1 1 10em.
                     grow = 1.0;
                     shrink = 1.0;
-                    basis = MaybeLen::parse(parts[0], font_px, main_extent);
+                    basis = values::parse_used_maybe_len(style, parts[0], font_px, main_extent);
                 }
             } else {
                 let nums: Vec<f32> = parts
@@ -249,7 +249,7 @@ impl ItemProps {
                 basis = parts
                     .iter()
                     .find(|part| parse_flex_number(part).is_none())
-                    .and_then(|p| MaybeLen::parse(p, font_px, main_extent))
+                    .and_then(|p| values::parse_used_maybe_len(style, p, font_px, main_extent))
                     .or_else(|| nums.get(2).map(|n| MaybeLen::Px(*n)));
             }
         }
@@ -263,7 +263,7 @@ impl ItemProps {
             basis = values::style_length_percentage(style, "flex-basis", font_px, font_px * 0.6)
                 .and_then(|value| value.resolve(Some(main_extent)))
                 .map(MaybeLen::Px)
-                .or_else(|| MaybeLen::parse(v, font_px, main_extent))
+                .or_else(|| values::parse_used_maybe_len(style, v, font_px, main_extent))
                 .or(basis);
         }
         ItemProps {

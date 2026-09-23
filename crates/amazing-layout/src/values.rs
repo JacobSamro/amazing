@@ -213,7 +213,55 @@ pub fn style_length_percentage(
         Some(ComputedValue::LengthPercentageExpression(expression)) => expression.as_str(),
         _ => style.get(property)?,
     };
-    parse_length_percentage(source, em, ch)
+    used_length_percentage(style, source, em, ch)
+}
+
+/// Scale only the absolute term at CSS zoom's used-value boundary. The
+/// percentage term uses its caller-supplied (already zoomed) containing box.
+/// `em` and `ch` arrive at their used sizes, so undo zoom before parsing and
+/// apply it once to the resulting absolute term.
+pub fn used_length_percentage(
+    style: &ComputedStyle, source: &str, em: f32, ch: f32,
+) -> Option<LengthPercentage> {
+    let zoom = style.effective_zoom() as f32;
+    let mut length = parse_length_percentage(source, em / zoom, ch / zoom)?;
+    length.px = style.scale_used_length(length.px as f64) as f32;
+    Some(length)
+}
+
+pub(crate) fn parse_used_maybe_len(
+    style: &ComputedStyle, source: &str, em: f32, basis: f32,
+) -> Option<MaybeLen> {
+    if source.trim().eq_ignore_ascii_case("auto") {
+        return Some(MaybeLen::Auto);
+    }
+    used_length_percentage(style, source, em, em * 0.6)?
+        .resolve(Some(basis))
+        .map(MaybeLen::Px)
+}
+
+pub fn resolve_used_font_size(style: &ComputedStyle, parent_used_px: f32) -> f32 {
+    if let Some(px) = style.used_length_px("font-size") {
+        return px as f32;
+    }
+    let zoom = style.effective_zoom() as f32;
+    style.scale_used_length(resolve_font_size(
+        style.get("font-size").unwrap_or("medium"),
+        parent_used_px / zoom,
+    ) as f64) as f32
+}
+
+pub fn resolve_used_line_height(style: &ComputedStyle, font_px: f32, normal_px: f32) -> f32 {
+    let value = style.get("line-height").unwrap_or("normal");
+    if value.eq_ignore_ascii_case("normal") {
+        return normal_px;
+    }
+    if let Ok(factor) = value.parse::<f32>() {
+        return factor * font_px;
+    }
+    style_length_percentage(style, "line-height", font_px, font_px * 0.6)
+        .and_then(|length| length.resolve(Some(font_px)))
+        .unwrap_or(normal_px)
 }
 
 fn style_maybe_length(
@@ -348,7 +396,15 @@ fn read_box_sides_auto(
     }
     if let Some(sh) = style.get(shorthand) {
         let parts: Vec<&str> = sh.split_ascii_whitespace().collect();
-        let slot = |s: &str| MaybeLen::parse(s, em_base, percent_base).unwrap_or(MaybeLen::Px(0.0));
+        let slot = |s: &str| {
+            if s.eq_ignore_ascii_case("auto") {
+                MaybeLen::Auto
+            } else {
+                used_length_percentage(style, s, em_base, em_base * 0.6)
+                    .and_then(|length| length.resolve(Some(percent_base)))
+                    .map_or(MaybeLen::Px(0.0), MaybeLen::Px)
+            }
+        };
         let expanded: [MaybeLen; 4] = match parts.len() {
             1 => [slot(parts[0]); 4],
             2 => [
@@ -488,12 +544,14 @@ pub fn resolve_borders(style: &ComputedStyle, em_base: f32) -> Sides {
             0.0
         } else {
             match side_component(style, i, true, em_base).as_deref() {
-                None => 3.0, // initial `medium`
+                None => style.scale_used_length(3.0) as f32, // initial `medium`
                 Some(w) => match w.to_ascii_lowercase().as_str() {
-                    "thin" => 1.0,
-                    "medium" => 3.0,
-                    "thick" => 5.0,
-                    _ => parse_len(w, em_base, 0.0).unwrap_or(3.0),
+                    "thin" => style.scale_used_length(1.0) as f32,
+                    "medium" => style.scale_used_length(3.0) as f32,
+                    "thick" => style.scale_used_length(5.0) as f32,
+                    _ => used_length_percentage(style, w, em_base, em_base * 0.6)
+                        .and_then(|length| length.resolve(Some(0.0)))
+                        .unwrap_or(style.scale_used_length(3.0) as f32),
                 },
             }
         };
@@ -543,7 +601,7 @@ pub fn resolve_corner_radii(
         "border-bottom-right-radius", "border-bottom-left-radius",
     ];
     if longhands.iter().all(|name| style.get(name).is_some()) {
-        return longhands.map(|name| radius_pair(style.get(name).unwrap_or(""), em, ch, width, height));
+        return longhands.map(|name| radius_pair(style, style.get(name).unwrap_or(""), em, ch, width, height));
     }
     let Some(shorthand) = style.get("border-radius") else { return [(0.0, 0.0); 4] };
     let slash = shorthand.char_indices().scan(0i32, |depth, (i, c)| {
@@ -551,8 +609,8 @@ pub fn resolve_corner_radii(
         Some((i, c, *depth))
     }).find(|(_, c, depth)| *c == '/' && *depth == 0).map(|(i, _, _)| i);
     let (horizontal, vertical) = slash.map_or((shorthand, None), |i| (&shorthand[..i], Some(&shorthand[i + 1..])));
-    let horizontal = expand_radii(horizontal, em, ch, width);
-    let vertical = vertical.map(|value| expand_radii(value, em, ch, height)).unwrap_or_else(|| expand_radii(horizontal_source(shorthand, slash), em, ch, height));
+    let horizontal = expand_radii(style, horizontal, em, ch, width);
+    let vertical = vertical.map(|value| expand_radii(style, value, em, ch, height)).unwrap_or_else(|| expand_radii(style, horizontal_source(shorthand, slash), em, ch, height));
     std::array::from_fn(|i| (horizontal[i], vertical[i]))
 }
 
@@ -560,17 +618,17 @@ fn horizontal_source<'a>(shorthand: &'a str, slash: Option<usize>) -> &'a str {
     slash.map_or(shorthand, |i| &shorthand[..i])
 }
 
-fn radius_pair(value: &str, em: f32, ch: f32, width: f32, height: f32) -> (f32, f32) {
+fn radius_pair(style: &ComputedStyle, value: &str, em: f32, ch: f32, width: f32, height: f32) -> (f32, f32) {
     let values = radius_tokens(value);
     match values.as_slice() {
-        [both] => (radius_value(both, em, ch, width), radius_value(both, em, ch, height)),
-        [x, y] => (radius_value(x, em, ch, width), radius_value(y, em, ch, height)),
+        [both] => (radius_value(style, both, em, ch, width), radius_value(style, both, em, ch, height)),
+        [x, y] => (radius_value(style, x, em, ch, width), radius_value(style, y, em, ch, height)),
         _ => (0.0, 0.0),
     }
 }
 
-fn expand_radii(value: &str, em: f32, ch: f32, basis: f32) -> [f32; 4] {
-    let numbers = radius_tokens(value).into_iter().map(|token| radius_value(token, em, ch, basis)).collect::<Vec<_>>();
+fn expand_radii(style: &ComputedStyle, value: &str, em: f32, ch: f32, basis: f32) -> [f32; 4] {
+    let numbers = radius_tokens(value).into_iter().map(|token| radius_value(style, token, em, ch, basis)).collect::<Vec<_>>();
     match numbers.as_slice() {
         [one] => [*one; 4],
         [top_left, top_right] => [*top_left, *top_right, *top_left, *top_right],
@@ -580,8 +638,8 @@ fn expand_radii(value: &str, em: f32, ch: f32, basis: f32) -> [f32; 4] {
     }
 }
 
-fn radius_value(value: &str, em: f32, ch: f32, basis: f32) -> f32 {
-    parse_length_percentage(value, em, ch)
+fn radius_value(style: &ComputedStyle, value: &str, em: f32, ch: f32, basis: f32) -> f32 {
+    used_length_percentage(style, value, em, ch)
         .and_then(|value| value.resolve(Some(basis)))
         .unwrap_or(0.0).max(0.0)
 }
@@ -656,6 +714,22 @@ mod tests {
     fn border_radius_calc_uses_its_own_axis_and_keeps_function_whitespace() {
         let style = style_of(&[("border-radius", "calc((1/32 * 100%) + 5px) calc((1/64 * 100%) - 2px) calc(10px + (1/256 * 100%)) calc((1/16 * 100%) - 3px) / calc((1/32 * 100%) - (1px + (1/128 * 100%))) calc(1/16 * 100%) calc(10px) 3px")]);
         assert_eq!(resolve_corner_radii(&style, 16.0, 8.0, 512.0, 256.0), [(21.0, 5.0), (6.0, 16.0), (12.0, 10.0), (29.0, 3.0)]);
+    }
+
+    #[test]
+    fn zoom_scales_absolute_used_lengths_once_but_not_percentage_terms() {
+        let mut style = ComputedStyle::default();
+        style.set("zoom", "2");
+        style.set("font-size", "16px");
+        style.set("width", "calc(50% + 10px)");
+        style.set("border-top-style", "solid");
+        style.set("border-top-width", "2px");
+        assert_eq!(resolve_used_font_size(&style, 16.0), 32.0);
+        assert_eq!(resolve_extent(&style, "width", 32.0, 200.0), MaybeLen::Px(120.0));
+        assert_eq!(resolve_borders(&style, 32.0).top, 4.0);
+
+        style.set("width", "1em");
+        assert_eq!(resolve_extent(&style, "width", 32.0, 200.0), MaybeLen::Px(32.0));
     }
 
     #[test]

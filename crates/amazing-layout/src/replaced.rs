@@ -165,8 +165,7 @@ pub(crate) fn construct(
     provider: &dyn ReplacedElementProvider,
 ) -> Option<InlineNode> {
     let kind = kind(dom, node)?;
-    let font_size =
-        values::resolve_font_size(style.get("font-size").unwrap_or("medium"), parent_font);
+    let font_size = values::resolve_used_font_size(style, parent_font);
     let count = |name, fallback| {
         attr(dom, node, name)
             .and_then(|s| s.parse::<u32>().ok())
@@ -182,14 +181,21 @@ pub(crate) fn construct(
                 && size.width >= 0.0
                 && size.height >= 0.0
         })
+        .map(|size| IntrinsicSize {
+            width: style.scale_used_length(size.width as f64) as f32,
+            height: style.scale_used_length(size.height as f64) as f32,
+        })
         .or_else(|| {
             Some(match kind {
                 // Undecoded images retain the existing no-fragment behavior.
                 ReplacedKind::Image => return None,
-                ReplacedKind::Svg => IntrinsicSize { width: 300.0, height: 150.0 },
+                ReplacedKind::Svg => IntrinsicSize {
+                    width: style.scale_used_length(300.0) as f32,
+                    height: style.scale_used_length(150.0) as f32,
+                },
                 ReplacedKind::Checkbox | ReplacedKind::Radio => IntrinsicSize {
-                    width: 13.0,
-                    height: 13.0,
+                    width: style.scale_used_length(13.0) as f32,
+                    height: style.scale_used_length(13.0) as f32,
                 },
                 ReplacedKind::TextInput => IntrinsicSize {
                     width: count("size", 20) * font_size * 0.6,

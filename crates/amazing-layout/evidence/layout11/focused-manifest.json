@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "frozen-layout11-zoom-cascade-font"
+  },
+  "sparse_paths": [
+    "css/css-viewport/zoom",
+    "css/css-cascade",
+    "css/css-values",
+    "css/css-fonts"
+  ],
+  "tests": [
+    {"id": "css-viewport__zoom__basic.html", "test": "css/css-viewport/zoom/basic.html"},
+    {"id": "css-viewport__zoom__inherited.html", "test": "css/css-viewport/zoom/inherited.html"},
+    {"id": "css-cascade__all-prop-002.html", "test": "css/css-cascade/all-prop-002.html"},
+    {"id": "css-values__calc-border-radius-1.html", "test": "css/css-values/calc-border-radius-1.html"},
+    {"id": "css-fonts__font-variant-ligatures-11.optional.html", "test": "css/css-fonts/font-variant-ligatures-11.optional.html"}
+  ]
+}
