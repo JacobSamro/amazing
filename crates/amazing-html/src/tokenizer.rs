@@ -145,6 +145,7 @@ pub struct Tokenizer {
     /// End-tag name we're looking for while in RAWTEXT/RCDATA.
     raw_end: String,
     eof_sent: bool,
+    input_finished: bool,
 }
 
 fn is_ws(c: char) -> bool {
@@ -183,6 +184,47 @@ impl Tokenizer {
             doctype_name: None,
             raw_end: String::new(),
             eof_sent: false,
+            input_finished: true,
+        }
+    }
+
+    pub(crate) fn streaming() -> Self {
+        let mut tokenizer = Self::new(Vec::new());
+        tokenizer.input_finished = false;
+        tokenizer
+    }
+
+    pub(crate) fn push_chars(&mut self, chars: impl IntoIterator<Item = char>) {
+        assert!(!self.input_finished, "cannot feed a finished tokenizer");
+        self.input.extend(chars);
+    }
+
+    pub(crate) fn finish_input(&mut self) {
+        self.input_finished = true;
+    }
+
+    pub(crate) fn buffered_input_scalars(&self) -> usize {
+        self.input.len()
+    }
+
+    /// Drop consumed scalars, retaining the source of a tag still being
+    /// constructed because EOF recovery replays it literally.
+    pub(crate) fn compact_input(&mut self) {
+        let replaying_tag = matches!(
+            self.state,
+            State::EndTagOpen | State::TagName | State::BeforeAttrName
+                | State::AttrName | State::AfterAttrName | State::BeforeAttrValue
+                | State::AttrValueDouble | State::AttrValueSingle
+                | State::AttrValueUnquoted | State::AfterAttrValueQuoted
+                | State::SelfClosingStart | State::RawTextLessThan
+                | State::RawTextEndTagOpen | State::RawTextEndTagName
+                | State::RcLessThan | State::RcEndTagOpen | State::RcEndTagName
+        );
+        let drop = if replaying_tag { self.tag_start.min(self.pos) } else { self.pos };
+        if drop > 0 {
+            self.input = self.input.split_off(drop);
+            self.pos -= drop;
+            self.tag_start = self.tag_start.saturating_sub(drop);
         }
     }
 
@@ -271,17 +313,74 @@ impl Tokenizer {
     /// token is available or EOF is fully processed; repeated calls after
     /// EOF keep returning [`Token::Eof`].
     pub fn next_token(&mut self) -> Token {
+        self.next_available().unwrap_or(Token::Eof)
+    }
+
+    /// Returns `None` while a chunk is exhausted but more input may arrive.
+    /// Unlike `next_token`, this emits EOF only once after `finish_input`.
+    pub(crate) fn next_available(&mut self) -> Option<Token> {
         if let Some(t) = self.queue.pop_front() {
-            return t;
+            return Some(t);
         }
         if !self.eof_sent {
             self.run();
             if let Some(t) = self.queue.pop_front() {
-                return t;
+                return Some(t);
             }
-            self.eof_sent = true;
+            if self.input_finished && self.state == State::Done {
+                self.eof_sent = true;
+                return Some(Token::Eof);
+            }
         }
-        Token::Eof
+        None
+    }
+
+    fn needs_more_input(&self) -> bool {
+        match self.state {
+            State::Data | State::RcData => match self.peek() {
+                Some('&') => self.reference_needs_more(),
+                Some('<') if self.state == State::Data => self.tag_open_needs_more(),
+                _ => false,
+            },
+            State::AttrValueDouble | State::AttrValueSingle | State::AttrValueUnquoted => {
+                self.peek() == Some('&') && self.reference_needs_more()
+            },
+            State::AfterDoctypeName if self.peek().is_some_and(is_alpha) => {
+                // The existing PUBLIC/SYSTEM scanner is all-at-once; wait for
+                // its terminator so a chunk boundary cannot restart it.
+                !self.input[self.pos..].contains(&'>')
+            },
+            _ => false,
+        }
+    }
+
+    fn tag_open_needs_more(&self) -> bool {
+        let tail = &self.input[self.pos + 1..];
+        let Some(&first) = tail.first() else { return true; };
+        if first != '!' { return false; }
+        let markup = &tail[1..];
+        let comment = ['-', '-'];
+        let doctype = ['d', 'o', 'c', 't', 'y', 'p', 'e'];
+        (markup.len() < comment.len() && markup == &comment[..markup.len()])
+            || (markup.len() < doctype.len()
+                && markup.iter().zip(&doctype).all(|(a, b)| a.eq_ignore_ascii_case(b)))
+    }
+
+    fn reference_needs_more(&self) -> bool {
+        let tail = &self.input[self.pos + 1..];
+        if tail.is_empty() { return true; }
+        if tail[0] == '#' {
+            let mut i = 1;
+            let hex = tail.get(i).is_some_and(|c| *c == 'x' || *c == 'X');
+            if hex { i += 1; }
+            if i == tail.len() { return true; }
+            let base = if hex { 16 } else { 10 };
+            while i < tail.len() && tail[i].to_digit(base).is_some() { i += 1; }
+            return i == tail.len();
+        }
+        let mut i = 0;
+        while i < tail.len() && i < MAX_NAME_LEN && tail[i].is_ascii_alphanumeric() { i += 1; }
+        i == tail.len() && i < MAX_NAME_LEN
     }
 
     /// Drives states until input is exhausted and everything is emitted.
@@ -291,7 +390,12 @@ impl Tokenizer {
                 return;
             }
             if self.pos >= self.input.len() {
-                self.finish_eof();
+                if self.input_finished { self.finish_eof(); }
+                else { self.flush_text(); }
+                return;
+            }
+            if !self.input_finished && self.needs_more_input() {
+                self.flush_text();
                 return;
             }
             match self.state {
@@ -857,6 +961,7 @@ impl Tokenizer {
                 State::RawText => match self.peek() {
                     None => {},
                     Some('<') => {
+                        self.tag_start = self.pos;
                         self.pos += 1;
                         self.state = State::RawTextLessThan;
                     },
@@ -886,7 +991,6 @@ impl Tokenizer {
                         Some(c) if is_alpha(c) => {
                             self.tag = Some(TagBuilder::new());
                             self.is_end_tag = true;
-                            self.tag_start = self.pos.saturating_sub(2);
                             self.state = if self.state
                                 == State::RawTextEndTagOpen
                             {
@@ -917,6 +1021,7 @@ impl Tokenizer {
                         }
                     },
                     Some('<') => {
+                        self.tag_start = self.pos;
                         self.pos += 1;
                         self.state = State::RcLessThan;
                     },

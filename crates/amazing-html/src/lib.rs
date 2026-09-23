@@ -19,6 +19,8 @@
 //! HTML deviations from full spec (deliberate):
 //! - [`parse`] accepts caller-decoded text. [`parse_bytes`] supports a bounded
 //!   byte-level subset; see [`encoding`] for its precise encoding coverage.
+//! - [`IncrementalParser`] accepts already-decoded chunks and finishes only
+//!   when the caller explicitly ends the document.
 //! - CDATA sections (`<![CDATA[…]]>`) tokenize as bogus comments.
 //! - Doctype PUBLIC/SYSTEM identifiers are consumed but not captured; only
 //!   their presence feeds quirks-mode approximation.
@@ -37,9 +39,13 @@ pub mod entities;
 pub mod tokenizer;
 pub mod tree;
 pub mod xml;
+pub use tree::IncrementalParser;
 pub use xml::{parse_xml, XmlError, XmlErrorKind};
 
 use amazing_dom::{Dom, Namespace, NodeIdx};
+
+#[cfg(test)]
+mod stream_tests;
 
 /// Decodes and parses a complete HTML byte stream. `transport_label` is the
 /// optional charset from out-of-band transport metadata.

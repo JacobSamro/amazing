@@ -2335,6 +2335,70 @@ fn feed_with_tokenizer_feedback(
     eof
 }
 
+/// Incremental HTML parser for already-decoded text chunks.
+///
+/// Chunks may end anywhere between Unicode scalar values. Tokenizer input
+/// already consumed is released after each call; an unfinished tag, comment,
+/// doctype, or character reference can remain buffered until it is resolved.
+pub struct IncrementalParser {
+    builder: TreeBuilder,
+    tokenizer: Tokenizer,
+    pending_cr: bool,
+}
+
+impl Default for IncrementalParser {
+    fn default() -> Self { Self::new() }
+}
+
+impl IncrementalParser {
+    pub fn new() -> Self {
+        Self {
+            builder: TreeBuilder::new(),
+            tokenizer: Tokenizer::streaming(),
+            pending_cr: false,
+        }
+    }
+
+    /// Feeds one decoded chunk without treating its end as document EOF.
+    pub fn push_chunk(&mut self, chunk: &str) {
+        let mut normalized = Vec::with_capacity(chunk.chars().count() + usize::from(self.pending_cr));
+        for c in chunk.chars() {
+            if self.pending_cr {
+                normalized.push('\n');
+                self.pending_cr = false;
+                if c == '\n' { continue; }
+            }
+            if c == '\r' { self.pending_cr = true; }
+            else { normalized.push(c); }
+        }
+        self.tokenizer.push_chars(normalized);
+        self.drive();
+    }
+
+    /// Number of scalar values retained as tokenizer input. This excludes
+    /// the DOM and the current token's decoded fields.
+    pub fn buffered_input_scalars(&self) -> usize {
+        self.tokenizer.buffered_input_scalars()
+    }
+
+    /// Signals the one final EOF and returns the completed DOM.
+    pub fn finish(mut self) -> Dom {
+        if self.pending_cr { self.tokenizer.push_chars(['\n']); }
+        self.tokenizer.finish_input();
+        self.drive();
+        self.builder.into_dom()
+    }
+
+    fn drive(&mut self) {
+        while let Some(tok) = self.tokenizer.next_available() {
+            if feed_with_tokenizer_feedback(&mut self.builder, &mut self.tokenizer, tok) {
+                break;
+            }
+        }
+        self.tokenizer.compact_input();
+    }
+}
+
 /// Convenience: tokenize `src` and run tree construction to completion.
 pub fn build(src: &str) -> Dom {
     let mut builder = TreeBuilder::new();
