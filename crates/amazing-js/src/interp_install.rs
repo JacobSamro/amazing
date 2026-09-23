@@ -499,6 +499,9 @@ impl Interpreter {
                 Self::native("isFinite", native_number_is_finite, &self.function_proto),
             );
         }
+        self.install_std_string();
+        self.install_std_number_math();
+        self.install_std_json_global();
     }
     fn define_global(&self, n: &str, v: JsValue) {
         self.global_obj.borrow_mut().set_own(n, v.clone());

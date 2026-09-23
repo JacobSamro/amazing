@@ -1118,90 +1118,13 @@ fn native_define_property(
         Some(JsValue::Object(object)) => object.clone(),
         _ => return Err(Throw::type_error("defineProperty target is not an object")),
     };
-    let descriptor = match args.get(2) {
-        Some(JsValue::Object(object)) => object.clone(),
-        _ => return Err(Throw::type_error("property descriptor is not an object")),
-    };
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
-    if let Some(result) = binary_define_index_object(i, &target, &key, &descriptor) {
-        // DefinePropertyOrThrow: a rejected integer-indexed definition throws here.
-        if !result? { return Err(Throw::type_error("could not define TypedArray index")); }
-        return Ok(JsValue::Object(target));
-    }
-    let has = |name: &str| descriptor.borrow().has_property(name);
-    let accessor = has("get") || has("set");
-    let data = has("value") || has("writable");
-    if accessor && data {
-        return Err(Throw::type_error(
-            "descriptor mixes data and accessor fields",
-        ));
-    }
-    if target.borrow().own_prop(&key).is_none() && !target.borrow().extensible {
-        return Err(Throw::type_error("object is not extensible"));
-    }
-    let value = if has("value") {
-        i.get_prop(&JsValue::Object(descriptor.clone()), "value")?
-    } else {
-        JsValue::Undefined
-    };
-    let writable = if has("writable") {
-        i.get_prop(&JsValue::Object(descriptor.clone()), "writable")?
-            .to_boolean()
-    } else {
-        false
-    };
-    let enumerable = if has("enumerable") {
-        i.get_prop(&JsValue::Object(descriptor.clone()), "enumerable")?
-            .to_boolean()
-    } else {
-        false
-    };
-    let configurable = if has("configurable") {
-        i.get_prop(&JsValue::Object(descriptor.clone()), "configurable")?
-            .to_boolean()
-    } else {
-        false
-    };
-    let getter = if has("get") {
-        match i.get_prop(&JsValue::Object(descriptor.clone()), "get")? {
-            JsValue::Undefined => None,
-            value => Some(
-                callable_function(&value)
-                    .map(Box::new)
-                    .ok_or_else(|| Throw::type_error("property getter is not callable"))?,
-            ),
+    let descriptor = args.get(2).cloned().unwrap_or(JsValue::Undefined);
         }
-    } else {
-        None
-    };
-    let setter = if has("set") {
-        match i.get_prop(&JsValue::Object(descriptor.clone()), "set")? {
-            JsValue::Undefined => None,
-            value => Some(
-                callable_function(&value)
-                    .map(Box::new)
-                    .ok_or_else(|| Throw::type_error("property setter is not callable"))?,
-            ),
-        }
-    } else {
-        None
-    };
-    let property = Property {
-        value,
-        writable: if accessor { false } else { writable },
-        enumerable,
-        configurable,
-        getter,
-        setter,
-    };
-    if let Some(result) = binary_define_index(i, &target, &key, &property) { result?; return Ok(JsValue::Object(target)); }
-    if let Some(name) = key.as_string() {
-        if i.legacy_define(&target, name, &property)? { return Ok(JsValue::Object(target)); }
     }
-    target
-        .borrow_mut()
-        .define(&key, property)
-        .map_err(|_| Throw::type_error("could not define property"))?;
+    if !i.define_own_property(&target, &key, &descriptor)? {
+        return Err(Throw::type_error("could not define property"));
+    }
     Ok(JsValue::Object(target))
 }
 
