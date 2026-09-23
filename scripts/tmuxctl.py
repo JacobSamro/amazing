@@ -250,6 +250,10 @@ LANE_GRANTS["js-binary"].append("crates/amazing-js/src/interp_install.rs")
 # JSB-1: value.rs::string_to_number StringNumericLiteral fix (value.rs already granted).
 # JSVM-3: generator/async frame state variant in value.rs and the bytecode
 # generator call hook in interp.rs (both already granted to js-vm). ADDED LINES ONLY.
+# ipc: root Cargo.lock entries for its own crates (cargo-written, additions only).
+LANE_GRANTS.setdefault("ipc", []).append("Cargo.lock")
+LANE_GRANTS.setdefault("compositor", []).append("Cargo.lock")
+LANE_GRANTS.setdefault("storage", []).append("Cargo.lock")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
