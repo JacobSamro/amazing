@@ -599,6 +599,90 @@ pub(crate) fn raster_command_range(
     true
 }
 
+/// Paint one independent command directly into a tile in untransformed
+/// document coordinates. Group state is deliberately absent: the compositor
+/// owns its transform, opacity and clip property trees.
+pub(crate) fn raster_raw_item(
+    command: &PaintCommand<'_>,
+    target: &mut Surface,
+    tile_origin: (i32, i32),
+    text: &dyn TextSystem,
+    images: &dyn ImageProvider,
+) -> bool {
+    match command {
+        PaintCommand::PaintDecorations(box_, background) => {
+            let mut local = LayoutBox::new(
+                box_.node,
+                box_.display,
+                box_.style.clone(),
+                box_.font_size,
+                box_.line_height,
+            );
+            let shift = |mut rect: amazing_layout::Rect| {
+                rect.x -= tile_origin.0 as f32;
+                rect.y -= tile_origin.1 as f32;
+                rect
+            };
+            local.border_box = shift(box_.border_box);
+            local.content_box = shift(box_.content_box);
+            local.padding = box_.padding;
+            local.border = box_.border;
+            local.replaced_size = box_.replaced_size;
+            local.svg_root = box_.svg_root;
+            let color = resolve_text_color(&local.style);
+            let clip = ClipRect::viewport(target);
+            let mut budget = 0;
+            paint_decorations(
+                target,
+                &local,
+                color,
+                images,
+                background,
+                clip,
+                &mut budget,
+            )
+        }
+        PaintCommand::PaintContent(box_) => {
+            if box_.lines.iter().any(|line| !line.replaced.is_empty()) {
+                return false;
+            }
+            let mut local = LayoutBox::new(
+                box_.node,
+                box_.display,
+                box_.style.clone(),
+                box_.font_size,
+                box_.line_height,
+            );
+            let (ox, oy) = (tile_origin.0 as f32, tile_origin.1 as f32);
+            local.lines = box_.lines.iter().map(|line| {
+                let mut glyphs = line.glyphs.clone();
+                for glyph in &mut glyphs {
+                    glyph.x -= ox;
+                    if glyph.writing_mode.is_vertical_flow() { glyph.y -= oy; }
+                }
+                let mut decorations = line.decorations.clone();
+                for decoration in &mut decorations {
+                    decoration.x -= ox;
+                    decoration.y -= oy;
+                }
+                amazing_layout::LineBox {
+                    y_top: line.y_top - oy,
+                    height: line.height,
+                    baseline: line.baseline - oy,
+                    words: Vec::new(),
+                    glyphs,
+                    decorations,
+                    replaced: Vec::new(),
+                }
+            }).collect();
+            let clip = ClipRect::viewport(target);
+            paint_shaped_lines(target, &local, text, images, clip);
+            true
+        }
+        _ => false,
+    }
+}
+
 fn paint_decorations(
     surface: &mut Surface,
     box_: &LayoutBox,

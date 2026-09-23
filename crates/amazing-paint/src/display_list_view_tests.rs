@@ -130,3 +130,71 @@ fn property_ids_and_direct_hints_follow_nested_state() {
         assert!((item.properties.scroll as usize) < view.scrolls().len());
     }
 }
+#[test]
+fn raw_tile_raster_skips_group_effects_and_uses_tile_origin() {
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div class='box'></div></body>",
+        "body{margin:0}.box{width:20px;height:20px;background:red;transform:translate(5px,0);opacity:.5}",
+        48.0,
+        &FallbackTextSystem::new(),
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::new(&root, 48, 48, &text, &crate::paint::NoImages, &crate::controls::NoControls);
+    let item = view.items().iter().find(|item| item.kind == PaintItemKind::Decorations && item.properties.transform != 0).unwrap();
+    let mut tile = Surface::new(8, 8);
+    view.raster_raw_local(item.index..item.index + 1, &mut tile, (10, 0)).unwrap();
+    assert_eq!(tile.get_pixel(2, 2), Some([255, 0, 0, 255]));
+    let mut baked = Surface::new(48, 48);
+    assert!(view.raster_range(item.index..item.index + 1, &mut baked, (0, 0), PaintBounds::viewport(48, 48)));
+    assert_ne!(baked.get_pixel(2, 2), Some([255, 0, 0, 255]));
+}
+
+#[test]
+fn raw_tile_rejects_unseparable_control_without_mutating_target() {
+    let root = amazing_layout::layout_document_with_text(
+        "<body><input type='checkbox'></body>", "body{margin:0}", 48.0, &FallbackTextSystem::new(),
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::new(&root, 48, 48, &text, &crate::paint::NoImages, &crate::controls::NoControls);
+    let item = view.items().iter().find(|item| item.kind == PaintItemKind::Control).unwrap();
+    let mut tile = Surface::new(8, 8);
+    tile.clear([7, 11, 13, 17]);
+    let before = tile.clone();
+    assert_eq!(view.raster_raw_local(item.index..item.index + 1, &mut tile, (0, 0)), Err(RawRasterError::UnseparableItem(item.index)));
+    assert_eq!(tile, before);
+}
+
+#[test]
+fn raw_tile_rasterizes_shaped_text_at_tile_origin() {
+    let root = amazing_layout::layout_document_with_text(
+        "<body><p>TEXT</p></body>", "body{margin:0}p{margin:0;color:black}", 48.0, &FallbackTextSystem::new(),
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::new(&root, 48, 48, &text, &crate::paint::NoImages, &crate::controls::NoControls);
+    let item = view.items().iter().find(|item| item.kind == PaintItemKind::Content && matches!(&view.commands[view.item_commands[item.index]], PaintCommand::PaintContent(box_) if box_.lines.iter().any(|line| !line.glyphs.is_empty()))).unwrap();
+    let mut raw = Surface::new(48, 48);
+    view.raster_raw_local(item.index..item.index + 1, &mut raw, (0, 0)).unwrap();
+    let mut baked = Surface::new(48, 48);
+    assert!(view.raster_range(item.index..item.index + 1, &mut baked, (0, 0), PaintBounds::viewport(48, 48)));
+    assert!(raw.pixels.chunks_exact(4).any(|pixel| pixel[3] != 0));
+    assert_eq!(raw.pixels, baked.pixels);
+}
+
+#[test]
+fn raw_tile_leaves_ancestor_clip_to_compositor() {
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div class='outer'><div class='inner'></div></div></body>",
+        "body{margin:0}.outer{width:10px;height:10px;overflow:hidden}.inner{width:20px;height:10px;background:blue}",
+        32.0,
+        &FallbackTextSystem::new(),
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::new(&root, 32, 32, &text, &crate::paint::NoImages, &crate::controls::NoControls);
+    let item = view.items().iter().find(|item| item.kind == PaintItemKind::Decorations && item.properties.clip != 0 && matches!(&view.commands[view.item_commands[item.index]], PaintCommand::PaintDecorations(box_, _) if box_.style.get("background-color") == Some("blue"))).unwrap();
+    let mut raw = Surface::new(20, 10);
+    view.raster_raw_local(item.index..item.index + 1, &mut raw, (0, 0)).unwrap();
+    assert_eq!(raw.get_pixel(15, 2), Some([0, 0, 255, 255]));
+    let mut baked = Surface::new(20, 10);
+    assert!(view.raster_range(item.index..item.index + 1, &mut baked, (0, 0), PaintBounds::viewport(20, 10)));
+    assert_eq!(baked.get_pixel(15, 2), Some([0, 0, 0, 0]));
+}

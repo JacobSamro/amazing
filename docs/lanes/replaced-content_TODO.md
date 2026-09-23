@@ -815,3 +815,22 @@ passes**, also with identical hashes to RC-15 after. Reports are in
 `tests/wpt-replaced-content/rc16/`. The fixed-base gate snapshot was
 `dd2fbee` with root lock SHA-256 `ADD98EE1…` and standalone shell lock
 `EA93BD5…`; it is a local test snapshot, not a pushed branch.
+
+## RC-17a — raw local-space compositor tiles
+
+`DisplayListView::raster_raw_local` draws a selected item range into a caller's
+tile using an untransformed document-space tile origin. It leaves group
+transform, opacity and overflow clipping to the compositor. Decoration and
+shaped-text items are separable; controls and replaced-fragment content return
+an explicit `UnseparableItem` error without changing the target. This is an
+additive path; `raster_range` retains its full-paint behavior.
+
+Fixed base `9571c04`, source commit `ca868ad`: win-002 locked paint nextest
+**98/98**, workspace **1,918 passed / 5 skipped**, and workspace doctests
+**2/2**. The pinned WPT focused selection stayed **10 pass / 2 mismatch**;
+the retained SVG selection stayed **25 pass / 9 mismatch / 1 crash**. The SVG
+crash is the same reference page script error before and after. All **47**
+per-case result records, including rendered image hashes, matched exactly;
+there were zero pass losses. Reports, source hashes and comparison are in
+`tests/wpt-replaced-content/rc17a/`. Generated-box ordering and URL-keyed
+images remain RC-17b after CSS-13 and LAYOUT-13 merge.

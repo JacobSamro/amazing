@@ -17,6 +17,17 @@ use crate::surface::Surface;
 /// An RGBA8 destination for rasterized paint items.
 pub type RgbaSurface = Surface;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RawRasterError {
+    InvalidRange,
+    InvalidTile,
+    TileTooLarge,
+    /// This item requires the existing baked-pixel path until it can be
+    /// separated from its command context without changing its pixels.
+    UnseparableItem(usize),
+    RasterFailed(usize),
+}
+
 /// Bounds in untransformed document paint coordinates.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PaintBounds {
@@ -334,6 +345,47 @@ impl<'a> DisplayListView<'a> {
             offset,
             clip,
         )
+    }
+
+    /// Rasterize separable items into a tile whose top-left is `tile_origin`
+    /// in untransformed document coordinates. The caller applies the item
+    /// property state; this path skips group transforms, opacity and clips.
+    /// Unsupported items fail explicitly and leave `target` unchanged.
+    pub fn raster_raw_local(
+        &self,
+        items: Range<usize>,
+        target: &mut RgbaSurface,
+        tile_origin: (i32, i32),
+    ) -> Result<(), RawRasterError> {
+        if items.start > items.end || items.end > self.items.len() {
+            return Err(RawRasterError::InvalidRange);
+        }
+        let Some(pixels) = (target.width as usize).checked_mul(target.height as usize) else {
+            return Err(RawRasterError::TileTooLarge);
+        };
+        if pixels > 16 * 1024 * 1024 {
+            return Err(RawRasterError::TileTooLarge);
+        }
+        if pixels.checked_mul(4) != Some(target.pixels.len()) {
+            return Err(RawRasterError::InvalidTile);
+        }
+        for index in items.clone() {
+            let command = &self.commands[self.item_commands[index]];
+            if !matches!(command, PaintCommand::PaintDecorations(..))
+                && !matches!(command, PaintCommand::PaintContent(box_) if box_.lines.iter().all(|line| line.replaced.is_empty()))
+            {
+                return Err(RawRasterError::UnseparableItem(index));
+            }
+        }
+        let mut result = target.clone();
+        for index in items {
+            let command = &self.commands[self.item_commands[index]];
+            if !paint::raster_raw_item(command, &mut result, tile_origin, self.text, self.images) {
+                return Err(RawRasterError::RasterFailed(index));
+            }
+        }
+        *target = result;
+        Ok(())
     }
 }
 
