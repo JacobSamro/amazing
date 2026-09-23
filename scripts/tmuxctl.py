@@ -94,8 +94,9 @@ LANE_PATHS = {
     ],
     "js-runtime": [
         "crates/amazing-js/src/interp.rs",
-        "crates/amazing-js/src/interp_builtins.rs",
-        "crates/amazing-js/src/interp_tests.rs",
+        # Every interp_* module split out of interp.rs (builtins, tests,
+        # bindings, ...) is runtime code; a prefix keeps new splits in-lane.
+        "crates/amazing-js/src/interp_",
         "crates/amazing-js/src/value.rs",
         "crates/amazing-js/src/env.rs",
         "crates/amazing-js/src/vm/",
