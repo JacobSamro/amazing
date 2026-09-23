@@ -225,6 +225,9 @@ LANE_GRANTS.setdefault("text", []).append("crates/amazing/src/page.rs")
 # TEXT-6: the web-font loading pipeline. page.rs font registration/loading
 # functions only (already granted above); font_loader.rs is text's outright.
 LANE_GRANTS["text"].append("crates/amazing/src/font_loader.rs")
+# TEXT-6: per-stylesheet URLs into load_page_text (call sites in render.rs and
+# gui.rs only), and FontFaceRule/parse_font_faces descriptors in amazing-css (additive).
+LANE_GRANTS["text"] += ["crates/amazing/src/cmd/render.rs", "crates/amazing/src/gui.rs", "crates/amazing-css/src/parser.rs"]
 # HTML-15 (ADR 0004): the amazing-html -> amazing-encoding lockfile edge must
 # land in the same commit as the manifest change, or --locked breaks.
 # ADDITIONS ONLY: the one dependency line.
