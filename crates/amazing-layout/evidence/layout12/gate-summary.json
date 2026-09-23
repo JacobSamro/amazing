@@ -1,0 +1,291 @@
+{
+  "base": "7c6824b8a12a50ea6ba99688678b98617bd27f26",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "broad": {
+    "before": {
+      "pass": 86,
+      "mismatch": 114,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after": {
+      "pass": 93,
+      "mismatch": 107,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [
+      "css-flexbox__flexbox_flex-0-0-N-shrink.html",
+      "css-flexbox__flexbox_flex-N-0-N-shrink.html",
+      "css-flexbox__flexbox_flex-0-0-auto-shrink.html",
+      "css-flexbox__flexbox_flex-N-0-Npercent-shrink.html",
+      "css-grid__abspos__grid-abspos-staticpos-align-items-end.html",
+      "css-grid__abspos__grid-abspos-staticpos-justify-self-rtl-003.html",
+      "css-grid__abspos__grid-abspos-staticpos-justify-self-002.html"
+    ],
+    "losses": [],
+    "consensus_gains": [
+      "css-flexbox__flexbox_flex-0-0-N-shrink.html",
+      "css-flexbox__flexbox_flex-N-0-N-shrink.html",
+      "css-flexbox__flexbox_flex-0-0-auto-shrink.html",
+      "css-flexbox__flexbox_flex-N-0-Npercent-shrink.html",
+      "css-grid__abspos__grid-abspos-staticpos-align-items-end.html"
+    ],
+    "consensus_losses": [],
+    "stable_repetitions": true
+  },
+  "retained": [
+    {
+      "suite": "flex-grid",
+      "before": {
+        "pass": 24,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": [],
+      "changed_actual_hashes": 0
+    },
+    {
+      "suite": "geometry",
+      "before": {
+        "pass": 41,
+        "mismatch": 20,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 41,
+        "mismatch": 20,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": [],
+      "changed_actual_hashes": 0
+    },
+    {
+      "suite": "tables",
+      "before": {
+        "pass": 10,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 10,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": [],
+      "changed_actual_hashes": 0
+    },
+    {
+      "suite": "floats",
+      "before": {
+        "pass": 6,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 6,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": [],
+      "changed_actual_hashes": 0
+    },
+    {
+      "suite": "block-collapse",
+      "before": {
+        "pass": 9,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 9,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": [],
+      "changed_actual_hashes": 0
+    },
+    {
+      "suite": "position",
+      "before": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": [],
+      "changed_actual_hashes": 0
+    },
+    {
+      "suite": "text-flow",
+      "before": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": [],
+      "changed_actual_hashes": 0
+    },
+    {
+      "suite": "contents",
+      "before": {
+        "pass": 6,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 6,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": [],
+      "changed_actual_hashes": 0
+    },
+    {
+      "suite": "paint-compositing",
+      "before": {
+        "pass": 24,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": [],
+      "changed_actual_hashes": 0
+    },
+    {
+      "suite": "images",
+      "before": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": [],
+      "changed_actual_hashes": 0
+    }
+  ],
+  "windows_gate": {
+    "host": "win-002",
+    "layout_nextest": {
+      "passed": 238,
+      "skipped": 0
+    },
+    "layout_doctests": {
+      "passed": 0
+    },
+    "workspace_nextest": {
+      "passed": 1843,
+      "skipped": 5
+    },
+    "workspace_doctests": {
+      "passed": 2
+    }
+  },
+  "font": {
+    "css12_base": "7a1e31e",
+    "before": {
+      "pass": 0,
+      "mismatch": 1,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after": {
+      "pass": 1,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "differing_pixels_before": 424,
+    "differing_pixels_after": 0
+  }
+}

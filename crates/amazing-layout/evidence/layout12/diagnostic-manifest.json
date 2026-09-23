@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "layout12-diagnostic",
+    "source": "frozen-broad-200",
+    "count": 2
+  },
+  "sparse_paths": [
+    "css/css-flexbox",
+    "css/css-grid"
+  ],
+  "tests": [
+    {
+      "id": "css-flexbox__flexbox_flex-0-0-N-shrink.html",
+      "test": "css/css-flexbox/flexbox_flex-0-0-N-shrink.html"
+    },
+    {
+      "id": "css-grid__abspos__grid-abspos-staticpos-justify-self-002.html",
+      "test": "css/css-grid/abspos/grid-abspos-staticpos-justify-self-002.html"
+    }
+  ]
+}

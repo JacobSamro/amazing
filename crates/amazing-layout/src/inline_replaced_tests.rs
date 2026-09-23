@@ -106,6 +106,19 @@ fn inline_block_controls_and_images_remain_on_the_text_line() {
 }
 
 #[test]
+fn nowrap_keeps_atomic_only_inline_run_on_one_line() {
+    let html = "<body> <span>one</span><span>two</span><span>three</span><span>four</span></body>";
+    let css = "body{width:120px;white-space:nowrap} span{display:inline-block;width:40px;height:20px}";
+    for shaped in [false, true] {
+        let nowrap = layout(html, css, None, shaped);
+        assert_eq!(nowrap.lines.len(), 1, "shaped={shaped}");
+
+        let normal = layout(html, &css.replace("white-space:nowrap", "white-space:normal"), None, shaped);
+        assert_eq!(normal.lines.len(), 2, "shaped={shaped}");
+    }
+}
+
+#[test]
 fn defaults_and_html_sizing_attributes_are_deterministic() {
     let root = layout(
         "<body><input size=5><input type=checkbox><input type=radio><button></button><select></select><textarea cols=4 rows=3></textarea></body>",
