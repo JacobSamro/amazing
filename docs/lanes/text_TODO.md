@@ -255,3 +255,39 @@ Missing glyphs use CSS Values 4 defaults: `ch` is 0.5em (1em for upright
 vertical text), `ic` is 1em, `ex` is 0.5em, and `cap` uses the selected font's
 ascent when cap height is unavailable. The default text system provides
 stable synthetic measures and `normal` line height from its metrics.
+
+## TEXT-11: contingent object breaks in the fallback
+
+The provider and `FallbackTextSystem` now share the UAX #14 LB20 boundary
+policy for U+FFFC. The fallback supplies opportunities around adjacent atomic
+inlines while preserving the higher-priority punctuation and nowrap rules.
+On the combined TEXT-7–10 plus LAYOUT-14 item 0 head, this resolves both
+`inline_replaced_tests` regressions. Linux workspace: 2,004 passed, five
+skipped; workspace doctests: two passed. The Windows workspace and doctest
+gates also passed. Commit: `7f378e2` on `2b11484`.
+
+## TEXT-12: remaining pinned font and writing-mode failure audit
+
+On `origin/dev` `1d53f79`, the four remaining eight-case font-face mismatches
+request fractional `font-stretch` values and oblique angles from
+`css/css-fonts/matching/font-matching.css`. Layout's
+`box_tree.rs::text_style` still passes `stretch_percent: 0.0` and
+`oblique_angle_degrees: None`, so the provider's exact Fonts 4 ranking cannot
+be exercised by these pages yet. The remaining `first-available-font-002`
+failure uses `ch`; layout does not yet call the provider's
+`font_relative_metrics` contract. Both are routed to LAYOUT-14 items 5 and 1.
+
+The other font-selection mismatch compares Arial and Times rendering of nine
+PUA codepoints. The installed `arial.ttf` and `times.ttf` on win-001 both lack
+all nine cmap entries, and the WPT mismatch-reference image is identical to
+the test image (zero differing pixels). The provider already prohibits generic
+and installed fallback for PUA; with those installed faces, CSS Fonts 4
+requires the same missing-glyph result on both sides. A controlled font
+fixture is needed for that case to discriminate implementations.
+
+The remaining vertical-lr Ahem placement, nested upright bidi, sideways flex,
+orthogonal baseline, text-combine and ruby pairing/overhang cases exercise
+layout inline geometry or ruby structure. Exact cases and paths are recorded
+in `.agents/text/questions.md` for the layout lane. The current reported
+vertical score is 4/7, while the last committed seven-case report is 5/7;
+the changed case needs its current report before provider attribution.
