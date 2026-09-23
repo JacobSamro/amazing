@@ -238,6 +238,9 @@ LANE_GRANTS["js-binary"].append("crates/amazing-js/src/value.rs")
 # JSB-1: the descriptor/define/delete/has/own-keys paths live in
 # interp_builtins.rs too. Same early-return exotic hook calls, ADDED LINES ONLY.
 LANE_GRANTS["js-binary"].append("crates/amazing-js/src/interp_builtins.rs")
+# JSB-1 shared fixes found by Test262: Throw::error realm-correct error objects
+# and native function name/length attributes. Minimal; read the diff at merge.
+LANE_GRANTS["js-binary"].append("crates/amazing-js/src/interp_install.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
