@@ -81,6 +81,9 @@ pub fn bad_port(url: &HttpUrl) -> bool {
 /// Mixed Content Level 2 §2. Secure Contexts treats loopback and localhost
 /// HTTP URLs as potentially trustworthy. Only HTTP(S) is representable here.
 pub fn a_priori_authenticated(url: &HttpUrl) -> bool {
+    if url.as_parsed().scheme() == "data" {
+        return true;
+    }
     if url.is_secure() {
         return true;
     }
@@ -180,35 +183,7 @@ pub fn check_redirect_corp(
 }
 
 fn mime_essence(headers: &HeaderList) -> Option<String> {
-    // Fetch extract-a-MIME-type uses the last valid Content-Type. We need only
-    // the essence for these checks; parameters have no effect on the result.
-    let mut last = None;
-    for (name, value) in headers.iter() {
-        if name != "content-type" {
-            continue;
-        }
-        for item in value.split(',') {
-            let essence = item
-                .split(';')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_ascii_lowercase();
-            let Some((kind, subtype)) = essence.split_once('/') else {
-                continue;
-            };
-            if !kind.is_empty()
-                && !subtype.is_empty()
-                && crate::headers::token(kind)
-                && crate::headers::token(subtype)
-                && kind != "*"
-                && subtype != "*"
-            {
-                last = Some(essence);
-            }
-        }
-    }
-    last
+    crate::mime::extract_mime_type(headers).map(|record| record.essence())
 }
 fn javascript_mime(mime: &str) -> bool {
     matches!(

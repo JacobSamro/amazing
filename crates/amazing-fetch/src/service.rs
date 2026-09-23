@@ -53,6 +53,7 @@ struct Task {
     headers: HeaderList,
     cookie: String,
     cacheable: bool,
+    revalidating: bool,
     credentials: CredentialsMode,
     client_origin: Origin,
     head: Option<(u16, HeaderList)>,
@@ -101,6 +102,20 @@ impl NetworkService {
         }
         let id = ServiceId(self.next_id);
         self.next_id = self.next_id.wrapping_add(1).max(1);
+        if request.url().as_parsed().scheme() == "data" {
+            let mut policy = request.policy_request()?;
+            policy.security = context.security;
+            policy.csp = context.csp;
+            policy.csp_destination = context.csp_destination;
+            let result = policy
+                .prepare()
+                .and_then(|_| crate::data_url::data_response(policy.url().as_parsed()))
+                .and_then(|internal| filter_response(&policy, &internal))
+                .map_err(ApiError::Network)
+                .and_then(ApiResponse::from_policy);
+            self.ready.push(ServiceEvent::Finished { id, result });
+            return Ok(id);
+        }
         let url = request.url().serialize();
         let method = request.method().to_owned();
         let client_origin = request.origin().clone();
@@ -125,6 +140,8 @@ impl NetworkService {
         };
         let headers = request.headers.to_header_list()?;
         let cacheable = method == "GET" && request.cache == ApiCache::Default;
+        let mut revalidating = false;
+        let mut conditional_headers = HeaderList::default();
         if cacheable {
             let cache_request = CacheRequest {
                 uri: &url,
@@ -132,28 +149,44 @@ impl NetworkService {
                 headers: &headers,
                 cookie: &cookie,
             };
-            if let CacheLookup::Fresh(entry) =
-                self.cache
-                    .lookup(&cache_request, context.now_unix)
-                    .map_err(|_| ApiError::Network(FetchError::Transport))?
+            match self
+                .cache
+                .lookup(&cache_request, context.now_unix)
+                .map_err(|_| ApiError::Network(FetchError::Transport))?
             {
-                let cached = entry.response_at(context.now_unix);
-                let mut policy = request.policy_request()?;
-                policy.security = context.security;
-                policy.csp = context.csp.clone();
-                policy.csp_destination = context.csp_destination;
-                policy.prepare().map_err(ApiError::Network)?;
-                let internal = InternalResponse {
-                    status: cached.status,
-                    status_text: String::new(),
-                    headers: cached.headers,
-                    body: Some(cached.body),
-                };
-                let result = filter_response(&policy, &internal)
-                    .map_err(ApiError::Network)
-                    .and_then(ApiResponse::from_policy);
-                self.ready.push(ServiceEvent::Finished { id, result });
-                return Ok(id);
+                CacheLookup::Fresh(entry) => {
+                    let cached = entry.response_at(context.now_unix);
+                    let mut policy = request.policy_request()?;
+                    policy.security = context.security;
+                    policy.csp = context.csp.clone();
+                    policy.csp_destination = context.csp_destination;
+                    policy.prepare().map_err(ApiError::Network)?;
+                    let internal = InternalResponse {
+                        status: cached.status,
+                        status_text: String::new(),
+                        headers: cached.headers,
+                        body: Some(cached.body),
+                    };
+                    let result = filter_response(&policy, &internal)
+                        .map_err(ApiError::Network)
+                        .and_then(ApiResponse::from_policy);
+                    self.ready.push(ServiceEvent::Finished { id, result });
+                    return Ok(id);
+                }
+                CacheLookup::Validate {
+                    headers: validators,
+                    ..
+                } => {
+                    for (name, value) in validators.iter() {
+                        if headers.get(name).is_none() {
+                            conditional_headers
+                                .append(name, value)
+                                .map_err(ApiError::Network)?;
+                            revalidating = true;
+                        }
+                    }
+                }
+                CacheLookup::Miss => {}
             }
         }
         let pending = PendingFetchApi::start_with_context(
@@ -164,6 +197,7 @@ impl NetworkService {
             context.csp.clone(),
             context.csp_destination,
             (!cookie.is_empty()).then(|| cookie.clone()),
+            revalidating.then_some(conditional_headers),
         )?;
         self.active.insert(
             id,
@@ -175,6 +209,7 @@ impl NetworkService {
                 headers,
                 cookie,
                 cacheable,
+                revalidating,
                 credentials: request.credentials,
                 client_origin,
                 head: None,
@@ -279,9 +314,42 @@ impl NetworkService {
                     },
                 );
             }
+            let wire_done = matches!(&event, NetEvent::Done { .. });
             result.push(ServiceEvent::Network { id, event });
-            if let Some(outcome) = finished {
+            if let Some(mut outcome) = finished {
                 if let Some(task) = self.active.remove(&id) {
+                    if task.revalidating && wire_done {
+                        if let Some((304, response_headers)) = &task.head {
+                            let request = CacheRequest {
+                                uri: &task.url,
+                                method: &task.method,
+                                headers: &task.headers,
+                                cookie: &task.cookie,
+                            };
+                            outcome = self
+                                .cache
+                                .update_304(
+                                    &request,
+                                    response_headers,
+                                    task.context.now_unix,
+                                    task.context.now_unix,
+                                )
+                                .ok()
+                                .flatten()
+                                .ok_or(ApiError::Network(FetchError::Transport))
+                                .and_then(|merged| {
+                                    let internal = InternalResponse {
+                                        status: merged.status,
+                                        status_text: String::new(),
+                                        headers: merged.headers,
+                                        body: Some(merged.body),
+                                    };
+                                    filter_response(task.pending.policy(), &internal)
+                                        .map_err(ApiError::Network)
+                                        .and_then(ApiResponse::from_policy)
+                                });
+                        }
+                    }
                     if task.cacheable && outcome.as_ref().is_ok_and(|r| !r.redirected) {
                         if let Some((status, response_headers)) = task.head {
                             let request = CacheRequest {
@@ -360,6 +428,7 @@ mod tests {
     #[test]
     fn service_drives_network_then_serves_fresh_cache_entry() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let (release, hold) = std::sync::mpsc::channel();
         let url = HttpUrl::parse(&format!(
             "http://127.0.0.1:{}/cached",
             listener.local_addr().unwrap().port()
@@ -374,6 +443,7 @@ mod tests {
                     b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nCache-Control: max-age=60\r\n\r\nok",
                 )
                 .unwrap();
+            hold.recv_timeout(Duration::from_secs(5)).unwrap();
         });
         let mut service = NetworkService::new(DispatchLimits::default());
         let context = ClientContext {
@@ -396,9 +466,10 @@ mod tests {
             if finished {
                 break;
             }
-            thread::yield_now();
+            thread::sleep(Duration::from_millis(1));
         }
         assert!(finished);
+        release.send(()).unwrap();
         server.join().unwrap();
         let second = service.start_at(request(&url), context, now).unwrap();
         assert!(service.step(1, now).into_iter().any(|event| matches!(event, ServiceEvent::Finished { id, result: Ok(response) } if id == second && response.status == 200)));
@@ -465,9 +536,112 @@ mod tests {
             if finished {
                 break;
             }
-            thread::yield_now();
+            thread::sleep(Duration::from_millis(1));
         }
         assert!(finished);
         server.join().unwrap();
+    }
+
+    #[test]
+    fn service_revalidates_304_and_reuses_stored_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = HttpUrl::parse(&format!(
+            "http://127.0.0.1:{}/etag",
+            listener.local_addr().unwrap().port()
+        ))
+        .unwrap();
+        let (release, hold) = std::sync::mpsc::channel();
+        let server = thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut bytes = [0; 2048];
+            let first = socket.read(&mut bytes).unwrap();
+            assert!(String::from_utf8_lossy(&bytes[..first]).starts_with("GET /etag "));
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nCache-Control: max-age=0\r\nETag: \"v1\"\r\n\r\nbody").unwrap();
+            let second = socket.read(&mut bytes).unwrap();
+            let conditional = String::from_utf8_lossy(&bytes[..second]).to_ascii_lowercase();
+            assert!(
+                conditional.contains("if-none-match: \"v1\"\r\n"),
+                "{conditional}"
+            );
+            socket.write_all(b"HTTP/1.1 304 Not Modified\r\nCache-Control: max-age=60\r\nETag: \"v1\"\r\n\r\n").unwrap();
+            hold.recv_timeout(Duration::from_secs(5)).unwrap();
+        });
+        let mut service = NetworkService::new(DispatchLimits::default());
+        let now = Instant::now();
+        for (wall, expected_body) in [
+            (100, b"body".as_slice()),
+            (101, b"body".as_slice()),
+            (102, b"body".as_slice()),
+        ] {
+            let mut incoming = request(&url);
+            if wall == 101 {
+                incoming.mode = crate::RequestMode::NoCors;
+            }
+            let id = service
+                .start_at(
+                    incoming,
+                    ClientContext {
+                        now_unix: wall,
+                        ..ClientContext::default()
+                    },
+                    now,
+                )
+                .unwrap();
+            let mut finished = false;
+            for tick in 0..5000 {
+                for event in service.step(8192, now + Duration::from_millis(tick)) {
+                    if let ServiceEvent::Finished { id: found, result } = event {
+                        assert_eq!(found, id);
+                        let mut response = result.unwrap_or_else(|error| {
+                            panic!("wall={wall} cache={} error={error:?}", service.cache.len())
+                        });
+                        assert_eq!(response.status, 200);
+                        assert_eq!(response.body.bytes().unwrap(), expected_body);
+                        finished = true;
+                    }
+                }
+                if finished {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(1));
+            }
+            assert!(finished);
+        }
+        release.send(()).unwrap();
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn service_serves_data_without_dispatch() {
+        let base = HttpUrl::parse("https://example.test/").unwrap();
+        let input: Vec<u16> = "data:text/plain,hello".encode_utf16().collect();
+        let request = ApiRequest::new(
+            ApiRequestInput::Url(&input),
+            ApiRequestInit {
+                mode: Some("cors".into()),
+                ..ApiRequestInit::default()
+            },
+            &base,
+            base.origin().clone(),
+        )
+        .unwrap();
+        let mut service = NetworkService::new(DispatchLimits::default());
+        let id = service
+            .start_at(request, ClientContext::default(), Instant::now())
+            .unwrap();
+        let events = service.step(1, Instant::now());
+        assert_eq!(events.len(), 1);
+        match events.into_iter().next().unwrap() {
+            ServiceEvent::Finished { id: found, result } => {
+                assert_eq!(found, id);
+                let mut response = result.unwrap();
+                assert_eq!(response.status, 200);
+                assert_eq!(response.body.bytes().unwrap(), b"hello");
+            }
+            _ => panic!("unexpected wire event"),
+        }
     }
 }

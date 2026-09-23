@@ -132,6 +132,19 @@ impl Request {
             return Err(FetchError::Csp(csp.violations));
         }
         check_request_security(self)?;
+        if self.url().as_parsed().scheme() == "data" {
+            if self.mode == RequestMode::SameOrigin {
+                return Err(FetchError::SameOrigin);
+            }
+            // Fetch main fetch selects scheme fetch before CORS for data:.
+            self.taint = ResponseType::Basic;
+            return Ok(FetchPlan {
+                taint: ResponseType::Basic,
+                credentials: false,
+                preflight: false,
+                referrer: None,
+            });
+        }
         let cross = self.origin != *self.url().origin();
         match self.mode {
             RequestMode::SameOrigin if cross => return Err(FetchError::SameOrigin),
