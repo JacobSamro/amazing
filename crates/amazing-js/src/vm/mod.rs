@@ -98,6 +98,8 @@ enum Instruction {
     Call(Register, Register, Register, Vec<Register>),
     Construct(Register, Register, Vec<Register>),
     Throw(Register),
+    Yield(Register, Register),
+    YieldDelegate(Register, Register),
 }
 
 #[derive(Debug, Clone)]
@@ -109,6 +111,7 @@ struct CompiledFunction {
     params: Vec<String>,
     program: Program,
     is_arrow: bool,
+    is_generator: bool,
 }
 
 #[derive(Debug)]
@@ -140,11 +143,39 @@ struct VmFrame {
     fuel: usize,
     try_stack: Vec<TryHandler>,
     completed: Option<JsValue>,
+    yield_dst: Option<Register>,
+    pending_resume: Option<Abrupt>,
+    delegate: Option<DelegateState>,
+    delegate_input: Option<(u8, JsValue)>,
+}
+
+struct DelegateState {
+    iterator: JsValue,
+    array_index: Option<usize>,
 }
 
 enum FrameOutcome {
     Suspended,
+    Yielded(JsValue),
     Completed(JsValue),
+}
+
+pub struct GeneratorState {
+    code: FunctionCode,
+    env: EnvHandle,
+    frame: Option<Box<VmFrame>>,
+    started: bool,
+    executing: bool,
+    completion: JsValue,
+}
+
+impl std::fmt::Debug for GeneratorState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GeneratorState")
+            .field("started", &self.started)
+            .field("executing", &self.executing)
+            .finish()
+    }
 }
 
 enum Abrupt {
@@ -193,6 +224,7 @@ impl Program {
         match self.resume_frame(i, &mut frame, usize::MAX)? {
             FrameOutcome::Completed(value) => Ok(value),
             FrameOutcome::Suspended => unreachable!("unbounded VM slice suspended"),
+            FrameOutcome::Yielded(_) => unreachable!("non-generator program yielded"),
         }
     }
 
@@ -211,6 +243,10 @@ impl Program {
             fuel,
             try_stack: Vec::new(),
             completed: None,
+            yield_dst: None,
+            pending_resume: None,
+            delegate: None,
+            delegate_input: None,
         });
         for name in &self.hoisted {
             consume(&mut frame.fuel)?;
@@ -233,6 +269,15 @@ impl Program {
         if let Some(value) = &frame.completed {
             return Ok(FrameOutcome::Completed(value.clone()));
         }
+        if let Some(abrupt) = frame.pending_resume.take() {
+            if let Some(value) = route_abrupt(
+                &mut frame.try_stack, &mut frame.scopes, &mut frame.env,
+                &mut frame.pc, i, abrupt,
+            )? {
+                frame.completed = Some(value.clone());
+                return Ok(FrameOutcome::Completed(value));
+            }
+        }
         let VmFrame {
             registers,
             references,
@@ -242,6 +287,10 @@ impl Program {
             fuel,
             try_stack,
             completed,
+            yield_dst,
+            pending_resume: _,
+            delegate,
+            delegate_input,
         } = frame.as_mut();
         let mut steps = 0;
         while let Some(op) = self.code.get(*pc) {
@@ -460,6 +509,73 @@ impl Program {
                     Instruction::Throw(src) => {
                         return Ok(Some(Abrupt::Throw(Throw(registers[*src].clone()))))
                     }
+                    Instruction::Yield(dst, _) => {
+                        *yield_dst = Some(*dst);
+                        return Ok(None);
+                    }
+                    Instruction::YieldDelegate(dst, src) => {
+                        if delegate.is_none() {
+                            let iterable = registers[*src].clone();
+                            let array_index = match &iterable {
+                                JsValue::Object(object) if matches!(object.borrow().exotic, crate::value::Exotic::Array) => Some(0),
+                                _ => None,
+                            };
+                            let iterator = if array_index.is_some() {
+                                iterable
+                            } else {
+                                i.custom_iterator(&iterable)?.ok_or_else(|| Throw::type_error("yield* value is not iterable"))?
+                            };
+                            *delegate = Some(DelegateState { iterator, array_index });
+                        }
+                        let state = delegate.as_mut().unwrap();
+                        let (kind, input) = delegate_input.take().unwrap_or((0, JsValue::Undefined));
+                        if state.array_index.is_some() && kind != 0 {
+                            *delegate = None;
+                            return Ok(Some(if kind == 1 {
+                                Abrupt::Return(input)
+                            } else {
+                                Abrupt::Throw(Throw::type_error("iterator has no throw method"))
+                            }));
+                        }
+                        let result = if let Some(index) = state.array_index.as_mut() {
+                            let length_value = i.get_prop(&state.iterator, "length")?;
+                            let length = i.to_number(&length_value)? as usize;
+                            if *index >= length {
+                                generator_result(i, JsValue::Undefined, true)
+                            } else {
+                                let value = i.get_prop(&state.iterator, index.to_string())?;
+                                *index += 1;
+                                generator_result(i, value, false)
+                            }
+                        } else {
+                            let method = i.get_prop(&state.iterator, match kind { 1 => "return", 2 => "throw", _ => "next" })?;
+                            if method.is_undefined() {
+                                *delegate = None;
+                                return Ok(Some(if kind == 1 {
+                                    Abrupt::Return(input)
+                                } else {
+                                    Abrupt::Throw(Throw::type_error(if kind == 2 { "iterator has no throw method" } else { "iterator has no next method" }))
+                                }));
+                            }
+                            i.call_value(&method, state.iterator.clone(), vec![input])?
+                        };
+                        if !result.is_object() {
+                            return Err(Throw::type_error("iterator result is not an object"));
+                        }
+                        let done = i.get_prop(&result, "done")?.to_boolean();
+                        let value = i.get_prop(&result, "value")?;
+                        if done {
+                            *delegate = None;
+                            if kind == 1 {
+                                return Ok(Some(Abrupt::Return(value)));
+                            }
+                            registers[*dst] = value;
+                        } else {
+                            registers[*dst] = value;
+                            *yield_dst = Some(*dst);
+                            *pc -= 1;
+                        }
+                    }
                 }
                 Ok(None)
             })();
@@ -472,6 +588,14 @@ impl Program {
                     *completed = Some(value.clone());
                     return Ok(FrameOutcome::Completed(value));
                 }
+            }
+            if yield_dst.is_some() {
+                let value = match op {
+                    Instruction::Yield(_, src) => registers[*src].clone(),
+                    Instruction::YieldDelegate(dst, _) => registers[*dst].clone(),
+                    _ => unreachable!(),
+                };
+                return Ok(FrameOutcome::Yielded(value));
             }
         }
         let value = if self.is_function {
@@ -536,19 +660,28 @@ impl FunctionCode {
             body: FunctionBody::Bytecode(self.clone()),
             is_arrow: self.0.is_arrow,
             is_async: false,
-            is_generator: false,
+            is_generator: self.0.is_generator,
             env: env.clone(),
             home: None,
             proto_for_new: None,
         });
         object.proto = Some(i.function_proto.clone());
         let handle = Obj(Rc::new(RefCell::new(object)));
+        if self.0.is_generator {
+            handle.borrow_mut().constructible = false;
+        }
         handle
             .borrow_mut()
             .set_own("name", JsValue::str(name.as_str()));
         if !self.0.is_arrow {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(i.object_proto.clone());
+            if self.0.is_generator {
+                prototype.set_own("next", Interpreter::native("next", generator_next, &i.function_proto));
+                prototype.set_own("return", Interpreter::native("return", generator_return, &i.function_proto));
+                prototype.set_own("throw", Interpreter::native("throw", generator_throw, &i.function_proto));
+                prototype.set_own("@@iterator", Interpreter::native("[Symbol.iterator]", generator_iterator, &i.function_proto));
+            }
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
             handle
                 .borrow_mut()
@@ -565,6 +698,7 @@ impl FunctionCode {
         is_arrow: bool,
         this: JsValue,
         args: Vec<JsValue>,
+        generator_proto: Option<Obj>,
     ) -> Result<JsValue, Throw> {
         let bound_this = if is_arrow {
             parent.resolve_this()
@@ -586,7 +720,109 @@ impl FunctionCode {
         }
         i.set_prop(&arguments, "length", JsValue::num(args.len() as f64))?;
         env.declare_var("arguments", arguments)?;
+        if self.0.is_generator {
+            let mut object = JsObject::ordinary();
+            object.proto = generator_proto.or_else(|| Some(i.object_proto.clone()));
+            object.exotic = crate::value::Exotic::Generator(Rc::new(RefCell::new(GeneratorState {
+                code: self.clone(),
+                env,
+                frame: None,
+                started: false,
+                executing: false,
+                completion: JsValue::Undefined,
+            })));
+            return Ok(JsValue::object(object));
+        }
         self.0.program.execute(i, env, DEFAULT_INSTRUCTION_LIMIT)
+    }
+}
+
+fn generator_result(i: &Interpreter, value: JsValue, done: bool) -> JsValue {
+    let mut result = JsObject::ordinary();
+    result.proto = Some(i.object_proto.clone());
+    result.set_own("value", value);
+    result.set_own("done", JsValue::Bool(done));
+    JsValue::object(result)
+}
+
+fn generator_state(this: JsValue) -> Result<Rc<RefCell<GeneratorState>>, Throw> {
+    let JsValue::Object(object) = this else {
+        return Err(Throw::type_error("generator method receiver is not an object"));
+    };
+    let state = match &object.borrow().exotic {
+        crate::value::Exotic::Generator(state) => Some(state.clone()),
+        _ => None,
+    };
+    state.ok_or_else(|| Throw::type_error("generator method receiver is not a generator"))
+}
+
+fn generator_iterator(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    generator_state(this.clone())?;
+    Ok(this)
+}
+
+fn generator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    generator_resume(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 0)
+}
+
+fn generator_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    generator_resume(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 1)
+}
+
+fn generator_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    generator_resume(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 2)
+}
+
+fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8) -> Result<JsValue, Throw> {
+    let state = generator_state(this)?;
+    let (code, mut frame, completion) = {
+        let mut state = state.borrow_mut();
+        if state.executing {
+            return Err(Throw::type_error("generator is already executing"));
+        }
+        if !state.started && kind != 0 {
+            state.started = true;
+            return if kind == 1 { Ok(generator_result(i, value, true)) } else { Err(Throw(value)) };
+        }
+        if state.started && state.frame.is_none() {
+            return if kind == 2 { Err(Throw(value)) } else {
+                Ok(generator_result(i, if kind == 1 { value } else { JsValue::Undefined }, true))
+            };
+        }
+        let frame = if state.started {
+            state.frame.take().unwrap()
+        } else {
+            state.started = true;
+            state.code.0.program.start_frame(i, state.env.clone(), DEFAULT_INSTRUCTION_LIMIT)?
+        };
+        state.executing = true;
+        (state.code.clone(), frame, state.completion.clone())
+    };
+    if let Some(dst) = frame.yield_dst.take() {
+        if frame.delegate.is_some() {
+            frame.delegate_input = Some((kind, value));
+        } else {
+            match kind {
+                0 => frame.registers[dst] = value,
+                1 => frame.pending_resume = Some(Abrupt::Return(value)),
+                _ => frame.pending_resume = Some(Abrupt::Throw(Throw(value))),
+            }
+        }
+    }
+    let previous_completion = std::mem::replace(&mut i.completion, completion);
+    let outcome = code.0.program.resume_frame(i, &mut frame, usize::MAX);
+    let completion = std::mem::replace(&mut i.completion, previous_completion);
+    let mut state = state.borrow_mut();
+    state.executing = false;
+    state.completion = completion;
+    match outcome {
+        Ok(FrameOutcome::Yielded(value)) => {
+            state.frame = Some(frame);
+            Ok(generator_result(i, value, false))
+        }
+        Ok(FrameOutcome::Completed(value)) => Ok(generator_result(i, value, true)),
+        Ok(FrameOutcome::Suspended) => unreachable!("unbounded generator slice suspended"),
+        Err(error) => Err(error),
     }
 }
 

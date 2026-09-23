@@ -31,6 +31,7 @@ pub fn compile(ast: &ast::Program) -> Result<Program, CompileError> {
 struct Compiler {
     program: Program,
     depth: usize,
+    is_generator: bool,
 }
 
 impl Compiler {
@@ -45,6 +46,7 @@ impl Compiler {
                 is_function,
             },
             depth: 0,
+            is_generator: false,
         }
     }
 
@@ -53,8 +55,8 @@ impl Compiler {
         function: &ast::FunctionItem,
         span: Span,
     ) -> Result<FunctionCode, CompileError> {
-        if function.is_async || function.is_generator {
-            return Err(self.error(span, "async or generator function"));
+        if function.is_async {
+            return Err(self.error(span, "async function"));
         }
         let mut params = Vec::new();
         for param in &function.params {
@@ -67,6 +69,7 @@ impl Compiler {
             params.push(name.name.clone());
         }
         let mut child = Self::new(true);
+        child.is_generator = function.is_generator;
         child.hoist_functions(&function.body.body)?;
         for statement in &function.body.body {
             child.statement(statement)?;
@@ -83,6 +86,7 @@ impl Compiler {
             params,
             program: child.program,
             is_arrow: false,
+            is_generator: function.is_generator,
         })))
     }
 
@@ -122,6 +126,7 @@ impl Compiler {
             params,
             program: child.program,
             is_arrow: true,
+            is_generator: false,
         })))
     }
 
@@ -404,6 +409,17 @@ impl Compiler {
             }
             ExprKind::Null => {
                 self.emit(Instruction::Constant(dst, JsValue::Null));
+            }
+            ExprKind::Yield { argument, delegate: false } if self.is_generator => {
+                let value = match argument {
+                    Some(argument) => self.expression(argument)?,
+                    None => 0,
+                };
+                self.emit(Instruction::Yield(dst, value));
+            }
+            ExprKind::Yield { argument: Some(argument), delegate: true } if self.is_generator => {
+                let value = self.expression(argument)?;
+                self.emit(Instruction::YieldDelegate(dst, value));
             }
             ExprKind::Array(elements) => {
                 self.emit(Instruction::NewArray(dst));

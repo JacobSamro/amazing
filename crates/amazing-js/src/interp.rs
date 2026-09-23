@@ -2383,7 +2383,17 @@ impl Interpreter {
         self.completion = JsValue::Undefined;
         let r = (|| -> Result<JsValue, Throw> {
             match fun.body {
-                FunctionBody::Bytecode(code) => code.call(self, fun.env.clone(), fun.is_arrow, this, args),
+                FunctionBody::Bytecode(code) => {
+                    let generator_proto = if fun.is_generator {
+                        match o.borrow().get_own("prototype") {
+                            Some(JsValue::Object(proto)) => Some(proto),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
+                    code.call(self, fun.env.clone(), fun.is_arrow, this, args, generator_proto)
+                }
                 FunctionBody::Native(n) => {
                     self.native_stack.push(o.clone());
                     let result = n(self, this, args);

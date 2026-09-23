@@ -220,6 +220,7 @@ fn heap_frame_suspends_and_resumes_at_instruction_boundaries() {
                 assert_eq!(value, JsValue::num(3.0));
                 break;
             }
+            FrameOutcome::Yielded(_) => panic!("ordinary frame yielded"),
         }
     }
     assert!(suspensions > 1);
@@ -281,12 +282,57 @@ fn heap_frame_resumes_through_catch_and_finally() {
                 assert_eq!(value, JsValue::num(9.0));
                 break;
             }
+            FrameOutcome::Yielded(_) => panic!("ordinary frame yielded"),
         }
     }
     assert!(suspended_in_handler);
     assert!(frame.try_stack.is_empty());
     assert!(frame.scopes.is_empty());
     assert!(interpreter.global_env.resolve("e").is_none());
+}
+
+#[test]
+fn generator_resume_and_finally_observe_completion() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var log = '';
+        function* g() {
+            log += 'a';
+            try { var input = yield 3; log += input; }
+            finally { log += 'f'; yield 8; log += 'z'; }
+            return 9;
+        }
+        var it = g();
+        var before = log;
+        var first = it.next(99);
+        var second = it.next('b');
+        var third = it.next();
+        var fourth = it.next();
+        before + ':' + first.value + ':' + second.value + ':' + third.value + ':' + fourth.done + ':' + log;
+    ";
+    let result = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(result, JsValue::str(":3:8:9:true:abfz"));
+
+    let source = "
+        function* g() { try { yield 1; } finally { yield 2; } }
+        var it = g(); it.next();
+        var a = it.return(7); var b = it.next();
+        a.value + ':' + a.done + ':' + b.value + ':' + b.done;
+    ";
+    let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(result, JsValue::str("2:false:7:true"));
+}
+
+#[test]
+fn generator_delegation_forwards_values_and_returns() {
+    let source = "
+        function* inner() { var v = yield 1; return v + 2; }
+        function* outer() { return yield* inner(); }
+        var it = outer(); var a = it.next(); var b = it.next(40);
+        a.value + ':' + a.done + ':' + b.value + ':' + b.done;
+    ";
+    let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(result, JsValue::str("1:false:42:true"));
 }
 
 #[test]

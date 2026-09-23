@@ -90,7 +90,29 @@ tests (five ignored) and workspace doctests 2/2.
 
 ## Following tickets
 
-- JSVM-3 generators: generator objects built on resumable frames, with the
-  primary's grant for additive `value.rs` and `interp.rs` hooks.
+## JSVM-3-GEN: generator frames and delegation
+
+Generator functions now create branded objects with suspended VM frames.
+`next`, `return`, and `throw` resume at yields or route abrupt completions
+through catch/finally handlers. `yield*` delegates to arrays or iterator
+methods and forwards normal, return, and throw completions. Generator calls
+are non-constructible; the frame is initialized on first `next`. The
+shared interpreter still owns values, calls, properties, and iterator methods.
+
+Pinned Linux Test262 (`3655e746`, input SHA-256 `91109b82`) compared the
+same-host tree walker with VM plus fallback: 10,967 versus 11,087 passing
+files, and 21,118 versus 21,334 passing variants. There were zero lost
+passes, 120 gained files, and 216 gained variants. The VM compiled
+19,685/34,493 eligible files (57.0696%), up from 19,494/34,493
+(56.5158%) at the try-handler gate. Classification hashes were `b9d73ca4`
+and `b1b5d146`. Linux amazing-js nextest passed 218 tests (one skipped).
+
+The current generator prototype is per function and has own method properties;
+shared `%GeneratorPrototype%` identity and full descriptor attributes remain
+for a later conformance pass. Arrays and user iterators are delegated, while
+other built-in iterable kinds still depend on the shared iterator model.
+
+## Following tickets
+
 - JSVM-4 async/await and async iteration, then classes and complex bindings.
 - Add tracing GC roots after VM frames become resumable (ADR 0003).
