@@ -250,7 +250,8 @@ impl DriverScheduler {
                     did_work = true;
                     self.invoke(callback, Some(timestamp))
                 }
-                Action::CheckpointCleanup | Action::Render { .. } => Ok(()),
+                Action::CheckpointCleanup => { self.bindings.storage_deactivate_transactions(); Ok(()) },
+                Action::Render { .. } => Ok(()),
             };
             if let Err(error) = result { first_error.get_or_insert(error); }
             // Even a throw or admission failure must release the in-flight step.

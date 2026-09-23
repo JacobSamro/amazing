@@ -504,6 +504,9 @@ impl Cursor {
     pub fn current(&self) -> Option<&CursorRecord> {
         self.position.and_then(|i| self.records.get(i))
     }
+    pub fn direction(&self) -> Direction {
+        self.direction
+    }
     pub fn advance(&mut self, count: usize) -> Result<Option<&CursorRecord>> {
         if count == 0 {
             return Err(Error::Data);

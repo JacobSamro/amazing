@@ -16,6 +16,7 @@ pub enum StorageInterface {
     IDBCursor,
     IDBCursorWithValue,
     IDBKeyRange,
+    IDBVersionChangeEvent,
     CacheStorage,
     Cache,
 }
@@ -44,6 +45,7 @@ const fn setter(name: &'static str) -> Member { Member { name, kind: MemberKind:
 const fn static_method(name: &'static str, length: u8) -> Member { Member { name, kind: MemberKind::StaticMethod, length } }
 
 pub const INTERFACES: &[Interface] = &[
+    Interface { kind: StorageInterface::IDBVersionChangeEvent, name: "IDBVersionChangeEvent", parent: None, members: &[] },
     Interface { kind: StorageInterface::Storage, name: "Storage", parent: None, members: &[
         getter("length"), method("key", 1), method("getItem", 1), method("setItem", 2),
         method("removeItem", 1), method("clear", 0),
