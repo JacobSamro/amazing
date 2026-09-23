@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "layout8-retained-table-gain-diagnostic"
+  },
+  "sparse_paths": [
+    "css/CSS2",
+    "css/css-tables",
+    "css/reference",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "baseline-empty-cell-001",
+      "test": "css/css-tables/baseline-empty-cell-001.html"
+    }
+  ]
+}

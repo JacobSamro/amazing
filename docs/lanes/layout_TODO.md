@@ -841,3 +841,60 @@ Remaining Grid 3 coverage gaps include CSS exposure of nondefault
 `flow-tolerance`, dense/reverse lane placement, and fuller intrinsic row
 subgrid sizing. The current implementation covers the default 1em tolerance,
 shortest lane selection, definite placement, spans, and inline-grid-lanes.
+
+## LAYOUT-8 — calc used values and selected-font `ch` (2026-09-23)
+
+Fixed base `e011417`, pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`,
+800×600. Layout now parses a computed length-percentage expression into separate
+pixel and percentage terms, including nested `calc()` arithmetic. The used
+value takes an explicit percentage basis. Indefinite containing-block heights
+leave percentage heights/max-heights unresolved; cyclic percentages contribute
+zero to intrinsic `min-width` under CSS Sizing 3 §5.2.1. Block width uses the
+selected font's measured zero-glyph advance for `ch`. Layout also exports
+`values::resolve_corner_radii` with horizontal percentages against border-box
+width and vertical percentages against border-box height; paint adoption is
+routed in `.agents/layout/questions.md`.
+
+The frozen 53-case calc/related selection ran twice before and after from
+source-verified immutable renderers. It moved **15/53 → 16/53**, raw **+1/−0**
+and Chrome/Safari exact-revision consensus **+1/−0** (45 consensus cases), with
+identical per-case classifications and image hashes in each pair. The sole gain
+is `css-values__ch-unit-008.html`, now an exact match. The one unchanged crash,
+`css-values__calc-zero-percent-height.html`, is a page script `CSS is not
+defined` error, not a layout result. Named results:
+
+| Case | Before → after | Owner / status |
+| --- | --- | --- |
+| `calc-max-height-block-1` | mismatch → mismatch | CSS-9 must preserve calc declarations before the layout used-value path can be measured |
+| `calc-min-width-block-intrinsic-1` | mismatch → mismatch | CSS-9 prerequisite; direct layout tests now cover all six cyclic-basis examples |
+| `calc-rounding-003` | pass → pass | Existing pass does not prove calc support; CSS-9 still drops its calc width |
+| `calc-border-radius-1` | mismatch → mismatch | CSS-9 preservation, then replaced-content paint adapter to the layout radius seam |
+| `all-prop-002` | mismatch → mismatch | Replaced-content paint stacking: absolute green child must paint after normal-flow red children inside a positioned parent |
+| `ch-unit-008` | mismatch → pass | Layout fixed using selected font zero-glyph advance |
+
+On this fixed base, `amazing-css::computed::compute_normal_value` rejects size
+`calc()` because `values::parse` accepts only simple length/percentage forms.
+CSS-9 owns preserving valid expressions after `var()` substitution; resolving
+their percentage basis remains in layout. The exact CSS and paint function
+requests are in `.agents/layout/questions.md`. The four calc geometry images
+were unchanged in the six-case candidate diagnostic, confirming the missing
+computed-style reach. The direct layout tests prove the used-value behavior
+once CSS-9 supplies those expressions.
+
+The broad flex/grid selection stayed **83/200 → 83/200** twice with zero
+per-case losses and identical image hashes to the accepted LAYOUT-7 report.
+All ten retained selections were run twice with identical per-case results and
+zero losses: flex/grid **24/24**, geometry **41/61**, tables **9/12 → 10/12**,
+floats **6/8**, block collapse **9/9**, position **12/12**, text flow **14/16**,
+contents **6/6**, paint compositing **24/24**, images **12/12**. The table raw
+gain is `baseline-empty-cell-001`; a fixed-base baseline probe reproduces the
+old 68-pixel mismatch and the final reference image now matches the unchanged
+test image. No browser consensus oracle was frozen for that retained table
+case, so it is counted as a raw gain only.
+
+Windows layout nextest passed **228/228**, layout doctests **0/0**. The
+source-guarded workspace gate passed **1590/1590** nextest tests with 3 skipped
+and workspace doctests **2/2**. The 293-file source manifest, immutable
+renderer/image adapter hashes, raw paired reports, oracle queries, comparison,
+and workspace logs are in `crates/amazing-layout/evidence/layout8/`. No Mac
+build or test was run.

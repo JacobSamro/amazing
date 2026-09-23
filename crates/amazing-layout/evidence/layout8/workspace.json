@@ -1,0 +1,11 @@
+{
+    "completed_utc":  "2026-09-23T11:17:35.3916031Z",
+    "docs_log_sha256":  "e7504b8957c194ff496bbd37dd85e698eebf6b0891e042ecc09ed52695d68fe5",
+    "docs_exit":  0,
+    "nextest_exit":  0,
+    "nextest_log_sha256":  "14fa5a0870821e644167410e50c50fbe16cd847972ece2a36f90db5fa34ae945",
+    "nextest_log":  "C:\\Users\\server\\target\\layout\\layout8-final-workspace-nextest.log",
+    "source_manifest_sha256":  "7aec655597d738903aca02f3e07ebb93d8711bb3030208db5718d4840ae83c39",
+    "docs_log":  "C:\\Users\\server\\target\\layout\\layout8-final-workspace-doc.log",
+    "source_count":  293
+}

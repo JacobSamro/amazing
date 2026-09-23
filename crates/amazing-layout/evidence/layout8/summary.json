@@ -1,0 +1,301 @@
+{
+  "calc": {
+    "before_counts": {
+      "pass": 15,
+      "mismatch": 37,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 1
+    },
+    "after_counts": {
+      "pass": 16,
+      "mismatch": 36,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 1
+    },
+    "raw_gains": [
+      "css-values__ch-unit-008.html"
+    ],
+    "raw_losses": [],
+    "consensus_gains": [
+      "css-values__ch-unit-008.html"
+    ],
+    "consensus_losses": [],
+    "changed_images_or_classification": [
+      "css-values__ch-unit-008.html"
+    ]
+  },
+  "broad": {
+    "before_counts": {
+      "pass": 83,
+      "mismatch": 117,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 83,
+      "mismatch": 117,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "flex-grid": {
+    "before_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "geometry": {
+    "before_counts": {
+      "pass": 41,
+      "mismatch": 20,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 41,
+      "mismatch": 20,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": [
+      "CSS2__floats__float-nowrap-3.html",
+      "CSS2__floats__float-nowrap-4.html",
+      "CSS2__floats__float-nowrap-3-ref.html",
+      "css-sizing__intrinsic-percent-non-replaced-004.html"
+    ]
+  },
+  "tables": {
+    "before_counts": {
+      "pass": 9,
+      "mismatch": 3,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 10,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [
+      "baseline-empty-cell-001"
+    ],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": [
+      "baseline-empty-cell-001"
+    ]
+  },
+  "floats": {
+    "before_counts": {
+      "pass": 6,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 6,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": [
+      "floats-line-wrap-shifted-001",
+      "float-nowrap-3",
+      "float-nowrap-4"
+    ]
+  },
+  "block-collapse": {
+    "before_counts": {
+      "pass": 9,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 9,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "position": {
+    "before_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "text-flow": {
+    "before_counts": {
+      "pass": 14,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 14,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": [
+      "css-text__white-space__white-space-normal-011.html",
+      "css-text__white-space__white-space-pre-011.html",
+      "css-text__hyphens__hyphens-manual-inline-011.html"
+    ]
+  },
+  "contents": {
+    "before_counts": {
+      "pass": 6,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 6,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "paint-compositing": {
+    "before_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "images": {
+    "before_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  }
+}
