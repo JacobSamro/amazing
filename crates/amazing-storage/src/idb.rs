@@ -6,6 +6,7 @@ mod codec;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum StructuredValue {
+    Undefined,
     Null,
     Bool(bool),
     Number(f64),
@@ -317,6 +318,10 @@ impl ObjectStore {
     pub fn get(&self, key: &Key) -> Option<&StructuredValue> {
         self.records.get(key)
     }
+    pub fn records(&self, range: Option<&KeyRange>, limit: Option<usize>) -> Vec<(Key, StructuredValue)> {
+        self.records.iter().filter(|(key,_)| range.is_none_or(|r|r.includes(key)))
+            .take(limit.unwrap_or(usize::MAX)).map(|(key,value)|(key.clone(),value.clone())).collect()
+    }
     pub fn count(&self, range: Option<&KeyRange>) -> usize {
         self.records
             .keys()
@@ -393,6 +398,9 @@ impl ObjectStore {
     pub fn index(&self, name: &str) -> Result<&Index> {
         self.indexes.get(name).ok_or(Error::NotFound)
     }
+    pub fn index_names(&self) -> Vec<&str> {
+        self.indexes.keys().map(String::as_str).collect()
+    }
     pub fn cursor(&self, range: Option<&KeyRange>, direction: Direction) -> Cursor {
         let entries = self
             .records
@@ -404,6 +412,11 @@ impl ObjectStore {
     }
 }
 impl Index {
+    pub fn records(&self, store:&ObjectStore, range:Option<&KeyRange>, limit:Option<usize>) -> Vec<(Key,Key,StructuredValue)> {
+        self.entries.iter().filter(|(key,_)|range.is_none_or(|r|r.includes(key)))
+            .flat_map(|(key,primary)|primary.iter().filter_map(|pk|store.records.get(pk).map(|value|(key.clone(),pk.clone(),value.clone()))))
+            .take(limit.unwrap_or(usize::MAX)).collect()
+    }
     pub fn get<'a>(&self, store: &'a ObjectStore, key: &Key) -> Option<&'a StructuredValue> {
         self.entries
             .get(key)?
@@ -624,6 +637,9 @@ pub struct Transaction {
     aborted: bool,
 }
 impl Transaction {
+    pub fn database(&self) -> &Database {
+        &self.working
+    }
     pub fn store(&self, name: &str) -> Result<&ObjectStore> {
         if !self.scope.contains(name) && self.mode != Mode::VersionChange {
             return Err(Error::NotFound);
@@ -705,6 +721,19 @@ pub struct IndexedDb {
     disk: Option<DiskStore>,
 }
 impl IndexedDb {
+    pub fn databases(&self,key:&StorageKey)->Vec<(String,u64)> {
+        self.databases.iter().filter(|((storage,_),_)|storage==key)
+            .map(|((_,name),db)|(name.clone(),db.version)).collect()
+    }
+    pub fn delete_database(&mut self,key:&StorageKey,name:&str)->Result<u64> {
+        if self.connections.values().any(|connection|&connection.key==key&&connection.name==name){return Err(Error::Blocked)}
+        let old=self.databases.get(&(key.clone(),name.to_owned())).map_or(0,|db|db.version);
+        if let Some(disk)=&mut self.disk {
+            let entry=EntryKey {bucket:BucketKey::new(key.clone(),"default"),namespace:"idb".into(),key:name.as_bytes().to_vec()};
+            disk.delete(&entry).map_err(Error::from)?;
+        }
+        self.databases.remove(&(key.clone(),name.to_owned()));Ok(old)
+    }
     pub fn with_disk(disk: DiskStore) -> Result<Self> {
         let mut engine = Self::default();
         for (key, data) in disk.memory().entries_in("idb") {
