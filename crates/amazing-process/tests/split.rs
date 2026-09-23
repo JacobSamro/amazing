@@ -20,6 +20,56 @@ fn spawn(role: Role) -> ProcessHost {
     )
     .unwrap()
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "Venus AppArmor denies unprivileged user namespace UID/GID mapping"]
+fn sandboxed_renderer_preserves_shared_frame_parity() {
+    let mut network = spawn(Role::Network);
+    let mut renderer = ProcessHost::spawn_sandboxed_renderer(
+        exe(),
+        Capabilities(BTreeMap::new()),
+        RestartPolicy::Never,
+    )
+    .unwrap();
+    let (proxy, _) = connect(&renderer, &network);
+    let request = Navigate {
+        url: "http://example.test/sandbox".into(),
+        html_bytes: ByteBuf(b"<style>body{background:#123456}</style><p>sandbox</p>".to_vec()),
+        viewport: Viewport {
+            width: 64,
+            height: 64,
+        },
+    };
+    let expected = render_document(&request, |_, _| {
+        Err(Error::Remote("unexpected resource".into()))
+    })
+    .unwrap();
+    let ready = proxy.navigate_shared(request).unwrap();
+    assert!(matches!(
+        proxy
+            .acquire_frame(AcquireFrame {
+                generation: ready.generation
+            })
+            .unwrap(),
+        AcquireResult::Transferred(())
+    ));
+    let actual = renderer.receive_frame(&ready).unwrap();
+    assert_eq!(actual.bytes(), expected.rgba.0);
+    assert!(proxy
+        .frame_received(AcquireFrame {
+            generation: ready.generation
+        })
+        .unwrap());
+    assert!(proxy
+        .release_frame(ReleaseFrame {
+            generation: ready.generation
+        })
+        .unwrap());
+    drop(actual);
+    renderer.kill().unwrap();
+    network.kill().unwrap();
+}
 struct Events(mpsc::Sender<FrameReady>);
 impl BrowserEvents for Events {
     fn frame_ready(&self, event: FrameReady) -> Result<(), Error> {

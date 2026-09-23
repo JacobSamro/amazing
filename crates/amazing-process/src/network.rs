@@ -160,6 +160,7 @@ impl NetworkRequests for NetworkEndpoint {
 pub fn serve_network(connection: &Arc<Connection>) {
     connection.bind(0, crate::Ping);
     connection.bind(8, NetworkReceiver(NetworkEndpoint::new()));
+    crate::network_v2::serve(connection);
 }
 /// Browser-side broker: the renderer never owns a direct process handle.
 pub struct NetworkBroker {

@@ -37,6 +37,49 @@ interface! {pub interface NetworkRequests(8) => NetworkProxy, NetworkReceiver {
     fn poll_request(request:RequestId) -> NetworkEvent = 2;
     fn cancel_request(request:RequestId) -> bool = 3;
 }}
+
+/// Version 2 is isolated from the IPC-2 demo interface (8). The browser
+/// constructs NetworkContext; page input must never supply its trust fields.
+pub const NETWORK_VERSION: u16 = 2;
+pub const NETWORK_MAX_REQUEST_BODY: usize = 1024 * 1024;
+pub const NETWORK_MAX_RESPONSE_BODY: u32 = 32 * 1024 * 1024;
+pub const NETWORK_CHUNK: u32 = 32 * 1024;
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HeaderField {name:String, value:String}}
+wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum WireOrigin {Tuple(String)=1, Opaque(u128)=2}}
+wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum WireCookieSite {NoClient(())=1, Origin(WireOrigin)=2, CrossSite(())=3}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkContext {
+    origin:WireOrigin, cookie_site:WireCookieSite, now_unix:i64,
+    restricts_mixed_content:bool, image_set_initiator:bool,
+    top_level_navigation:bool, embedder_policy:String,
+    no_cors_media_state:String, csp_headers:Vec<HeaderField>
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkStart {
+    version:u16, client_id:u64, epoch:u64, url:String, base_url:String, method:String,
+    headers:Vec<HeaderField>, body_present:bool, body:ByteBuf, destination:String,
+    mode:String, credentials:String, redirect:String, cache:String,
+    referrer:String, referrer_policy:String, response_limit:u32,
+    navigation_reload_or_history:bool, navigation_client_reserved_id:Option<u64>,
+    context:NetworkContext
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkStarted {id:u64, client_id:u64, epoch:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkRead {id:u64, client_id:u64, epoch:u64, credit:u32}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkCancel {id:u64, client_id:u64, epoch:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkEpoch {client_id:u64, epoch:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkHead {
+    id:u64, client_id:u64, epoch:u64, status:u16, url:String, reason:String,
+    headers:Vec<HeaderField>, response_type:String, redirected:bool
+}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkBody {id:u64, epoch:u64, bytes:ByteBuf}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkComplete {id:u64, epoch:u64, error:Option<String>}}
+wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum NetworkReply {
+    Pending(())=0, Head(NetworkHead)=1, Body(NetworkBody)=2, Complete(NetworkComplete)=3
+}}
+interface! {pub interface NetworkRequestsV2(10) => NetworkProxyV2, NetworkReceiverV2 {
+    fn start(request:NetworkStart) -> NetworkStarted = 1;
+    fn read(request:NetworkRead) -> NetworkReply = 2;
+    fn cancel(request:NetworkCancel) -> NetworkComplete = 3;
+    fn cancel_epoch(request:NetworkEpoch) -> Vec<NetworkComplete> = 4;
+}}
 interface! {pub interface BrowserEvents(9) => BrowserEventsProxy, BrowserEventsReceiver {
     fn frame_ready(event:FrameReady) -> () = 1;
 }}

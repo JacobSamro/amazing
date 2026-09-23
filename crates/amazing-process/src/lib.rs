@@ -159,6 +159,18 @@ pub fn bootstrap_child(
             .insert(FRAME_NONCE_CAPABILITY.into(), channel.nonce_hex());
         parent.capabilities.0.remove(FRAME_NONCE_CAPABILITY);
     }
+    let sandbox_requested = std::env::var_os("AMAZING_RENDERER_SANDBOX").is_some();
+    std::env::remove_var("AMAZING_RENDERER_SANDBOX");
+    if sandbox_requested {
+        if role != Role::Renderer {
+            return Err(Error::Role);
+        }
+        #[cfg(target_os = "linux")]
+        let frame_fd = frame_channel.as_ref().ok_or(Error::Role)?.sandbox_keep_fd();
+        #[cfg(not(target_os = "linux"))]
+        let frame_fd = -1;
+        amazing_ipc_platform::enter_renderer_sandbox(frame_fd)?;
+    }
     send_boot(
         &mut output,
         &Handshake {
@@ -185,6 +197,7 @@ pub struct ProcessHost {
     last_pong: Instant,
     restarts: u32,
     policy: RestartPolicy,
+    sandboxed_renderer: bool,
     frame_channel: Mutex<Option<HandleChannel>>,
     frame_budget: Arc<Mutex<FrameBudget>>,
 }
@@ -211,8 +224,26 @@ impl ProcessHost {
     pub fn spawn(
         exe: &std::path::Path,
         role: Role,
+        capabilities: Capabilities,
+        policy: RestartPolicy,
+    ) -> Result<Self, Error> {
+        Self::spawn_inner(exe, role, capabilities, policy, false)
+    }
+    /// A renderer launch that fails closed if the Linux profile cannot be
+    /// installed. No ordinary-process retry is performed.
+    pub fn spawn_sandboxed_renderer(
+        exe: &std::path::Path,
+        capabilities: Capabilities,
+        policy: RestartPolicy,
+    ) -> Result<Self, Error> {
+        Self::spawn_inner(exe, Role::Renderer, capabilities, policy, true)
+    }
+    fn spawn_inner(
+        exe: &std::path::Path,
+        role: Role,
         mut capabilities: Capabilities,
         policy: RestartPolicy,
+        sandboxed_renderer: bool,
     ) -> Result<Self, Error> {
         let mut command = Command::new(exe);
         command
@@ -220,6 +251,10 @@ impl ProcessHost {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
+        command.env_remove("AMAZING_RENDERER_SANDBOX");
+        if sandboxed_renderer {
+            command.env("AMAZING_RENDERER_SANDBOX", "1");
+        }
         let mut frame_channel = if role == Role::Renderer && cfg!(any(target_os = "linux", windows))
         {
             Some(HandleChannel::prepare_child(&mut command)?)
@@ -232,27 +267,39 @@ impl ProcessHost {
                 .insert(FRAME_NONCE_CAPABILITY.into(), channel.nonce_hex());
         }
         let mut child = command.spawn()?;
-        if let Some(channel) = &mut frame_channel {
-            channel.attach_child(&child)?;
-        }
-        let mut stdin = child.stdin.take().ok_or(Error::Dead)?;
-        let mut stdout = child.stdout.take().ok_or(Error::Dead)?;
-        send_boot(
-            &mut stdin,
-            &Handshake {
-                version: BOOTSTRAP_VERSION,
-                role: Role::Browser.name().into(),
-                capabilities,
-            },
-        )?;
-        let mut response = recv_boot(&mut stdout)?;
-        verify(&response, role)?;
-        if let Some(channel) = &frame_channel {
-            if response.capabilities.0.get(FRAME_NONCE_CAPABILITY) != Some(&channel.nonce_hex()) {
-                return Err(Error::Role);
+        let boot = (|| {
+            if let Some(channel) = &mut frame_channel {
+                channel.attach_child(&child)?;
             }
-            response.capabilities.0.remove(FRAME_NONCE_CAPABILITY);
-        }
+            let mut stdin = child.stdin.take().ok_or(Error::Dead)?;
+            let mut stdout = child.stdout.take().ok_or(Error::Dead)?;
+            send_boot(
+                &mut stdin,
+                &Handshake {
+                    version: BOOTSTRAP_VERSION,
+                    role: Role::Browser.name().into(),
+                    capabilities,
+                },
+            )?;
+            let mut response = recv_boot(&mut stdout)?;
+            verify(&response, role)?;
+            if let Some(channel) = &frame_channel {
+                if response.capabilities.0.get(FRAME_NONCE_CAPABILITY) != Some(&channel.nonce_hex())
+                {
+                    return Err(Error::Role);
+                }
+                response.capabilities.0.remove(FRAME_NONCE_CAPABILITY);
+            }
+            Ok((stdin, stdout, response))
+        })();
+        let (stdin, stdout, response) = match boot {
+            Ok(boot) => boot,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error);
+            }
+        };
         let conn = Connection::new(StdioTransport::new(stdout, stdin));
         Ok(Self {
             child,
@@ -263,6 +310,7 @@ impl ProcessHost {
             last_pong: Instant::now(),
             restarts: 0,
             policy,
+            sandboxed_renderer,
             frame_channel: Mutex::new(frame_channel),
             frame_budget: Arc::new(Mutex::new(FrameBudget::new())),
         })
@@ -357,7 +405,13 @@ impl ProcessHost {
         if self.restarts >= max_restarts {
             return Ok(false);
         };
-        let next = Self::spawn(exe, self.role, capabilities, self.policy)?;
+        let next = Self::spawn_inner(
+            exe,
+            self.role,
+            capabilities,
+            self.policy,
+            self.sandboxed_renderer,
+        )?;
         let count = self.restarts + 1;
         *self = next;
         self.restarts = count;
@@ -467,6 +521,7 @@ pub struct SandboxPolicy {
 }
 
 pub mod network;
+pub mod network_v2;
 pub mod protocol;
 pub mod renderer;
 

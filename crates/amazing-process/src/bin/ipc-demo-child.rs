@@ -9,7 +9,26 @@ use std::collections::BTreeMap;
 use std::io::Write;
 use std::time::Duration;
 interface! {pub interface Echo(17) => EchoProxy, EchoReceiver {fn echo(message:String) -> String = 1;}}
+interface! {pub interface SandboxProbe(18) => SandboxProbeProxy, SandboxProbeReceiver {fn probe(message:String) -> String = 1;}}
 struct EchoHandler;
+struct SandboxProbeHandler;
+impl SandboxProbe for SandboxProbeHandler {
+    fn probe(&self, message: String) -> Result<String, amazing_ipc::Error> {
+        let result = if let Some(path) = message.strip_prefix("open:") {
+            std::fs::File::open(path).map(|_| ())
+        } else if let Some(address) = message.strip_prefix("connect:") {
+            std::net::TcpStream::connect(address).map(|_| ())
+        } else if message == "spawn" {
+            std::process::Command::new("/bin/true").status().map(|_| ())
+        } else {
+            return Err(amazing_ipc::Error::Remote("unknown probe".into()));
+        };
+        Ok(match result {
+            Ok(()) => "allowed".into(),
+            Err(error) => format!("denied:{}", error.raw_os_error().unwrap_or(0)),
+        })
+    }
+}
 struct ProbeEvents;
 impl BrowserEvents for ProbeEvents {
     fn frame_ready(&self, _: FrameReady) -> Result<(), amazing_ipc::Error> {
@@ -85,9 +104,16 @@ fn main() {
         ("renderer".into(), "1".into()),
         ("network".into(), "1".into()),
     ]));
-    let Ok((conn, _, channel)) = bootstrap_child(role, caps) else {
+    let Ok((conn, parent, channel)) = bootstrap_child(role, caps) else {
         return;
     };
+    if parent
+        .0
+        .get("__sandbox_probe")
+        .is_some_and(|value| value == "1")
+    {
+        conn.bind(18, SandboxProbeReceiver(SandboxProbeHandler));
+    }
     match role {
         Role::Renderer => amazing_process::renderer::serve_renderer(&conn, channel),
         Role::Network => amazing_process::network::serve_network(&conn),
