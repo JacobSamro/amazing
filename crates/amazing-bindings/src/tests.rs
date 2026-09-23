@@ -1343,10 +1343,19 @@ fn custom_element_registry_validates_defines_upgrades_and_resolves_when_defined(
     assert_eq!(h.promises[0].1, Some(constructor.clone()));
     assert_eq!(call(&mut h, O::CustomElementRegistryGet, registry.clone(), &[str_value("x-card")]), constructor);
     assert_eq!(call(&mut h, O::CustomElementRegistryGetName, registry.clone(), &[constructor.clone()]), str_value("x-card"));
+    assert_eq!(call(&mut h, O::CustomElementRegistryGetName, registry.clone(),
+        &[V::Dictionary(vec![("__constructor", V::Bool(true)), ("__id", V::Number(999.))])]), V::Null);
+    assert_eq!(call(&mut h, O::CustomElementRegistryGet, registry.clone(), &[str_value("not-defined")]), V::Undefined);
+    let resolved = call(&mut h, O::CustomElementRegistryWhenDefined, registry.clone(), &[str_value("x-card")]);
+    assert_ne!(resolved, pending);
+    let V::Promise(resolved_id) = resolved else { panic!("expected resolved promise") };
+    assert_eq!(h.promises[resolved_id as usize].1, Some(constructor.clone()));
     assert_eq!(h.dom.custom_element_state(element), amazing_dom::custom_elements::CustomElementState::Custom);
     assert_eq!(h.calls, [11, 12]);
     assert_eq!(invoke(&mut h, O::CustomElementRegistryDefine, registry.clone(),
         &[str_value("x-card"), constructor.clone()]), Err("NotSupportedError".into()));
+    assert_eq!(invoke(&mut h, O::CustomElementRegistryDefine, registry.clone(),
+        &[str_value("x-other"), constructor.clone()]), Err("NotSupportedError".into()));
     let invalid = call(&mut h, O::CustomElementRegistryWhenDefined, registry.clone(), &[str_value("plain")]);
     let V::Promise(id) = invalid else { panic!("expected promise") };
     assert_eq!(h.promises[id as usize].2, Some(str_value("SyntaxError")));
@@ -1419,4 +1428,26 @@ fn synchronous_custom_element_creation_propagates_constructor_failure() {
     h.fail_custom_element_constructor = true;
     assert_eq!(invoke(&mut h, O::CreateElement, V::Node(NodeIdx(0)), &[str_value("x-fail")]),
         Err("constructor failed".into()));
+}
+
+// Pinned WPT custom-elements/CustomElementRegistry.html validation order and
+// observedAttributes conditional extraction ports.
+#[test]
+fn custom_element_definition_running_and_callback_extraction_order() {
+    let mut h = Host::default();
+    let registry = crate::registry_for_document(&mut h, NodeIdx(0)).unwrap();
+    h.dom.custom_element_begin_definition(NodeIdx(0)).unwrap();
+    let constructor = V::Dictionary(vec![("__constructor", V::Bool(true)),
+        ("prototype", V::Dictionary(vec![])),
+        ("observedAttributes", V::Number(3.))]);
+    assert_eq!(invoke(&mut h, O::CustomElementRegistryDefine, registry.clone(),
+        &[str_value("x-running"), V::Number(1.)]), Err("TypeError: Expected a constructor".into()));
+    assert_eq!(invoke(&mut h, O::CustomElementRegistryDefine, registry.clone(),
+        &[str_value("invalid"), constructor.clone()]), Err("SyntaxError".into()));
+    assert_eq!(invoke(&mut h, O::CustomElementRegistryDefine, registry.clone(),
+        &[str_value("x-running"), constructor.clone()]), Err("NotSupportedError".into()));
+    h.dom.custom_element_end_definition(NodeIdx(0));
+    // No attributeChangedCallback means observedAttributes is not converted.
+    assert_eq!(call(&mut h, O::CustomElementRegistryDefine, registry,
+        &[str_value("x-running"), constructor]), V::Undefined);
 }
