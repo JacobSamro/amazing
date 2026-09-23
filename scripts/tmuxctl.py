@@ -188,6 +188,13 @@ def owned_paths(lane: str) -> list[str]:
     )
 
 
+# Every lane runs the same model. A bare `codex --yolo` inherits whatever the
+# local default happens to be, so a restart could silently move a lane onto a
+# different model or effort -- two lanes had already drifted this way.
+AGENT_MODEL = "gpt-6-sol"
+AGENT_EFFORT = "medium"
+AGENT_LAUNCH = f'codex --yolo -m {AGENT_MODEL} -c model_reasoning_effort="{AGENT_EFFORT}"'
+
 # Context below this fraction means the agent must checkpoint and be restarted
 # before it loses the thread mid-ticket.
 CONTEXT_FLOOR = 25
@@ -907,7 +914,7 @@ def cmd_restart(args) -> int:
         tmux(["new-session", "-d", "-s", session, "-c", worktree], check=True)
         print(f"{lane}: recreated exited session", flush=True)
 
-    tmux(["send-keys", "-t", session, "-l", f"cd {worktree} && codex --yolo"])
+    tmux(["send-keys", "-t", session, "-l", f"cd {worktree} && {AGENT_LAUNCH}"])
     tmux(["send-keys", "-t", session, "Enter"])
     deadline = time.time() + 45
     while time.time() < deadline:

@@ -13,6 +13,8 @@ Events, each emitted once:
     ASK      <lane> <question>             new unresolved question
     STALL    <lane> busy but status is Nm old
     CONTEXT  <lane> N% left -- restart
+    MODEL    <lane> running X, expected gpt-6-sol medium
+    SERVER   win-001 unreachable over ssh
 
 State is kept in .agents/.monitor-seen so a restarted monitor does not replay
 history. Resolved questions, per the RESOLVED convention, disappear on their
@@ -24,6 +26,8 @@ Usage: scripts/fleet-monitor.py [poll_seconds]
 from __future__ import annotations
 
 import hashlib
+import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -62,6 +66,27 @@ def stale_minutes(age: str) -> int:
     except ValueError:
         return 0
     return {"m": n, "h": n * 60, "d": n * 1440}.get(age[-1], 0)
+
+
+MODEL_RE = re.compile(r"(gpt-[0-9a-z.\-]+) (minimal|low|medium|high|xhigh)")
+
+
+def server_down() -> str | None:
+    """Detect the build-server outage class before lanes pile up retries.
+
+    Checks the local multiplexed master first, which costs no network round
+    trip. Only if it is gone does it try one real connection, and the ssh
+    config's ControlMaster makes that connection the new master.
+    """
+    if subprocess.run(["ssh", "-O", "check", "win-001"],
+                      capture_output=True, text=True).returncode == 0:
+        return None
+    probe = subprocess.run(
+        ["ssh", "-o", "ConnectTimeout=10", "win-001", "echo ok"],
+        capture_output=True, text=True, timeout=30)
+    if "ok" in probe.stdout:
+        return None
+    return (probe.stderr.strip().splitlines() or ["no response"])[-1][:120]
 
 
 def scan(seen: set[str]) -> list[str]:
@@ -108,6 +133,16 @@ def scan(seen: set[str]) -> list[str]:
                     remember(seen, key)
                     events.append(f"STALL    {lane} busy but status is {mins}m old")
 
+        m = MODEL_RE.search(raw)
+        if m:
+            running = f"{m.group(1)} {m.group(2)}"
+            expected = f"{tmuxctl.AGENT_MODEL} {tmuxctl.AGENT_EFFORT}"
+            if running != expected:
+                key = digest(f"model:{lane}:{running}")
+                if key not in seen:
+                    remember(seen, key)
+                    events.append(f"MODEL    {lane} running {running}, expected {expected}")
+
         pct = tmuxctl.context_pct(raw)
         if pct.endswith("%"):
             left = int(pct[:-1])
@@ -116,6 +151,16 @@ def scan(seen: set[str]) -> list[str]:
                 if key not in seen:
                     remember(seen, key)
                     events.append(f"CONTEXT  {lane} {pct} left -- checkpoint and restart")
+
+    try:
+        down = server_down()
+    except subprocess.TimeoutExpired:
+        down = "probe timed out"
+    if down:
+        key = digest(f"server:{int(time.time() // 300)}")
+        if key not in seen:
+            remember(seen, key)
+            events.append(f"SERVER   win-001 unreachable over ssh: {down}")
 
     return events
 
