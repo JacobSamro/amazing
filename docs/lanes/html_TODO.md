@@ -177,3 +177,42 @@ encoding or driver change is included.
 The pinned sample has two measured DTD-entity blockers and no UTF-8 input
 failures among 14 files. A bounded XHTML entity policy is a separate decision;
 do not silently use HTML's entity table or fetch arbitrary external resources.
+
+## HTML-4 — bounded incremental HTML byte input
+
+`IncrementalByteParser::new(transport_label: Option<&str>)` fixes the optional
+out-of-band charset before input begins. Repeated `push_chunk(&[u8])` calls
+accept arbitrary byte boundaries; consuming `finish()` signals the only EOF
+and returns `Dom`. The bridge uses the same `encoding::sniff` decision as
+`parse_bytes`, then feeds decoded text to HTML-3's `IncrementalParser`.
+No text is emitted until either the first 1024 bytes have arrived or `finish`
+is called. Thus the complete HTML-2 prescan has its exact available prefix,
+including unfinished comments or meta attributes. BOM wins over a supported
+transport label, then the UTF-16 XML preamble, then the first supported meta,
+then windows-1252 fallback. An unsupported label is ignored.
+
+After each push, retained undecoded input is at most 1024 bytes before the
+choice, or at most three partial UTF-8 bytes, or a UTF-16 odd byte and one
+pending high surrogate afterward. Decoded text is passed in batches capped at
+4099 UTF-8 bytes (a 4096-byte flush threshold plus one scalar) and cleared
+after each push. `buffered_input_bytes()` and
+`buffered_input_scalars()` expose retained input for checks. A single unfinished
+HTML token's decoded fields, any tokenizer lookahead needed for that token,
+and the growing DOM are outside this consumed-input bound. The caller owns
+the supplied chunk; it is not copied wholesale. CR/CRLF normalization remains
+in the text parser and therefore crosses byte and scalar chunk boundaries.
+
+The deliberately non-WHATWG HTML-2 behavior remains: only four decoders and
+an enumerated label subset are supported; unknown labels fall through, and
+there is no full HTML Encoding prescan/reparse algorithm. The existing
+UTF-16 XML-preamble sniff and windows-1252 default are preserved exactly.
+
+The fixed HTML-4 Windows base was `da7f6c8`. After an HTML-only refresh and
+source re-sync, 250 Rust source, Cargo manifest and root lockfile SHA-256
+checks matched before and after the gates (manifest SHA-256
+`4a2a13aac87803f51161f88ecf7880d1d2f4a6e5ae0066686dfc9e80ca004daa`).
+Package nextest passed **98/98 twice**, with a separate **1/1** doctest.
+Shared-slot workspace nextest passed **1419/1419**, with 3 skipped; separate
+workspace doctests passed **2/2**. The 3 new byte-stream tests account for
+the package increase from HTML-3's measured 95 tests. This ticket supplies
+the byte API only; later driver streaming integration is owned elsewhere.

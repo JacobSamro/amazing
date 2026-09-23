@@ -34,6 +34,20 @@ pub struct DecodedHtml {
 /// Decode a complete HTML input using BOM > transport > prescan > fallback.
 /// Malformed byte sequences become U+FFFD. A leading BOM is consumed.
 pub fn decode(bytes: &[u8], transport_label: Option<&str>) -> DecodedHtml {
+    let (encoding, source, skip) = sniff(bytes, transport_label);
+    let bytes = &bytes[skip..];
+    let text = match encoding {
+        Encoding::Utf8 => String::from_utf8_lossy(bytes).into_owned(),
+        Encoding::Utf16Le => decode_utf16(bytes, true),
+        Encoding::Utf16Be => decode_utf16(bytes, false),
+        Encoding::Windows1252 => bytes.iter().map(|&byte| windows1252(byte)).collect(),
+    };
+    DecodedHtml { text, encoding, source }
+}
+
+// Both complete and incremental input use this exact choice function. The
+// caller supplies at most the first 1024 bytes when streaming.
+pub(crate) fn sniff(bytes: &[u8], transport_label: Option<&str>) -> (Encoding, Source, usize) {
     let bom = if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
         Some((Encoding::Utf8, 3))
     } else if bytes.starts_with(&[0xfe, 0xff]) {
@@ -54,18 +68,7 @@ pub fn decode(bytes: &[u8], transport_label: Option<&str>) -> DecodedHtml {
     } else {
         (Encoding::Windows1252, Source::Default, 0)
     };
-    let bytes = &bytes[skip..];
-    let text = match encoding {
-        Encoding::Utf8 => String::from_utf8_lossy(bytes).into_owned(),
-        Encoding::Utf16Le => decode_utf16(bytes, true),
-        Encoding::Utf16Be => decode_utf16(bytes, false),
-        Encoding::Windows1252 => bytes.iter().map(|&byte| windows1252(byte)).collect(),
-    };
-    DecodedHtml {
-        text,
-        encoding,
-        source,
-    }
+    (encoding, source, skip)
 }
 
 fn label(raw: &str) -> Option<Encoding> {
@@ -292,7 +295,7 @@ fn decode_utf16(bytes: &[u8], little: bool) -> String {
     result
 }
 
-fn windows1252(byte: u8) -> char {
+pub(crate) fn windows1252(byte: u8) -> char {
     const C1: [u16; 32] = [
         0x20ac, 0x0081, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160,
         0x2039, 0x0152, 0x008d, 0x017d, 0x008f, 0x0090, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
