@@ -102,8 +102,23 @@ pub(crate) fn invoke<H: BindingHost>(
         return match current.get(index) { Some(token) => host.string(token), None => Ok(host.null()) };
     }
     if op == O::TokenListSupports {
-        required_token(host, args, 0)?;
-        return Err(host.type_error("This DOMTokenList has no supported tokens"));
+        let value = required_token(host, args, 0)?;
+        if attribute != "rel" {
+            return Err(host.type_error("This DOMTokenList has no supported tokens"));
+        }
+        let tag = host.with_dom(|dom| Ok(dom.local_name(element).unwrap_or_default().to_owned()))?;
+        let keyword: String = value.iter().map(|unit| {
+            if (b'A' as u16..=b'Z' as u16).contains(unit) { (*unit as u8 + 32) as char }
+            else if *unit <= 0x7f { *unit as u8 as char } else { '\u{fffd}' }
+        }).collect();
+        let supported = match tag.as_str() {
+            "a" | "area" => matches!(keyword.as_str(), "noreferrer" | "noopener" | "opener"),
+            "link" => matches!(keyword.as_str(), "alternate" | "dns-prefetch" | "icon"
+                | "manifest" | "modulepreload" | "preconnect" | "prefetch"
+                | "preload" | "stylesheet"),
+            _ => false,
+        };
+        return Ok(host.boolean(supported));
     }
     let converted = if matches!(op, O::TokenListAdd | O::TokenListRemove) {
         args.iter().map(|arg| token(host, arg)).collect::<Result<Vec<_>, _>>()?

@@ -1424,3 +1424,37 @@ index 81848d9..6d21c52 100644
 `SelectorEngine` parses UTF-16 selector text once to an opaque driver handle and reports invalid syntax as SyntaxError. It matches elements against the current DOM using `amazing_css::selectors::{parse_selector, matches}`. The binding releases every DOM borrow before calling this seam; the driver may briefly borrow the arena for each match. `querySelectorAll` stores a static NodeList of matching node handles in tree order; `querySelector` returns the first. `matches` tests only the receiver; `closest` tests its inclusive element ancestors.
 
 Integrator-assist installation: implement both new traits on the driver host; connect HTML/CSS parser errors to DOMException names; add the new `Operation` cases to the installed interface dispatch; expose static NodeList wrappers and the `NoModificationAllowedError` mapping. The HTML parser's bounded fragment context list currently limits real-page coverage, and the CSS parser's supported selector subset limits matching. `innerText` is a DOM-only approximation: it includes text and BR newlines, without computed style, visibility, layout, or CSS white-space processing. Template content is represented by the current DOM child tree, so fragment serialization serializes those children; a separate template-content node is future HTML/DOM work. Driver adoption and WPT measurement remain separate tickets.
+
+
+## DOM-10 surface and installation checklist (2026-09-23)
+
+Fixed base: `c2d3012`. DOM-10 is implemented in the native DOM and mock binding host. Production driver adoption and pinned WPT measurement are separate integrator work.
+
+| Surface | Coverage |
+|---|---|
+| AbortController `signal`, `abort(reason)` | Done; default AbortError, idempotent abort |
+| AbortSignal `aborted`, `reason`, `throwIfAborted`, `onabort`, abort event | Done; native algorithm callbacks precede events |
+| AbortSignal static `abort`, `any`, `timeout` | Done; dependent source graph, host timer fire seam |
+| Document `title` HTML/SVG, `head`, `body` get/set, `documentElement`, `readyState` | Done; host advances readyState |
+| Document `URL`, `documentURI`, `characterSet`, `contentType`, `compatMode`, `referrer` | Done via DocumentHost |
+| Document/Fragment `getElementById`; Document `getElementsByName` | Done; name result is live NodeList |
+| Document `forms`, `images`, `links`, `scripts` | Done; live HTMLCollections |
+| Document `activeElement`, `hasFocus` | Done via DocumentHost |
+| Anchor/Area `href`, `target`, `rel`, `relList`, `download` | Done; href resolves through UrlReflection, relList is live |
+| Image `src`, `alt`, `width`, `height`, `loading` | Done; unsigned long conversion and loading enum |
+| Input `type`, `name`, `disabled`, `placeholder` | Done; `value`/`checked` state deferred to form work |
+| Script `src`, `type`, `async`, `defer` | Done |
+| Link `href`, `rel`, `relList`, `media`, `type`, `disabled` | Done |
+| Meta `name`, `content`, `httpEquiv`, `charset` | Done |
+| TableCell `colSpan`, `rowSpan` | Done; clamp to specified limits |
+| OList `start`, `reversed`; LI `value` | Done |
+| Remaining element-specific reflected attributes outside ticket list | Deferred |
+
+Integrator installation steps:
+
+1. Implement `AbortHost` with a driver timer queue and call `fire_abort_timeout` when its timer fires. Keep signal reason roots alive and expose an embedding callback registry for native abort algorithms. For NET-13 `fetch_api` and NET-14 `xhr`, register each request through `Dom::add_abort_algorithm`; if it returns an existing reason, reject immediately. On abort, the driver maps that typed reason to each NET cancellation path, then unregisters on settlement.
+2. Implement `DocumentHost` using the active document, parser readiness, navigation metadata, and focus state. Call `set_document_ready_state` at parser and load transitions. Implement `UrlReflection::resolve_url` against the document base URL and URL parser.
+3. Install AbortController/AbortSignal constructors and AbortSignal static methods with `BindingHost::install_static_method`. Dispatch `Operation` additions, the `FILTERED_NODE_LIST` brand, and its legacy indexed hooks. Preserve one shared DOM arena and wrapper identity.
+4. Retain JS roots for signal reasons and onabort handlers until the runtime collector can trace/release the native signal graph. Wire timeout task cancellation when the signal is no longer observable.
+
+Mock-host coverage includes source/dependent abort algorithm and event order, default/explicit reasons, timeout fire idempotence, HTML/SVG Document behavior, live named NodeList/collections, invalid enums, negative unsigned long, URL seam resolution, relList mutation and supported-token lookup, and cell clamping. Production driver adoption and WPT `html/dom/reflection-*` measurement are deferred; no WPT credit is claimed for mock tests.

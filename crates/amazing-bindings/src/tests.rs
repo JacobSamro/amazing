@@ -1057,6 +1057,8 @@ fn element_specific_reflection_handles_urls_enums_numbers_and_rel_list() {
     assert_eq!(h.dom.attribute_utf16(anchor, "href"), Some("next".encode_utf16().collect()));
     let rel = call(&mut h, O::ElementRelList, V::Node(anchor), &[]);
     assert_eq!(rel, call(&mut h, O::ElementRelList, V::Node(anchor), &[]));
+    assert_eq!(call(&mut h, O::TokenListSupports, rel.clone(), &[str_value("NOOPENER")]), V::Bool(true));
+    assert_eq!(call(&mut h, O::TokenListSupports, rel.clone(), &[str_value("stylesheet")]), V::Bool(false));
     call(&mut h, O::TokenListAdd, rel, &[str_value("noopener")]);
     assert_eq!(call(&mut h, O::ElementRel, V::Node(anchor), &[]), str_value("noopener"));
     let image = h.dom.create_element(root, "img");
@@ -1083,6 +1085,8 @@ fn element_specific_reflection_handles_urls_enums_numbers_and_rel_list() {
     call(&mut h, O::LISetValue, V::Node(item), &[V::Number(7.)]);
     assert_eq!(call(&mut h, O::LIValue, V::Node(item), &[]), V::Number(7.));
     let link = h.dom.create_element(root, "link");
+    let link_rel = call(&mut h, O::ElementRelList, V::Node(link), &[]);
+    assert_eq!(call(&mut h, O::TokenListSupports, link_rel, &[str_value("STYLESHEET")]), V::Bool(true));
     call(&mut h, O::ResourceSetType, V::Node(link), &[str_value("text/css")]);
     assert_eq!(call(&mut h, O::ResourceType, V::Node(link), &[]), str_value("text/css"));
     let meta = h.dom.create_element(root, "meta");
