@@ -270,6 +270,9 @@ LANE_GRANTS.setdefault("net", []).extend(["crates/amazing-bindings/src/fetch_int
 # COMP-4: the GPUI presenter in the shell (its own new file), plus the shell's
 # Cargo.toml dependency line and isolated lockfile edge (additions only).
 LANE_GRANTS.setdefault("compositor", []).extend(["crates/amazing-shell-gpui/src/compositor_presenter.rs", "crates/amazing-shell-gpui/Cargo.toml", "crates/amazing-shell-gpui/Cargo.lock"])
+# TEXT-6: one driver test (malformed_page_font_warns_without_advancing_font_generation)
+# updated to the CSS Fonts 4 section 4.1 shadowing policy.
+LANE_GRANTS["text"].append("crates/amazing/src/driver_tests.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
