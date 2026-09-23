@@ -1183,3 +1183,10 @@ quote keywords, and `url()` images. Layout adoption is LAYOUT-13; CSS-owned
 unit tests prove the style/output seam. `css13-manifest.json` freezes 78
 script-free local-reference cases from WPT `css-pseudo/` and `css-content/`
 at revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+Each stylesheet can now carry its final fetched URL (or the document URL for
+inline CSS) in `Stylesheet::base_url`. The winning declaration's URL follows
+`content` and inherited `list-style-image` through the cascade. Generated
+image runs resolve relative URLs against that URL; a default `::marker` uses
+`list-style-image` before falling back to `list-style-type` text. The driver
+must populate `base_url` when collecting stylesheets (requested in the CSS
+lane's `questions.md`).

@@ -238,6 +238,7 @@ enum Origin {
 #[derive(Clone, Copy)]
 struct Candidate<'a> {
     value: &'a str,
+    base_url: Option<&'a str>,
     important: bool,
     inline: bool,
     origin: Origin,
@@ -354,6 +355,7 @@ fn compute_one(
     struct FlatDecl {
         prop: String,
         value: String,
+        base_url: Option<String>,
         important: bool,
         inline: bool,
         origin: Origin,
@@ -381,6 +383,7 @@ fn compute_one(
             pool.push(FlatDecl {
                 prop,
                 value,
+                base_url: None,
                 important: false,
                 inline: false,
                 origin: Origin::Hint,
@@ -402,6 +405,7 @@ fn compute_one(
                 pool.push(FlatDecl {
                     prop: property,
                     value,
+                    base_url: rule.base_url.clone(),
                     important: decl.important,
                     inline: false,
                     origin: if rule.ua { Origin::Ua } else { Origin::Author },
@@ -428,6 +432,7 @@ fn compute_one(
             pool.push(FlatDecl {
                 prop: property,
                 value,
+                base_url: None,
                 important: decl.important,
                 inline: true,
                 origin: Origin::Author,
@@ -446,6 +451,7 @@ fn compute_one(
     for d in &pool {
         let cand = Candidate {
             value: &d.value,
+            base_url: d.base_url.as_deref(),
             important: d.important,
             inline: d.inline,
             origin: d.origin,
@@ -727,11 +733,28 @@ fn resolve_candidate_pool<'a>(
         .filter(|(_, candidate)| candidate.author_declaration)
         .map(|(property, _)| *property)
         .collect();
+    let url_bases: Vec<_> = ["content", "list-style-image"]
+        .into_iter()
+        .map(|property| (property, champs.get(property).copied()))
+        .collect();
     let cascaded = champs
         .into_iter()
         .map(|(property, candidate)| (property.to_owned(), candidate.value.to_owned()))
         .collect();
     let mut style = computed::resolve_with_root(parent_style, cascaded, root_font_px);
+    for (property, winner) in url_bases {
+        let base = match winner {
+            Some(candidate) if candidate.value.trim().eq_ignore_ascii_case("inherit") ||
+                (property == "list-style-image" && candidate.value.trim().eq_ignore_ascii_case("unset")) => {
+                parent_style.and_then(|parent| parent.url_base(property))
+            }
+            Some(candidate) if candidate.value.trim().eq_ignore_ascii_case("initial") => None,
+            Some(candidate) => candidate.base_url,
+            None if property == "list-style-image" => parent_style.and_then(|parent| parent.url_base(property)),
+            None => None,
+        };
+        style.set_url_base(property, base);
+    }
     for property in author_properties {
         style.mark_author_specified(property);
     }
@@ -907,6 +930,7 @@ pub fn compute_element_paint_style(
     for (order, (property, value, origin, is_inline, important)) in pool.iter().enumerate() {
         candidates.entry(property).or_default().push(Candidate {
             value,
+            base_url: None,
             important: *important,
             inline: *is_inline,
             origin: *origin,
@@ -1189,6 +1213,25 @@ mod tests {
         let styled = compute(&dom, &[css]);
         assert_eq!(styled.generated_content(bullet, PseudoElement::Marker).unwrap().text(), "• ");
         assert!(styled.get_pseudo(suppressed, PseudoElement::Marker).is_none());
+    }
+
+    #[test]
+    fn generated_images_use_winning_stylesheet_url_and_inherited_marker_image() {
+        use crate::generated::ContentRun;
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let list = dom.create_element(body, "ul");
+        let item = dom.create_element(list, "li");
+        let mut first = parse_stylesheet("li::before { content: url(icons/old.svg) } ul { list-style-image: url(../marks/bullet.svg) }");
+        first.base_url = Some("https://example.test/css/theme/site.css".into());
+        let mut second = parse_stylesheet("li::before { content: url(../new.svg) }");
+        second.base_url = Some("https://example.test/overrides/over.css".into());
+        let styled = compute(&dom, &[first, second]);
+        assert_eq!(styled.generated_content(item, PseudoElement::Before).unwrap().runs,
+            vec![ContentRun::Image("https://example.test/new.svg".into())]);
+        assert_eq!(styled.generated_content(item, PseudoElement::Marker).unwrap().runs,
+            vec![ContentRun::Image("https://example.test/css/marks/bullet.svg".into())]);
     }
 
     #[test]

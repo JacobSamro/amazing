@@ -12,6 +12,7 @@ pub(super) struct CompiledRule {
     pub(super) layer: usize,
     scopes: Vec<CompiledScope>,
     owner: Option<NodeIdx>,
+    pub(super) base_url: Option<String>,
 }
 struct CompiledScope {
     start: Option<Vec<Selector>>,
@@ -79,6 +80,7 @@ pub(super) fn compile_sheets(sheets: &[Stylesheet], ua: bool) -> Vec<CompiledRul
                             ua,
                             layer: 0,
                             owner: sheet.scope_root,
+                            base_url: sheet.base_url.clone(),
                         },
                     ));
                 }

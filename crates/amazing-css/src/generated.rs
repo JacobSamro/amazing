@@ -209,6 +209,74 @@ fn parse_content(css: &str) -> Option<ContentValue> {
     })
 }
 
+/// Resolve a CSS URL against the stylesheet that supplied its declaration.
+/// Absolute URLs already carry their own base; fragment and query references
+/// retain the stylesheet path.
+fn resolve_image_url(url: &str, base: Option<&str>) -> String {
+    let url = url.trim();
+    if url
+        .bytes()
+        .take_while(|byte| *byte != b':')
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
+        && url
+            .find(':')
+            .is_some_and(|colon| colon > 0 && !url[..colon].contains('/'))
+    {
+        return url.to_owned();
+    }
+    let Some(base) = base else {
+        return url.to_owned();
+    };
+    let Some((scheme, rest)) = base.split_once("://") else {
+        return url.to_owned();
+    };
+    let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
+    if authority.is_empty() {
+        return url.to_owned();
+    }
+    if url.starts_with("//") {
+        return format!("{scheme}:{url}");
+    }
+    let base_path = format!("/{path}");
+    let target = if url.starts_with('/') {
+        url.to_owned()
+    } else if url.starts_with('?') {
+        format!(
+            "{}{}",
+            base_path.split(['?', '#']).next().unwrap_or("/"),
+            url
+        )
+    } else if url.starts_with('#') {
+        format!("{}{}", base_path.split('#').next().unwrap_or("/"), url)
+    } else {
+        let clean = base_path.split(['?', '#']).next().unwrap_or("/");
+        format!("{}{}", &clean[..clean.rfind('/').unwrap_or(0) + 1], url)
+    };
+    let split = target.find(['?', '#']).unwrap_or(target.len());
+    let (path, suffix) = target.split_at(split);
+    let mut parts = Vec::new();
+    for segment in path.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            _ => parts.push(segment),
+        }
+    }
+    let trailing = path.ends_with('/') || path.ends_with("/.") || path.ends_with("/..");
+    let normalized = format!(
+        "/{}{}",
+        parts.join("/"),
+        if trailing && !parts.is_empty() {
+            "/"
+        } else {
+            ""
+        }
+    );
+    format!("{scheme}://{authority}{normalized}{suffix}")
+}
+
 fn parse_counter_ops(css: &str, default: i32, allow_reversed: bool) -> Option<Vec<(String, i32)>> {
     let tokens = compact(&tokenize(css));
     if tokens == [Token::Ident("none".into())] {
@@ -493,15 +561,28 @@ fn resolve_pseudo(
         return;
     };
     let css = style.get("content").unwrap_or("normal");
-    let value = if css == "normal" && pseudo == PseudoElement::Marker {
+    let mut value = if css == "normal" && pseudo == PseudoElement::Marker {
+        let image = style.get("list-style-image").unwrap_or("none");
+        let image_item = parse_content(image).and_then(|value| match value.items.as_slice() {
+            [Item::Image(url)] => Some(Item::Image(resolve_image_url(
+                url,
+                style.url_base("list-style-image"),
+            ))),
+            _ => None,
+        });
         let list_style = style.get("list-style-type").unwrap_or("disc");
-        let items = match list_style {
-            "disc" => vec![Item::Text("• ".into())],
-            "circle" => vec![Item::Text("◦ ".into())],
-            "square" => vec![Item::Text("▪ ".into())],
-            "none" => Vec::new(),
-            counter_style => vec![Item::Counter("list-item".into(), counter_style.into()), Item::Text(". ".into())],
-        };
+        let items = image_item
+            .map(|image| vec![image])
+            .unwrap_or_else(|| match list_style {
+                "disc" => vec![Item::Text("• ".into())],
+                "circle" => vec![Item::Text("◦ ".into())],
+                "square" => vec![Item::Text("▪ ".into())],
+                "none" => Vec::new(),
+                counter_style => vec![
+                    Item::Counter("list-item".into(), counter_style.into()),
+                    Item::Text(". ".into()),
+                ],
+            });
         ContentValue { items, alt: None }
     } else {
         match parse_content(css) {
@@ -509,6 +590,11 @@ fn resolve_pseudo(
             None => return,
         }
     };
+    for item in &mut value.items {
+        if let Item::Image(url) = item {
+            *url = resolve_image_url(url, style.url_base("content"));
+        }
+    }
     let pushed = apply_counters(dom, node, style, state);
     let mut content = GeneratedContent {
         runs: evaluate(&value.items, dom, node, style, state),
