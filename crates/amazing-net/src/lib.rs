@@ -60,11 +60,13 @@ pub mod headers;
 pub mod http;
 pub mod http2;
 pub mod response;
+pub mod stream;
 pub mod url;
 
 pub use fetch::{fetch, FetchOptions};
 pub use headers::Headers;
 pub use response::Response;
+pub use stream::{fetch_stream, StreamOptions, StreamingResponse};
 pub use url::{resolve, ParseError, ParsedUrl, Url, UrlError, UrlOrigin};
 
 /// Top-level error type for network operations.

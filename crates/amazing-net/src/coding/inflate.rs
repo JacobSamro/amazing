@@ -62,7 +62,11 @@ struct Bits<'a> {
     input: &'a [u8],
     bit: usize,
 }
-impl Bits<'_> {
+pub(super) trait BitRead {
+    fn read(&mut self, count: usize) -> Result<usize, NetError>;
+    fn align(&mut self);
+}
+impl BitRead for Bits<'_> {
     fn read(&mut self, count: usize) -> Result<usize, NetError> {
         let mut value = 0;
         for shift in 0..count {
@@ -82,12 +86,12 @@ impl Bits<'_> {
 
 /// Canonical codes grouped by length, then symbol. Small fixed tables avoid
 /// allocations controlled by a stream and decoding scans at most 15 bits.
-struct Huffman {
+pub(super) struct Huffman {
     counts: [usize; 16],
     symbols: [usize; 288],
 }
 impl Huffman {
-    fn new(lengths: &[u8], code_lengths: bool) -> Result<Self, NetError> {
+    pub(super) fn new(lengths: &[u8], code_lengths: bool) -> Result<Self, NetError> {
         let mut tree = Self {
             counts: [0; 16],
             symbols: [0; 288],
@@ -124,7 +128,7 @@ impl Huffman {
         }
         Ok(tree)
     }
-    fn symbol(&self, bits: &mut Bits<'_>) -> Result<usize, NetError> {
+    pub(super) fn symbol(&self, bits: &mut impl BitRead) -> Result<usize, NetError> {
         let (mut code, mut first, mut index) = (0, 0, 0);
         for length in 1..=15 {
             // Huffman codes are transmitted MSB first, inside LSB-first bytes.
@@ -140,7 +144,7 @@ impl Huffman {
     }
 }
 
-fn trees(bits: &mut Bits<'_>) -> Result<(Huffman, Huffman), NetError> {
+pub(super) fn trees(bits: &mut impl BitRead) -> Result<(Huffman, Huffman), NetError> {
     let literals = bits.read(5)? + 257;
     let distances = bits.read(5)? + 1;
     let codes = bits.read(4)? + 4;
@@ -187,18 +191,18 @@ fn trees(bits: &mut Bits<'_>) -> Result<(Huffman, Huffman), NetError> {
     ))
 }
 
-const LENGTH: [usize; 29] = [
+pub(super) const LENGTH: [usize; 29] = [
     3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131,
     163, 195, 227, 258,
 ];
-const LENGTH_BITS: [usize; 29] = [
+pub(super) const LENGTH_BITS: [usize; 29] = [
     0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
 ];
-const DISTANCE: [usize; 30] = [
+pub(super) const DISTANCE: [usize; 30] = [
     1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537,
     2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577,
 ];
-const DISTANCE_BITS: [usize; 30] = [
+pub(super) const DISTANCE_BITS: [usize; 30] = [
     0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13,
     13,
 ];

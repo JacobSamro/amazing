@@ -40,16 +40,38 @@ const USER_AGENT: &str = "Ferric/0.1";
 pub(crate) fn get(url: &ParsedUrl, options: &FetchOptions) -> Result<Response, NetError> {
     let body_limit = options.max_response_bytes.min(MAX_BODY_BYTES);
     let wire_limit = body_limit.saturating_add(MAX_HEADER_BYTES);
+    let request = request_bytes(url, options)?;
     // ToSocketAddrs for (&str, u16) parses IP literals itself, but bracketed
     // IPv6 ("[::1]") does not parse — hand it the bare address instead.
-    if !matches!(url.scheme(), "http" | "https") {
-        return Err(NetError::UnsupportedScheme(url.scheme().into()));
-    }
     let host = url.hostname();
     let connect_host = host.trim_start_matches('[').trim_end_matches(']');
     let port = url
         .effective_port()
         .expect("validated HTTP(S) URL has a port");
+    let (raw, require_explicit_body_length) = match url.scheme() {
+        "http" => {
+            let mut stream = TcpStream::connect((connect_host, port))?;
+            stream.set_read_timeout(Some(options.timeout))?;
+            stream.set_write_timeout(Some(options.timeout))?;
+            stream.write_all(&request)?;
+            stream.flush()?;
+            (read_to_eof(&stream, wire_limit)?, false)
+        }
+        "https" => {
+            let stream = amazing_net_tls::connect(connect_host, port, options.timeout)
+                .map_err(|e| NetError::Tls(e.to_string()))?;
+            return tls_response(stream, url, options, &request);
+        }
+        other => return Err(NetError::UnsupportedScheme(other.to_string())),
+    };
+    response_from_raw_with_limit(url, &raw, require_explicit_body_length, body_limit)
+}
+
+/// Shared request serialization for buffered and pull-style HTTP/1.1 paths.
+pub(crate) fn request_bytes(url: &ParsedUrl, options: &FetchOptions) -> Result<Vec<u8>, NetError> {
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(NetError::UnsupportedScheme(url.scheme().into()));
+    }
     let method = options.method.to_ascii_uppercase();
     if !matches!(method.as_str(), "GET" | "POST") {
         return Err(NetError::UnsupportedMethod(method));
@@ -86,23 +108,7 @@ pub(crate) fn get(url: &ParsedUrl, options: &FetchOptions) -> Result<Response, N
     request.push_str("\r\n");
     let mut request = request.into_bytes();
     request.extend_from_slice(&options.body);
-    let (raw, require_explicit_body_length) = match url.scheme() {
-        "http" => {
-            let mut stream = TcpStream::connect((connect_host, port))?;
-            stream.set_read_timeout(Some(options.timeout))?;
-            stream.set_write_timeout(Some(options.timeout))?;
-            stream.write_all(&request)?;
-            stream.flush()?;
-            (read_to_eof(&stream, wire_limit)?, false)
-        }
-        "https" => {
-            let stream = amazing_net_tls::connect(connect_host, port, options.timeout)
-                .map_err(|e| NetError::Tls(e.to_string()))?;
-            return tls_response(stream, url, options, &request);
-        }
-        other => return Err(NetError::UnsupportedScheme(other.to_string())),
-    };
-    response_from_raw_with_limit(url, &raw, require_explicit_body_length, body_limit)
+    Ok(request)
 }
 
 /// Shared post-handshake dispatch; loopback TLS proof uses this exact path.
@@ -211,7 +217,7 @@ fn find_header_end(raw: &[u8]) -> Option<usize> {
 
 /// Parses the status line and header block (the bytes before `\r\n\r\n`).
 /// Header lines may use bare `\n`; their trailing `\r` is trimmed.
-fn parse_head(head: &[u8]) -> Result<(u16, String, Headers), NetError> {
+pub(crate) fn parse_head(head: &[u8]) -> Result<(u16, String, Headers), NetError> {
     let head_str = std::str::from_utf8(head)
         .map_err(|_| NetError::MalformedResponse("non-UTF-8 header block".into()))?;
     let mut lines = head_str.split('\n');
@@ -265,7 +271,7 @@ fn parse_status_line(line: &str) -> Result<(u16, String), NetError> {
 
 /// Header order is coding order; decoding runs in reverse. Bound layering as
 /// well as bytes so a header cannot request unbounded repeated work.
-fn codings(headers: &Headers, name: &str) -> Result<Vec<String>, NetError> {
+pub(crate) fn codings(headers: &Headers, name: &str) -> Result<Vec<String>, NetError> {
     let mut result = Vec::new();
     for field in headers.get_all(name) {
         for item in field.split(',') {
@@ -287,7 +293,7 @@ fn codings(headers: &Headers, name: &str) -> Result<Vec<String>, NetError> {
     Ok(result)
 }
 
-fn content_length(headers: &Headers) -> Result<Option<usize>, NetError> {
+pub(crate) fn content_length(headers: &Headers) -> Result<Option<usize>, NetError> {
     let mut expected = None;
     for field in headers.get_all("content-length") {
         for value in field.split(',') {
