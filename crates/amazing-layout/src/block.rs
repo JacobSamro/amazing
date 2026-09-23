@@ -259,8 +259,10 @@ fn layout_block_in_context(
             }
         }
     }
-    let min_width = values::parse_len(b.style.get("min-width").unwrap_or("0"), font_px, cbw).unwrap_or(0.0).max(0.0);
-    let max_width = b.style.get("max-width").and_then(|v| values::parse_len(v, font_px, cbw));
+    let min_width = values::style_length_percentage(&b.style, "min-width", font_px, font_px * 0.6)
+        .and_then(|value| value.resolve(Some(cbw))).unwrap_or(0.0).max(0.0);
+    let max_width = values::style_length_percentage(&b.style, "max-width", font_px, font_px * 0.6)
+        .and_then(|value| value.resolve(Some(cbw)));
     content_w = max_width.map_or(content_w, |maximum| content_w.min(maximum.max(0.0))).max(min_width);
 
     // Margin edges: the box's border box starts after its own margins.
@@ -538,17 +540,12 @@ fn pb(b: &LayoutBox) -> f32 {
 /// Specified `height` in px, or None (auto). Percentages need the
 /// containing block's definite height; content-derived heights stay auto.
 fn specified_height(b: &LayoutBox, font_px: f32) -> Option<f32> {
-    let v = b.style.get("height")?;
-    values::parse_length_percentage(v, font_px, font_px * 0.6)?
+    values::style_length_percentage(&b.style, "height", font_px, font_px * 0.6)?
         .resolve(b.containing_block_height)
 }
 
 fn size_constraint(b: &LayoutBox, property: &str, font_px: f32) -> Option<f32> {
-    let value = b.style.get(property)?.trim();
-    if value.eq_ignore_ascii_case("none") {
-        return None;
-    }
-    values::parse_length_percentage(value, font_px, font_px * 0.6)?
+    values::style_length_percentage(&b.style, property, font_px, font_px * 0.6)?
         .resolve(b.containing_block_height)
         .map(|size| size.max(0.0))
 }

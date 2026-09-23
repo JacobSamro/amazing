@@ -1,0 +1,53 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "manifest":  "C:\\Users\\server\\src\\wt\\layout\\crates\\amazing-layout\\evidence\\layout10\\gap-diagnostic-manifest.json",
+    "viewport":  {
+                     "width":  800,
+                     "height":  600,
+                     "device_scale":  1
+                 },
+    "font_set":  "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+    "run_directory":  "C:\\Users\\server\\target\\layout\\layout10-gap-diagnostic\\run-20260923T133530402Z-441504",
+    "counts":  {
+                   "pass":  2,
+                   "mismatch":  0,
+                   "error":  0,
+                   "timeout":  0,
+                   "unsupported":  0,
+                   "crash":  0
+               },
+    "unexpected":  0,
+    "tests":  [
+                  {
+                      "id":  "css-flexbox__gap-006-rtl.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "gap-006-rtl-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "7cf490b2e3f797df597a6580c31eae2a78d446c3b88eeaea755deea587411c23",
+                      "reference_sha256":  "7cf490b2e3f797df597a6580c31eae2a78d446c3b88eeaea755deea587411c23",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css-flexbox__gap-006-lr.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "gap-006-lr-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "8850bd32d3e266a3dc602e5644c3fe5b6e9241fe35bf47a87f966056ddba0a3c",
+                      "reference_sha256":  "8850bd32d3e266a3dc602e5644c3fe5b6e9241fe35bf47a87f966056ddba0a3c",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  }
+              ]
+}

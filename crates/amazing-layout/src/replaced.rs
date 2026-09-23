@@ -224,11 +224,9 @@ pub(crate) fn construct(
 }
 
 fn length(style: &ComputedStyle, name: &str, font: f32, basis: Option<f32>) -> Option<f32> {
-    let value = style.get(name)?.trim();
-    if value.ends_with('%') && basis.is_none() {
-        return None;
-    }
-    values::parse_len(value, font, basis.unwrap_or(0.0)).filter(|v| v.is_finite() && *v >= 0.0)
+    values::style_length_percentage(style, name, font, font * 0.6)?
+        .resolve(basis)
+        .filter(|v| v.is_finite() && *v >= 0.0)
 }
 
 impl InlineReplaced {

@@ -1,0 +1,495 @@
+{
+  "css9_calc": {
+    "before_counts": {
+      "pass": 16,
+      "mismatch": 36,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 1
+    },
+    "after_counts": {
+      "pass": 31,
+      "mismatch": 21,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 1
+    },
+    "raw_gains": [
+      "css-values__calc-height-block-1.html",
+      "css-values__calc-height-table-1.html",
+      "css-values__calc-invalid-range-clamping.html",
+      "css-values__calc-max-height-block-1.html",
+      "css-values__calc-max-width-block-1.html",
+      "css-values__calc-max-width-block-intrinsic-1.html",
+      "css-values__calc-min-width-block-1.html",
+      "css-values__calc-min-width-block-intrinsic-1.html",
+      "css-values__calc-offsets-absolute-bottom-1.html",
+      "css-values__calc-offsets-absolute-left-1.html",
+      "css-values__calc-offsets-absolute-right-1.html",
+      "css-values__calc-offsets-absolute-top-1.html",
+      "css-values__calc-offsets-relative-left-1.html",
+      "css-values__calc-offsets-relative-right-1.html",
+      "css-values__calc-width-block-1.html"
+    ],
+    "raw_losses": [],
+    "consensus_gains": [
+      "css-values__calc-height-block-1.html",
+      "css-values__calc-height-table-1.html",
+      "css-values__calc-invalid-range-clamping.html",
+      "css-values__calc-max-height-block-1.html",
+      "css-values__calc-max-width-block-1.html",
+      "css-values__calc-max-width-block-intrinsic-1.html",
+      "css-values__calc-min-width-block-1.html",
+      "css-values__calc-offsets-absolute-bottom-1.html",
+      "css-values__calc-offsets-absolute-left-1.html",
+      "css-values__calc-offsets-absolute-right-1.html",
+      "css-values__calc-offsets-absolute-top-1.html",
+      "css-values__calc-offsets-relative-left-1.html",
+      "css-values__calc-offsets-relative-right-1.html",
+      "css-values__calc-width-block-1.html"
+    ],
+    "consensus_losses": [],
+    "changed_images_or_classification": [
+      "css-values__calc-height-block-1.html",
+      "css-values__calc-height-table-1.html",
+      "css-values__calc-invalid-range-clamping.html",
+      "css-values__calc-max-height-block-1.html",
+      "css-values__calc-max-width-block-1.html",
+      "css-values__calc-max-width-block-intrinsic-1.html",
+      "css-values__calc-min-height-block-1.html",
+      "css-values__calc-min-height.html",
+      "css-values__calc-min-width-block-1.html",
+      "css-values__calc-min-width-block-intrinsic-1.html",
+      "css-values__calc-offsets-absolute-bottom-1.html",
+      "css-values__calc-offsets-absolute-left-1.html",
+      "css-values__calc-offsets-absolute-right-1.html",
+      "css-values__calc-offsets-absolute-top-1.html",
+      "css-values__calc-offsets-relative-bottom-1.html",
+      "css-values__calc-offsets-relative-left-1.html",
+      "css-values__calc-offsets-relative-right-1.html",
+      "css-values__calc-offsets-relative-top-1.html",
+      "css-values__calc-rounding-001.html",
+      "css-values__calc-width-block-1.html",
+      "css-values__calc-width-block-intrinsic-1.html",
+      "css-values__calc-width-table-auto-1.html",
+      "css-values__calc-width-table-fixed-1.html"
+    ]
+  },
+  "css9_broad": {
+    "before_counts": {
+      "pass": 83,
+      "mismatch": 117,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 84,
+      "mismatch": 116,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [
+      "css-flexbox__gap-006-rtl.html"
+    ],
+    "raw_losses": [],
+    "consensus_gains": [
+      "css-flexbox__gap-006-rtl.html"
+    ],
+    "consensus_losses": [],
+    "changed_images_or_classification": [
+      "css-flexbox__flexbox-min-height-auto-001.html",
+      "css-flexbox__gap-004-rtl.html",
+      "css-flexbox__gap-001-rtl.html",
+      "css-flexbox__gap-002-rtl.html",
+      "css-flexbox__gap-006-rtl.html",
+      "css-flexbox__gap-006-lr.html",
+      "css-grid__grid-lanes__item-placement__flow-tolerance__flow-tolerance-percentage-column-001.html",
+      "css-grid__grid-lanes__subgrid__grid-subgridded-to-grid-lanes__column-scrollbar-gutter-001.html",
+      "css-grid__grid-lanes__baseline__grid-lanes-grid-item-self-baseline-002b.html"
+    ]
+  },
+  "layout10_calc": {
+    "before_counts": {
+      "pass": 31,
+      "mismatch": 21,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 1
+    },
+    "after_counts": {
+      "pass": 31,
+      "mismatch": 21,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 1
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "layout10_broad": {
+    "before_counts": {
+      "pass": 84,
+      "mismatch": 116,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 86,
+      "mismatch": 114,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [
+      "css-flexbox__flex-flow-008.html",
+      "css-flexbox__gap-006-lr.html"
+    ],
+    "raw_losses": [],
+    "consensus_gains": [
+      "css-flexbox__flex-flow-008.html",
+      "css-flexbox__gap-006-lr.html"
+    ],
+    "consensus_losses": [],
+    "changed_images_or_classification": [
+      "css-flexbox__flexbox-writing-mode-003.html",
+      "css-flexbox__flexbox_writing_mode_vertical_lays_out_contents_from_top_to_bottom.html",
+      "css-flexbox__flexbox-safe-overflow-position-001.html",
+      "css-flexbox__flexbox_rtl-flow.html",
+      "css-flexbox__flex-lines__multi-line-wrap-with-column-reverse.html",
+      "css-flexbox__flex-flow-008.html",
+      "css-flexbox__gap-006-lr.html"
+    ]
+  },
+  "flex-grid": {
+    "before_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "geometry": {
+    "before_counts": {
+      "pass": 41,
+      "mismatch": 20,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 41,
+      "mismatch": 20,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": [
+      "css-box__margin-trim__flex-column-inline-multiline.html"
+    ]
+  },
+  "tables": {
+    "before_counts": {
+      "pass": 10,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 10,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "floats": {
+    "before_counts": {
+      "pass": 6,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 6,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "block-collapse": {
+    "before_counts": {
+      "pass": 9,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 9,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "position": {
+    "before_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "text-flow": {
+    "before_counts": {
+      "pass": 14,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 14,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "contents": {
+    "before_counts": {
+      "pass": 6,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 6,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "paint-compositing": {
+    "before_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "images": {
+    "before_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "raw_gains": [],
+    "raw_losses": [],
+    "consensus_gains": [],
+    "consensus_losses": [],
+    "changed_images_or_classification": []
+  },
+  "named": {
+    "css-values__calc-max-height-block-1.html": {
+      "before": [
+        "pass",
+        "061ef42b7c5b741436fab26db97ce652de35d0711afb307bbb0689471fbc9bb2",
+        "061ef42b7c5b741436fab26db97ce652de35d0711afb307bbb0689471fbc9bb2",
+        "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+      ],
+      "after": [
+        "pass",
+        "061ef42b7c5b741436fab26db97ce652de35d0711afb307bbb0689471fbc9bb2",
+        "061ef42b7c5b741436fab26db97ce652de35d0711afb307bbb0689471fbc9bb2",
+        "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+      ]
+    },
+    "css-values__calc-min-width-block-intrinsic-1.html": {
+      "before": [
+        "pass",
+        "403b122ff6b125a00077e7e8819c8483e6e3f41feedabaf85aac1f512b72886d",
+        "403b122ff6b125a00077e7e8819c8483e6e3f41feedabaf85aac1f512b72886d",
+        "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+      ],
+      "after": [
+        "pass",
+        "403b122ff6b125a00077e7e8819c8483e6e3f41feedabaf85aac1f512b72886d",
+        "403b122ff6b125a00077e7e8819c8483e6e3f41feedabaf85aac1f512b72886d",
+        "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+      ]
+    },
+    "css-values__calc-rounding-003.html": {
+      "before": [
+        "pass",
+        "a686737a976cd98f436756aa3871b08dfea2d3fe545e5c11ad5f632df0b93615",
+        "a686737a976cd98f436756aa3871b08dfea2d3fe545e5c11ad5f632df0b93615",
+        "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+      ],
+      "after": [
+        "pass",
+        "a686737a976cd98f436756aa3871b08dfea2d3fe545e5c11ad5f632df0b93615",
+        "a686737a976cd98f436756aa3871b08dfea2d3fe545e5c11ad5f632df0b93615",
+        "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+      ]
+    },
+    "css-values__calc-border-radius-1.html": {
+      "before": [
+        "mismatch",
+        "c222c008b7f5391ae8d183258fa8e66ba84e609c0fc19dc77a1e55582daf5c21",
+        "c873a9d0c1581def83edf268ed38183c12b4e6a849eb29c1a9e662bbf3dab40f",
+        "8401c55a7ffd442a247319f9bbdb21306301f7e2f554cfc617b4df8cd024a819"
+      ],
+      "after": [
+        "mismatch",
+        "c222c008b7f5391ae8d183258fa8e66ba84e609c0fc19dc77a1e55582daf5c21",
+        "c873a9d0c1581def83edf268ed38183c12b4e6a849eb29c1a9e662bbf3dab40f",
+        "8401c55a7ffd442a247319f9bbdb21306301f7e2f554cfc617b4df8cd024a819"
+      ]
+    },
+    "css-flexbox__gap-006-rtl.html": {
+      "before": [
+        "pass",
+        "7cf490b2e3f797df597a6580c31eae2a78d446c3b88eeaea755deea587411c23",
+        "7cf490b2e3f797df597a6580c31eae2a78d446c3b88eeaea755deea587411c23",
+        "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+      ],
+      "after": [
+        "pass",
+        "7cf490b2e3f797df597a6580c31eae2a78d446c3b88eeaea755deea587411c23",
+        "7cf490b2e3f797df597a6580c31eae2a78d446c3b88eeaea755deea587411c23",
+        "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+      ]
+    },
+    "css-flexbox__gap-006-lr.html": {
+      "before": [
+        "mismatch",
+        "acd40ec8a6306ea151ac753c257f95d205c11d72cf0d33b0f4f2777f7b521509",
+        "60fd221afa99af908577bd2d9fcb58e2982f1738300f45277eda8c65ea4d4349",
+        "56e498470232ac0a6e4f8b4b4aaf09d06c0e48656aff8f2a2b0bc43a40247cdc"
+      ],
+      "after": [
+        "pass",
+        "8850bd32d3e266a3dc602e5644c3fe5b6e9241fe35bf47a87f966056ddba0a3c",
+        "8850bd32d3e266a3dc602e5644c3fe5b6e9241fe35bf47a87f966056ddba0a3c",
+        "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+      ]
+    }
+  }
+}
