@@ -5,10 +5,11 @@
 //! applies relative offsets and lays out every out-of-flow subtree against the
 //! nearest positioned padding box (or the viewport for fixed positioning).
 
-use crate::block::layout_block;
+use crate::block::{layout_block, layout_block_with_text};
 use crate::font::FontSource;
 use crate::values;
 use crate::{Flow, LayoutBox, Rect};
+use amazing_text::TextSystem;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PositionKind {
@@ -40,6 +41,7 @@ pub(crate) fn layout_positioned(
     viewport_width: f32,
     viewport_height: f32,
     fonts: &FontSource,
+    text: Option<&dyn TextSystem>,
 ) {
     let viewport = Rect {
         x: 0.0,
@@ -47,7 +49,7 @@ pub(crate) fn layout_positioned(
         w: viewport_width.max(0.0),
         h: viewport_height.max(0.0),
     };
-    position_subtree(root, viewport, viewport, viewport, fonts);
+    position_subtree(root, viewport, viewport, viewport, fonts, text);
 }
 
 fn position_subtree(
@@ -56,9 +58,10 @@ fn position_subtree(
     normal_containing_block: Rect,
     inherited_positioned_cb: Rect,
     fonts: &FontSource,
+    text: Option<&dyn TextSystem>,
 ) {
     if position_kind(box_) == PositionKind::Relative {
-        let (dx, dy) = relative_offset(box_, normal_containing_block);
+        let (dx, dy) = relative_offset(box_, normal_containing_block, text);
         shift_box(box_, dx, dy);
     }
 
@@ -77,6 +80,7 @@ fn position_subtree(
                     own_padding_box,
                     descendant_positioned_cb,
                     fonts,
+                    text,
                 );
             }
         },
@@ -106,14 +110,14 @@ fn position_subtree(
             }
             .max(1.0);
             child.style.set("width", &format!("{width}px"));
-            layout_block(child, 0.0, 0.0, width, fonts);
+            layout_child(child, 0.0, 0.0, width, fonts, text);
             let x = box_.content_box.x - child.border_box.w;
             let y = box_.content_box.y;
             shift_box(child, x - child.border_box.x, y - child.border_box.y);
             continue;
         }
         if child.inline_atomic {
-            position_subtree(child, viewport, own_padding_box, descendant_positioned_cb, fonts);
+            position_subtree(child, viewport, own_padding_box, descendant_positioned_cb, fonts, text);
             continue;
         }
         let containing_block = if position_kind(child) == PositionKind::Fixed {
@@ -121,15 +125,17 @@ fn position_subtree(
         } else {
             descendant_positioned_cb
         };
+        let units = font_units(child, text);
         let specified_margins =
-            values::resolve_margins(&child.style, child.font_size, containing_block.w);
-        prepare_stretch(child, containing_block);
-        layout_block(
+            values::resolve_margins_with_units(&child.style, units, containing_block.w);
+        prepare_stretch(child, containing_block, text);
+        layout_child(
             child,
             containing_block.x,
             containing_block.y,
             containing_block.w,
             fonts,
+            text,
         );
         child.margin = specified_margins;
         let static_anchor = if matches!(box_.display, crate::Display::Grid) {
@@ -142,6 +148,7 @@ fn position_subtree(
             containing_block,
             static_anchor,
             specified_margins,
+            text,
         );
         shift_box(child, x - child.border_box.x, y - child.border_box.y);
         position_subtree(
@@ -150,9 +157,25 @@ fn position_subtree(
             containing_block,
             padding_box(child),
             fonts,
+            text,
         );
     }
     box_.positioned = positioned;
+}
+
+fn layout_child(child: &mut LayoutBox, x: f32, y: f32, width: f32,
+    fonts: &FontSource, text: Option<&dyn TextSystem>) {
+    if let Some(text) = text {
+        layout_block_with_text(child, x, y, width, fonts, text);
+    } else {
+        layout_block(child, x, y, width, fonts);
+    }
+}
+
+fn font_units(box_: &LayoutBox, text: Option<&dyn TextSystem>) -> values::FontRelativeUnits {
+    values::FontRelativeUnits::from_text_system(
+        text, box_.font_metric_style.as_ref(), box_.root_font_metric_style.as_ref(), box_.font_size,
+    )
 }
 
 fn padding_box(box_: &LayoutBox) -> Rect {
@@ -164,16 +187,17 @@ fn padding_box(box_: &LayoutBox) -> Rect {
     }
 }
 
-fn resolve_inset(box_: &LayoutBox, property: &str, base: f32) -> Option<f32> {
-    values::style_length_percentage(&box_.style, property, box_.font_size, box_.font_size * 0.6)?
+fn resolve_inset(box_: &LayoutBox, property: &str, base: f32,
+    text: Option<&dyn TextSystem>) -> Option<f32> {
+    values::style_length_percentage_with_units(&box_.style, property, font_units(box_, text))?
         .resolve(Some(base))
 }
 
-fn relative_offset(box_: &LayoutBox, containing_block: Rect) -> (f32, f32) {
-    let left = resolve_inset(box_, "left", containing_block.w);
-    let right = resolve_inset(box_, "right", containing_block.w);
-    let top = resolve_inset(box_, "top", containing_block.h);
-    let bottom = resolve_inset(box_, "bottom", containing_block.h);
+fn relative_offset(box_: &LayoutBox, containing_block: Rect, text: Option<&dyn TextSystem>) -> (f32, f32) {
+    let left = resolve_inset(box_, "left", containing_block.w, text);
+    let right = resolve_inset(box_, "right", containing_block.w, text);
+    let top = resolve_inset(box_, "top", containing_block.h, text);
+    let bottom = resolve_inset(box_, "bottom", containing_block.h, text);
     let rtl = box_
         .style
         .get("direction")
@@ -187,13 +211,14 @@ fn relative_offset(box_: &LayoutBox, containing_block: Rect) -> (f32, f32) {
     (dx, dy)
 }
 
-fn prepare_stretch(box_: &mut LayoutBox, containing_block: Rect) {
-    let left = resolve_inset(box_, "left", containing_block.w);
-    let right = resolve_inset(box_, "right", containing_block.w);
-    let top = resolve_inset(box_, "top", containing_block.h);
-    let bottom = resolve_inset(box_, "bottom", containing_block.h);
-    let margins = values::resolve_margins(&box_.style, box_.font_size, containing_block.w);
-    let padding = values::resolve_padding(&box_.style, box_.font_size, containing_block.w);
+fn prepare_stretch(box_: &mut LayoutBox, containing_block: Rect, text: Option<&dyn TextSystem>) {
+    let left = resolve_inset(box_, "left", containing_block.w, text);
+    let right = resolve_inset(box_, "right", containing_block.w, text);
+    let top = resolve_inset(box_, "top", containing_block.h, text);
+    let bottom = resolve_inset(box_, "bottom", containing_block.h, text);
+    let units = font_units(box_, text);
+    let margins = values::resolve_margins_with_units(&box_.style, units, containing_block.w);
+    let padding = values::resolve_padding_with_units(&box_.style, units, containing_block.w);
     let border = values::resolve_borders(&box_.style, box_.font_size);
 
     let width_auto = box_
@@ -244,11 +269,12 @@ fn absolute_origin(
     containing_block: Rect,
     static_anchor: (f32, f32),
     margins: values::SidesM,
+    text: Option<&dyn TextSystem>,
 ) -> (f32, f32) {
-    let left = resolve_inset(box_, "left", containing_block.w);
-    let right = resolve_inset(box_, "right", containing_block.w);
-    let top = resolve_inset(box_, "top", containing_block.h);
-    let bottom = resolve_inset(box_, "bottom", containing_block.h);
+    let left = resolve_inset(box_, "left", containing_block.w, text);
+    let right = resolve_inset(box_, "right", containing_block.w, text);
+    let top = resolve_inset(box_, "top", containing_block.h, text);
+    let bottom = resolve_inset(box_, "bottom", containing_block.h, text);
     let rtl = box_
         .style
         .get("direction")
@@ -264,7 +290,7 @@ fn absolute_origin(
             .or_else(|| {
                 left.map(|left| containing_block.x + left + margins.left.unwrap_or(0.0))
             })
-            .unwrap_or(static_anchor.0)
+            .unwrap_or(static_anchor.0 + margins.left.unwrap_or(0.0))
     } else {
         left.map(|left| containing_block.x + left + margins.left.unwrap_or(0.0))
             .or_else(|| {
@@ -275,7 +301,7 @@ fn absolute_origin(
                         - margins.right.unwrap_or(0.0)
                 })
             })
-            .unwrap_or(static_anchor.0)
+            .unwrap_or(static_anchor.0 + margins.left.unwrap_or(0.0))
     };
     let y = top
         .map(|top| containing_block.y + top + margins.top.unwrap_or(0.0))
@@ -287,7 +313,7 @@ fn absolute_origin(
                     - margins.bottom.unwrap_or(0.0)
             })
         })
-        .unwrap_or(static_anchor.1);
+        .unwrap_or(static_anchor.1 + margins.top.unwrap_or(0.0));
     (x, y)
 }
 

@@ -1,0 +1,38 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "manifest":  "C:\\Users\\server\\src\\wt\\layout\\tests\\wpt-render\\layout14-compression.json",
+    "viewport":  {
+                     "width":  800,
+                     "height":  600,
+                     "device_scale":  1
+                 },
+    "font_set":  "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+    "run_directory":  "C:\\Users\\server\\target\\layout\\layout14-compression\\run-20260923T232837443Z-556500",
+    "counts":  {
+                   "pass":  0,
+                   "mismatch":  1,
+                   "error":  0,
+                   "timeout":  0,
+                   "unsupported":  0,
+                   "crash":  0
+               },
+    "unexpected":  0,
+    "tests":  [
+                  {
+                      "id":  "css-writing-modes__text-combine-upright-compression-001.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "text-combine-upright-compression-001-ref.html",
+                      "differing_pixels":  1422,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "c0f3b619a54a558d586ee897f805f26c733e59e661cdc31dab13151fb5cc131d",
+                      "reference_sha256":  "88c25abd8f859e0f29196ce11235490599a7a38a99d4ace01df350428281eba8",
+                      "diff_sha256":  "a3cd0d47590243e937c365569533a66d974cd760be967a1e7115b0a308cad617",
+                      "detail":  "maxDifference=255/0; totalPixels=1422/0"
+                  }
+              ]
+}

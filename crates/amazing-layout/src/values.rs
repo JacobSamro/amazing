@@ -41,7 +41,7 @@ const PX_PER_IN: f32 = 96.0;
 /// A computed length before its percentage has a used-value basis. Keeping
 /// the two terms separate lets callers handle an indefinite containing block
 /// or the cyclic-percentage rule for intrinsic sizing.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct LengthPercentage {
     pub px: f32,
     pub percentage: f32,
@@ -67,8 +67,77 @@ enum CalcValue {
 struct CalcParser<'a> {
     input: &'a str,
     pos: usize,
-    em: f32,
-    ch: f32,
+    units: FontRelativeUnits,
+}
+
+/// Used font-relative unit sizes for the element and the document root.
+/// The text provider supplies the first available face's metrics; the legacy
+/// constructor keeps callers without a provider on deterministic defaults.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FontRelativeUnits {
+    pub em: f32,
+    pub ch: f32,
+    pub ic: f32,
+    pub ex: f32,
+    pub cap: f32,
+    pub root_em: f32,
+    pub root_ch: f32,
+    pub root_ic: f32,
+    pub root_ex: f32,
+    pub root_cap: f32,
+}
+
+impl FontRelativeUnits {
+    fn legacy(em: f32, ch: f32) -> Self {
+        Self {
+            em,
+            ch,
+            ic: em,
+            ex: em * 0.5,
+            cap: em * 0.8,
+            root_em: ROOT_FONT_SIZE,
+            root_ch: ROOT_FONT_SIZE * 0.5,
+            root_ic: ROOT_FONT_SIZE,
+            root_ex: ROOT_FONT_SIZE * 0.5,
+            root_cap: ROOT_FONT_SIZE * 0.8,
+        }
+    }
+
+    pub(crate) fn from_text_system(
+        text: Option<&dyn amazing_text::TextSystem>,
+        style: Option<&amazing_text::TextStyle>,
+        root_style: Option<&amazing_text::TextStyle>,
+        fallback_em: f32,
+    ) -> Self {
+        let mut units = Self::legacy(fallback_em, fallback_em * 0.6);
+        if let (Some(text), Some(style)) = (text, style) {
+            let metrics = text.font_relative_metrics(style);
+            units.em = style.size;
+            units.ch = metrics.ch_advance;
+            units.ic = metrics.ic_advance;
+            units.ex = metrics.x_height;
+            units.cap = metrics.cap_height;
+        }
+        if let (Some(text), Some(style)) = (text, root_style) {
+            let metrics = text.font_relative_metrics(style);
+            units.root_em = style.size;
+            units.root_ch = metrics.ch_advance;
+            units.root_ic = metrics.ic_advance;
+            units.root_ex = metrics.x_height;
+            units.root_cap = metrics.cap_height;
+        }
+        units
+    }
+
+    fn divided_by(self, factor: f32) -> Self {
+        Self {
+            em: self.em / factor, ch: self.ch / factor,
+            ic: self.ic / factor, ex: self.ex / factor, cap: self.cap / factor,
+            root_em: self.root_em / factor, root_ch: self.root_ch / factor,
+            root_ic: self.root_ic / factor, root_ex: self.root_ex / factor,
+            root_cap: self.root_cap / factor,
+        }
+    }
 }
 
 impl<'a> CalcParser<'a> {
@@ -166,9 +235,16 @@ impl<'a> CalcParser<'a> {
             "in" => Some(number * PX_PER_IN),
             "cm" => Some(number * PX_PER_IN / 2.54),
             "mm" => Some(number * PX_PER_IN / 25.4),
-            "em" => Some(number * self.em),
-            "rem" => Some(number * ROOT_FONT_SIZE),
-            "ch" => Some(number * self.ch),
+            "em" => Some(number * self.units.em),
+            "rem" => Some(number * self.units.root_em),
+            "ch" => Some(number * self.units.ch),
+            "rch" => Some(number * self.units.root_ch),
+            "ic" => Some(number * self.units.ic),
+            "ric" => Some(number * self.units.root_ic),
+            "ex" => Some(number * self.units.ex),
+            "rex" => Some(number * self.units.root_ex),
+            "cap" => Some(number * self.units.cap),
+            "rcap" => Some(number * self.units.root_cap),
             _ => None,
         };
         if unit == "%" {
@@ -190,7 +266,13 @@ fn scale(value: LengthPercentage, factor: f32) -> LengthPercentage {
 /// Parse a `<length-percentage>` including nested `calc()` arithmetic. `ch`
 /// comes from the selected font's zero-glyph advance at the computed size.
 pub fn parse_length_percentage(s: &str, em: f32, ch: f32) -> Option<LengthPercentage> {
-    let mut parser = CalcParser { input: s.trim(), pos: 0, em, ch };
+    parse_length_percentage_with_units(s, FontRelativeUnits::legacy(em, ch))
+}
+
+pub(crate) fn parse_length_percentage_with_units(
+    s: &str, units: FontRelativeUnits,
+) -> Option<LengthPercentage> {
+    let mut parser = CalcParser { input: s.trim(), pos: 0, units };
     let value = parser.sum()?;
     parser.skip_ws();
     if parser.pos != parser.input.len() { return None; }
@@ -216,6 +298,16 @@ pub fn style_length_percentage(
     used_length_percentage(style, source, em, ch)
 }
 
+pub(crate) fn style_length_percentage_with_units(
+    style: &ComputedStyle, property: &str, units: FontRelativeUnits,
+) -> Option<LengthPercentage> {
+    let source = match style.typed(property) {
+        Some(ComputedValue::LengthPercentageExpression(expression)) => expression.as_str(),
+        _ => style.get(property)?,
+    };
+    used_length_percentage_with_units(style, source, units)
+}
+
 /// Scale only the absolute term at CSS zoom's used-value boundary. The
 /// percentage term uses its caller-supplied (already zoomed) containing box.
 /// `em` and `ch` arrive at their used sizes, so undo zoom before parsing and
@@ -225,6 +317,15 @@ pub fn used_length_percentage(
 ) -> Option<LengthPercentage> {
     let zoom = style.effective_zoom() as f32;
     let mut length = parse_length_percentage(source, em / zoom, ch / zoom)?;
+    length.px = style.scale_used_length(length.px as f64) as f32;
+    Some(length)
+}
+
+pub(crate) fn used_length_percentage_with_units(
+    style: &ComputedStyle, source: &str, units: FontRelativeUnits,
+) -> Option<LengthPercentage> {
+    let zoom = style.effective_zoom() as f32;
+    let mut length = parse_length_percentage_with_units(source, units.divided_by(zoom))?;
     length.px = style.scale_used_length(length.px as f64) as f32;
     Some(length)
 }
@@ -265,12 +366,12 @@ pub fn resolve_used_line_height(style: &ComputedStyle, font_px: f32, normal_px: 
 }
 
 fn style_maybe_length(
-    style: &ComputedStyle, property: &str, em: f32, basis: f32,
+    style: &ComputedStyle, property: &str, units: FontRelativeUnits, basis: f32,
 ) -> Option<MaybeLen> {
     if style.get(property)?.trim().eq_ignore_ascii_case("auto") {
         return Some(MaybeLen::Auto);
     }
-    style_length_percentage(style, property, em, em * 0.6)?
+    style_length_percentage_with_units(style, property, units)?
         .resolve(Some(basis))
         .map(MaybeLen::Px)
 }
@@ -351,7 +452,13 @@ pub fn resolve_line_height(v: &str, font_px: f32, normal_px: f32) -> f32 {
 
 /// Margins keep `auto` distinct (§10.3.3 centers/expands with it).
 pub fn resolve_margins(style: &ComputedStyle, em_base: f32, cbw: f32) -> SidesM {
-    read_box_sides_auto(style, "margin", MARGIN_LONGHANDS, em_base, cbw)
+    resolve_margins_with_units(style, FontRelativeUnits::legacy(em_base, em_base * 0.6), cbw)
+}
+
+pub(crate) fn resolve_margins_with_units(
+    style: &ComputedStyle, units: FontRelativeUnits, cbw: f32,
+) -> SidesM {
+    read_box_sides_auto(style, "margin", MARGIN_LONGHANDS, units, cbw)
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -385,14 +492,14 @@ fn read_box_sides_auto(
     style: &ComputedStyle,
     shorthand: &str,
     longhands: [&str; 4],
-    em_base: f32,
+    units: FontRelativeUnits,
     percent_base: f32,
 ) -> SidesM {
     // Slots keep the full MaybeLen so `auto` survives longhand parsing;
     // shorthand components that fail to parse recover to 0.
     let mut slots: [Option<MaybeLen>; 4] = [None; 4];
     for (i, lh) in longhands.iter().enumerate() {
-        slots[i] = style_maybe_length(style, lh, em_base, percent_base);
+        slots[i] = style_maybe_length(style, lh, units, percent_base);
     }
     if let Some(sh) = style.get(shorthand) {
         let parts: Vec<&str> = sh.split_ascii_whitespace().collect();
@@ -400,7 +507,7 @@ fn read_box_sides_auto(
             if s.eq_ignore_ascii_case("auto") {
                 MaybeLen::Auto
             } else {
-                used_length_percentage(style, s, em_base, em_base * 0.6)
+                used_length_percentage_with_units(style, s, units)
                     .and_then(|length| length.resolve(Some(percent_base)))
                     .map_or(MaybeLen::Px(0.0), MaybeLen::Px)
             }
@@ -448,7 +555,13 @@ fn read_box_sides_auto(
 
 /// Padding has no `auto`; unresolved sides are 0.
 pub fn resolve_padding(style: &ComputedStyle, em_base: f32, cbw: f32) -> Sides {
-    let m = read_box_sides_auto(style, "padding", PADDING_LONGHANDS, em_base, cbw);
+    resolve_padding_with_units(style, FontRelativeUnits::legacy(em_base, em_base * 0.6), cbw)
+}
+
+pub(crate) fn resolve_padding_with_units(
+    style: &ComputedStyle, units: FontRelativeUnits, cbw: f32,
+) -> Sides {
+    let m = read_box_sides_auto(style, "padding", PADDING_LONGHANDS, units, cbw);
     m.unwrap_or(0.0)
 }
 
@@ -589,6 +702,15 @@ pub fn resolve_extent_with_ch(
         .map_or(MaybeLen::Auto, MaybeLen::Px)
 }
 
+pub(crate) fn resolve_extent_with_units(
+    style: &ComputedStyle, prop: &str, units: FontRelativeUnits, basis: Option<f32>,
+) -> MaybeLen {
+    style_length_percentage_with_units(style, prop, units)
+        .and_then(|length| length.resolve(basis))
+        .map(MaybeLen::Px)
+        .unwrap_or(MaybeLen::Auto)
+}
+
 /// Resolve all four border corner radii in top-left, top-right,
 /// bottom-right, bottom-left order. Horizontal percentages use the border-box
 /// width and vertical percentages use its height. Paint applies the common
@@ -695,6 +817,18 @@ mod tests {
         ));
         assert_eq!(resolve_extent(style, "height", 16.0, 200.0), MaybeLen::Px(98.0));
         assert_eq!(resolve_extent(style, "width", 16.0, 200.0), MaybeLen::Px(40.0));
+    }
+
+    #[test]
+    fn font_relative_units_keep_element_and_root_metrics_separate() {
+        let units = FontRelativeUnits {
+            em: 20.0, ch: 9.0, ic: 20.0, ex: 8.0, cap: 15.0,
+            root_em: 16.0, root_ch: 7.0, root_ic: 16.0, root_ex: 6.0, root_cap: 12.0,
+        };
+        let length = parse_length_percentage_with_units(
+            "calc(1ch + 1ic + 1ex + 1cap + 1rch + 1ric + 1rex + 1rcap)", units,
+        ).unwrap();
+        assert_eq!(length.resolve(None), Some(93.0));
     }
 
     #[test]

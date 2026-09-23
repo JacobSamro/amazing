@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "layout14-font-spacing-target",
+    "case_count": 13
+  },
+  "sparse_paths": [
+    "css/css-writing-modes",
+    "css/css-fonts",
+    "css/css-text/letter-spacing",
+    "css/css-text/word-spacing",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "layout14__css__css-writing-modes__text-orientation-upright-directionality-001.html",
+      "test": "css/css-writing-modes/text-orientation-upright-directionality-001.html"
+    },
+    {
+      "id": "layout14__css__css-writing-modes__writing-mode-vertical-lr-002.xht",
+      "test": "css/css-writing-modes/writing-mode-vertical-lr-002.xht"
+    },
+    {
+      "id": "layout14__css__css-fonts__first-available-font-002.html",
+      "test": "css/css-fonts/first-available-font-002.html"
+    },
+    {
+      "id": "layout14__css__css-fonts__font-variant-ligatures-11.optional.html",
+      "test": "css/css-fonts/font-variant-ligatures-11.optional.html"
+    },
+    {
+      "id": "layout14__css__css-fonts__font-feature-resolution-001.html",
+      "test": "css/css-fonts/font-feature-resolution-001.html"
+    },
+    {
+      "id": "layout14__css__css-fonts__font-feature-resolution-002.html",
+      "test": "css/css-fonts/font-feature-resolution-002.html"
+    },
+    {
+      "id": "layout14__css__css-text__letter-spacing__letter-spacing-200.html",
+      "test": "css/css-text/letter-spacing/letter-spacing-200.html"
+    },
+    {
+      "id": "layout14__css__css-text__letter-spacing__letter-spacing-end-of-line-001.html",
+      "test": "css/css-text/letter-spacing/letter-spacing-end-of-line-001.html"
+    },
+    {
+      "id": "layout14__css__css-text__letter-spacing__letter-spacing-ligatures-001.html",
+      "test": "css/css-text/letter-spacing/letter-spacing-ligatures-001.html"
+    },
+    {
+      "id": "layout14__css__css-text__word-spacing__word-spacing-001.html",
+      "test": "css/css-text/word-spacing/word-spacing-001.html"
+    },
+    {
+      "id": "layout14__css__css-text__word-spacing__word-spacing-002.html",
+      "test": "css/css-text/word-spacing/word-spacing-002.html"
+    },
+    {
+      "id": "layout14__css__css-text__word-spacing__word-spacing-003.html",
+      "test": "css/css-text/word-spacing/word-spacing-003.html"
+    },
+    {
+      "id": "layout14__css__css-text__word-spacing__word-spacing-percent-001.html",
+      "test": "css/css-text/word-spacing/word-spacing-percent-001.html"
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "manifest":  "C:\\Users\\server\\src\\wt\\layout\\tests\\wpt-render\\layout14-target.json",
+    "viewport":  {
+                     "width":  800,
+                     "height":  600,
+                     "device_scale":  1
+                 },
+    "font_set":  "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+    "run_directory":  "C:\\Users\\server\\target\\layout\\layout14-diagnostic\\run-20260923T230731712Z-452876",
+    "counts":  {
+                   "pass":  3,
+                   "mismatch":  3,
+                   "error":  0,
+                   "timeout":  0,
+                   "unsupported":  0,
+                   "crash":  0
+               },
+    "unexpected":  0,
+    "tests":  [
+                  {
+                      "id":  "css__css-writing-modes__text-combine-upright-line-breaking-rules-001.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "text-combine-upright-line-breaking-rules-001-ref.html",
+                      "differing_pixels":  4192,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "000d2df841175d48c36259cb587e876aa76e9b452f9358a20ed7309558b4e213",
+                      "reference_sha256":  "99aef73171a6822aa6082921a4bebe7d4e116886aacea2de8036b9dde8fbe766",
+                      "diff_sha256":  "d6f38982c2f821ff164629d44843a10248c60472e6f315ef25df1cf79cf1075c",
+                      "detail":  "maxDifference=255/0; totalPixels=4192/0"
+                  },
+                  {
+                      "id":  "css__css-writing-modes__text-orientation-upright-directionality-001.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "text-orientation-upright-directionality-001-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "c8c638c556494c8e09762b68408e64c48b3eb57758f82f4ec5e62a33595e5e6f",
+                      "reference_sha256":  "c8c638c556494c8e09762b68408e64c48b3eb57758f82f4ec5e62a33595e5e6f",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css__css-writing-modes__writing-mode-vertical-lr-002.xht",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "reference/writing-mode-vertical-lr-002-ref.xht",
+                      "differing_pixels":  1299,
+                      "max_difference":  52,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "14c16ed7456e49ccbed54e22238c5e00c600ecae5db103826d0776493bec4d75",
+                      "reference_sha256":  "de4f86eb28cb77ba36b3bfc7e1f0fa042bab094fca45d0d568590c2cce8c6b74",
+                      "diff_sha256":  "d9c58d34bbafe1839a7579068d0266a5f87c16b715c97978bd2351ab31c461cf",
+                      "detail":  "maxDifference=52/0; totalPixels=1299/0"
+                  },
+                  {
+                      "id":  "css__css-writing-modes__direction-upright-001.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "reference/direction-upright-001.html",
+                      "differing_pixels":  4429,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "636417c702961b565afe5f7c94d279517226a73a20950b86c0923861091c494a",
+                      "reference_sha256":  "6240f8e51ccf93ddcf228b841fb80e7a511d1c5e6e4dae4ab9d76eb999715c57",
+                      "diff_sha256":  "664933a6eaac53a6b1a76e8fddea84d92dd7d2fa37ff28c9ebf95aee3809bdbe",
+                      "detail":  "maxDifference=255/0; totalPixels=4429/0"
+                  },
+                  {
+                      "id":  "css__css-fonts__first-available-font-002.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "first-available-font-002-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "1e7850db21ca467963054a98a8da67ce6d681ff8f0d7a477050fe36074584cf7",
+                      "reference_sha256":  "1e7850db21ca467963054a98a8da67ce6d681ff8f0d7a477050fe36074584cf7",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css__css-fonts__font-variant-ligatures-11.optional.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "font-variant-ligatures-11-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "77dc1833202550bc2088327f41e2f9d80ce112025c0a60a7950a95f1304a3c80",
+                      "reference_sha256":  "77dc1833202550bc2088327f41e2f9d80ce112025c0a60a7950a95f1304a3c80",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  }
+              ]
+}
