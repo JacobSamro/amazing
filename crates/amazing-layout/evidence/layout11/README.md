@@ -8,6 +8,8 @@ expanded into the layout Windows build tree. `cargo build -p amazing --bin amazi
 The pinned WPT revision was `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`,
 800×600 at device scale 1. The zoom fixtures were copied from the CSS lane's
 checkout of the same revision into the layout lane's WPT root.
+The 292 tracked crate source files and Cargo manifests/lockfile in
+`baseline-source.json` matched their win-001 copies, 292/292.
 
 The five-case `focused-manifest.json` ran twice under a build slot, producing
 `baseline-1.json` and `baseline-2.json`. Both report **0 pass, 5 mismatch**, with
