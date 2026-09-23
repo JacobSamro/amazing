@@ -50,7 +50,7 @@
 use crate::ast::*;
 use crate::errors::SyntaxError;
 use crate::tokens::{Punct, SourceLocation, Span, Token, TokenKind};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Parses a full script (modules are deferred; see module docs).
 pub fn parse_script(src: &str) -> Result<Program, SyntaxError> {
@@ -94,6 +94,8 @@ struct Parser {
     in_generator: usize,
     in_async: usize,
     in_formal_params: usize,
+    /// A script directive applies to methods parsed after it.
+    strict_script: bool,
     /// Class field initializers inherit this restriction through arrows.
     in_class_field_initializer: usize,
     /// Only a class constructor may contain a direct `super()` call.
@@ -121,6 +123,7 @@ impl Parser {
             in_generator: 0,
             in_async: 0,
             in_formal_params: 0,
+            strict_script: false,
             in_class_field_initializer: 0,
             super_call_allowed: false,
             template_depth: 0,
@@ -285,8 +288,17 @@ impl Parser {
     fn parse_program(mut self) -> Result<Program, SyntaxError> {
         let start = self.cur_loc();
         let mut body = Vec::new();
+        let mut in_directive_prologue = true;
         while !self.at_eof() {
-            body.push(self.parse_stmt()?);
+            let stmt = self.parse_stmt()?;
+            if in_directive_prologue {
+                match directive_string(&stmt) {
+                    Some("use strict") => self.strict_script = true,
+                    Some(_) => {}
+                    None => in_directive_prologue = false,
+                }
+            }
+            body.push(stmt);
         }
         Ok(Program {
             span: self.span_from(start),
@@ -1033,6 +1045,42 @@ impl Parser {
         Ok(params)
     }
 
+    /// Method definitions use UniqueFormalParameters. Their body directive
+    /// also rules out non-simple parameters, even when the containing script
+    /// was already strict.
+    fn validate_method_params(
+        &self,
+        params: &[Param],
+        strict: bool,
+        own_strict_directive: bool,
+    ) -> Result<(), SyntaxError> {
+        let mut names = HashSet::new();
+        for param in params {
+            if own_strict_directive
+                && (param.rest
+                    || param.default.is_some()
+                    || !matches!(param.binding, Binding::Ident(_)))
+            {
+                return Err(self.err_at(
+                    param.span.start,
+                    "a use strict directive cannot accompany non-simple parameters",
+                ));
+            }
+            for ident in binding_names(&param.binding) {
+                if !names.insert(&ident.name) {
+                    return Err(self.err_at(ident.span.start, "duplicate method parameter"));
+                }
+                if strict && (ident.name == "eval" || ident.name == "arguments") {
+                    return Err(self.err_at(
+                        ident.span.start,
+                        "eval and arguments cannot be strict parameters",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Runs `f` with the function-body context flags applied; used by every
     /// callable body so nested `return`/`yield`/`await` validity works.
     fn with_fn_context<T>(
@@ -1120,7 +1168,7 @@ impl Parser {
         // Modifier order is fixed by the grammar: `async` precedes `*`
         // (`async *ag() {}`; bare `*g()` and `async m()` are the other combos).
         let is_async =
-            self.word("async") && !self.cur().newline_before && self.nth_starts_member_key(1);
+            self.word("async") && !self.nth(1).newline_before && self.nth_starts_member_key(1);
         if is_async {
             self.bump();
         }
@@ -1142,6 +1190,12 @@ impl Parser {
             self.parse_prop_key()?
         };
         if self.at_punct(Punct::LParen) {
+            if !is_static
+                && (is_async || is_generator)
+                && prop_key_name(&key) == Some("constructor")
+            {
+                return Err(self.err_at(start, "class constructors cannot be async or generators"));
+            }
             self.in_async += usize::from(is_async);
             self.in_generator += usize::from(is_generator);
             let params = self.parse_params();
@@ -1165,6 +1219,7 @@ impl Parser {
             self.super_call_allowed = saved_super;
             self.in_class_field_initializer = saved_field;
             let body = body?;
+            self.validate_method_params(&params, true, has_use_strict(&body))?;
             return Ok(ClassMember::Method(ClassMethod {
                 key,
                 key_utf16,
@@ -1284,6 +1339,43 @@ fn prop_key_name(key: &PropKey) -> Option<&str> {
     match key {
         PropKey::Ident(id) => Some(id.name.as_str()),
         _ => None,
+    }
+}
+
+fn directive_string(stmt: &Stmt) -> Option<&str> {
+    match &stmt.kind {
+        StmtKind::Expression(Expr {
+            kind: ExprKind::Str(value),
+            ..
+        }) => Some(value),
+        _ => None,
+    }
+}
+
+fn has_use_strict(block: &Block) -> bool {
+    for stmt in &block.body {
+        match directive_string(stmt) {
+            Some("use strict") => return true,
+            Some(_) => {}
+            None => break,
+        }
+    }
+    false
+}
+
+fn binding_names(binding: &Binding) -> Vec<&Ident> {
+    match binding {
+        Binding::Ident(ident) => vec![ident],
+        Binding::Array(elements) => elements
+            .iter()
+            .flatten()
+            .flat_map(|item| binding_names(item))
+            .collect(),
+        Binding::Object(properties) => properties
+            .iter()
+            .flat_map(|(_, item)| binding_names(item))
+            .collect(),
+        Binding::Rest(inner) | Binding::Default(inner, _) => binding_names(inner),
     }
 }
 
@@ -1652,7 +1744,7 @@ impl Parser {
             ));
         }
         // `await` (contextual: only inside async functions).
-        if self.word("await") && self.in_async > 0 && !self.cur().newline_before {
+        if self.word("await") && self.in_async > 0 {
             if self.in_formal_params > 0 {
                 return Err(self.err("await is forbidden in async formal parameter defaults"));
             }
@@ -1847,6 +1939,9 @@ impl Parser {
                     args.push(self.parse_assignment_expr()?);
                 }
                 if !self.eat_punct(Punct::Comma) {
+                    break;
+                }
+                if self.at_punct(Punct::RParen) {
                     break;
                 }
             }
@@ -2199,7 +2294,7 @@ impl Parser {
         // Modifier order is fixed by the grammar: `async` precedes `*`
         // (`async *ag() {}`; bare `*g()` and `async m()` are the other combos).
         let is_async =
-            self.word("async") && !self.cur().newline_before && self.nth_starts_member_key(1);
+            self.word("async") && !self.nth(1).newline_before && self.nth_starts_member_key(1);
         if is_async {
             self.bump();
         }
@@ -2227,8 +2322,19 @@ impl Parser {
             }));
         }
         if self.at_punct(Punct::LParen) {
-            let params = self.parse_params()?;
+            self.in_async += usize::from(is_async);
+            self.in_generator += usize::from(is_generator);
+            let params = self.parse_params();
+            self.in_generator -= usize::from(is_generator);
+            self.in_async -= usize::from(is_async);
+            let params = params?;
             let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block())?;
+            let own_strict_directive = has_use_strict(&body);
+            self.validate_method_params(
+                &params,
+                self.strict_script || own_strict_directive,
+                own_strict_directive,
+            )?;
             return Ok(ObjElem::Prop(Property {
                 key: key.clone(),
                 key_utf16: key_utf16.clone(),
@@ -2774,6 +2880,66 @@ mod tests {
         // Sloppy-mode deferral: outside async functions `await` stays a
         // plain identifier (see module docs).
         assert!(parse_script("function f() { await(1); }").is_ok());
+    }
+
+    #[test]
+    fn async_methods_and_await_accept_a_newline_before_the_token() {
+        for source in [
+            "var driver = {\n  async subscribe() {\n    await ready();\n  }\n};",
+            "class Driver {\n  async subscribe() {\n    await ready();\n  }\n}",
+            "async function run() {\n  await ready();\n}",
+        ] {
+            assert!(parse_script(source).is_ok(), "rejected {source}");
+        }
+        for source in ["var driver = { async\nsubscribe() {} };"] {
+            assert!(parse_script(source).is_err(), "accepted {source}");
+        }
+        // In a class, the same spelling is a field followed by a method.
+        assert!(parse_script("class Driver { async\nsubscribe() {} }").is_ok());
+    }
+
+    #[test]
+    fn async_method_formals_keep_their_early_errors() {
+        for source in [
+            "var o = {\n async method(x, x) {} };",
+            "var o = {\n async *method(x = 0, x) {} };",
+            "var o = {\n async method([x]) { 'use strict'; } };",
+            "var o = {\n async method(await) {} };",
+            "var o = {\n async method(x = await value) {} };",
+            "'use strict'; var o = {\n async method(eval) {} };",
+            "'use strict'; var o = {\n async method(arguments) {} };",
+        ] {
+            assert!(parse_script(source).is_err(), "accepted {source}");
+        }
+        assert!(parse_script("var o = {\n async method(a, b) { await ready(); } };").is_ok());
+    }
+
+    #[test]
+    fn class_constructors_reject_async_and_generator_modifiers() {
+        for source in [
+            "class C {\n async constructor() {} }",
+            "class C {\n async *constructor() {} }",
+            "var C = class {\n async constructor() {} };",
+            "var C = class {\n async *constructor() {} };",
+        ] {
+            assert!(parse_script(source).is_err(), "accepted {source}");
+        }
+        assert!(parse_script("class C { static async constructor() {} }").is_ok());
+    }
+
+    #[test]
+    fn call_arguments_allow_one_trailing_comma() {
+        for source in [
+            "f(1,);",
+            "f(1, ...rest,);",
+            "new C(1,);",
+            "obj?.method(1,);",
+        ] {
+            assert!(parse_script(source).is_ok(), "rejected {source}");
+        }
+        for source in ["f(,);", "f(1,,);", "f(...rest,,);"] {
+            assert!(parse_script(source).is_err(), "accepted {source}");
+        }
     }
 
     // =========================================================================
