@@ -1,0 +1,12 @@
+wpt-empty	fail	df0ba819ccbf5a51
+wpt-div	fail	4ee780d1d2e36cc6
+wpt-text	fail	375f900f05dd053e
+wpt-nested	fail	eccf8325da1c26a5
+wpt-head	fail	cccbe44243009fb0
+basic	fail	f9833f2221f09f63
+table	fail	fe13e49784d5019e
+eof	fail	46cf9a39e213ed98
+stray-end	pass	86bf50cc3322e2de
+nested	fail	ccfec72b74e5ecd1
+select	fail	0e85235a32881be4
+fragment-template	unsupported	-

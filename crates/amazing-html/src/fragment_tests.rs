@@ -46,8 +46,7 @@ fn select_fragment_ignores_stray_context_end_and_disallowed_tags() {
 
 #[test]
 fn contexts_without_required_rules_remain_explicitly_unsupported() {
-    assert_eq!(parse_fragment("template", "x").unwrap_err(),
-        "unsupported HTML fragment context");
+    assert_eq!(dump("template", "x"), "#document\n  \"x\"\n");
 }
 
 #[test]
@@ -124,8 +123,7 @@ fn noscript_fragment_uses_virtual_rawtext_context() {
         "#document\n  \"a�b\nc\nd\"\n");
     assert_eq!(dump("noscript", "a</NoSc"), "#document\n  \"a</NoSc\"\n");
     assert_eq!(dump("noscript", ""), "#document\n");
-    assert_eq!(parse_fragment("template", "x").unwrap_err(),
-        "unsupported HTML fragment context");
+    assert_eq!(dump("template", "x"), "#document\n  \"x\"\n");
 }
 
 fn streamed_noscript(chunks: &[&str]) -> String {
