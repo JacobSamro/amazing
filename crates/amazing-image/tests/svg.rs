@@ -306,3 +306,61 @@ fn paths_reject_open_curved_malformed_and_unsupported_paint_whole_image() {
         DecodeError::AllocationLimit
     );
 }
+
+#[test]
+fn polygons_fill_simple_concave_transformed_and_double_wound_outlines() {
+    let simple = svg("", r#"<polygon points="1,1 6,1 6,6 1,6" fill="red"/>"#);
+    assert_eq!(pixel(&simple, 2, 2), [255, 0, 0, 255]);
+    assert_eq!(pixel(&simple, 0, 2), [0; 4]);
+    let adjacent_negative = svg("", r#"<polygon points="1-1 6-1 6,6 1,6" fill="red"/>"#);
+    assert_eq!(pixel(&adjacent_negative, 2, 2), [255, 0, 0, 255]);
+
+    let concave = svg("", r#"<polygon points="1 1,7 1,7 3,3 3,3 7,1 7" fill="lime"/>"#);
+    assert_eq!(pixel(&concave, 2, 5), [0, 255, 0, 255]);
+    assert_eq!(pixel(&concave, 5, 5), [0; 4]);
+
+    let transformed = svg("", r#"<g transform="translate(1 1)"><polygon points="1,1 4,1 4,4 1,4" style="fill: blue; fill-opacity: .5"/></g>"#);
+    assert_eq!(pixel(&transformed, 2, 2), [0, 0, 255, 128]);
+    assert_eq!(pixel(&transformed, 1, 1), [0; 4]);
+
+    let double = svg("", r#"<polygon points="1,1 6,1 6,6 1,6 1,1 6,1 6,6 1,6" fill="red"/>"#);
+    assert_eq!(pixel(&double, 2, 2), [255, 0, 0, 255]);
+    assert_eq!(pixel(&double, 0, 2), [0; 4]);
+}
+
+#[test]
+fn polygons_reject_malformed_points_and_unsupported_features_whole_image() {
+    for polygon in [
+        r#"<polygon/>"#,
+        r#"<polygon points=""/>"#,
+        r#"<polygon points="0,0 1,0"/>"#,
+        r#"<polygon points="0,0 1,0 1"/>"#,
+        r#"<polygon points=",0 1,0 1,1"/>"#,
+        r#"<polygon points="0,0 1,,0 1,1"/>"#,
+        r#"<polygon points="0,0 1,0 1,1,"/>"#,
+        r#"<polygon points="0,0 1,0 1px,1"/>"#,
+        r#"<polygon points="0,0 1e309,0 1,1"/>"#,
+        r#"<polygon points="0,0 1e,0 1,1"/>"#,
+        r#"<polygon points="0,0-1,0 1,1"/>"#,
+        r#"<polygon points="0,0 1,0 1,1" stroke="red"/>"#,
+        r#"<polygon points="0,0 1,0 1,1" fill-rule="evenodd"/>"#,
+        r#"<polygon points="0,0 1,0 1,1" fill-rule="nonzero"/>"#,
+        r#"<polygon points="0,0 1,0 1,1" fill="url(#paint)"/>"#,
+        r#"<polyline points="0,0 1,0 1,1"/>"#,
+    ] {
+        let body = format!(r#"<rect width="8" height="8" fill="red"/>{polygon}"#);
+        assert_eq!(
+            decode(&svg("", &body), Default::default()).unwrap_err(),
+            DecodeError::UnsupportedSvg,
+            "{polygon}"
+        );
+    }
+    let oversized = format!("{}", "0 0 ".repeat(513));
+    assert_eq!(
+        decode(&svg("", &format!(r#"<polygon points="{oversized}"/>"#)), Default::default()).unwrap_err(),
+        DecodeError::AllocationLimit
+    );
+    let costly = "0 0 ".repeat(257);
+    let large = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><polygon points="{costly}"/></svg>"#);
+    assert_eq!(decode(large.as_bytes(), Default::default()).unwrap_err(), DecodeError::AllocationLimit);
+}
