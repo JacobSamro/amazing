@@ -43,3 +43,7 @@ validate the newer source. Fresh gates on that base remain unrun. The refresh
 hold was removed only after the existing gate process ended naturally. All
 previous before and verified paired evidence remains untouched. No unrelated
 changes are credited to RC-4, and no final readiness is claimed during outage.
+
+## Post-outage collection
+
+The saved reports and executable hashes were collected before the current-source refresh. Five pinned pairs and the 9/9 owned proof agree on classifications, pixel differences, and actual/reference hashes; see `repeatability.json` and `artifacts.json`. This packet is historical compiled `552fd1f` on dev `f1d0f50`, not validation of later IA-1 or current dev.
