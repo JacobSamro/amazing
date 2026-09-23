@@ -166,7 +166,7 @@ pub(crate) fn invoke<H: BindingHost>(
                 else { (name.rsplit(':').next().unwrap(), uri.as_deref()) };
             dom.get_attribute_node(element, uri, local).ok_or(DomError::InvalidStateError)
         })?;
-        host.with_dom(|dom| dom.set_attr_value(attr, units))?;
+        host.with_dom(|dom| dom.store_attr_value_units(attr, units))?;
         return Ok(host.undefined());
     }
     if matches!(op, O::ElementRemoveAttribute | O::ElementRemoveAttributeNS

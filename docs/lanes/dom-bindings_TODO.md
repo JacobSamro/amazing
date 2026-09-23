@@ -1527,3 +1527,33 @@ The existing `isConnected` and event-parent algorithms were light-tree-only; bot
 ## Optional binding installation hooks (2026-09-23)
 
 On base `9cd9e24` (merged DOM-13), the DOM-12 class-string and DOMException Error-prototype hooks no longer abort installation when an older host lacks those capabilities. Both return the typed `OptionalHookInstall::NotSupported` by default. `interfaces::install` records each skipped capability in `InstallReport::not_installed` and continues installing the rest of the interface surface; actual `Err` values remain fatal. Mock tests cover complete installation with both hooks skipped and propagation of a real hook failure. The runtime/driver can override each hook when it supports the required Symbol key or Error prototype behavior. A skipped hook is not WebIDL conformance credit.
+
+## DOM-14 native Custom Elements and Node.baseURI (2026-09-23)
+
+Fixed base `7801627` (includes OPTIONAL-HOOKS). Pinned normative sources: [HTML Standard `cd8ac6f1bbf86dd0bd09ef75d27dacaebe7b4c1d`](https://github.com/whatwg/html/blob/cd8ac6f1bbf86dd0bd09ef75d27dacaebe7b4c1d/source), §2.4.1 document base URLs and §4.13 custom elements; [DOM Standard `a2331a45360129e8645ef7e0a04740241b6e3726`](https://github.com/whatwg/dom/blob/a2331a45360129e8645ef7e0a04740241b6e3726/dom.bs), moveBefore and shadow-including tree algorithms. Pinned WPT checkout `53bc812da2ed81179ebd1ba76b2d197cc4747d12`.
+
+`Node.baseURI` selects the first HTML `base[href]` in the owner document's tree, resolves it via `UrlReflection`, and otherwise returns the driver's `DocumentField::URL`. It works for connected and detached nodes, fragments, and Attr nodes. The current URL seam has one input and resolves against the embedding's base; a driver with a relative `<base href>` must ensure it resolves that href against the document's fallback URL, not against itself. The pinned `Node-baseURI.html` selection covers only the document-URL fallback.
+
+The native `CustomElements` registry stores definitions per document, constructor/callback root IDs, observed attributes, disabled features, form association, per-element upgrade state, construction stacks with the already-constructed marker, and reaction frames plus a backup queue. Native insertion/removal/adoption/attribute hooks enqueue lifecycle reactions. `ParentNode.moveBefore` preserves custom element connection and enqueues `connectedMoveCallback`, falling back to disconnected then connected callbacks when absent. Defining a name upgrades matching shadow-including document descendants; `CustomElementRegistry.upgrade(root)` queues disconnected candidates. `Document.createElement` and `createElementNS` synchronously deliver matching upgrades; `createElement(name, {is})` supports customized built-ins. Constructor errors in synchronous creation propagate. Binding calls flush reactions after the DOM borrow, one upgraded element's callbacks before the next element's upgrade. Parser tasks must call the exported `deliver_custom_element_reactions` after native tree mutations.
+
+The binding descriptor exposes `CustomElementRegistry.define/get/getName/whenDefined/upgrade`. `define` validates constructor, name, duplicate name/constructor, and `extends`; uses a definition-running guard while extracting prototype callbacks, conditional `observedAttributes`, `disabledFeatures`, `formAssociated`, and form lifecycle callbacks. `whenDefined` returns one pending promise per name, rejects invalid names, and resolves pending/fresh promises with the constructor. Constructors and callbacks are held through `retain_value`. New host methods default to typed NotSupported. The optional global installer hook records `CustomElementsGlobal` as not installed if the driver does not expose `window.customElements`; its absence never aborts other interface installation.
+
+Pinned WPT **native/mock assertion ports**, not unmodified WPT passes:
+
+| Source file | Ported assertion cases |
+|---|---:|
+| `dom/nodes/Node-baseURI.html` | 5 fallback cases: connected/detached/fragment element, detached/attached Attr |
+| `custom-elements/CustomElementRegistry.html` | 13 validation, lookup, promise, and upgrade-order cases |
+| `custom-elements/CustomElementRegistry-getName.html` | 2 known/unknown constructor cases |
+| `custom-elements/attribute-changed-callback.html` | 3 add/remove payload and one-callback-per-set cases |
+| `custom-elements/connected-callbacks.html` | 1 insertion case |
+| `custom-elements/disconnected-callbacks.html` | 1 removal case |
+| `custom-elements/adopted-callback.html` | 1 adoption reaction case |
+| `custom-elements/custom-element-reaction-queue.html` | 1 per-element upgrade/reaction ordering case |
+| `custom-elements/Document-createElement-customized-builtins.html` | 1 `{is}` construction case |
+| `custom-elements/customized-built-in-constructor-exceptions.html` | 1 synchronous constructor failure case |
+| **Total** | **29 cases from 10 files** |
+
+The assertion ports found two defects: `Element.setAttribute` changed the same attached Attr twice to preserve UTF-16 sidecar units, which queued two `attributeChangedCallback`s; it now updates the sidecar without a second mutation. Flat reaction delivery ran all upgrades before any of their callbacks; it now drains each upgraded element's queued callbacks first. The older `Node.baseURI` missing getter caused IA-BINDINGS-2's `Node-baseURI.html` pass-to-fail regression.
+
+Installation limits: the production driver must install the optional global, implement constructor/object/sequence conversion, construction and promise hooks, call `Dom::custom_element_super` from the HTMLElement constructor, and report callback exceptions. Until then the feature is proven natively and in the mock host only. Scoped `CustomElementRegistry()` construction/`initialize`, custom element registry association with scoped shadow roots, form-associated internals/callback dispatch, and parser-side synchronous construction hooks are beyond this ticket's named methods. `observedAttributes` presently passes through the DOM's scalar `String` attribute storage, so lone-surrogate names need a future UTF-16 attribute model. No real `custom-elements/` WPT pass number is claimed.

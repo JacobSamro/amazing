@@ -131,6 +131,25 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
     receiver: H::Value,
     args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    host.with_dom(|dom| { dom.custom_element_push_reaction_frame(); Ok(()) })?;
+    let result = invoke_inner(host, operation, receiver, args);
+    let created = if matches!(operation, O::CreateElement | O::CreateElementNS) {
+        result.as_ref().ok().and_then(|value| host.node_brand(value))
+    } else { None };
+    if let Some(node) = created {
+        host.with_dom(|dom| { dom.queue_custom_element_upgrade(node); Ok(()) })?;
+    }
+    host.with_dom(|dom| { dom.custom_element_pop_reaction_frame(); Ok(()) })?;
+    let delivered = crate::custom_element_bindings::deliver_custom_element_reactions_for_created(host, created);
+    match result { Err(error) => Err(error), Ok(value) => { delivered?; Ok(value) } }
+}
+
+fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + DocumentHost + UrlReflection>(
+    host: &mut H, operation: O, receiver: H::Value, args: &[H::Value],
+) -> Result<H::Value, H::Error> {
+    if crate::custom_element_bindings::handles(operation) {
+        return crate::custom_element_bindings::invoke(host, operation, receiver, args);
+    }
     if crate::shadow_bindings::handles(operation) {
         return crate::shadow_bindings::invoke(host, operation, receiver, args);
     }
@@ -193,7 +212,7 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
     }
     let required = match operation {
         O::CreateText | O::CreateCDATASection | O::CreateComment | O::AppendChild | O::RemoveChild | O::Contains => 1,
-        O::InsertBefore | O::ReplaceChild => 2,
+        O::InsertBefore | O::ReplaceChild | O::MoveBefore => 2,
         _ => 0,
     };
     if args.len() < required {
@@ -235,7 +254,7 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
     }
     let argument_node = if matches!(
         operation,
-        O::AppendChild | O::InsertBefore | O::ReplaceChild | O::RemoveChild
+        O::AppendChild | O::InsertBefore | O::ReplaceChild | O::RemoveChild | O::MoveBefore
     ) {
         Some(required_node(host, args.first())?)
     } else if operation == O::Contains {
@@ -243,7 +262,7 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
     } else {
         None
     };
-    let reference = if operation == O::InsertBefore {
+    let reference = if matches!(operation, O::InsertBefore | O::MoveBefore) {
         nullable_node(host, &args[1])?
     } else if operation == O::ReplaceChild {
         Some(required_node(host, args.get(1))?)
@@ -308,6 +327,10 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
             }
             O::AppendChild | O::InsertBefore => {
                 R::Node(dom.pre_insert(argument_node.unwrap(), target, reference)?)
+            }
+            O::MoveBefore => {
+                dom.move_before(argument_node.unwrap(), target, reference)?;
+                R::Undefined
             }
             O::RemoveChild => R::Node(dom.pre_remove(argument_node.unwrap(), target)?),
             O::ReplaceChild => {

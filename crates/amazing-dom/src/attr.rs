@@ -48,6 +48,15 @@ impl Dom {
         if let NodeKind::Attr { value, .. } = &mut self.nodes[attr.0 as usize].kind { *value = units; }
         Ok(())
     }
+    /// Preserve exact code units after an Element setter has already changed
+    /// the attribute; do not repeat the mutation or its reactions.
+    pub fn store_attr_value_units(&mut self, attr: NodeIdx, units: Vec<u16>) -> Result<(), DomError> {
+        self.check_node(attr)?;
+        let NodeKind::Attr { value, .. } = &mut self.nodes[attr.0 as usize].kind
+            else { return Err(DomError::TypeError) };
+        *value = units;
+        Ok(())
+    }
     fn attached_attr_slot(&self, element: NodeIdx, uri: Option<&str>, local: &str) -> Option<NodeIdx> {
         self.nodes.iter().enumerate().find_map(|(index, node)| match &node.kind {
             NodeKind::Attr { local_name, namespace_uri, owner_element: Some(owner), .. }

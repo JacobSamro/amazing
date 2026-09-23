@@ -23,6 +23,7 @@ pub mod markup;
 pub mod event_loop;
 pub mod mutation;
 pub mod shadow;
+pub mod custom_elements;
 mod namespace;
 mod node_mixins;
 pub use node_mixins::NodeOrString;
@@ -129,6 +130,7 @@ pub struct Dom {
     traversals: traversal::Traversals,
     shadow_roots: Vec<shadow::ShadowRootData>,
     slot_states: Vec<shadow::SlotState>,
+    custom_elements: custom_elements::CustomElements,
     /// Doctype name captured by the tree builder (Phase 1). Quirks-mode bits
     /// land here when the layout engine needs them.
     pub doctype: Option<String>,
@@ -173,6 +175,7 @@ impl Dom {
             traversals: traversal::Traversals::default(),
             shadow_roots: Vec::new(),
             slot_states: Vec::new(),
+            custom_elements: custom_elements::CustomElements::default(),
             doctype: None,
         };
         dom.nodes.push(Node {

@@ -48,6 +48,7 @@ impl InterfaceBrand {
     pub const ABORT_CONTROLLER: Self = Self(19);
     pub const ABORT_SIGNAL: Self = Self(20);
     pub const FILTERED_NODE_LIST: Self = Self(21);
+    pub const CUSTOM_ELEMENT_REGISTRY: Self = Self(22);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -148,6 +149,7 @@ pub enum Interface {
     DOMException,
     AbortController,
     AbortSignal,
+    CustomElementRegistry,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -206,6 +208,13 @@ pub enum Operation {
     ElementInnerText,
     ElementSetInnerText,
     GetRootNode,
+    NodeBaseURI,
+    MoveBefore,
+    CustomElementRegistryDefine,
+    CustomElementRegistryGet,
+    CustomElementRegistryGetName,
+    CustomElementRegistryWhenDefined,
+    CustomElementRegistryUpgrade,
     ElementAttachShadow,
     ElementShadowRoot,
     ElementAssignedSlot,
@@ -684,6 +693,38 @@ pub trait BindingHost: Sized {
     /// name/message toString behavior. Kept separate from WebIDL inheritance.
     fn install_dom_exception_error_prototype(&mut self) -> Result<OptionalHookInstall, Self::Error> {
         Ok(OptionalHookInstall::NotSupported)
+    }
+    /// Expose the current document's registry as `window.customElements`.
+    fn install_custom_elements_global(&mut self) -> Result<OptionalHookInstall, Self::Error> {
+        Ok(OptionalHookInstall::NotSupported)
+    }
+    fn is_constructor(&mut self, _value: &Self::Value) -> Result<bool, Self::Error> {
+        self.with_dom::<bool>(|_| Err(DomError::NotSupportedError))
+    }
+    fn require_object(&mut self, _value: &Self::Value) -> Result<(), Self::Error> {
+        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
+    fn sequence_dom_strings(&mut self, _value: &Self::Value) -> Result<Vec<Vec<u16>>, Self::Error> {
+        self.with_dom::<Vec<Vec<u16>>>(|_| Err(DomError::NotSupportedError))
+    }
+    fn construct_custom_element(&mut self, _constructor: &Self::Value,
+        _definition: usize, _element: NodeIdx) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn new_promise(&mut self) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn resolve_promise(&mut self, _promise: &Self::Value, _value: Self::Value) -> Result<(), Self::Error> {
+        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
+    fn reject_promise(&mut self, _promise: &Self::Value, _reason: Self::Value) -> Result<(), Self::Error> {
+        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
+    fn dom_exception_value(&mut self, _error: DomError) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn report_custom_element_exception(&mut self, _error: Self::Error) -> Result<(), Self::Error> {
+        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
     }
     /// Standard Node constants are exposed on Node and its prototype.
     fn install_node_constant(&mut self, name: &'static str, value: u16) -> Result<(), Self::Error>;
