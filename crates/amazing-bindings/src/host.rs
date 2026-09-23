@@ -227,7 +227,7 @@ pub enum Operation {
     OptionsIndexedSetter, OptionsSupportedIndexCount, OptionsSupportedNames,
     RadioNodeListLength, RadioNodeListItem, RadioNodeListIndexedGetter,
     RadioNodeListSupportedIndexCount, RadioNodeListValue, RadioNodeListSetValue,
-    ElementHref, ElementSetHref, ElementTarget, ElementSetTarget,
+    ElementGetHTML, ElementHref, ElementSetHref, ElementTarget, ElementSetTarget,
     ElementRel, ElementSetRel, ElementRelList, OutputHtmlFor, IFrameSandbox,
     LinkSizes, ElementDownload, ElementSetDownload,
     ElementSrc, ElementSetSrc, ImageAlt, ImageSetAlt, ImageWidth, ImageSetWidth,
@@ -803,6 +803,10 @@ pub trait BindingHost: Sized {
     }
     fn sequence_dom_strings(&mut self, _value: &Self::Value) -> Result<Vec<Vec<u16>>, Self::Error> {
         self.with_dom::<Vec<Vec<u16>>>(|_| Err(DomError::NotSupportedError))
+    }
+    /// WebIDL sequence<ShadowRoot> for getHTML({shadowRoots}).
+    fn sequence_shadow_roots(&mut self, _value: &Self::Value) -> Result<Vec<NodeIdx>, Self::Error> {
+        self.with_dom::<Vec<NodeIdx>>(|_| Err(DomError::NotSupportedError))
     }
     fn construct_custom_element(&mut self, _constructor: &Self::Value,
         _definition: usize, _element: NodeIdx) -> Result<Self::Value, Self::Error> {

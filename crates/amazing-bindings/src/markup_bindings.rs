@@ -2,7 +2,7 @@ use crate::host::{BindingHost, FragmentContext, FragmentParser, InterfaceBrand, 
 use amazing_dom::{DomError, NodeKind};
 
 pub(crate) fn handles(op: O) -> bool {
-    matches!(op, O::ElementInnerHTML | O::ElementSetInnerHTML | O::ElementOuterHTML
+    matches!(op, O::ElementGetHTML | O::ElementInnerHTML | O::ElementSetInnerHTML | O::ElementOuterHTML
         | O::ElementSetOuterHTML | O::ElementInsertAdjacentHTML | O::ElementInnerText
         | O::ElementSetInnerText | O::ParentQuerySelector | O::ParentQuerySelectorAll
         | O::ElementMatches | O::ElementClosest | O::ElementWebkitMatchesSelector)
@@ -65,9 +65,27 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
         };
     }
     host.with_dom(|dom| if matches!(dom.get(node).kind, NodeKind::Element { .. })
-        || (matches!(op, O::ElementInnerHTML | O::ElementSetInnerHTML) && dom.is_shadow_root(node)) { Ok(()) }
+        || (matches!(op, O::ElementGetHTML | O::ElementInnerHTML | O::ElementSetInnerHTML)
+            && dom.is_shadow_root(node)) { Ok(()) }
         else { Err(DomError::TypeError) })?;
     match op {
+        O::ElementGetHTML => {
+            let mut serializable = false;
+            let mut roots = Vec::new();
+            if let Some(options) = args.first().filter(|value| !host.is_nullish(value)) {
+                let flag = host.get_property(options, "serializableShadowRoots")?;
+                serializable = host.to_boolean(&flag);
+                let list = host.get_property(options, "shadowRoots")?;
+                if !host.is_nullish(&list) {
+                    roots = host.sequence_shadow_roots(&list)?;
+                    host.with_dom(|dom| if roots.iter().all(|root| dom.is_shadow_root(*root)) {
+                        Ok(())
+                    } else { Err(DomError::TypeError) })?;
+                }
+            }
+            let units = host.with_dom(|dom| dom.serialize_children_with_shadow(node, serializable, &roots))?;
+            host.string(&units)
+        }
         O::ElementInnerHTML | O::ElementOuterHTML => {
             let units = host.with_dom(|dom| if op == O::ElementInnerHTML {
                 dom.serialize_children(node)

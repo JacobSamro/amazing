@@ -50,21 +50,62 @@ impl Dom {
     }
     /// HTML fragment serialization; results preserve UTF-16 code units.
     pub fn serialize_children(&self, parent: NodeIdx) -> Result<Vec<u16>, DomError> {
+        self.serialize_children_with_shadow(parent, false, &[])
+    }
+
+    /// HTML fragment serialization used by Element/ShadowRoot.getHTML().
+    /// `shadow_roots` can include closed and non-serializable roots explicitly.
+    pub fn serialize_children_with_shadow(&self, parent: NodeIdx,
+        serializable_shadow_roots: bool, shadow_roots: &[NodeIdx]) -> Result<Vec<u16>, DomError> {
         self.check_node(parent)?;
         let mut out = Vec::new();
+        if self.namespace_uri(parent) == Some("http://www.w3.org/1999/xhtml")
+            && self.local_name(parent).is_some_and(void_element) { return Ok(out); }
+        self.serialize_shadow_into(parent, &mut out, serializable_shadow_roots, shadow_roots);
         let parent = self.template_contents(parent).unwrap_or(parent);
-        for child in self.children(parent) { self.serialize_node_into(child, &mut out); }
+        for child in self.children(parent) {
+            self.serialize_node_into(child, &mut out, serializable_shadow_roots, shadow_roots);
+        }
         Ok(out)
     }
 
     pub fn serialize_node(&self, node: NodeIdx) -> Result<Vec<u16>, DomError> {
         self.check_node(node)?;
         let mut out = Vec::new();
-        self.serialize_node_into(node, &mut out);
+        self.serialize_node_into(node, &mut out, false, &[]);
         Ok(out)
     }
 
-    fn serialize_node_into(&self, node: NodeIdx, out: &mut Vec<u16>) {
+    fn serialize_shadow_into(&self, host: NodeIdx, out: &mut Vec<u16>,
+        serializable_shadow_roots: bool, shadow_roots: &[NodeIdx]) {
+        let Some(root) = self.shadow_root_of_host(host) else { return };
+        let data = self.shadow_data(root).expect("attached shadow root");
+        if !((serializable_shadow_roots && data.options.serializable)
+            || shadow_roots.contains(&root)) { return }
+        append(out, "<template shadowrootmode=\"");
+        append(out, match data.options.mode {
+            crate::shadow::ShadowMode::Open => "open",
+            crate::shadow::ShadowMode::Closed => "closed",
+        });
+        append(out, "\"");
+        if data.options.delegates_focus { append(out, " shadowrootdelegatesfocus=\"\""); }
+        if data.options.serializable { append(out, " shadowrootserializable=\"\""); }
+        if data.options.slot_assignment == crate::shadow::SlotAssignment::Manual {
+            append(out, " shadowrootslotassignment=\"manual\"");
+        }
+        if data.options.clonable { append(out, " shadowrootclonable=\"\""); }
+        if data.keep_custom_element_registry_null {
+            append(out, " shadowrootcustomelementregistry=\"\"");
+        }
+        append(out, ">");
+        for child in self.children(root) {
+            self.serialize_node_into(child, out, serializable_shadow_roots, shadow_roots);
+        }
+        append(out, "</template>");
+    }
+
+    fn serialize_node_into(&self, node: NodeIdx, out: &mut Vec<u16>,
+        serializable_shadow_roots: bool, shadow_roots: &[NodeIdx]) {
         match &self.get(node).kind {
             NodeKind::Element { .. } => {
                 let name = self.qualified_name(node).expect("element name");
@@ -77,8 +118,11 @@ impl Dom {
                 append(out, ">");
                 let is_html = self.namespace_uri(node) == Some("http://www.w3.org/1999/xhtml");
                 if is_html && void_element(self.local_name(node).unwrap()) { return; }
+                self.serialize_shadow_into(node, out, serializable_shadow_roots, shadow_roots);
                 let contents = self.template_contents(node).unwrap_or(node);
-                for child in self.children(contents) { self.serialize_node_into(child, out); }
+                for child in self.children(contents) {
+                    self.serialize_node_into(child, out, serializable_shadow_roots, shadow_roots);
+                }
                 append(out, "</"); append(out, &name); append(out, ">");
             }
             NodeKind::Text { .. } => {
@@ -98,7 +142,9 @@ impl Dom {
             }
             NodeKind::DocumentType { name, .. } => { append(out, "<!DOCTYPE "); append(out, name); append(out, ">"); }
             NodeKind::Document | NodeKind::DocumentFragment => {
-                for child in self.children(node) { self.serialize_node_into(child, out); }
+                for child in self.children(node) {
+                    self.serialize_node_into(child, out, serializable_shadow_roots, shadow_roots);
+                }
             }
             NodeKind::Attr { .. } => (),
         }
@@ -148,6 +194,18 @@ impl Dom {
                 return Err(DomError::NotSupportedError),
         };
         self.pre_insert(created, parent, None)?;
+        if let Some(root) = source.shadow_root_of_host(node) {
+            let source_data = source.shadow_data(root).expect("attached parser shadow root").clone();
+            let copied_root = self.attach_shadow(created, source_data.options)?;
+            let copied_data = self.shadow_roots.iter_mut().find(|data| data.root == copied_root)
+                .expect("new imported shadow root");
+            copied_data.declarative = source_data.declarative;
+            copied_data.available_to_element_internals = source_data.available_to_element_internals;
+            copied_data.keep_custom_element_registry_null = source_data.keep_custom_element_registry_null;
+            for child in source.children(root) {
+                self.import_node_into(source, child, document, copied_root)?;
+            }
+        }
         if source.is_html_template(node) {
             let destination = self.ensure_template_contents(created)?;
             if let Some(contents) = source.template_contents(node) {

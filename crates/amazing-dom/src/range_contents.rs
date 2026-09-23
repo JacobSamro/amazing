@@ -62,9 +62,14 @@ impl Dom {
             }
         }
         if let Some(root) = self.shadow_root_of_host(node) {
-            let options = self.shadow_data(root).unwrap().options;
+            let data = self.shadow_data(root).unwrap().clone();
+            let options = data.options;
             if options.clonable {
                 let copy_root = self.attach_shadow(copy, options)?;
+                let copy_data = self.shadow_roots.iter_mut().find(|entry| entry.root == copy_root)
+                    .expect("new clone shadow root");
+                copy_data.declarative = data.declarative;
+                copy_data.keep_custom_element_registry_null = data.keep_custom_element_registry_null;
                 let children: Vec<_> = self.children(root).collect();
                 for child in children {
                     let child = self.clone_node(child, true)?;

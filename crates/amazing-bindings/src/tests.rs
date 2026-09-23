@@ -216,6 +216,13 @@ impl BindingHost for Host {
         let V::Array(values) = value else { return Err("TypeError: Expected a sequence".into()) };
         values.iter().map(|value| self.to_dom_string(value)).collect()
     }
+    fn sequence_shadow_roots(&mut self, value: &V) -> Result<Vec<NodeIdx>, String> {
+        let V::Array(values) = value else { return Err("TypeError: Expected a sequence".into()) };
+        values.iter().map(|value| match value {
+            V::Node(node) if self.dom.is_shadow_root(*node) => Ok(*node),
+            _ => Err("TypeError: Expected a ShadowRoot".into()),
+        }).collect()
+    }
     fn construct_custom_element(&mut self, _constructor: &V, definition: usize, element: NodeIdx)
         -> Result<V, String> {
         if self.fail_custom_element_constructor { return Err("constructor failed".into()); }
@@ -1816,6 +1823,28 @@ fn reflected_form_attributes_feed_validation_and_preserve_webidl_rules() {
     let text = h.dom.create_text(option, "  Example  label ");
     assert_ne!(option, text);
     assert_eq!(call(&mut h, O::FormAttributeGet(F::Label), V::Node(option), &[]), str_value("Example label"));
+}
+
+#[test]
+fn get_html_options_include_serializable_and_explicit_shadow_roots() {
+    use amazing_dom::shadow::{ShadowMode, ShadowOptions, SlotAssignment};
+    let mut h = Host::default();
+    let container = h.dom.create_element(NodeIdx(0), "main");
+    let host = h.dom.create_element(container, "div");
+    let options = ShadowOptions { mode: ShadowMode::Closed, delegates_focus: false,
+        slot_assignment: SlotAssignment::Named, clonable: false, serializable: false };
+    let root = h.dom.attach_declarative_shadow(host, options, false).unwrap();
+    h.dom.create_text(root, "hidden");
+    let empty = call(&mut h, O::ElementGetHTML, V::Node(container), &[]);
+    assert_eq!(empty, str_value("<div></div>"));
+    let explicit = V::Dictionary(vec![("shadowRoots", V::Array(vec![V::Node(root)]))]);
+    assert_eq!(call(&mut h, O::ElementGetHTML, V::Node(container), &[explicit]),
+        str_value("<div><template shadowrootmode=\"closed\">hidden</template></div>"));
+    let own_root = V::Dictionary(vec![("shadowRoots", V::Array(vec![V::Node(root)]))]);
+    assert_eq!(call(&mut h, O::ElementGetHTML, V::Node(host), &[own_root]),
+        str_value("<template shadowrootmode=\"closed\">hidden</template>"));
+    let serializable = V::Dictionary(vec![("serializableShadowRoots", V::Bool(true))]);
+    assert_eq!(call(&mut h, O::ElementGetHTML, V::Node(container), &[serializable]), empty);
 }
 
 // WPT pin 53bc812da2ed81179ebd1ba76b2d197cc4747d12:
