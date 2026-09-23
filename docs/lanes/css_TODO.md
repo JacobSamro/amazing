@@ -1201,3 +1201,8 @@ subset is recorded in `css13-lists-manifest.json`.
 Quoted `list-style-type` values now produce literal marker text after CSS
 escape decoding. An omitted `reversed()` reset value uses the later increments
 in its scope to derive a descending start; explicit values are preserved.
+The subsequent page follow-up expands `list-style` into its inherited type,
+image and position longhands, including `none`, image URLs, CSS-wide values and
+post-substitution `var()`. The selector parser now accepts `:nth-of-type()` and
+`:nth-last-of-type()` so a structural compound immediately before `::marker`
+can match its originating list item. CSS crate regressions cover both paths.

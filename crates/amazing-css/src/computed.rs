@@ -870,6 +870,13 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     } else {
         property.to_ascii_lowercase()
     };
+    if property == "list-style" {
+        if contains_var_function(value) {
+            return ["list-style-type", "list-style-image", "list-style-position"]
+                .into_iter().map(|name| (name.to_owned(), deferred(DEFERRED_LIST_STYLE, value))).collect();
+        }
+        return expand_list_style(value).unwrap_or_default();
+    }
     if metadata(&property).is_some()
         && css_wide_keyword(value).is_none()
         && !contains_var_function(value)
@@ -1216,8 +1223,56 @@ fn expand_basic_background(value: &str) -> Option<Vec<(String, String)>> {
         } else { p.initial.to_owned() })).collect())
 }
 
+fn expand_list_style(value: &str) -> Option<Vec<(String, String)>> {
+    let value = value.trim();
+    if css_wide_keyword(value).is_some() {
+        return Some(["list-style-type", "list-style-image", "list-style-position"]
+            .into_iter().map(|name| (name.to_owned(), value.to_owned())).collect());
+    }
+    let tokens = tokenize(value);
+    let parts = top_level_components(&tokens)?;
+    if parts.is_empty() { return None; }
+    let mut style_type = None;
+    let mut image = None;
+    let mut position = None;
+    let mut none = 0usize;
+    for part in parts {
+        let css = serialize(part);
+        match part {
+            [Token::Ident(name)] if name.eq_ignore_ascii_case("none") => none += 1,
+            [Token::Ident(name)] if matches!(name.to_ascii_lowercase().as_str(), "inside" | "outside") => {
+                if position.replace(name.to_ascii_lowercase()).is_some() { return None; }
+            }
+            [Token::Str(_)] | [Token::Ident(_)] => {
+                if style_type.replace(css).is_some() { return None; }
+            }
+            [Token::Function(name), Token::OpenParen, .., Token::CloseParen]
+                if matches!(name.to_ascii_lowercase().as_str(), "url" | "image" | "image-set" | "linear-gradient" | "radial-gradient") => {
+                if image.replace(css).is_some() { return None; }
+            }
+            _ => return None,
+        }
+    }
+    if none > 2 || none > usize::from(style_type.is_none()) + usize::from(image.is_none()) {
+        return None;
+    }
+    if none > 0 {
+        if style_type.is_none() { style_type = Some("none".to_owned()); none -= 1; }
+        if none > 0 && image.is_none() { image = Some("none".to_owned()); }
+        // A single `none` with no other type/image sets both, as required by
+        // the shorthand's marker-suppression meaning.
+        if style_type.as_deref() == Some("none") && image.is_none() { image = Some("none".to_owned()); }
+    }
+    Some(vec![
+        ("list-style-type".to_owned(), style_type.unwrap_or_else(|| "disc".to_owned())),
+        ("list-style-image".to_owned(), image.unwrap_or_else(|| "none".to_owned())),
+        ("list-style-position".to_owned(), position.unwrap_or_else(|| "outside".to_owned())),
+    ])
+}
+
 const DEFERRED_BACKGROUND: &str = "amazing-internal-background";
 const DEFERRED_FONT: &str = "amazing-internal-font";
+const DEFERRED_LIST_STYLE: &str = "amazing-internal-list-style";
 const DEFERRED_BORDER_WIDTH: &str = "amazing-internal-border-side-width";
 const DEFERRED_BORDER_STYLE: &str = "amazing-internal-border-side-style";
 const DEFERRED_BORDER_COLOR: &str = "amazing-internal-border-side-color";
@@ -2964,6 +3019,10 @@ fn deferred_inner<'a>(value: &'a str, function: &str) -> Option<&'a str> {
 }
 
 fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()> {
+    if let Some(inner) = deferred_inner(value, DEFERRED_LIST_STYLE) {
+        return expand_list_style(inner).ok_or(())?.into_iter()
+            .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());
+    }
     if let Some(inner) = deferred_inner(value, DEFERRED_FONT) {
         return expand_font_shorthand(inner).ok_or(())?.into_iter()
             .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());
