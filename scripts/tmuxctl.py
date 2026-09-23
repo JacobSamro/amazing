@@ -282,6 +282,9 @@ LANE_GRANTS["js-vm"].append("crates/amazing-js/examples/test262_host.rs")
 LANE_GRANTS["js-lang"] += ["crates/amazing-js/src/env.rs", "crates/amazing-js/src/interp.rs"]
 # JSB-2: $DETACHBUFFER wiring in the Test262 host. ADDED LINES ONLY.
 LANE_GRANTS["js-binary"].append("crates/amazing-js/examples/test262_host.rs")
+# JS-10: Exotic::ModuleNamespace (value.rs) and property-path hooks (interp.rs,
+# interp_builtins.rs). ADDED LINES ONLY, section 10.4.6.
+LANE_GRANTS["js-lang"] += ["crates/amazing-js/src/value.rs", "crates/amazing-js/src/interp_builtins.rs"]
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
