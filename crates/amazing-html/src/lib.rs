@@ -17,8 +17,8 @@
 //! for supported syntax, namespace handling, and explicit DTD/encoding limits.
 //!
 //! HTML deviations from full spec (deliberate):
-//! - Encoding is assumed lossy UTF-8; byte-level encoding detection is not
-//!   performed (caller decodes bytes before handing them to [`parse`]).
+//! - [`parse`] accepts caller-decoded text. [`parse_bytes`] supports a bounded
+//!   byte-level subset; see [`encoding`] for its precise encoding coverage.
 //! - CDATA sections (`<![CDATA[…]]>`) tokenize as bogus comments.
 //! - Doctype PUBLIC/SYSTEM identifiers are consumed but not captured; only
 //!   their presence feeds quirks-mode approximation.
@@ -32,6 +32,7 @@
 //! assert!(dom.dump(amazing_dom::NodeIdx(0)).contains("<b>"));
 //! ```
 
+pub mod encoding;
 pub mod entities;
 pub mod tokenizer;
 pub mod tree;
@@ -39,6 +40,12 @@ pub mod xml;
 pub use xml::{parse_xml, XmlError, XmlErrorKind};
 
 use amazing_dom::{Dom, Namespace, NodeIdx};
+
+/// Decodes and parses a complete HTML byte stream. `transport_label` is the
+/// optional charset from out-of-band transport metadata.
+pub fn parse_bytes(bytes: &[u8], transport_label: Option<&str>) -> Dom {
+    parse(&encoding::decode(bytes, transport_label).text)
+}
 
 /// Parses an HTML document into an arena-backed DOM.
 ///
@@ -67,8 +74,7 @@ pub fn parse(src: &str) -> Dom {
 pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     let context = context.to_ascii_lowercase();
     let supported = [
-        "div", "table", "tbody", "thead", "tfoot", "tr", "td", "th",
-        "caption", "colgroup",
+        "div", "table", "tbody", "thead", "tfoot", "tr", "td", "th", "caption", "colgroup",
     ];
     if !supported.contains(&context.as_str()) {
         return Err("unsupported HTML fragment context".into());
@@ -82,12 +88,7 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     };
     let source = tree::build_fragment(src, &context);
 
-    fn clone_subtree(
-        source: &Dom,
-        source_node: NodeIdx,
-        target: &mut Dom,
-        parent: NodeIdx,
-    ) {
+    fn clone_subtree(source: &Dom, source_node: NodeIdx, target: &mut Dom, parent: NodeIdx) {
         let created = target.append_child(parent, source.get(source_node).kind.clone());
         for child in source.children(source_node) {
             clone_subtree(source, child, target, created);
@@ -97,8 +98,7 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     let root = source
         .children(NodeIdx(0))
         .find(|node| {
-            source.namespace(*node) == Some(Namespace::Html)
-                && source.name(*node) == Some("html")
+            source.namespace(*node) == Some(Namespace::Html) && source.name(*node) == Some("html")
         })
         .ok_or_else(|| "fragment root was not constructed".to_owned())?;
     let context_node = source
@@ -151,42 +151,33 @@ mod tests {
 
     #[test]
     fn parses_div_context_fragment_without_document_wrappers() {
-        let dom = parse_fragment(
-            "div",
-            "<b><em><foo><foob><fooc><aside></b></em>",
-        )
-        .expect("fragment");
+        let dom =
+            parse_fragment("div", "<b><em><foo><foob><fooc><aside></b></em>").expect("fragment");
         assert_eq!(
             dom.dump(NodeIdx(0)),
             "#document\n  <b>\n    <em>\n      <foo>\n        <foob>\n          <fooc>\n  <aside>\n    <b>\n"
         );
-        let recovery = parse_fragment("div", "</div><span>x")
-            .expect("stray context end tag recovery");
+        let recovery =
+            parse_fragment("div", "</div><span>x").expect("stray context end tag recovery");
         assert_eq!(
             recovery.dump(NodeIdx(0)),
             "#document\n  <span>\n    \"x\"\n"
         );
         assert!(parse_fragment("template", "x").is_err());
-        let table = parse_fragment("table", "<td>x")
-            .expect("table fragment context");
+        let table = parse_fragment("table", "<td>x").expect("table fragment context");
         assert_eq!(
             table.dump(NodeIdx(0)),
             "#document\n  <tbody>\n    <tr>\n      <td>\n        \"x\"\n"
         );
-        let body = parse_fragment("tbody", "<tr><td>x")
-            .expect("tbody fragment context");
+        let body = parse_fragment("tbody", "<tr><td>x").expect("tbody fragment context");
         assert_eq!(
             body.dump(NodeIdx(0)),
             "#document\n  <tr>\n    <td>\n      \"x\"\n"
         );
-        let row = parse_fragment("tr", "<td>x")
-            .expect("tr fragment context");
-        assert_eq!(
-            row.dump(NodeIdx(0)),
-            "#document\n  <td>\n    \"x\"\n"
-        );
-        let normalized = parse_fragment("div", "<span>a\r\nb\rc")
-            .expect("fragment newline normalization");
+        let row = parse_fragment("tr", "<td>x").expect("tr fragment context");
+        assert_eq!(row.dump(NodeIdx(0)), "#document\n  <td>\n    \"x\"\n");
+        let normalized =
+            parse_fragment("div", "<span>a\r\nb\rc").expect("fragment newline normalization");
         assert_eq!(
             normalized.dump(NodeIdx(0)),
             "#document\n  <span>\n    \"a\nb\nc\"\n"

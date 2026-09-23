@@ -108,13 +108,27 @@ pixel hashes, and final integrated workspace nextest plus separate doctests.
 No server Git, no push/PR, and no next ticket. Historical parser counts are not
 render passes; both external-DTD Unsupported limitations remain.
 
-## Proposed HTML-2 — strict XML byte input
+## HTML-2 — bounded HTML byte input
 
-Add BOM/encoding detection and strict UTF-8/UTF-16 decoding with declaration
-consistency tests. The declaration test accepts decoded text declaring UTF-16
-while the CLI only reads UTF-8: decoding is a concrete missing boundary before
-streaming. Incremental parsing should follow with chunk-split tests once decoder
-ownership is settled. No HTML-2 work has started.
+The HTML parser now has `parse_bytes(&[u8], Option<&str>) -> Dom` beside the
+unchanged `parse(&str) -> Dom`. `encoding::decode` also returns decoded text,
+selected encoding and the source of that choice. This is an owned crate seam;
+the browser CLI still calls `String::from_utf8_lossy` before `parse`, so product
+adoption needs an integrator-owned driver change.
+
+The initial slice uses WHATWG precedence: leading UTF-8/UTF-16 BOM, supported
+transport charset label, a 1024-byte HTML meta prescan, then windows-1252
+fallback. It recognizes plain `<meta charset>` and `http-equiv=content-type`
+with a `content` charset, and handles the UTF-16 XML preamble. A UTF-16 meta
+declaration maps to UTF-8 per HTML. Invalid UTF-8 and UTF-16 sequences decode
+with U+FFFD; the BOM is consumed. The supported decoders are UTF-8, UTF-16LE,
+UTF-16BE and windows-1252. Accepted labels are explicitly enumerated in
+`encoding.rs`, including UTF-8 aliases and ISO-8859-1/ASCII aliases that map
+to windows-1252. Other labels do not claim coverage. The complete Encoding
+label/decoder table and full HTML prescan/reparse algorithm remain future work.
+
+This ticket does not change XML byte handling or the HTML-1 XML cascade. Its
+strict XML byte-input idea remains a separate possible ticket after HTML-2.
 
 The pinned sample has two measured DTD-entity blockers and no UTF-8 input
 failures among 14 files. A bounded XHTML entity policy is a separate decision;
