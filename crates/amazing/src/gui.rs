@@ -24,13 +24,16 @@ mod windows {
     use std::process::ExitCode;
     use std::ptr::{null, null_mut};
     use std::rc::Rc;
+    use std::time::Instant;
 
     use amazing_dom::{Dom, NodeIdx, NodeKind};
     use amazing_js::DomHost;
     use amazing_layout::{Flow, LayoutBox};
     use amazing_paint::Surface;
+    use amazing_compositor::PropertyUpdate;
 
     use crate::{BrowserDomHost, PageMedia, load_page_media};
+    use crate::animation_scene::{AnimationScene, apply_to_layout};
     use crate::page::load_page_text_from_sheets;
     use crate::page::PagePaint;
 
@@ -249,6 +252,9 @@ mod windows {
     struct PageRuntime {
         host: Rc<RefCell<BrowserDomHost>>,
         js: crate::js_scheduler::DriverScheduler,
+        animations: AnimationScene,
+        animation_started: Instant,
+        animation_updates: Vec<PropertyUpdate>,
         layout: LayoutBox,
         media: PageMedia,
     }
@@ -529,7 +535,7 @@ mod windows {
             for warning in &page_text.warnings {
                 eprintln!("amazing gui: {warning}");
             }
-            let layout = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
+            let mut layout = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
                 &host_ref.dom,
                 &css,
                 width.max(1) as f32,
@@ -537,6 +543,10 @@ mod windows {
                 &page_text.provider,
                 &media,
             );
+            if apply_to_layout(&mut layout, &runtime.animation_updates) {
+                amazing_layout::block::layout_root_in_viewport(&mut layout, width.max(1) as f32,
+                    Some(viewport_height), &amazing_layout::font::FontSource::fallback());
+            }
             let height = amazing_layout::layout_overflow_bottom(&layout)
                 .ceil()
                 .clamp(1.0, 8192.0) as u32;
@@ -631,7 +641,8 @@ mod windows {
         }
 
         fn pump_timers(&mut self) {
-            let fired = if let Some(runtime) = self.tab_mut().runtime.as_mut() {
+            let page = self.tab().current_url().unwrap_or("").to_owned();
+            let mut fired = if let Some(runtime) = self.tab_mut().runtime.as_mut() {
                 match runtime.js.pump_now(true) {
                     Ok(fired) => fired,
                     Err(error) => {
@@ -642,6 +653,39 @@ mod windows {
             } else {
                 false
             };
+            if let Some(runtime) = self.tab_mut().runtime.as_mut() {
+                let sampled = (|| -> Result<_, String> {
+                    let host = runtime.host.borrow();
+                    let mut sources = Vec::new();
+                    collect_author_css(&host.dom, NodeIdx(0), &page, &mut sources)?;
+                    let sheets = sources.into_iter().map(|(source, url)| {
+                        let mut sheet = amazing_css::parse_stylesheet(&source);
+                        sheet.base_url = Some(url);
+                        sheet
+                    }).collect::<Vec<_>>();
+                    runtime.animations.frame(&host.dom, &sheets,
+                        runtime.animation_started.elapsed().as_secs_f64() * 1000.)
+                })();
+                match sampled {
+                    Ok(output) => {
+                        if !output.events.is_empty() {
+                            // An event listener can mutate the page without changing
+                            // this frame's sampled animation values.
+                            fired = true;
+                        }
+                        for event in &output.events {
+                            if let Err(error) = runtime.js.dispatch_animation_event(event) {
+                                eprintln!("amazing gui: animation listener failed: {}", error.describe());
+                            }
+                        }
+                        if runtime.animation_updates != output.main_thread_updates {
+                            runtime.animation_updates = output.main_thread_updates;
+                            fired = true;
+                        }
+                    }
+                    Err(error) => eprintln!("amazing gui: animation frame failed: {error}"),
+                }
+            }
             if let Some(delta) = self
                 .tab_mut()
                 .runtime
@@ -979,6 +1023,16 @@ mod windows {
             collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut font_sheets)?;
         }
         let css = font_sheets.iter().map(|(source, _)| source.as_str()).collect::<Vec<_>>().join("\n");
+        let mut animations = AnimationScene::new();
+        let animation_started = Instant::now();
+        let initial_animation = {
+            let host_ref = host.borrow();
+            let sheets = font_sheets.iter().map(|(source, _)| amazing_css::parse_stylesheet(source)).collect::<Vec<_>>();
+            animations.frame(&host_ref.dom, &sheets, 0.)?
+        };
+        for event in &initial_animation.events {
+            js.dispatch_animation_event(event).map_err(|error| error.describe())?;
+        }
         let host_ref = host.borrow();
         let media = load_page_media(&host_ref.dom, input);
         for warning in &media.warnings {
@@ -988,7 +1042,7 @@ mod windows {
         for warning in &page_text.warnings {
             eprintln!("amazing gui: {warning}");
         }
-        let root = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
+        let mut root = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
             &host_ref.dom,
             &css,
             width.max(1) as f32,
@@ -996,6 +1050,10 @@ mod windows {
             &page_text.provider,
             &media,
         );
+        if apply_to_layout(&mut root, &initial_animation.main_thread_updates) {
+            amazing_layout::block::layout_root_in_viewport(&mut root, width.max(1) as f32,
+                Some(700.), &amazing_layout::font::FontSource::fallback());
+        }
         let height = amazing_layout::layout_overflow_bottom(&root)
             .ceil()
             .clamp(1.0, 8192.0) as u32;
@@ -1014,6 +1072,9 @@ mod windows {
             runtime: PageRuntime {
                 host,
                 js,
+                animations,
+                animation_started,
+                animation_updates: initial_animation.main_thread_updates,
                 layout: root,
                 media,
             },

@@ -110,6 +110,32 @@ impl RuntimeBindings {
         Ok(())
     }
 
+    pub(crate) fn dispatch_animation_event(&self, js: &mut Interpreter, animation: &amazing_compositor::CssAnimationEvent) -> Result<(), Throw> {
+        use amazing_compositor::CssAnimationEventKind as Kind;
+        let (name, property) = match animation.kind {
+            Kind::AnimationStart => ("animationstart", "animationName"),
+            Kind::AnimationIteration => ("animationiteration", "animationName"),
+            Kind::AnimationEnd => ("animationend", "animationName"),
+            Kind::AnimationCancel => ("animationcancel", "animationName"),
+            Kind::TransitionRun => ("transitionrun", "propertyName"),
+            Kind::TransitionStart => ("transitionstart", "propertyName"),
+            Kind::TransitionEnd => ("transitionend", "propertyName"),
+            Kind::TransitionCancel => ("transitioncancel", "propertyName"),
+        };
+        let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        let prototype = adapter.js.binding_object_prototype();
+        let options = adapter.create_object(Some(&prototype))?;
+        adapter.js.binding_define_data_property(&options, "bubbles", JsValue::Bool(true), BindingPropertyFlags::METHOD)?;
+        let event = invoke(&mut adapter, Operation::EventConstructor, JsValue::Undefined,
+            &[JsValue::str(name), options])?;
+        adapter.js.binding_define_data_property(&event, property, JsValue::str(&animation.name), BindingPropertyFlags::METHOD)?;
+        adapter.js.binding_define_data_property(&event, "elapsedTime", JsValue::num(animation.elapsed_time_ms / 1000.), BindingPropertyFlags::METHOD)?;
+        adapter.js.binding_define_data_property(&event, "pseudoElement", JsValue::str(""), BindingPropertyFlags::METHOD)?;
+        let target = adapter.wrap_node(NodeIdx(animation.element as u32))?;
+        invoke(&mut adapter, Operation::DispatchEvent, target, &[event])?;
+        Ok(())
+    }
+
     pub(crate) fn deliver_mutations(&self, js: &mut Interpreter) -> Result<(), Throw> {
         let mut adapter = RuntimeBindingHost {
             js,

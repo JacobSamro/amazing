@@ -3,6 +3,8 @@ use std::{cell::RefCell, rc::Rc, process::ExitCode, time::Duration};
 use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text_from_sheets, PagePaint}, gui};
 use super::{parse::{read_bytes, read_source}, js::{execute_inline_scripts, prepare_page_scripts}};
 use crate::document::{DocumentKind, PageError, parse_document_bytes};
+use crate::animation_scene::{AnimationScene, apply_to_layout};
+use amazing_compositor::PropertyUpdate;
 /// Phase 2 demo artifact: compute styles for an HTML page.
 ///
 /// Stylesheets come from every `<style>` element in document order plus any
@@ -250,27 +252,58 @@ fn render_wpt_surface_after_first_paint(
     } else {
         None
     };
-    let first = paint_host_surface(&host, html_path, width as f32, Some(height), "")?;
+    let mut animations = AnimationScene::new();
+    let first_updates = sample_animation_frame(&host, html_path, &mut animations, 0.)?;
+    let first = paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "", &first_updates.main_thread_updates)?;
     after_first_paint(&first);
     let Some(scheduler) = scheduler.as_mut() else {
         return Ok(first);
     };
+    for event in &first_updates.events {
+        scheduler.dispatch_animation_event(event)
+            .map_err(|error| format!("animation listener failed: {}", error.describe()))?;
+    }
 
     scheduler.dispatch_dom_event(0, "TestRendered")
         .map_err(|error| format!("TestRendered listener failed: {}", error.describe()))?;
     scheduler.pump_at(Duration::ZERO, false)
         .map_err(|error| format!("TestRendered checkpoint failed: {}", error.describe()))?;
+    let mut sampled_at = 0.;
     for frame in 1..=MAX_REFTEST_FRAMES {
         if !root_has_reftest_wait(&host)? {
             break;
         }
         scheduler.pump_at(Duration::from_millis(frame * 16), true)
             .map_err(|error| format!("reftest-wait checkpoint failed: {}", error.describe()))?;
+        sampled_at = (frame * 16) as f64;
+        let output = sample_animation_frame(&host, html_path, &mut animations, sampled_at)?;
+        for event in &output.events {
+            scheduler.dispatch_animation_event(event)
+                .map_err(|error| format!("animation listener failed: {}", error.describe()))?;
+        }
     }
     if root_has_reftest_wait(&host)? {
         return Err(PageError::ReftestWaitTimeout);
     }
-    paint_host_surface(&host, html_path, width as f32, Some(height), "")
+    let final_updates = sample_animation_frame(&host, html_path, &mut animations, sampled_at)?;
+    for event in &final_updates.events {
+        scheduler.dispatch_animation_event(event)
+            .map_err(|error| format!("animation listener failed: {}", error.describe()))?;
+    }
+    paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "", &final_updates.main_thread_updates)
+}
+
+fn sample_animation_frame(
+    host: &Rc<RefCell<BrowserDomHost>>,
+    html_path: &str,
+    animations: &mut AnimationScene,
+    now_ms: f64,
+) -> Result<amazing_compositor::AnimationFrameOutput, PageError> {
+    let dom = host.borrow();
+    let mut sources = Vec::new();
+    collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut sources)?;
+    let sheets = sources.into_iter().map(|(_, _, sheet)| sheet).collect::<Vec<_>>();
+    animations.frame(&dom.dom, &sheets, now_ms).map_err(PageError::Render)
 }
 
 fn root_has_reftest_wait(host: &Rc<RefCell<BrowserDomHost>>) -> Result<bool, PageError> {
@@ -288,6 +321,17 @@ fn paint_host_surface(
     width: f32,
     fixed_height: Option<u32>,
     extra_css: &str,
+) -> Result<amazing_paint::Surface, PageError> {
+    paint_host_surface_with_updates(host, html_path, width, fixed_height, extra_css, &[])
+}
+
+fn paint_host_surface_with_updates(
+    host: &Rc<RefCell<BrowserDomHost>>,
+    html_path: &str,
+    width: f32,
+    fixed_height: Option<u32>,
+    extra_css: &str,
+    updates: &[PropertyUpdate],
 ) -> Result<amazing_paint::Surface, PageError> {
 
     let mut sources = Vec::new();
@@ -309,7 +353,7 @@ fn paint_host_surface(
     for warning in &page_text.warnings {
         eprintln!("amazing render: {warning}");
     }
-    let root = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
+    let mut root = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
         &dom.dom,
         &sheets,
         width,
@@ -317,6 +361,10 @@ fn paint_host_surface(
         &page_text.provider,
         &media,
     );
+    if apply_to_layout(&mut root, updates) {
+        amazing_layout::block::layout_root_in_viewport(&mut root, width,
+            fixed_height.map(|height| height as f32), &amazing_layout::font::FontSource::fallback());
+    }
     let page_height = fixed_height.unwrap_or_else(|| {
         // Normal document rendering follows content height; WPT rendering
         // supplies a fixed viewport instead.
@@ -440,6 +488,33 @@ mod reftest_protocol_tests {
         let html = page("reftest-wait", "document.addEventListener('TestRendered',()=>requestAnimationFrame(()=>document.documentElement.setAttribute('class','ready')));");
         let final_frame = render_wpt_surface("frame.html", html.as_bytes(), 64, 48).unwrap();
         assert_eq!(final_frame.pixels, ready_reference().pixels);
+    }
+
+    #[test]
+    fn css_animation_end_event_releases_wait_and_paints_final_sample() {
+        let html = "<!doctype html><html class='reftest-wait'><style>body{margin:0}@keyframes grow{from{width:8px}to{width:32px}}#box{height:16px;background:lime;animation:grow 32ms linear forwards}</style><body><div id='box'></div><script>document.querySelector('#box').addEventListener('animationend',e=>{if(e.animationName==='grow'&&e.elapsedTime===0.032)document.documentElement.setAttribute('class','ready')})</script></body></html>";
+        let result = render_wpt_surface("animation.html", html.as_bytes(), 64, 48).unwrap();
+        let reference = "<!doctype html><html><style>body{margin:0}#box{width:32px;height:16px;background:lime}</style><body><div id='box'></div></body></html>";
+        let expected = render_surface("reference.html", reference.as_bytes(), 64., Some(48), "").unwrap();
+        assert_eq!(result.pixels, expected.pixels);
+    }
+
+    #[test]
+    fn transition_end_event_follows_testrendered_style_change() {
+        let html = "<!doctype html><html class='reftest-wait'><style>body{margin:0}#box{width:8px;height:16px;background:lime;transition:width 32ms linear}#box.wide{width:32px}</style><body><div id='box'></div><script>let box=document.querySelector('#box');document.addEventListener('TestRendered',()=>box.setAttribute('class','wide'));box.addEventListener('transitionend',e=>{if(e.propertyName==='width'&&e.elapsedTime===0.032)document.documentElement.setAttribute('class','ready')})</script></body></html>";
+        let result = render_wpt_surface("transition.html", html.as_bytes(), 64, 48).unwrap();
+        let reference = "<!doctype html><html><style>body{margin:0}#box{width:32px;height:16px;background:lime}</style><body><div id='box'></div></body></html>";
+        let expected = render_surface("reference.html", reference.as_bytes(), 64., Some(48), "").unwrap();
+        assert_eq!(result.pixels, expected.pixels);
+    }
+
+    #[test]
+    fn color_and_opacity_samples_reach_final_paint() {
+        let html = "<!doctype html><html class='reftest-wait'><style>body{margin:0}@keyframes appear{from{background-color:red;opacity:0}to{background-color:lime;opacity:1}}#box{width:32px;height:16px;animation:appear 32ms linear forwards}</style><body><div id='box'></div><script>document.querySelector('#box').addEventListener('animationend',()=>document.documentElement.setAttribute('class','ready'))</script></body></html>";
+        let result = render_wpt_surface("color-opacity.html", html.as_bytes(), 64, 48).unwrap();
+        let reference = "<!doctype html><html><style>body{margin:0}#box{width:32px;height:16px;background-color:lime;opacity:1}</style><body><div id='box'></div></body></html>";
+        let expected = render_surface("reference.html", reference.as_bytes(), 64., Some(48), "").unwrap();
+        assert_eq!(result.pixels, expected.pixels);
     }
 
     #[test]

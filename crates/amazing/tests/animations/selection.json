@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": [
+    800,
+    600
+  ],
+  "selection": {
+    "kind": "fixed-animation-reftests",
+    "reason": "CSS animation sampling, important cascade and infinite duration"
+  },
+  "sparse_paths": [
+    "css/css-animations",
+    "css/css-backgrounds/animations"
+  ],
+  "tests": [
+    {
+      "id": "animation-duration-infinite",
+      "test": "css/css-animations/animation-duration-infinite.html"
+    },
+    {
+      "id": "animation-important-002",
+      "test": "css/css-animations/animation-important-002.html"
+    },
+    {
+      "id": "background-color-animation-in-body",
+      "test": "css/css-backgrounds/animations/background-color-animation-in-body.html"
+    }
+  ],
+  "files": {
+    "css/css-animations/animation-duration-infinite.html": {
+      "sha256": "e029e6bee17b8ca0da98f978d0ab8d044eb54df354f081ce9eb6e72ac34b9e9c",
+      "git_blob": "cfe6dc0bcf4f946832b82c4a838844498be2cc22"
+    },
+    "css/css-animations/animation-duration-infinite-ref.html": {
+      "sha256": "057f811c3025fbfc5a556b9c72e073aa2b4856abe169474a10d532acfe7a6c3f",
+      "git_blob": "a72dd6aef19cdb445e6784a44e4620f2dff06910"
+    },
+    "css/css-animations/animation-important-002.html": {
+      "sha256": "a9578bbf0841d16eece1da9e05da51556d76b20d6fa662252781a11660ceea17",
+      "git_blob": "2a68f8e0cacf06e2e5761ef392b90a4f89fcc843"
+    },
+    "css/css-animations/animation-important-002-ref.html": {
+      "sha256": "895130a64cd98f20c4d36ba8d6bbb47c4f41707aca79e1d1bfa3108f8361cf4c",
+      "git_blob": "52855cb91e6b780fc6375280b0643335802dd4e3"
+    },
+    "css/css-backgrounds/animations/background-color-animation-in-body.html": {
+      "sha256": "b83c561db4fdee4d9f749b841b8124f238359b8bbbf48938b731ce42e5133f81",
+      "git_blob": "e5783f2b41f8e89b15d7b2a5d0c2abfbec37ad40"
+    },
+    "css/css-backgrounds/animations/background-color-animation-in-body-ref.html": {
+      "sha256": "1a4e41625ebb996940dbe50cc3ebffeb5adba8c9e551340c518a6a61867ce5dd",
+      "git_blob": "5d3d419db6c84dc9480218b1ee487c7e4b301a58"
+    }
+  }
+}

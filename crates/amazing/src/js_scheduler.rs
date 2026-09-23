@@ -74,6 +74,10 @@ impl DriverScheduler {
             bindings.dispatch_event(js, node, event)
         })
     }
+    pub(crate) fn dispatch_animation_event(&mut self, event: &amazing_compositor::CssAnimationEvent) -> Result<(), Throw> {
+        let bindings = self.bindings.clone();
+        self.enter(|js| bindings.dispatch_animation_event(js, event))
+    }
     pub(crate) fn install_inline_handler(&mut self, node: u32, event: &str, body: &str) -> Result<(), Throw> {
         self.enter(|js| js.install_inline_handler(node, event, body))
     }

@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "base": "ba83010663168cf959f2d02b20a3e3dcaadd790f",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": [
+    800,
+    600
+  ],
+  "selection_sha256": "c88b2f1f1b8ce79ca363d19f72d8eb2fe51428e9eeb2612fa8912ebb394b39cf",
+  "before_counts": {
+    "pass": 2,
+    "mismatch": 1,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "after_counts": {
+    "pass": 2,
+    "mismatch": 1,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "stable_all": true,
+  "rows": [
+    {
+      "id": "animation-duration-infinite",
+      "before": "pass",
+      "after": "pass",
+      "stable": true,
+      "before_actual_sha256": "34343670eba7757e2491a16f7dea3cb7851c74338aedf2e406a09c5ce302cc78",
+      "after_actual_sha256": "34343670eba7757e2491a16f7dea3cb7851c74338aedf2e406a09c5ce302cc78",
+      "reference_sha256": "34343670eba7757e2491a16f7dea3cb7851c74338aedf2e406a09c5ce302cc78",
+      "differing_pixels_before": 0,
+      "differing_pixels_after": 0,
+      "note": ""
+    },
+    {
+      "id": "animation-important-002",
+      "before": "mismatch",
+      "after": "mismatch",
+      "stable": true,
+      "before_actual_sha256": "863de4935cc2db0ebf4e8ac3ea7f6c6f11ea0bc34b86422fd6565c296b72163d",
+      "after_actual_sha256": "863de4935cc2db0ebf4e8ac3ea7f6c6f11ea0bc34b86422fd6565c296b72163d",
+      "reference_sha256": "d7c6a8869e8f5d5d2a676d37db14fa28424e40e0b18c1a08368e6fa0157a7805",
+      "differing_pixels_before": 1823,
+      "differing_pixels_after": 1823,
+      "note": ""
+    },
+    {
+      "id": "background-color-animation-in-body",
+      "before": "pass",
+      "after": "pass",
+      "stable": true,
+      "before_actual_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "after_actual_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "reference_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+      "differing_pixels_before": 0,
+      "differing_pixels_after": 0,
+      "note": "white-only actual and reference; raw pass is not conformance credit"
+    }
+  ]
+}
