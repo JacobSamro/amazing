@@ -10,7 +10,7 @@ use super::{adopt_promise_result, callable_function, native_promise_reject, nati
 use crate::ast::{BinOp, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
-use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Throw};
+use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, PropertyKey, Throw};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -51,10 +51,14 @@ enum KeyOperand {
 }
 
 impl KeyOperand {
-    fn resolve(&self, i: &mut Interpreter, registers: &[JsValue]) -> Result<JsString, Throw> {
+    fn resolve(&self, registers: &[JsValue]) -> Result<PropertyKey, Throw> {
         match self {
-            Self::Static(key) => Ok(key.clone()),
-            Self::Dynamic(register) => i.to_js_string(&registers[*register]),
+            Self::Static(key) => Ok(PropertyKey::String(key.clone())),
+            Self::Dynamic(register) => match &registers[*register] {
+                JsValue::Str(key) => Ok(PropertyKey::String(key.clone())),
+                JsValue::Symbol(key) => Ok(PropertyKey::Symbol(key.clone())),
+                _ => Err(Throw::type_error("invalid VM property key")),
+            },
         }
     }
 }
@@ -314,7 +318,10 @@ impl Program {
                     Instruction::Constant(dst, value) => registers[*dst] = value.clone(),
                     Instruction::Numeric(dst, number) => registers[*dst] = i.numeric(number)?,
                     Instruction::ToKey(register) => {
-                        registers[*register] = JsValue::Str(i.to_js_string(&registers[*register])?);
+                        registers[*register] = match i.to_property_key(&registers[*register])? {
+                            PropertyKey::String(key) => JsValue::Str(key),
+                            PropertyKey::Symbol(key) => JsValue::Symbol(key),
+                        };
                     }
                     Instruction::LoadName(dst, name, optional) => {
                         registers[*dst] = match i.identifier_value(&env, name)? {
@@ -351,14 +358,14 @@ impl Program {
                         None => return Err(Throw::type_error("invalid VM reference lifetime")),
                     },
                     Instruction::GetMember(dst, object, key) => {
-                        let key = key.resolve(i, &registers)?;
+                        let key = key.resolve(&registers)?;
                         registers[*dst] = i.get_prop(&registers[*object], key)?;
                     }
                     Instruction::ResolveMember(slot, dst, object, key) => {
-                        let key = key.resolve(i, &registers)?;
+                        let key = key.resolve(&registers)?;
                         let receiver = registers[*object].clone();
                         registers[*dst] = i.get_prop(&receiver, key.clone())?;
-                        references[*slot] = Some(Reference::Property(receiver, crate::value::PropertyKey::String(key)));
+                        references[*slot] = Some(Reference::Property(receiver, key));
                     }
                     Instruction::StoreReference(slot, src) => {
                         let reference = references[*slot]
@@ -381,7 +388,7 @@ impl Program {
                     }
                     Instruction::NewObject(dst) => registers[*dst] = i.object_value(),
                     Instruction::SetObjectProperty(object, key, src) => {
-                        let key = key.resolve(i, &registers)?;
+                        let key = key.resolve(&registers)?;
                         i.set_prop(&registers[*object], key, registers[*src].clone())?;
                     }
                     Instruction::NewArray(dst) => {
@@ -647,7 +654,7 @@ fn route_abrupt(
         if handler.phase == TryPhase::Body {
             if let (Abrupt::Throw(error), Some(catch)) = (&abrupt, handler.catch) {
                 handler.phase = TryPhase::Catch;
-                handler.caught = Some(error.0.clone());
+                handler.caught = Some(i.normalize_throw(error.clone()).0);
                 *pc = catch;
                 return Ok(None);
             }
@@ -691,10 +698,13 @@ impl FunctionCode {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(i.object_proto.clone());
             if self.0.is_generator {
-                prototype.set_own("next", Interpreter::native("next", generator_next, &i.function_proto));
-                prototype.set_own("return", Interpreter::native("return", generator_return, &i.function_proto));
-                prototype.set_own("throw", Interpreter::native("throw", generator_throw, &i.function_proto));
-                prototype.set_own("@@iterator", Interpreter::native("[Symbol.iterator]", generator_iterator, &i.function_proto));
+                let mut methods = JsObject::ordinary();
+                methods.proto = Some(i.object_proto.clone());
+                methods.set_own("next", Interpreter::native("next", generator_next, &i.function_proto));
+                methods.set_own("return", Interpreter::native("return", generator_return, &i.function_proto));
+                methods.set_own("throw", Interpreter::native("throw", generator_throw, &i.function_proto));
+                methods.set_own("@@iterator", Interpreter::native("[Symbol.iterator]", generator_iterator, &i.function_proto));
+                prototype.proto = Some(Obj(Rc::new(RefCell::new(methods))));
             }
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
             handle

@@ -473,6 +473,9 @@ impl Compiler {
                 self.emit(Instruction::LoadThis(dst));
             }
             ExprKind::Function(function) => {
+                if function.is_generator && function.name.is_some() {
+                    return Err(self.error(expression.span, "named generator expression binding"));
+                }
                 let code = self.compile_function(function, expression.span)?;
                 self.emit(Instruction::MakeFunction(dst, code));
             }
