@@ -1,0 +1,17 @@
+﻿[
+    {
+        "sha256":  "d050278ec756d7dbdcf17c673491d7f9f8b7a4790ddebf57cfa67dd4a72c31c7",
+        "name":  "inline-style-colors",
+        "bytes":  12301
+    },
+    {
+        "sha256":  "d050278ec756d7dbdcf17c673491d7f9f8b7a4790ddebf57cfa67dd4a72c31c7",
+        "name":  "inline-style-colors-ref",
+        "bytes":  12301
+    },
+    {
+        "sha256":  "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+        "name":  "inline-style-colors-blank",
+        "bytes":  12301
+    }
+]

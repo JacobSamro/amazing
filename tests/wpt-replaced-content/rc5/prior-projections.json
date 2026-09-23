@@ -1,0 +1,44 @@
+{
+  "source": "rc4b/base-253d9ec/svg-after-1.json",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "credit": 0,
+  "reason": "raw matches omit unsupported styled SVG resources",
+  "tests": [
+    {
+      "id": "object-fit-fill-svg-001i",
+      "classification": "pass",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "f1bae1d6024265447a6dfbff252d1c474167048e98db7c8dc9bb4d92e103d9b2",
+      "reference_sha256": "f1bae1d6024265447a6dfbff252d1c474167048e98db7c8dc9bb4d92e103d9b2",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "object-fit-fill-svg-002i",
+      "classification": "pass",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "f1bae1d6024265447a6dfbff252d1c474167048e98db7c8dc9bb4d92e103d9b2",
+      "reference_sha256": "f1bae1d6024265447a6dfbff252d1c474167048e98db7c8dc9bb4d92e103d9b2",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "object-fit-contain-svg-001i",
+      "classification": "pass",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "f1bae1d6024265447a6dfbff252d1c474167048e98db7c8dc9bb4d92e103d9b2",
+      "reference_sha256": "f1bae1d6024265447a6dfbff252d1c474167048e98db7c8dc9bb4d92e103d9b2",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "object-fit-contain-svg-002i",
+      "classification": "pass",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "f1bae1d6024265447a6dfbff252d1c474167048e98db7c8dc9bb4d92e103d9b2",
+      "reference_sha256": "f1bae1d6024265447a6dfbff252d1c474167048e98db7c8dc9bb4d92e103d9b2",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    }
+  ]
+}
