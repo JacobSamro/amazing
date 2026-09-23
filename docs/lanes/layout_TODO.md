@@ -1054,3 +1054,49 @@ the final fixed-base gate, so the provisional layout-to-text feature mapper
 was not merged. The two paint-owned cases remain routed in
 `.agents/layout/questions.md`. Source manifest, renderer hashes and all raw
 before/after reports are in `crates/amazing-layout/evidence/layout11/`.
+
+## LAYOUT-12 — broad flex/grid convergence (2026-09-24)
+
+Fixed base `7c6824b8a12a50ea6ba99688678b98617bd27f26`; pinned WPT
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. The frozen broad selection
+was **86/200 twice** before and **93/200 twice** after, with identical case
+classifications and actual hashes between repetitions. Seven cases became exact,
+zero passed cases regressed. Five gains are Chrome/Safari consensus passes; the
+two `grid-abspos-staticpos-justify-self-{002,rtl-003}` gains pass in Chrome but
+fail in Safari at this WPT revision. Ten retained selections had zero gains,
+zero losses, and zero changed actual hashes on both repetitions: flex/grid
+24/24, geometry 41/61, tables 10/12, floats 6/8, block collapse 9/9,
+position 12/12, text flow 14/16, contents 6/6, paint compositing 24/24,
+and images 12/12.
+
+The four `flexbox_flex-*-shrink` gains shared one first cause in their reference:
+atomic inline children wrapped despite `white-space: nowrap`. Both the legacy
+and shaped inline placement paths now suppress soft overflow breaks while
+retaining forced breaks. The three grid abspos gains shared another first cause:
+`position.rs::static_anchor` used preceding-flow placement for an absolutely
+positioned grid child. Static positioning now aligns the child inside the grid
+container content edges using `justify-self`/`align-self`, inherited item
+alignment, and direction. The safe overflow keyword conservatively falls back
+to the start edge until positioned grid area geometry reaches this pass; this
+keeps `grid-abspos-staticpos-align-self-safe-001` exact. That grid area geometry
+is the next layout-owned abspos cause, in `position.rs::position_subtree` and
+`grid.rs::parse_placement`.
+
+The original 114 mismatches were inventoried by path as 41 flex, 11 grid
+abspos, 4 other grid, and 58 grid lanes. Within grid lanes the largest families
+are subgrid (21), alignment (13), and item placement (9). These path families
+have multiple first causes; prioritize `grid.rs::subgrid_axis_for_item`,
+`subgrid_column_contribs`, `subgrid_row_contribs`, `layout_grid_lanes`,
+`layout_row_lanes`, and `parse_item_align` in the next grid pass. Remaining flex
+writing/direction and sizing cases point to `flex.rs::physical_direction`,
+`layout_row`, and `layout_column`; they have not been assigned one common cause.
+Two flex pseudo-element mismatches are blocked at
+`amazing-css/src/selectors.rs::Parser::pseudo`, which rejects `::before` and
+`::after`; CSS-13 owns computed pseudo styles and LAYOUT-13 owns generated
+boxes. The exact cross-lane request is in `.agents/layout/questions.md`.
+
+CSS-12 computed `font-feature-settings` and `font-variant-ligatures` had not
+landed on dev by this fixed-base gate. The saved LAYOUT-11 font-feature stash
+remains pending for the next ticket after CSS-12. Evidence, source/executable
+hashes, and the seven exact case IDs are under
+`crates/amazing-layout/evidence/layout12/`.

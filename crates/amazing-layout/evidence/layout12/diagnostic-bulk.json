@@ -1,0 +1,53 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "manifest":  "C:\\Users\\server\\src\\wt\\layout\\crates\\amazing-layout\\evidence\\layout12\\diagnostic-manifest.json",
+    "viewport":  {
+                     "width":  800,
+                     "height":  600,
+                     "device_scale":  1
+                 },
+    "font_set":  "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+    "run_directory":  "C:\\Users\\server\\target\\layout\\layout12-bulk-diagnostic\\run-20260923T191256478Z-452224",
+    "counts":  {
+                   "pass":  2,
+                   "mismatch":  0,
+                   "error":  0,
+                   "timeout":  0,
+                   "unsupported":  0,
+                   "crash":  0
+               },
+    "unexpected":  0,
+    "tests":  [
+                  {
+                      "id":  "css-flexbox__flexbox_flex-0-0-N-shrink.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "flexbox_flex-0-0-N-shrink-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "4cd24b4df8d79957045a68eb5e780ddc7a62a8fe605ff34a799a334ee1013858",
+                      "reference_sha256":  "4cd24b4df8d79957045a68eb5e780ddc7a62a8fe605ff34a799a334ee1013858",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css-grid__abspos__grid-abspos-staticpos-justify-self-002.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "grid-abspos-staticpos-justify-self-002-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "982d156c59b4df74189a40f1de828ce86ca26dfad172a45895d68f9c21038337",
+                      "reference_sha256":  "982d156c59b4df74189a40f1de828ce86ca26dfad172a45895d68f9c21038337",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  }
+              ]
+}
