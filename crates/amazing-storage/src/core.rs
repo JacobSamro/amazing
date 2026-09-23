@@ -1,0 +1,454 @@
+//! Partitioned buckets, quota accounting, and recoverable byte storage.
+use std::collections::BTreeMap;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct StorageKey {
+    pub origin: String,
+    pub top_level_site: String,
+}
+impl StorageKey {
+    pub fn new(origin: impl Into<String>, top_level_site: impl Into<String>) -> Self {
+        Self {
+            origin: origin.into(),
+            top_level_site: top_level_site.into(),
+        }
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct BucketKey {
+    pub storage: StorageKey,
+    pub name: String,
+}
+impl BucketKey {
+    pub fn new(storage: StorageKey, name: impl Into<String>) -> Self {
+        Self {
+            storage,
+            name: name.into(),
+        }
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct EntryKey {
+    pub bucket: BucketKey,
+    pub namespace: String,
+    pub key: Vec<u8>,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Error {
+    Io(String),
+    Corrupt,
+    QuotaExceeded,
+    InvalidInput,
+}
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Self {
+        Self::Io(e.to_string())
+    }
+}
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Clone, Debug, Default)]
+pub struct MemoryStore {
+    entries: BTreeMap<EntryKey, Vec<u8>>,
+    limits: BTreeMap<StorageKey, u64>,
+    default_limit: u64,
+    access: BTreeMap<BucketKey, u64>,
+    clock: u64,
+}
+impl MemoryStore {
+    pub fn new(default_limit: u64) -> Self {
+        Self {
+            default_limit,
+            ..Self::default()
+        }
+    }
+    pub fn set_quota(&mut self, key: StorageKey, bytes: u64) {
+        self.limits.insert(key, bytes);
+    }
+    pub fn quota(&self, key: &StorageKey) -> u64 {
+        self.limits.get(key).copied().unwrap_or(self.default_limit)
+    }
+    pub fn usage(&self, key: &StorageKey) -> u64 {
+        self.entries
+            .iter()
+            .filter(|(k, _)| &k.bucket.storage == key)
+            .map(|(k, v)| (k.key.len() + k.namespace.len() + v.len()) as u64)
+            .sum()
+    }
+    pub fn get(&mut self, key: &EntryKey) -> Option<Vec<u8>> {
+        let value = self.entries.get(key).cloned();
+        if value.is_some() {
+            self.touch(&key.bucket);
+        }
+        value
+    }
+    pub fn peek(&self, key: &EntryKey) -> Option<&[u8]> {
+        self.entries.get(key).map(Vec::as_slice)
+    }
+    pub fn scan(&self, bucket: &BucketKey, namespace: &str) -> Vec<(Vec<u8>, Vec<u8>)> {
+        self.entries
+            .iter()
+            .filter(|(k, _)| &k.bucket == bucket && k.namespace == namespace)
+            .map(|(k, v)| (k.key.clone(), v.clone()))
+            .collect()
+    }
+    pub fn entries_in(&self, namespace: &str) -> Vec<(EntryKey, Vec<u8>)> {
+        self.entries
+            .iter()
+            .filter(|(k, _)| k.namespace == namespace)
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+    pub fn put(&mut self, key: EntryKey, value: Vec<u8>) -> Result<()> {
+        let old = self.entries.insert(key.clone(), value);
+        if self.usage(&key.bucket.storage) > self.quota(&key.bucket.storage) {
+            match old {
+                Some(v) => {
+                    self.entries.insert(key, v);
+                }
+                None => {
+                    self.entries.remove(&key);
+                }
+            }
+            return Err(Error::QuotaExceeded);
+        }
+        self.touch(&key.bucket);
+        Ok(())
+    }
+    pub fn delete(&mut self, key: &EntryKey) -> bool {
+        self.entries.remove(key).is_some()
+    }
+    pub fn clear_namespace(&mut self, bucket: &BucketKey, namespace: &str) {
+        self.entries
+            .retain(|k, _| &k.bucket != bucket || k.namespace != namespace);
+    }
+    pub fn delete_bucket(&mut self, bucket: &BucketKey) {
+        self.entries.retain(|k, _| &k.bucket != bucket);
+        self.access.remove(bucket);
+    }
+    pub fn buckets(&self, key: &StorageKey) -> Vec<BucketKey> {
+        self.access
+            .keys()
+            .filter(|b| &b.storage == key)
+            .cloned()
+            .collect()
+    }
+    /// Evict least recently accessed buckets until usage is at most `target`.
+    /// Buckets explicitly marked persistent by the caller are spared.
+    pub fn evict_to(
+        &mut self,
+        key: &StorageKey,
+        target: u64,
+        persistent: &[BucketKey],
+    ) -> Vec<BucketKey> {
+        let mut candidates: Vec<_> = self
+            .access
+            .iter()
+            .filter(|(b, _)| &b.storage == key && !persistent.contains(b))
+            .map(|(b, t)| (*t, b.clone()))
+            .collect();
+        candidates.sort();
+        let mut removed = Vec::new();
+        for (_, bucket) in candidates {
+            if self.usage(key) <= target {
+                break;
+            }
+            self.delete_bucket(&bucket);
+            removed.push(bucket);
+        }
+        removed
+    }
+    fn touch(&mut self, bucket: &BucketKey) {
+        self.clock = self.clock.saturating_add(1);
+        self.access.insert(bucket.clone(), self.clock);
+    }
+    pub fn transaction<F, T>(&mut self, f: F) -> Result<T>
+    where
+        F: FnOnce(&mut Self) -> Result<T>,
+    {
+        let backup = self.clone();
+        match f(self) {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                *self = backup;
+                Err(e)
+            }
+        }
+    }
+}
+
+// All integers are little endian; every variable byte string has a u32 length.
+pub(crate) fn bytes(out: &mut Vec<u8>, value: &[u8]) {
+    out.extend_from_slice(&(value.len() as u32).to_le_bytes());
+    out.extend_from_slice(value);
+}
+pub(crate) fn string(out: &mut Vec<u8>, value: &str) {
+    bytes(out, value.as_bytes());
+}
+pub(crate) struct Reader<'a> {
+    data: &'a [u8],
+    pos: usize,
+}
+impl<'a> Reader<'a> {
+    pub(crate) fn new(data: &'a [u8]) -> Self {
+        Self { data, pos: 0 }
+    }
+    pub(crate) fn take(&mut self, n: usize) -> Result<&'a [u8]> {
+        let end = self.pos.checked_add(n).ok_or(Error::Corrupt)?;
+        let part = self.data.get(self.pos..end).ok_or(Error::Corrupt)?;
+        self.pos = end;
+        Ok(part)
+    }
+    pub(crate) fn u32(&mut self) -> Result<u32> {
+        Ok(u32::from_le_bytes(
+            self.take(4)?.try_into().map_err(|_| Error::Corrupt)?,
+        ))
+    }
+    pub(crate) fn u64(&mut self) -> Result<u64> {
+        Ok(u64::from_le_bytes(
+            self.take(8)?.try_into().map_err(|_| Error::Corrupt)?,
+        ))
+    }
+    pub(crate) fn bytes(&mut self) -> Result<Vec<u8>> {
+        let n = self.u32()? as usize;
+        Ok(self.take(n)?.to_vec())
+    }
+    pub(crate) fn string(&mut self) -> Result<String> {
+        String::from_utf8(self.bytes()?).map_err(|_| Error::Corrupt)
+    }
+    pub(crate) fn done(&self) -> bool {
+        self.pos == self.data.len()
+    }
+}
+fn encode_key(out: &mut Vec<u8>, key: &EntryKey) {
+    string(out, &key.bucket.storage.origin);
+    string(out, &key.bucket.storage.top_level_site);
+    string(out, &key.bucket.name);
+    string(out, &key.namespace);
+    bytes(out, &key.key);
+}
+fn decode_key(r: &mut Reader<'_>) -> Result<EntryKey> {
+    Ok(EntryKey {
+        bucket: BucketKey::new(StorageKey::new(r.string()?, r.string()?), r.string()?),
+        namespace: r.string()?,
+        key: r.bytes()?,
+    })
+}
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc = !0u32;
+    for byte in data {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ if crc & 1 != 0 { 0xedb8_8320 } else { 0 };
+        }
+    }
+    !crc
+}
+const LOG_MAGIC: &[u8; 8] = b"AMSTLOG1";
+const SNAP_MAGIC: &[u8; 8] = b"AMSTSN01";
+const MAX_RECORD: usize = 64 * 1024 * 1024;
+fn read_checkpoint(path: &Path) -> Result<(u64, BTreeMap<EntryKey, Vec<u8>>)> {
+    let data = fs::read(path)?;
+    if data.len() < 24 || &data[..8] != SNAP_MAGIC {
+        return Err(Error::Corrupt);
+    }
+    let generation = u64::from_le_bytes(data[8..16].try_into().map_err(|_| Error::Corrupt)?);
+    let len = u32::from_le_bytes(data[16..20].try_into().map_err(|_| Error::Corrupt)?) as usize;
+    if generation == 0
+        || len > MAX_RECORD
+        || data.len() != len + 24
+        || crc32(&data[20..20 + len])
+            != u32::from_le_bytes(data[20 + len..].try_into().map_err(|_| Error::Corrupt)?)
+    {
+        return Err(Error::Corrupt);
+    }
+    let mut r = Reader::new(&data[20..20 + len]);
+    let count = r.u32()?;
+    let mut entries = BTreeMap::new();
+    for _ in 0..count {
+        let key = decode_key(&mut r)?;
+        let value = r.bytes()?;
+        if entries.insert(key, value).is_some() {
+            return Err(Error::Corrupt);
+        }
+    }
+    if !r.done() {
+        return Err(Error::Corrupt);
+    }
+    Ok((generation, entries))
+}
+/// A committed transaction is one complete checksummed log record. A torn tail is ignored.
+/// Checkpoints rotate between two slots so Windows renames never replace the active slot.
+pub struct DiskStore {
+    path: PathBuf,
+    memory: MemoryStore,
+    generation: u64,
+}
+impl DiskStore {
+    pub fn open(path: impl AsRef<Path>, default_limit: u64) -> Result<Self> {
+        let path = path.as_ref().to_path_buf();
+        fs::create_dir_all(&path)?;
+        let mut memory = MemoryStore::new(default_limit);
+        let mut generation = 0;
+        let mut saw_checkpoint = false;
+        for slot in 0..2 {
+            let snap = path.join(format!("checkpoint.{slot}"));
+            if !snap.exists() {
+                continue;
+            }
+            saw_checkpoint = true;
+            if let Ok((candidate, entries)) = read_checkpoint(&snap) {
+                if candidate > generation {
+                    generation = candidate;
+                    memory.entries = entries;
+                }
+            }
+        }
+        if saw_checkpoint && generation == 0 {
+            return Err(Error::Corrupt);
+        }
+        for key in memory.entries.keys() {
+            memory.access.entry(key.bucket.clone()).or_insert(0);
+        }
+        let log = path.join("log");
+        if log.exists() {
+            let data = fs::read(&log)?;
+            if data.len() < 8 {
+                if !LOG_MAGIC.starts_with(&data) {
+                    return Err(Error::Corrupt);
+                }
+                let file = OpenOptions::new().write(true).open(&log)?;
+                file.set_len(0)?;
+                let mut file = OpenOptions::new().write(true).open(&log)?;
+                file.write_all(LOG_MAGIC)?;
+                return Ok(Self {
+                    path,
+                    memory,
+                    generation,
+                });
+            }
+            if &data[..8] != LOG_MAGIC {
+                return Err(Error::Corrupt);
+            }
+            let mut offset = 8;
+            while offset + 8 <= data.len() {
+                let len = u32::from_le_bytes(
+                    data[offset..offset + 4]
+                        .try_into()
+                        .map_err(|_| Error::Corrupt)?,
+                ) as usize;
+                if len > MAX_RECORD || offset + 8 + len > data.len() {
+                    break;
+                }
+                let payload = &data[offset + 4..offset + 4 + len];
+                let expected = u32::from_le_bytes(
+                    data[offset + 4 + len..offset + 8 + len]
+                        .try_into()
+                        .map_err(|_| Error::Corrupt)?,
+                );
+                if crc32(payload) != expected {
+                    break;
+                }
+                let mut r = Reader::new(payload);
+                let op = r.take(1)?[0];
+                let key = decode_key(&mut r)?;
+                match op {
+                    1 => {
+                        let value = r.bytes()?;
+                        memory.entries.insert(key.clone(), value);
+                        memory.access.entry(key.bucket).or_insert(0);
+                    }
+                    2 => {
+                        memory.entries.remove(&key);
+                    }
+                    _ => return Err(Error::Corrupt),
+                }
+                if !r.done() {
+                    return Err(Error::Corrupt);
+                }
+                offset += len + 8;
+            }
+            // A future append must replace a torn tail, or the next valid record is invisible.
+            let file = OpenOptions::new().write(true).open(log)?;
+            file.set_len(offset as u64)?;
+        }
+        Ok(Self {
+            path,
+            memory,
+            generation,
+        })
+    }
+    pub fn memory(&self) -> &MemoryStore {
+        &self.memory
+    }
+    pub fn get(&mut self, key: &EntryKey) -> Option<Vec<u8>> {
+        self.memory.get(key)
+    }
+    pub fn put(&mut self, key: EntryKey, value: Vec<u8>) -> Result<()> {
+        let mut next = self.memory.clone();
+        next.put(key.clone(), value.clone())?;
+        let mut payload = vec![1];
+        encode_key(&mut payload, &key);
+        bytes(&mut payload, &value);
+        self.append(&payload)?;
+        self.memory = next;
+        Ok(())
+    }
+    pub fn delete(&mut self, key: &EntryKey) -> Result<bool> {
+        let mut payload = vec![2];
+        encode_key(&mut payload, key);
+        self.append(&payload)?;
+        Ok(self.memory.delete(key))
+    }
+    fn append(&self, payload: &[u8]) -> Result<()> {
+        if payload.len() > MAX_RECORD {
+            return Err(Error::InvalidInput);
+        }
+        let path = self.path.join("log");
+        let new = !path.exists();
+        let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+        if new {
+            file.write_all(LOG_MAGIC)?;
+        }
+        file.write_all(&(payload.len() as u32).to_le_bytes())?;
+        file.write_all(payload)?;
+        file.write_all(&crc32(payload).to_le_bytes())?;
+        file.sync_all()?;
+        Ok(())
+    }
+    pub fn checkpoint(&mut self) -> Result<()> {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(self.memory.entries.len() as u32).to_le_bytes());
+        for (key, value) in &self.memory.entries {
+            encode_key(&mut payload, key);
+            bytes(&mut payload, value);
+        }
+        if payload.len() > MAX_RECORD {
+            return Err(Error::InvalidInput);
+        }
+        let next = self.generation.checked_add(1).ok_or(Error::InvalidInput)?;
+        let slot = next % 2;
+        let temporary = self.path.join(format!("checkpoint.{slot}.tmp"));
+        let mut file = File::create(&temporary)?;
+        file.write_all(SNAP_MAGIC)?;
+        file.write_all(&next.to_le_bytes())?;
+        file.write_all(&(payload.len() as u32).to_le_bytes())?;
+        file.write_all(&payload)?;
+        file.write_all(&crc32(&payload).to_le_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        let target = self.path.join(format!("checkpoint.{slot}"));
+        if target.exists() {
+            fs::remove_file(&target)?;
+        }
+        fs::rename(&temporary, target)?;
+        self.generation = next;
+        let mut log = File::create(self.path.join("log"))?;
+        log.write_all(LOG_MAGIC)?;
+        log.sync_all()?;
+        Ok(())
+    }
+}
