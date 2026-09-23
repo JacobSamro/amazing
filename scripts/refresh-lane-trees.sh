@@ -30,7 +30,10 @@ ARCHIVE_REMOTE="C:\\Users\\server\\dev-refresh-$STAMP.tar"
 cleanup() { rm -f "$ARCHIVE_LOCAL"; }
 trap cleanup EXIT
 
-ALL_LANES=(js-lang js-runtime dom-bindings layout css net replaced-content html integrator-assist)
+# "integrator" is not an agent lane: it is the tree the integrators use for the
+# authoritative gate on a merged head. Borrowing a lane's tree for that would
+# overwrite the lane's own synced work mid-ticket.
+ALL_LANES=(js-lang js-runtime dom-bindings layout css net replaced-content html integrator-assist integrator)
 
 # Lanes run this for THEMSELVES, so a bare invocation must not touch anyone
 # else's tree. Refreshing every lane is an integrator action and has to be
