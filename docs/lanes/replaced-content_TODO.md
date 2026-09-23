@@ -440,3 +440,40 @@ older ffb143b after packet exactly (aside from an added explicit `error: 0`
 report-count field). Full evidence is in
 `tests/wpt-replaced-content/rc4b/base-253d9ec/`. Owned 9-case proof was not
 part of this five-selection rerun. Stop at RC-4b for integrator review.
+
+## RC-5 — non-inert static SVG resource styling
+
+Fixed dev base `0964385d49bb1a0da1822446a4e1572d91d7c925`; pinned WPT
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. A four-case subset of the
+prior CSS Images SVG selection was frozen before implementation, together with
+an owned 64×64 styled/reference/blank SVG fixture. Prior WPT results were 4/4
+raw inert matches and **zero SVG credit**. The saved predecessor executable
+rendered the styled fixture exactly like blank and unlike the reference.
+
+The bounded image decoder now applies inline `fill`, `color`, `fill-opacity`,
+and `opacity` through `amazing-css::parse_declarations` and its canonical color
+parser. Inline values outrank presentation attributes, inline `!important`
+wins over normal duplicates, and `currentColor` resolves against the effective
+inherited color. Unsupported declarations and values reject the whole image.
+Scripts, external references, animation, unimplemented geometry/paint, and
+the existing input, depth, element, output, and raster-work caps remain strict.
+No CSS, DOM, root graph, lockfile, shell, paint, or media source was changed.
+
+After a lane-only refresh and owned-file re-sync, 10 source/fixture hashes
+matched Mac and Windows both before and after final gates. Windows root
+nextest **1,396 passed, 3 skipped**; separate root doctests **2 passed**.
+Isolated image nextest **19 passed**; separate image doctests **0 present**.
+The exact four-case WPT selection is **4/4 twice** with stable classifications,
+pixel differences, and actual/reference/diff hashes; all four actual and
+reference hashes changed from the inert prior. The owned fixture matches its
+reference in both runs and differs from blank at all **4,096 pixels**. Raw
+WPT pass gain is zero; the four selected passes are now non-inert headless
+resource evidence, without a broader SVG conformance claim. Full hashes and
+reproduction details are in `tests/wpt-replaced-content/rc5/`.
+
+CSS-wide keywords, `var()`/custom properties, stylesheet cascade, and SVG
+presentation metadata need a CSS-owned standalone computation API. The lane
+requested that contract in `questions.md` and did not add a parallel CSS
+grammar. Paths, text, strokes, paint servers, filters and group opacity remain
+outside the static renderer. Stop at RC-5 for co-integrator review; no next
+ticket, push or PR.

@@ -1,6 +1,7 @@
 //! Explicit static SVG image subset, not a general SVG/DOM implementation.
 //! Strict XML subset; rectangles, circles and ellipses with presentation fills.
-//! No scripts, CSS, references, paths, text, strokes or animation.
+//! Bounded inline color/fill declarations use the shared CSS declaration parser.
+//! No scripts, stylesheets, references, paths, text, strokes or animation.
 //! Bounded attribute transforms on groups and shapes are supported.
 use crate::{DecodeError, DecodeLimits};
 use amazing_media::Image;
@@ -187,6 +188,7 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
         let self_closed = tag.ends_with('/');
         let tag = tag.strip_suffix('/').unwrap_or(tag).trim_end();
         let (name, attrs) = attributes(tag)?;
+        let attrs = presentation_attrs(attrs)?;
         elements += 1;
         if elements > MAX_SHAPES || stack.len() >= 32 {
             return Err(DecodeError::AllocationLimit);
@@ -375,15 +377,52 @@ fn style(a: &Attrs, mut parent: Style) -> Result<Style, DecodeError> {
             amazing_css::color::parse_css_color(color).ok_or(DecodeError::UnsupportedSvg)?;
     }
     if let Some(fill) = a.get("fill") {
-        parent.fill_current = fill == "currentColor";
-        parent.fill = match fill.as_str() {
-            "none" => [0; 4],
-            "currentColor" => parent.color,
-            _ => amazing_css::color::parse_css_color(fill).ok_or(DecodeError::UnsupportedSvg)?,
+        parent.fill_current = fill.eq_ignore_ascii_case("currentcolor");
+        parent.fill = if fill.eq_ignore_ascii_case("none") {
+            [0; 4]
+        } else if parent.fill_current {
+            parent.color
+        } else {
+            amazing_css::color::parse_css_color(fill).ok_or(DecodeError::UnsupportedSvg)?
         };
     }
     parent.fill_opacity = scalar_value(a, "fill-opacity", parent.fill_opacity)?.clamp(0.0, 1.0);
     Ok(parent)
+}
+
+/// Presentation attributes are lower priority than declarations in `style`.
+/// The CSS crate owns declaration tokenization, comments, escapes and !important.
+/// Only values this static renderer can compute and paint are admitted here.
+fn presentation_attrs(mut attrs: Attrs) -> Result<Attrs, DecodeError> {
+    let Some(inline) = attrs.remove("style") else {
+        return Ok(attrs);
+    };
+    let declarations = amazing_css::parse_declarations(&inline);
+    if declarations.is_empty() && !inline.trim().is_empty() {
+        return Err(DecodeError::UnsupportedSvg);
+    }
+    let mut winners: BTreeMap<String, (String, bool)> = BTreeMap::new();
+    for declaration in declarations {
+        if !matches!(
+            declaration.property.as_str(),
+            "fill" | "color" | "fill-opacity" | "opacity"
+        ) {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+        let previous_important = winners
+            .get(&declaration.property)
+            .is_some_and(|(_, important)| *important);
+        if !previous_important || declaration.important {
+            winners.insert(
+                declaration.property,
+                (declaration.value, declaration.important),
+            );
+        }
+    }
+    for (property, (value, _)) in winners {
+        attrs.insert(property, value);
+    }
+    Ok(attrs)
 }
 fn check_attrs(a: &Attrs, extra: &[&str]) -> Result<(), DecodeError> {
     for key in a.keys() {

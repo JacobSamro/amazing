@@ -1,0 +1,18 @@
+{
+  "fixed_base": "0964385d49bb1a0da1822446a4e1572d91d7c925",
+  "phase": "after-final-gate",
+  "files": {
+    "crates/amazing-image/src/svg.rs": "e875233fdba222efdd0273eb529b182b62e1cda20c6cdcedd430afeebbd427d2",
+    "crates/amazing-image/tests/svg.rs": "f33cae830edcf29b4edd7a15df2459241a6f268a5826297a6574a1d52979680e",
+    "tests/wpt-replaced-content/rc5-svg-manifest.json": "5f906f1cc7726b6f9398b36639435c63bdd8064bfbefddbf556ed20d97f7ed23",
+    "tests/wpt-replaced-content/rc5-fixtures/inline-style-colors-blank.html": "ed26b8c1d85e103c33a315a110f4f19afc00e6120449df64bdb2c463017fe17b",
+    "tests/wpt-replaced-content/rc5-fixtures/inline-style-colors-blank.svg": "52c189a5ba935dabcaa697980968836e2ebbe2c19c67210c35d3dbcfd63dfdde",
+    "tests/wpt-replaced-content/rc5-fixtures/inline-style-colors-ref.html": "58fe38c35fcf4547fb20133cb1db8443712f93761cdfcbc47c906adb74643184",
+    "tests/wpt-replaced-content/rc5-fixtures/inline-style-colors-ref.svg": "8238493ab01d3acebe2db75b6050da2da2768326f92a30d3c079e2be01673697",
+    "tests/wpt-replaced-content/rc5-fixtures/inline-style-colors.html": "6ef74177fdf2bd1a8e8020f5cc1302d16ce778c24a7680ba8ac5caa51c2fd2a1",
+    "tests/wpt-replaced-content/rc5-fixtures/inline-style-colors.svg": "86fc36f740332a184f00fa907061d5a060a8aacd3b5dd3842d577b1ec9a1ef5a",
+    "tests/wpt-replaced-content/rc5-fixtures/manifest.json": "1758d74346fdad438054b9ce297b0e138a6e4a6f02f47c0008ca53dbff263428"
+  },
+  "mac_windows_equal": true,
+  "unchanged_from_before": true
+}

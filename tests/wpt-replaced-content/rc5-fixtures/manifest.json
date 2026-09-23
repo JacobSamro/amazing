@@ -1,0 +1,7 @@
+{
+  "kind": "owned RC-5 pixel diagnostic, not WPT",
+  "viewport": [64, 64],
+  "tests": [
+    {"id":"inline-style-colors","test":"inline-style-colors.html","reference":"inline-style-colors-ref.html","blank":"inline-style-colors-blank.html"}
+  ]
+}

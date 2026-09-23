@@ -198,3 +198,31 @@ fn transform_errors_and_limits_fail_the_entire_image() {
         DecodeError::UnsupportedSvg
     );
 }
+
+#[test]
+fn inline_declarations_override_presentation_and_keep_inheritance() {
+    let bytes = svg(
+        "",
+        r#"<g color="red"><rect width="2" height="2" fill="lime" style="fill: currentColor"/><rect x="2" width="2" height="2" fill="red" style="fill: blue; fill: lime !important; fill: red"/><rect x="4" width="2" height="2" style="color: blue; fill: currentColor"/><rect x="6" width="2" height="2" style="fill: none"/></g>"#,
+    );
+    assert_eq!(pixel(&bytes, 0, 0), [255, 0, 0, 255]);
+    assert_eq!(pixel(&bytes, 2, 0), [0, 255, 0, 255]);
+    assert_eq!(pixel(&bytes, 4, 0), [0, 0, 255, 255]);
+    assert_eq!(pixel(&bytes, 6, 0), [0; 4]);
+}
+
+#[test]
+fn inline_fill_opacity_and_unsupported_css_fail_closed() {
+    let bytes = svg("", r#"<rect width="8" height="8" style="fill: red; fill-opacity: .5"/>"#);
+    assert_eq!(pixel(&bytes, 0, 0), [255, 0, 0, 128]);
+    for body in [
+        r#"<rect width="8" height="8" style="stroke: red"/>"#,
+        r#"<rect width="8" height="8" style="fill: url(#paint)"/>"#,
+        r#"<rect width="8" height="8" style="fill: var(--color)"/>"#,
+        r#"<rect width="8" height="8" style="fill: initial"/>"#,
+        r#"<rect width="8" height="8" style="fill: red; filter: blur(1px)"/>"#,
+        r#"<g style="opacity: .5"><rect width="8" height="8"/></g>"#,
+    ] {
+        assert_eq!(decode(&svg("", body), Default::default()).unwrap_err(), DecodeError::UnsupportedSvg);
+    }
+}
