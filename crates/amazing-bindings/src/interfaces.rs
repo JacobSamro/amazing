@@ -177,6 +177,8 @@ const DOCUMENT: &[Member] = &[
     getter("compatMode", O::DocumentCompatMode), getter("referrer", O::DocumentReferrer),
     method("getElementById", O::DocumentGetElementById, 1),
     method("getElementsByName", O::DocumentGetElementsByName, 1),
+    method("adoptNode", O::DocumentAdoptNode, 1),
+    method("importNode", O::DocumentImportNode, 1),
     getter("forms", O::DocumentForms), getter("images", O::DocumentImages),
     getter("links", O::DocumentLinks), getter("scripts", O::DocumentScripts),
     getter("activeElement", O::DocumentActiveElement),
@@ -1072,6 +1074,13 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
             unenumerable_names: false,
         })?;
     }
+    host.define_legacy_platform_object(InterfaceBrand::NAMED_NODE_MAP, LegacyPlatformHooks {
+        supported_index_count: O::NamedNodeMapSupportedIndexCount,
+        supported_names: Some(O::NamedNodeMapSupportedNames),
+        indexed_getter: O::NamedNodeMapItem, indexed_setter: None,
+        named_getter: Some(O::NamedNodeMapGetNamedItem), named_setter: None, named_deleter: None,
+        override_builtins: false, unenumerable_names: true,
+    })?;
     host.define_legacy_platform_object(InterfaceBrand::DOM_TOKEN_LIST, LegacyPlatformHooks {
         supported_index_count: O::TokenListSupportedIndexCount, supported_names: None,
         indexed_getter: O::TokenListIndexedGetter, indexed_setter: None, named_getter: None,

@@ -497,6 +497,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
                             .filter(|token| !token.is_empty() && seen.insert(*token)).count())
                     } else { Err(DomError::InvalidStateError) }
                 },
+                Operation::NamedNodeMapSupportedIndexCount => {
+                    dom.attribute_nodes(NodeIdx(handle.slot as u32)).map(|attrs| attrs.len())
+                },
                 _ => Err(DomError::NotSupportedError),
             }.map_err(|error| Throw::type_error(error.to_string()))?;
             u32::try_from(length).map_err(|_| Throw::range_error("collection length exceeds u32"))
@@ -507,6 +510,21 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 let borrowed = state.borrow();
                 if handle.arena != borrowed.arena || handle.generation != 1 || handle.brand != brand.0 {
                     return Err(Throw::type_error("Invalid legacy platform object"));
+                }
+                if brand == InterfaceBrand::NAMED_NODE_MAP {
+                    let mut host = borrowed.host.borrow_mut();
+                    let dom = &mut host.dom;
+                    let element = NodeIdx(handle.slot as u32);
+                    let attrs = dom.attribute_nodes(element)
+                        .map_err(|error| Throw::type_error(error.to_string()))?;
+                    let html = dom.owner_document(element) == Some(NodeIdx(0))
+                        && dom.namespace_uri(element) == Some("http://www.w3.org/1999/xhtml");
+                    let mut seen = std::collections::HashSet::new();
+                    return Ok(attrs.into_iter().filter_map(|attr| dom.attr_snapshot(attr).ok())
+                        .map(|attr| attr.name())
+                        .filter(|name| !html || name.to_ascii_lowercase() == *name)
+                        .map(|name| name.encode_utf16().collect::<Vec<_>>())
+                        .filter(|name| seen.insert(name.clone())).collect());
                 }
                 let mut host = borrowed.host.borrow_mut();
                 let dom = &mut host.dom;

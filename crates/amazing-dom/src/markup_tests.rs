@@ -120,3 +120,30 @@ fn parser_fragment_import_keeps_declarative_shadow_contents() {
     assert_eq!(String::from_utf16(&target.serialize_children_with_shadow(fragment, true, &[]).unwrap()).unwrap(),
         "<div><template shadowrootmode=\"open\" shadowrootserializable=\"\" shadowrootclonable=\"\"><slot></slot></template></div>");
 }
+
+#[test]
+fn document_import_clones_into_target_with_clonable_shadow() {
+    let mut dom = Dom::new();
+    let other = dom.create_document();
+    let host = dom.create_element(NodeIdx(0), "div");
+    let child = dom.create_element(host, "span");
+    let options = ShadowOptions { mode: ShadowMode::Closed, delegates_focus: false,
+        slot_assignment: SlotAssignment::Named, clonable: true, serializable: true };
+    let root = dom.attach_declarative_shadow(host, options, true).unwrap();
+    dom.create_text(root, "shadow");
+    let copied = dom.import_node(other, host, true).unwrap();
+    let copied_child = dom.children(copied).next().unwrap();
+    let copied_root = dom.shadow_root_of_host(copied).unwrap();
+    assert_ne!(copied, host);
+    assert_ne!(copied_child, child);
+    assert_eq!(dom.owner_document(copied), Some(other));
+    assert_eq!(dom.owner_document(copied_child), Some(other));
+    assert_eq!(dom.owner_document(copied_root), Some(other));
+    assert_eq!(dom.owner_document(dom.children(copied_root).next().unwrap()), Some(other));
+    assert!(dom.shadow_data(copied_root).unwrap().declarative);
+    assert!(dom.shadow_data(copied_root).unwrap().keep_custom_element_registry_null);
+    assert_eq!(dom.owner_document(host), Some(NodeIdx(0)));
+    assert_eq!(dom.import_node(other, NodeIdx(0), false), Err(crate::DomError::NotSupportedError));
+    assert_eq!(dom.import_node(other, root, true), Err(crate::DomError::NotSupportedError));
+    assert_eq!(dom.adopt(root, other), Err(crate::DomError::HierarchyRequestError));
+}

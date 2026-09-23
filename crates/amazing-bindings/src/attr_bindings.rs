@@ -1,6 +1,30 @@
 use crate::host::{BindingHost, InterfaceBrand, Operation as O};
 use amazing_dom::{attr::AttrSnapshot, DomError, NodeIdx, NodeKind};
 
+pub(crate) fn supported_index_count<H: BindingHost>(host: &mut H, receiver: &H::Value)
+    -> Result<u32, H::Error> {
+    let element = map_element(host, receiver)?;
+    let count = host.with_dom(|dom| Ok(dom.attribute_nodes(element)?.len()))?;
+    u32::try_from(count).map_err(|_| host.type_error("Attribute count exceeds u32"))
+}
+
+pub(crate) fn supported_names<H: BindingHost>(host: &mut H, receiver: &H::Value)
+    -> Result<Vec<Vec<u16>>, H::Error> {
+    let element = map_element(host, receiver)?;
+    let (names, owner, html_namespace) = host.with_dom(|dom| {
+        let attrs = dom.attribute_nodes(element)?;
+        let names = attrs.into_iter().map(|attr| dom.attr_snapshot(attr).map(|attr| attr.name()))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((names, dom.owner_document(element).unwrap(),
+            dom.namespace_uri(element) == Some("http://www.w3.org/1999/xhtml")))
+    })?;
+    let html = html_namespace && host.is_html_document(owner);
+    let mut seen = std::collections::HashSet::new();
+    Ok(names.into_iter().filter(|name| !html || name.to_ascii_lowercase() == *name)
+        .map(|name| name.encode_utf16().collect::<Vec<_>>())
+        .filter(|name| seen.insert(name.clone())).collect())
+}
+
 pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::CreateAttribute | O::CreateAttributeNS | O::ElementAttributes
         | O::AttrNamespaceURI | O::AttrPrefix | O::AttrLocalName | O::AttrName

@@ -781,6 +781,7 @@ fn fallible_host_string_propagates_lone_surrogate_error() {
 #[test]
 fn attr_and_named_node_map_keep_identity_and_utf16_value() {
     let mut h = Host::default();
+    install(&mut h).unwrap();
     let xml = node(call(&mut h, O::DocumentConstructor, V::Undefined, &[]));
     let element = call(&mut h, O::CreateElementNS, V::Node(xml),
         &[str_value("urn:test"), str_value("root")]);
@@ -793,6 +794,9 @@ fn attr_and_named_node_map_keep_identity_and_utf16_value() {
     assert_eq!(call(&mut h, O::NamedNodeMapSetNamedItemNS, map.clone(), &[attr.clone()]), V::Null);
     assert_eq!(call(&mut h, O::NamedNodeMapLength, map.clone(), &[]), V::Number(1.));
     assert_eq!(call(&mut h, O::NamedNodeMapItem, map.clone(), &[V::Number(0.)]), attr);
+    assert_eq!(mock_legacy_keys(&mut h, map.clone()), vec!["0", "p:name"]);
+    assert_eq!(mock_legacy_get(&mut h, map.clone(), "0"), attr);
+    assert_eq!(mock_legacy_get(&mut h, map.clone(), "p:name"), attr);
     assert_eq!(call(&mut h, O::ElementGetAttributeNS, element.clone(),
         &[str_value("urn:attr"), str_value("name")]), units);
     assert_eq!(call(&mut h, O::AttrOwnerElement, attr.clone(), &[]), element);
@@ -1222,7 +1226,11 @@ fn class_list_is_live_canonical_and_validates_tokens() {
 fn html_collection_binding_and_legacy_hooks_are_live() {
     let mut h = Host::default();
     install(&mut h).unwrap();
-    assert_eq!(h.legacy.len(), 8);
+    assert_eq!(h.legacy.len(), 9);
+    assert!(h.legacy.iter().any(|(brand, hooks)| *brand == InterfaceBrand::NAMED_NODE_MAP
+        && hooks.indexed_getter == O::NamedNodeMapItem
+        && hooks.named_getter == Some(O::NamedNodeMapGetNamedItem)
+        && hooks.unenumerable_names));
     assert_eq!(h.legacy[0].0, InterfaceBrand::COLLECTION);
     assert_eq!(h.legacy[0].1.named_getter, Some(O::HTMLCollectionNamedGetter));
     assert!(h.legacy[0].1.unenumerable_names);
@@ -1845,6 +1853,43 @@ fn get_html_options_include_serializable_and_explicit_shadow_roots() {
         str_value("<template shadowrootmode=\"closed\">hidden</template>"));
     let serializable = V::Dictionary(vec![("serializableShadowRoots", V::Bool(true))]);
     assert_eq!(call(&mut h, O::ElementGetHTML, V::Node(container), &[serializable]), empty);
+}
+
+// dom/nodes/Document-adoptNode.html and Document-importNode.html at
+// c2a2fce69e5c2509d9dc28440ec8b42532e5c293.
+#[test]
+fn document_adopt_and_import_preserve_identity_and_target_ownership() {
+    let mut h = Host::default();
+    let other = h.dom.create_document();
+    let parent = h.dom.create_element(NodeIdx(0), "main");
+    let element = h.dom.create_element(parent, "div");
+    let child = h.dom.create_element(element, "span");
+    h.dom.set_attribute(element, "id", "adopt-me").unwrap();
+    let attr = h.dom.get_attribute_node(element, None, "id").unwrap();
+    let shallow = node(call(&mut h, O::DocumentImportNode, V::Node(other), &[V::Node(element)]));
+    assert_ne!(shallow, element);
+    assert_eq!(h.dom.owner_document(shallow), Some(other));
+    assert_eq!(h.dom.children(shallow).count(), 0);
+    assert_eq!(h.dom.owner_document(element), Some(NodeIdx(0)));
+    let deep = node(call(&mut h, O::DocumentImportNode, V::Node(other),
+        &[V::Node(element), V::Bool(true)]));
+    assert_eq!(h.dom.owner_document(h.dom.children(deep).next().unwrap()), Some(other));
+    let null_options = node(call(&mut h, O::DocumentImportNode, V::Node(other),
+        &[V::Node(element), V::Null]));
+    assert_eq!(h.dom.children(null_options).count(), 1);
+    let self_only = V::Dictionary(vec![("selfOnly", V::Bool(true))]);
+    let shallow_dict = node(call(&mut h, O::DocumentImportNode, V::Node(other),
+        &[V::Node(element), self_only]));
+    assert_eq!(h.dom.children(shallow_dict).count(), 0);
+    assert_eq!(call(&mut h, O::DocumentAdoptNode, V::Node(other), &[V::Node(element)]), V::Node(element));
+    assert_eq!(h.dom.get(element).parent, None);
+    assert_eq!(h.dom.owner_document(element), Some(other));
+    assert_eq!(h.dom.owner_document(child), Some(other));
+    assert_eq!(h.dom.owner_document(attr), Some(other));
+    assert_eq!(invoke(&mut h, O::DocumentAdoptNode, V::Node(other), &[V::Node(NodeIdx(0))]),
+        Err("NotSupportedError".into()));
+    assert_eq!(invoke(&mut h, O::DocumentImportNode, V::Node(other), &[V::Node(NodeIdx(0))]),
+        Err("NotSupportedError".into()));
 }
 
 // WPT pin 53bc812da2ed81179ebd1ba76b2d197cc4747d12:
