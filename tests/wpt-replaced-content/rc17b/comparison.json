@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "ticket": "RC-17b",
+  "fixed_base": "ba83010663168cf959f2d02b20a3e3dcaadd790f",
+  "final_gate_commit": "b097fe0cbbbe957d3dc6b69f5df14426090eceb7",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "source_sha256": {
+    "crates/amazing-paint/src/display_list.rs": {
+      "before": "d009e1297355a384c0a39759494bb3e4f3f6a3f33c06bbfe6d140533e782e830",
+      "after": "c9752766ed6a1545a19179f1b7575a51f7554ecbe8efcf1d9de0f462fa8668a5"
+    },
+    "crates/amazing-paint/src/display_list_view_tests.rs": {
+      "before": "b12dbabedf7bea2cd8945a04c350bcf50dd89ddbe650a73d581ccacddc4c6d24",
+      "after": "7af87a130726232c3da7923386e7760442eb0abff270463feb62a6015e9efda4"
+    },
+    "crates/amazing-paint/src/image.rs": {
+      "before": "c03608bffbcd5392f4072cec573cc738b27ba8aae56e0b429950e78722357043",
+      "after": "f8a3661c6706a8ac5affdf96a7f35b7dcefabbdeb518c9e2fc1a43040a76ae7e"
+    },
+    "crates/amazing-paint/src/paint.rs": {
+      "before": "90a33db8d4d6a87317a5a579497d3ec8f9e39a23b41c6d257b95fdc913c7d3f5",
+      "after": "72385a5debee933a960447ff590d09639c1fad0558e0d77caca87dfe95524cb1"
+    },
+    "crates/amazing-image/tests/svg.rs": {
+      "before": "7ff50ea3ad6becd31133496725f49c561b5f4e8bf83c938a62547d64d2e16049",
+      "after": "b704788cac7652017299a9f8fb9f67dfdfe931be1a262c2adb844963616ba4ac"
+    }
+  },
+  "input_sha256": {
+    "root_lock": "5805cd2f1cfb89a839377662df59c2d78ab43633c9674ca0caf9a568b47892c9",
+    "shell_lock": "c143ed837533d960afb98f1308dc59e35efe5821f2d0e1b346714db1ebabaee8",
+    "generated_manifest": "86973f4cd6aa2ef8d73ad6315b95cc65b93863a5a80ef2852fd66b42a17b284e",
+    "pinned_fixtures_before": "c4f9d9039f9050145fb4d58e841262a83624489dbaec17ca3733cce9a92624f8",
+    "pinned_fixtures_after": "0168c09d29f5256357b022b0d13ac3fdcedaaba4edecdf867c264d27878aa6f8"
+  },
+  "windows_gate": {
+    "paint_nextest": {
+      "passed": 103,
+      "skipped": 0
+    },
+    "image_nextest": {
+      "passed": 47,
+      "skipped": 0
+    },
+    "workspace_nextest": {
+      "passed": 2026,
+      "skipped": 5
+    },
+    "paint_doctests": 0,
+    "image_doctests": 0,
+    "workspace_doctests": 2
+  },
+  "paired_wpt": {
+    "generated": {
+      "cases": 7,
+      "before_counts": {
+        "pass": 2,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 2,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_transitions": [],
+      "pass_losses": [],
+      "all_four_test_records_identical": true,
+      "report_sha256": {
+        "before-1": "8c69dbfa39f5cc724a5815d494a249d252ecc97f399487e6503325d7ac9e8c62",
+        "before-2": "d1c92cb1759a3c31a8d0e83b9ff3b71e3868a95b6bb7f6f788bd0968806e31c2",
+        "after-1": "e3961d6c0c4f7d241cda9afb917b20c13e17466c98958817fb6454732d3ff70c",
+        "after-2": "60e908b3c1e2d7681176544770a77e9265711ab4b6cb881f55940b11f1ef88af"
+      }
+    },
+    "focused": {
+      "cases": 12,
+      "before_counts": {
+        "pass": 10,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 10,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_transitions": [],
+      "pass_losses": [],
+      "all_four_test_records_identical": true,
+      "report_sha256": {
+        "before-1": "93db710e6d5f7a2b0254b6f155576e31c9a2b352c7342f815285d54b98f28f3c",
+        "before-2": "3b801e71b7b231d943f8bbd1349d74243f9bde7e6a2d071a2d759b55efdc2ea1",
+        "after-1": "271c4be4a0bd99b34d36a248026dacceb7b429e3cb9374cc2bb0758887ebe9e6",
+        "after-2": "25609163a9f6c7372cce8de3b542f29e222c4f1c43fe392c70bbc6157bf5ba99"
+      }
+    },
+    "svg": {
+      "cases": 35,
+      "before_counts": {
+        "pass": 25,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 1
+      },
+      "after_counts": {
+        "pass": 25,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 1
+      },
+      "classification_transitions": [],
+      "pass_losses": [],
+      "all_four_test_records_identical": true,
+      "report_sha256": {
+        "before-1": "fff9a4cddd1ee9486fa42d41206e8698364df09f4c7c0e9b8f1e7af8da8ac78d",
+        "before-2": "8494283aae1bff959f149a5f5426a6555d4f42cd5204f914621ef871d5f83937",
+        "after-1": "e47473794c72d491ac7bd4c47fa3f853946c53fed7f8dbd7dda08b8cb627b1ab",
+        "after-2": "7f2debda98998e6c5f19c754a99b423e464adacb6c5334613bf9fe3c8944f02f"
+      }
+    }
+  },
+  "total_cases": 54,
+  "total_case_record_changes": 0,
+  "total_pass_losses": 0,
+  "known_reference_crash": {
+    "id": "svg--painting--svg-with-outline",
+    "classification": "crash",
+    "detail": "reference page script ReferenceError: text is not defined; unchanged before/after"
+  }
+}

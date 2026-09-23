@@ -405,7 +405,11 @@ fn source_children(box_: &LayoutBox) -> Option<Vec<&LayoutBox>> {
         Flow::Inlines(_) | Flow::Empty => {}
     }
     children.extend(box_.positioned.iter());
-    children.sort_by_key(|child| child.node.map(|node| node.0).unwrap_or(0));
+    // LAYOUT-13 assigns every emitted box its pre-order tree position. Older
+    // layout producers without that key retain the arena-order fallback.
+    children.sort_by_key(|child| {
+        child.source_order.unwrap_or_else(|| child.node.map_or(0, |node| u64::from(node.0)))
+    });
     Some(children)
 }
 

@@ -834,3 +834,32 @@ per-case result records, including rendered image hashes, matched exactly;
 there were zero pass losses. Reports, source hashes and comparison are in
 `tests/wpt-replaced-content/rc17a/`. Generated-box ordering and URL-keyed
 images remain RC-17b after CSS-13 and LAYOUT-13 merge.
+
+## RC-17b — generated order and URL-keyed images
+
+Paint orders every sibling box by layout's DOM pre-order `source_order` when
+present, retaining the old NodeIdx fallback for manually built boxes. The
+display-list regression creates a newer arena node, inserts it before an older
+sibling, and verifies the resulting paint command order. Existing positioned
+and stacking buckets still determine the painting phase.
+
+Generated replaced fragments use `(NodeIdx, source_order)` to recover their
+styled URL and paint through `ImageProvider::image_by_url(&str)`. A missing URL
+resource does not reuse the originating node's image. Ordinary replaced
+elements continue to use `image(NodeIdx)`. Layout owns the parallel
+`ReplacedElementProvider::intrinsic_size_by_url(&str)` query; the production
+driver must fill both URL lookups from its decoded cache. The two-URL paint
+test verifies distinct pixels for generated runs sharing one origin node.
+
+At fixed base `ba83010`, the locked win-002 gate passed paint **103/103**,
+image **47/47**, workspace **2,026 passed / 5 skipped**, and workspace
+doctests **2/2**. A granted image test correction replaced an obsolete
+unsupported `lab()` expectation with unsupported `context-fill`; the former
+failed on the clean base after CSS-12 added Lab color support. The pinned
+generated-content seven-case selection stayed **2 pass / 5 mismatch** across
+two exact before/after pairs. RC-17a's focused 12 stayed **10/2**, and its SVG
+35 stayed **25/9/1 reference script crash**. All **54** per-case records and
+image hashes were identical, with zero pass losses. These are raw counts; the
+missing production URL lookup means the WPT selection shows no URL rendering
+gain yet. Reports, fixture hashes and comparison are in
+`tests/wpt-replaced-content/rc17b/`.
