@@ -33,14 +33,53 @@ shift
 [ "${1:-}" = "--" ] && shift
 [ $# -gt 0 ] || { echo "with-build-slot: no command given" >&2; exit 2; }
 
-mkdir -p "$DIR"
+mkdir -p "$DIR" "$DIR/queue"
 held=""
 waited=0
 
-release() { [ -n "$held" ] && rm -rf "$held"; }
+# First come, first served. Without a queue, whichever waiter polled first
+# after a release won, and a lane once waited 18+ minutes while later arrivals
+# took every freed slot. Each waiter holds a ticket named by arrival time; only
+# the oldest live tickets may claim a free slot.
+ticket="$DIR/queue/$(date +%s)$(printf '%06d' $$)-$$"
+: > "$ticket"
+
+release() { [ -n "$held" ] && rm -rf "$held"; rm -f "$ticket"; }
 trap release EXIT INT TERM
 
+my_turn() {
+  # Drop tickets whose waiter died, then check that we are among the oldest
+  # waiters for the number of currently free slots.
+  local free=0 rank=0 t pid
+  for t in "$DIR"/queue/*; do
+    [ -e "$t" ] || continue
+    pid="${t##*-}"
+    kill -0 "$pid" 2>/dev/null || rm -f "$t"
+  done
+  for i in $(seq 1 "$SLOTS"); do
+    # Reclaim a slot whose holder died, or it would never count as free.
+    pid="$(cut -d' ' -f1 "$DIR/slot-$i/owner" 2>/dev/null || true)"
+    if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then rm -rf "$DIR/slot-$i"; fi
+    [ -d "$DIR/slot-$i" ] || free=$((free + 1))
+  done
+  for t in $(ls "$DIR/queue" | sort); do
+    rank=$((rank + 1))
+    [ "$DIR/queue/$t" = "$ticket" ] && break
+  done
+  [ "$rank" -le "$free" ]
+}
+
 while [ -z "$held" ]; do
+  if ! my_turn; then
+    if [ $((waited % 60)) -eq 0 ]; then
+      holders="$(cat "$DIR"/slot-*/owner 2>/dev/null | awk '{print $2}' | tr '\n' ' ')"
+      ahead="$(ls "$DIR/queue" | sort | awk -v me="$(basename "$ticket")" '$0==me{exit} {n++} END{print n+0}')"
+      echo "with-build-slot[$LANE]: queued, $ahead ahead (holders: ${holders}); waited ${waited}s" >&2
+    fi
+    sleep 10
+    waited=$((waited + 10))
+    continue
+  fi
   for i in $(seq 1 "$SLOTS"); do
     slot="$DIR/slot-$i"
     if mkdir "$slot" 2>/dev/null; then
@@ -64,5 +103,6 @@ while [ -z "$held" ]; do
   fi
 done
 
+rm -f "$ticket"
 echo "with-build-slot[$LANE]: acquired $(basename "$held") after ${waited}s" >&2
 "$@"
