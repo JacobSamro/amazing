@@ -7,6 +7,7 @@ pub enum OptionalCapability {
     InterfaceClassString(I),
     DomExceptionErrorPrototype,
     CustomElementsGlobal,
+    PairIterable(I),
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -158,6 +159,7 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    getter("fonts", O::DocumentFonts),
     getter("title", O::DocumentTitle), setter("title", O::DocumentSetTitle),
     getter("head", O::DocumentHead),
     getter("body", O::DocumentBody), setter("body", O::DocumentSetBody),
@@ -196,6 +198,51 @@ const DOCUMENT: &[Member] = &[
     method("append", O::Append, 0),
     method("prepend", O::Prepend, 0),
     method("replaceChildren", O::ReplaceChildren, 0),
+];
+const URL: &[Member] = &[
+    getter("href", O::URLHref), setter("href", O::URLSetHref),
+    getter("origin", O::URLOrigin),
+    getter("protocol", O::URLProtocol), setter("protocol", O::URLSetProtocol),
+    getter("username", O::URLUsername), setter("username", O::URLSetUsername),
+    getter("password", O::URLPassword), setter("password", O::URLSetPassword),
+    getter("host", O::URLHost), setter("host", O::URLSetHost),
+    getter("hostname", O::URLHostname), setter("hostname", O::URLSetHostname),
+    getter("port", O::URLPort), setter("port", O::URLSetPort),
+    getter("pathname", O::URLPathname), setter("pathname", O::URLSetPathname),
+    getter("search", O::URLSearch), setter("search", O::URLSetSearch),
+    getter("searchParams", O::URLSearchParams),
+    getter("hash", O::URLHash), setter("hash", O::URLSetHash),
+    method("toString", O::URLToString, 0), method("toJSON", O::URLToJSON, 0),
+];
+const URL_SEARCH_PARAMS: &[Member] = &[
+    getter("size", O::URLSearchParamsSize),
+    method("append", O::URLSearchParamsAppend, 2),
+    method("delete", O::URLSearchParamsDelete, 1),
+    method("get", O::URLSearchParamsGet, 1),
+    method("getAll", O::URLSearchParamsGetAll, 1),
+    method("has", O::URLSearchParamsHas, 1),
+    method("set", O::URLSearchParamsSet, 2),
+    method("sort", O::URLSearchParamsSort, 0),
+    method("toString", O::URLSearchParamsToString, 0),
+    method("forEach", O::URLSearchParamsForEach, 1),
+];
+const BLOB: &[Member] = &[
+    getter("size", O::BlobSize), getter("type", O::BlobType),
+    method("slice", O::BlobSlice, 0), method("text", O::BlobText, 0),
+    method("arrayBuffer", O::BlobArrayBuffer, 0), method("bytes", O::BlobBytes, 0),
+    method("stream", O::BlobStream, 0),
+];
+const FILE: &[Member] = &[
+    getter("name", O::FileName), getter("lastModified", O::FileLastModified),
+];
+const FORM_DATA: &[Member] = &[
+    method("append", O::FormDataAppend, 2), method("delete", O::FormDataDelete, 1),
+    method("get", O::FormDataGet, 1), method("getAll", O::FormDataGetAll, 1),
+    method("has", O::FormDataHas, 1), method("set", O::FormDataSet, 2),
+    method("forEach", O::FormDataForEach, 1),
+];
+const FONT_FACE_SET: &[Member] = &[
+    getter("status", O::FontFaceSetStatus), getter("ready", O::FontFaceSetReady),
 ];
 const DOM_IMPLEMENTATION: &[Member] = &[
     method("createDocumentType", O::ImplementationCreateDocumentType, 3),
@@ -534,6 +581,12 @@ const OLIST: &[Member] = &[
 ];
 const LI: &[Member] = &[getter("value", O::LIValue), setter("value", O::LISetValue)];
 pub static INTERFACES: &[D] = &[
+    D { interface: I::URL, name: "URL", parent: None, constructor: Some(O::URLConstructor), members: URL },
+    D { interface: I::URLSearchParams, name: "URLSearchParams", parent: None,
+        constructor: Some(O::URLSearchParamsConstructor), members: URL_SEARCH_PARAMS },
+    D { interface: I::Blob, name: "Blob", parent: None, constructor: Some(O::BlobConstructor), members: BLOB },
+    D { interface: I::File, name: "File", parent: Some(I::Blob), constructor: Some(O::FileConstructor), members: FILE },
+    D { interface: I::FormData, name: "FormData", parent: None, constructor: Some(O::FormDataConstructor), members: FORM_DATA },
     D {
         interface: I::EventTarget,
         name: "EventTarget",
@@ -541,6 +594,8 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::EventTargetConstructor),
         members: EVENT_TARGET,
     },
+    D { interface: I::FontFaceSet, name: "FontFaceSet", parent: Some(I::EventTarget),
+        constructor: None, members: FONT_FACE_SET },
     D { interface: I::AbortController, name: "AbortController", parent: None,
         constructor: Some(O::AbortControllerConstructor), members: ABORT_CONTROLLER },
     D { interface: I::AbortSignal, name: "AbortSignal", parent: Some(I::EventTarget),
@@ -898,6 +953,8 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
     host.install_static_method(I::AbortSignal, "abort", O::AbortSignalAbort, 0)?;
     host.install_static_method(I::AbortSignal, "any", O::AbortSignalAny, 1)?;
     host.install_static_method(I::AbortSignal, "timeout", O::AbortSignalTimeout, 1)?;
+    host.install_static_method(I::URL, "canParse", O::URLCanParse, 1)?;
+    host.install_static_method(I::URL, "parse", O::URLParse, 1)?;
     host.define_legacy_platform_object(InterfaceBrand::COLLECTION, LegacyPlatformHooks {
         supported_index_count: O::HTMLCollectionSupportedIndexCount,
         supported_names: Some(O::HTMLCollectionSupportedNames),
@@ -946,6 +1003,11 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
     })?;
     host.define_iterable(I::NodeList, IterableKind::Values)?;
     host.define_iterable(I::DOMTokenList, IterableKind::Values)?;
+    for interface in [I::URLSearchParams, I::FormData] {
+        if host.define_pair_iterable(interface)? == OptionalHookInstall::NotSupported {
+            report.not_installed.push(OptionalCapability::PairIterable(interface));
+        }
+    }
     for (name, value) in [
         ("ELEMENT_NODE", 1),
         ("ATTRIBUTE_NODE", 2),

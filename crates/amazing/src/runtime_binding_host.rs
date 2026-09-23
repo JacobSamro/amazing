@@ -13,6 +13,9 @@ use amazing_bindings::{
     install as install_interfaces, invoke,
 };
 use amazing_dom::{Dom, DomError, NodeIdx, NodeKind, Namespace, abort::AbortSignalId};
+use amazing_bindings::{Blob, BlobPart, File, FormData};
+use amazing_net::url::{UrlSearchParams, UrlWithSearchParams};
+use amazing_js::value::Exotic;
 use amazing_js::{
     DomHost,
     env::{EnvHandle, EnvKind},
@@ -30,6 +33,15 @@ enum NativeEntry {
     IllegalConstructor,
 }
 
+enum WebObject {
+    Url(UrlWithSearchParams, Option<u64>),
+    Params(UrlSearchParams),
+    Blob(Blob),
+    File(File),
+    FormData(FormData),
+    FontFaceSet(NodeIdx, Option<JsValue>),
+}
+
 struct BindingState {
     host: Rc<RefCell<BrowserDomHost>>,
     arena: u64,
@@ -43,6 +55,8 @@ struct BindingState {
     document_character_set: Option<String>,
     document_content_type: Option<String>,
     document_referrer: Option<String>,
+    web_objects: Vec<WebObject>,
+    font_sets: HashMap<NodeIdx, u64>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -276,6 +290,12 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::DOM_IMPLEMENTATION => Interface::DOMImplementation,
             InterfaceBrand::ABORT_CONTROLLER => Interface::AbortController,
             InterfaceBrand::ABORT_SIGNAL => Interface::AbortSignal,
+            InterfaceBrand::URL => Interface::URL,
+            InterfaceBrand::URL_SEARCH_PARAMS => Interface::URLSearchParams,
+            InterfaceBrand::BLOB => Interface::Blob,
+            InterfaceBrand::FILE => Interface::File,
+            InterfaceBrand::FORM_DATA => Interface::FormData,
+            InterfaceBrand::FONT_FACE_SET => Interface::FontFaceSet,
             _ => return Err(Throw::type_error("Unknown platform brand")),
         })
     }
@@ -303,6 +323,8 @@ pub(crate) fn install(
         document_character_set: None,
         document_content_type: None,
         document_referrer: None,
+        web_objects: Vec::new(),
+        font_sets: HashMap::new(),
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -340,6 +362,28 @@ pub(crate) fn install(
         .borrow_mut()
         .set_own("document", document);
     Ok(RuntimeBindings { state })
+}
+
+impl RuntimeBindingHost<'_> {
+    fn web_allocate(&mut self, object: WebObject, brand: InterfaceBrand) -> Result<JsValue, Throw> {
+        let slot = {
+            let mut state = self.state.borrow_mut();
+            let slot = state.web_objects.len() as u64;
+            state.web_objects.push(object);
+            slot
+        };
+        let arena = self.state.borrow().arena;
+        self.wrap_platform_object(PlatformKey { arena, slot, generation: 1 }, brand)
+    }
+    fn web_slot(&self, value: &JsValue, brand: InterfaceBrand) -> Result<usize, Throw> {
+        let key = self.platform_object(value, brand)
+            .ok_or_else(|| Throw::type_error("Incompatible web object receiver"))?;
+        let slot = key.slot as usize;
+        if slot >= self.state.borrow().web_objects.len() {
+            return Err(Throw::type_error("Stale web object receiver"));
+        }
+        Ok(slot)
+    }
 }
 
 impl BindingHost for RuntimeBindingHost<'_> {
@@ -713,6 +757,174 @@ impl BindingHost for RuntimeBindingHost<'_> {
             };
         dom_exception.borrow_mut().proto = Some(error);
         Ok(OptionalHookInstall::Installed)
+    }
+
+    fn url_new(&mut self, url: UrlWithSearchParams) -> Result<JsValue, Throw> {
+        self.web_allocate(WebObject::Url(url, None), InterfaceBrand::URL)
+    }
+    fn url_record(&mut self, receiver: &JsValue) -> Result<UrlWithSearchParams, Throw> {
+        let slot = self.web_slot(receiver, InterfaceBrand::URL)?;
+        match &self.state.borrow().web_objects[slot] {
+            WebObject::Url(url, _) => Ok(url.clone()),
+            _ => Err(Throw::type_error("Expected URL")),
+        }
+    }
+    fn url_search_params(&mut self, receiver: &JsValue) -> Result<JsValue, Throw> {
+        let slot = self.web_slot(receiver, InterfaceBrand::URL)?;
+        let existing = match &self.state.borrow().web_objects[slot] {
+            WebObject::Url(_, params) => *params,
+            _ => return Err(Throw::type_error("Expected URL")),
+        };
+        let params_slot = if let Some(existing) = existing { existing } else {
+            let url = self.url_record(receiver)?;
+            let mut state = self.state.borrow_mut();
+            let next = state.web_objects.len() as u64;
+            state.web_objects.push(WebObject::Params(url.search_params()));
+            if let WebObject::Url(_, params) = &mut state.web_objects[slot] { *params = Some(next); }
+            next
+        };
+        let arena = self.state.borrow().arena;
+        self.wrap_platform_object(PlatformKey { arena,
+            slot: params_slot, generation: 1 }, InterfaceBrand::URL_SEARCH_PARAMS)
+    }
+    fn url_params_new(&mut self, params: UrlSearchParams) -> Result<JsValue, Throw> {
+        self.web_allocate(WebObject::Params(params), InterfaceBrand::URL_SEARCH_PARAMS)
+    }
+    fn url_params_record(&mut self, receiver: &JsValue) -> Result<UrlSearchParams, Throw> {
+        let slot = self.web_slot(receiver, InterfaceBrand::URL_SEARCH_PARAMS)?;
+        match &self.state.borrow().web_objects[slot] {
+            WebObject::Params(params) => Ok(params.clone()),
+            _ => Err(Throw::type_error("Expected URLSearchParams")),
+        }
+    }
+    fn url_params_store(&mut self, receiver: &JsValue, params: UrlSearchParams) -> Result<(), Throw> {
+        let slot = self.web_slot(receiver, InterfaceBrand::URL_SEARCH_PARAMS)?;
+        self.state.borrow_mut().web_objects[slot] = WebObject::Params(params);
+        Ok(())
+    }
+    fn url_params_pairs(&mut self, value: &JsValue) -> Result<Option<Vec<(String, String)>>, Throw> {
+        let JsValue::Object(object) = value else { return Ok(None); };
+        if self.platform_object(value, InterfaceBrand::URL_SEARCH_PARAMS).is_some() {
+            return Ok(Some(self.url_params_record(value)?.pairs()));
+        }
+        let mut pairs = Vec::new();
+        if matches!(object.borrow().exotic, Exotic::Array) {
+            let length = self.js.binding_get_property(value, "length")?;
+            let JsValue::Num(length) = length else { return Err(Throw::type_error("Invalid sequence length")); };
+            for index in 0..length as usize {
+                let pair = self.js.binding_get_property(value, &index.to_string())?;
+                let JsValue::Object(inner) = &pair else { return Err(Throw::type_error("Expected pair sequence")); };
+                if !matches!(inner.borrow().exotic, Exotic::Array) {
+                    return Err(Throw::type_error("Expected pair sequence"));
+                }
+                if !matches!(self.js.binding_get_property(&pair, "length")?, JsValue::Num(2.0)) {
+                    return Err(Throw::type_error("Each pair must have two items"));
+                }
+                let name = self.js.binding_get_property(&pair, "0")?;
+                let value = self.js.binding_get_property(&pair, "1")?;
+                pairs.push((String::from_utf16_lossy(&self.to_dom_string(&name)?),
+                    String::from_utf16_lossy(&self.to_dom_string(&value)?)));
+            }
+        } else {
+            let names = object.borrow().own_keys_enumerable();
+            for name in names {
+                let key = name.to_string();
+                let value = self.js.binding_get_property(value, &key)?;
+                pairs.push((String::from_utf16_lossy(name.units()),
+                    String::from_utf16_lossy(&self.to_dom_string(&value)?)));
+            }
+        }
+        Ok(Some(pairs))
+    }
+    fn blob_parts(&mut self, value: &JsValue) -> Result<Vec<BlobPart>, Throw> {
+        let JsValue::Object(object) = value else { return Err(Throw::type_error("Blob parts must be a sequence")); };
+        if !matches!(object.borrow().exotic, Exotic::Array) {
+            return Err(Throw::type_error("Blob parts must be a sequence"));
+        }
+        let JsValue::Num(length) = self.js.binding_get_property(value, "length")? else {
+            return Err(Throw::type_error("Invalid Blob parts length"));
+        };
+        let mut parts = Vec::new();
+        for index in 0..length as usize {
+            let part = self.js.binding_get_property(value, &index.to_string())?;
+            if self.platform_object(&part, InterfaceBrand::FILE).is_some() {
+                parts.push(BlobPart::Blob(self.file_record(&part)?.blob));
+            } else if self.platform_object(&part, InterfaceBrand::BLOB).is_some() {
+                parts.push(BlobPart::Blob(self.blob_record(&part)?));
+            } else {
+                parts.push(BlobPart::Text(String::from_utf16_lossy(&self.to_dom_string(&part)?)));
+            }
+        }
+        Ok(parts)
+    }
+    fn blob_new(&mut self, blob: Blob) -> Result<JsValue, Throw> {
+        self.web_allocate(WebObject::Blob(blob), InterfaceBrand::BLOB)
+    }
+    fn blob_record(&mut self, receiver: &JsValue) -> Result<Blob, Throw> {
+        let slot = self.web_slot(receiver, InterfaceBrand::BLOB)?;
+        match &self.state.borrow().web_objects[slot] {
+            WebObject::Blob(blob) => Ok(blob.clone()),
+            _ => Err(Throw::type_error("Expected Blob")),
+        }
+    }
+    fn file_new(&mut self, file: File) -> Result<JsValue, Throw> {
+        self.web_allocate(WebObject::File(file), InterfaceBrand::FILE)
+    }
+    fn file_record(&mut self, receiver: &JsValue) -> Result<File, Throw> {
+        let slot = self.web_slot(receiver, InterfaceBrand::FILE)?;
+        match &self.state.borrow().web_objects[slot] {
+            WebObject::File(file) => Ok(file.clone()),
+            _ => Err(Throw::type_error("Expected File")),
+        }
+    }
+    fn form_data_new(&mut self, data: FormData) -> Result<JsValue, Throw> {
+        self.web_allocate(WebObject::FormData(data), InterfaceBrand::FORM_DATA)
+    }
+    fn form_data_record(&mut self, receiver: &JsValue) -> Result<FormData, Throw> {
+        let slot = self.web_slot(receiver, InterfaceBrand::FORM_DATA)?;
+        match &self.state.borrow().web_objects[slot] {
+            WebObject::FormData(data) => Ok(data.clone()),
+            _ => Err(Throw::type_error("Expected FormData")),
+        }
+    }
+    fn form_data_store(&mut self, receiver: &JsValue, data: FormData) -> Result<(), Throw> {
+        let slot = self.web_slot(receiver, InterfaceBrand::FORM_DATA)?;
+        self.state.borrow_mut().web_objects[slot] = WebObject::FormData(data);
+        Ok(())
+    }
+    fn blob_promise_bytes(&mut self, bytes: Vec<u8>, as_text: bool, _as_array_buffer: bool) -> Result<JsValue, Throw> {
+        if !as_text { return self.with_dom::<JsValue>(|_| Err(DomError::NotSupportedError)); }
+        let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(&bytes);
+        let value = JsValue::str(String::from_utf8_lossy(bytes).as_ref());
+        let promise = self.js.binding_get_property(&self.js.binding_global_object(), "Promise")?;
+        let resolve = self.js.binding_get_property(&promise, "resolve")?;
+        binding_call(self.js, &resolve, &promise, &[value])
+    }
+    fn font_face_set(&mut self, document: NodeIdx) -> Result<JsValue, Throw> {
+        let existing = self.state.borrow().font_sets.get(&document).copied();
+        let slot = if let Some(slot) = existing { slot } else {
+            let mut state = self.state.borrow_mut();
+            let slot = state.web_objects.len() as u64;
+            state.web_objects.push(WebObject::FontFaceSet(document, None));
+            state.font_sets.insert(document, slot);
+            slot
+        };
+        let arena = self.state.borrow().arena;
+        self.wrap_platform_object(PlatformKey { arena,
+            slot, generation: 1 }, InterfaceBrand::FONT_FACE_SET)
+    }
+    fn font_face_set_ready(&mut self, receiver: &JsValue) -> Result<JsValue, Throw> {
+        let slot = self.web_slot(receiver, InterfaceBrand::FONT_FACE_SET)?;
+        if let WebObject::FontFaceSet(_, Some(promise)) = &self.state.borrow().web_objects[slot] {
+            return Ok(promise.clone());
+        }
+        let promise_class = self.js.binding_get_property(&self.js.binding_global_object(), "Promise")?;
+        let resolve = self.js.binding_get_property(&promise_class, "resolve")?;
+        let promise = binding_call(self.js, &resolve, &promise_class, &[receiver.clone()])?;
+        if let WebObject::FontFaceSet(_, ready) = &mut self.state.borrow_mut().web_objects[slot] {
+            *ready = Some(promise.clone());
+        }
+        Ok(promise)
     }
     fn install_node_constant(&mut self, name: &'static str, value: u16) -> Result<(), Throw> {
         let prototype = self
