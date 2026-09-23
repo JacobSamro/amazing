@@ -1,7 +1,7 @@
 //! Driver-owned WebIDL installation over the same arena used for page parsing.
 //! The JS runtime currently stores strings as Unicode scalars. Until its
 //! UTF-16 migration, a lone surrogate is an explicit TypeError at this seam.
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use amazing_bindings::{
     deliver_mutation_checkpoint,
@@ -53,6 +53,8 @@ struct BindingState {
     interfaces: Vec<(Interface, JsValue, JsValue)>,
     roots: Vec<Option<JsValue>>,
     lists: Vec<(PlatformKey, JsValue, usize)>,
+    legacy_document: JsValue,
+    legacy_elements: HashMap<u32, JsValue>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -67,6 +69,19 @@ pub(crate) struct RuntimeBindings {
 }
 
 impl RuntimeBindings {
+    pub(crate) fn dispatch_event(&self, js: &mut Interpreter, node: u32, name: &str) -> Result<(), Throw> {
+        let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        let prototype = adapter.js.binding_object_prototype();
+        let options = adapter.create_object(Some(&prototype))?;
+        adapter.js.binding_define_data_property(&options, "bubbles", JsValue::Bool(true),
+            BindingPropertyFlags::METHOD)?;
+        let event = invoke(&mut adapter, Operation::EventConstructor, JsValue::Undefined,
+            &[JsValue::str(name), options])?;
+        let target = adapter.wrap_node(NodeIdx(node))?;
+        invoke(&mut adapter, Operation::DispatchEvent, target, &[event])?;
+        Ok(())
+    }
+
     pub(crate) fn deliver_mutations(&self, js: &mut Interpreter) -> Result<(), Throw> {
         let mut adapter = RuntimeBindingHost {
             js,
@@ -84,6 +99,86 @@ impl RuntimeBindings {
 }
 
 impl RuntimeBindingHost<'_> {
+    fn materialize_accessors(&self, wrapper: &JsValue) {
+        let JsValue::Object(object) = wrapper else { return; };
+        let mut prototype = object.borrow().proto.clone();
+        while let Some(current) = prototype {
+            let (next, accessors) = {
+                let current = current.borrow();
+                let accessors = current.own_keys_enumerable().into_iter()
+                    .filter_map(|name| current.own_prop(&name).cloned()
+                        .filter(|property| property.getter.is_some() || property.setter.is_some())
+                        .map(|property| (name, property)))
+                    .collect::<Vec<_>>();
+                (current.proto.clone(), accessors)
+            };
+            for (name, property) in accessors {
+                let mut object = object.borrow_mut();
+                if object.own_prop(&name).is_none() {
+                    let _ = object.define(&name, property);
+                }
+            }
+            prototype = next;
+        }
+    }
+
+    fn preserve_legacy_element_extensions(&mut self, node: NodeIdx, wrapper: &JsValue) -> Result<(), Throw> {
+        let host = self.state.borrow().host.clone();
+        if !host.borrow().dom.is_connected(node) { return Ok(()); }
+        let old = self.state.borrow().legacy_elements.get(&node.0).cloned();
+        let old = if let Some(old) = old { old } else {
+            let document = self.state.borrow().legacy_document.clone();
+            let query = self.js.binding_get_property(&document, "querySelectorAll")?;
+            let all = binding_call(self.js, &query, &document, &[JsValue::str("*")])?;
+            let length = self.js.binding_get_property(&all, "length")?;
+            let count = match length { JsValue::Num(n) if n.is_finite() && n >= 0.0 => n as usize, _ => 0 };
+            let mut found = None;
+            for index in 0..count {
+                let value = self.js.binding_get_property(&all, &index.to_string())?;
+                let Some(slot) = (match &value {
+                    JsValue::Object(object) => object.borrow().get_own("[[DomNode]]"),
+                    _ => None,
+                }) else { continue };
+                if let JsValue::Num(slot) = slot {
+                    let slot = slot as u32;
+                    self.state.borrow_mut().legacy_elements.insert(slot, value.clone());
+                    if slot == node.0 { found = Some(value); }
+                }
+            }
+            let Some(old) = found else { return Ok(()); };
+            old
+        };
+        let (JsValue::Object(old), JsValue::Object(new)) = (old, wrapper) else {
+            return Ok(());
+        };
+        let extensions = ["dataset", "style", "classList", "matches", "closest",
+            "hasAttribute", "removeAttribute", "innerHTML", "innerText", "onclick", "click"];
+        let properties = {
+            let old = old.borrow();
+            extensions.iter().filter_map(|name| old.own_prop(name).cloned().map(|prop| (*name, prop)))
+                .collect::<Vec<_>>()
+        };
+        // The legacy extensions still use the old node marker internally. The
+        // binding brand remains a separate private runtime slot.
+        new.borrow_mut().set_own("[[DomNode]]", JsValue::num(f64::from(node.0)));
+        for (name, property) in properties {
+            // Keep the installed WebIDL member when both layers expose a
+            // name. The fallback only fills gaps in the DOM-7 surface.
+            let mut object = Some(new.clone());
+            let mut present = false;
+            while let Some(current) = object {
+                let current = current.borrow();
+                if current.own_prop(name).is_some() { present = true; break; }
+                object = current.proto.clone();
+            }
+            if !present {
+                new.borrow_mut().define(name, property)
+                    .map_err(|_| Throw::type_error("Cannot install legacy extension"))?;
+            }
+        }
+        Ok(())
+    }
+
     fn prototype(&self, interface: Interface) -> Option<JsValue> {
         self.state
             .borrow()
@@ -327,6 +422,8 @@ pub(crate) fn install(
         interfaces: Vec::new(),
         roots: Vec::new(),
         lists: Vec::new(),
+        legacy_document: js.binding_get_property(&js.binding_global_object(), "document")?,
+        legacy_elements: HashMap::new(),
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -462,6 +559,16 @@ impl BindingHost for RuntimeBindingHost<'_> {
             },
             &prototype,
         )?;
+        self.materialize_accessors(&value);
+        if brand == InterfaceBrand::NODE {
+            if let Some(node) = self.node_from_platform_key(key) {
+                let is_element = {
+                    let host = self.state.borrow().host.clone();
+                    matches!(&host.borrow().dom.get(node).kind, NodeKind::Element { .. })
+                };
+                if is_element { self.preserve_legacy_element_extensions(node, &value)?; }
+            }
+        }
         if brand == InterfaceBrand::NODE_LIST {
             let mut state = self.state.borrow_mut();
             if !state.lists.iter().any(|entry| entry.0 == key) {
@@ -696,6 +803,14 @@ impl BindingHost for RuntimeBindingHost<'_> {
     ) -> Result<R, Throw> {
         let host = self.state.borrow().host.clone();
         let result = callback(&mut host.borrow_mut().dom);
+        // Preserve the order in which script queues JS jobs and native DOM
+        // mutations. Collecting only at the end of the script would move the
+        // mutation checkpoint behind jobs queued after this operation.
+        let pending = host.borrow().pending_native_microtasks();
+        for request in pending {
+            self.js.enqueue_native_microtask(request.global, request.kind)?;
+            host.borrow_mut().acknowledge_native_microtask(request);
+        }
         self.refresh_lists()?;
         result.map_err(|error| throw_dom_error(self, error))
     }

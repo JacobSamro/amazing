@@ -55,7 +55,11 @@ impl DriverScheduler {
         self.enter(|js| js.run_script(source))
     }
     pub(crate) fn dispatch_dom_event(&mut self, node: u32, event: &str) -> Result<(), Throw> {
-        self.enter(|js| js.dispatch_dom_event(node, event))
+        let bindings = self.bindings.clone();
+        self.enter(|js| {
+            js.dispatch_dom_event(node, event)?;
+            bindings.dispatch_event(js, node, event)
+        })
     }
     pub(crate) fn install_inline_handler(&mut self, node: u32, event: &str, body: &str) -> Result<(), Throw> {
         self.enter(|js| js.install_inline_handler(node, event, body))
@@ -246,7 +250,7 @@ mod tests {
         let mut scheduler = DriverScheduler::new(host.clone(), capacity).unwrap();
         if observe {
             let callback = scheduler.run_script("(()=>{})").unwrap();
-            scheduler.bindings.seed_test_root(CallbackId(1), callback);
+            scheduler.bindings.seed_test_root(amazing_dom::events::CallbackId(1), callback);
         }
         (scheduler, host)
     }
