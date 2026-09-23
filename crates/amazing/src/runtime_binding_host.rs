@@ -4,19 +4,20 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use amazing_bindings::{
-    deliver_mutation_checkpoint,
+    deliver_mutation_checkpoint, fire_abort_timeout, html_element_interface,
     dom_exception::throw_dom_error,
     host::{
         BindingHost, CallbackId, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition,
-        MemberKind, Operation, PlatformKey, RootId,
+        MemberKind, Operation, PlatformKey, RootId, LegacyPlatformHooks, IterableKind,
+        FragmentParser, FragmentContext, SelectorEngine, AbortHost, DocumentHost, DocumentField, UrlReflection,
     },
     install as install_interfaces, invoke,
 };
-use amazing_dom::{Dom, DomError, NodeIdx, NodeKind};
+use amazing_dom::{Dom, DomError, NodeIdx, NodeKind, Namespace, abort::AbortSignalId};
 use amazing_js::{
     DomHost,
     env::{EnvHandle, EnvKind},
-    interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter},
+    interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter, LegacyPlatformHooks as RuntimeLegacyHooks},
     value::{
         HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsValue, Throw,
         to_display_string,
@@ -29,21 +30,6 @@ use crate::dom_host::BrowserDomHost;
 enum NativeEntry {
     Operation(Operation),
     IllegalConstructor,
-    LegacyDocument(LegacyDocument),
-    ListIndex(u32),
-}
-
-#[derive(Clone, Copy)]
-enum LegacyDocument {
-    Body,
-    DocumentElement,
-    TitleGet,
-    TitleSet,
-    QuerySelector,
-    QuerySelectorAll,
-    GetElementById,
-    GetElementsByTagName,
-    GetElementsByClassName,
 }
 
 struct BindingState {
@@ -52,9 +38,13 @@ struct BindingState {
     functions: Vec<NativeEntry>,
     interfaces: Vec<(Interface, JsValue, JsValue)>,
     roots: Vec<Option<JsValue>>,
-    lists: Vec<(PlatformKey, JsValue, usize)>,
     legacy_document: JsValue,
     legacy_elements: HashMap<u32, JsValue>,
+    abort_timeouts: Vec<(AbortSignalId, u64)>,
+    document_url: Option<String>,
+    document_character_set: Option<String>,
+    document_content_type: Option<String>,
+    document_referrer: Option<String>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -69,6 +59,28 @@ pub(crate) struct RuntimeBindings {
 }
 
 impl RuntimeBindings {
+    pub(crate) fn set_document_url(&self, url: &str) {
+        self.state.borrow_mut().document_url = Some(url.to_owned());
+    }
+
+    pub(crate) fn set_document_metadata(&self, character_set: &str, content_type: &str, referrer: &str) {
+        let mut state = self.state.borrow_mut();
+        state.document_character_set = Some(character_set.to_owned());
+        state.document_content_type = Some(content_type.to_owned());
+        state.document_referrer = Some(referrer.to_owned());
+    }
+
+    pub(crate) fn set_document_content_type(&self, content_type: &str) {
+        self.state.borrow_mut().document_content_type = Some(content_type.to_owned());
+    }
+
+    pub(crate) fn take_abort_timeouts(&self) -> Vec<(AbortSignalId, u64)> {
+        std::mem::take(&mut self.state.borrow_mut().abort_timeouts)
+    }
+
+    pub(crate) fn fire_abort_timeout(&self, js: &mut Interpreter, id: AbortSignalId) -> Result<(), Throw> {
+        fire_abort_timeout(&mut RuntimeBindingHost { js, state: self.state.clone() }, id)
+    }
     pub(crate) fn dispatch_event(&self, js: &mut Interpreter, node: u32, name: &str) -> Result<(), Throw> {
         let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
         let prototype = adapter.js.binding_object_prototype();
@@ -99,6 +111,10 @@ impl RuntimeBindings {
 }
 
 impl RuntimeBindingHost<'_> {
+    fn hook_receiver(&mut self, handle: HostHandle) -> Result<JsValue, Throw> {
+        self.wrap_platform_object(PlatformKey { arena: handle.arena, slot: handle.slot,
+            generation: handle.generation }, InterfaceBrand(handle.brand))
+    }
     fn materialize_accessors(&self, wrapper: &JsValue) {
         let JsValue::Object(object) = wrapper else { return; };
         let mut prototype = object.borrow().proto.clone();
@@ -228,7 +244,11 @@ impl RuntimeBindingHost<'_> {
                 NodeKind::Document => Interface::Document,
                 NodeKind::DocumentFragment => Interface::DocumentFragment,
                 NodeKind::DocumentType { .. } => Interface::DocumentType,
-                NodeKind::Element { .. } => Interface::Element,
+                NodeKind::Element { .. } => {
+                    if host.dom.namespace(node) == Some(Namespace::Html) {
+                        html_element_interface(host.dom.name(node).unwrap_or(""))
+                    } else { Interface::Element }
+                },
                 NodeKind::Text { .. } => Interface::Text,
                 NodeKind::CDATASection { .. } => Interface::CDATASection,
                 NodeKind::Attr { .. } => Interface::Attr,
@@ -247,165 +267,21 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::MUTATION_OBSERVER => Interface::MutationObserver,
             InterfaceBrand::MUTATION_RECORD => Interface::MutationRecord,
             InterfaceBrand::ATTRIBUTE => Interface::Attr,
-            InterfaceBrand::COLLECTION => Interface::NodeList,
+            InterfaceBrand::COLLECTION => Interface::HTMLCollection,
             InterfaceBrand::NODE_LIST => Interface::NodeList,
             InterfaceBrand::STATIC_NODE_LIST => Interface::NodeList,
+            InterfaceBrand::FILTERED_NODE_LIST => Interface::NodeList,
             InterfaceBrand::NAMED_NODE_MAP => Interface::NamedNodeMap,
             InterfaceBrand::DOM_TOKEN_LIST => Interface::DOMTokenList,
             InterfaceBrand::DOM_EXCEPTION => Interface::DOMException,
             InterfaceBrand::DOM_IMPLEMENTATION => Interface::DOMImplementation,
+            InterfaceBrand::ABORT_CONTROLLER => Interface::AbortController,
+            InterfaceBrand::ABORT_SIGNAL => Interface::AbortSignal,
             _ => return Err(Throw::type_error("Unknown platform brand")),
         })
     }
 
-    fn legacy_document(
-        &mut self,
-        operation: LegacyDocument,
-        args: &[JsValue],
-    ) -> Result<JsValue, Throw> {
-        let text = if let Some(value) = args.first() {
-            Some(
-                String::from_utf16(&self.to_dom_string(value)?)
-                    .map_err(|_| Throw::type_error("lone surrogate not yet representable"))?,
-            )
-        } else {
-            None
-        };
-        let host = self.state.borrow().host.clone();
-        match operation {
-            LegacyDocument::Body | LegacyDocument::DocumentElement => {
-                let selector = if matches!(operation, LegacyDocument::Body) {
-                    "body"
-                } else {
-                    "html"
-                };
-                let found = host.borrow_mut().query_selector(selector);
-                found
-                    .map(|node| self.wrap_node(NodeIdx(node)))
-                    .transpose()
-                    .map(|value| value.unwrap_or(JsValue::Null))
-            }
-            LegacyDocument::TitleGet => Ok(JsValue::str(host.borrow().get_document_title())),
-            LegacyDocument::TitleSet => {
-                host.borrow_mut()
-                    .set_document_title(text.as_deref().unwrap_or("undefined"))
-                    .map_err(Throw::type_error)?;
-                Ok(JsValue::Undefined)
-            }
-            LegacyDocument::QuerySelector | LegacyDocument::GetElementById => {
-                let selector = if matches!(operation, LegacyDocument::GetElementById) {
-                    format!("#{}", text.as_deref().unwrap_or("undefined"))
-                } else {
-                    text.unwrap_or_else(|| "undefined".into())
-                };
-                let found = host.borrow_mut().query_selector(&selector);
-                found
-                    .map(|node| self.wrap_node(NodeIdx(node)))
-                    .transpose()
-                    .map(|value| value.unwrap_or(JsValue::Null))
-            }
-            LegacyDocument::QuerySelectorAll
-            | LegacyDocument::GetElementsByTagName
-            | LegacyDocument::GetElementsByClassName => {
-                let selector = match operation {
-                    LegacyDocument::GetElementsByClassName => {
-                        format!(".{}", text.as_deref().unwrap_or("undefined"))
-                    }
-                    _ => text.unwrap_or_else(|| "undefined".into()),
-                };
-                let nodes = host.borrow_mut().query_selector_all(&selector);
-                let values = nodes
-                    .into_iter()
-                    .map(|node| self.wrap_node(NodeIdx(node)))
-                    .collect::<Result<Vec<_>, _>>()?;
-                self.create_array(values)
-            }
-        }
-    }
 
-    fn install_legacy_document(&mut self, document: &JsValue) -> Result<(), Throw> {
-        for (name, operation, length) in [
-            ("querySelector", LegacyDocument::QuerySelector, 1),
-            ("querySelectorAll", LegacyDocument::QuerySelectorAll, 1),
-            ("getElementById", LegacyDocument::GetElementById, 1),
-            (
-                "getElementsByTagName",
-                LegacyDocument::GetElementsByTagName,
-                1,
-            ),
-            (
-                "getElementsByClassName",
-                LegacyDocument::GetElementsByClassName,
-                1,
-            ),
-        ] {
-            let function = self.native(
-                name,
-                length,
-                NativeEntry::LegacyDocument(operation),
-                HostCallPolicy::CallOnly,
-            );
-            self.define_data_property(document, name, function, true, false, true)?;
-        }
-        for (name, getter, setter) in [
-            ("body", LegacyDocument::Body, None),
-            ("documentElement", LegacyDocument::DocumentElement, None),
-            (
-                "title",
-                LegacyDocument::TitleGet,
-                Some(LegacyDocument::TitleSet),
-            ),
-        ] {
-            let getter = self.native(
-                name,
-                0,
-                NativeEntry::LegacyDocument(getter),
-                HostCallPolicy::CallOnly,
-            );
-            let setter = setter.map(|operation| {
-                self.native(
-                    name,
-                    1,
-                    NativeEntry::LegacyDocument(operation),
-                    HostCallPolicy::CallOnly,
-                )
-            });
-            self.define_accessor_property(document, name, Some(getter), setter, true, true)?;
-        }
-        Ok(())
-    }
-
-    fn refresh_lists(&mut self) -> Result<(), Throw> {
-        let lists = self.state.borrow().lists.clone();
-        for (key, list, installed) in lists {
-            let Some(parent) = self.node_from_platform_key(key) else {
-                continue;
-            };
-            let host = self.state.borrow().host.clone();
-            let count = host.borrow().dom.children(parent).count();
-            for index in installed..count {
-                let getter = self.native(
-                    "get index",
-                    0,
-                    NativeEntry::ListIndex(index as u32),
-                    HostCallPolicy::CallOnly,
-                );
-                self.js.binding_define_accessor_property(
-                    &list,
-                    &index.to_string(),
-                    Some(&getter),
-                    None,
-                    true,
-                    true,
-                )?;
-            }
-            let mut state = self.state.borrow_mut();
-            if let Some(entry) = state.lists.iter_mut().find(|entry| entry.0 == key) {
-                entry.2 = count.max(installed);
-            }
-        }
-        Ok(())
-    }
 }
 
 /// Install once before the first page script. The existing legacy host remains
@@ -421,9 +297,13 @@ pub(crate) fn install(
         functions: Vec::new(),
         interfaces: Vec::new(),
         roots: Vec::new(),
-        lists: Vec::new(),
         legacy_document: js.binding_get_property(&js.binding_global_object(), "document")?,
         legacy_elements: HashMap::new(),
+        abort_timeouts: Vec::new(),
+        document_url: None,
+        document_character_set: None,
+        document_content_type: None,
+        document_referrer: None,
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -440,20 +320,6 @@ pub(crate) fn install(
         match entry {
             NativeEntry::Operation(operation) => invoke(&mut adapter, operation, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
-            NativeEntry::LegacyDocument(operation) => adapter.legacy_document(operation, &args),
-            NativeEntry::ListIndex(index) => {
-                let result = invoke(
-                    &mut adapter,
-                    Operation::NodeListItem,
-                    this,
-                    &[JsValue::num(index as f64)],
-                )?;
-                Ok(if result.is_null() {
-                    JsValue::Undefined
-                } else {
-                    result
-                })
-            }
         }
     });
     js.set_host_native_dispatcher(dispatch);
@@ -463,7 +329,6 @@ pub(crate) fn install(
     };
     install_interfaces(&mut adapter)?;
     let document = adapter.wrap_node(NodeIdx(0))?;
-    adapter.install_legacy_document(&document)?;
     // set_dom_host installs an immutable lexical legacy document. Shadow it in
     // a new global environment so every new page script sees the canonical
     // private wrapper while older browser globals remain available upstream.
@@ -535,6 +400,81 @@ impl BindingHost for RuntimeBindingHost<'_> {
             configurable,
         )
     }
+    fn define_legacy_platform_object(&mut self, brand: InterfaceBrand, hooks: LegacyPlatformHooks) -> Result<(), Throw> {
+        let state = self.state.clone();
+        let count_op = hooks.supported_index_count;
+        let count = Rc::new(move |handle: HostHandle| {
+            let borrowed = state.borrow();
+            if handle.arena != borrowed.arena || handle.generation != 1 || handle.brand != brand.0 {
+                return Err(Throw::type_error("Invalid legacy platform object"));
+            }
+            let mut host = borrowed.host.borrow_mut();
+            let dom = &mut host.dom;
+            let length = match count_op {
+                Operation::HTMLCollectionSupportedIndexCount => dom.collection_length(handle.slot as usize),
+                Operation::NodeListSupportedIndexCount => match brand {
+                    InterfaceBrand::NODE_LIST => Ok(dom.children(NodeIdx(handle.slot as u32)).count()),
+                    InterfaceBrand::STATIC_NODE_LIST => dom.static_node_list(handle.slot as usize)
+                        .map(|nodes| nodes.len()).ok_or(DomError::InvalidStateError),
+                    InterfaceBrand::FILTERED_NODE_LIST => dom.collection_length(handle.slot as usize),
+                    _ => Err(DomError::InvalidStateError),
+                },
+                Operation::TokenListSupportedIndexCount => {
+                    if let Some((node, attribute)) = dom.token_list_info(handle.slot as usize) {
+                        let value = dom.attrs_of(node).and_then(|attrs| attrs.iter()
+                            .find(|(name, _)| name == attribute).map(|(_, value)| value.as_str())).unwrap_or("");
+                        let mut seen = std::collections::HashSet::new();
+                        Ok(value.split(|ch| matches!(ch, '\t' | '\n' | '\u{000C}' | '\r' | ' '))
+                            .filter(|token| !token.is_empty() && seen.insert(*token)).count())
+                    } else { Err(DomError::InvalidStateError) }
+                },
+                _ => Err(DomError::NotSupportedError),
+            }.map_err(|error| Throw::type_error(error.to_string()))?;
+            u32::try_from(length).map_err(|_| Throw::range_error("collection length exceeds u32"))
+        });
+        let names = hooks.supported_names.map(|_| {
+            let state = self.state.clone();
+            Rc::new(move |handle: HostHandle| {
+                let borrowed = state.borrow();
+                if handle.arena != borrowed.arena || handle.generation != 1 || handle.brand != brand.0 {
+                    return Err(Throw::type_error("Invalid legacy platform object"));
+                }
+                borrowed.host.borrow_mut().dom.collection_names(handle.slot as usize)
+                    .map_err(|error| Throw::type_error(error.to_string()))
+            }) as Rc<dyn Fn(HostHandle) -> Result<Vec<Vec<u16>>, Throw>>
+        });
+        let indexed_op = hooks.indexed_getter;
+        let state = self.state.clone();
+        let indexed_getter = Rc::new(move |js: &mut Interpreter, handle: HostHandle, index: u32| {
+            let mut adapter = RuntimeBindingHost { js, state: state.clone() };
+            let receiver = adapter.hook_receiver(handle)?;
+            invoke(&mut adapter, indexed_op, receiver, &[JsValue::num(f64::from(index))])
+        });
+        let named_getter = hooks.named_getter.map(|op| {
+            let state = self.state.clone();
+            Rc::new(move |js: &mut Interpreter, handle: HostHandle, name: &[u16]| {
+                let mut adapter = RuntimeBindingHost { js, state: state.clone() };
+                let receiver = adapter.hook_receiver(handle)?;
+                let arg = adapter.string(name)?;
+                invoke(&mut adapter, op, receiver, &[arg])
+            }) as Rc<dyn Fn(&mut Interpreter, HostHandle, &[u16]) -> Result<JsValue, Throw>>
+        });
+        self.js.binding_define_legacy_platform_object(brand.0, RuntimeLegacyHooks {
+            supported_index_count: count, supported_names: names, indexed_getter, named_getter,
+            indexed_setter: None, named_setter: None, named_deleter: None,
+            unenumerable_names: hooks.unenumerable_names, override_builtins: hooks.override_builtins,
+        });
+        Ok(())
+    }
+    fn define_iterable(&mut self, interface: Interface, _kind: IterableKind) -> Result<(), Throw> {
+        let brand = match interface {
+            Interface::NodeList => InterfaceBrand::NODE_LIST,
+            Interface::DOMTokenList => InterfaceBrand::DOM_TOKEN_LIST,
+            _ => return Err(Throw::type_error("Unsupported iterable interface")),
+        };
+        let prototype = self.prototype(interface).ok_or_else(|| Throw::type_error("Missing iterable prototype"))?;
+        self.js.binding_define_iterable(brand.0, &prototype)
+    }
     fn get_property(&mut self, object: &JsValue, name: &str) -> Result<JsValue, Throw> {
         self.js.binding_get_property(object, name)
     }
@@ -568,14 +508,6 @@ impl BindingHost for RuntimeBindingHost<'_> {
                 };
                 if is_element { self.preserve_legacy_element_extensions(node, &value)?; }
             }
-        }
-        if brand == InterfaceBrand::NODE_LIST {
-            let mut state = self.state.borrow_mut();
-            if !state.lists.iter().any(|entry| entry.0 == key) {
-                state.lists.push((key, value.clone(), 0));
-            }
-            drop(state);
-            self.refresh_lists()?;
         }
         Ok(value)
     }
@@ -794,6 +726,12 @@ impl BindingHost for RuntimeBindingHost<'_> {
         }
         Ok(())
     }
+    fn install_static_method(&mut self, interface: Interface, name: &'static str,
+        operation: Operation, length: u8) -> Result<(), Throw> {
+        let constructor = self.constructor(interface).ok_or_else(|| Throw::type_error("Missing interface constructor"))?;
+        let method = self.native(name, length, NativeEntry::Operation(operation), HostCallPolicy::CallOnly);
+        self.define_data_property(&constructor, name, method, true, false, true)
+    }
     fn current_document(&self) -> NodeIdx {
         NodeIdx(0)
     }
@@ -811,7 +749,6 @@ impl BindingHost for RuntimeBindingHost<'_> {
             self.js.enqueue_native_microtask(request.global, request.kind)?;
             host.borrow_mut().acknowledge_native_microtask(request);
         }
-        self.refresh_lists()?;
         result.map_err(|error| throw_dom_error(self, error))
     }
     fn is_html_document(&self, document: NodeIdx) -> bool {
@@ -843,6 +780,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
     fn to_boolean(&self, value: &JsValue) -> bool {
         self.js.binding_to_boolean(value)
     }
+    fn string_units(&self, value: &JsValue) -> Option<Vec<u16>> {
+        match value { JsValue::Str(value) => Some(value.encode_utf16().collect()), _ => None }
+    }
     fn to_dom_string(&mut self, value: &JsValue) -> Result<Vec<u16>, Throw> {
         let primitive = if value.is_object() {
             let mut primitive = None;
@@ -865,6 +805,107 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn type_error(&mut self, message: &'static str) -> Throw {
         Throw::type_error(message)
+    }
+}
+
+impl FragmentParser for RuntimeBindingHost<'_> {
+    fn parse_fragment(&mut self, context: FragmentContext, markup: &[u16]) -> Result<Dom, DomError> {
+        if context.namespace_uri.as_deref() != Some("http://www.w3.org/1999/xhtml") {
+            return Err(DomError::NotSupportedError);
+        }
+        let markup = String::from_utf16(markup).map_err(|_| DomError::TypeError)?;
+        // A paragraph uses the ordinary in-body fragment insertion mode.
+        // The parser's `div` context has the same tokenizer and insertion
+        // state for this context; special contexts remain explicit above.
+        let parser_context = if context.local_name == "p" { "div" } else { &context.local_name };
+        amazing_html::parse_fragment(parser_context, &markup)
+            .map_err(|_| DomError::NotSupportedError)
+    }
+}
+
+impl SelectorEngine for RuntimeBindingHost<'_> {
+    type SelectorHandle = Vec<amazing_css::selectors::Selector>;
+    fn parse_selector(&mut self, selector: &[u16]) -> Result<Self::SelectorHandle, DomError> {
+        let selector = String::from_utf16(selector).map_err(|_| DomError::TypeError)?;
+        let mut selectors = Vec::new();
+        let mut start = 0;
+        let mut depth = 0u32;
+        let mut quote = None;
+        let mut escaped = false;
+        for (index, ch) in selector.char_indices() {
+            if escaped { escaped = false; continue; }
+            if ch == '\\' { escaped = true; continue; }
+            if let Some(active) = quote {
+                if ch == active { quote = None; }
+                continue;
+            }
+            match ch {
+                '\'' | '"' => quote = Some(ch),
+                '(' | '[' => depth += 1,
+                ')' | ']' => depth = depth.checked_sub(1).ok_or(DomError::SyntaxError)?,
+                ',' if depth == 0 => {
+                    selectors.push(amazing_css::selectors::parse_selector(&selector[start..index])
+                        .ok_or(DomError::SyntaxError)?);
+                    start = index + 1;
+                }
+                _ => {}
+            }
+        }
+        if quote.is_some() || depth != 0 { return Err(DomError::SyntaxError); }
+        selectors.push(amazing_css::selectors::parse_selector(&selector[start..])
+            .ok_or(DomError::SyntaxError)?);
+        Ok(selectors)
+    }
+    fn matches_selector(&mut self, element: NodeIdx, selector: &Self::SelectorHandle) -> Result<bool, DomError> {
+        let host = self.state.borrow().host.clone();
+        let host = host.borrow();
+        if element.0 as usize >= host.dom.node_count() { return Err(DomError::InvalidNode); }
+        Ok(selector.iter().any(|part| amazing_css::selectors::matches(&host.dom, element, part)))
+    }
+}
+
+impl AbortHost for RuntimeBindingHost<'_> {
+    fn schedule_abort_timeout(&mut self, signal: AbortSignalId, milliseconds: u64) -> Result<(), Throw> {
+        self.state.borrow_mut().abort_timeouts.push((signal, milliseconds));
+        Ok(())
+    }
+    fn run_abort_algorithm(&mut self, _algorithm: u64, _reason: &JsValue) -> Result<(), Throw> {
+        Err(throw_dom_error(self, DomError::NotSupportedError))
+    }
+}
+
+impl DocumentHost for RuntimeBindingHost<'_> {
+    fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, Throw> {
+        if document != NodeIdx(0) { return Err(throw_dom_error(self, DomError::NotSupportedError)); }
+        let value = match field {
+            DocumentField::URL | DocumentField::DocumentURI => self.state.borrow().document_url.clone(),
+            DocumentField::CharacterSet => self.state.borrow().document_character_set.clone(),
+            DocumentField::ContentType => self.state.borrow().document_content_type.clone(),
+            DocumentField::Referrer => self.state.borrow().document_referrer.clone(),
+            DocumentField::CompatMode => None,
+        }.ok_or_else(|| throw_dom_error(self, DomError::NotSupportedError))?;
+        Ok(value.encode_utf16().collect())
+    }
+    fn active_element(&mut self, _document: NodeIdx) -> Result<Option<NodeIdx>, Throw> {
+        Err(throw_dom_error(self, DomError::NotSupportedError))
+    }
+    fn has_focus(&mut self, _document: NodeIdx) -> Result<bool, Throw> {
+        Err(throw_dom_error(self, DomError::NotSupportedError))
+    }
+}
+
+impl UrlReflection for RuntimeBindingHost<'_> {
+    fn resolve_url(&mut self, input: &[u16]) -> Result<Vec<u16>, Throw> {
+        let input = String::from_utf16(input)
+            .map_err(|_| Throw::type_error("lone surrogate not yet representable"))?;
+        let base_url = self.state.borrow().document_url.clone();
+        let base = base_url
+            .ok_or_else(|| throw_dom_error(self, DomError::NotSupportedError))?;
+        let base = amazing_net::url::ParsedUrl::parse(&base)
+            .map_err(|_| throw_dom_error(self, DomError::NotSupportedError))?;
+        let resolved = base.resolve(&input)
+            .map_err(|_| Throw::type_error("Invalid URL"))?;
+        Ok(resolved.serialize().encode_utf16().collect())
     }
 }
 

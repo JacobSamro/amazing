@@ -3,6 +3,7 @@
 use std::{cell::RefCell, collections::{BTreeMap, VecDeque}, rc::Rc, time::{Duration, Instant}};
 
 use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, TimerId};
+use amazing_dom::abort::AbortSignalId;
 use amazing_js::{DomHost, interp::{Interpreter, NativeMicrotaskKind, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
 
 use crate::dom_host::BrowserDomHost;
@@ -15,6 +16,7 @@ enum Payload {
     Job(SchedulingToken),
     Callback(SchedulingToken),
     Mutation,
+    AbortTimeout(AbortSignalId, u64),
 }
 struct TimerRegistration {
     core: TimerId,
@@ -53,6 +55,17 @@ impl DriverScheduler {
 
     pub(crate) fn run_script(&mut self, source: &str) -> Result<JsValue, Throw> {
         self.enter(|js| js.run_script(source))
+    }
+    pub(crate) fn set_location_url(&mut self, url: impl Into<String>) {
+        let url = url.into();
+        self.js.set_location_url(&url);
+        self.bindings.set_document_url(&url);
+    }
+    pub(crate) fn set_document_metadata(&mut self, character_set: &str, content_type: &str, referrer: &str) {
+        self.bindings.set_document_metadata(character_set, content_type, referrer);
+    }
+    pub(crate) fn set_document_content_type(&mut self, content_type: &str) {
+        self.bindings.set_document_content_type(content_type);
     }
     pub(crate) fn dispatch_dom_event(&mut self, node: u32, event: &str) -> Result<(), Throw> {
         let bindings = self.bindings.clone();
@@ -101,6 +114,19 @@ impl DriverScheduler {
         while let Some(request) = self.pending.front().copied() {
             self.admit(request)?;
             self.pending.pop_front();
+        }
+        for (signal, delay_ms) in self.bindings.take_abort_timeouts() {
+            self.register_abort_timeout(signal, delay_ms)?;
+        }
+        Ok(())
+    }
+
+    fn register_abort_timeout(&mut self, signal: AbortSignalId, delay_ms: u64) -> Result<(), Throw> {
+        let chunk = delay_ms.min(i32::MAX as u64);
+        let callback = self.own(Payload::AbortTimeout(signal, delay_ms - chunk))?;
+        if let Err(error) = self.loop_.set_timer(GLOBAL, callback, chunk as i32, false) {
+            self.payloads.remove(&callback.0);
+            return Err(loop_error(error));
         }
         Ok(())
     }
@@ -185,6 +211,12 @@ impl DriverScheduler {
                 self.trace.push("M".into());
                 result
             }
+            Payload::AbortTimeout(signal, remaining) => {
+                self.payloads.remove(&callback.0);
+                if remaining > 0 { return self.register_abort_timeout(signal, remaining); }
+                let bindings = self.bindings.clone();
+                self.enter(|js| bindings.fire_abort_timeout(js, signal))
+            }
         }
     }
 
@@ -253,6 +285,15 @@ mod tests {
             scheduler.bindings.seed_test_root(amazing_dom::events::CallbackId(1), callback);
         }
         (scheduler, host)
+    }
+
+    #[test]
+    fn abort_signal_timeout_fires_from_driver_timer_queue() {
+        let (mut driver, _) = adapter(16, false);
+        driver.run_script("globalThis.signal = AbortSignal.timeout(0)").unwrap();
+        assert!(matches!(driver.run_script("signal.aborted").unwrap(), JsValue::Bool(false)));
+        driver.pump_at(Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("signal.aborted").unwrap(), JsValue::Bool(true)));
     }
 
     #[test]

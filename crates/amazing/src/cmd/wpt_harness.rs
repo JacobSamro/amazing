@@ -312,7 +312,9 @@ fn execute(options: &Options) -> Result<(), String> {
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
         .map_err(|error| error.describe())?;
     scheduler.js.set_viewport_size(options.width, options.height);
-    scheduler.js.set_location_url(format!("http://web-platform.test/{}", options.test));
+    scheduler.set_location_url(format!("http://web-platform.test/{}", options.test));
+    // This runner reads a UTF-8 HTML source directly as its top-level page.
+    scheduler.set_document_metadata("UTF-8", "text/html", "");
     // The engine's browser-global identity also supplies the standard self alias.
     let global = JsValue::Object(scheduler.js.global_obj.clone());
     scheduler.js.global_obj.borrow_mut().set_own("self", global.clone());
