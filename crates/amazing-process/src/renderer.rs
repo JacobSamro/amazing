@@ -160,6 +160,9 @@ impl RendererEndpoint {
 }
 impl RendererControls for RendererEndpoint {
     fn navigate(&self, request: Navigate) -> Result<Frame, Error> {
+        if !cfg!(feature = "byte-frame-fallback") {
+            return Err(Error::Remote("byte frame fallback disabled".into()));
+        }
         let mut frame = render_document(&request, |url, base| {
             fetch_resource(&self.network, url, base)
         })?;

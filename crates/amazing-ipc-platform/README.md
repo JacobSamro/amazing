@@ -24,5 +24,5 @@ generation with `AcquireFrame`, and the renderer sends only that handle; an old
 request receives `Superseded`. A receipt acknowledgement limits the side
 channel to one handle in flight per renderer. The renderer budgets at most
 three outstanding frames and 256 MiB of mappings. The browser separately
-charges each live view to the same limit and releases its charge on drop. IPC-2 byte frames remain available as the fallback and
-parity oracle. macOS requires its own reviewed adapter and is not enabled.
+charges each live view to the same limit and releases its charge on drop. IPC-2 byte frames remain available through amazing-process's default
+`byte-frame-fallback` feature as the fallback and parity oracle. macOS requires its own reviewed adapter and is not enabled.
