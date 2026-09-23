@@ -1,17 +1,19 @@
 use super::{
-    CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction, Instruction, Program,
-    Register,
+    CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction, Instruction,
+    KeyOperand, Program, Register,
 };
 use crate::ast::{
     self, AssignOp, Binding, Expr, ExprKind, LogicalOp, Stmt, StmtKind, UnOp, VarKind,
 };
 use crate::tokens::Span;
-use crate::value::JsValue;
+use crate::value::{JsString, JsValue};
 use std::rc::Rc;
 
 const MAX_REGISTERS: usize = 65_536;
 const MAX_INSTRUCTIONS: usize = 262_144;
-const MAX_DEPTH: usize = 256;
+// Keep recursive compilation below the Windows test host's main-thread stack.
+// Deeper valid syntax falls back atomically before instruction execution.
+const MAX_DEPTH: usize = 64;
 
 /// Compile the entire AST before any binding mutation or JavaScript execution.
 pub fn compile(ast: &ast::Program) -> Result<Program, CompileError> {
@@ -314,7 +316,7 @@ impl Compiler {
                 };
                 self.emit(Instruction::Return(value));
             }
-            _ => return Err(self.error(statement.span, "statement kind")),
+            _ => return Err(self.error(statement.span, unsupported_statement(&statement.kind))),
         }
         Ok(())
     }
@@ -333,13 +335,56 @@ impl Compiler {
                 self.emit(Instruction::Numeric(dst, number.clone()));
             }
             ExprKind::Str(value) => {
-                self.emit(Instruction::Constant(dst, JsValue::str(value.as_str())));
+                let value = expression
+                    .string_utf16
+                    .as_ref()
+                    .map(|units| JsString::from_units(units.clone()))
+                    .unwrap_or_else(|| value.as_str().into());
+                self.emit(Instruction::Constant(dst, JsValue::Str(value)));
             }
             ExprKind::Bool(value) => {
                 self.emit(Instruction::Constant(dst, JsValue::Bool(*value)));
             }
             ExprKind::Null => {
                 self.emit(Instruction::Constant(dst, JsValue::Null));
+            }
+            ExprKind::Array(elements) => {
+                self.emit(Instruction::NewArray(dst));
+                for (index, element) in elements.iter().enumerate() {
+                    if let Some(element) = element {
+                        if matches!(element.kind, ExprKind::Spread(_)) {
+                            return Err(self.error(element.span, "array spread"));
+                        }
+                        let value = self.expression(element)?;
+                        self.emit(Instruction::SetArrayElement(dst, index, value));
+                    }
+                }
+                self.emit(Instruction::SetArrayLength(dst, elements.len()));
+            }
+            ExprKind::Object(elements) => {
+                self.emit(Instruction::NewObject(dst));
+                for element in elements {
+                    let ast::ObjElem::Prop(property) = element else {
+                        return Err(self.error(expression.span, "object spread"));
+                    };
+                    let key = self.object_key(
+                        &property.key,
+                        property.key_utf16.as_deref(),
+                        property.span,
+                    )?;
+                    let value = match &property.value {
+                        ast::PropValue::Shorthand(name) => {
+                            let value = self.register(property.span)?;
+                            self.emit(Instruction::LoadName(value, name.name.clone(), false));
+                            value
+                        }
+                        ast::PropValue::Init(value) => self.expression(value)?,
+                        ast::PropValue::Method(_) => {
+                            return Err(self.error(property.span, "object method"));
+                        }
+                    };
+                    self.emit(Instruction::SetObjectProperty(dst, key, value));
+                }
             }
             ExprKind::This => {
                 self.emit(Instruction::LoadThis(dst));
@@ -354,6 +399,15 @@ impl Compiler {
             }
             ExprKind::Ident(name) => {
                 self.emit(Instruction::LoadName(dst, name.name.clone(), false));
+            }
+            ExprKind::Member {
+                obj,
+                prop,
+                optional: false,
+            } => {
+                let object = self.expression(obj)?;
+                let key = self.member_key(prop)?;
+                self.emit(Instruction::GetMember(dst, object, key));
             }
             ExprKind::Paren(inner) => return self.expression(inner),
             ExprKind::Sequence(items) => {
@@ -392,17 +446,33 @@ impl Compiler {
                 args,
                 optional: false,
             } => {
-                // Calls into functions from another script may enter the tree walker.
-                // Only calls to this program's bytecode declarations are compiled.
-                if !self.vm_callable(callee) {
-                    return Err(self.error(expression.span, "call target"));
+                let (callee, this) = match &callee.kind {
+                    ExprKind::Member {
+                        obj,
+                        prop,
+                        optional: false,
+                    } => {
+                        let object = self.expression(obj)?;
+                        let key = self.member_key(prop)?;
+                        let function = self.register(callee.span)?;
+                        self.emit(Instruction::GetMember(function, object, key));
+                        (function, object)
+                    }
+                    _ => (self.expression(callee)?, 0),
+                };
+                let mut arguments = Vec::new();
+                for argument in args {
+                    arguments.push(self.expression(argument)?);
                 }
+                self.emit(Instruction::Call(dst, callee, this, arguments));
+            }
+            ExprKind::New { callee, args } => {
                 let callee = self.expression(callee)?;
                 let mut arguments = Vec::new();
                 for argument in args {
                     arguments.push(self.expression(argument)?);
                 }
-                self.emit(Instruction::Call(dst, callee, arguments));
+                self.emit(Instruction::Construct(dst, callee, arguments));
             }
             ExprKind::Logical { op, left, right } => {
                 let left = self.expression(left)?;
@@ -495,20 +565,9 @@ impl Compiler {
                     return Ok(old);
                 }
             }
-            _ => return Err(self.error(expression.span, "expression kind")),
+            _ => return Err(self.error(expression.span, unsupported_expression(&expression.kind))),
         }
         Ok(dst)
-    }
-
-    fn vm_callable(&self, expression: &Expr) -> bool {
-        match &expression.kind {
-            ExprKind::Ident(name) => self.program.functions.iter().any(|f| f.name == name.name),
-            ExprKind::Function(_) => true,
-            ExprKind::Arrow(_) => true,
-            ExprKind::Paren(inner) => self.vm_callable(inner),
-            ExprKind::Call { callee, .. } => self.vm_callable(callee),
-            _ => false,
-        }
     }
 
     fn reference(&mut self, expression: &Expr) -> Result<(usize, Register), CompileError> {
@@ -516,13 +575,101 @@ impl Compiler {
         while let ExprKind::Paren(inner) = &target.kind {
             target = inner;
         }
-        let ExprKind::Ident(name) = &target.kind else {
-            return Err(self.error(target.span, "assignment target"));
-        };
         let slot = self.program.references;
         self.program.references += 1;
         let old = self.register(expression.span)?;
-        self.emit(Instruction::ResolveName(slot, old, name.name.clone()));
+        match &target.kind {
+            ExprKind::Ident(name) => {
+                self.emit(Instruction::ResolveName(slot, old, name.name.clone()));
+            }
+            ExprKind::Member {
+                obj,
+                prop,
+                optional: false,
+            } => {
+                let object = self.expression(obj)?;
+                let key = self.member_key(prop)?;
+                self.emit(Instruction::ResolveMember(slot, old, object, key));
+            }
+            _ => return Err(self.error(target.span, "assignment target")),
+        }
         Ok((slot, old))
+    }
+
+    fn member_key(&mut self, prop: &ast::MemberProp) -> Result<KeyOperand, CompileError> {
+        match prop {
+            ast::MemberProp::Ident(name) => Ok(KeyOperand::Static(name.name.as_str().into())),
+            ast::MemberProp::Computed(expression) => {
+                let register = self.expression(expression)?;
+                self.emit(Instruction::ToKey(register));
+                Ok(KeyOperand::Dynamic(register))
+            }
+            ast::MemberProp::Private(name) => Err(self.error(name.span, "private member")),
+        }
+    }
+
+    fn object_key(
+        &mut self,
+        key: &ast::PropKey,
+        utf16: Option<&[u16]>,
+        span: Span,
+    ) -> Result<KeyOperand, CompileError> {
+        if let Some(units) = utf16 {
+            return Ok(KeyOperand::Static(JsString::from_units(units.to_vec())));
+        }
+        match key {
+            ast::PropKey::Ident(name) => Ok(KeyOperand::Static(name.name.as_str().into())),
+            ast::PropKey::Str(value) => Ok(KeyOperand::Static(value.as_str().into())),
+            ast::PropKey::Num(number) => {
+                let register = self.register(span)?;
+                self.emit(Instruction::Numeric(register, number.clone()));
+                self.emit(Instruction::ToKey(register));
+                Ok(KeyOperand::Dynamic(register))
+            }
+            ast::PropKey::Computed(expression) => {
+                let register = self.expression(expression)?;
+                self.emit(Instruction::ToKey(register));
+                Ok(KeyOperand::Dynamic(register))
+            }
+            ast::PropKey::Private(name) => Err(self.error(name.span, "private object key")),
+        }
+    }
+}
+
+fn unsupported_statement(kind: &StmtKind) -> &'static str {
+    match kind {
+        StmtKind::ForIn { .. } => "for-in",
+        StmtKind::ForOf { .. } => "for-of",
+        StmtKind::Switch { .. } => "switch",
+        StmtKind::Try(_) => "try",
+        StmtKind::Break { .. } => "break",
+        StmtKind::Continue { .. } => "continue",
+        StmtKind::Labeled { .. } => "labeled statement",
+        StmtKind::Class(_) => "class",
+        _ => "statement kind",
+    }
+}
+
+fn unsupported_expression(kind: &ExprKind) -> &'static str {
+    match kind {
+        ExprKind::Array(_) => "array literal",
+        ExprKind::Object(_) => "object literal",
+        ExprKind::Member { .. } => "member access",
+        ExprKind::New { .. } => "new",
+        ExprKind::Template(_) => "template literal",
+        ExprKind::RegExp(_) => "regexp literal",
+        ExprKind::Call { optional: true, .. } => "optional call",
+        ExprKind::Spread(_) => "spread",
+        ExprKind::Class(_) => "class",
+        ExprKind::Yield { .. } => "yield",
+        ExprKind::Super => "super",
+        ExprKind::PrivateName(_) => "private name",
+        ExprKind::Unary {
+            op: UnOp::Delete, ..
+        } => "delete",
+        ExprKind::Unary {
+            op: UnOp::Await, ..
+        } => "await",
+        _ => "expression kind",
     }
 }

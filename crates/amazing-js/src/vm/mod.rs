@@ -10,13 +10,13 @@ use super::{reference_name, Interpreter, Reference};
 use crate::ast::{BinOp, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
-use crate::value::{FunctionBody, JsFunction, JsObject, JsValue, Obj, Throw};
+use crate::value::{FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, Throw};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub use compiler::compile;
 
-pub const DEFAULT_INSTRUCTION_LIMIT: usize = 1_000_000;
+pub const DEFAULT_INSTRUCTION_LIMIT: usize = 10_000_000;
 type Register = usize;
 
 /// This is a capability error, not a JavaScript syntax error. No code has run.
@@ -45,13 +45,36 @@ enum Condition {
 }
 
 #[derive(Debug)]
+enum KeyOperand {
+    Static(JsString),
+    Dynamic(Register),
+}
+
+impl KeyOperand {
+    fn resolve(&self, i: &mut Interpreter, registers: &[JsValue]) -> Result<JsString, Throw> {
+        match self {
+            Self::Static(key) => Ok(key.clone()),
+            Self::Dynamic(register) => i.to_js_string(&registers[*register]),
+        }
+    }
+}
+
+#[derive(Debug)]
 enum Instruction {
     Constant(Register, JsValue),
     Numeric(Register, Numeric),
+    ToKey(Register),
     LoadName(Register, String, bool),
     LoadThis(Register),
     ResolveName(usize, Register, String),
+    GetMember(Register, Register, KeyOperand),
+    ResolveMember(usize, Register, Register, KeyOperand),
     StoreReference(usize, Register),
+    NewObject(Register),
+    SetObjectProperty(Register, KeyOperand, Register),
+    NewArray(Register),
+    SetArrayElement(Register, usize, Register),
+    SetArrayLength(Register, usize),
     Declare(String, Register, VarKind),
     Unary(Register, UnOp, Register),
     Binary(Register, BinOp, Register, Register),
@@ -63,7 +86,8 @@ enum Instruction {
     Complete(Register),
     Return(Register),
     MakeFunction(Register, FunctionCode),
-    Call(Register, Register, Vec<Register>),
+    Call(Register, Register, Register, Vec<Register>),
+    Construct(Register, Register, Vec<Register>),
     Throw(Register),
 }
 
@@ -95,6 +119,25 @@ pub struct Program {
     is_function: bool,
 }
 
+/// Mutable execution state owned by a heap allocation. The try stack is empty
+/// until exception handlers are compiled, but belongs to the frame so it can
+/// survive an instruction-boundary suspension with the other VM state.
+struct VmFrame {
+    registers: Vec<JsValue>,
+    references: Vec<Option<Reference>>,
+    scopes: Vec<EnvHandle>,
+    env: EnvHandle,
+    pc: usize,
+    fuel: usize,
+    try_stack: Vec<usize>,
+    completed: Option<JsValue>,
+}
+
+enum FrameOutcome {
+    Suspended,
+    Completed(JsValue),
+}
+
 impl Program {
     pub fn instruction_count(&self) -> usize {
         self.code.len()
@@ -112,31 +155,76 @@ impl Program {
         result
     }
 
-    fn execute(
+    fn execute(&self, i: &mut Interpreter, env: EnvHandle, fuel: usize) -> Result<JsValue, Throw> {
+        let mut frame = self.start_frame(i, env, fuel)?;
+        match self.resume_frame(i, &mut frame, usize::MAX)? {
+            FrameOutcome::Completed(value) => Ok(value),
+            FrameOutcome::Suspended => unreachable!("unbounded VM slice suspended"),
+        }
+    }
+
+    fn start_frame(
         &self,
         i: &mut Interpreter,
-        mut env: EnvHandle,
-        mut fuel: usize,
-    ) -> Result<JsValue, Throw> {
-        let mut registers = vec![JsValue::Undefined; self.registers];
-        let mut references: Vec<Option<Reference>> = (0..self.references).map(|_| None).collect();
-        let mut scopes = Vec::new();
+        env: EnvHandle,
+        fuel: usize,
+    ) -> Result<Box<VmFrame>, Throw> {
+        let mut frame = Box::new(VmFrame {
+            registers: vec![JsValue::Undefined; self.registers],
+            references: (0..self.references).map(|_| None).collect(),
+            scopes: Vec::new(),
+            env,
+            pc: 0,
+            fuel,
+            try_stack: Vec::new(),
+            completed: None,
+        });
         for name in &self.hoisted {
-            consume(&mut fuel)?;
-            env.declare_var(name, JsValue::Undefined)?;
+            consume(&mut frame.fuel)?;
+            frame.env.declare_var(name, JsValue::Undefined)?;
         }
         for function in &self.functions {
-            consume(&mut fuel)?;
-            let value = function.code.instantiate(i, &env);
-            env.declare_var(&function.name, value)?;
+            consume(&mut frame.fuel)?;
+            let value = function.code.instantiate(i, &frame.env);
+            frame.env.declare_var(&function.name, value)?;
         }
-        let mut pc = 0;
-        while let Some(op) = self.code.get(pc) {
-            consume(&mut fuel)?;
-            pc += 1;
+        Ok(frame)
+    }
+
+    fn resume_frame(
+        &self,
+        i: &mut Interpreter,
+        frame: &mut Box<VmFrame>,
+        quantum: usize,
+    ) -> Result<FrameOutcome, Throw> {
+        if let Some(value) = &frame.completed {
+            return Ok(FrameOutcome::Completed(value.clone()));
+        }
+        let VmFrame {
+            registers,
+            references,
+            scopes,
+            env,
+            pc,
+            fuel,
+            try_stack,
+            completed,
+        } = frame.as_mut();
+        debug_assert!(try_stack.is_empty(), "try compilation is not supported yet");
+        let mut steps = 0;
+        while let Some(op) = self.code.get(*pc) {
+            if steps == quantum {
+                return Ok(FrameOutcome::Suspended);
+            }
+            consume(fuel)?;
+            steps += 1;
+            *pc += 1;
             match op {
                 Instruction::Constant(dst, value) => registers[*dst] = value.clone(),
                 Instruction::Numeric(dst, number) => registers[*dst] = i.numeric(number)?,
+                Instruction::ToKey(register) => {
+                    registers[*register] = JsValue::Str(i.to_js_string(&registers[*register])?);
+                }
                 Instruction::LoadName(dst, name, optional) => {
                     registers[*dst] = match i.identifier_value(&env, name)? {
                         Some(value) => value,
@@ -160,6 +248,16 @@ impl Program {
                     references[*slot] = Some(reference);
                     registers[*dst] = value;
                 }
+                Instruction::GetMember(dst, object, key) => {
+                    let key = key.resolve(i, &registers)?;
+                    registers[*dst] = i.get_prop(&registers[*object], key)?;
+                }
+                Instruction::ResolveMember(slot, dst, object, key) => {
+                    let key = key.resolve(i, &registers)?;
+                    let receiver = registers[*object].clone();
+                    registers[*dst] = i.get_prop(&receiver, key.clone())?;
+                    references[*slot] = Some(Reference::Property(receiver, crate::value::PropertyKey::String(key)));
+                }
                 Instruction::StoreReference(slot, src) => {
                     let reference = references[*slot]
                         .take()
@@ -169,6 +267,26 @@ impl Program {
                         i.infer_function_name(&mut value, &name);
                     }
                     i.put_reference(reference, value, &env)?;
+                }
+                Instruction::NewObject(dst) => registers[*dst] = i.object_value(),
+                Instruction::SetObjectProperty(object, key, src) => {
+                    let key = key.resolve(i, &registers)?;
+                    i.set_prop(&registers[*object], key, registers[*src].clone())?;
+                }
+                Instruction::NewArray(dst) => {
+                    let mut array = JsObject::array();
+                    array.proto = Some(i.array_proto.clone());
+                    registers[*dst] = JsValue::object(array);
+                }
+                Instruction::SetArrayElement(array, index, src) => {
+                    i.set_prop(
+                        &registers[*array],
+                        index.to_string(),
+                        registers[*src].clone(),
+                    )?;
+                }
+                Instruction::SetArrayLength(array, len) => {
+                    i.set_prop(&registers[*array], "length", JsValue::num(*len as f64))?;
                 }
                 Instruction::Declare(name, src, kind) => match kind {
                     VarKind::Var => {
@@ -200,7 +318,7 @@ impl Program {
                         i.binary(*op, registers[*left].clone(), registers[*right].clone())?;
                 }
                 Instruction::Move(dst, src) => registers[*dst] = registers[*src].clone(),
-                Instruction::Jump(target) => pc = *target,
+                Instruction::Jump(target) => *pc = *target,
                 Instruction::Branch(src, condition, target) => {
                     let value = &registers[*src];
                     if match condition {
@@ -208,50 +326,49 @@ impl Program {
                         Condition::Falsy => !value.to_boolean(),
                         Condition::Nullish => value.is_null() || value.is_undefined(),
                     } {
-                        pc = *target;
+                        *pc = *target;
                     }
                 }
                 Instruction::EnterScope => {
                     scopes.push(env.clone());
-                    env = EnvHandle::new(EnvKind::Block, Some(env));
+                    *env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
                 }
                 Instruction::LeaveScope => {
-                    env = scopes
+                    *env = scopes
                         .pop()
                         .ok_or_else(|| Throw::type_error("invalid VM scope"))?;
                 }
                 Instruction::Complete(src) => i.completion = registers[*src].clone(),
-                Instruction::Return(src) => return Ok(registers[*src].clone()),
+                Instruction::Return(src) => {
+                    let value = registers[*src].clone();
+                    *completed = Some(value.clone());
+                    return Ok(FrameOutcome::Completed(value));
+                }
                 Instruction::MakeFunction(dst, code) => {
                     registers[*dst] = code.instantiate(i, &env);
                 }
-                Instruction::Call(dst, callee, arguments) => {
-                    let callable = match &registers[*callee] {
-                        JsValue::Object(object) => object
-                            .borrow()
-                            .func
-                            .as_ref()
-                            .is_some_and(|f| matches!(&f.body, FunctionBody::Bytecode(_))),
-                        _ => false,
-                    };
-                    if !callable {
-                        return Err(Throw::type_error("VM call target is not bytecode"));
-                    }
+                Instruction::Call(dst, callee, this, arguments) => {
                     let args = arguments.iter().map(|r| registers[*r].clone()).collect();
                     registers[*dst] =
-                        i.call_value(&registers[*callee], JsValue::Undefined, args)?;
+                        i.call_value(&registers[*callee], registers[*this].clone(), args)?;
+                }
+                Instruction::Construct(dst, callee, arguments) => {
+                    let args = arguments.iter().map(|r| registers[*r].clone()).collect();
+                    registers[*dst] = i.construct(&registers[*callee], args)?;
                 }
                 Instruction::Throw(src) => return Err(Throw(registers[*src].clone())),
             }
         }
-        if self.is_function {
-            Ok(JsValue::Undefined)
+        let value = if self.is_function {
+            JsValue::Undefined
         } else {
             if i.external_scheduling.is_none() {
                 i.drain_jobs()?;
             }
-            Ok(i.completion.clone())
-        }
+            i.completion.clone()
+        };
+        *completed = Some(value.clone());
+        Ok(FrameOutcome::Completed(value))
     }
 }
 
