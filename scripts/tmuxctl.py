@@ -161,6 +161,10 @@ LANE_GRANTS.setdefault("dom-bindings", []).extend([
     "crates/amazing/src/dom_host.rs",
     "crates/amazing-css/src/selectors.rs",
 ])
+# LAYOUT-7: spec-correct auto-track stretch changes one driver assertion
+# (grid_template_longhand_rejects_reserved_line_names: 0 -> 100px). That single
+# assertion and its comment only; read the diff at merge.
+LANE_GRANTS.setdefault("layout", []).append("crates/amazing/tests/phase5_flex_grid.rs")
 LANE_GRANTS["integrator-assist"] = [
     "crates/amazing-shell-gpui/src/session_state.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
@@ -217,6 +221,7 @@ LANE_GRANTS_REWRITE = {
         "crates/amazing-shell-gpui/src/session_state.rs",
         "crates/amazing-shell-gpui/Cargo.lock",
     ],
+    "layout": ["crates/amazing/tests/phase5_flex_grid.rs"],
 }
 # IA-CACHE adds exactly one line, `amazing-fetch = { path = "../amazing-fetch" }`,
 # to the shell manifest. Additive, verified at merge.
