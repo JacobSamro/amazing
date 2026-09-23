@@ -1,0 +1,229 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "frozen-reftest-calc-used-values",
+    "css_values_root_calc_reftests": 45,
+    "css_sizing_calc_reftests": 6,
+    "named_related_cases": 2
+  },
+  "sparse_paths": [
+    "css/css-values",
+    "css/css-sizing",
+    "css/css-cascade"
+  ],
+  "tests": [
+    {
+      "id": "css-cascade__all-prop-002.html",
+      "test": "css/css-cascade/all-prop-002.html"
+    },
+    {
+      "id": "css-sizing__calc-margins-block.html",
+      "test": "css/css-sizing/calc-margins-block.html"
+    },
+    {
+      "id": "css-sizing__calc-margins-fieldset-content.html",
+      "test": "css/css-sizing/calc-margins-fieldset-content.html"
+    },
+    {
+      "id": "css-sizing__calc-margins-fieldset-legend.html",
+      "test": "css/css-sizing/calc-margins-fieldset-legend.html"
+    },
+    {
+      "id": "css-sizing__calc-margins-flex.html",
+      "test": "css/css-sizing/calc-margins-flex.html"
+    },
+    {
+      "id": "css-sizing__calc-margins-percent-flex.html",
+      "test": "css/css-sizing/calc-margins-percent-flex.html"
+    },
+    {
+      "id": "css-sizing__calc-margins-table-caption.html",
+      "test": "css/css-sizing/calc-margins-table-caption.html"
+    },
+    {
+      "id": "css-values__calc-background-image-gradient-1.html",
+      "test": "css/css-values/calc-background-image-gradient-1.html"
+    },
+    {
+      "id": "css-values__calc-background-linear-gradient-1.html",
+      "test": "css/css-values/calc-background-linear-gradient-1.html"
+    },
+    {
+      "id": "css-values__calc-background-position-1.html",
+      "test": "css/css-values/calc-background-position-1.html"
+    },
+    {
+      "id": "css-values__calc-background-size-1.html",
+      "test": "css/css-values/calc-background-size-1.html"
+    },
+    {
+      "id": "css-values__calc-border-radius-1.html",
+      "test": "css/css-values/calc-border-radius-1.html"
+    },
+    {
+      "id": "css-values__calc-ch-ex-lang.html",
+      "test": "css/css-values/calc-ch-ex-lang.html"
+    },
+    {
+      "id": "css-values__calc-height-block-1.html",
+      "test": "css/css-values/calc-height-block-1.html"
+    },
+    {
+      "id": "css-values__calc-height-table-1.html",
+      "test": "css/css-values/calc-height-table-1.html"
+    },
+    {
+      "id": "css-values__calc-in-calc.html",
+      "test": "css/css-values/calc-in-calc.html"
+    },
+    {
+      "id": "css-values__calc-in-max.html",
+      "test": "css/css-values/calc-in-max.html"
+    },
+    {
+      "id": "css-values__calc-in-media-queries-001.html",
+      "test": "css/css-values/calc-in-media-queries-001.html"
+    },
+    {
+      "id": "css-values__calc-in-media-queries-002.html",
+      "test": "css/css-values/calc-in-media-queries-002.html"
+    },
+    {
+      "id": "css-values__calc-invalid-range-clamping.html",
+      "test": "css/css-values/calc-invalid-range-clamping.html"
+    },
+    {
+      "id": "css-values__calc-margin-block-1.html",
+      "test": "css/css-values/calc-margin-block-1.html"
+    },
+    {
+      "id": "css-values__calc-max-height-block-1.html",
+      "test": "css/css-values/calc-max-height-block-1.html"
+    },
+    {
+      "id": "css-values__calc-max-width-block-1.html",
+      "test": "css/css-values/calc-max-width-block-1.html"
+    },
+    {
+      "id": "css-values__calc-max-width-block-intrinsic-1.html",
+      "test": "css/css-values/calc-max-width-block-intrinsic-1.html"
+    },
+    {
+      "id": "css-values__calc-min-height-block-1.html",
+      "test": "css/css-values/calc-min-height-block-1.html"
+    },
+    {
+      "id": "css-values__calc-min-height.html",
+      "test": "css/css-values/calc-min-height.html"
+    },
+    {
+      "id": "css-values__calc-min-width-block-1.html",
+      "test": "css/css-values/calc-min-width-block-1.html"
+    },
+    {
+      "id": "css-values__calc-min-width-block-intrinsic-1.html",
+      "test": "css/css-values/calc-min-width-block-intrinsic-1.html"
+    },
+    {
+      "id": "css-values__calc-offsets-absolute-bottom-1.html",
+      "test": "css/css-values/calc-offsets-absolute-bottom-1.html"
+    },
+    {
+      "id": "css-values__calc-offsets-absolute-left-1.html",
+      "test": "css/css-values/calc-offsets-absolute-left-1.html"
+    },
+    {
+      "id": "css-values__calc-offsets-absolute-right-1.html",
+      "test": "css/css-values/calc-offsets-absolute-right-1.html"
+    },
+    {
+      "id": "css-values__calc-offsets-absolute-top-1.html",
+      "test": "css/css-values/calc-offsets-absolute-top-1.html"
+    },
+    {
+      "id": "css-values__calc-offsets-relative-bottom-1.html",
+      "test": "css/css-values/calc-offsets-relative-bottom-1.html"
+    },
+    {
+      "id": "css-values__calc-offsets-relative-left-1.html",
+      "test": "css/css-values/calc-offsets-relative-left-1.html"
+    },
+    {
+      "id": "css-values__calc-offsets-relative-right-1.html",
+      "test": "css/css-values/calc-offsets-relative-right-1.html"
+    },
+    {
+      "id": "css-values__calc-offsets-relative-top-1.html",
+      "test": "css/css-values/calc-offsets-relative-top-1.html"
+    },
+    {
+      "id": "css-values__calc-padding-block-1.html",
+      "test": "css/css-values/calc-padding-block-1.html"
+    },
+    {
+      "id": "css-values__calc-parenthesis-stack.html",
+      "test": "css/css-values/calc-parenthesis-stack.html"
+    },
+    {
+      "id": "css-values__calc-positive-fraction-001.html",
+      "test": "css/css-values/calc-positive-fraction-001.html"
+    },
+    {
+      "id": "css-values__calc-rem-lang.html",
+      "test": "css/css-values/calc-rem-lang.html"
+    },
+    {
+      "id": "css-values__calc-rounding-001.html",
+      "test": "css/css-values/calc-rounding-001.html"
+    },
+    {
+      "id": "css-values__calc-rounding-002.html",
+      "test": "css/css-values/calc-rounding-002.html"
+    },
+    {
+      "id": "css-values__calc-rounding-003.html",
+      "test": "css/css-values/calc-rounding-003.html"
+    },
+    {
+      "id": "css-values__calc-text-indent-1.html",
+      "test": "css/css-values/calc-text-indent-1.html"
+    },
+    {
+      "id": "css-values__calc-text-indent-intrinsic-1.html",
+      "test": "css/css-values/calc-text-indent-intrinsic-1.html"
+    },
+    {
+      "id": "css-values__calc-transform-origin-1.html",
+      "test": "css/css-values/calc-transform-origin-1.html"
+    },
+    {
+      "id": "css-values__calc-vertical-align-1.html",
+      "test": "css/css-values/calc-vertical-align-1.html"
+    },
+    {
+      "id": "css-values__calc-width-block-1.html",
+      "test": "css/css-values/calc-width-block-1.html"
+    },
+    {
+      "id": "css-values__calc-width-block-intrinsic-1.html",
+      "test": "css/css-values/calc-width-block-intrinsic-1.html"
+    },
+    {
+      "id": "css-values__calc-width-table-auto-1.html",
+      "test": "css/css-values/calc-width-table-auto-1.html"
+    },
+    {
+      "id": "css-values__calc-width-table-fixed-1.html",
+      "test": "css/css-values/calc-width-table-fixed-1.html"
+    },
+    {
+      "id": "css-values__calc-zero-percent-height.html",
+      "test": "css/css-values/calc-zero-percent-height.html"
+    },
+    {
+      "id": "css-values__ch-unit-008.html",
+      "test": "css/css-values/ch-unit-008.html"
+    }
+  ]
+}

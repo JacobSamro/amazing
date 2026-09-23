@@ -1132,7 +1132,7 @@ pub(crate) fn max_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
         MaybeLen::Px(width) => width.max(0.0),
         MaybeLen::Auto => max_content_inner_width(b, fonts),
     };
-    chrome + inner
+    chrome + intrinsic_width_constraints(b, inner)
 }
 
 /// Approximate min-content width: the widest unbreakable inline token or
@@ -1148,7 +1148,22 @@ pub(crate) fn min_content_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
         MaybeLen::Px(width) => width.max(0.0),
         MaybeLen::Auto => min_content_inner_width(b, fonts),
     };
-    chrome + inner
+    chrome + intrinsic_width_constraints(b, inner)
+}
+
+fn intrinsic_width_constraints(b: &LayoutBox, inner: f32) -> f32 {
+    // CSS Sizing 3 §5.2.1: a cyclic percentage in a min size contributes
+    // zero during intrinsic sizing. The definite length term still counts.
+    let min = b.style.get("min-width")
+        .and_then(|value| values::parse_length_percentage(value, b.font_size, b.font_size * 0.6))
+        .and_then(|value| value.resolve(Some(0.0)))
+        .unwrap_or(0.0).max(0.0);
+    // Cyclic percentages in a maximum size behave as the initial `none`.
+    let max = b.style.get("max-width")
+        .and_then(|value| values::parse_length_percentage(value, b.font_size, b.font_size * 0.6))
+        .filter(|value| !value.has_percentage)
+        .and_then(|value| value.resolve(None));
+    max.map_or(inner, |maximum| inner.min(maximum.max(0.0))).max(min)
 }
 
 pub(crate) fn max_content_inner_width(b: &LayoutBox, fonts: &FontSource) -> f32 {
