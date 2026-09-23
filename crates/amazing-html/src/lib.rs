@@ -52,6 +52,8 @@ mod stream_tests;
 mod byte_stream_tests;
 #[cfg(test)]
 mod fuzz_tests;
+#[cfg(test)]
+mod fragment_tests;
 
 /// Decodes and parses a complete HTML byte stream. `transport_label` is the
 /// optional charset from out-of-band transport metadata.
@@ -87,6 +89,7 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     let context = context.to_ascii_lowercase();
     let supported = [
         "div", "table", "tbody", "thead", "tfoot", "tr", "td", "th", "caption", "colgroup",
+        "textarea", "title", "style", "select", "option",
     ];
     if !supported.contains(&context.as_str()) {
         return Err("unsupported HTML fragment context".into());
@@ -113,6 +116,14 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
             source.namespace(*node) == Some(Namespace::Html) && source.name(*node) == Some("html")
         })
         .ok_or_else(|| "fragment root was not constructed".to_owned())?;
+    let virtual_context = matches!(context.as_str(), "textarea" | "title" | "style" | "select" | "option");
+    let mut fragment = Dom::new();
+    if virtual_context {
+        for child in source.children(root) {
+            clone_subtree(&source, child, &mut fragment, NodeIdx(0));
+        }
+        return Ok(fragment);
+    }
     let context_node = source
         .children(root)
         .find(|node| {
@@ -120,7 +131,6 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
                 && source.name(*node) == Some(context.as_str())
         })
         .ok_or_else(|| "fragment context was not constructed".to_owned())?;
-    let mut fragment = Dom::new();
     for child in source.children(root) {
         if child == context_node {
             for context_child in source.children(context_node) {

@@ -249,3 +249,37 @@ for the package increase from HTML-4's 98. On the earlier fixed base
 `cfb13a9`, three driver/JSRT-2 thrown-error-text tests failed in a full
 workspace sweep; the primary's hotfix superseded that result. The harness
 found no HTML mismatch or panic, so there is no new minimized fixture.
+
+## HTML-6 — bounded fragment context initialization
+
+Before implementation, `parse_fragment` returned the exact error
+`unsupported HTML fragment context` for `textarea`, `title`, `style`,
+`script`, `select` and `option`; this was asserted on win-001 at fixed base
+`262f211`. The predetermined tree fixtures are retained in the lane's
+`html6-fixtures.md` scratch note. This ticket adds `textarea` and `title`
+with initial RCDATA tokenization, `style` with initial RAWTEXT tokenization,
+and `select` with a bounded select insertion mode. `option` uses in-body
+insertion mode with the context kept off the open-element stack. The new
+contexts extract children from the synthetic `html` root; old table/body
+contexts retain their existing wrapper path. A fragment context's own end tag
+is not appropriate because its start tag was never tokenized; the literal
+text is retained. The tokenizer now replays the source spelling for a
+mismatched RAWTEXT/RCDATA end tag, including mixed case, instead of replaying
+its lowercased tag builder.
+
+`script`, `template`, `noscript` and `plaintext` remain explicit errors.
+In particular, script data tokenization is absent and RAWTEXT is not a safe
+replacement for it. The select mode covers option/optgroup insertion,
+end-tag recovery, character references and ignored disallowed tags; broader
+fragment contexts remain future work. No Encoding expansion was made.
+
+Fixed-base `262f211` HTML-only Windows gates: package nextest **105/105
+twice**, separate package doctest **1/1**, shared-slot workspace nextest
+**1451/1451** with 3 skipped, and separate shared-slot workspace doctests
+**2/2**. A 256-input Rust source, Cargo manifest and root lockfile hash
+manifest (`e118de499146db29439521fe1461e045ecfdd1f5e8f7d77039568dbe62be16ad`)
+matched on Mac and win-001 before and after the gates. Five new fragment
+tests account for the package increase from HTML-5's 100 tests. The earlier
+baseline error selection is retained in `.agents/html/html6-baseline.log`;
+its independent expected trees were fixed in `html6-fixtures.md` before
+implementation. No WPT conformance claim is made for other contexts.
