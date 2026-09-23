@@ -82,8 +82,11 @@ side; full Test262 found the missing check when `try` became compilable.
 On the pinned Linux checkout, same-host tree-walker versus VM comparison found
 zero lost passing files or variants, 23 gained files and 28 gained variants.
 Compiled coverage rose from 18,501/34,493 eligible files (53.6370%) on
-JSVM-2 to 19,494/34,493 (56.5158%). The final Windows crate/workspace
-nextest and doctest gate is pending on win-002.
+JSVM-2 to 19,494/34,493 (56.5158%). The pinned Linux corpus input SHA-256
+was `91109b82`; the baseline and VM classification hashes were `b9d73ca4`
+and `cc08903c`. Final exact-commit Windows gates on win-002 passed: amazing-js
+nextest 216 tests (one ignored) and its doctest 1/1; workspace nextest 1,770
+tests (five ignored) and workspace doctests 2/2.
 
 ## Following tickets
 
