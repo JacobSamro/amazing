@@ -12,6 +12,7 @@ Events, each emitted once:
     BLOCKED  <lane> <blocker>              lane cannot proceed
     ASK      <lane> <question>             new unresolved question
     STALL    <lane> busy but status is Nm old
+    ERROR    <lane> idle after a provider error (model at capacity, rate limit)
     CONTEXT  <lane> N% left -- restart
     MODEL    <lane> running X, expected gpt-6-sol medium
     SERVER   win-001 unreachable over ssh
@@ -140,6 +141,22 @@ def scan(seen: set[str]) -> list[str]:
                 if key not in seen:
                     remember(seen, key)
                     events.append(f"STALL    {lane} busy but status is {mins}m old")
+
+        # A provider error ends the agent's turn and leaves it idle at the
+        # prompt, which is indistinguishable from "waiting" in every other
+        # signal. text sat 40 minutes after "model is at capacity" before
+        # anyone noticed. An idle lane whose recent output ends in such an
+        # error needs a nudge to resume.
+        if tmuxctl.state_of(raw) == "idle" and state not in ("done", "checkpointed"):
+            tail = "\n".join(raw.splitlines()[-15:]).lower()
+            for marker in ("at capacity", "rate limit", "stream error",
+                           "stream disconnected", "internal server error"):
+                if marker in tail:
+                    key = digest(f"err:{lane}:{marker}:{int(time.time() // 900)}")
+                    if key not in seen:
+                        remember(seen, key)
+                        events.append(f"ERROR    {lane} idle after provider error '{marker}' -- resend to resume")
+                    break
 
         m = MODEL_RE.search(raw)
         if m:
