@@ -478,3 +478,63 @@ workspace. The gate logs have SHA-256
 the gate, including the two pushed-base scripts. `REFRESH-HOLD` was released.
 The pushed base `582a6af` differs from `6dff430` only in those scripts. No
 push or PR was made by this lane.
+
+## IA-ADOPT — DOM-15/14/13/10 driver adoption (2026-09-23)
+
+On the IA branch, `RuntimeBindingHost` now chooses `HTMLFormControlsCollection`,
+`HTMLOptionsCollection`, `RadioNodeList`, `ValidityState`, and
+`CustomElementRegistry` prototypes for their native brands. Live form/select/radio
+index counts and supported names read the same DOM arena as page scripts; the
+options indexed setter calls the binding operation. Date values use the realm's
+Date constructor and the runtime's existing date value. Focused Windows driver
+tests exercise collection identity and indexing, radio value, options indexed
+replacement, constraint validity, Date conversion, document metadata/URL
+reflection, registry identity, definition lookup, and `whenDefined` promise
+resolution. Existing tests cover ShadowRoot interface selection and slotchange
+checkpoint delivery, plus abort timeout delivery through the driver timer queue.
+
+`window.customElements` uses the current document's canonical registry wrapper.
+The driver supplies constructor checks, object/sequence conversion, Promise
+resolve/reject, DOMException values, and thrown reaction reporting. It drains
+custom element reactions at each driver event-loop entry after script execution
+and before outbox admission. The JS runtime currently constructs a derived
+class with an ordinary `this` and calls `super()` as an ordinary call. Therefore
+JS custom-element upgrades cannot finish with the canonical host wrapper;
+JSRT-7 owns that runtime/host-super facade. HTML-14 parser construction remains
+a separate document-loading integration. The registry surface is installed,
+but no class-upgrade WPT conformance is claimed.
+
+The DOM-15 `pattern` hook remains typed `NotSupported` at the primary's direction.
+JS `v` UnicodeSets and a full-match host facade are queued as JS-9; substituting
+`u` or Rust regex would give false patternMismatch results. DOM-10 abort timeout,
+DocumentHost, and URL reflection were already installed on this base. There is
+no existing fetch/XHR global abort callback to connect before IA-NET; the
+unsupported abort algorithm remains explicit. NET-16 transport/security adoption
+and Fetch/XHR globals stay on IA-NET.
+
+The frozen DOM WPT selection is 627 tracked sources at revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, selection SHA-256
+`9787de028efe5dc83f491ce2a818e2a549b4a07a236e6538c1e6165bb437b0b5`.
+On old fixed base `d2a610e`, the twice-repeated BEFORE was 77 passing files,
+1,775 passing subtests (raw SHA-256 `f14b6c721312fde5221cb06ba7d845e0102457e5fff5af47d46bfcbed456ce5d`);
+the IA AFTER was also 77/1,775 (raw `704c3857f2d4be882ed6e3f3845d4f76fb3ce5b2297e998ab04e39bb14def0a2`).
+There were zero file pass gains/losses and zero subtest pass gains/losses.
+`dom/nodes/moveBefore/slotchange-events.html` changed from harness error to file
+failure with four failing subtests; the first reports `cannot convert object to
+primitive`. It exercises a derived custom element class and earns no pass credit.
+Both old-base pairs were stable and their raw reports are retained in the IA
+orchestration evidence. The IA branch was then rebased onto JSRT-5 dev
+`cb3064b` as `8690864`; the final rebased WPT and workspace gate are measured
+separately below.
+
+The first rebased AFTER attempt used three WPT workers. Both rounds retained
+77 passing files and 1,775 passing subtests, but the pair was **unstable**:
+`Document-createElementNS.html` crossed the unchanged 10-second deadline after
+596 versus 464 failing assertions. Its file status was timeout in both rounds,
+yet the raw and outcome hashes differed, so this attempt is diagnostic evidence
+only. Three standalone executions of that pinned source on the same executable
+completed all 596 assertions as file failures in 9.47, 7.95, and 8.58 seconds.
+The subsequent serial, unchanged-deadline run was stopped by primary checkpoint
+direction during round 1 after its last logged 225/627 sources. It is partial
+and carries no baseline or final pass claim. A complete stable pair is still
+required before final WPT stability can be claimed.
