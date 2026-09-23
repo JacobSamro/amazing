@@ -770,9 +770,24 @@ pattern, and `pathLength` calibration for dashes. The shared renderer now
 builds bounded strokes for rect, circle, ellipse, path, line, polygon and
 polyline. It accepts stroked byte SVG resources, including viewBox-only line
 images used by the data-URL cases, and retains strict rejection of curves and
-unsupported paint. Linux iteration passed image **45/45** plus the root
-workspace and doctests. Fixed-base Windows retained WPT before/after and final
-locked gates are pending.
+unsupported paint. A fresh paired sweep exposed two reference strokes that
+became painted while their tests' embedded SVG data images remained empty.
+The DOM renderer now accepts bounded SVG data images, including fractional
+source viewports, and rasterizes them at the embedding viewport so a
+non-scaling stroke remains one host pixel wide. External SVG images and
+recursive embedded images remain outside this bounded path.
+
+At fixed base `f8bdb33` and WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, the exact retained 35 SVG
+cases moved from **26 pass / 9 mismatch, 25 painted passes** to **28 pass /
+7 mismatch, 28 painted passes**. The two raw gains are
+`non-scaling-stroke-009` and `non-scaling-stroke-010`; the previously blank
+`pathlength-005` pass now paints. There were zero raw or painted pass losses,
+and zero errors, timeouts, unsupported cases or crashes. Two fresh after runs
+have identical per-case classifications and actual/reference/diff hashes.
+Reports and pixel counts are in `tests/wpt-replaced-content/rc15/`; an earlier
+stale-binary pair was discarded. The source recovery commits are `64833d3`,
+`aeb3820` and `53f9b29`.
 
 ## RC-16 — compositor display-list view
 
@@ -789,3 +804,14 @@ translates and clips the resulting RGBA ink into the caller's surface. This
 preserves the existing full-document entry points and their pixels. The
 initial seam uses a full-viewport scratch surface for each call; tile-local
 raster allocation and command culling remain a compositor performance followup.
+
+At the same fixed base, win-002 locked gates passed image **47/47**, paint
+**94/94**, workspace **1,791/1,791** with four skipped, and workspace
+doctests **2/2**. Image and paint doctests each had zero cases and passed.
+The 12-case focused WPT selection stayed **8 pass / 4 mismatch** before and
+after RC-16, with identical per-case classifications and image hashes. The
+35-case retained SVG selection stayed **28 pass / 7 mismatch, 28 painted
+passes**, also with identical hashes to RC-15 after. Reports are in
+`tests/wpt-replaced-content/rc16/`. The fixed-base gate snapshot was
+`dd2fbee` with root lock SHA-256 `ADD98EE1…` and standalone shell lock
+`EA93BD5…`; it is a local test snapshot, not a pushed branch.

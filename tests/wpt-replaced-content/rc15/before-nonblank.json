@@ -1,0 +1,216 @@
+﻿{
+    "schema":  1,
+    "pass_nonblank":  25,
+    "cases":  [
+                  {
+                      "id":  "svg--shapes--reftests--ellipse-auto-rx-clip-path",
+                      "classification":  "pass",
+                      "nonwhite":  15720,
+                      "ref_nonwhite":  15720
+                  },
+                  {
+                      "id":  "svg--shapes--reftests--ellipse-auto-rx-css-clip-path",
+                      "classification":  "pass",
+                      "nonwhite":  15720,
+                      "ref_nonwhite":  15720
+                  },
+                  {
+                      "id":  "svg--shapes--reftests--ellipse-auto-rx-percent-clip-path",
+                      "classification":  "pass",
+                      "nonwhite":  10048,
+                      "ref_nonwhite":  10048
+                  },
+                  {
+                      "id":  "svg--shapes--reftests--ellipse-auto-rx-textpath",
+                      "classification":  "pass",
+                      "nonwhite":  5776,
+                      "ref_nonwhite":  5776
+                  },
+                  {
+                      "id":  "svg--shapes--reftests--pathlength-005",
+                      "classification":  "pass",
+                      "nonwhite":  0,
+                      "ref_nonwhite":  0
+                  },
+                  {
+                      "id":  "svg--shapes--reftests--polygon-with-filtered-marker",
+                      "classification":  "pass",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--foreignObject-overflow",
+                      "classification":  "pass",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--inner-outer-svg-overflow-auto",
+                      "classification":  "pass",
+                      "nonwhite":  16200,
+                      "ref_nonwhite":  16200
+                  },
+                  {
+                      "id":  "svg--painting--negative-dashoffset-odd-dasharray",
+                      "classification":  "pass",
+                      "nonwhite":  12551,
+                      "ref_nonwhite":  12551
+                  },
+                  {
+                      "id":  "svg--painting--reftests--display-none-mask",
+                      "classification":  "pass",
+                      "nonwhite":  120000,
+                      "ref_nonwhite":  120000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--large-transform-001",
+                      "classification":  "pass",
+                      "nonwhite":  300000,
+                      "ref_nonwhite":  300000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--marker-context-fill-transform",
+                      "classification":  "pass",
+                      "nonwhite":  8162,
+                      "ref_nonwhite":  8162
+                  },
+                  {
+                      "id":  "svg--painting--reftests--marker-implicit-subpaths",
+                      "classification":  "pass",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--mask-percentage",
+                      "classification":  "pass",
+                      "nonwhite":  117600,
+                      "ref_nonwhite":  117600
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-001",
+                      "classification":  "mismatch",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-003",
+                      "classification":  "mismatch",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-004",
+                      "classification":  "mismatch",
+                      "nonwhite":  480000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-005",
+                      "classification":  "pass",
+                      "nonwhite":  21632,
+                      "ref_nonwhite":  21632
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-006",
+                      "classification":  "pass",
+                      "nonwhite":  26032,
+                      "ref_nonwhite":  26032
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-007",
+                      "classification":  "pass",
+                      "nonwhite":  1900,
+                      "ref_nonwhite":  1900
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-008",
+                      "classification":  "mismatch",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-009",
+                      "classification":  "mismatch",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-010",
+                      "classification":  "mismatch",
+                      "nonwhite":  0,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-non-uniform-scale",
+                      "classification":  "pass",
+                      "nonwhite":  20000,
+                      "ref_nonwhite":  20000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--non-scaling-stroke-with-none-preserve-aspect-ratio",
+                      "classification":  "pass",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--small-nested-viewbox",
+                      "classification":  "pass",
+                      "nonwhite":  576,
+                      "ref_nonwhite":  576
+                  },
+                  {
+                      "id":  "svg--painting--reftests--symbol-in-mask",
+                      "classification":  "mismatch",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--reftests--text-shadow-01",
+                      "classification":  "mismatch",
+                      "nonwhite":  225,
+                      "ref_nonwhite":  99
+                  },
+                  {
+                      "id":  "svg--painting--reftests--text-shadow-02",
+                      "classification":  "mismatch",
+                      "nonwhite":  196,
+                      "ref_nonwhite":  99
+                  },
+                  {
+                      "id":  "svg--painting--reftests--text-shadow-03",
+                      "classification":  "pass",
+                      "nonwhite":  196,
+                      "ref_nonwhite":  196
+                  },
+                  {
+                      "id":  "svg--painting--subpixel-clip-path-transform",
+                      "classification":  "pass",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  },
+                  {
+                      "id":  "svg--painting--svg-with-outline",
+                      "classification":  "pass",
+                      "nonwhite":  1076,
+                      "ref_nonwhite":  1076
+                  },
+                  {
+                      "id":  "svg--painting--text-clip-path-transform",
+                      "classification":  "pass",
+                      "nonwhite":  20000,
+                      "ref_nonwhite":  20000
+                  },
+                  {
+                      "id":  "svg--painting--text-mask-transform",
+                      "classification":  "pass",
+                      "nonwhite":  20000,
+                      "ref_nonwhite":  20000
+                  },
+                  {
+                      "id":  "svg--painting--will-change-under-mask",
+                      "classification":  "pass",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  }
+              ]
+}
