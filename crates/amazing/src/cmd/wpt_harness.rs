@@ -31,6 +31,30 @@ fn quote(value: &str) -> String {
     s
 }
 
+fn quote_utf16(value: &[u16]) -> String {
+    let mut s = String::from("\"");
+    for decoded in std::char::decode_utf16(value.iter().copied()) {
+        let c = match decoded {
+            Ok(c) => c,
+            Err(unpaired) => {
+                s.push_str(&format!("\\u{:04x}", unpaired.unpaired_surrogate()));
+                continue;
+            }
+        };
+        match c {
+            '"' => s.push_str("\\\""),
+            '\\' => s.push_str("\\\\"),
+            '\n' => s.push_str("\\n"),
+            '\r' => s.push_str("\\r"),
+            '\t' => s.push_str("\\t"),
+            c if c < ' ' => s.push_str(&format!("\\u{:04x}", c as u32)),
+            c => s.push(c),
+        }
+    }
+    s.push('"');
+    s
+}
+
 struct Options {
     scaffold: bool,
     root: PathBuf,
@@ -182,7 +206,7 @@ fn status_code(value: JsValue) -> i32 {
 }
 fn string_value(value: JsValue) -> String {
     match value {
-        JsValue::Str(s) => quote(&s),
+        JsValue::Str(s) => quote_utf16(s.units()),
         _ => "null".into(),
     }
 }

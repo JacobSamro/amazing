@@ -26,6 +26,52 @@ use std::rc::Rc;
 
 use crate::ast;
 
+/// ECMAScript string data. The payload is UTF-16, including unpaired surrogates.
+/// Conversion to Rust text is explicitly lossy and is only for diagnostics or
+/// host interfaces that cannot represent arbitrary JavaScript strings.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct JsString(Rc<[u16]>);
+
+impl JsString {
+    pub fn from_units(units: impl Into<Rc<[u16]>>) -> Self { Self(units.into()) }
+    pub fn units(&self) -> &[u16] { &self.0 }
+    pub fn len(&self) -> usize { self.0.len() }
+    pub fn is_empty(&self) -> bool { self.0.is_empty() }
+    pub fn to_utf8_lossy(&self) -> String { String::from_utf16_lossy(&self.0) }
+    pub fn is_well_formed(&self) -> bool { String::from_utf16(&self.0).is_ok() }
+    pub fn to_well_formed(&self) -> Self {
+        Self::from(String::from_utf16_lossy(&self.0))
+    }
+}
+
+impl From<&str> for JsString {
+    fn from(value: &str) -> Self { Self::from_units(value.encode_utf16().collect::<Vec<_>>()) }
+}
+impl From<String> for JsString {
+    fn from(value: String) -> Self { Self::from(value.as_str()) }
+}
+impl From<&String> for JsString {
+    fn from(value: &String) -> Self { Self::from(value.as_str()) }
+}
+impl From<Rc<str>> for JsString {
+    fn from(value: Rc<str>) -> Self { Self::from(value.as_ref()) }
+}
+impl From<&JsString> for JsString {
+    fn from(value: &JsString) -> Self { value.clone() }
+}
+impl PartialEq<&str> for JsString {
+    fn eq(&self, other: &&str) -> bool { self.units().iter().copied().eq(other.encode_utf16()) }
+}
+impl PartialEq<String> for JsString {
+    fn eq(&self, other: &String) -> bool { self.units().iter().copied().eq(other.encode_utf16()) }
+}
+impl fmt::Display for JsString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.to_utf8_lossy()) }
+}
+impl fmt::Debug for JsString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.to_utf8_lossy().fmt(f) }
+}
+
 /// A JavaScript value (spec §6.1).
 #[derive(Clone)]
 pub enum JsValue {
@@ -33,7 +79,7 @@ pub enum JsValue {
     Null,
     Bool(bool),
     Num(f64),
-    Str(Rc<str>),
+    Str(JsString),
     Object(Obj),
 }
 
@@ -116,8 +162,12 @@ impl fmt::Debug for JsValue {
 }
 
 impl JsValue {
-    pub fn str(s: impl Into<Rc<str>>) -> JsValue {
+    pub fn str(s: impl Into<JsString>) -> JsValue {
         JsValue::Str(s.into())
+    }
+
+    pub fn str_units(units: impl Into<Rc<[u16]>>) -> JsValue {
+        JsValue::Str(JsString::from_units(units))
     }
 
     pub fn num(n: impl Into<f64>) -> JsValue {
@@ -143,7 +193,7 @@ impl JsValue {
     }
 
     /// The string payload when this IS a string.
-    pub fn as_str(&self) -> Option<&Rc<str>> {
+    pub fn as_str(&self) -> Option<&JsString> {
         match self {
             JsValue::Str(s) => Some(s),
             _ => None,
@@ -178,7 +228,7 @@ impl JsValue {
             JsValue::Null => Ok(0.0),
             JsValue::Bool(b) => Ok(if *b { 1.0 } else { 0.0 }),
             JsValue::Num(n) => Ok(*n),
-            JsValue::Str(s) => Ok(string_to_number(s)),
+            JsValue::Str(s) => Ok(string_to_number(&s.to_utf8_lossy())),
             JsValue::Object(_) => Err(Throw::type_error(
                 "object passed to primitive ToNumber without conversion",
             )),
@@ -476,7 +526,7 @@ pub struct MapState {
 /// f64 arm would break the first two, so equality is hand-written.
 #[derive(Debug, Clone)]
 pub enum MapKey {
-    Str(Rc<str>),
+    Str(JsString),
     Num(f64),
     Bool(bool),
     Null,
@@ -557,7 +607,7 @@ pub struct PendingReaction {
 /// slot, and an exotic payload.
 #[derive(Debug, Clone)]
 pub struct JsObject {
-    props: Vec<(String, Property)>,
+    props: Vec<(JsString, Property)>,
     pub proto: Option<Obj>,
     pub exotic: Exotic,
     /// Whether new own properties may be created.
@@ -567,6 +617,8 @@ pub struct JsObject {
     /// True once this object has been invoked via `new` as a constructor
     /// (cheap stand-in for the internal Slots checks the spec performs).
     pub constructed: bool,
+    /// Built-in methods are callable but lack [[Construct]].
+    pub(crate) constructible: bool,
     /// Engine-private brand and identity; never reflected as a JS property.
     pub(crate) host_identity: Option<HostIdentity>,
 }
@@ -586,6 +638,7 @@ impl JsObject {
             extensible: true,
             func: None,
             constructed: false,
+            constructible: true,
             host_identity: None,
         }
     }
@@ -625,33 +678,37 @@ impl JsObject {
 
     /// Define an own property, replacing any existing entry in place
     /// (preserving its position). Infallible for our ordinary-model subset.
-    pub fn define(&mut self, key: &str, prop: Property) -> Result<(), ()> {
-        if let Some(slot) = self.props.iter_mut().find(|(k, _)| k == key) {
+    pub fn define(&mut self, key: impl Into<JsString>, prop: Property) -> Result<(), ()> {
+        let key = key.into();
+        if let Some(slot) = self.props.iter_mut().find(|(k, _)| k == &key) {
             slot.1 = prop;
         } else {
-            self.props.push((key.to_string(), prop));
+            self.props.push((key, prop));
         }
         Ok(())
     }
 
     /// Shorthand for a full-rights data property.
-    pub fn set_own(&mut self, key: &str, value: JsValue) {
+    pub fn set_own(&mut self, key: impl Into<JsString>, value: JsValue) {
         let _ = self.define(key, Property::data(value));
     }
 
-    pub fn get_own(&self, key: &str) -> Option<JsValue> {
+    pub fn get_own(&self, key: impl Into<JsString>) -> Option<JsValue> {
+        let key = key.into();
         self.props
             .iter()
-            .find(|(k, _)| k == key)
+            .find(|(k, _)| k == &key)
             .map(|(_, p)| p.value.clone())
     }
 
-    pub fn own_prop(&self, key: &str) -> Option<&Property> {
-        self.props.iter().find(|(k, _)| k == key).map(|(_, p)| p)
+    pub fn own_prop(&self, key: impl Into<JsString>) -> Option<&Property> {
+        let key = key.into();
+        self.props.iter().find(|(k, _)| k == &key).map(|(_, p)| p)
     }
 
-    pub fn delete_own(&mut self, key: &str) -> bool {
-        if let Some(pos) = self.props.iter().position(|(k, _)| k == key) {
+    pub fn delete_own(&mut self, key: impl Into<JsString>) -> bool {
+        let key = key.into();
+        if let Some(pos) = self.props.iter().position(|(k, _)| k == &key) {
             if !self.props[pos].1.configurable {
                 return false;
             }
@@ -663,7 +720,7 @@ impl JsObject {
     }
 
     /// Own enumerable keys in insertion order (for-in / Object.keys).
-    pub fn own_keys_enumerable(&self) -> Vec<String> {
+    pub fn own_keys_enumerable(&self) -> Vec<JsString> {
         self.props
             .iter()
             .filter(|(_, p)| p.enumerable)
@@ -672,29 +729,31 @@ impl JsObject {
     }
 
     /// All own keys in insertion order (getOwnPropertyNames-lite).
-    pub fn own_keys(&self) -> Vec<String> {
+    pub fn own_keys(&self) -> Vec<JsString> {
         self.props.iter().map(|(k, _)| k.clone()).collect()
     }
 
     /// §7.3.20/§10.4 proto-chain lookup: walks own props then prototypes.
     /// Returns None when the chain ends without the key anywhere.
-    pub fn lookup(&self, key: &str) -> Option<JsValue> {
-        if let Some(v) = self.get_own(key) {
+    pub fn lookup(&self, key: impl Into<JsString>) -> Option<JsValue> {
+        let key = key.into();
+        if let Some(v) = self.get_own(&key) {
             return Some(v);
         }
         match &self.proto {
-            Some(p) => p.borrow().lookup(key),
+            Some(p) => p.borrow().lookup(&key),
             None => None,
         }
     }
 
     /// Whether the key exists anywhere on the chain (the `in` operator).
-    pub fn has_property(&self, key: &str) -> bool {
-        self.get_own(key).is_some()
+    pub fn has_property(&self, key: impl Into<JsString>) -> bool {
+        let key = key.into();
+        self.get_own(&key).is_some()
             || self
                 .proto
                 .as_ref()
-                .is_some_and(|p| p.borrow().has_property(key))
+                .is_some_and(|p| p.borrow().has_property(&key))
     }
 }
 
@@ -759,8 +818,8 @@ mod tests {
     fn array_length_starts_nonenumerable_zero() {
         let a = JsObject::array();
         assert_eq!(a.get_own("length"), Some(JsValue::num(0.0)));
-        assert!(!a.own_keys_enumerable().contains(&"length".to_string()));
-        assert!(a.own_keys().contains(&"length".to_string()));
+        assert!(!a.own_keys_enumerable().contains(&JsString::from("length")));
+        assert!(a.own_keys().contains(&JsString::from("length")));
     }
 
     #[test]

@@ -25,9 +25,10 @@ pub struct LegacyPlatformHooks {
     pub override_builtins: bool,
 }
 
-fn array_index(key: &str) -> Option<u32> {
-    let index = key.parse::<u32>().ok()?;
-    (index.to_string() == key && index != u32::MAX).then_some(index)
+fn array_index(key: &crate::value::JsString) -> Option<u32> {
+    let text = String::from_utf16(key.units()).ok()?;
+    let index = text.parse::<u32>().ok()?;
+    (index.to_string() == text && index != u32::MAX).then_some(index)
 }
 
 fn property(value: JsValue, writable: bool, enumerable: bool) -> Property {
@@ -47,13 +48,12 @@ impl Interpreter {
         self.legacy_hooks.get(&identity.handle.brand).cloned().map(|hooks| (identity.handle, hooks))
     }
 
-    fn supported_name(&self, hooks: &LegacyPlatformHooks, handle: HostHandle, key: &str) -> Result<bool, Throw> {
+    fn supported_name(&self, hooks: &LegacyPlatformHooks, handle: HostHandle, key: &crate::value::JsString) -> Result<bool, Throw> {
         let Some(names) = &hooks.supported_names else { return Ok(false); };
-        let units: Vec<u16> = key.encode_utf16().collect();
-        Ok(names(handle)?.iter().any(|name| name == &units))
+        Ok(names(handle)?.iter().any(|name| name == key.units()))
     }
 
-    fn named_visible(&self, object: &Obj, key: &str, hooks: &LegacyPlatformHooks) -> bool {
+    fn named_visible(&self, object: &Obj, key: &crate::value::JsString, hooks: &LegacyPlatformHooks) -> bool {
         let own = object.borrow().own_prop(key).cloned();
         if own.as_ref().is_some_and(|p| !p.configurable) { return false; }
         if hooks.override_builtins { return true; }
@@ -67,91 +67,96 @@ impl Interpreter {
         true
     }
 
-    pub(super) fn legacy_own_property(&mut self, object: &Obj, key: &str, ignore_named: bool) -> Result<Option<Property>, Throw> {
+    pub(super) fn legacy_own_property(&mut self, object: &Obj, key: impl Into<crate::value::JsString>, ignore_named: bool) -> Result<Option<Property>, Throw> {
+        let key = key.into();
         let Some((handle, hooks)) = self.legacy_for(object) else {
-            let ordinary = object.borrow().own_prop(key).cloned();
+            let ordinary = object.borrow().own_prop(&key).cloned();
             return Ok(ordinary);
         };
-        if let Some(index) = array_index(key) {
+        if let Some(index) = array_index(&key) {
             if index < (hooks.supported_index_count)(handle)? {
                 let value = (hooks.indexed_getter)(self, handle, index)?;
                 return Ok(Some(property(value, hooks.indexed_setter.is_some(), true)));
             }
         }
-        if !ignore_named && hooks.named_getter.is_some() && self.supported_name(&hooks, handle, key)? && self.named_visible(object, key, &hooks) {
-            let value = (hooks.named_getter.as_ref().unwrap())(self, handle, &key.encode_utf16().collect::<Vec<_>>())?;
+        if !ignore_named && hooks.named_getter.is_some() && self.supported_name(&hooks, handle, &key)? && self.named_visible(object, &key, &hooks) {
+            let value = (hooks.named_getter.as_ref().unwrap())(self, handle, key.units())?;
             return Ok(Some(property(value, hooks.named_setter.is_some(), !hooks.unenumerable_names)));
         }
-        let ordinary = object.borrow().own_prop(key).cloned();
+        let ordinary = object.borrow().own_prop(&key).cloned();
         Ok(ordinary)
     }
 
-    pub(super) fn legacy_has_property(&self, object: &Obj, key: &str) -> Result<bool, Throw> {
+    pub(super) fn legacy_has_property(&self, object: &Obj, key: impl Into<crate::value::JsString>) -> Result<bool, Throw> {
+        let key = key.into();
         if let Some((handle, hooks)) = self.legacy_for(object) {
-            if let Some(index) = array_index(key) {
+            if let Some(index) = array_index(&key) {
                 if index < (hooks.supported_index_count)(handle)? { return Ok(true); }
             }
-            if self.supported_name(&hooks, handle, key)? && self.named_visible(object, key, &hooks) { return Ok(true); }
+            if self.supported_name(&hooks, handle, &key)? && self.named_visible(object, &key, &hooks) { return Ok(true); }
         }
-        let ordinary = object.borrow().has_property(key);
+        let ordinary = object.borrow().has_property(&key);
         Ok(ordinary)
     }
 
-    pub(super) fn legacy_set(&mut self, object: &Obj, key: &str, value: JsValue) -> Result<bool, Throw> {
+    pub(super) fn legacy_set(&mut self, object: &Obj, key: impl Into<crate::value::JsString>, value: JsValue) -> Result<bool, Throw> {
+        let key = key.into();
         let Some((handle, hooks)) = self.legacy_for(object) else { return Ok(false); };
-        if let Some(index) = array_index(key) {
+        if let Some(index) = array_index(&key) {
             if let Some(setter) = hooks.indexed_setter { setter(self, handle, index, value)?; return Ok(true); }
             return Err(Throw::type_error("indexed property has no setter"));
         }
         if let Some(setter) = hooks.named_setter {
-            setter(self, handle, &key.encode_utf16().collect::<Vec<_>>(), value)?;
+            setter(self, handle, key.units(), value)?;
             return Ok(true);
         }
         Ok(false)
     }
 
-    pub(super) fn legacy_define(&mut self, object: &Obj, key: &str, prop: &Property) -> Result<bool, Throw> {
+    pub(super) fn legacy_define(&mut self, object: &Obj, key: impl Into<crate::value::JsString>, prop: &Property) -> Result<bool, Throw> {
+        let key = key.into();
         let Some((handle, hooks)) = self.legacy_for(object) else { return Ok(false); };
-        if let Some(index) = array_index(key) {
+        if let Some(index) = array_index(&key) {
             if prop.getter.is_some() || prop.setter.is_some() { return Err(Throw::type_error("indexed property requires a data descriptor")); }
             let Some(setter) = hooks.indexed_setter else { return Err(Throw::type_error("indexed property has no setter")); };
             setter(self, handle, index, prop.value.clone())?;
             return Ok(true);
         }
-        let ordinary = object.borrow().own_prop(key).cloned();
+        let ordinary = object.borrow().own_prop(&key).cloned();
         let unforgeable = ordinary.as_ref().is_some_and(|property| !property.configurable);
         if hooks.supported_names.is_some() && !unforgeable
             && (hooks.override_builtins || ordinary.is_none()) {
-            let supported = self.supported_name(&hooks, handle, key)?;
+            let supported = self.supported_name(&hooks, handle, &key)?;
             if supported && hooks.named_setter.is_none() { return Err(Throw::type_error("named property has no setter")); }
             if let Some(setter) = hooks.named_setter {
                 if prop.getter.is_some() || prop.setter.is_some() { return Err(Throw::type_error("named property requires a data descriptor")); }
-                setter(self, handle, &key.encode_utf16().collect::<Vec<_>>(), prop.value.clone())?;
+                setter(self, handle, key.units(), prop.value.clone())?;
                 return Ok(true);
             }
         }
         Ok(false)
     }
 
-    pub(super) fn legacy_delete(&mut self, object: &Obj, key: &str) -> Result<Option<bool>, Throw> {
+    pub(super) fn legacy_delete(&mut self, object: &Obj, key: impl Into<crate::value::JsString>) -> Result<Option<bool>, Throw> {
+        let key = key.into();
         let Some((handle, hooks)) = self.legacy_for(object) else { return Ok(None); };
-        if let Some(index) = array_index(key) { return Ok(Some(index >= (hooks.supported_index_count)(handle)?)); }
-        if self.supported_name(&hooks, handle, key)? && self.named_visible(object, key, &hooks) {
-            return match hooks.named_deleter { Some(deleter) => deleter(self, handle, &key.encode_utf16().collect::<Vec<_>>()).map(Some), None => Ok(Some(false)) };
+        if let Some(index) = array_index(&key) { return Ok(Some(index >= (hooks.supported_index_count)(handle)?)); }
+        if self.supported_name(&hooks, handle, &key)? && self.named_visible(object, &key, &hooks) {
+            return match hooks.named_deleter { Some(deleter) => deleter(self, handle, key.units()).map(Some), None => Ok(Some(false)) };
         }
         Ok(None)
     }
 
-    pub(super) fn legacy_own_keys(&mut self, object: &Obj, enumerable_only: bool) -> Result<Vec<String>, Throw> {
+    pub(super) fn legacy_own_keys(&mut self, object: &Obj, enumerable_only: bool) -> Result<Vec<crate::value::JsString>, Throw> {
         let Some((handle, hooks)) = self.legacy_for(object) else {
             let ordinary = if enumerable_only { object.borrow().own_keys_enumerable() } else { object.borrow().own_keys() };
             return Ok(ordinary);
         };
-        let mut keys: Vec<String> = (0..(hooks.supported_index_count)(handle)?).map(|i| i.to_string()).collect();
+        let mut keys: Vec<crate::value::JsString> = (0..(hooks.supported_index_count)(handle)?).map(|i| i.to_string().into()).collect();
         if hooks.named_getter.is_some() && (!enumerable_only || !hooks.unenumerable_names) {
             if let Some(names) = &hooks.supported_names {
                 for units in names(handle)? {
-                    let name = String::from_utf16(&units).map_err(|_| Throw::type_error("UTF-16 property key needs JsString"))?;
+                    let name = crate::value::JsString::from_units(units);
                     if self.named_visible(object, &name, &hooks) && !keys.contains(&name) { keys.push(name); }
                 }
             }

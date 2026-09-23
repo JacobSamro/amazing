@@ -8,12 +8,10 @@ fn regexp_error(error: amazing_regex::Error) -> Throw {
         }
     }
 }
-fn regexp_units(source: &str) -> Result<Vec<u16>, Throw> {
+fn regexp_units(source: impl Into<crate::value::JsString>) -> Result<Vec<u16>, Throw> {
     const MAX_UNITS: usize = 1_048_576;
-    if source.len() > MAX_UNITS * 3 {
-        return Err(Throw::range_error("RegExp resource limit: input bytes"));
-    }
-    let units: Vec<u16> = source.encode_utf16().collect();
+    let source = source.into();
+    let units = source.units().to_vec();
     if units.len() > MAX_UNITS {
         return Err(Throw::range_error(
             "RegExp resource limit: input code units",
@@ -143,10 +141,13 @@ fn native_regexp(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Resu
         ));
     }
     let pattern = if pattern.is_undefined() {
-        String::new()
+        crate::value::JsString::from("")
     } else {
-        i.to_string(&pattern)?
+        i.to_js_string(&pattern)?
     };
+    let pattern = String::from_utf16(pattern.units()).map_err(|_| {
+        Throw::syntax_error("RegExp pattern with a lone surrogate is unsupported until JS-8 UTF-16 pattern parsing")
+    })?;
     let flags = if flag_value.is_undefined() {
         String::new()
     } else {
@@ -228,11 +229,11 @@ fn native_regexp_to_string(
 fn regexp_match(
     i: &mut Interpreter,
     this: &JsValue,
-    source: &str,
+    source: impl Into<crate::value::JsString>,
 ) -> Result<Option<amazing_regex::Match>, Throw> {
     let regex =
         regexp_data(this).ok_or_else(|| Throw::type_error("incompatible RegExp receiver"))?;
-    let units = regexp_units(&source)?;
+    let units = regexp_units(source)?;
     let mut matcher = regex.matcher_utf16(&units).map_err(regexp_error)?;
     regexp_match_with(i, this, regex.flags(), &mut matcher)
 }
@@ -262,23 +263,17 @@ fn regexp_match_with(
     }
     Ok(result)
 }
-fn regexp_piece(units: &[u16], range: std::ops::Range<usize>) -> Result<String, Throw> {
-    String::from_utf16(&units[range]).map_err(|_| {
-        Throw::type_error(
-            "RegExp result contains a lone surrogate; UTF-16 JS strings are not implemented",
-        )
-    })
-}
 fn regexp_result(
     i: &mut Interpreter,
-    source: &str,
+    source: impl Into<crate::value::JsString>,
     matched: amazing_regex::Match,
 ) -> Result<JsValue, Throw> {
+    let source = source.into();
     let units = regexp_units(&source)?;
     let mut values = Vec::new();
     for capture in matched.captures {
         values.push(match capture {
-            Some(r) => JsValue::str(regexp_piece(&units, r)?),
+            Some(r) => JsValue::str_units(units[r].to_vec()),
             None => JsValue::Undefined,
         });
     }
@@ -296,7 +291,7 @@ fn native_regexp_exec(
     if regexp_data(&this).is_none() {
         return Err(Throw::type_error("incompatible RegExp receiver"));
     }
-    let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let source = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
     match regexp_match(i, &this, &source)? {
         Some(m) => regexp_result(i, &source, m),
         None => Ok(JsValue::Null),
@@ -307,7 +302,7 @@ fn native_regexp_test(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    let source = i.to_js_string(args.first().unwrap_or(&JsValue::Undefined))?;
     // RegExpExec delegates to an overridden exec before falling back to slots.
     let exec = i.get_prop(&this, "exec")?;
     if callable_function(&exec).is_some() {
@@ -326,7 +321,7 @@ fn native_string_match(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let source = string_this(i, this)?;
+    let source = string_this_units(i, this)?;
     let value = args.first().cloned().unwrap_or(JsValue::Undefined);
     let regexp = if regexp_data(&value).is_some() {
         value
@@ -348,7 +343,7 @@ fn native_string_match(
         if matches.len() >= 100_000 {
             return Err(Throw::range_error("RegExp match collection limit"));
         }
-        matches.push(JsValue::str(regexp_piece(&units, m.range.clone())?));
+        matches.push(JsValue::str_units(units[m.range.clone()].to_vec()));
         if m.range.is_empty() {
             i.set_prop(
                 &regexp,
@@ -372,7 +367,7 @@ fn native_string_search(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let source = string_this(i, this)?;
+    let source = string_this_units(i, this)?;
     let value = args.first().cloned().unwrap_or(JsValue::Undefined);
     let regexp = if regexp_data(&value).is_some() {
         value
@@ -387,15 +382,15 @@ fn native_string_search(
         result?.map(|m| m.range.start as f64).unwrap_or(-1.0),
     ))
 }
-fn regexp_replace(i: &mut Interpreter, source: &str, args: &[JsValue]) -> Result<JsValue, Throw> {
+fn regexp_replace(i: &mut Interpreter, source: &crate::value::JsString, args: &[JsValue]) -> Result<JsValue, Throw> {
     let regexp = &args[0];
     let regex = regexp_data(regexp).unwrap();
     let replacement = args.get(1).cloned().unwrap_or(JsValue::Undefined);
     let callable = callable_function(&replacement).is_some();
     let text = if callable {
-        String::new()
+        crate::value::JsString::from("")
     } else {
-        i.to_string(&replacement)?
+        i.to_js_string(&replacement)?
     };
     if text.len() > 16_777_216 {
         return Err(Throw::range_error("RegExp replacement text limit"));
@@ -403,7 +398,7 @@ fn regexp_replace(i: &mut Interpreter, source: &str, args: &[JsValue]) -> Result
     if regex.flags().global {
         i.set_prop(regexp, "lastIndex", JsValue::num(0.0))?;
     }
-    let units = regexp_units(&source)?;
+    let units = regexp_units(source)?;
     let mut matches = Vec::new();
     let mut slots = 0;
     let mut matcher = regex.matcher_utf16(&units).map_err(regexp_error)?;
@@ -428,15 +423,15 @@ fn regexp_replace(i: &mut Interpreter, source: &str, args: &[JsValue]) -> Result
             )?;
         }
     }
-    let mut out = String::new();
+    let mut out = Vec::<u16>::new();
     let mut end = 0;
     for m in matches {
-        out.push_str(&regexp_piece(&units, end..m.range.start)?);
+        out.extend_from_slice(&units[end..m.range.start]);
         let captures = m
             .captures
             .iter()
-            .map(|r| r.clone().map(|r| regexp_piece(&units, r)).transpose())
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|r| r.clone().map(|r| crate::value::JsString::from_units(units[r].to_vec())))
+            .collect::<Vec<_>>();
         if callable {
             let mut args: Vec<_> = captures
                 .iter()
@@ -445,9 +440,9 @@ fn regexp_replace(i: &mut Interpreter, source: &str, args: &[JsValue]) -> Result
             args.push(JsValue::num(m.range.start as f64));
             args.push(JsValue::str(source));
             let value = i.call_value(&replacement, JsValue::Undefined, args)?;
-            out.push_str(&i.to_string(&value)?);
+            out.extend_from_slice(i.to_js_string(&value)?.units());
         } else {
-            out.push_str(&regexp_substitution(
+            out.extend_from_slice(&regexp_substitution(
                 &text,
                 &captures,
                 &units,
@@ -459,53 +454,53 @@ fn regexp_replace(i: &mut Interpreter, source: &str, args: &[JsValue]) -> Result
             return Err(Throw::range_error("RegExp replacement output limit"));
         }
     }
-    out.push_str(&regexp_piece(&units, end..units.len())?);
+    out.extend_from_slice(&units[end..]);
     if out.len() > 16_777_216 {
         return Err(Throw::range_error("RegExp replacement output limit"));
     }
-    Ok(JsValue::str(out))
+    Ok(JsValue::str_units(out))
 }
 fn regexp_substitution(
-    text: &str,
-    captures: &[Option<String>],
+    text: &crate::value::JsString,
+    captures: &[Option<crate::value::JsString>],
     input: &[u16],
     range: std::ops::Range<usize>,
-) -> Result<String, Throw> {
-    let mut out = String::new();
-    let mut chars = text.chars().peekable();
+) -> Result<Vec<u16>, Throw> {
+    let mut out = Vec::new();
+    let mut chars = text.units().iter().copied().peekable();
     while let Some(c) = chars.next() {
         if out.len() > 16_777_216 {
             return Err(Throw::range_error("RegExp replacement output limit"));
         }
-        if c != '$' {
+        if c != b'$' as u16 {
             out.push(c);
             continue;
         }
         match chars.peek().copied() {
-            Some('$') => {
+            Some(0x24) => {
                 chars.next();
-                out.push('$');
+                out.push(0x24);
             }
-            Some('&') => {
+            Some(0x26) => {
                 chars.next();
-                out.push_str(captures[0].as_deref().unwrap_or(""));
+                if let Some(capture) = &captures[0] { out.extend_from_slice(capture.units()); }
             }
-            Some('`') => {
+            Some(0x60) => {
                 chars.next();
-                out.push_str(&regexp_piece(input, 0..range.start)?);
+                out.extend_from_slice(&input[..range.start]);
             }
-            Some('\'') => {
+            Some(0x27) => {
                 chars.next();
-                out.push_str(&regexp_piece(input, range.end..input.len())?);
+                out.extend_from_slice(&input[range.end..]);
             }
-            Some(d @ '0'..='9') => {
-                let one = (d as u8 - b'0') as usize;
+            Some(d @ 0x30..=0x39) => {
+                let one = (d - 0x30) as usize;
                 let mut look = chars.clone();
                 look.next();
                 let two = look
                     .peek()
-                    .and_then(|c| c.to_digit(10))
-                    .map(|n| one * 10 + n as usize);
+                    .filter(|c| (0x30u16..=0x39u16).contains(*c))
+                    .map(|n| one * 10 + (*n - 0x30) as usize);
                 let group = two
                     .filter(|n| *n > 0 && *n < captures.len())
                     .or_else(|| (one > 0 && one < captures.len()).then_some(one));
@@ -514,12 +509,12 @@ fn regexp_substitution(
                     if Some(n) == two {
                         chars.next();
                     }
-                    out.push_str(captures[n].as_deref().unwrap_or(""));
+                    if let Some(capture) = &captures[n] { out.extend_from_slice(capture.units()); }
                 } else {
-                    out.push('$');
+                    out.push(0x24);
                 }
             }
-            _ => out.push('$'),
+            _ => out.push(0x24),
         }
     }
     if out.len() > 16_777_216 {

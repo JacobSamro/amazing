@@ -352,7 +352,7 @@ mod tests {
             .run_script("localStorage.setItem('theme', 'dark'); localStorage.getItem('theme');")
             .unwrap();
         match value {
-            amazing_js::value::JsValue::Str(value) => assert_eq!(value.as_ref(), "dark"),
+            amazing_js::value::JsValue::Str(value) => assert_eq!(value.to_utf8_lossy(), "dark"),
             other => panic!("expected stored string, got {other:?}"),
         }
         assert_eq!(

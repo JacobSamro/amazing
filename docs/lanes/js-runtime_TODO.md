@@ -336,3 +336,50 @@ amazing-js nextest passes 190/190 with one doctest; fixed-base workspace
 nextest passes 1,503/1,503 with three skipped and doctests pass 2/2. No
 `crates/amazing-js` drift from fixed `0244456` to current `origin/dev` at final
 review.
+
+### JSRT-5 lossless UTF-16 JavaScript strings
+
+Fixed base: `7e0ec7f` (JSRT-4), with a measured 10,594/53,872 pinned
+Test262 baseline. `JsValue::Str` now holds opaque `JsString(Rc<[u16]>)`.
+Literals, template quasis, concatenation, ToString, property keys, Map string
+keys, primitive string indices, and String prototype methods carry exact UTF-16
+code units. The BindingHost facade accepts and returns code units; a Windows
+fake-host test verifies a JS → DOMString → JS lone-surrogate round trip. String
+length and indexing are code-unit based, and regex input and captures preserve
+those units. `normalize` uses a deliberately bounded Latin table;
+`localeCompare` uses code-unit ordering, pending a locale collation layer.
+
+`amazing-regex::Regex::new` still takes `&str`. Well-formed patterns continue
+through that constructor, while a pattern containing a lone surrogate raises a
+typed SyntaxError stating the temporary limit. The integrator queued a
+`Regex::new_utf16` constructor as js-lang JS-8 after JS-7. Runtime never
+replaces pattern code units to make them compile. The integrator also authorized
+mechanical JsString adapters in `amazing` CLI/WPT code and the GPUI storage
+test. The WPT JSON encoder escapes an unpaired surrogate as `\\uXXXX`; valid
+Unicode strings retain their previous JSON output.
+
+JSRT-5 fixed-base evidence on 2026-09-23: Windows amazing-js nextest passes 193/193
+and its doctest passes 1/1. Fixed-base workspace nextest passes 1,560/1,560
+with three skipped; workspace doctests pass 2/2. The first complete after
+Test262 run on frozen host SHA-256
+`8d49350067252aa00fbe96e2c8cae68271a6a7dfc401097737e0f1c9fcb25c56`
+passes 10,865/53,872 files (32,741 fail, 16 timeout, 9,956 unsupported,
+294 skipped), compared with the 10,594-pass baseline. `built-ins/String`
+passes 481 versus 259. There are 270 fail-to-pass and one timeout-to-pass
+file transitions, with zero lost baseline file or variant passes. After #1
+classification SHA-256 is
+`e78552fd9f7d7e17bfabe9b0e2e73aa1ff40b92c3641ff055076aad78531085f`.
+The second complete after run reproduced all 53,872 per-file statuses and
+reasons, the same counts, and the exact classification hash above with frozen
+host SHA-256
+`8d49350067252aa00fbe96e2c8cae68271a6a7dfc401097737e0f1c9fcb25c56`.
+The branch was rebased without conflicts onto integration base `8151f5c`;
+its updated scheduler adapters and the JsString conversions coexist in the
+resulting source. The integrator-authorized driver adapter now uses
+`binding_string`, `binding_string_units`, and `binding_to_dom_string`, so a DOM
+Text node round trips an unpaired surrogate without replacement. The refreshed
+Windows integration tree passes 1,671/1,671 workspace nextest cases (three
+skipped), 2/2 doctests, and 129/129 amazing crate cases. An eager iterator
+safety bound of 100,000 entries avoids
+unstable runner deadline races in four iterator-close tests pending lazy
+consumption.

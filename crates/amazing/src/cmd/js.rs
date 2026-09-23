@@ -224,7 +224,7 @@ pub(crate) fn format_js_error(value: &amazing_js::value::JsValue) -> String {
                 .borrow()
                 .get_own("name")
                 .and_then(|v| match v {
-                    amazing_js::value::JsValue::Str(s) => Some(s.to_string()),
+                    amazing_js::value::JsValue::Str(s) => Some(s.to_utf8_lossy()),
                     _ => None,
                 })
                 .unwrap_or_else(|| "Error".to_string());
@@ -232,7 +232,7 @@ pub(crate) fn format_js_error(value: &amazing_js::value::JsValue) -> String {
                 .borrow()
                 .get_own("message")
                 .and_then(|v| match v {
-                    amazing_js::value::JsValue::Str(s) => Some(s.to_string()),
+                    amazing_js::value::JsValue::Str(s) => Some(s.to_utf8_lossy()),
                     _ => None,
                 })
                 .unwrap_or_default();
@@ -242,7 +242,7 @@ pub(crate) fn format_js_error(value: &amazing_js::value::JsValue) -> String {
                 format!("{name}: {message}")
             }
         }
-        amazing_js::value::JsValue::Str(s) => s.to_string(),
+        amazing_js::value::JsValue::Str(s) => s.to_utf8_lossy(),
         other => format!("{other:?}"),
     }
 }

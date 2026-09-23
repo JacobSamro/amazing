@@ -409,17 +409,77 @@ impl Interpreter {
         );
         let string_ctor = Self::native("String", native_string, &self.function_proto);
         if let JsValue::Object(object) = &string_ctor {
-            let _ = object.borrow_mut().define(
-                "fromCharCode",
-                regexp_property(
-                    Self::native(
+            let _ = object.borrow_mut().define("length", Property {
+                value: JsValue::num(1.0), writable: false, enumerable: false,
+                configurable: true, getter: None, setter: None,
+            });
+            let _ = object.borrow_mut().define("prototype", Property {
+                value: JsValue::Object(self.string_proto.clone()), writable: false,
+                enumerable: false, configurable: false, getter: None, setter: None,
+            });
+            let from_char_code = Self::native(
                         "fromCharCode",
                         native_string_from_char_code,
                         &self.function_proto,
-                    ),
-                    true,
-                ),
-            );
+                    );
+            if let JsValue::Object(function) = &from_char_code {
+                function.borrow_mut().constructible = false;
+                function.borrow_mut().delete_own("prototype");
+                let _ = function.borrow_mut().define("length", Property {
+                    value: JsValue::num(1.0), writable: false, enumerable: false,
+                    configurable: true, getter: None, setter: None,
+                });
+            }
+            let _ = object.borrow_mut().define("fromCharCode", regexp_property(from_char_code, true));
+        }
+        let _ = self.string_proto.borrow_mut().define("constructor", Property {
+            value: string_ctor.clone(), writable: true, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        });
+        let _ = self.string_proto.borrow_mut().define("length", Property {
+            value: JsValue::num(0.0), writable: false, enumerable: false,
+            configurable: false, getter: None, setter: None,
+        });
+        for (name, function) in [
+            ("match", native_string_match as crate::value::NativeFn),
+            ("search", native_string_search as crate::value::NativeFn),
+            ("split", native_string_split as crate::value::NativeFn),
+            ("trim", native_string_trim as crate::value::NativeFn),
+            ("charAt", native_string_char_at as crate::value::NativeFn),
+            ("charCodeAt", native_string_char_code_at as crate::value::NativeFn),
+            ("codePointAt", native_string_code_point_at as crate::value::NativeFn),
+            ("slice", native_string_slice as crate::value::NativeFn),
+            ("substring", native_string_substring as crate::value::NativeFn),
+            ("indexOf", native_string_index_of as crate::value::NativeFn),
+            ("includes", native_string_includes as crate::value::NativeFn),
+            ("replace", native_string_replace as crate::value::NativeFn),
+            ("startsWith", native_string_starts_with as crate::value::NativeFn),
+            ("endsWith", native_string_ends_with as crate::value::NativeFn),
+            ("isWellFormed", native_string_is_well_formed as crate::value::NativeFn),
+            ("toWellFormed", native_string_to_well_formed as crate::value::NativeFn),
+            ("normalize", native_string_normalize as crate::value::NativeFn),
+            ("localeCompare", native_string_locale_compare as crate::value::NativeFn),
+            ("toString", native_string_value_of as crate::value::NativeFn),
+            ("valueOf", native_string_value_of as crate::value::NativeFn),
+        ] {
+            let arity = match name {
+                "slice" | "substring" | "replace" => 2.0,
+                "trim" | "isWellFormed" | "toWellFormed" | "normalize" | "toString" | "valueOf" => 0.0,
+                _ => 1.0,
+            };
+            let method = Self::native(name, function, &self.function_proto);
+            if let JsValue::Object(object) = &method {
+                object.borrow_mut().constructible = false;
+                object.borrow_mut().delete_own("prototype");
+                let _ = object.borrow_mut().define("length", Property {
+                    value: JsValue::num(arity), writable: false, enumerable: false,
+                    configurable: true, getter: None, setter: None,
+                });
+            }
+            let _ = self.string_proto.borrow_mut().define(name, Property {
+                value: method, writable: true,
+                enumerable: false, configurable: true, getter: None, setter: None,
+            });
         }
         self.define_global("String", string_ctor);
         self.define_global(

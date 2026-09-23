@@ -58,7 +58,7 @@ fn binding_install_mutates_the_parsed_dom_and_keeps_child_nodes_live() {
 }
 
 #[test]
-fn binding_string_boundary_rejects_lone_surrogate_without_replacement() {
+fn binding_string_boundary_round_trips_lone_surrogate_without_replacement() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse("<body></body>"),
         native_forwarded: false,
@@ -79,16 +79,13 @@ fn binding_string_boundary_rejects_lone_surrogate_without_replacement() {
         .children(amazing_dom::NodeIdx(body))
         .next()
         .unwrap();
-    host.borrow_mut()
-        .dom
-        .replace_character_data(text, 0, 2, &[0xd800])
-        .unwrap();
-    let error = scheduler.run_script("text.data").unwrap_err();
-    assert!(
-        error
-            .describe()
-            .contains("lone surrogate not yet representable")
+    assert_eq!(
+        scheduler
+            .run_script("text.data = String.fromCharCode(0xd800); text.data")
+            .unwrap(),
+        amazing_js::value::JsValue::str_units(vec![0xd800])
     );
+    assert_eq!(host.borrow().dom.character_data_utf16(text), Some(vec![0xd800]));
 }
 
 #[test]
