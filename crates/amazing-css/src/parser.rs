@@ -16,7 +16,7 @@
 //! - declaration values stay normalized strings; the private computed-value
 //!   module tokenizes them for custom-property substitution and defaulting
 
-use crate::syntax::{tokenize, serialize, Token};
+use crate::syntax::{Token, serialize, tokenize};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Declaration {
@@ -42,6 +42,8 @@ pub struct Stylesheet {
     pub rules: Vec<Rule>,
     /// Parent of the stylesheet owner node, for implicit `@scope`.
     pub scope_root: Option<amazing_dom::NodeIdx>,
+    /// Final fetched URL, or the document URL for an inline stylesheet.
+    pub base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -62,7 +64,9 @@ mod group_rules;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FontSource {
     pub url: String,
+    pub local: Option<String>,
     pub format: Option<String>,
+    pub technologies: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +76,13 @@ pub struct FontFaceRule {
     pub weight: String,
     pub style: String,
     pub stretch: String,
+    pub unicode_range: Option<String>,
+    pub display: Option<String>,
+    pub size_adjust: Option<String>,
+    pub ascent_override: Option<String>,
+    pub descent_override: Option<String>,
+    pub line_gap_override: Option<String>,
+    pub feature_settings: Option<String>,
 }
 
 /// Parses a full stylesheet. Invalid constructs are dropped with recovery.
@@ -115,7 +126,7 @@ pub fn parse_font_faces(src: &str) -> Vec<FontFaceRule> {
                     };
                     recovery.skip_at_rule();
                     position = recovery.pos;
-                },
+                }
                 Some(_) => position = skip_qualified_rule(&tokens, position),
                 None => break,
             }
@@ -142,7 +153,7 @@ pub fn parse_font_faces(src: &str) -> Vec<FontFaceRule> {
             match tokens[position] {
                 Token::OpenCurly => depth += 1,
                 Token::CloseCurly => depth -= 1,
-                _ => {},
+                _ => {}
             }
             position += 1;
         }
@@ -165,7 +176,9 @@ pub fn parse_font_faces(src: &str) -> Vec<FontFaceRule> {
         let Some(family) = descriptor("font-family").and_then(parse_font_family_descriptor) else {
             continue;
         };
-        let sources = descriptor("src").map(parse_font_sources).unwrap_or_default();
+        let sources = descriptor("src")
+            .map(parse_font_sources)
+            .unwrap_or_default();
         if sources.is_empty() {
             continue;
         }
@@ -175,6 +188,25 @@ pub fn parse_font_faces(src: &str) -> Vec<FontFaceRule> {
             weight: descriptor("font-weight").unwrap_or("normal").to_owned(),
             style: descriptor("font-style").unwrap_or("normal").to_owned(),
             stretch: descriptor("font-stretch").unwrap_or("normal").to_owned(),
+            unicode_range: descriptor("unicode-range").map(|raw| {
+                raw.split(',')
+                    .map(|part| {
+                        let part = part.trim();
+                        if part.starts_with('U') && !part.starts_with("U+") {
+                            format!("U+{}", &part[1..])
+                        } else {
+                            part.to_owned()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",")
+            }),
+            display: descriptor("font-display").map(str::to_owned),
+            size_adjust: descriptor("size-adjust").map(str::to_owned),
+            ascent_override: descriptor("ascent-override").map(str::to_owned),
+            descent_override: descriptor("descent-override").map(str::to_owned),
+            line_gap_override: descriptor("line-gap-override").map(str::to_owned),
+            feature_settings: descriptor("font-feature-settings").map(str::to_owned),
         });
     }
     faces
@@ -205,11 +237,7 @@ fn closes_component(token: &Token, end: ComponentEnd) -> bool {
     )
 }
 
-fn skip_rule_remainder(
-    tokens: &[Token],
-    mut position: usize,
-    semicolon_ends_rule: bool,
-) -> usize {
+fn skip_rule_remainder(tokens: &[Token], mut position: usize, semicolon_ends_rule: bool) -> usize {
     let mut stack = Vec::new();
     let mut rule_block_started = false;
     while position < tokens.len() {
@@ -252,9 +280,12 @@ fn parse_font_family_descriptor(value: &str) -> Option<String> {
         .collect::<Vec<_>>();
     match significant.as_slice() {
         [Token::Str(value)] => Some(value.clone()),
-        values if !values.is_empty() && values.iter().all(|token| matches!(token, Token::Ident(_))) => {
+        values
+            if !values.is_empty()
+                && values.iter().all(|token| matches!(token, Token::Ident(_))) =>
+        {
             Some(serialize(&tokens))
-        },
+        }
         _ => None,
     }
 }
@@ -270,7 +301,7 @@ fn parse_font_sources(value: &str) -> Vec<FontSource> {
             match tokens[index] {
                 Token::OpenParen | Token::OpenSquare => depth += 1,
                 Token::CloseParen | Token::CloseSquare => depth = depth.saturating_sub(1),
-                _ => {},
+                _ => {}
             }
         }
         if (at_end || matches!(tokens[index], Token::Comma)) && depth == 0 {
@@ -289,25 +320,42 @@ fn parse_font_source_candidate(tokens: &[Token]) -> Option<FontSource> {
     let Token::Function(name) = tokens.get(position)? else {
         return None;
     };
-    if name.eq_ignore_ascii_case("local") {
-        return None;
-    }
-    if !name.eq_ignore_ascii_case("url") {
+    if !name.eq_ignore_ascii_case("local") && !name.eq_ignore_ascii_case("url") {
         return None;
     }
     let (argument, after_url) = function_argument(tokens, position)?;
-    let url = parse_url_argument(argument)?;
+    let local = if name.eq_ignore_ascii_case("local") {
+        Some(parse_one_ident_or_string(argument)?)
+    } else {
+        None
+    };
+    let url = if local.is_some() {
+        String::new()
+    } else {
+        parse_url_argument(argument)?
+    };
     position = after_url;
     skip_whitespace(tokens, &mut position);
     let mut format = None;
-    if matches!(tokens.get(position), Some(Token::Function(name)) if name.eq_ignore_ascii_case("format")) {
-        let (argument, after_format) = function_argument(tokens, position)?;
-        format = parse_one_ident_or_string(argument);
-        format.as_ref()?;
-        position = after_format;
+    let mut technologies = Vec::new();
+    while let Some(Token::Function(name)) = tokens.get(position) {
+        let (argument, after_function) = function_argument(tokens, position)?;
+        if name.eq_ignore_ascii_case("format") && format.is_none() && local.is_none() {
+            format = Some(parse_one_ident_or_string(argument)?);
+        } else if name.eq_ignore_ascii_case("tech") && local.is_none() {
+            technologies.push(parse_one_ident_or_string(argument)?);
+        } else {
+            return None;
+        }
+        position = after_function;
         skip_whitespace(tokens, &mut position);
     }
-    (position == tokens.len()).then_some(FontSource { url, format })
+    (position == tokens.len()).then_some(FontSource {
+        url,
+        local,
+        format,
+        technologies,
+    })
 }
 
 fn parse_url_argument(tokens: &[Token]) -> Option<String> {
@@ -374,8 +422,8 @@ fn function_argument(tokens: &[Token], function: usize) -> Option<(&[Token], usi
                 if depth == 0 {
                     return Some((&tokens[function + 2..position], position + 1));
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
         position += 1;
     }
@@ -383,7 +431,10 @@ fn function_argument(tokens: &[Token], function: usize) -> Option<(&[Token], usi
 }
 
 fn parse_rule_list(tokens: &[Token]) -> Stylesheet {
-    let mut parser = Parser { toks: tokens, pos: 0 };
+    let mut parser = Parser {
+        toks: tokens,
+        pos: 0,
+    };
     parser.rule_list()
 }
 
@@ -392,7 +443,10 @@ fn parse_rule_list(tokens: &[Token]) -> Stylesheet {
 /// with the same recovery rules as stylesheet blocks.
 pub fn parse_declarations(src: &str) -> Vec<Declaration> {
     let toks = tokenize(src);
-    let mut p = Parser { toks: &toks, pos: 0 };
+    let mut p = Parser {
+        toks: &toks,
+        pos: 0,
+    };
     p.block_declarations()
 }
 
@@ -437,7 +491,7 @@ impl Parser<'_> {
                 Some(Token::OpenCurly) if depth == 0 => break,
                 Some(Token::OpenParen | Token::OpenSquare) => depth += 1,
                 Some(Token::CloseParen | Token::CloseSquare) => depth = depth.saturating_sub(1),
-                _ => {},
+                _ => {}
             }
             self.pos += 1;
         }
@@ -460,8 +514,8 @@ impl Parser<'_> {
                         selector_srcs.push(seg);
                     }
                     current_start = i + 1;
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
         if current_start < prelude_toks.len() {
@@ -471,7 +525,12 @@ impl Parser<'_> {
             }
         }
 
-        Some(Rule { selector_srcs, declarations, layer: Vec::new(), scopes: Vec::new() })
+        Some(Rule {
+            selector_srcs,
+            declarations,
+            layer: Vec::new(),
+            scopes: Vec::new(),
+        })
     }
 
     /// Reads declarations until the block's closing '}' (consumed) or EOF.
@@ -484,19 +543,19 @@ impl Parser<'_> {
                 None => {
                     out.extend(self.finish_declaration(&current));
                     return out;
-                },
+                }
                 // Parens belong to the value (rgba(…), var(…)); track nesting
                 // but keep the tokens so serialization stays faithful.
                 Some(tok @ (Token::OpenParen | Token::OpenSquare)) => {
                     depth += 1;
                     current.push(tok);
                     self.pos += 1;
-                },
+                }
                 Some(tok @ (Token::CloseParen | Token::CloseSquare)) => {
                     depth = depth.saturating_sub(1);
                     current.push(tok);
                     self.pos += 1;
-                },
+                }
                 // A nested '{' inside a value is invalid here: drop this
                 // declaration through the matching '}' (recovery).
                 Some(Token::OpenCurly) => {
@@ -508,12 +567,12 @@ impl Parser<'_> {
                             None => return out,
                             Some(Token::OpenCurly) => d += 1,
                             Some(Token::CloseCurly) => d -= 1,
-                            _ => {},
+                            _ => {}
                         }
                         self.pos += 1;
                     }
                     return out;
-                },
+                }
                 Some(Token::CloseCurly) => {
                     self.pos += 1;
                     if depth == 0 {
@@ -521,22 +580,22 @@ impl Parser<'_> {
                         return out;
                     }
                     depth -= 1; // stray closer inside parens — tolerate
-                },
+                }
                 Some(Token::Semicolon) if depth == 0 => {
                     self.pos += 1;
                     out.extend(self.finish_declaration(&current));
                     current.clear();
-                },
+                }
                 // Whitespace between declarations is not part of the next
                 // declaration's fragment; inside values/parens it is kept
                 // (serialize collapses runs to single spaces).
                 Some(Token::Whitespace) if depth == 0 && current.is_empty() => {
                     self.pos += 1;
-                },
+                }
                 Some(tok) => {
                     current.push(tok);
                     self.pos += 1;
-                },
+                }
             }
         }
     }
@@ -607,7 +666,11 @@ impl Parser<'_> {
         if value.is_empty() {
             return None;
         }
-        Some(Declaration { property, value, important })
+        Some(Declaration {
+            property,
+            value,
+            important,
+        })
     }
 }
 
@@ -647,8 +710,8 @@ fn supports_condition(tokens: &[Token]) -> bool {
                     segments.push(&tokens[start..index]);
                     start = index + 1;
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
     if let Some(and) = operator {
@@ -714,8 +777,8 @@ fn strip_outer_parentheses(tokens: &[Token]) -> Option<&[Token]> {
                 if depth == 0 {
                     return (index == tokens.len() - 1).then_some(&tokens[1..index]);
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
     None
@@ -731,7 +794,7 @@ fn top_level_colon(tokens: &[Token]) -> Option<usize> {
             Token::OpenSquare => square_depth += 1,
             Token::CloseSquare if square_depth > 0 => square_depth -= 1,
             Token::Colon if paren_depth == 0 && square_depth == 0 => return Some(index),
-            _ => {},
+            _ => {}
         }
     }
     None
@@ -778,17 +841,23 @@ mod tests {
     #[test]
     fn selector_list_splits_on_commas() {
         let sheet = parse_stylesheet("a, .b > c { color: blue }");
-        assert_eq!(
-            sheet.rules[0].selector_srcs,
-            vec!["a", ".b > c"]
-        );
+        assert_eq!(sheet.rules[0].selector_srcs, vec!["a", ".b > c"]);
     }
 
     #[test]
     fn important_flag_case_insensitive() {
-        assert_eq!(decls("p{margin:0 !IMPORTANT}"), vec![("margin".into(), "0".into(), true)]);
-        assert_eq!(decls("p{margin:0!important}"), vec![("margin".into(), "0".into(), true)]);
-        assert_eq!(decls("p{margin:0}"), vec![("margin".into(), "0".into(), false)]);
+        assert_eq!(
+            decls("p{margin:0 !IMPORTANT}"),
+            vec![("margin".into(), "0".into(), true)]
+        );
+        assert_eq!(
+            decls("p{margin:0!important}"),
+            vec![("margin".into(), "0".into(), true)]
+        );
+        assert_eq!(
+            decls("p{margin:0}"),
+            vec![("margin".into(), "0".into(), false)]
+        );
     }
 
     #[test]
@@ -800,9 +869,8 @@ mod tests {
 
     #[test]
     fn at_rules_skipped_including_blocks() {
-        let sheet = parse_stylesheet(
-            "@import url(x.css); @media screen { p { color: red } } div { x:y }",
-        );
+        let sheet =
+            parse_stylesheet("@import url(x.css); @media screen { p { color: red } } div { x:y }");
         assert_eq!(sheet.rules.len(), 1);
         assert_eq!(sheet.rules[0].selector_srcs, vec!["div"]);
         assert_eq!(sheet.rules[0].declarations[0].value, "y");
@@ -825,35 +893,67 @@ mod tests {
         assert_eq!(faces[0].stretch, "normal");
         assert_eq!(
             faces[0].sources,
-            vec![FontSource {
-                url: "/fonts/noto/NotoNaskhArabic-regular.woff2".into(),
-                format: Some("woff2".into()),
-            }]
+            vec![
+                FontSource {
+                    url: String::new(),
+                    local: Some("ignored".into()),
+                    format: None,
+                    technologies: Vec::new(),
+                },
+                FontSource {
+                    url: "/fonts/noto/NotoNaskhArabic-regular.woff2".into(),
+                    local: None,
+                    format: Some("woff2".into()),
+                    technologies: Vec::new(),
+                }
+            ]
         );
     }
 
     #[test]
     fn invalid_font_face_descriptor_grammars_are_rejected() {
-        assert!(parse_font_faces(
-            "@font-face { font-family: One,Two; src: url(font.woff2) format(woff2) }"
-        )
-        .is_empty());
-        assert!(parse_font_faces(
-            "@font-face { font-family: One; src: junk url(font.woff2) }"
-        )
-        .is_empty());
-        assert!(parse_font_faces(
-            "@font-face { font-family: One; src: url(bad path.woff2) }"
-        )
-        .is_empty());
+        assert!(
+            parse_font_faces(
+                "@font-face { font-family: One,Two; src: url(font.woff2) format(woff2) }"
+            )
+            .is_empty()
+        );
+        assert!(
+            parse_font_faces("@font-face { font-family: One; src: junk url(font.woff2) }")
+                .is_empty()
+        );
+        assert!(
+            parse_font_faces("@font-face { font-family: One; src: url(bad path.woff2) }")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn font_face_exposes_ordered_local_url_and_extended_descriptors() {
+        let faces = parse_font_faces(
+            "@font-face { font-family: Demo; src: local('Demo Local'), url('../demo.woff2') format('woff2') tech(color-COLRv1); font-weight: 300 700; font-stretch: 80% 120%; font-style: oblique 10deg 20deg; unicode-range: U+41-5A, U+4??; font-display: swap; size-adjust: 90%; ascent-override: 80%; descent-override: 20%; line-gap-override: 0%; font-feature-settings: 'liga' 0; }",
+        );
+        assert_eq!(faces.len(), 1);
+        assert_eq!(faces[0].sources[0].local.as_deref(), Some("Demo Local"));
+        assert_eq!(faces[0].sources[1].url, "../demo.woff2");
+        assert_eq!(faces[0].sources[1].technologies, ["color-COLRv1"]);
+        assert_eq!(faces[0].unicode_range.as_deref(), Some("U+41-5A,U+4??"));
+        assert_eq!(faces[0].display.as_deref(), Some("swap"));
+        assert_eq!(faces[0].size_adjust.as_deref(), Some("90%"));
+        assert_eq!(faces[0].ascent_override.as_deref(), Some("80%"));
+        assert_eq!(faces[0].descent_override.as_deref(), Some("20%"));
+        assert_eq!(faces[0].line_gap_override.as_deref(), Some("0%"));
+        assert_eq!(faces[0].feature_settings.as_deref(), Some("\"liga\" 0"));
     }
 
     #[test]
     fn font_face_recovery_consumes_invalid_rules_and_last_descriptor_wins() {
-        assert!(parse_font_faces(
-            "@font-face invalid @font-face { font-family: Wrong; src: url(wrong.woff2) }"
-        )
-        .is_empty());
+        assert!(
+            parse_font_faces(
+                "@font-face invalid @font-face { font-family: Wrong; src: url(wrong.woff2) }"
+            )
+            .is_empty()
+        );
 
         let faces = parse_font_faces(
             "@font-face { font-family: Wrong; font-family: Right; \
@@ -869,15 +969,17 @@ mod tests {
         assert_eq!(faces.len(), 1);
         assert_eq!(faces[0].family, "Right");
 
-        assert!(parse_font_faces(
-            "@bad fn([)]; @font-face { font-family: Wrong; src: url(wrong.woff2) }"
-        )
-        .is_empty());
+        assert!(
+            parse_font_faces(
+                "@bad fn([)]; @font-face { font-family: Wrong; src: url(wrong.woff2) }"
+            )
+            .is_empty()
+        );
 
-        assert!(parse_font_faces(
-            "garbage; @font-face { font-family: Wrong; src: url(wrong.woff2) }"
-        )
-        .is_empty());
+        assert!(
+            parse_font_faces("garbage; @font-face { font-family: Wrong; src: url(wrong.woff2) }")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -916,9 +1018,8 @@ mod tests {
 
     #[test]
     fn invalid_top_level_var_fallback_remnants_drop_the_declaration() {
-        let declarations = decls(
-            "p{--a:green;--a:var(--b,!);--b:blue;--b:var(--c,;);color:var(--a,(;))}",
-        );
+        let declarations =
+            decls("p{--a:green;--a:var(--b,!);--b:blue;--b:var(--c,;);color:var(--a,(;))}");
         assert_eq!(
             declarations,
             vec![

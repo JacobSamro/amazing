@@ -2,6 +2,9 @@
 
 #![forbid(unsafe_code)]
 
+mod font_display;
+pub use font_display::FontDisplayPeriods;
+
 use amazing_text::{
     BreakKind, BreakOpportunity, Direction, FallbackTextSystem, FontAttributes, FontKey,
     FontMetrics, FontSlant, GlyphCacheKey, GlyphContent, GlyphFlags, GlyphId, GlyphImage,
@@ -170,6 +173,11 @@ pub struct FontFaceDescriptor {
     pub stretch: FontDescriptorRange,
     pub style: FontStyleDescriptor,
     pub display: FontDisplay,
+    pub size_adjust: f32,
+    pub ascent_override: Option<f32>,
+    pub descent_override: Option<f32>,
+    pub line_gap_override: Option<f32>,
+    pub features: Vec<amazing_text::FeatureSetting>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -189,6 +197,11 @@ impl Default for FontFaceDescriptor {
             stretch: FontDescriptorRange::single(100),
             style: FontStyleDescriptor::Normal,
             display: FontDisplay::Auto,
+            size_adjust: 1.0,
+            ascent_override: None,
+            descent_override: None,
+            line_gap_override: None,
+            features: Vec::new(),
         }
     }
 }
@@ -214,6 +227,11 @@ struct FontFaceMetadata {
     style: FontStyleDescriptor,
     unicode_ranges: Vec<UnicodeRange>,
     display: FontDisplay,
+    size_adjust: f32,
+    ascent_override: Option<f32>,
+    descent_override: Option<f32>,
+    line_gap_override: Option<f32>,
+    features: Vec<amazing_text::FeatureSetting>,
 }
 
 #[derive(Debug)]
@@ -259,6 +277,7 @@ pub struct TextProvider {
     author_families: BTreeSet<String>,
     face_rules: Vec<FontFaceRegistration>,
     font_set_bytes: usize,
+    pending_font_loads: Vec<FontDisplay>,
     raster_cache: RefCell<HashMap<GlyphCacheKey, Option<GlyphImage>>>,
     raster_cache_bytes: Cell<usize>,
     fallback: FallbackTextSystem,
@@ -273,6 +292,7 @@ impl Default for TextProvider {
             author_families: BTreeSet::new(),
             face_rules: Vec::new(),
             font_set_bytes: 0,
+            pending_font_loads: Vec::new(),
             raster_cache: RefCell::new(HashMap::new()),
             raster_cache_bytes: Cell::new(0),
             fallback: FallbackTextSystem::new(),
@@ -288,7 +308,26 @@ impl TextProvider {
     /// Number of asynchronous font loads still in progress. Font registration
     /// currently completes synchronously through a caller-owned loader.
     pub fn pending_font_loads(&self) -> usize {
-        0
+        self.pending_font_loads.len()
+    }
+
+    pub fn pending_font_display_periods(&self) -> Vec<FontDisplayPeriods> {
+        self.pending_font_loads
+            .iter()
+            .map(|display| display.periods())
+            .collect()
+    }
+
+    pub fn begin_font_load(&mut self, display: FontDisplay) -> Result<(), TextError> {
+        if self.pending_font_loads.len() >= MAX_FONT_FACE_RULES {
+            return Err(TextError::ResourceLimit);
+        }
+        self.pending_font_loads.push(display);
+        Ok(())
+    }
+
+    pub fn end_font_load(&mut self) {
+        self.pending_font_loads.pop();
     }
 
     pub fn register_web_font(&mut self, font: WebFont) -> Result<FontKey, TextError> {
@@ -314,6 +353,17 @@ impl TextProvider {
             || !descriptor.weight.valid()
             || !descriptor.stretch.valid()
             || !descriptor.style.valid()
+            || !descriptor.size_adjust.is_finite()
+            || descriptor.size_adjust <= 0.0
+            || descriptor.size_adjust > 10.0
+            || [
+                descriptor.ascent_override,
+                descriptor.descent_override,
+                descriptor.line_gap_override,
+            ]
+            .iter()
+            .flatten()
+            .any(|value| !value.is_finite() || !(0.0..=10.0).contains(value))
         {
             return Err(TextError::InvalidStyle);
         }
@@ -326,6 +376,11 @@ impl TextProvider {
             style: descriptor.style,
             unicode_ranges: descriptor.unicode_ranges,
             display: descriptor.display,
+            size_adjust: descriptor.size_adjust,
+            ascent_override: descriptor.ascent_override,
+            descent_override: descriptor.descent_override,
+            line_gap_override: descriptor.line_gap_override,
+            features: descriptor.features,
         };
         // A declared author family shadows an installed family with the same
         // name even if none of its sources can be loaded.
@@ -1193,11 +1248,22 @@ fn font_metrics(font: &FontRecord, size: f32) -> Result<FontMetrics, TextError> 
     }
     catch_unwind(AssertUnwindSafe(|| {
         let face = SwashFontRef::from_index(&font.sfnt, 0).ok_or(TextError::MalformedFont)?;
-        let metrics = face.metrics(&[]).scale(size);
+        let face_rule = font.author_face.as_ref();
+        let adjusted_size = size * face_rule.map_or(1.0, |rule| rule.size_adjust);
+        let metrics = face.metrics(&[]).scale(adjusted_size);
+        let ascent = face_rule
+            .and_then(|rule| rule.ascent_override)
+            .map_or(metrics.ascent.max(0.0), |value| value * adjusted_size);
+        let descent = face_rule
+            .and_then(|rule| rule.descent_override)
+            .map_or(metrics.descent.abs(), |value| value * adjusted_size);
+        let leading = face_rule
+            .and_then(|rule| rule.line_gap_override)
+            .map_or(metrics.leading.max(0.0), |value| value * adjusted_size);
         Ok(FontMetrics {
-            ascent: metrics.ascent.max(0.0),
-            descent: metrics.descent.abs(),
-            leading: metrics.leading.max(0.0),
+            ascent,
+            descent,
+            leading,
             x_height: metrics.x_height.max(0.0),
             cap_height: metrics.cap_height.max(0.0),
             vertical_ascent: metrics.vertical_ascent.max(0.0),
@@ -1732,7 +1798,12 @@ fn shape_range(
             flags |= BufferFlags::END_OF_TEXT;
         }
         buffer.set_flags(flags);
-        let scale = (style.size * 64.0).round().clamp(1.0, i32::MAX as f32) as i32;
+        let adjusted_size = style.size
+            * font
+                .author_face
+                .as_ref()
+                .map_or(1.0, |face| face.size_adjust);
+        let scale = (adjusted_size * 64.0).round().clamp(1.0, i32::MAX as f32) as i32;
         let mut features = Vec::with_capacity(style.features.len() + 2);
         if style.writing_mode.uses_vertical_metrics() {
             let upright = orientation == GlyphOrientation::Upright;
@@ -1740,6 +1811,13 @@ fn shape_range(
             // CSS selects mixed glyph orientation through UAX50 rather than
             // delegating it to the font's vrt2 feature.
             features.push(Feature::new(Tag::new(b"vrt2"), 0, ..));
+        }
+        if let Some(face) = font.author_face.as_ref() {
+            features.extend(
+                face.features
+                    .iter()
+                    .map(|feature| Feature::new(Tag::new(&feature.tag), feature.value, ..)),
+            );
         }
         features.extend(
             style
@@ -1788,7 +1866,7 @@ fn shape_range(
                 text_range: cluster_start..cluster_end,
                 source: source_span.source,
                 font: font.key,
-                font_size: style.size,
+                font_size: adjusted_size,
                 direction,
                 writing_mode: style.writing_mode,
                 metrics,
@@ -2813,6 +2891,87 @@ mod tests {
             })
             .unwrap();
         assert_eq!(provider.pending_font_loads(), 0);
+    }
+
+    #[test]
+    fn author_metric_and_feature_descriptors_reach_shaping() {
+        let mut loader = FakeFontLoader::default();
+        loader.urls.insert(
+            "face.otf".into(),
+            synthetic_font_with_feature('A', Some(*b"liga")),
+        );
+        let mut provider = TextProvider::new();
+        provider.begin_font_load(FontDisplay::Fallback).unwrap();
+        assert_eq!(provider.pending_font_loads(), 1);
+        assert_eq!(
+            provider.pending_font_display_periods(),
+            [FontDisplayPeriods {
+                block_ms: 100,
+                swap_ms: Some(3000)
+            }]
+        );
+        provider
+            .register_font_face(
+                FontFaceDescriptor {
+                    family: "Adjusted".into(),
+                    sources: vec![FontFaceSource::Url {
+                        url: "face.otf".into(),
+                        formats: vec![],
+                        technologies: vec![],
+                    }],
+                    size_adjust: 1.25,
+                    ascent_override: Some(0.8),
+                    descent_override: Some(0.2),
+                    line_gap_override: Some(0.1),
+                    features: vec![amazing_text::FeatureSetting {
+                        tag: *b"liga",
+                        value: 1,
+                    }],
+                    ..FontFaceDescriptor::default()
+                },
+                &mut loader,
+            )
+            .unwrap()
+            .unwrap();
+        provider.end_font_load();
+        assert_eq!(provider.pending_font_loads(), 0);
+        let mut style = TextStyle {
+            families: vec!["Adjusted".into()],
+            size: 20.0,
+            ..TextStyle::default()
+        };
+        let metrics = font_metrics(&provider.fonts[0], style.size).unwrap();
+        assert_eq!(
+            (metrics.ascent, metrics.descent, metrics.leading),
+            (20.0, 5.0, 2.5)
+        );
+        let count = |style: &TextStyle| {
+            let spans = [TextSpan {
+                range: 0..2,
+                source: 0,
+                style: style.clone(),
+                boundary_before: ShapingBoundary::Continue,
+            }];
+            provider
+                .shape(Paragraph {
+                    text: "AA",
+                    spans: &spans,
+                    sources: &[],
+                    bidi_scopes: &[],
+                    base_direction: Direction::LeftToRight,
+                })
+                .unwrap()
+                .runs
+                .iter()
+                .map(|run| run.glyphs.len())
+                .sum::<usize>()
+        };
+        assert_eq!(count(&style), 1);
+        style.features.push(amazing_text::FeatureSetting {
+            tag: *b"liga",
+            value: 0,
+        });
+        assert_eq!(count(&style), 2);
     }
 
     #[test]

@@ -1,5 +1,7 @@
 //! Page resource loading and stylesheet collection.
 use crate::cmd::js::resolve_script_url;
+#[path = "font_loader.rs"]
+mod font_loader;
 
 fn load_resource(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
     if url.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:")) {
@@ -37,88 +39,47 @@ pub(crate) struct PageText {
 const MAX_PAGE_FONT_BYTES: usize = 8 * 1024 * 1024;
 
 pub(crate) fn load_page_text(css: &str, page: &str) -> PageText {
-    use amazing_text::FontSlant;
-    use amazing_text_provider::{FontFormat, WebFont};
+    load_page_text_from_sheets(&[(css.to_owned(), page.to_owned())], page)
+}
 
+pub(crate) fn load_page_text_from_sheets(sheets: &[(String, String)], page: &str) -> PageText {
     let mut text = PageText {
         provider: amazing_text_provider::TextProvider::new(),
         warnings: Vec::new(),
     };
     register_system_text_faces(&mut text.provider);
-    for face in amazing_css::parse_font_faces(css) {
-        let weight = match face.weight.trim() {
-            value if value.eq_ignore_ascii_case("bold") => 700,
-            value if value.eq_ignore_ascii_case("normal") => 400,
-            value => value.parse::<u16>().ok().filter(|value| (1..=1000).contains(value)).unwrap_or(400),
-        };
-        let stretch = face
-            .stretch
-            .trim()
-            .strip_suffix('%')
-            .and_then(|value| value.parse::<u16>().ok())
-            .filter(|value| (1..=1000).contains(value))
-            .unwrap_or(100);
-        let slant = if face.style.eq_ignore_ascii_case("italic") {
-            FontSlant::Italic
-        } else if face.style.to_ascii_lowercase().starts_with("oblique") {
-            FontSlant::Oblique
-        } else {
-            FontSlant::Normal
-        };
-        let mut errors = Vec::new();
-        let mut loaded = false;
-        for source in face.sources {
-            let format_name = source
-                .format
-                .as_deref()
-                .map(str::to_ascii_lowercase)
-                .unwrap_or_else(|| {
-                    source
-                        .url
-                        .split(['?', '#'])
-                        .next()
-                        .and_then(|url| url.rsplit('.').next())
-                        .unwrap_or_default()
-                        .to_ascii_lowercase()
-                });
-            let format = match format_name.as_str() {
-                "woff2" => FontFormat::Woff2,
-                "woff" => FontFormat::Woff,
-                "opentype" | "truetype" | "ttf" | "otf" => FontFormat::OpenType,
-                _ => {
-                    errors.push(format!("unsupported format {format_name:?}"));
-                    continue;
-                },
-            };
-            let resolved = resolve_font_url(page, &source.url);
-            let bytes = match load_resource(&resolved, MAX_PAGE_FONT_BYTES) {
-                Ok(bytes) => bytes,
+    let expanded = font_loader::expand_font_sheets(sheets, &mut text.warnings);
+    for (source, stylesheet_url) in &expanded {
+        for face in amazing_css::parse_font_faces(source) {
+            let family = face.family.clone();
+            let descriptor = match font_loader::descriptor_from_css(face) {
+                Ok(value) => value,
                 Err(error) => {
-                    errors.push(format!("{}: {error}", source.url));
+                    text.warnings.push(format!("font-face {family:?}: {error}"));
                     continue;
-                },
+                }
             };
-            match text.provider.register_web_font(WebFont {
-                family: face.family.clone(),
-                weight,
-                stretch,
-                slant,
-                format,
-                bytes,
-            }) {
-                Ok(_) => {
-                    loaded = true;
-                    break;
-                },
-                Err(error) => errors.push(format!("{}: {error:?}", source.url)),
+            let mut loader = font_loader::PageFontLoader {
+                stylesheet_url,
+                document_url: page,
+                warnings: Vec::new(),
+            };
+            let source_labels = descriptor.sources.iter().map(|source| match source {
+                amazing_text_provider::FontFaceSource::Local(name) => format!("local({name})"),
+                amazing_text_provider::FontFaceSource::Url { url, .. } => url.clone(),
+            }).collect::<Vec<_>>().join(", ");
+            if let Err(error) = text.provider.begin_font_load(descriptor.display) {
+                text.warnings.push(format!("font-face {family:?}: {error:?}"));
+                continue;
             }
-        }
-        if !loaded {
-            text.warnings.push(format!(
-                "font-face {:?}: {}",
-                face.family,
-                errors.join("; ")
-            ));
+            let result = text.provider.register_font_face(descriptor, &mut loader);
+            text.provider.end_font_load();
+            match result {
+                Ok(Some(_)) => {},
+                Ok(None) => text.warnings.push(format!("font-face {family:?}: no usable source ({source_labels})")),
+                Err(error) => text.warnings.push(format!("font-face {family:?}: {error:?}")),
+            }
+            text.warnings.extend(loader.warnings);
         }
     }
     text
@@ -301,6 +262,7 @@ pub(crate) fn load_page_media(dom: &amazing_dom::Dom, page: &str) -> PageMedia {
 pub(crate) fn collect_style_text(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
+    page: &str,
     out: &mut Vec<(String, amazing_css::Stylesheet)>,
 ) {
     if dom.name(node) == Some("style") {
@@ -312,11 +274,12 @@ pub(crate) fn collect_style_text(
         }
         let mut sheet = amazing_css::parse_stylesheet(&source);
         sheet.scope_root = dom.get(node).parent;
+        sheet.base_url = Some(page.to_owned());
         out.push((source, sheet));
         return;
     }
     for child in dom.children(node) {
-        collect_style_text(dom, child, out);
+        collect_style_text(dom, child, page, out);
     }
 }
 
@@ -324,10 +287,19 @@ pub(crate) fn collect_author_css(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
     page: &str,
-    out: &mut Vec<(String, amazing_css::Stylesheet)>,
+    out: &mut Vec<(String, String, amazing_css::Stylesheet)>,
 ) -> Result<(), String> {
     if dom.name(node) == Some("style") {
-        collect_style_text(dom, node, out);
+        let mut source = String::new();
+        for child in dom.children(node) {
+            if let amazing_dom::NodeKind::Text { data } = &dom.get(child).kind {
+                source.push_str(data);
+            }
+        }
+        let mut sheet = amazing_css::parse_stylesheet(&source);
+        sheet.scope_root = dom.get(node).parent;
+        sheet.base_url = Some(page.to_owned());
+        out.push((source, page.to_owned(), sheet));
         return Ok(());
     }
     if dom.name(node) == Some("link") {
@@ -346,12 +318,23 @@ pub(crate) fn collect_author_css(
                 .map(|(_, value)| value)
         {
             let url = resolve_script_url(page, href);
-            let response = load_resource(&url, 16 * 1024 * 1024)
-                .map_err(|error| format!("stylesheet {href}: {error}"))?;
-            let source = String::from_utf8_lossy(&response).into_owned();
+            let (bytes, final_url) = if url.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:")) {
+                (load_resource(&url, 16 * 1024 * 1024)
+                    .map_err(|error| format!("stylesheet {href}: {error}"))?, url.clone())
+            } else {
+                let options = amazing_net::FetchOptions {
+                    max_response_bytes: 16 * 1024 * 1024,
+                    ..amazing_net::FetchOptions::default()
+                };
+                let response = amazing_net::fetch(&url, &options)
+                    .map_err(|error| format!("stylesheet {href}: {error}"))?;
+                (response.body, response.url)
+            };
+            let source = String::from_utf8_lossy(&bytes).into_owned();
             let mut sheet = amazing_css::parse_stylesheet(&source);
             sheet.scope_root = dom.get(node).parent;
-            out.push((source, sheet));
+            sheet.base_url = Some(final_url.clone());
+            out.push((source, final_url, sheet));
         }
     }
     for child in dom.children(node) {
@@ -376,6 +359,15 @@ mod tests {
         collect_author_css(&dom, amazing_dom::NodeIdx(0), "C:/pages/test.html", &mut sheets).unwrap();
         assert_eq!(sheets.len(), 1);
         assert_eq!(sheets[0].0, "body{color:red}");
+        assert_eq!(sheets[0].2.base_url.as_deref(), Some("data:text/css,body%7Bcolor%3Ared%7D"));
+    }
+
+    #[test]
+    fn inline_stylesheet_uses_document_url_as_base() {
+        let dom = amazing_html::parse("<style>p { color: red }</style>");
+        let mut sheets = Vec::new();
+        collect_author_css(&dom, amazing_dom::NodeIdx(0), "https://example.test/pages/p.html", &mut sheets).unwrap();
+        assert_eq!(sheets[0].2.base_url.as_deref(), Some("https://example.test/pages/p.html"));
     }
 
     #[test]

@@ -1,0 +1,172 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-6",
+  "implementation_base": "a4ab541",
+  "windows_render_tree_base": "a4ab541",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "candidate_executable_sha256": "6BF62C9A4D747E87DB23BEB5A0759362F8BCEEEB796BEEBA30F6ABC37F823DCE",
+  "selections": {
+    "font": {
+      "before": "text6-font-before.json",
+      "after": "text6-font-after.json",
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 12,
+        "mismatch": 3,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "classification_changes": [
+        [
+          "css-fonts__first-available-font-003.html",
+          "mismatch",
+          "pass"
+        ]
+      ],
+      "actual_pixel_changes": [
+        "css-fonts__first-available-font-003.html"
+      ]
+    },
+    "font-face": {
+      "before": "text6-font-face-before.json",
+      "after": "text6-font-face-after.json",
+      "before_counts": {
+        "pass": 2,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 6
+      },
+      "after_counts": {
+        "pass": 2,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 6
+      },
+      "classification_losses": 0,
+      "classification_changes": [],
+      "actual_pixel_changes": []
+    },
+    "vertical": {
+      "before": "text6-vertical-before.json",
+      "after": "text6-vertical-after.json",
+      "before_counts": {
+        "pass": 2,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 2,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "classification_changes": [],
+      "actual_pixel_changes": []
+    },
+    "flow": {
+      "before": "text6-flow-before.json",
+      "after": "text6-flow-after.json",
+      "before_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "classification_changes": [],
+      "actual_pixel_changes": []
+    },
+    "shaping": {
+      "before": "text6-shaping-before.json",
+      "after": "text6-shaping-after.json",
+      "before_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "classification_changes": [],
+      "actual_pixel_changes": []
+    },
+    "vertical-ruby": {
+      "before": "text6-vertical-ruby-before.json",
+      "after": "text6-vertical-ruby-after.json",
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "classification_changes": [],
+      "actual_pixel_changes": [
+        "css-writing-modes__text-combine-upright-compression-001.html"
+      ]
+    }
+  },
+  "win002_selected_nextest": {
+    "passed": 389,
+    "failed": 0,
+    "skipped": 4
+  },
+  "win002_workspace_nextest": {
+    "passed": 1856,
+    "failed": 0,
+    "skipped": 5
+  },
+  "win002_workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  }
+}

@@ -30,7 +30,8 @@ mod windows {
     use amazing_layout::{Flow, LayoutBox};
     use amazing_paint::Surface;
 
-    use crate::{BrowserDomHost, PageMedia, load_page_media, load_page_text};
+    use crate::{BrowserDomHost, PageMedia, load_page_media};
+    use crate::page::load_page_text_from_sheets;
     use crate::page::PagePaint;
 
     type Handle = *mut c_void;
@@ -514,16 +515,17 @@ mod windows {
             };
             let host = runtime.host.clone();
             let host_ref = host.borrow();
-            let mut css = String::new();
-            if let Err(error) = collect_author_css(&host_ref.dom, NodeIdx(0), &page, &mut css) {
+            let mut font_sheets = Vec::new();
+            if let Err(error) = collect_author_css(&host_ref.dom, NodeIdx(0), &page, &mut font_sheets) {
                 eprintln!("amazing gui: stylesheet refresh failed: {error}");
                 return;
             }
+            let css = font_sheets.iter().map(|(source, _)| source.as_str()).collect::<Vec<_>>().join("\n");
             let media = load_page_media(&host_ref.dom, &page);
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
             }
-            let page_text = load_page_text(&css, &page);
+            let page_text = load_page_text_from_sheets(&font_sheets, &page);
             for warning in &page_text.warnings {
                 eprintln!("amazing gui: {warning}");
             }
@@ -799,15 +801,16 @@ mod windows {
         dom: &Dom,
         node: NodeIdx,
         page: &str,
-        out: &mut String,
+        out: &mut Vec<(String, String)>,
     ) -> Result<(), String> {
         if dom.name(node) == Some("style") {
+            let mut source = String::new();
             for child in dom.children(node) {
                 if let NodeKind::Text { data } = &dom.get(child).kind {
-                    out.push_str(data);
-                    out.push('\n');
+                    source.push_str(data);
                 }
             }
+            out.push((source, page.to_owned()));
             return Ok(());
         }
         if dom.name(node) == Some("link") {
@@ -831,8 +834,7 @@ mod windows {
                 let css = response
                     .text()
                     .ok_or_else(|| format!("stylesheet {href} was not text"))?;
-                out.push_str(&css);
-                out.push('\n');
+                out.push((css, response.url));
             }
         }
         for child in dom.children(node) {
@@ -957,10 +959,10 @@ mod windows {
         }
         js.dispatch_dom_event(0, "DOMContentLoaded")
             .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
-        let mut css = String::new();
+        let mut font_sheets = Vec::new();
         {
             let host_ref = host.borrow();
-            collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut css)?;
+            collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut font_sheets)?;
         }
         js.dispatch_dom_event(0, "load")
             .map_err(|error| format!("load listener failed: {}", error.describe()))?;
@@ -971,17 +973,18 @@ mod windows {
         }
         js.pump_at(std::time::Duration::from_millis(16), true)
             .map_err(|error| format!("page event loop failed: {}", error.describe()))?;
-        css.clear();
+        font_sheets.clear();
         {
             let host_ref = host.borrow();
-            collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut css)?;
+            collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut font_sheets)?;
         }
+        let css = font_sheets.iter().map(|(source, _)| source.as_str()).collect::<Vec<_>>().join("\n");
         let host_ref = host.borrow();
         let media = load_page_media(&host_ref.dom, input);
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");
         }
-        let page_text = load_page_text(&css, input);
+        let page_text = load_page_text_from_sheets(&font_sheets, input);
         for warning in &page_text.warnings {
             eprintln!("amazing gui: {warning}");
         }
