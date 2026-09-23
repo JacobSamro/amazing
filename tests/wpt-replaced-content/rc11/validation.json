@@ -1,0 +1,36 @@
+{
+  "fixed_base": "592e54266dfc310e204da95803b8045cd76eb478",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "manifest_sha256": "2fdbe12184173e8808ad2c09a6dc2ed41254affaa4bd1d84054e1880e110cfb0",
+  "oracle_runs": {
+    "chrome": 5182906107691008,
+    "safari": 5141363439173632
+  },
+  "selected_cases": 35,
+  "both_browser_pass_cases": 20,
+  "before_repeats": 2,
+  "raw_before": {
+    "pass": 22,
+    "mismatch": 13,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "consensus_before": {
+    "pass": 11,
+    "mismatch": 9
+  },
+  "stable_per_case_projection": true,
+  "all_white_raw_passes": 16,
+  "all_white_consensus_passes": 9,
+  "input_hashes": {
+    "count": 45,
+    "mac_windows_equal_before": true,
+    "mac_windows_equal_after": true,
+    "unchanged_across_baseline": true
+  },
+  "source_implementation": false,
+  "after_sweeps": "not run: no actionable both-browser-pass case within lane ownership",
+  "new_wpt_credit": 0
+}
