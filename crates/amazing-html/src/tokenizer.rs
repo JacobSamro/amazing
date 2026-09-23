@@ -74,6 +74,24 @@ enum State {
     RawTextLessThan,
     RawTextEndTagOpen,
     RawTextEndTagName,
+    ScriptData,
+    ScriptLessThan,
+    ScriptEndTagOpen,
+    ScriptEndTagName,
+    ScriptEscapeStart,
+    ScriptEscapeStartDash,
+    ScriptEscaped,
+    ScriptEscapedDash,
+    ScriptEscapedDashDash,
+    ScriptEscapedLessThan,
+    ScriptEscapedEndTagOpen,
+    ScriptEscapedEndTagName,
+    ScriptDoubleEscapeStart,
+    ScriptDoubleEscaped,
+    ScriptDoubleEscapedDash,
+    ScriptDoubleEscapedDashDash,
+    ScriptDoubleEscapedLessThan,
+    ScriptDoubleEscapeEnd,
     RcData,
     RcLessThan,
     RcEndTagOpen,
@@ -142,8 +160,10 @@ pub struct Tokenizer {
     processing_target: String,
     processing_data: String,
     doctype_name: Option<String>,
-    /// End-tag name we're looking for while in RAWTEXT/RCDATA.
+    /// End-tag name we're looking for while in a text state.
     raw_end: String,
+    /// The script double-escape delimiter's case-folded name.
+    script_temporary: String,
     eof_sent: bool,
     input_finished: bool,
 }
@@ -183,6 +203,7 @@ impl Tokenizer {
             processing_data: String::new(),
             doctype_name: None,
             raw_end: String::new(),
+            script_temporary: String::new(),
             eof_sent: false,
             input_finished: true,
         }
@@ -219,6 +240,9 @@ impl Tokenizer {
                 | State::SelfClosingStart | State::RawTextLessThan
                 | State::RawTextEndTagOpen | State::RawTextEndTagName
                 | State::RcLessThan | State::RcEndTagOpen | State::RcEndTagName
+                | State::ScriptLessThan | State::ScriptEndTagOpen | State::ScriptEndTagName
+                | State::ScriptEscapedLessThan | State::ScriptEscapedEndTagOpen
+                | State::ScriptEscapedEndTagName
         );
         let drop = if replaying_tag { self.tag_start.min(self.pos) } else { self.pos };
         if drop > 0 {
@@ -279,7 +303,11 @@ impl Tokenizer {
                 self.raw_end = name.to_owned();
                 self.state = State::RcData;
             },
-            "script" | "style" | "xmp" | "iframe" | "noembed"
+            "script" => {
+                self.raw_end = name.to_owned();
+                self.state = State::ScriptData;
+            },
+            "style" | "xmp" | "iframe" | "noembed"
             | "noframes" | "noscript" => {
                 self.raw_end = name.to_owned();
                 self.state = State::RawText;
@@ -295,6 +323,7 @@ impl Tokenizer {
         self.state = match name {
             "textarea" | "title" => State::RcData,
             "style" => State::RawText,
+            "script" => State::ScriptData,
             _ => return,
         };
     }
@@ -997,17 +1026,17 @@ impl Tokenizer {
                     },
                 },
 
-                State::RawTextEndTagOpen | State::RcEndTagOpen => {
+                State::RawTextEndTagOpen | State::RcEndTagOpen
+                | State::ScriptEndTagOpen | State::ScriptEscapedEndTagOpen => {
                     match self.peek() {
                         Some(c) if is_alpha(c) => {
                             self.tag = Some(TagBuilder::new());
                             self.is_end_tag = true;
-                            self.state = if self.state
-                                == State::RawTextEndTagOpen
-                            {
-                                State::RawTextEndTagName
-                            } else {
-                                State::RcEndTagName
+                            self.state = match self.state {
+                                State::RawTextEndTagOpen => State::RawTextEndTagName,
+                                State::RcEndTagOpen => State::RcEndTagName,
+                                State::ScriptEndTagOpen => State::ScriptEndTagName,
+                                _ => State::ScriptEscapedEndTagName,
                             };
                             // reconsume the letter
                         },
@@ -1018,8 +1047,140 @@ impl Tokenizer {
                     }
                 },
 
-                State::RawTextEndTagName | State::RcEndTagName => {
+                State::RawTextEndTagName | State::RcEndTagName
+                | State::ScriptEndTagName | State::ScriptEscapedEndTagName => {
                     self.rawtext_end_tag_name_state();
+                },
+
+                State::ScriptData => match self.bump() {
+                    Some('<') => { self.tag_start = self.pos - 1; self.state = State::ScriptLessThan; },
+                    Some('\0') => self.text_buf.push('\u{FFFD}'),
+                    Some(c) => self.text_buf.push(c),
+                    None => {},
+                },
+                State::ScriptLessThan => match self.peek() {
+                    Some('/') => { self.pos += 1; self.state = State::ScriptEndTagOpen; },
+                    Some('!') => {
+                        self.pos += 1;
+                        self.text_buf.push_str("<!");
+                        self.state = State::ScriptEscapeStart;
+                    },
+                    _ => { self.text_buf.push('<'); self.state = State::ScriptData; },
+                },
+                State::ScriptEscapeStart => {
+                    if self.peek() == Some('-') {
+                        self.pos += 1;
+                        self.text_buf.push('-');
+                        self.state = State::ScriptEscapeStartDash;
+                    } else { self.state = State::ScriptData; }
+                },
+                State::ScriptEscapeStartDash => {
+                    if self.peek() == Some('-') {
+                        self.pos += 1;
+                        self.text_buf.push('-');
+                        self.state = State::ScriptEscapedDashDash;
+                    } else { self.state = State::ScriptData; }
+                },
+                State::ScriptEscaped | State::ScriptEscapedDash | State::ScriptEscapedDashDash => {
+                    let previous = self.state;
+                    match self.peek() {
+                        Some('-') => {
+                            self.pos += 1;
+                            self.text_buf.push('-');
+                            self.state = if previous == State::ScriptEscaped {
+                                State::ScriptEscapedDash
+                            } else { State::ScriptEscapedDashDash };
+                        },
+                        Some('<') => {
+                            self.tag_start = self.pos;
+                            self.pos += 1;
+                            self.state = State::ScriptEscapedLessThan;
+                        },
+                        Some('>') if previous == State::ScriptEscapedDashDash => {
+                            self.pos += 1;
+                            self.text_buf.push('>');
+                            self.state = State::ScriptData;
+                        },
+                        Some(c) => {
+                            self.pos += 1;
+                            self.text_buf.push(if c == '\0' { '\u{FFFD}' } else { c });
+                            self.state = State::ScriptEscaped;
+                        },
+                        None => {},
+                    }
+                },
+                State::ScriptEscapedLessThan => match self.peek() {
+                    Some('/') => {
+                        self.pos += 1;
+                        self.state = State::ScriptEscapedEndTagOpen;
+                    },
+                    Some(c) if is_alpha(c) => {
+                        self.text_buf.push('<');
+                        self.script_temporary.clear();
+                        self.state = State::ScriptDoubleEscapeStart;
+                    },
+                    _ => {
+                        self.text_buf.push('<');
+                        self.state = State::ScriptEscaped;
+                    },
+                },
+                State::ScriptDoubleEscapeStart | State::ScriptDoubleEscapeEnd => {
+                    let starting = self.state == State::ScriptDoubleEscapeStart;
+                    match self.peek() {
+                        Some(c) if is_alpha(c) => {
+                            self.pos += 1;
+                            self.script_temporary.push(c.to_ascii_lowercase());
+                            self.text_buf.push(c);
+                        },
+                        Some(c) if is_ws(c) || c == '/' || c == '>' => {
+                            self.pos += 1;
+                            self.text_buf.push(c);
+                            self.state = match (starting, self.script_temporary == "script") {
+                                (true, true) => State::ScriptDoubleEscaped,
+                                (true, false) => State::ScriptEscaped,
+                                (false, true) => State::ScriptEscaped,
+                                (false, false) => State::ScriptDoubleEscaped,
+                            };
+                        },
+                        _ => self.state = if starting { State::ScriptEscaped } else { State::ScriptDoubleEscaped },
+                    }
+                },
+                State::ScriptDoubleEscaped | State::ScriptDoubleEscapedDash
+                | State::ScriptDoubleEscapedDashDash => {
+                    let previous = self.state;
+                    match self.peek() {
+                        Some('-') => {
+                            self.pos += 1;
+                            self.text_buf.push('-');
+                            self.state = if previous == State::ScriptDoubleEscaped {
+                                State::ScriptDoubleEscapedDash
+                            } else { State::ScriptDoubleEscapedDashDash };
+                        },
+                        Some('<') => {
+                            self.pos += 1;
+                            self.text_buf.push('<');
+                            self.state = State::ScriptDoubleEscapedLessThan;
+                        },
+                        Some('>') if previous == State::ScriptDoubleEscapedDashDash => {
+                            self.pos += 1;
+                            self.text_buf.push('>');
+                            self.state = State::ScriptData;
+                        },
+                        Some(c) => {
+                            self.pos += 1;
+                            self.text_buf.push(if c == '\0' { '\u{FFFD}' } else { c });
+                            self.state = State::ScriptDoubleEscaped;
+                        },
+                        None => {},
+                    }
+                },
+                State::ScriptDoubleEscapedLessThan => {
+                    if self.peek() == Some('/') {
+                        self.pos += 1;
+                        self.text_buf.push('/');
+                        self.script_temporary.clear();
+                        self.state = State::ScriptDoubleEscapeEnd;
+                    } else { self.state = State::ScriptDoubleEscaped; }
                 },
 
                 State::RcData => match self.peek() {
@@ -1113,10 +1274,7 @@ impl Tokenizer {
     /// The RCDATA/RAWTEXT appropriate-end-tag-name states (they share shape;
     /// only their "return to" raw mode differs).
     fn rawtext_end_tag_name_state(&mut self) {
-        let in_rc = matches!(
-            self.state,
-            State::RcEndTagName | State::RcData | State::RcLessThan
-        );
+        let return_state = self.rawtext_back();
         match self.peek() {
             None => {
                 // EOF mid-end-tag: dump it back as text (finish_eof also
@@ -1153,14 +1311,22 @@ impl Tokenizer {
                     self.dump_mismatched_end_tag();
                 }
             },
+            Some(c) if matches!(return_state, State::ScriptData | State::ScriptEscaped)
+                && !is_alpha(c) => {
+                // Script end-tag-name's anything-else branch reconsumes the
+                // character in script data; in particular a null becomes
+                // U+FFFD there rather than entering the candidate tag name.
+                self.dump_mismatched_end_tag();
+            },
             Some(_) => {
                 let c = self.bump().unwrap();
                 self.tagname_push(c.to_ascii_lowercase());
                 // stay in this end-tag-name state
-                self.state = if in_rc {
-                    State::RcEndTagName
-                } else {
-                    State::RawTextEndTagName
+                self.state = match return_state {
+                    State::RcData => State::RcEndTagName,
+                    State::ScriptData => State::ScriptEndTagName,
+                    State::ScriptEscaped => State::ScriptEscapedEndTagName,
+                    _ => State::RawTextEndTagName,
                 };
             },
         }
@@ -1171,6 +1337,9 @@ impl Tokenizer {
             State::RcEndTagOpen | State::RcEndTagName | State::RcLessThan => {
                 State::RcData
             },
+            State::ScriptEndTagOpen | State::ScriptEndTagName | State::ScriptLessThan => State::ScriptData,
+            State::ScriptEscapedEndTagOpen | State::ScriptEscapedEndTagName
+            | State::ScriptEscapedLessThan => State::ScriptEscaped,
             _ => State::RawText,
         }
     }
@@ -1306,7 +1475,12 @@ impl Tokenizer {
                 self.flush_text();
                 return;
             },
-            State::Data | State::RawText | State::RcData => {
+            State::Data | State::RawText | State::RcData | State::ScriptData
+            | State::ScriptEscaped | State::ScriptEscapedDash | State::ScriptEscapedDashDash
+            | State::ScriptDoubleEscapeStart | State::ScriptDoubleEscaped
+            | State::ScriptDoubleEscapedDash | State::ScriptDoubleEscapedDashDash
+            | State::ScriptDoubleEscapeEnd | State::ScriptEscapeStart
+            | State::ScriptEscapeStartDash => {
                 // just flush text below
             },
             State::EndTagOpen
@@ -1326,18 +1500,19 @@ impl Tokenizer {
                 let lit: String = self.input[start..self.pos].iter().collect();
                 self.text_buf.push_str(&lit);
             },
-            State::RawTextLessThan | State::RcLessThan => {
+            State::RawTextLessThan | State::RcLessThan | State::ScriptLessThan
+            | State::ScriptEscapedLessThan => {
                 self.text_buf.push('<');
             },
-            State::RawTextEndTagOpen | State::RcEndTagOpen => {
+            State::RawTextEndTagOpen | State::RcEndTagOpen | State::ScriptEndTagOpen
+            | State::ScriptEscapedEndTagOpen => {
                 self.text_buf.push_str("</");
             },
-            State::RawTextEndTagName | State::RcEndTagName => {
-                self.text_buf.push_str("</");
-                if let Some(t) = self.tag.take() {
-                    self.text_buf.push_str(&t.name);
-                }
+            State::RawTextEndTagName | State::RcEndTagName
+            | State::ScriptEndTagName | State::ScriptEscapedEndTagName => {
+                self.text_buf.extend(self.input[self.tag_start..self.pos].iter());
             },
+            State::ScriptDoubleEscapedLessThan => {},
             State::CommentStartDash => {
                 // dash not yet added
                 let data = std::mem::take(&mut self.comment_buf);
@@ -1525,6 +1700,32 @@ mod tests {
             out.push(tok);
         }
         out
+    }
+
+    #[test]
+    fn script_document_end_tags_follow_escape_depth() {
+        fn names_and_text(src: &str) -> Vec<Token> { tokenize(src) }
+        assert_eq!(names_and_text("<script>a<b>&amp;</script><p>z"), vec![
+            Token::StartTag { name: "script".into(), attrs: vec![], self_closing: false },
+            Token::Characters("a<b>&amp;".into()),
+            Token::EndTag { name: "script".into() },
+            Token::StartTag { name: "p".into(), attrs: vec![], self_closing: false },
+            Token::Characters("z".into()),
+        ]);
+        assert_eq!(names_and_text("<script><!-- <script>inner</script> --> tail </script><p>z"), vec![
+            Token::StartTag { name: "script".into(), attrs: vec![], self_closing: false },
+            Token::Characters("<!-- <script>inner</script> --> tail ".into()),
+            Token::EndTag { name: "script".into() },
+            Token::StartTag { name: "p".into(), attrs: vec![], self_closing: false },
+            Token::Characters("z".into()),
+        ]);
+        assert_eq!(names_and_text("<script>a</ScRiPt><p>z"), vec![
+            Token::StartTag { name: "script".into(), attrs: vec![], self_closing: false },
+            Token::Characters("a".into()),
+            Token::EndTag { name: "script".into() },
+            Token::StartTag { name: "p".into(), attrs: vec![], self_closing: false },
+            Token::Characters("z".into()),
+        ]);
     }
 
     #[test]

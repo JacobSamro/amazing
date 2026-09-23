@@ -45,8 +45,29 @@ fn select_fragment_ignores_stray_context_end_and_disallowed_tags() {
 
 #[test]
 fn contexts_without_required_rules_remain_explicitly_unsupported() {
-    for context in ["script", "template", "noscript", "plaintext"] {
+    for context in ["template", "noscript", "plaintext"] {
         assert_eq!(parse_fragment(context, "x").unwrap_err(),
             "unsupported HTML fragment context", "context={context}");
+    }
+}
+
+#[test]
+fn script_fragment_uses_script_data_and_keeps_virtual_context_end_tag() {
+    assert_eq!(dump("script", "a<b>&amp;"), "#document\n  \"a<b>&amp;\"\n");
+    assert_eq!(dump("script", "x</script><i>y"), "#document\n  \"x</script><i>y\"\n");
+    assert_eq!(dump("script", "a</ScRiPt >b</SCRIPTX>c"),
+        "#document\n  \"a</ScRiPt >b</SCRIPTX>c\"\n");
+    assert_eq!(dump("script", "a\0b\r\nc"), "#document\n  \"a�b\nc\"\n");
+    assert_eq!(dump("script", "a</Sc\0ript>"), "#document\n  \"a</Sc�ript>\"\n");
+}
+
+#[test]
+fn script_fragment_escape_and_double_escape_sequences() {
+    assert_eq!(dump("script", "<!-- x --> y <b>"),
+        "#document\n  \"<!-- x --> y <b>\"\n");
+    assert_eq!(dump("script", "<!-- <script>inside</script> --> after"),
+        "#document\n  \"<!-- <script>inside</script> --> after\"\n");
+    for input in ["a<", "a</", "a</ScR", "<!-- <scr"] {
+        assert_eq!(dump("script", input), format!("#document\n  {input:?}\n"));
     }
 }

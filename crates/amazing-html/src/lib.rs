@@ -89,7 +89,7 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     let context = context.to_ascii_lowercase();
     let supported = [
         "div", "table", "tbody", "thead", "tfoot", "tr", "td", "th", "caption", "colgroup",
-        "textarea", "title", "style", "select", "option",
+        "textarea", "title", "style", "script", "select", "option",
     ];
     if !supported.contains(&context.as_str()) {
         return Err("unsupported HTML fragment context".into());
@@ -116,7 +116,7 @@ pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
             source.namespace(*node) == Some(Namespace::Html) && source.name(*node) == Some("html")
         })
         .ok_or_else(|| "fragment root was not constructed".to_owned())?;
-    let virtual_context = matches!(context.as_str(), "textarea" | "title" | "style" | "select" | "option");
+    let virtual_context = matches!(context.as_str(), "textarea" | "title" | "style" | "script" | "select" | "option");
     let mut fragment = Dom::new();
     if virtual_context {
         for child in source.children(root) {
