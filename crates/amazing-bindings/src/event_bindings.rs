@@ -1,5 +1,6 @@
 use crate::host::{BindingHost, CallbackId, InterfaceBrand, Operation as O, PlatformKey};
 use amazing_dom::{
+    abort::AbortSignalId,
     events::{DispatchOrigin, Event, EventId, EventInit, EventTarget, ListenerOptions},
     DomError, NodeKind,
 };
@@ -37,6 +38,13 @@ fn event_id<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventId, H
 }
 fn target<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventTarget, H::Error> {
     if let Some(node) = host.node_brand(value) { return Ok(EventTarget::Node(node)); }
+    if let Some(key) = host.platform_object(value, InterfaceBrand::ABORT_SIGNAL) {
+        if key.arena != host.node_platform_key(host.current_document()).arena || key.generation != 1 {
+            return Err(host.type_error("Invalid AbortSignal"));
+        }
+        let slot = host.with_dom(|dom| dom.abort_signal_target(AbortSignalId(key.slot as usize)))?;
+        return Ok(EventTarget::External(slot));
+    }
     let key = host.platform_object(value, InterfaceBrand::EVENT_TARGET)
         .ok_or_else(|| host.type_error("Expected an EventTarget"))?;
     if key.arena != host.node_platform_key(host.current_document()).arena || key.generation != 1 {
@@ -49,9 +57,29 @@ fn target<H: BindingHost>(host: &mut H, value: &H::Value) -> Result<EventTarget,
 fn wrap_target<H: BindingHost>(host: &mut H, target: Option<EventTarget>) -> Result<H::Value, H::Error> {
     match target {
         Some(EventTarget::Node(node)) => host.wrap_node(node),
-        Some(EventTarget::External(slot)) => host.wrap_platform_object(key(host, slot), InterfaceBrand::EVENT_TARGET),
+        Some(EventTarget::External(slot)) => {
+            let signal = host.with_dom(|dom| Ok(dom.abort_signal_for_target(slot)))?;
+            match signal {
+                Some(id) => host.wrap_platform_object(key(host, id.0 as u64), InterfaceBrand::ABORT_SIGNAL),
+                None => host.wrap_platform_object(key(host, slot), InterfaceBrand::EVENT_TARGET),
+            }
+        }
         None => Ok(host.null()),
     }
+}
+pub(crate) fn dispatch_abort_event<H: BindingHost>(host: &mut H, signal: AbortSignalId) -> Result<(), H::Error> {
+    let target = host.with_dom(|dom| dom.abort_signal_target(signal).map(EventTarget::External))?;
+    let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(
+        Event::new("abort", EventInit::default(), Duration::ZERO))))?;
+    let mut dispatch = host.with_dom(|dom| dom.begin_event_dispatch(target, event, DispatchOrigin::UserAgent))?;
+    loop {
+        let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
+        let Some(invocation) = invocation else { break };
+        let result = callback_call(host, invocation.callback, invocation.current_target, event);
+        if invocation.once { host.release_value(invocation.callback); }
+        if result.is_err() { dispatch.report_exception("AbortSignal listener threw".into()); }
+    }
+    host.with_dom(|dom| dom.events().dispatch_result(event).map(|_| ()))
 }
 fn option<H: BindingHost>(host: &mut H, value: Option<&H::Value>, name: &str) -> Result<bool, H::Error> {
     let Some(value) = value else { return Ok(false) };

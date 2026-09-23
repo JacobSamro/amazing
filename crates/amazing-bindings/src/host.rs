@@ -37,6 +37,9 @@ impl InterfaceBrand {
     pub const STATIC_NODE_LIST: Self = Self(16);
     pub const NAMED_NODE_MAP: Self = Self(17);
     pub const DOM_TOKEN_LIST: Self = Self(18);
+    pub const ABORT_CONTROLLER: Self = Self(19);
+    pub const ABORT_SIGNAL: Self = Self(20);
+    pub const FILTERED_NODE_LIST: Self = Self(21);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -134,10 +137,57 @@ pub enum Interface {
     MutationObserver,
     MutationRecord,
     DOMException,
+    AbortController,
+    AbortSignal,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    ElementHref, ElementSetHref, ElementTarget, ElementSetTarget,
+    ElementRel, ElementSetRel, ElementRelList, ElementDownload, ElementSetDownload,
+    ElementSrc, ElementSetSrc, ImageAlt, ImageSetAlt, ImageWidth, ImageSetWidth,
+    ImageHeight, ImageSetHeight, ImageLoading, ImageSetLoading,
+    InputType, InputSetType, ElementName, ElementSetName, ElementDisabled, ElementSetDisabled,
+    InputPlaceholder, InputSetPlaceholder, ResourceType, ResourceSetType,
+    ScriptAsync, ScriptSetAsync, ScriptDefer, ScriptSetDefer,
+    LinkMedia, LinkSetMedia, MetaContent, MetaSetContent,
+    MetaHttpEquiv, MetaSetHttpEquiv, MetaCharset, MetaSetCharset,
+    CellColSpan, CellSetColSpan, CellRowSpan, CellSetRowSpan,
+    OListStart, OListSetStart, OListReversed, OListSetReversed,
+    LIValue, LISetValue,
+    DocumentTitle,
+    DocumentSetTitle,
+    DocumentHead,
+    DocumentBody,
+    DocumentSetBody,
+    DocumentElement,
+    DocumentReadyState,
+    DocumentURL,
+    DocumentURI,
+    DocumentCharacterSet,
+    DocumentContentType,
+    DocumentCompatMode,
+    DocumentReferrer,
+    DocumentGetElementById,
+    FragmentGetElementById,
+    DocumentGetElementsByName,
+    DocumentForms,
+    DocumentImages,
+    DocumentLinks,
+    DocumentScripts,
+    DocumentActiveElement,
+    DocumentHasFocus,
+    AbortControllerConstructor,
+    AbortControllerSignal,
+    AbortControllerAbort,
+    AbortSignalAborted,
+    AbortSignalReason,
+    AbortSignalThrowIfAborted,
+    AbortSignalOnAbort,
+    AbortSignalSetOnAbort,
+    AbortSignalAbort,
+    AbortSignalAny,
+    AbortSignalTimeout,
     ElementInnerHTML,
     ElementSetInnerHTML,
     ElementOuterHTML,
@@ -397,6 +447,32 @@ pub trait SelectorEngine: BindingHost {
         -> Result<bool, DomError>;
 }
 
+/// Driver schedules timeouts and runs native fetch/XHR abort subscribers after
+/// the DOM borrow is released. It calls `fire_abort_timeout` at timer expiry.
+pub trait AbortHost: BindingHost {
+    fn schedule_abort_timeout(&mut self, signal: amazing_dom::abort::AbortSignalId, milliseconds: u64)
+        -> Result<(), Self::Error>;
+    fn run_abort_algorithm(&mut self, algorithm: u64, reason: &Self::Value)
+        -> Result<(), Self::Error>;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DocumentField { URL, DocumentURI, CharacterSet, ContentType, CompatMode, Referrer }
+
+/// Browsing-context data comes from the driver, not guesses from the DOM tree.
+pub trait DocumentHost: BindingHost {
+    fn document_field(&mut self, document: NodeIdx, field: DocumentField)
+        -> Result<Vec<u16>, Self::Error>;
+    fn active_element(&mut self, document: NodeIdx) -> Result<Option<NodeIdx>, Self::Error>;
+    fn has_focus(&mut self, document: NodeIdx) -> Result<bool, Self::Error>;
+}
+
+/// URL-valued reflected attributes resolve against the embedding's document
+/// base URL without making bindings depend on the URL/network crate.
+pub trait UrlReflection: BindingHost {
+    fn resolve_url(&mut self, input: &[u16]) -> Result<Vec<u16>, Self::Error>;
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemberKind {
     Method { length: u8 },
@@ -578,6 +654,8 @@ pub trait BindingHost: Sized {
         name: &'static str,
         value: u32,
     ) -> Result<(), Self::Error>;
+    fn install_static_method(&mut self, interface: Interface, name: &'static str,
+        operation: Operation, length: u8) -> Result<(), Self::Error>;
     fn current_document(&self) -> NodeIdx;
     fn with_dom<R>(
         &mut self,

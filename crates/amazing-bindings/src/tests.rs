@@ -1,5 +1,5 @@
 use super::*;
-use crate::host::{BindingHost, CallbackId, FragmentContext, FragmentParser, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, PlatformKey, SelectorEngine};
+use crate::host::{AbortHost, BindingHost, CallbackId, DocumentField, DocumentHost, FragmentContext, FragmentParser, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, PlatformKey, SelectorEngine, UrlReflection};
 use amazing_dom::NodeKind;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -31,6 +31,12 @@ struct Host {
     reject_lone_surrogate: bool,
     legacy: Vec<(InterfaceBrand, LegacyPlatformHooks)>,
     iterables: Vec<(Interface, IterableKind)>,
+    static_methods: Vec<(Interface, &'static str, O, u8)>,
+    abort_timers: Vec<(amazing_dom::abort::AbortSignalId, u64)>,
+    abort_algorithms: Vec<u64>,
+    abort_trace: Vec<u64>,
+    active: Option<NodeIdx>,
+    focused: bool,
 }
 impl BindingHost for Host {
     type Value = V;
@@ -119,7 +125,7 @@ impl BindingHost for Host {
     fn is_callable(&self, value: &V) -> bool { matches!(value, V::Callable(_)) }
     fn call(&mut self, function: &V, _this: &V, _arguments: &[V]) -> Result<V, String> {
         assert!(!self.arena_borrowed);
-        if let V::Callable(id) = function { self.calls.push(*id); }
+        if let V::Callable(id) = function { self.calls.push(*id); self.abort_trace.push(*id); }
         match function { V::Callable(1) => Ok(V::Number(1.)), V::Callable(_) => Ok(V::Undefined), _ => Err("not callable".into()) }
     }
     fn same_value(&self, left: &V, right: &V) -> bool { left == right }
@@ -154,6 +160,10 @@ impl BindingHost for Host {
     }
     fn install_interface_constant(&mut self, interface: Interface, name: &'static str, value: u32) -> Result<(), String> {
         self.interface_constants.push((interface, name, value)); Ok(())
+    }
+    fn install_static_method(&mut self, interface: Interface, name: &'static str,
+        operation: O, length: u8) -> Result<(), String> {
+        self.static_methods.push((interface, name, operation, length)); Ok(())
     }
     fn current_document(&self) -> NodeIdx {
         NodeIdx(0)
@@ -220,6 +230,46 @@ impl BindingHost for Host {
     }
     fn type_error(&mut self, message: &'static str) -> String {
         format!("TypeError: {message}")
+    }
+}
+impl AbortHost for Host {
+    fn schedule_abort_timeout(&mut self, signal: amazing_dom::abort::AbortSignalId,
+        milliseconds: u64) -> Result<(), String> {
+        assert!(!self.arena_borrowed);
+        self.abort_timers.push((signal, milliseconds)); Ok(())
+    }
+    fn run_abort_algorithm(&mut self, algorithm: u64, _reason: &V) -> Result<(), String> {
+        assert!(!self.arena_borrowed);
+        self.abort_algorithms.push(algorithm);
+        self.abort_trace.push(1000 + algorithm);
+        Ok(())
+    }
+}
+impl DocumentHost for Host {
+    fn document_field(&mut self, _document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, String> {
+        assert!(!self.arena_borrowed);
+        let value = match field {
+            DocumentField::URL | DocumentField::DocumentURI => "https://example.test/page",
+            DocumentField::CharacterSet => "UTF-8",
+            DocumentField::ContentType => "text/html",
+            DocumentField::CompatMode => "CSS1Compat",
+            DocumentField::Referrer => "https://referrer.test/",
+        };
+        Ok(value.encode_utf16().collect())
+    }
+    fn active_element(&mut self, _document: NodeIdx) -> Result<Option<NodeIdx>, String> {
+        assert!(!self.arena_borrowed); Ok(self.active)
+    }
+    fn has_focus(&mut self, _document: NodeIdx) -> Result<bool, String> {
+        assert!(!self.arena_borrowed); Ok(self.focused)
+    }
+}
+impl UrlReflection for Host {
+    fn resolve_url(&mut self, input: &[u16]) -> Result<Vec<u16>, String> {
+        assert!(!self.arena_borrowed);
+        let raw = String::from_utf16(input).map_err(|_| "TypeError: invalid URL units".to_owned())?;
+        Ok(if raw.starts_with("https://") { raw } else { format!("https://example.test/{raw}") }
+            .encode_utf16().collect())
     }
 }
 impl FragmentParser for Host {
@@ -763,7 +813,7 @@ fn class_list_is_live_canonical_and_validates_tokens() {
 fn html_collection_binding_and_legacy_hooks_are_live() {
     let mut h = Host::default();
     install(&mut h).unwrap();
-    assert_eq!(h.legacy.len(), 4);
+    assert_eq!(h.legacy.len(), 5);
     assert_eq!(h.legacy[0].0, InterfaceBrand::COLLECTION);
     assert_eq!(h.legacy[0].1.named_getter, Some(O::HTMLCollectionNamedGetter));
     assert!(h.legacy[0].1.unenumerable_names);
@@ -905,4 +955,140 @@ fn adjacent_html_positions_and_inner_text_approximation() {
     call(&mut h, O::ElementSetInnerText, V::Node(target), &[str_value("a\nb")]);
     assert_eq!(call(&mut h, O::ElementInnerText, V::Node(target), &[]), str_value("a\nb"));
     assert_eq!(call(&mut h, O::ElementInnerHTML, V::Node(target), &[]), str_value("a\nb"));
+}
+
+#[test]
+fn abort_controller_delivers_algorithms_and_events_before_any_dependents() {
+    let mut h = Host::default();
+    install(&mut h).unwrap();
+    assert!(h.static_methods.contains(&(Interface::AbortSignal, "any", O::AbortSignalAny, 1)));
+    let controller = call(&mut h, O::AbortControllerConstructor, V::Undefined, &[]);
+    let source = call(&mut h, O::AbortControllerSignal, controller.clone(), &[]);
+    let dependent = call(&mut h, O::AbortSignalAny, V::Undefined, &[V::Array(vec![source.clone()])]);
+    let source_id = amazing_dom::abort::AbortSignalId(h.platform_object(&source, InterfaceBrand::ABORT_SIGNAL).unwrap().slot as usize);
+    let dependent_id = amazing_dom::abort::AbortSignalId(h.platform_object(&dependent, InterfaceBrand::ABORT_SIGNAL).unwrap().slot as usize);
+    h.dom.add_abort_algorithm(source_id, 1).unwrap();
+    h.dom.add_abort_algorithm(dependent_id, 2).unwrap();
+    call(&mut h, O::AddEventListener, source.clone(), &[str_value("abort"), V::Callable(11)]);
+    call(&mut h, O::AddEventListener, dependent.clone(), &[str_value("abort"), V::Callable(12)]);
+    call(&mut h, O::AbortControllerAbort, controller.clone(), &[str_value("why")]);
+    assert_eq!(h.abort_trace, vec![1001, 11, 1002, 12]);
+    assert_eq!(call(&mut h, O::AbortSignalAborted, dependent.clone(), &[]), V::Bool(true));
+    assert_eq!(call(&mut h, O::AbortSignalReason, dependent.clone(), &[]), str_value("why"));
+    assert_eq!(invoke(&mut h, O::AbortSignalThrowIfAborted, source.clone(), &[]), Err("throw: String([119, 104, 121])".into()));
+    call(&mut h, O::AbortControllerAbort, controller, &[str_value("later")]);
+    assert_eq!(h.abort_trace, vec![1001, 11, 1002, 12]);
+    let already = call(&mut h, O::AbortSignalAny, V::Undefined, &[V::Array(vec![source])]);
+    assert_eq!(call(&mut h, O::AbortSignalReason, already, &[]), str_value("why"));
+}
+
+#[test]
+fn timeout_signal_uses_host_timer_and_fires_on_expiry() {
+    let mut h = Host::default();
+    assert_eq!(invoke(&mut h, O::AbortSignalTimeout, V::Undefined, &[V::Number(-1.)]),
+        Err("TypeError: AbortSignal.timeout requires an unsigned long long".into()));
+    let signal = call(&mut h, O::AbortSignalTimeout, V::Undefined, &[V::Number(5.)]);
+    let id = amazing_dom::abort::AbortSignalId(h.platform_object(&signal, InterfaceBrand::ABORT_SIGNAL).unwrap().slot as usize);
+    assert_eq!(h.abort_timers, vec![(id, 5)]);
+    assert_eq!(call(&mut h, O::AbortSignalAborted, signal.clone(), &[]), V::Bool(false));
+    call(&mut h, O::AddEventListener, signal.clone(), &[str_value("abort"), V::Callable(13)]);
+    call(&mut h, O::AbortSignalSetOnAbort, signal.clone(), &[V::Callable(14)]);
+    assert_eq!(call(&mut h, O::AbortSignalOnAbort, signal.clone(), &[]), V::Callable(14));
+    crate::fire_abort_timeout(&mut h, id).unwrap();
+    assert_eq!(call(&mut h, O::AbortSignalAborted, signal, &[]), V::Bool(true));
+    assert_eq!(h.abort_trace, vec![13, 14]);
+    crate::fire_abort_timeout(&mut h, id).unwrap();
+    assert_eq!(h.abort_trace, vec![13, 14]);
+}
+
+#[test]
+fn document_surface_uses_tree_and_host_metadata() {
+    let mut h = Host::default();
+    let doc = V::Node(NodeIdx(0));
+    let html = h.dom.create_element(NodeIdx(0), "html");
+    let head = h.dom.create_element(html, "head");
+    let body = h.dom.create_element(html, "body");
+    let image = h.dom.create_element(body, "img");
+    h.dom.set_attribute(image, "id", "hero").unwrap();
+    h.dom.set_attribute(image, "name", "photo").unwrap();
+    let a = h.dom.create_element(body, "a");
+    h.dom.set_attribute(a, "href", "x").unwrap();
+    assert_eq!(call(&mut h, O::DocumentHead, doc.clone(), &[]), V::Node(head));
+    assert_eq!(call(&mut h, O::DocumentBody, doc.clone(), &[]), V::Node(body));
+    assert_eq!(call(&mut h, O::DocumentElement, doc.clone(), &[]), V::Node(html));
+    call(&mut h, O::DocumentSetTitle, doc.clone(), &[str_value(" New  title ")]);
+    assert_eq!(call(&mut h, O::DocumentTitle, doc.clone(), &[]), str_value("New title"));
+    assert_eq!(call(&mut h, O::DocumentGetElementById, doc.clone(), &[str_value("hero")]), V::Node(image));
+    for (op, expected) in [(O::DocumentImages, 1.), (O::DocumentLinks, 1.),
+        (O::DocumentForms, 0.), (O::DocumentScripts, 0.)] {
+        let list = call(&mut h, op, doc.clone(), &[]);
+        assert_eq!(call(&mut h, O::HTMLCollectionLength, list, &[]), V::Number(expected));
+    }
+    let named = call(&mut h, O::DocumentGetElementsByName, doc.clone(), &[str_value("photo")]);
+    assert_eq!(call(&mut h, O::NodeListItem, named.clone(), &[V::Number(0.)]), V::Node(image));
+    h.dom.remove_attribute(image, "name").unwrap();
+    assert_eq!(call(&mut h, O::NodeListLength, named, &[]), V::Number(0.));
+    assert_eq!(call(&mut h, O::DocumentReadyState, doc.clone(), &[]), str_value("loading"));
+    h.dom.set_document_ready_state(NodeIdx(0), amazing_dom::document_surface::ReadyState::Interactive).unwrap();
+    assert_eq!(call(&mut h, O::DocumentReadyState, doc.clone(), &[]), str_value("interactive"));
+    assert_eq!(call(&mut h, O::DocumentURL, doc.clone(), &[]), str_value("https://example.test/page"));
+    assert_eq!(call(&mut h, O::DocumentCharacterSet, doc.clone(), &[]), str_value("UTF-8"));
+    assert_eq!(call(&mut h, O::DocumentActiveElement, doc.clone(), &[]), V::Node(body));
+    h.active = Some(a); h.focused = true;
+    assert_eq!(call(&mut h, O::DocumentActiveElement, doc.clone(), &[]), V::Node(a));
+    assert_eq!(call(&mut h, O::DocumentHasFocus, doc.clone(), &[]), V::Bool(true));
+    let fragment = h.dom.create_document_fragment(NodeIdx(0)).unwrap();
+    let child = h.dom.create_element(fragment, "span");
+    h.dom.set_attribute(child, "id", "fragment-id").unwrap();
+    assert_eq!(call(&mut h, O::FragmentGetElementById, V::Node(fragment), &[str_value("fragment-id")]), V::Node(child));
+    let replacement = h.dom.create_element_ns_in(NodeIdx(0), Some("http://www.w3.org/1999/xhtml"), "body").unwrap();
+    call(&mut h, O::DocumentSetBody, doc.clone(), &[V::Node(replacement)]);
+    assert_eq!(call(&mut h, O::DocumentBody, doc.clone(), &[]), V::Node(replacement));
+    assert_eq!(invoke(&mut h, O::DocumentSetBody, doc, &[V::Node(head)]), Err("HierarchyRequestError".into()));
+}
+
+#[test]
+fn element_specific_reflection_handles_urls_enums_numbers_and_rel_list() {
+    let mut h = Host::default();
+    let root = h.dom.create_element(NodeIdx(0), "div");
+    let anchor = h.dom.create_element(root, "a");
+    call(&mut h, O::ElementSetHref, V::Node(anchor), &[str_value("next")]);
+    assert_eq!(call(&mut h, O::ElementHref, V::Node(anchor), &[]), str_value("https://example.test/next"));
+    assert_eq!(h.dom.attribute_utf16(anchor, "href"), Some("next".encode_utf16().collect()));
+    let rel = call(&mut h, O::ElementRelList, V::Node(anchor), &[]);
+    assert_eq!(rel, call(&mut h, O::ElementRelList, V::Node(anchor), &[]));
+    call(&mut h, O::TokenListAdd, rel, &[str_value("noopener")]);
+    assert_eq!(call(&mut h, O::ElementRel, V::Node(anchor), &[]), str_value("noopener"));
+    let image = h.dom.create_element(root, "img");
+    call(&mut h, O::ImageSetWidth, V::Node(image), &[V::Number(-1.)]);
+    assert_eq!(call(&mut h, O::ImageWidth, V::Node(image), &[]), V::Number(u32::MAX as f64));
+    h.dom.set_attribute(image, "loading", "unknown").unwrap();
+    assert_eq!(call(&mut h, O::ImageLoading, V::Node(image), &[]), str_value("eager"));
+    let input = h.dom.create_element(root, "input");
+    h.dom.set_attribute(input, "type", "UNSUPPORTED").unwrap();
+    assert_eq!(call(&mut h, O::InputType, V::Node(input), &[]), str_value("text"));
+    call(&mut h, O::InputSetType, V::Node(input), &[str_value("EMAIL")]);
+    assert_eq!(call(&mut h, O::InputType, V::Node(input), &[]), str_value("email"));
+    call(&mut h, O::ElementSetDisabled, V::Node(input), &[V::Bool(true)]);
+    assert_eq!(call(&mut h, O::ElementDisabled, V::Node(input), &[]), V::Bool(true));
+    let cell = h.dom.create_element(root, "td");
+    call(&mut h, O::CellSetColSpan, V::Node(cell), &[V::Number(5000.)]);
+    assert_eq!(call(&mut h, O::CellColSpan, V::Node(cell), &[]), V::Number(1000.));
+    call(&mut h, O::CellSetRowSpan, V::Node(cell), &[V::Number(0.)]);
+    assert_eq!(call(&mut h, O::CellRowSpan, V::Node(cell), &[]), V::Number(0.));
+    let list = h.dom.create_element(root, "ol");
+    call(&mut h, O::OListSetStart, V::Node(list), &[V::Number(-3.)]);
+    assert_eq!(call(&mut h, O::OListStart, V::Node(list), &[]), V::Number(-3.));
+    let item = h.dom.create_element(list, "li");
+    call(&mut h, O::LISetValue, V::Node(item), &[V::Number(7.)]);
+    assert_eq!(call(&mut h, O::LIValue, V::Node(item), &[]), V::Number(7.));
+    let link = h.dom.create_element(root, "link");
+    call(&mut h, O::ResourceSetType, V::Node(link), &[str_value("text/css")]);
+    assert_eq!(call(&mut h, O::ResourceType, V::Node(link), &[]), str_value("text/css"));
+    let meta = h.dom.create_element(root, "meta");
+    call(&mut h, O::MetaSetHttpEquiv, V::Node(meta), &[str_value("refresh")]);
+    assert_eq!(call(&mut h, O::MetaHttpEquiv, V::Node(meta), &[]), str_value("refresh"));
+    let script = h.dom.create_element(root, "script");
+    call(&mut h, O::ScriptSetAsync, V::Node(script), &[V::Bool(true)]);
+    assert_eq!(call(&mut h, O::ScriptAsync, V::Node(script), &[]), V::Bool(true));
 }

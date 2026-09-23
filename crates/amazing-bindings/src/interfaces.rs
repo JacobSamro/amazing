@@ -51,6 +51,16 @@ const EVENT_TARGET: &[Member] = &[
     method("removeEventListener", O::RemoveEventListener, 2),
     method("dispatchEvent", O::DispatchEvent, 1),
 ];
+const ABORT_CONTROLLER: &[Member] = &[
+    getter("signal", O::AbortControllerSignal),
+    method("abort", O::AbortControllerAbort, 0),
+];
+const ABORT_SIGNAL: &[Member] = &[
+    getter("aborted", O::AbortSignalAborted),
+    getter("reason", O::AbortSignalReason),
+    method("throwIfAborted", O::AbortSignalThrowIfAborted, 0),
+    getter("onabort", O::AbortSignalOnAbort), setter("onabort", O::AbortSignalSetOnAbort),
+];
 const EVENT: &[Member] = &[
     getter("type", O::EventType),
     getter("target", O::EventTargetValue),
@@ -99,6 +109,7 @@ const DOM_EXCEPTION: &[Member] = &[
     getter("code", O::DOMExceptionCode),
 ];
 const PARENT: &[Member] = &[
+    method("getElementById", O::FragmentGetElementById, 1),
     method("querySelector", O::ParentQuerySelector, 1),
     method("querySelectorAll", O::ParentQuerySelectorAll, 1),
     getter("children", O::FragmentChildren),
@@ -122,6 +133,20 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    getter("title", O::DocumentTitle), setter("title", O::DocumentSetTitle),
+    getter("head", O::DocumentHead),
+    getter("body", O::DocumentBody), setter("body", O::DocumentSetBody),
+    getter("documentElement", O::DocumentElement),
+    getter("readyState", O::DocumentReadyState),
+    getter("URL", O::DocumentURL), getter("documentURI", O::DocumentURI),
+    getter("characterSet", O::DocumentCharacterSet), getter("contentType", O::DocumentContentType),
+    getter("compatMode", O::DocumentCompatMode), getter("referrer", O::DocumentReferrer),
+    method("getElementById", O::DocumentGetElementById, 1),
+    method("getElementsByName", O::DocumentGetElementsByName, 1),
+    getter("forms", O::DocumentForms), getter("images", O::DocumentImages),
+    getter("links", O::DocumentLinks), getter("scripts", O::DocumentScripts),
+    getter("activeElement", O::DocumentActiveElement),
+    method("hasFocus", O::DocumentHasFocus, 0),
     method("querySelector", O::ParentQuerySelector, 1),
     method("querySelectorAll", O::ParentQuerySelectorAll, 1),
     getter("children", O::DocumentChildren),
@@ -297,6 +322,55 @@ const HTML_ELEMENT: &[Member] = &[
     getter("accessKey", O::HTMLAccessKey), setter("accessKey", O::HTMLSetAccessKey),
     getter("translate", O::HTMLTranslate), setter("translate", O::HTMLSetTranslate),
 ];
+const HYPERLINK: &[Member] = &[
+    getter("href", O::ElementHref), setter("href", O::ElementSetHref),
+    getter("target", O::ElementTarget), setter("target", O::ElementSetTarget),
+    getter("rel", O::ElementRel), setter("rel", O::ElementSetRel),
+    getter("relList", O::ElementRelList),
+    getter("download", O::ElementDownload), setter("download", O::ElementSetDownload),
+];
+const IMAGE: &[Member] = &[
+    getter("src", O::ElementSrc), setter("src", O::ElementSetSrc),
+    getter("alt", O::ImageAlt), setter("alt", O::ImageSetAlt),
+    getter("width", O::ImageWidth), setter("width", O::ImageSetWidth),
+    getter("height", O::ImageHeight), setter("height", O::ImageSetHeight),
+    getter("loading", O::ImageLoading), setter("loading", O::ImageSetLoading),
+];
+const INPUT: &[Member] = &[
+    getter("type", O::InputType), setter("type", O::InputSetType),
+    getter("name", O::ElementName), setter("name", O::ElementSetName),
+    getter("disabled", O::ElementDisabled), setter("disabled", O::ElementSetDisabled),
+    getter("placeholder", O::InputPlaceholder), setter("placeholder", O::InputSetPlaceholder),
+];
+const SCRIPT: &[Member] = &[
+    getter("src", O::ElementSrc), setter("src", O::ElementSetSrc),
+    getter("type", O::ResourceType), setter("type", O::ResourceSetType),
+    getter("async", O::ScriptAsync), setter("async", O::ScriptSetAsync),
+    getter("defer", O::ScriptDefer), setter("defer", O::ScriptSetDefer),
+];
+const LINK: &[Member] = &[
+    getter("href", O::ElementHref), setter("href", O::ElementSetHref),
+    getter("rel", O::ElementRel), setter("rel", O::ElementSetRel),
+    getter("relList", O::ElementRelList),
+    getter("media", O::LinkMedia), setter("media", O::LinkSetMedia),
+    getter("type", O::ResourceType), setter("type", O::ResourceSetType),
+    getter("disabled", O::ElementDisabled), setter("disabled", O::ElementSetDisabled),
+];
+const META: &[Member] = &[
+    getter("name", O::ElementName), setter("name", O::ElementSetName),
+    getter("content", O::MetaContent), setter("content", O::MetaSetContent),
+    getter("httpEquiv", O::MetaHttpEquiv), setter("httpEquiv", O::MetaSetHttpEquiv),
+    getter("charset", O::MetaCharset), setter("charset", O::MetaSetCharset),
+];
+const CELL: &[Member] = &[
+    getter("colSpan", O::CellColSpan), setter("colSpan", O::CellSetColSpan),
+    getter("rowSpan", O::CellRowSpan), setter("rowSpan", O::CellSetRowSpan),
+];
+const OLIST: &[Member] = &[
+    getter("start", O::OListStart), setter("start", O::OListSetStart),
+    getter("reversed", O::OListReversed), setter("reversed", O::OListSetReversed),
+];
+const LI: &[Member] = &[getter("value", O::LIValue), setter("value", O::LISetValue)];
 pub static INTERFACES: &[D] = &[
     D {
         interface: I::EventTarget,
@@ -305,6 +379,10 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::EventTargetConstructor),
         members: EVENT_TARGET,
     },
+    D { interface: I::AbortController, name: "AbortController", parent: None,
+        constructor: Some(O::AbortControllerConstructor), members: ABORT_CONTROLLER },
+    D { interface: I::AbortSignal, name: "AbortSignal", parent: Some(I::EventTarget),
+        constructor: None, members: ABORT_SIGNAL },
     D {
         interface: I::Node,
         name: "Node",
@@ -346,8 +424,8 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLHeadElement, name: "HTMLHeadElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLTitleElement, name: "HTMLTitleElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLBaseElement, name: "HTMLBaseElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLLinkElement, name: "HTMLLinkElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLMetaElement, name: "HTMLMetaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLLinkElement, name: "HTMLLinkElement", parent: Some(I::HTMLElement), constructor: None, members: LINK },
+    D { interface: I::HTMLMetaElement, name: "HTMLMetaElement", parent: Some(I::HTMLElement), constructor: None, members: META },
     D { interface: I::HTMLStyleElement, name: "HTMLStyleElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLBodyElement, name: "HTMLBodyElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHeadingElement, name: "HTMLHeadingElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -355,13 +433,13 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLHRElement, name: "HTMLHRElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLPreElement, name: "HTMLPreElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLQuoteElement, name: "HTMLQuoteElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLOListElement, name: "HTMLOListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLOListElement, name: "HTMLOListElement", parent: Some(I::HTMLElement), constructor: None, members: OLIST },
     D { interface: I::HTMLUListElement, name: "HTMLUListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLLIElement, name: "HTMLLIElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLLIElement, name: "HTMLLIElement", parent: Some(I::HTMLElement), constructor: None, members: LI },
     D { interface: I::HTMLDListElement, name: "HTMLDListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDivElement, name: "HTMLDivElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLAnchorElement, name: "HTMLAnchorElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLImageElement, name: "HTMLImageElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLAnchorElement, name: "HTMLAnchorElement", parent: Some(I::HTMLElement), constructor: None, members: HYPERLINK },
+    D { interface: I::HTMLImageElement, name: "HTMLImageElement", parent: Some(I::HTMLElement), constructor: None, members: IMAGE },
     D { interface: I::HTMLBRElement, name: "HTMLBRElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLModElement, name: "HTMLModElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLTimeElement, name: "HTMLTimeElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -370,10 +448,10 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLTableCaptionElement, name: "HTMLTableCaptionElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLTableSectionElement, name: "HTMLTableSectionElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLTableRowElement, name: "HTMLTableRowElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLTableCellElement, name: "HTMLTableCellElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTableCellElement, name: "HTMLTableCellElement", parent: Some(I::HTMLElement), constructor: None, members: CELL },
     D { interface: I::HTMLTableColElement, name: "HTMLTableColElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLFormElement, name: "HTMLFormElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLInputElement, name: "HTMLInputElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLInputElement, name: "HTMLInputElement", parent: Some(I::HTMLElement), constructor: None, members: INPUT },
     D { interface: I::HTMLButtonElement, name: "HTMLButtonElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLSelectElement, name: "HTMLSelectElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLOptionElement, name: "HTMLOptionElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -392,7 +470,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLSourceElement, name: "HTMLSourceElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLTrackElement, name: "HTMLTrackElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLCanvasElement, name: "HTMLCanvasElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: SCRIPT },
     D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -402,7 +480,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLDetailsElement, name: "HTMLDetailsElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDialogElement, name: "HTMLDialogElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLMapElement, name: "HTMLMapElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLAreaElement, name: "HTMLAreaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLAreaElement, name: "HTMLAreaElement", parent: Some(I::HTMLElement), constructor: None, members: HYPERLINK },
     D { interface: I::HTMLPictureElement, name: "HTMLPictureElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLMenuElement, name: "HTMLMenuElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D {
@@ -636,6 +714,9 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<(), H::Error> {
     for definition in INTERFACES {
         host.install_interface(definition)?;
     }
+    host.install_static_method(I::AbortSignal, "abort", O::AbortSignalAbort, 0)?;
+    host.install_static_method(I::AbortSignal, "any", O::AbortSignalAny, 1)?;
+    host.install_static_method(I::AbortSignal, "timeout", O::AbortSignalTimeout, 1)?;
     host.define_legacy_platform_object(InterfaceBrand::COLLECTION, LegacyPlatformHooks {
         supported_index_count: O::HTMLCollectionSupportedIndexCount,
         supported_names: Some(O::HTMLCollectionSupportedNames),
@@ -647,7 +728,7 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<(), H::Error> {
         override_builtins: false,
         unenumerable_names: true,
     })?;
-    for brand in [InterfaceBrand::NODE_LIST, InterfaceBrand::STATIC_NODE_LIST] {
+    for brand in [InterfaceBrand::NODE_LIST, InterfaceBrand::STATIC_NODE_LIST, InterfaceBrand::FILTERED_NODE_LIST] {
         host.define_legacy_platform_object(brand, LegacyPlatformHooks {
             supported_index_count: O::NodeListSupportedIndexCount, supported_names: None,
             indexed_getter: O::NodeListIndexedGetter, indexed_setter: None, named_getter: None,

@@ -1,4 +1,4 @@
-use crate::host::{BindingHost, FragmentParser, Operation as O, SelectorEngine};
+use crate::host::{AbortHost, BindingHost, DocumentHost, FragmentParser, Operation as O, SelectorEngine, UrlReflection};
 use amazing_dom::{Dom, DomError, Namespace, NodeIdx, NodeKind, NodeOrString};
 
 enum ResultValue {
@@ -125,12 +125,21 @@ fn nullable_node<H: BindingHost>(
 /// Invoke one installed synchronous DOM operation. WebIDL coercions run before
 /// arena mutation, in argument order, and may re-enter the runtime or throw.
 /// This entry point never drains a private job queue or drives an event loop.
-pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
+pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + DocumentHost + UrlReflection>(
     host: &mut H,
     operation: O,
     receiver: H::Value,
     args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    if crate::abort_bindings::handles(operation) {
+        return crate::abort_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::document_bindings::handles(operation) {
+        return crate::document_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::element_reflection::handles(operation) {
+        return crate::element_reflection::invoke(host, operation, receiver, args);
+    }
     if crate::markup_bindings::handles(operation) {
         return crate::markup_bindings::invoke(host, operation, receiver, args);
     }

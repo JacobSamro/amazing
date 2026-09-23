@@ -1,0 +1,123 @@
+//! Element-specific reflected attributes, using the shared DOM-8 converters.
+use crate::{host::{InterfaceBrand, Operation as O, UrlReflection}, html_reflection};
+use amazing_dom::{DomError, Namespace, NodeKind};
+
+#[derive(Clone, Copy)]
+enum Kind { String, Url, Boolean, Unsigned, Signed(i32), InputType, Loading, ColSpan, RowSpan, RelList }
+#[derive(Clone, Copy)]
+struct Spec { attribute: &'static str, tags: &'static [&'static str], kind: Kind, setter: bool }
+const HYPERLINK: &[&str] = &["a", "area"];
+const REL: &[&str] = &["a", "area", "link"];
+fn spec(op: O) -> Option<Spec> {
+    use Kind as K;
+    let (attribute, tags, kind): (&'static str, &'static [&'static str], Kind) = match op {
+        O::ElementHref | O::ElementSetHref => ("href", REL, K::Url),
+        O::ElementTarget | O::ElementSetTarget => ("target", HYPERLINK, K::String),
+        O::ElementRel | O::ElementSetRel => ("rel", REL, K::String),
+        O::ElementRelList => ("rel", REL, K::RelList),
+        O::ElementDownload | O::ElementSetDownload => ("download", HYPERLINK, K::String),
+        O::ElementSrc | O::ElementSetSrc => ("src", &["img", "script"], K::Url),
+        O::ImageAlt | O::ImageSetAlt => ("alt", &["img"], K::String),
+        O::ImageWidth | O::ImageSetWidth => ("width", &["img"], K::Unsigned),
+        O::ImageHeight | O::ImageSetHeight => ("height", &["img"], K::Unsigned),
+        O::ImageLoading | O::ImageSetLoading => ("loading", &["img"], K::Loading),
+        O::InputType | O::InputSetType => ("type", &["input"], K::InputType),
+        O::ElementName | O::ElementSetName => ("name", &["input", "meta"], K::String),
+        O::ElementDisabled | O::ElementSetDisabled => ("disabled", &["input", "link"], K::Boolean),
+        O::InputPlaceholder | O::InputSetPlaceholder => ("placeholder", &["input"], K::String),
+        O::ResourceType | O::ResourceSetType => ("type", &["script", "link"], K::String),
+        O::ScriptAsync | O::ScriptSetAsync => ("async", &["script"], K::Boolean),
+        O::ScriptDefer | O::ScriptSetDefer => ("defer", &["script"], K::Boolean),
+        O::LinkMedia | O::LinkSetMedia => ("media", &["link"], K::String),
+        O::MetaContent | O::MetaSetContent => ("content", &["meta"], K::String),
+        O::MetaHttpEquiv | O::MetaSetHttpEquiv => ("http-equiv", &["meta"], K::String),
+        O::MetaCharset | O::MetaSetCharset => ("charset", &["meta"], K::String),
+        O::CellColSpan | O::CellSetColSpan => ("colspan", &["td", "th"], K::ColSpan),
+        O::CellRowSpan | O::CellSetRowSpan => ("rowspan", &["td", "th"], K::RowSpan),
+        O::OListStart | O::OListSetStart => ("start", &["ol"], K::Signed(1)),
+        O::OListReversed | O::OListSetReversed => ("reversed", &["ol"], K::Boolean),
+        O::LIValue | O::LISetValue => ("value", &["li"], K::Signed(0)),
+        _ => return None,
+    };
+    let setter = matches!(op, O::ElementSetHref | O::ElementSetTarget | O::ElementSetRel
+        | O::ElementSetDownload | O::ElementSetSrc | O::ImageSetAlt | O::ImageSetWidth
+        | O::ImageSetHeight | O::ImageSetLoading | O::InputSetType | O::ElementSetName
+        | O::ElementSetDisabled | O::InputSetPlaceholder | O::ResourceSetType
+        | O::ScriptSetAsync | O::ScriptSetDefer | O::LinkSetMedia | O::MetaSetContent
+        | O::MetaSetHttpEquiv | O::MetaSetCharset | O::CellSetColSpan
+        | O::CellSetRowSpan | O::OListSetStart | O::OListSetReversed | O::LISetValue);
+    Some(Spec { attribute, tags, kind, setter })
+}
+pub(crate) fn handles(op: O) -> bool { spec(op).is_some() }
+fn unsigned(number: f64) -> u32 {
+    if number.is_finite() { number.trunc().rem_euclid(4_294_967_296.) as u32 } else { 0 }
+}
+fn input_type(value: &[u16]) -> Vec<u16> {
+    const TYPES: &[&str] = &["hidden", "text", "search", "tel", "url", "email", "password", "date",
+        "month", "week", "time", "datetime-local", "number", "range", "color", "checkbox",
+        "radio", "file", "submit", "image", "reset", "button"];
+    html_reflection::keyword(value, TYPES).unwrap_or_else(|| "text".encode_utf16().collect())
+}
+pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
+    args: &[H::Value]) -> Result<H::Value, H::Error> {
+    let spec = spec(op).expect("routed reflection operation");
+    let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected an Element"))?;
+    host.with_dom(|dom| match &dom.get(node).kind {
+        NodeKind::Element { namespace: Namespace::Html, .. }
+            if spec.tags.contains(&dom.local_name(node).unwrap()) => Ok(()),
+        _ => Err(DomError::TypeError),
+    })?;
+    if matches!(spec.kind, Kind::RelList) {
+        let slot = host.with_dom(|dom| dom.token_list(node, "rel"))?;
+        let mut key = host.node_platform_key(node);
+        key.slot = slot as u64;
+        return host.wrap_platform_object(key, InterfaceBrand::DOM_TOKEN_LIST);
+    }
+    if spec.setter {
+        let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;
+        if matches!(spec.kind, Kind::Boolean) {
+            let enabled = host.to_boolean(value);
+            host.with_dom(|dom| if enabled {
+                html_reflection::set(dom, node, spec.attribute, Vec::new())
+            } else { dom.remove_attribute(node, spec.attribute) })?;
+        } else {
+            let units = match spec.kind {
+                Kind::Unsigned | Kind::ColSpan | Kind::RowSpan | Kind::Signed(_) => {
+                    let number = host.to_number(value)?;
+                    let unsigned = unsigned(number);
+                    let value = match spec.kind {
+                        Kind::ColSpan => unsigned.clamp(1, 1000).to_string(),
+                        Kind::RowSpan => unsigned.min(65534).to_string(),
+                        Kind::Signed(_) => (unsigned as i32).to_string(),
+                        _ => unsigned.to_string(),
+                    };
+                    value.encode_utf16().collect()
+                }
+                _ => host.to_dom_string(value)?,
+            };
+            host.with_dom(|dom| html_reflection::set(dom, node, spec.attribute, units))?;
+        }
+        return Ok(host.undefined());
+    }
+    let value = host.with_dom(|dom| Ok(dom.attribute_utf16(node, spec.attribute)))?;
+    match spec.kind {
+        Kind::Boolean => Ok(host.boolean(value.is_some())),
+        Kind::Unsigned => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long).unwrap_or(0) as f64)),
+        Kind::ColSpan => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long)
+            .unwrap_or(1).clamp(1, 1000) as f64)),
+        Kind::RowSpan => Ok(host.number(value.as_deref().and_then(html_reflection::unsigned_long)
+            .unwrap_or(1).min(65534) as f64)),
+        Kind::Signed(default) => Ok(host.number(value.as_deref().and_then(html_reflection::signed_long)
+            .unwrap_or(default) as f64)),
+        Kind::Url => {
+            let Some(value) = value else { return host.string(&[]) };
+            let resolved = host.resolve_url(&value)?;
+            host.string(&resolved)
+        }
+        Kind::InputType => host.string(&input_type(value.as_deref().unwrap_or_default())),
+        Kind::Loading => host.string(&html_reflection::keyword(value.as_deref().unwrap_or_default(),
+            &["eager", "lazy"]).unwrap_or_else(|| "eager".encode_utf16().collect())),
+        Kind::String => host.string(&value.unwrap_or_default()),
+        Kind::RelList => unreachable!(),
+    }
+}
