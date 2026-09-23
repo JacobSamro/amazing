@@ -2,6 +2,7 @@
 //! this module owns conversion, interface shape, and native algorithm dispatch.
 use crate::host::{BindingHost, HostCallPolicy, InterfaceBrand, PlatformKey};
 use amazing_dom::abort::AbortSignalId;
+use amazing_dom::NodeKind;
 use amazing_fetch::{
     HttpUrl,
     api::{
@@ -112,6 +113,7 @@ pub enum FetchOperation {
     XhrSetResponseType,
     XhrResponseText,
     XhrResponse,
+    XhrResponseXml,
     XhrTimeout,
     XhrSetTimeout,
     XhrWithCredentials,
@@ -183,6 +185,7 @@ pub trait FetchHost: BindingHost {
     fn fetch_promise_value(&mut self, value: Self::Value) -> Result<Self::Value, Self::Error>;
     fn fetch_array_buffer(&mut self, bytes: Vec<u8>) -> Result<Self::Value, Self::Error>;
     fn fetch_uint8_array(&mut self, bytes: Vec<u8>) -> Result<Self::Value, Self::Error>;
+    fn fetch_buffer_source_bytes(&mut self, value: &Self::Value) -> Result<Option<Vec<u8>>, Self::Error>;
     fn fetch_array_iterator(&mut self, values: Vec<Self::Value>) -> Result<Self::Value, Self::Error>;
     fn fetch_symbol_iterator(&mut self, prototype: &Self::Value, method: Self::Value) -> Result<(), Self::Error>;
     fn fetch_json_parse(&mut self, text: &str) -> Result<Self::Value, Self::Error>;
@@ -197,6 +200,7 @@ pub trait FetchHost: BindingHost {
         current: amazing_fetch::xhr::XhrState) -> amazing_fetch::xhr::XhrState;
     fn fetch_xhr_event(&mut self, receiver: &Self::Value, event: XhrEvent) -> Result<(), Self::Error>;
     fn fetch_xhr_error(&mut self, error: XhrError) -> Self::Error;
+    fn fetch_xhr_document(&mut self, receiver: &Self::Value, xhr: &Xhr) -> Result<Self::Value, Self::Error>;
     fn fetch_reject_throw(&mut self, error: Self::Error) -> Result<Self::Value, Self::Error>;
     fn fetch_add_listener(&mut self, target: &Self::Value, name: String,
         callback: Self::Value) -> Result<(), Self::Error>;
@@ -384,6 +388,7 @@ pub fn install<H: FetchHost>(host: &mut H) -> Result<(), H::Error> {
                     ),
                     ("responseText", O::XhrResponseText, None),
                     ("response", O::XhrResponse, None),
+                    ("responseXML", O::XhrResponseXml, None),
                     ("timeout", O::XhrTimeout, Some(O::XhrSetTimeout)),
                     (
                         "withCredentials",
@@ -557,6 +562,9 @@ fn body_input<H: FetchHost>(host: &mut H, value: &H::Value) -> Result<Option<Bod
     if host.is_nullish(value) {
         return Ok(None);
     }
+    if let Some(bytes) = host.fetch_buffer_source_bytes(value)? {
+        return Ok(Some(BodyInput::Bytes(bytes)));
+    }
     if host.platform_object(value, InterfaceBrand::BLOB).is_some() {
         return host.blob_record(value).map(|v| Some(BodyInput::Blob(v)));
     }
@@ -586,6 +594,26 @@ fn body_input<H: FetchHost>(host: &mut H, value: &H::Value) -> Result<Option<Bod
         return Ok(Some(BodyInput::UrlSearchParams(pairs)));
     }
     Ok(Some(BodyInput::String(units(host, value)?)))
+}
+fn xhr_body_input<H: FetchHost>(host: &mut H, value: &H::Value) -> Result<Option<BodyInput>, H::Error> {
+    if let Some(node) = host.node_brand(value) {
+        let is_document = host.with_dom(|dom| Ok(matches!(&dom.get(node).kind, NodeKind::Document)))?;
+        if is_document {
+            let content_type = host.get_property(value, "contentType")?;
+            let content_type = usv(host, &content_type)?;
+            let mime = if content_type.eq_ignore_ascii_case("text/html") {
+                "text/html;charset=UTF-8"
+            } else {
+                "application/xml;charset=UTF-8"
+            };
+            let markup = host.with_dom(|dom| dom.serialize_children(node))?;
+            return Ok(Some(BodyInput::Document {
+                bytes: amazing_fetch::api::usv_string(&markup).into_bytes(),
+                content_type: mime.into(),
+            }));
+        }
+    }
+    body_input(host, value)
 }
 fn optional<H: FetchHost>(
     host: &mut H,
@@ -1103,6 +1131,7 @@ pub fn invoke<H: FetchHost>(
         O::XhrGetResponseHeader | O::XhrGetAllResponseHeaders | O::XhrOverrideMimeType |
         O::XhrReadyState | O::XhrStatus | O::XhrStatusText | O::XhrResponseUrl |
         O::XhrResponseType | O::XhrSetResponseType | O::XhrResponseText | O::XhrResponse |
+        O::XhrResponseXml |
         O::XhrTimeout | O::XhrSetTimeout | O::XhrWithCredentials | O::XhrSetWithCredentials |
         O::XhrUpload => xhr_invoke(host, op, &receiver, args),
     }
@@ -1143,7 +1172,7 @@ fn xhr_invoke<H: FetchHost>(host: &mut H, op: FetchOperation,
             Ok(host.undefined())
         }
         O::XhrSend => {
-            let body = args.first().map(|v| body_input(host, v)).transpose()?.flatten();
+            let body = args.first().map(|v| xhr_body_input(host, v)).transpose()?.flatten();
             let upload_has_listeners = host.fetch_upload_has_listeners(receiver)?;
             let events = {
                 let mut record = record.borrow_mut();
@@ -1237,6 +1266,14 @@ fn xhr_invoke<H: FetchHost>(host: &mut H, op: FetchOperation,
                     let value = xhr.response_text(&Utf8Decoder).map_err(|e| host.fetch_xhr_error(e))?;
                     string(host, &value)
                 },
+                O::XhrResponseXml => {
+                    if !matches!(xhr.response_type(), XhrResponseType::Default | XhrResponseType::Document) {
+                        return Err(host.fetch_xhr_error(XhrError::InvalidStateResponseXml));
+                    }
+                    host.fetch_xhr_document(receiver, xhr)
+                }
+                O::XhrResponse if xhr.response_type() == XhrResponseType::Document =>
+                    host.fetch_xhr_document(receiver, xhr),
                 O::XhrResponse => match xhr.response(&Utf8Decoder).map_err(|e| host.fetch_xhr_error(e))? {
                     XhrResponseValue::Text(value) => string(host, &value),
                     XhrResponseValue::ArrayBuffer(bytes) => host.fetch_array_buffer(bytes),
