@@ -127,6 +127,18 @@ UTF-16BE and windows-1252. Accepted labels are explicitly enumerated in
 to windows-1252. Other labels do not claim coverage. The complete Encoding
 label/decoder table and full HTML prescan/reparse algorithm remain future work.
 
+Final HTML-2 gate at `579874a` (base `ffb143b`), after an HTML-only Windows
+refresh and source re-sync: `amazing-html` nextest **91 passed / 0 failed /
+0 skipped** twice; separate package doctest **1 passed / 0 failed**. Seven
+byte-input unit cases are new, compared with the previous measured HTML crate
+gate of 84 unit tests and 1 doctest. The ten-case projection of seven new
+byte tests plus three existing `parse` tests matched across both final runs,
+SHA256 `248db09cc4ef101ccf2ef9fc41707ee5635a07152634dbaf975fe96996a8a3e0`.
+Final full workspace nextest **1269 passed / 0 failed / 3 skipped**; separate
+workspace doctests **2 passed / 0 failed**. Root lock and both owned source
+hashes matched before and after that gate. This count is for the complete
+rebased workspace, not an attributed HTML-only workspace delta.
+
 This ticket does not change XML byte handling or the HTML-1 XML cascade. Its
 strict XML byte-input idea remains a separate possible ticket after HTML-2.
 
