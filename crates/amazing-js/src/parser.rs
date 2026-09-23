@@ -74,7 +74,7 @@ struct LabelCtx {
 #[derive(Default)]
 struct PrivateScope {
     // Getter and setter may share one name; all other duplicates are errors.
-    declared: HashMap<String, u8>,
+    declared: HashMap<String, (u8, bool)>,
     uses: Vec<Ident>,
 }
 
@@ -1114,7 +1114,7 @@ impl Parser {
             } else {
                 kind
             };
-            self.declare_private(&key, actual_kind)?;
+            self.declare_private(&key, actual_kind, is_static)?;
             let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block())?;
             return Ok(ClassMember::Method(ClassMethod {
                 key,
@@ -1133,7 +1133,7 @@ impl Parser {
                 "only methods may use `*`, `async`, `get`, or `set` without a parameter list",
             ));
         }
-        self.declare_private(&key, MethodKind::Method)?;
+        self.declare_private(&key, MethodKind::Method, is_static)?;
         let init = if self.eat_punct(Punct::Eq) {
             Some(self.parse_assignment_expr()?)
         } else {
@@ -1154,21 +1154,35 @@ impl Parser {
         }))
     }
 
-    fn declare_private(&mut self, key: &PropKey, kind: MethodKind) -> Result<(), SyntaxError> {
+    fn declare_private(
+        &mut self,
+        key: &PropKey,
+        kind: MethodKind,
+        is_static: bool,
+    ) -> Result<(), SyntaxError> {
         let PropKey::Private(id) = key else {
             return Ok(());
         };
+        if id.name == "#constructor" {
+            return Err(self.err_at(id.span.start, "#constructor is not a valid private name"));
+        }
         let bit = match kind {
             MethodKind::Get => 1,
             MethodKind::Set => 2,
             _ => 4,
         };
         let scope = self.private_scopes.last_mut().expect("class scope");
-        let previous = scope.declared.entry(id.name.clone()).or_default();
-        if *previous & bit != 0 || (*previous | bit) & 4 != 0 && *previous != 0 {
+        let previous = scope
+            .declared
+            .entry(id.name.clone())
+            .or_insert((0, is_static));
+        if previous.1 != is_static
+            || previous.0 & bit != 0
+            || (previous.0 | bit) & 4 != 0 && previous.0 != 0
+        {
             return Err(self.err_at(id.span.start, format!("duplicate private name {}", id.name)));
         }
-        *previous |= bit;
+        previous.0 |= bit;
         Ok(())
     }
 
@@ -1216,6 +1230,17 @@ fn prop_key_name(key: &PropKey) -> Option<&str> {
     match key {
         PropKey::Ident(id) => Some(id.name.as_str()),
         _ => None,
+    }
+}
+
+fn is_private_reference(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Member {
+            prop: MemberProp::Private(_),
+            ..
+        } => true,
+        ExprKind::Paren(inner) => is_private_reference(inner),
+        _ => false,
     }
 }
 
@@ -1550,6 +1575,9 @@ impl Parser {
         if let Some(op) = simple_unop {
             self.bump();
             let operand = self.parse_unary()?;
+            if op == UnOp::Delete && is_private_reference(&operand) {
+                return Err(self.err_at(start, "cannot delete a private name"));
+            }
             return Ok(Expr::new(
                 ExprKind::Unary {
                     op,
@@ -1633,6 +1661,11 @@ impl Parser {
         loop {
             if self.at_punct(Punct::Dot) {
                 self.bump();
+                if matches!(&e.kind, ExprKind::Super)
+                    && matches!(self.cur().kind, TokenKind::PrivateIdent(_))
+                {
+                    return Err(self.err("super cannot access a private name"));
+                }
                 let prop = self.member_name()?;
                 let span = Span::new(e.span.start, self.last_end);
                 e = Expr::new(
@@ -1686,6 +1719,11 @@ impl Parser {
                         span,
                     );
                 } else {
+                    if matches!(&e.kind, ExprKind::Super)
+                        && matches!(self.cur().kind, TokenKind::PrivateIdent(_))
+                    {
+                        return Err(self.err("super cannot access a private name"));
+                    }
                     let prop = self.member_name()?;
                     let span = Span::new(e.span.start, self.last_end);
                     e = Expr::new(
@@ -2866,6 +2904,9 @@ mod construct_tests {
             "class A { #p = 1; get #q() { return this.#p; } set #q(v) { this.#p = v; } }"
         )
         .is_ok());
+        assert!(
+            parse_script("class A { static get #q() { return 1; } static set #q(v) {} }").is_ok()
+        );
         assert!(parse_script("class A { method() { return this.#later; } #later; }").is_ok());
         assert!(parse_script(
             "class A { method() { return class B { method() { return this.#outer; } }; } #outer; }"
@@ -2880,6 +2921,21 @@ mod construct_tests {
         assert!(err("class A { get #p() {} get #p() {} }")
             .message
             .contains("duplicate private"));
+        assert!(err("class A { static get #p() {} set #p(v) {} }")
+            .message
+            .contains("duplicate private"));
+        assert!(err("class A { #constructor; }")
+            .message
+            .contains("#constructor"));
+        assert!(err("class A { #p; m() { delete this.#p; } }")
+            .message
+            .contains("cannot delete"));
+        assert!(err("class A { #p; m() { delete (this.#p); } }")
+            .message
+            .contains("cannot delete"));
+        assert!(err("class A extends B { #p; m() { return super.#p; } }")
+            .message
+            .contains("super cannot"));
         assert!(err("class A { m() { return this.#missing; } }")
             .message
             .contains("not declared"));

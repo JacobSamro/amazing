@@ -923,3 +923,28 @@ unchanged full pinned Test262 measurement at 60s/jobs=8 against the JS-3
 classification hash; finish with workspace nextest and separate JS/HTML
 doctests. Required Test262 files remain 10314/33292/16/9956 plus 294 fixtures,
 with 102918 variants. No VM/GC work or broad Promise fixes are part of JS-4.
+
+## JS-5 — Class private names (front half)
+
+JS-3's largest front-end-owned first diagnostic is `parse:SyntaxError |
+unexpected character #`: **4,523 failing variants**. The next ranked
+front-end candidates are the mixed negative-phase bucket (1,771 variants),
+unsupported Unicode RegExp properties/named references (886), and a broad
+backslash rejection bucket (828). JS-5 therefore targets class private-name
+syntax and early errors. The 4,523 count is an observed first blocker, not a
+promise that 4,523 variants will pass once parsing works.
+
+The lexer emits a distinct private identifier token. The AST keeps private
+class keys, private member accesses, and the left operand of private-brand
+`in` separate from public property strings. The parser checks lexical class
+scope, forward references, duplicate declarations (with one getter/setter
+pair allowed only when both have the same static placement), forbidden
+`#constructor`, private deletion and `super.#x`, bare `#x` misuse, and private access outside a class. A nested
+class can resolve an outer class's private name if it does not redeclare it.
+
+The integrator granted four additive interpreter match arms so this front-end
+change compiles without giving private names public-property behavior. Each
+arm explicitly rejects private runtime evaluation. Private brands, fields,
+methods, accessors and membership tests remain execution-owned work after
+JS-4 and BindingHost. Full-tree results must split parse/early-error cases
+from the runtime-semantic failures that remain.
