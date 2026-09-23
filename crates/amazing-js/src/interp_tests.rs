@@ -439,6 +439,26 @@ mod tests {
     }
 
     #[test]
+    fn derived_this_is_initialized_only_by_super_and_return_rules_apply() {
+        let cases = [
+            "class A {} class B extends A { constructor(){ this.x=1; super(); } } try { new B(); false } catch (e) { e instanceof ReferenceError }",
+            "class A {} class B extends A { constructor(){ super(); super(); } } try { new B(); false } catch (e) { e instanceof ReferenceError }",
+            "class A {} class B extends A { constructor(){ return 1; } } try { new B(); false } catch (e) { e instanceof TypeError }",
+            "class A {} class B extends A { constructor(){ super(); return undefined; } } new B() instanceof B",
+            "class A { constructor(x){ this.x=x; } } class B extends A {} new B(7).x === 7",
+            "class A {} class B extends A { constructor(){ return {}; } } new B() instanceof B === false",
+            "class A {} class B extends A { constructor(){ super(); } } function Target() {} Reflect.construct(B, [], Target) instanceof Target",
+            "class Child extends Array {} var child = new Child(); child instanceof Child && child instanceof Array",
+            "class Child extends Object { valueOf(){ return 42; } } new Child().valueOf() === 42",
+            "class Base {} class Child extends Base { constructor(){ var callSuper = () => super(); callSuper(); } } new Child() instanceof Child",
+        ];
+        for source in cases {
+            let mut i = Interpreter::new();
+            assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
     fn class_getters_and_setters_use_property_descriptors() {
         let mut i = Interpreter::new();
         let value = i

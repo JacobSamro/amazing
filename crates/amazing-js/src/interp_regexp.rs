@@ -28,24 +28,24 @@ fn regexp_data(value: &JsValue) -> Option<Rc<amazing_regex::Regex>> {
         _ => None,
     }
 }
-fn regexp_source(pattern: &str) -> String {
+fn regexp_source(pattern: &[u16]) -> crate::value::JsString {
     if pattern.is_empty() {
         return "(?:)".into();
     }
-    let mut out = String::new();
+    let mut out = Vec::new();
     let mut escaped = false;
-    for c in pattern.chars() {
+    for &c in pattern {
         match c {
-            '/' if !escaped => out.push_str("\\/"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\u{2028}' => out.push_str("\\u2028"),
-            '\u{2029}' => out.push_str("\\u2029"),
+            0x2f if !escaped => out.extend("\\/".encode_utf16()),
+            0x0a => out.extend("\\n".encode_utf16()),
+            0x0d => out.extend("\\r".encode_utf16()),
+            0x2028 => out.extend("\\u2028".encode_utf16()),
+            0x2029 => out.extend("\\u2029".encode_utf16()),
             _ => out.push(c),
         }
-        escaped = c == '\\' && !escaped;
+        escaped = c == 0x5c && !escaped;
     }
-    out
+    crate::value::JsString::from_units(out)
 }
 fn regexp_property(value: JsValue, writable: bool) -> crate::value::Property {
     crate::value::Property {
@@ -90,6 +90,7 @@ impl Interpreter {
         ] {
             let method = Self::native(name, fun, &self.function_proto);
             if let JsValue::Object(o) = &method {
+                o.borrow_mut().constructible = false;
                 let _ = o.borrow_mut().define(
                     "length",
                     regexp_property(JsValue::num(length as f64), false),
@@ -108,6 +109,7 @@ impl Interpreter {
             "multiline",
             "dotAll",
             "unicode",
+            "unicodeSets",
             "sticky",
         ] {
             let getter = Self::native(
@@ -137,7 +139,7 @@ fn native_regexp(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Resu
             i.to_string(&flag_value)?
         };
         return i.make_regexp(Rc::new(
-            amazing_regex::Regex::new(original.pattern(), &flags).map_err(regexp_error)?,
+            amazing_regex::Regex::new_utf16(original.pattern_utf16(), &flags).map_err(regexp_error)?,
         ));
     }
     let pattern = if pattern.is_undefined() {
@@ -145,16 +147,13 @@ fn native_regexp(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Resu
     } else {
         i.to_js_string(&pattern)?
     };
-    let pattern = String::from_utf16(pattern.units()).map_err(|_| {
-        Throw::syntax_error("RegExp pattern with a lone surrogate is unsupported until JS-8 UTF-16 pattern parsing")
-    })?;
     let flags = if flag_value.is_undefined() {
         String::new()
     } else {
         i.to_string(&flag_value)?
     };
     i.make_regexp(Rc::new(
-        amazing_regex::Regex::new(&pattern, &flags).map_err(regexp_error)?,
+        amazing_regex::Regex::new_utf16(pattern.units(), &flags).map_err(regexp_error)?,
     ))
 }
 fn native_regexp_getter(
@@ -179,6 +178,7 @@ fn native_regexp_getter(
             ("multiline", 'm'),
             ("dotAll", 's'),
             ("unicode", 'u'),
+            ("unicodeSets", 'v'),
             ("sticky", 'y'),
         ] {
             if i.get_prop(&this, property)?.to_boolean() {
@@ -200,12 +200,13 @@ fn native_regexp_getter(
     };
     let flags = regex.flags();
     Ok(match key {
-        "source" => JsValue::str(regexp_source(regex.pattern())),
+        "source" => JsValue::Str(regexp_source(regex.pattern_utf16())),
         "global" => JsValue::Bool(flags.global),
         "ignoreCase" => JsValue::Bool(flags.ignore_case),
         "multiline" => JsValue::Bool(flags.multiline),
         "dotAll" => JsValue::Bool(flags.dot_all),
         "unicode" => JsValue::Bool(flags.unicode),
+        "unicodeSets" => JsValue::Bool(flags.unicode_sets),
         "sticky" => JsValue::Bool(flags.sticky),
         _ => JsValue::Undefined,
     })

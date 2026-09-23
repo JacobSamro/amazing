@@ -20,6 +20,13 @@ impl BindingPropertyFlags {
 }
 
 impl Interpreter {
+    /// The active constructor's `newTarget`, including through a derived
+    /// `super()` call. Ordinary calls and nested non-constructor callbacks
+    /// have no `newTarget` of their own.
+    pub fn current_new_target(&self) -> Option<JsValue> {
+        self.frames.last().and_then(|frame| frame.new_target.clone())
+    }
+
     /// Set the instance-owned native dispatcher before installing host functions.
     /// The dispatcher must not capture unrooted JS values in its Rust closure.
     pub fn set_host_native_dispatcher(&mut self, dispatch: Rc<HostNativeDispatch>) {
@@ -322,6 +329,29 @@ impl Interpreter {
         Ok(self.to_js_string(value)?.units().to_vec())
     }
 
+    /// Match the entire UTF-16 input for a host form-pattern check. Invalid
+    /// patterns are reported separately from execution/resource failures.
+    pub fn binding_regex_full_match(
+        &mut self,
+        pattern: &[u16],
+        input: &[u16],
+        flags: &str,
+    ) -> Result<Option<bool>, Throw> {
+        // Anchoring the alternatives as a group lets the matcher backtrack
+        // to a full match (for example, `a|ab` against `ab`).
+        let mut full_pattern = Vec::with_capacity(pattern.len() + 6);
+        full_pattern.extend("^(?:".encode_utf16());
+        full_pattern.extend_from_slice(pattern);
+        full_pattern.extend(")$".encode_utf16());
+        let regex = match amazing_regex::Regex::new_utf16(&full_pattern, flags) {
+            Ok(regex) => regex,
+            Err(amazing_regex::Error::Syntax(_)) => return Ok(None),
+            Err(error) => return Err(regexp_error(error)),
+        };
+        let matched = regex.exec_utf16(input, 0).map_err(regexp_error)?;
+        Ok(Some(matched.is_some_and(|match_| match_.range == (0..input.len()))))
+    }
+
     pub fn binding_is_nullish(&self, value: &JsValue) -> bool {
         matches!(value, JsValue::Null | JsValue::Undefined)
     }
@@ -392,8 +422,8 @@ mod tests {
         assert_eq!(runtime.run_script("'\\u0100'.normalize('NFD') === 'A\\u0304'").unwrap(), JsValue::Bool(true));
         assert_eq!(runtime.run_script("var rejected = false; try { ''.normalize('NFE'); } catch (e) { rejected = e instanceof RangeError; } rejected").unwrap(), JsValue::Bool(true));
         assert_eq!(runtime.run_script("var rejected = false; try { new (String.prototype.charAt)(); } catch (e) { rejected = e instanceof TypeError; } rejected").unwrap(), JsValue::Bool(true));
-        let unsupported = runtime.run_script("new RegExp('\\uD800', 'u')").unwrap_err();
-        assert!(unsupported.describe().contains("SyntaxError: RegExp pattern with a lone surrogate is unsupported until JS-8"));
+        assert_eq!(runtime.run_script("var re = new RegExp('\\uD800', 'u'); re.source === '\\uD800' && re.test('\\uD800')").unwrap(), JsValue::Bool(true));
+        assert_eq!(runtime.run_script("var rv = new RegExp('a', 'gv'); rv.unicodeSets && rv.flags === 'gv' && !/a/u.unicodeSets").unwrap(), JsValue::Bool(true));
     }
 
     #[test]
@@ -409,6 +439,7 @@ mod tests {
         let calls_for_dispatch = calls.clone();
         interpreter.set_host_native_dispatcher(Rc::new(move |runtime, id, this, args, new_target| {
             calls_for_dispatch.borrow_mut().push((id.0, new_target.is_some()));
+            assert_eq!(runtime.current_new_target(), new_target);
             // Nested entry must not borrow the dispatch slot or the caller frame.
             assert_eq!(runtime.run_script("1 + 2")?, JsValue::num(3.0));
             if new_target.is_some() {
@@ -439,6 +470,65 @@ mod tests {
         let result = interpreter.binding_construct(&constructor, vec![JsValue::num(9.0)]).unwrap();
         assert_eq!(interpreter.binding_get_property(&result, "value").unwrap(), JsValue::num(9.0));
         assert_eq!(&*calls.borrow(), &[(7, false), (8, true)]);
+    }
+
+    #[test]
+    fn derived_host_super_binds_the_canonical_upgrade_wrapper() {
+        let mut interpreter = Interpreter::new();
+        let handle = HostHandle { arena: 1, slot: 42, generation: 0, brand: 9 };
+        let constructor = interpreter.binding_create_native_function(
+            HostFunctionId(42), "HTMLElement", 0, HostCallPolicy::ConstructOnly,
+        );
+        let prototype = interpreter.binding_get_property(&constructor, "prototype").unwrap();
+        let wrapper = interpreter.binding_wrap_host(handle, &prototype).unwrap();
+        let prototype_for_host = prototype.clone();
+        interpreter.set_host_native_dispatcher(Rc::new(move |runtime, id, this, _, new_target| {
+            assert_eq!(id, HostFunctionId(42));
+            assert!(this.is_object());
+            assert!(new_target.is_some());
+            assert_eq!(runtime.current_new_target(), new_target);
+            runtime.binding_wrap_host(handle, &prototype_for_host)
+        }));
+        interpreter.binding_define_data_property(
+            &interpreter.binding_global_object(), "HTMLElement", constructor,
+            BindingPropertyFlags::METHOD,
+        ).unwrap();
+        let upgraded = interpreter.run_script(
+            "class X extends HTMLElement { constructor(){ super(); } } new X()",
+        ).unwrap();
+        assert_eq!(upgraded, wrapper);
+        assert_eq!(interpreter.binding_host_handle(&upgraded, 9), Some(handle));
+    }
+
+    #[test]
+    fn reflect_construct_preserves_explicit_new_target_in_native_entry() {
+        let mut interpreter = Interpreter::new();
+        interpreter.set_host_native_dispatcher(Rc::new(|runtime, _, this, args, new_target| {
+            assert_eq!(runtime.current_new_target(), new_target);
+            assert_eq!(runtime.binding_get_property(&new_target.unwrap(), "name")?, JsValue::str("Derived"));
+            runtime.binding_set_property(&this, "value", args[0].clone())?;
+            Ok(this)
+        }));
+        let host = interpreter.binding_create_native_function(
+            HostFunctionId(99), "Host", 1, HostCallPolicy::ConstructOnly,
+        );
+        interpreter.binding_define_data_property(
+            &interpreter.binding_global_object(), "Host", host, BindingPropertyFlags::METHOD,
+        ).unwrap();
+        assert_eq!(interpreter.run_script(
+            "function Derived() {} var instance = Reflect.construct(Host, [7], Derived); instance instanceof Derived && instance.value === 7",
+        ).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn regex_full_match_facade_distinguishes_invalid_patterns() {
+        let mut interpreter = Interpreter::new();
+        let pattern: Vec<u16> = "a+".encode_utf16().collect();
+        assert_eq!(interpreter.binding_regex_full_match(&pattern, &['a' as u16, 'a' as u16], "v").unwrap(), Some(true));
+        assert_eq!(interpreter.binding_regex_full_match(&pattern, &['b' as u16, 'a' as u16], "v").unwrap(), Some(false));
+        assert_eq!(interpreter.binding_regex_full_match(&"a|ab".encode_utf16().collect::<Vec<_>>(), &['a' as u16, 'b' as u16], "v").unwrap(), Some(true));
+        assert_eq!(interpreter.binding_regex_full_match(&['[' as u16], &[], "v").unwrap(), None);
+        assert_eq!(interpreter.binding_regex_full_match(&[0xd800], &[0xd800], "").unwrap(), Some(true));
     }
 
     #[test]

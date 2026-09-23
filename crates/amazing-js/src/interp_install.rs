@@ -195,6 +195,7 @@ impl Interpreter {
                 ("has", native_reflect_has as crate::value::NativeFn),
                 ("deleteProperty", native_reflect_delete_property as crate::value::NativeFn),
                 ("defineProperty", native_reflect_define_property as crate::value::NativeFn),
+                ("construct", native_reflect_construct as crate::value::NativeFn),
                 ("getOwnPropertyDescriptor", native_object_get_own_property_descriptor as crate::value::NativeFn),
             ] {
                 object.borrow_mut().set_own(name, Self::native(name, native, &self.function_proto));

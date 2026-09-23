@@ -2349,6 +2349,35 @@ fn native_reflect_define_property(i: &mut Interpreter, _: JsValue, args: Vec<JsV
     Ok(JsValue::Bool(true))
 }
 
+fn native_reflect_construct(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let target = args.first().cloned().unwrap_or(JsValue::Undefined);
+    let new_target = args.get(2).cloned().unwrap_or_else(|| target.clone());
+    for constructor in [&target, &new_target] {
+        let JsValue::Object(object) = constructor else {
+            return Err(Throw::type_error("Reflect.construct requires constructors"));
+        };
+        let object = object.borrow();
+        if object.func.is_none() || !object.constructible {
+            return Err(Throw::type_error("Reflect.construct requires constructors"));
+        }
+    }
+    let arguments = args.get(1).cloned().unwrap_or(JsValue::Undefined);
+    if !arguments.is_object() {
+        return Err(Throw::type_error("Reflect.construct argumentsList must be an object"));
+    }
+    let length = i.get_prop(&arguments, "length")?;
+    let length = i.to_number(&length)?;
+    if length > 1_048_576.0 {
+        return Err(Throw::range_error("Reflect.construct argumentsList is too large"));
+    }
+    let count = if length.is_nan() || length <= 0.0 { 0 } else { length.floor() as usize };
+    let mut values = Vec::with_capacity(count);
+    for index in 0..count {
+        values.push(i.get_prop(&arguments, &index.to_string())?);
+    }
+    i.construct_with_new_target(&target, values, new_target)
+}
+
 fn native_object_values(
     i: &mut Interpreter,
     _: JsValue,

@@ -214,6 +214,7 @@ impl fmt::Debug for Obj {
             (Exotic::RegExp(_), _) => write!(f, "[regexp]"),
             (Exotic::Promise(_), _) => write!(f, "[promise]"),
             (Exotic::LegacyIterator(_), _) => write!(f, "[array iterator]"),
+            (Exotic::PairIterator(_), _) => write!(f, "[pair iterator]"),
             (Exotic::SequenceIterator(_), _) => write!(f, "[sequence iterator]"),
             (Exotic::CollectionIterator(_), _) => write!(f, "[collection iterator]"),
             (Exotic::SymbolObject(_), _) => write!(f, "[symbol object]"),
@@ -557,6 +558,14 @@ pub struct JsFunction {
     pub proto_for_new: Option<Obj>,
 }
 
+/// Internal class-constructor metadata kept on the function object, so the
+/// embedding-facing `JsFunction` initializer remains independent of classes.
+#[derive(Debug, Clone)]
+pub(crate) struct DerivedConstructor {
+    pub parent: JsValue,
+    pub implicit: bool,
+}
+
 /// Function body: block for declarations/functions/methods, expression for
 /// concise arrows, native for built-ins.
 #[derive(Debug, Clone)]
@@ -597,6 +606,7 @@ pub enum Exotic {
     Promise(PromiseState),
     RegExp(Rc<amazing_regex::Regex>),
     LegacyIterator(LegacyIteratorState),
+    PairIterator(PairIteratorState),
     SequenceIterator(SequenceIteratorState),
     CollectionIterator(CollectionIteratorState),
     SymbolObject(JsSymbol),
@@ -630,6 +640,16 @@ pub struct LegacyIteratorState {
     pub target: Obj,
     pub next_index: u32,
     pub kind: LegacyIteratorKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PairIteratorKind { Keys, Values, Entries }
+
+#[derive(Debug, Clone)]
+pub struct PairIteratorState {
+    pub target: Obj,
+    pub next_index: u32,
+    pub kind: PairIteratorKind,
 }
 
 /// Map internals: insertion-order key/value store keyed by display string
@@ -741,6 +761,9 @@ pub struct JsObject {
     pub constructed: bool,
     /// Built-in methods are callable but lack [[Construct]].
     pub(crate) constructible: bool,
+    pub(crate) derived_constructor: Option<DerivedConstructor>,
+    pub(crate) lexical_super_constructor: Option<JsValue>,
+    pub(crate) lexical_new_target: Option<JsValue>,
     /// Engine-private brand and identity; never reflected as a JS property.
     pub(crate) host_identity: Option<HostIdentity>,
 }
@@ -761,6 +784,9 @@ impl JsObject {
             func: None,
             constructed: false,
             constructible: true,
+            derived_constructor: None,
+            lexical_super_constructor: None,
+            lexical_new_target: None,
             host_identity: None,
         }
     }
