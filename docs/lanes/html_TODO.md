@@ -216,3 +216,36 @@ Shared-slot workspace nextest passed **1419/1419**, with 3 skipped; separate
 workspace doctests passed **2/2**. The 3 new byte-stream tests account for
 the package increase from HTML-3's measured 95 tests. This ticket supplies
 the byte API only; later driver streaming integration is owned elsewhere.
+
+## HTML-5 — deterministic parser consistency fuzz
+
+The owned `fuzz_tests.rs` harness uses xorshift64 with recorded seed
+`0x8a41d72ec09b6153`. It generates 256 cases of at most 192 bytes from
+HTML token fragments and bounded truncate, byte replacement, deletion and
+insertion mutations. The fragments cover insertion modes, RAWTEXT/RCDATA,
+references, malformed EOF, CRLF, meta declarations and bad UTF-8. It also
+injects BOM and transport conflicts, plus valid and truncated UTF-16LE/BE
+surrogates. Eight longer cases cross the 1024-byte sniff boundary.
+
+Every case compares `parse_bytes` with whole-input, one-byte, uneven 2/7/3/11
+and 17/5 byte chunk schedules; the first 24 generated cases also check every
+two-chunk byte split. The harness asserts the retained undecoded byte bound
+after every push. Three literal expected DOM dumps check basic element,
+entity and CRLF behavior independently of the complete/streaming comparison.
+This is a consistency property and panic/termination stress test, not a WPT
+or independent parsing conformance score. A failure prints the seed, case,
+bytes and schedule or split so its input can be minimized and kept as a fixed
+regression fixture.
+
+Final HTML-5 fixed base `133db58` includes the primary's `Throw::describe`
+hotfix. After an HTML-only refresh and re-sync, 254 Rust source, Cargo
+manifest and root lockfile hashes matched on Mac and win-001 before and after
+the gates (manifest SHA-256
+`55273a0f062d4d5ef5985dffe58eb5cf65fd09ff06b0b37986fcf6f81d61476f`).
+Package nextest passed **100/100 twice**, with **1/1** separate doctest.
+Shared-slot workspace nextest passed **1438/1438** with 3 skipped, and
+separate workspace doctests passed **2/2**. The two new harness tests account
+for the package increase from HTML-4's 98. On the earlier fixed base
+`cfb13a9`, three driver/JSRT-2 thrown-error-text tests failed in a full
+workspace sweep; the primary's hotfix superseded that result. The harness
+found no HTML mismatch or panic, so there is no new minimized fixture.

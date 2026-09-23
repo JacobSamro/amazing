@@ -50,6 +50,8 @@ use amazing_dom::{Dom, Namespace, NodeIdx};
 mod stream_tests;
 #[cfg(test)]
 mod byte_stream_tests;
+#[cfg(test)]
+mod fuzz_tests;
 
 /// Decodes and parses a complete HTML byte stream. `transport_label` is the
 /// optional charset from out-of-band transport metadata.
