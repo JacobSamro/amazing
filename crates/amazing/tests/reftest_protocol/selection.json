@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": [
+    800,
+    600
+  ],
+  "selection": {
+    "kind": "fixed-reftest-protocol",
+    "reason": "TestRendered, reftest-wait.js, and static neighbor"
+  },
+  "sparse_paths": [
+    "css/css-lists",
+    "common/reftest-wait.js"
+  ],
+  "tests": [
+    {
+      "id": "marker-dynamic-content-change",
+      "test": "css/css-lists/marker-dynamic-content-change.html"
+    },
+    {
+      "id": "list-item-dynamic-padding",
+      "test": "css/css-lists/list-item-dynamic-padding.html"
+    },
+    {
+      "id": "list-style-image-gradients-dynamic",
+      "test": "css/css-lists/list-style-image-gradients-dynamic.html"
+    },
+    {
+      "id": "marker-counter",
+      "test": "css/css-lists/marker-counter.html"
+    }
+  ],
+  "files": {
+    "common/reftest-wait.js": {
+      "sha256": "d4a7992dfa6020b92a59955753e2e2ba7219047cd2a4ccb1fcd989a64e899b42",
+      "git_blob": "92cd976d6a39c8ea107dad50cae716cf568fb4ac"
+    },
+    "css/css-lists/marker-dynamic-content-change.html": {
+      "sha256": "c969ef4043da9fb7bc6185732345b4446994fe9792db886418a9529180ee0aff",
+      "git_blob": "31abb16cdc276e54e1059277ce9a6a0ec417ade8"
+    },
+    "css/css-lists/marker-dynamic-content-change-ref.html": {
+      "sha256": "ad742a27c0d907213be0df31547aa13b226d1880b437674a12f704a831b085b1",
+      "git_blob": "6b5daa1b97d144f529e75fdf251b1b99c6b70200"
+    },
+    "css/css-lists/list-item-dynamic-padding.html": {
+      "sha256": "8290c04017a55dd7ae298b5f828491e664b6a0b8851c1688bced6c1a13dc9661",
+      "git_blob": "97cb474b8b9b6290da0224bfc449183f293e164e"
+    },
+    "css/css-lists/list-item-dynamic-padding-ref.html": {
+      "sha256": "705ee3b893d06bf749be48c14f7ee931ed4e9997b62c1d02b2412d648f236982",
+      "git_blob": "6d3af90a47fec63d5dcd0dbf15f00d1a34ac9fd8"
+    },
+    "css/css-lists/list-style-image-gradients-dynamic.html": {
+      "sha256": "47a32d0e9196f9512dc84c746fff0f44b5b63a2343177435a0316795f0ea6a53",
+      "git_blob": "eb96fdd444f34b5f3958516e70d8fe7bd5ab0068"
+    },
+    "css/css-lists/list-style-image-gradients-dynamic-ref.html": {
+      "sha256": "c5cb3e0696d4551649f28269a07b70b8435694e13574fb1ba3b699701595fc2e",
+      "git_blob": "b8940767e741a363792076964525f154d260e82e"
+    },
+    "css/css-lists/marker-counter.html": {
+      "sha256": "4a4b678f512502f6780ad071ce2a71dcff32655f4d2f917b42f443beedbc215e",
+      "git_blob": "25ae8de03aa8b7078170e08e6c5aa042e66366fe"
+    },
+    "css/css-lists/marker-counter-ref.html": {
+      "sha256": "0c5bdaa1145f2675a10d777331629e8400e29adc4c31413e24f21f4cd21c07f3",
+      "git_blob": "2fe0e6437bc8b9f19cf4f575d279a3e81c2f8a10"
+    }
+  }
+}

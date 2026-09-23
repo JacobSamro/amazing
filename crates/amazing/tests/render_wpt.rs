@@ -46,3 +46,40 @@ fn fixed_render_rejects_unbounded_dimensions() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("width must be"));
 }
+
+#[test]
+fn wait_timeout_and_page_script_error_do_not_write_images() {
+    for (name, source, exit, detail) in [
+        (
+            "wait-timeout",
+            "<!doctype html><html class='reftest-wait'><body>pending</body></html>",
+            3,
+            "reftest-wait remained",
+        ),
+        (
+            "script-error",
+            "<!doctype html><script>throw new Error('page sentinel')</script>",
+            1,
+            "page sentinel",
+        ),
+    ] {
+        let html = fixture_path(&format!("{name}.html"));
+        let ppm = fixture_path(&format!("{name}.ppm"));
+        let _ = fs::remove_file(&ppm);
+        fs::write(&html, source).expect("write render fixture");
+        let output = Command::new(env!("CARGO_BIN_EXE_amazing"))
+            .args([
+                "render-wpt",
+                html.to_str().expect("UTF-8 fixture path"),
+                ppm.to_str().expect("UTF-8 output path"),
+                "64",
+                "48",
+            ])
+            .output()
+            .expect("run fixed renderer");
+        assert_eq!(output.status.code(), Some(exit));
+        assert!(String::from_utf8_lossy(&output.stderr).contains(detail));
+        assert!(!ppm.exists());
+        let _ = fs::remove_file(html);
+    }
+}

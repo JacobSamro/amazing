@@ -52,14 +52,29 @@ pub(crate) fn collect_inline_handlers(
 }
 
 pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &str) -> Result<(), String> {
+    if let Some(mut scheduler) = prepare_page_scripts(host, page, false)? {
+        scheduler.pump_at(std::time::Duration::from_millis(16), true)
+            .map_err(|error| format!("page event loop failed: {}", error.describe()))?;
+    }
+    Ok(())
+}
+
+/// Starts the page's script and event-loop lifetime. WPT keeps this scheduler
+/// through first paint and its reftest checkpoint; ordinary render performs
+/// its existing 16 ms checkpoint in `execute_inline_scripts`.
+pub(crate) fn prepare_page_scripts(
+    host: &Rc<RefCell<BrowserDomHost>>,
+    page: &str,
+    force_scheduler: bool,
+) -> Result<Option<crate::js_scheduler::DriverScheduler>, String> {
     let scripts = {
         let host_ref = host.borrow();
         let mut scripts = Vec::new();
         collect_script_text(&host_ref.dom, amazing_dom::NodeIdx(0), &mut scripts);
         scripts
     };
-    if scripts.is_empty() {
-        return Ok(());
+    if scripts.is_empty() && !force_scheduler {
+        return Ok(None);
     }
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
         .map_err(|error| error.describe())?;
@@ -99,9 +114,7 @@ pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &
         scheduler.dispatch_dom_event(body, "load")
             .map_err(|error| format!("body load listener failed: {}", error.describe()))?;
     }
-    scheduler.pump_at(std::time::Duration::from_millis(16), true)
-        .map_err(|error| format!("page event loop failed: {}", error.describe()))?;
-    Ok(())
+    Ok(Some(scheduler))
 }
 
 pub(crate) fn resolve_script_url(page: &str, source: &str) -> String {
