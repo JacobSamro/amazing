@@ -234,6 +234,33 @@ impl Interpreter {
         self.construct(function, args)
     }
 
+    /// Invoke a callable with the supplied receiver. The call path clones the
+    /// native dispatcher before entry, so a callback can reenter this runtime.
+    pub fn binding_call(
+        &mut self,
+        function: &JsValue,
+        this: JsValue,
+        args: Vec<JsValue>,
+    ) -> Result<JsValue, Throw> {
+        self.call_value(function, this, args)
+    }
+
+    /// Create a realm array with the usual Array exotic and prototype.
+    pub fn binding_create_array(&mut self, values: Vec<JsValue>) -> Result<JsValue, Throw> {
+        array_values(self, values)
+    }
+
+    /// ECMAScript SameValue: NaN equals NaN, but positive and negative zero differ.
+    pub fn binding_same_value(&self, left: &JsValue, right: &JsValue) -> bool {
+        match (left, right) {
+            (JsValue::Num(a), JsValue::Num(b)) if a.is_nan() && b.is_nan() => true,
+            (JsValue::Num(a), JsValue::Num(b)) if *a == 0.0 && *b == 0.0 => {
+                a.to_bits() == b.to_bits()
+            }
+            _ => left == right,
+        }
+    }
+
     pub fn binding_to_boolean(&self, value: &JsValue) -> bool {
         value.to_boolean()
     }
@@ -358,7 +385,7 @@ mod tests {
     fn host_wrappers_are_canonical_weak_private_and_realm_scoped() {
         let mut interpreter = Interpreter::new();
         let prototype = interpreter.binding_object_prototype();
-        let handle = HostHandle { arena: 9, slot: 4, generation: 0, brand: 17 };
+        let handle = HostHandle { arena: 9, slot: u32::MAX as u64 + 4, generation: u32::MAX as u64 + 1, brand: 17 };
         let first = interpreter.binding_wrap_host(handle, &prototype).unwrap();
         let again = interpreter.binding_wrap_host(handle, &prototype).unwrap();
         assert_eq!(first, again);
@@ -378,5 +405,57 @@ mod tests {
         assert!(weak.upgrade().is_none());
         let replacement = interpreter.binding_wrap_host(handle, &prototype).unwrap();
         assert_eq!(interpreter.binding_host_handle(&replacement, 17), Some(handle));
+    }
+
+    #[test]
+    fn binding_call_reenters_with_receiver_and_preserves_thrown_identity() {
+        let mut interpreter = Interpreter::new();
+        interpreter.set_host_native_dispatcher(Rc::new(|runtime, id, this, args, _| {
+            if id.0 == 1 {
+                runtime.binding_call(&args[0], this, Vec::new())
+            } else {
+                Ok(JsValue::num(5.0))
+            }
+        }));
+        let global = interpreter.binding_global_object();
+        let leaf = interpreter.binding_create_native_function(
+            HostFunctionId(2), "leaf", 0, HostCallPolicy::CallOnly,
+        );
+        interpreter.binding_define_data_property(
+            &global, "leaf", leaf, BindingPropertyFlags::METHOD,
+        ).unwrap();
+        let invoke = interpreter.binding_create_native_function(
+            HostFunctionId(1), "invoke", 1, HostCallPolicy::CallOnly,
+        );
+        let receiver = interpreter.binding_create_object(None).unwrap();
+        interpreter.binding_define_data_property(
+            &receiver, "x", JsValue::num(7.0), BindingPropertyFlags::METHOD,
+        ).unwrap();
+        let callback = interpreter.run_script("function callback(){ return this.x + leaf(); } callback").unwrap();
+        assert_eq!(interpreter.binding_call(&invoke, receiver.clone(), vec![callback]).unwrap(), JsValue::num(12.0));
+
+        let thrown = interpreter.binding_create_object(None).unwrap();
+        interpreter.binding_define_data_property(
+            &global, "marker", thrown.clone(), BindingPropertyFlags::METHOD,
+        ).unwrap();
+        let failing = interpreter.run_script("function failing(){ throw marker; } failing").unwrap();
+        let error = interpreter.binding_call(&invoke, receiver, vec![failing]).unwrap_err();
+        assert_eq!(error.0, thrown);
+    }
+
+    #[test]
+    fn binding_array_and_same_value_follow_realm_semantics() {
+        let mut interpreter = Interpreter::new();
+        let array = interpreter.binding_create_array(vec![JsValue::num(1.0), JsValue::num(2.0)]).unwrap();
+        let global = interpreter.binding_global_object();
+        interpreter.binding_define_data_property(
+            &global, "nativeArray", array.clone(), BindingPropertyFlags::METHOD,
+        ).unwrap();
+        assert_eq!(interpreter.run_script("Array.isArray(nativeArray) && nativeArray.join('-') === '1-2'").unwrap(), JsValue::Bool(true));
+        assert!(interpreter.binding_same_value(&JsValue::num(f64::NAN), &JsValue::num(f64::NAN)));
+        assert!(!interpreter.binding_same_value(&JsValue::num(0.0), &JsValue::num(-0.0)));
+        assert!(interpreter.binding_same_value(&array, &array.clone()));
+        let other = interpreter.binding_create_array(Vec::new()).unwrap();
+        assert!(!interpreter.binding_same_value(&array, &other));
     }
 }

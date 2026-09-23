@@ -46,8 +46,8 @@ pub struct Obj(pub Rc<RefCell<JsObject>>);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct HostHandle {
     pub arena: u64,
-    pub slot: u32,
-    pub generation: u32,
+    pub slot: u64,
+    pub generation: u64,
     pub brand: u64,
 }
 
