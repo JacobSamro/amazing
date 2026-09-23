@@ -614,6 +614,11 @@ fn authenticated_h2_pull_stream_yields_data_before_second_frame() {
             (credit.kind, credit.stream, frame::number(&credit.payload)),
             (8, 0, 3)
         );
+        let credit = frame::Frame::read(io).unwrap();
+        assert_eq!(
+            (credit.kind, credit.stream, frame::number(&credit.payload)),
+            (8, request.stream, 3)
+        );
         frame::write(io, 0, 1, request.stream, b"lo").unwrap();
         io.flush().unwrap();
         let credit = frame::Frame::read(io).unwrap();

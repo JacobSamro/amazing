@@ -487,6 +487,16 @@ impl Http1Body {
             }
         }
     }
+    fn verify_end(&mut self, message: &'static str) -> Result<(), NetError> {
+        let mut b = [0];
+        match self.io.read(&mut b) {
+            Ok(0) => Ok(()),
+            Ok(_) => Err(NetError::MalformedResponse(message.into())),
+            // Explicit framing is complete even if TLS omits close_notify.
+            Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
     fn finish_chunks(&mut self) -> Result<(), NetError> {
         let mut total = 0;
         for _ in 0..128 {
@@ -496,13 +506,7 @@ impl Http1Body {
                 return Err(NetError::ResponseTooLarge);
             }
             if line.is_empty() {
-                let mut b = [0];
-                if self.io.read(&mut b)? != 0 {
-                    return Err(NetError::MalformedResponse(
-                        "bytes after chunked message".into(),
-                    ));
-                }
-                return Ok(());
+                return self.verify_end("bytes after chunked message");
             }
             if !line.contains(&b':') {
                 return Err(NetError::MalformedResponse("invalid trailer field".into()));
@@ -521,23 +525,13 @@ impl Source for Http1Body {
             match framing {
                 Framing::Empty { checked } => {
                     if !checked {
-                        let mut b = [0];
-                        if self.io.read(&mut b)? != 0 {
-                            return Err(NetError::MalformedResponse(
-                                "body on bodyless response".into(),
-                            ));
-                        }
+                        self.verify_end("body on bodyless response")?;
                     }
                     return Ok(0);
                 }
                 Framing::Length(left) => {
                     if left == 0 {
-                        let mut b = [0];
-                        if self.io.read(&mut b)? != 0 {
-                            return Err(NetError::MalformedResponse(
-                                "body exceeds Content-Length".into(),
-                            ));
-                        }
+                        self.verify_end("body exceeds Content-Length")?;
                         return Ok(0);
                     }
                     let count = output.len().min(left);
@@ -557,7 +551,11 @@ impl Source for Http1Body {
                         return Err(NetError::ResponseTooLarge);
                     }
                     self.total += n;
-                    self.framing = if n == 0 { Framing::Empty } else { Framing::Eof };
+                    self.framing = if n == 0 {
+                        Framing::Empty { checked: true }
+                    } else {
+                        Framing::Eof
+                    };
                     return Ok(n);
                 }
                 Framing::Chunked {
@@ -646,6 +644,41 @@ mod tests {
             Ok(())
         }
     }
+    struct UncleanIo(TinyIo);
+    impl Read for UncleanIo {
+        fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+            let n = self.0.read(output)?;
+            if n == 0 {
+                Err(std::io::ErrorKind::UnexpectedEof.into())
+            } else {
+                Ok(n)
+            }
+        }
+    }
+    impl Write for UncleanIo {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.write(bytes)
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.0.flush()
+        }
+    }
+    fn unclean_body(raw: &[u8]) -> Result<Vec<u8>, NetError> {
+        let url = ParsedUrl::parse("http://example.test/").unwrap();
+        let mut response = open_http1(
+            Box::new(UncleanIo(TinyIo {
+                input: Cursor::new(raw.to_vec()),
+            })),
+            &url,
+            &FetchOptions::default(),
+            StreamOptions::default(),
+        )?;
+        let mut result = Vec::new();
+        while let Some(chunk) = response.next_chunk()? {
+            result.extend_from_slice(&chunk);
+        }
+        Ok(result)
+    }
     fn body(
         coding: &str,
         encoded: &[u8],
@@ -711,6 +744,26 @@ mod tests {
         assert!(matches!(
             body("gzip", &gzip, true, 10),
             Err(NetError::ResponseTooLarge)
+        ));
+    }
+    #[test]
+    fn complete_framing_survives_unclean_tls_eof_but_eof_framing_does_not() {
+        assert_eq!(
+            unclean_body(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok").unwrap(),
+            b"ok"
+        );
+        assert_eq!(
+            unclean_body(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\n")
+                .unwrap(),
+            b"ok"
+        );
+        assert_eq!(
+            unclean_body(b"HTTP/1.1 204 No Content\r\n\r\n").unwrap(),
+            b""
+        );
+        assert!(matches!(
+            unclean_body(b"HTTP/1.1 200 OK\r\n\r\nok"),
+            Err(NetError::Io(error)) if error.kind() == std::io::ErrorKind::UnexpectedEof
         ));
     }
 }

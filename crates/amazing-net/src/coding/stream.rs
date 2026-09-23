@@ -532,9 +532,9 @@ mod tests {
             Ok(1)
         }
     }
-    fn collect(mut source: Box<dyn Source>) -> Result<Vec<u8>, NetError> {
+    fn collect_with_chunk(mut source: Box<dyn Source>, chunk: usize) -> Result<Vec<u8>, NetError> {
         let mut result = Vec::new();
-        let mut buffer = [0; 7];
+        let mut buffer = vec![0; chunk];
         loop {
             let n = source.read(&mut buffer)?;
             if n == 0 {
@@ -542,6 +542,9 @@ mod tests {
             }
             result.extend_from_slice(&buffer[..n]);
         }
+    }
+    fn collect(source: Box<dyn Source>) -> Result<Vec<u8>, NetError> {
+        collect_with_chunk(source, 7)
     }
     #[test]
     fn one_byte_deflate_gzip_zlib_and_adversarial_output_splits() {
@@ -558,18 +561,30 @@ mod tests {
             "overlap-default-gzip",
         ] {
             let (plain, encoded) = crate::coding::tests::fixture(name);
-            let input: Box<dyn Source> = Box::new(OneByte {
-                bytes: encoded,
-                pos: 0,
-            });
-            let source: Box<dyn Source> = if name.ends_with("raw") {
-                Box::new(DeflateSource::new(input, 32768))
-            } else if name.ends_with("gzip") {
-                Box::new(GzipSource::new(input))
+            let whole = if name.ends_with("raw") {
+                plain.clone()
             } else {
-                Box::new(ZlibSource::new(input).unwrap())
+                crate::coding::decode(
+                    &encoded,
+                    if name.ends_with("gzip") { "gzip" } else { "deflate" },
+                    plain.len(),
+                )
+                .unwrap()
             };
-            assert_eq!(collect(source).unwrap(), plain, "{name}");
+            for chunk in [1, 2, 7, 8192] {
+                let input: Box<dyn Source> = Box::new(OneByte {
+                    bytes: encoded.clone(),
+                    pos: 0,
+                });
+                let source: Box<dyn Source> = if name.ends_with("raw") {
+                    Box::new(DeflateSource::new(input, 32768))
+                } else if name.ends_with("gzip") {
+                    Box::new(GzipSource::new(input))
+                } else {
+                    Box::new(ZlibSource::new(input).unwrap())
+                };
+                assert_eq!(collect_with_chunk(source, chunk).unwrap(), whole, "{name}/{chunk}");
+            }
         }
     }
     #[test]
@@ -601,15 +616,19 @@ mod tests {
             let plain = std::fs::read(root.join(format!("{name}.raw"))).unwrap();
             for quality in [0, 5, 11] {
                 let encoded = std::fs::read(root.join(format!("{name}-{quality}.br"))).unwrap();
-                let input: Box<dyn Source> = Box::new(OneByte {
-                    bytes: encoded,
-                    pos: 0,
-                });
-                assert_eq!(
-                    collect(Box::new(BrotliSource::new(input, plain.len()))).unwrap(),
-                    plain,
-                    "{name}-{quality}"
-                );
+                let whole = amazing_net_brotli::decode(&encoded, plain.len()).unwrap();
+                for chunk in [1, 7, 8192] {
+                    let input: Box<dyn Source> = Box::new(OneByte {
+                        bytes: encoded.clone(),
+                        pos: 0,
+                    });
+                    assert_eq!(
+                        collect_with_chunk(Box::new(BrotliSource::new(input, plain.len())), chunk)
+                            .unwrap(),
+                        whole,
+                        "{name}-{quality}/{chunk}"
+                    );
+                }
             }
         }
     }
@@ -651,5 +670,33 @@ mod tests {
             }
         }
         panic!("ratio did not reject");
+    }
+    #[test]
+    fn real_brotli_bomb_ratio_is_cumulative_across_output_chunks() {
+        let encoded = include_bytes!("../../../amazing-net-brotli/tests/vectors/bomb-11.br");
+        let count = Rc::new(Cell::new(0));
+        let input: Box<dyn Source> = Box::new(CountSource {
+            inner: Box::new(OneByte {
+                bytes: encoded.to_vec(),
+                pos: 0,
+            }),
+            count: count.clone(),
+        });
+        let decoded: Box<dyn Source> = Box::new(BrotliSource::new(input, 2 * 1024 * 1024));
+        let mut capped = CapSource {
+            inner: decoded,
+            total: 0,
+            limit: 2 * 1024 * 1024,
+            ratio: Some((count, 1)),
+        };
+        let mut output = [0; 8192];
+        loop {
+            match capped.read(&mut output) {
+                Ok(n) => assert!(n > 0, "bomb completed before the ratio bound fired"),
+                Err(NetError::ResponseTooLarge) => break,
+                Err(error) => panic!("unexpected bomb error: {error}"),
+            }
+        }
+        assert!(capped.total <= 65536 + encoded.len());
     }
 }
