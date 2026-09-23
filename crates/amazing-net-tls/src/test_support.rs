@@ -69,7 +69,18 @@ where
     (port, thread)
 }
 pub fn connect(port: u16) -> Result<TlsStream, TlsError> {
-    let mut config = (*client_config()).clone();
+    connect_fixture(port, false)
+}
+pub fn connect_http1(port: u16) -> Result<TlsStream, TlsError> {
+    connect_fixture(port, true)
+}
+fn connect_fixture(port: u16, http1: bool) -> Result<TlsStream, TlsError> {
+    let mut config = (*(if http1 {
+        legacy_config()
+    } else {
+        client_config()
+    }))
+    .clone();
     let mut roots = RootCertStore::empty();
     roots.add(CertificateDer::from(CA.to_vec())).unwrap();
     // A new verified config, not a dangerous certificate-verification bypass.

@@ -903,3 +903,83 @@ checks, runner notices and finalization). Recipe/input files: `net7_gate.py`,
 `net7-inputs.json`; `net7_finalize.py` records the summary-parser reconciliation
 and final public fetch/hash audit. Superseded logs are retained separately.
 NET-7 stops at this protocol/transport boundary; no next ticket was started.
+
+## NET-8 — RFC6455 WebSocket client
+
+The bounded blocking `amazing_net::websocket` client connects over `ws` and
+verified `wss` with an HTTP/1.1 Upgrade. The existing TLS adapter supplies
+caller-buffer CSPRNG bytes to both schemes for the 16-byte handshake nonce and
+a new 32-bit mask for every outgoing frame. Its `connect_http1` path keeps wss
+on HTTP/1.1 ALPN. Core handshake, SHA-1 Accept challenge, base64, framing,
+fragment assembly and incremental UTF-8 validation are std-only. The SHA-1
+routine is fixed-input challenge processing, not an authentication API.
+
+The client validates status, Upgrade, Connection, Accept and selected offered
+subprotocol, rejects extensions, and leaves the first coalesced frame unread.
+Frames reject RSV bits, unknown opcodes, server masks, nonminimal lengths and
+invalid control shapes. Fragmented messages retain type and size accounting;
+Ping/Pong can interleave. Invalid UTF-8 fails with close 1007, resource refusal
+with 1009 and malformed protocol data with 1002 when a close can be sent.
+Peer, local and simultaneous close paths send at most one close frame and expose
+an explicit `finish_close` wait for server transport EOF. Failed connections
+drop the owned transport.
+
+| Resource | Default / hard ceiling |
+| --- | --- |
+| Handshake response | 16 KiB; 128 fields |
+| Input URL | 8 KiB |
+| Offered protocols | 32 entries; 256 bytes each |
+| Frame payload | 1 MiB / 16 MiB |
+| Assembled message | 8 MiB / 32 MiB |
+| Retained Ping/Pong notifications | 32 |
+| Control payload | 125 bytes |
+| Lifetime incoming frames | 100,000 / 1,000,000 |
+
+Peer-sized frame and message checks precede payload reserve/read. The fixed
+control buffer and notification cap bound retained control data. These are
+payload ceilings, not a process RSS guarantee. One `poll` consumes one frame;
+there is no reader thread or unbounded event queue. No RFC8441 extended CONNECT,
+compression, redirects, cookies, proxying or automatic retries are included.
+Browser embeddings must supply initiating Origin and enforce CSP, mixed-content
+and credential policy themselves; this module is not a browser WebSocket binding.
+
+### NET-8 evidence
+
+Rebased `lane/net` onto dev `ffb143b`, including shared coordination fix
+`7811124`. Refreshed only the net Windows tree via the primary checkout script,
+then re-synced lane-owned files. A shared REFRESH-HOLD protected the final run.
+All builds and tests ran on win-001 with `CARGO_TARGET_DIR=C:\Users\server\target\net`,
+`CARGO_INCREMENTAL=0`, `--locked`, and the primary checkout's global build slot.
+Pre-outage and pre-refresh results were excluded. Both final runs cleaned and
+rebuilt all 20 first-party workspace packages.
+
+| Gate | Run 1 | Run 2 |
+| --- | --- | --- |
+| Workspace nextest | 1289 passed / 0 failed / 3 skipped | identical |
+| Workspace doctests (`cargo test --doc`) | 2 passed / 0 failed / 0 ignored | identical |
+| Network lane nextest | 271 passed / 0 failed / 0 skipped | identical |
+| Network lane doctests (`cargo test --doc`) | 0 tests | identical |
+| Pinned URL WPT | 864 passed / 0 failed / 0 timeout / 32 unsupported | identical |
+
+Lane native breakdown: net 170, TLS 4, Fetch 87, Brotli 10. The 27 new WebSocket
+tests cover RFC handshake and masked-Hello vectors, rejected handshakes and
+malformed frames, fragmentation/control interleaving, UTF-8 splits/errors,
+close codes, entropy failure/per-frame calls, pre-allocation capacity/read
+positions, and live loopback ws and verified wss echo. No nextest LEAK notices
+appeared in either final workspace run. The pinned URL corpus remains 896
+objects at revision `c48d58747e1f211527fb695fd60548a997fae617`;
+normalized stdout SHA-256 was
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`
+in both runs.
+
+All 407 tracked workspace source/input hashes matched local files and stayed
+unchanged before/after both runs; source manifest SHA-256:
+`eb9117bb4dc196446901545b36e66ec5f29589aa6cc1740f85f45af63e66c385`.
+PSL regeneration, TLS/Brotli fixture pins and decoder feature checks passed.
+Canonical logs/results/source manifests: integrator checkout
+`.agents/net/net8-final-evidence/`. Gate recipe and input hashes:
+`.agents/net/net8_gate.py` and `.agents/net/net8-inputs.json`.
+
+Sources: [RFC6455](https://www.rfc-editor.org/rfc/rfc6455.html) and the
+[IANA WebSocket close-code registry](https://www.iana.org/assignments/websocket).
+This ticket stops at the protocol/transport boundary.
