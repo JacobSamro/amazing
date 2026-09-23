@@ -8,6 +8,7 @@ rust-version = "1.89"
 description = "Bounded image decoder adapter; provider-neutral owned RGBA output"
 
 [dependencies]
+amazing-svg = { path = "../amazing-svg" }
 amazing-css = { path = "../amazing-css" }
 amazing-media = { path = "../amazing-media" }
 amazing-dom = { path = "../amazing-dom" }

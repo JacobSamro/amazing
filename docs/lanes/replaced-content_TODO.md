@@ -679,3 +679,33 @@ after this merge; RC-12 claims no WPT gain from its fixtures. Fixed base
 `859bb53` includes LAYOUT-9 `ccea7b0` and HTML-13. Windows image and paint
 crate tests plus separate doctests passed after a fresh tree refresh and
 source audit. No RC-12 workspace or after-WPT result is claimed.
+
+## RC-13 — retained SVG recovery and crate split
+
+Fixed dev base `cb3064b` includes CSS-10's SVG presentation attributes in
+the document cascade. The inline DOM builder now takes paint values from that
+computed style and no longer guesses whether an initial fill came from a
+presentation hint. Unsupported DOM descendants degrade by skipping that
+subtree while preserving renderable siblings; the byte resource parser remains
+strict. Nested SVG viewports, viewBox transforms and clipping, basic clip
+shapes, rectangular masks and foreign-object backgrounds cover the retained
+reftest cases. The renderer still has a bounded static subset and does not
+implement general SVG text, filters or paint servers.
+
+The frozen RC-11 35-case selection at WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` is rendered with
+integrator-assist's exact `7e48a0e` adapter. Against the pre-RC-12 `859bb53`
+result of **22 pass / 13 mismatch**, the recovered renderer measures **26 pass
+/ 9 mismatch, 23 nonblank passes**, twice with identical per-case actual and
+reference hashes. There are **zero retained pass to mismatch transitions**.
+Three passes remain blank matches and receive no painting credit. The
+after-move sweep repeated **26 / 9 and 23 nonblank** twice, preserving every
+classification and actual/reference/diff hash from both pre-move runs. The
+paired reports and pixel counts are under `tests/wpt-replaced-content/rc13/`.
+
+The SVG model and software renderer move into root-workspace `amazing-svg`.
+`amazing-image` re-exports the SVG API for its existing callers and keeps the
+raster codec adapter. The six DOM model tests move to an image integration test
+so the image test count stays **40/40** across the split. The shell lockfile
+adds only the `amazing-svg` package and the image-to-SVG dependency; the
+IA adapter's scratch fetch/net dependencies are not product dependencies.

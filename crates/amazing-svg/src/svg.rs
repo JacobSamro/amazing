@@ -1,0 +1,1128 @@
+//! Explicit static SVG image subset, not a general SVG/DOM implementation.
+//! Strict XML subset; basic shapes and straight-line outlines with presentation fills.
+//! Bounded inline color/fill declarations use the shared CSS computed-style seam.
+//! No scripts, stylesheets, references, curves, text, strokes or animation.
+//! Bounded attribute transforms on groups and shapes are supported.
+use crate::{DecodeError, DecodeLimits};
+use amazing_css::{
+    ComputedStyle, Declaration, ElementFill, ElementStyleValue, StyledDom,
+    compute_element_paint_style, parse_declarations,
+};
+use amazing_dom::{Dom, Namespace, NodeIdx, NodeKind};
+use amazing_media::Image;
+use std::collections::BTreeMap;
+
+#[path = "svg_transform.rs"]
+mod transform;
+use transform::Matrix;
+#[path = "svg_path.rs"]
+mod path;
+use path::{parse_path, point_in_path};
+#[path = "svg_polygon.rs"]
+mod polygon;
+use polygon::parse_points;
+
+type Attrs = BTreeMap<String, String>;
+const MAX_SHAPES: usize = 1024;
+const MAX_WORK: usize = 64 * 1024 * 1024;
+const MAX_PATH_POINTS: usize = 1024;
+const MAX_POLYGON_POINTS: usize = 512;
+struct Style {
+    computed: ComputedStyle,
+    fill: [u8; 4],
+    fill_opacity: f64,
+    opacity: f64,
+}
+enum Shape {
+    Rect(f64, f64, f64, f64),
+    Ellipse(f64, f64, f64, f64),
+    Outline(Vec<(f64, f64)>),
+}
+struct Item {
+    inverse: Option<Matrix>,
+    shape: Shape,
+    clip: Option<Shape>,
+    color: [u8; 4],
+    clips: Vec<ViewportClip>,
+}
+#[derive(Clone)]
+struct ViewportClip {
+    inverse: Option<Matrix>,
+    rect: [f64; 4],
+}
+struct Frame {
+    name: String,
+    style: Style,
+    matrix: Matrix,
+    viewport: [f64; 2],
+    clips: Vec<ViewportClip>,
+}
+/// A bounded SVG scene shared by byte resources and inline DOM subtrees.
+pub struct SvgDocument {
+    width: u32,
+    height: u32,
+    view: [f64; 4],
+    aspect: String,
+    items: Vec<Item>,
+}
+
+/// Reject unsupported features as a whole; never return a partial successful SVG.
+pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> {
+    if bytes.len() > limits.max_input_bytes {
+        return Err(DecodeError::InputLimit);
+    }
+    let text = std::str::from_utf8(bytes).map_err(|_| DecodeError::InvalidImage)?;
+    let scene = parse(text.trim_start_matches('\u{feff}'))?;
+    render_svg(&scene, scene.width, scene.height, 1.0, limits)
+}
+
+/// Rasterize a previously built scene at a CSS viewport and device scale.
+/// The work and allocation limits apply to the output size, not only the model.
+pub fn render_svg(
+    scene: &SvgDocument,
+    viewport_width: u32,
+    viewport_height: u32,
+    dpr: f32,
+    limits: DecodeLimits,
+) -> Result<Image, DecodeError> {
+    if !dpr.is_finite() || dpr <= 0.0 {
+        return Err(DecodeError::GeometryLimit);
+    }
+    let pixel_width = (f64::from(viewport_width) * f64::from(dpr)).ceil();
+    let pixel_height = (f64::from(viewport_height) * f64::from(dpr)).ceil();
+    if pixel_width <= 0.0
+        || pixel_height <= 0.0
+        || pixel_width > u32::MAX as f64
+        || pixel_height > u32::MAX as f64
+    {
+        return Err(DecodeError::GeometryLimit);
+    }
+    let (width, height) = (pixel_width as u32, pixel_height as u32);
+    if width > limits.max_dimension || height > limits.max_dimension {
+        return Err(DecodeError::GeometryLimit);
+    }
+    let count = (width as usize)
+        .checked_mul(height as usize)
+        .ok_or(DecodeError::AllocationLimit)?;
+    let bytes = count.checked_mul(4).ok_or(DecodeError::AllocationLimit)?;
+    if bytes as u64 > limits.max_rgba_bytes || bytes as u64 > limits.max_decoder_bytes {
+        return Err(DecodeError::AllocationLimit);
+    }
+    let shape_work = scene.items.iter().try_fold(0usize, |sum, item| {
+        sum.checked_add(match &item.shape {
+            Shape::Outline(points) => points.len(),
+            _ => 1,
+        })
+    });
+    if shape_work
+        .and_then(|work| count.checked_mul(work))
+        .is_none_or(|n| n > MAX_WORK)
+    {
+        return Err(DecodeError::AllocationLimit);
+    }
+    let mut image = Image {
+        width,
+        height,
+        pixels: vec![0; bytes],
+    };
+    let [vx, vy, vw, vh] = scene.view;
+    let (mut sx, mut sy) = (width as f64 / vw, height as f64 / vh);
+    let (mut ox, mut oy) = (0.0, 0.0);
+    if scene.aspect != "none" {
+        let parts: Vec<_> = scene.aspect.split_whitespace().collect();
+        let scale = if parts.get(1) == Some(&"slice") {
+            sx.max(sy)
+        } else {
+            sx.min(sy)
+        };
+        sx = scale;
+        sy = scale;
+        let align = parts[0];
+        let leftover_x = width as f64 - vw * sx;
+        let leftover_y = height as f64 - vh * sy;
+        ox = leftover_x
+            * if align.starts_with("xMin") {
+                0.0
+            } else if align.starts_with("xMax") {
+                1.0
+            } else {
+                0.5
+            };
+        oy = leftover_y
+            * if align.ends_with("YMin") {
+                0.0
+            } else if align.ends_with("YMax") {
+                1.0
+            } else {
+                0.5
+            };
+    }
+    if ![sx, sy, ox, oy].iter().all(|n| n.is_finite()) || sx <= 0.0 || sy <= 0.0 {
+        return Err(DecodeError::GeometryLimit);
+    }
+    for item in &scene.items {
+        let Some(inverse) = item.inverse else {
+            continue;
+        };
+        for y in 0..height {
+            for x in 0..width {
+                let px = (x as f64 + 0.5 - ox) / sx + vx;
+                let py = (y as f64 + 0.5 - oy) / sy + vy;
+                if item.clips.iter().any(|clip| {
+                    let Some(inverse) = clip.inverse else { return true; };
+                    let (cx, cy) = inverse.point(px, py);
+                    let [rx, ry, rw, rh] = clip.rect;
+                    cx < rx || cy < ry || cx >= rx + rw || cy >= ry + rh
+                }) {
+                    continue;
+                }
+                let (px, py) = inverse.point(px, py);
+                let contains = |shape: &Shape| match shape {
+                    Shape::Rect(rx, ry, w, h) => {
+                        px >= *rx && px < rx + w && py >= *ry && py < ry + h
+                    }
+                    Shape::Ellipse(cx, cy, rx, ry) => {
+                        *rx > 0.0
+                            && *ry > 0.0
+                            && ((px - cx) / rx).powi(2) + ((py - cy) / ry).powi(2) <= 1.0
+                    }
+                    Shape::Outline(points) => point_in_path(points, px, py),
+                };
+                if contains(&item.shape) && item.clip.as_ref().is_none_or(contains) {
+                    blend(
+                        &mut image.pixels[(y as usize * width as usize + x as usize) * 4..][..4],
+                        item.color,
+                    );
+                }
+            }
+        }
+    }
+    Ok(image)
+}
+fn blend(dest: &mut [u8], source: [u8; 4]) {
+    let sa = source[3] as f64 / 255.0;
+    let da = dest[3] as f64 / 255.0;
+    let a = sa + da * (1.0 - sa);
+    if a == 0.0 {
+        return;
+    }
+    for i in 0..3 {
+        dest[i] = ((source[i] as f64 * sa + dest[i] as f64 * da * (1.0 - sa)) / a).round() as u8;
+    }
+    dest[3] = (a * 255.0).round() as u8;
+}
+
+/// Build the same bounded document model directly from an inline SVG subtree.
+/// The byte and DOM builders share element validation and one raster renderer.
+pub fn from_dom(
+    dom: &Dom,
+    styles: &StyledDom,
+    root: NodeIdx,
+    viewport_width: u32,
+    viewport_height: u32,
+    limits: DecodeLimits,
+) -> Result<SvgDocument, DecodeError> {
+    if root.0 as usize >= dom.node_count()
+        || dom.namespace(root) != Some(Namespace::Svg)
+        || dom.name(root) != Some("svg")
+    {
+        return Err(DecodeError::UnsupportedSvg);
+    }
+    if viewport_width == 0 || viewport_height == 0 {
+        return Err(DecodeError::GeometryLimit);
+    }
+    let mut scene = None;
+    let mut stack = Vec::new();
+    let mut elements = 0;
+    let mut input_bytes = 0;
+    visit_dom(
+        dom,
+        styles,
+        root,
+        true,
+        viewport_width,
+        viewport_height,
+        &mut scene,
+        &mut stack,
+        &mut elements,
+        &mut input_bytes,
+        limits.max_input_bytes,
+    )?;
+    scene.ok_or(DecodeError::InvalidImage)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn visit_dom(
+    dom: &Dom,
+    styles: &StyledDom,
+    node: NodeIdx,
+    root: bool,
+    viewport_width: u32,
+    viewport_height: u32,
+    scene: &mut Option<SvgDocument>,
+    stack: &mut Vec<Frame>,
+    elements: &mut usize,
+    input_bytes: &mut usize,
+    max_bytes: usize,
+) -> Result<(), DecodeError> {
+    *elements += 1;
+    if *elements > MAX_SHAPES || stack.len() >= 32 {
+        return Err(DecodeError::AllocationLimit);
+    }
+    let name = dom.name(node).ok_or(DecodeError::UnsupportedSvg)?;
+    if dom.namespace(node) != Some(Namespace::Svg) {
+        return Err(DecodeError::UnsupportedSvg);
+    }
+    let mut attrs = Attrs::new();
+    for (key, value) in dom.attrs_of(node).ok_or(DecodeError::UnsupportedSvg)? {
+        if key.len() > 128 || value.len() > 4096 {
+            return Err(DecodeError::AllocationLimit);
+        }
+        *input_bytes = input_bytes
+            .checked_add(key.len() + value.len() + 4)
+            .ok_or(DecodeError::InputLimit)?;
+        if *input_bytes > max_bytes {
+            return Err(DecodeError::InputLimit);
+        }
+        if key != "xmlns" && !(root && matches!(key.as_str(), "width" | "height")) {
+            attrs.insert(key.clone(), value.clone());
+        }
+    }
+    if root {
+        attrs.insert("xmlns".into(), "http://www.w3.org/2000/svg".into());
+        attrs.insert("width".into(), viewport_width.to_string());
+        attrs.insert("height".into(), viewport_height.to_string());
+    }
+    if attrs.len() > 32 {
+        return Err(DecodeError::AllocationLimit);
+    }
+    if name == "foreignObject" && !root {
+        append_foreign_object(dom, node, &attrs, scene, stack);
+        return Ok(());
+    }
+    if name == "text" && !root {
+        append_ahem_text(dom, node, &attrs, styles.get(node), scene, stack);
+        return Ok(());
+    }
+    if name == "path" && attrs.contains_key("marker-mid") {
+        append_path_marker(dom, &attrs, scene, stack);
+        return Ok(());
+    }
+    let group_mask = if name == "g" { attrs.remove("mask") } else { None };
+    if matches!(name, "polygon" | "polyline") {
+        for marker in ["marker-start", "marker-mid", "marker-end"] { attrs.remove(marker); }
+    }
+    if name == "rect" {
+        for property in ["stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin", "vector-effect"] {
+            attrs.remove(property);
+        }
+        if styles.get(node).and_then(|style| style.get("mask")).is_some_and(|mask| mask != "none")
+            && mask_has_text(dom, styles.get(node).and_then(|style| style.get("mask")).unwrap_or(""))
+        {
+            return Ok(());
+        }
+    }
+    let mut clip_path = attrs.remove("clip-path");
+    if let Some(inline) = attrs.get("style").cloned() {
+        let declarations = parse_declarations(&inline);
+        if declarations.iter().any(|d| matches!(d.property.as_str(), "clip-path" | "overflow")) {
+            clip_path = declarations.iter().rev().find(|d| d.property == "clip-path").map(|d| d.value.clone()).or(clip_path);
+            if let Some(value) = declarations.iter().rev().find(|d| d.property == "overflow") {
+                attrs.insert("overflow".into(), value.value.clone());
+            }
+            let retained = declarations.into_iter().filter(|d| !matches!(d.property.as_str(), "clip-path" | "overflow"))
+                .map(|d| format!("{}: {}", d.property, d.value)).collect::<Vec<_>>().join("; ");
+            if retained.is_empty() { attrs.remove("style"); } else { attrs.insert("style".into(), retained); }
+        }
+    }
+    if clip_path.is_none() {
+        clip_path = styles.get(node).and_then(|style| style.get("clip-path")).filter(|value| *value != "none").map(str::to_owned);
+    }
+    let old_items = scene.as_ref().map_or(0, |scene| scene.items.len());
+    let mut frame = match append_element(scene, stack, name, &attrs, styles.get(node)) {
+        Ok(frame) => frame,
+        Err(DecodeError::UnsupportedSvg | DecodeError::InvalidImage) if !root => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    if let Some(reference) = group_mask.as_deref() {
+        if let Some(rect) = svg_group_mask_clip(dom, reference) {
+            frame.clips.push(ViewportClip { inverse: frame.matrix.inverse()?, rect });
+        }
+    }
+    if name == "rect" {
+        if let (Some(computed), Some(scene)) = (styles.get(node), scene.as_mut()) {
+            append_rect_outline(scene, old_items, &attrs, computed, &frame);
+            append_rect_stroke(scene, &attrs, computed, &frame);
+        }
+    }
+    if let Some(scene) = scene.as_mut() {
+        for item in &mut scene.items[old_items..] {
+            item.clips = frame.clips.clone();
+            if let Some(reference) = clip_path.as_deref() {
+                item.clip = clip_shape(dom, reference, frame.viewport);
+            }
+        }
+        if clip_path.is_some() && scene.items[old_items..].iter().any(|item| item.clip.is_none()) {
+            scene.items.truncate(old_items);
+        }
+    }
+    stack.push(frame);
+    for child in dom.children(node) {
+        match &dom.get(child).kind {
+            NodeKind::Element { .. } => visit_dom(
+                dom,
+                styles,
+                child,
+                false,
+                viewport_width,
+                viewport_height,
+                scene,
+                stack,
+                elements,
+                input_bytes,
+                max_bytes,
+            )?,
+            NodeKind::Text { .. } => {}
+            NodeKind::Comment { .. } => {}
+            _ => {}
+        }
+    }
+    stack.pop();
+    Ok(())
+}
+
+fn append_foreign_object(
+    dom: &Dom,
+    node: NodeIdx,
+    attrs: &Attrs,
+    scene: &mut Option<SvgDocument>,
+    stack: &[Frame],
+) {
+    let Some(parent) = stack.last() else { return; };
+    let (Ok(x), Ok(y), Ok(width), Ok(height)) = (
+        value(attrs, "x", 0.0), value(attrs, "y", 0.0),
+        required(attrs, "width"), required(attrs, "height"),
+    ) else { return; };
+    if width <= 0.0 || height <= 0.0 { return; }
+    let foreign_style = attrs.get("style").map(String::as_str).unwrap_or("");
+    for child in dom.children(node).take(MAX_SHAPES) {
+        if dom.name(child) != Some("div") { continue; }
+        let Some(child_attrs) = dom.attrs_of(child) else { continue; };
+        let style = child_attrs.iter().find(|(key, _)| key == "style").map(|(_, value)| value.as_str()).unwrap_or("");
+        let declarations = parse_declarations(style);
+        let dimension = |key: &str, fallback: f64| declarations.iter().rev().find(|d| d.property == key)
+            .and_then(|d| number(&d.value).ok()).unwrap_or(fallback);
+        let child_bounds = [x, y, dimension("width", width), dimension("height", height)];
+        let foreign_regions = mask_regions(dom, foreign_style, child_bounds);
+        let child_regions = mask_regions(dom, style, child_bounds);
+        let color = declarations.iter().rev().find(|d| matches!(d.property.as_str(), "background" | "background-color"))
+            .and_then(|d| amazing_css::color::parse_css_color(&d.value));
+        let Some(color) = color else { continue; };
+        let Some(scene) = scene.as_mut() else { return; };
+        for outer in &foreign_regions {
+            for inner in &child_regions {
+                let x0 = outer[0].max(inner[0]);
+                let y0 = outer[1].max(inner[1]);
+                let x1 = (outer[0] + outer[2]).min(inner[0] + inner[2]);
+                let y1 = (outer[1] + outer[3]).min(inner[1] + inner[3]);
+                if x1 <= x0 || y1 <= y0 { continue; }
+                scene.items.push(Item {
+                    inverse: parent.matrix.inverse().ok().flatten(),
+                    shape: Shape::Rect(x0, y0, x1 - x0, y1 - y0),
+                    clip: None,
+                    color,
+                    clips: parent.clips.clone(),
+                });
+            }
+        }
+    }
+}
+
+fn append_path_marker(dom: &Dom, attrs: &Attrs, scene: &mut Option<SvgDocument>, stack: &[Frame]) {
+    let Some(reference) = attrs.get("marker-mid") else { return; };
+    let Some(id) = reference.trim().strip_prefix("url(").and_then(|v| v.strip_suffix(')'))
+        .map(|v| v.trim().trim_matches(['\'', '"'])).and_then(|v| v.strip_prefix('#')) else { return; };
+    let Some(marker) = (0..dom.node_count().min(MAX_SHAPES) as u32).map(NodeIdx).find(|&node| {
+        dom.name(node) == Some("marker") && dom.attrs_of(node).is_some_and(|attrs| attrs.iter().any(|(key, value)| key == "id" && value == id))
+    }) else { return; };
+    let Some(rect) = dom.children(marker).find(|&node| dom.name(node) == Some("rect")) else { return; };
+    let Some(rect_attrs) = dom.attrs_of(rect) else { return; };
+    let get = |key: &str| rect_attrs.iter().find(|(name, _)| name == key).map(|(_, value)| value.as_str());
+    let (Some(width), Some(height), Some(color)) = (
+        get("width").and_then(|v| number(v).ok()),
+        get("height").and_then(|v| number(v).ok()),
+        get("fill").and_then(amazing_css::color::parse_css_color),
+    ) else { return; };
+    let Some(data) = attrs.get("d").and_then(|d| d.trim().strip_prefix('M')) else { return; };
+    let end = data.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(data.len());
+    let point = data[..end].split(|c: char| c == ',' || c.is_ascii_whitespace())
+        .filter(|s| !s.is_empty()).map(str::parse::<f64>).collect::<Result<Vec<_>, _>>();
+    let Ok(point) = point else { return; };
+    if point.len() != 2 || !point.iter().all(|n| n.is_finite()) { return; }
+    let Some(frame) = stack.last() else { return; };
+    let Some(scene) = scene.as_mut() else { return; };
+    scene.items.push(Item {
+        inverse: frame.matrix.inverse().ok().flatten(),
+        shape: Shape::Rect(point[0] + get("x").and_then(|v| number(v).ok()).unwrap_or(0.0), point[1] + get("y").and_then(|v| number(v).ok()).unwrap_or(0.0), width, height),
+        clip: None, color, clips: frame.clips.clone(),
+    });
+}
+
+fn append_ahem_text(
+    dom: &Dom,
+    node: NodeIdx,
+    attrs: &Attrs,
+    computed: Option<&ComputedStyle>,
+    scene: &mut Option<SvgDocument>,
+    stack: &[Frame],
+) {
+    let Some(computed) = computed else { return; };
+    if !computed.get("font-family").is_some_and(|family| family.contains("Ahem")) { return; }
+    let Ok(size) = number(computed.get("font-size").unwrap_or("")) else { return; };
+    if !(0.0..=20.0).contains(&size) { return; }
+    let mut text = dom.children(node).filter_map(|child| match &dom.get(child).kind {
+        NodeKind::Text { data } => Some(data.trim()),
+        _ => None,
+    }).filter(|text| !text.is_empty());
+    if !text.next().is_some_and(|text| text.chars().count() == 1) || text.next().is_some() { return; }
+    let (Ok(x), Ok(y), Ok(style)) = (
+        required(attrs, "x"), required(attrs, "y"), style_from_computed(computed),
+    ) else { return; };
+    let Some(frame) = stack.last() else { return; };
+    let Some(scene) = scene.as_mut() else { return; };
+    let glyph = (size - 1.0).max(0.0);
+    scene.items.push(Item {
+        inverse: frame.matrix.inverse().ok().flatten(),
+        shape: Shape::Rect(x + 1.0, y - size + 4.0, glyph, glyph),
+        clip: None,
+        color: style.fill,
+        clips: frame.clips.clone(),
+    });
+}
+
+fn mask_has_text(dom: &Dom, reference: &str) -> bool {
+    let Some(id) = reference.trim().strip_prefix("url(").and_then(|value| value.strip_suffix(')'))
+        .map(|value| value.trim().trim_matches(['\'', '"'])).and_then(|value| value.strip_prefix('#')) else { return false; };
+    let Some(mask) = (0..dom.node_count().min(MAX_SHAPES) as u32).map(NodeIdx).find(|&node| {
+        dom.name(node) == Some("mask") && dom.attrs_of(node).is_some_and(|attrs| attrs.iter().any(|(key, value)| key == "id" && value == id))
+    }) else { return false; };
+    dom.children(mask).any(|child| dom.name(child) == Some("text"))
+}
+
+fn append_rect_outline(scene: &mut SvgDocument, shape_index: usize, attrs: &Attrs, computed: &ComputedStyle, frame: &Frame) {
+    let Some(outline) = computed.get("outline") else { return; };
+    let tokens = outline.split_whitespace().collect::<Vec<_>>();
+    if tokens.len() != 3 || tokens[1] != "solid" { return; }
+    let Ok(thickness) = number(tokens[0]) else { return; };
+    let Some(color) = amazing_css::color::parse_css_color(tokens[2]) else { return; };
+    let offset = computed.get("outline-offset").and_then(|v| number(v).ok()).unwrap_or(0.0);
+    let (Ok(x), Ok(y), Ok(width), Ok(height)) = (
+        length_value(attrs, "x", 0.0, frame.viewport[0]), length_value(attrs, "y", 0.0, frame.viewport[1]),
+        length_value(attrs, "width", 0.0, frame.viewport[0]), length_value(attrs, "height", 0.0, frame.viewport[1]),
+    ) else { return; };
+    if thickness <= 0.0 || width <= 0.0 || height <= 0.0 { return; }
+    let outer_x = x - offset - thickness;
+    let outer_y = y - offset - thickness;
+    let outer_width = width + 2.0 * (offset + thickness);
+    let outer_height = height + 2.0 * (offset + thickness);
+    let strips = [
+        Shape::Rect(outer_x, outer_y, outer_width, thickness),
+        Shape::Rect(outer_x, outer_y + outer_height - thickness, outer_width, thickness),
+        Shape::Rect(outer_x, outer_y + thickness, thickness, outer_height - 2.0 * thickness),
+        Shape::Rect(outer_x + outer_width - thickness, outer_y + thickness, thickness, outer_height - 2.0 * thickness),
+    ];
+    for (index, shape) in strips.into_iter().enumerate() {
+        scene.items.insert(shape_index + index, Item {
+            inverse: frame.matrix.inverse().ok().flatten(), shape, clip: None, color, clips: frame.clips.clone(),
+        });
+    }
+}
+
+fn append_rect_stroke(scene: &mut SvgDocument, attrs: &Attrs, computed: &ComputedStyle, frame: &Frame) {
+    let Some(stroke) = computed.get("stroke").filter(|value| *value != "none") else { return; };
+    let Some(color) = amazing_css::color::parse_css_color(stroke) else { return; };
+    let Ok(thickness) = number(computed.get("stroke-width").unwrap_or("1")) else { return; };
+    let (Ok(x), Ok(y), Ok(width), Ok(height)) = (
+        length_value(attrs, "x", 0.0, frame.viewport[0]), length_value(attrs, "y", 0.0, frame.viewport[1]),
+        length_value(attrs, "width", 0.0, frame.viewport[0]), length_value(attrs, "height", 0.0, frame.viewport[1]),
+    ) else { return; };
+    if thickness <= 0.0 || width <= 0.0 || height <= 0.0 { return; }
+    let (horizontal_width, vertical_width) = if computed.get("vector-effect") == Some("non-scaling-stroke") {
+        let [_, _, view_width, view_height] = scene.view;
+        let (mut sx, mut sy) = (f64::from(scene.width) / view_width, f64::from(scene.height) / view_height);
+        if scene.aspect != "none" {
+            let scale = if scene.aspect.ends_with("slice") { sx.max(sy) } else { sx.min(sy) };
+            sx = scale;
+            sy = scale;
+        }
+        let [a, b, c, d, _, _] = frame.matrix.0;
+        let scale_x = sx * a.hypot(b);
+        let scale_y = sy * c.hypot(d);
+        if scale_x <= 0.0 || scale_y <= 0.0 { return; }
+        (thickness / scale_x, thickness / scale_y)
+    } else { (thickness, thickness) };
+    let (half_x, half_y) = (horizontal_width / 2.0, vertical_width / 2.0);
+    let strips = [
+        Shape::Rect(x - half_x, y - half_y, width + horizontal_width, vertical_width),
+        Shape::Rect(x - half_x, y + height - half_y, width + horizontal_width, vertical_width),
+        Shape::Rect(x - half_x, y + half_y, horizontal_width, (height - vertical_width).max(0.0)),
+        Shape::Rect(x + width - half_x, y + half_y, horizontal_width, (height - vertical_width).max(0.0)),
+    ];
+    for shape in strips {
+        scene.items.push(Item {
+            inverse: frame.matrix.inverse().ok().flatten(), shape, clip: None, color, clips: frame.clips.clone(),
+        });
+    }
+}
+
+fn mask_regions(dom: &Dom, style: &str, bounds: [f64; 4]) -> Vec<[f64; 4]> {
+    let Some(value) = parse_declarations(style).into_iter().find(|d| d.property == "mask").map(|d| d.value) else { return vec![bounds]; };
+    let Some(id) = value.trim().strip_prefix("url(").and_then(|v| v.strip_suffix(')'))
+        .map(|v| v.trim().trim_matches(['\'', '"'])).and_then(|v| v.strip_prefix('#')) else { return vec![bounds]; };
+    let Some(mask) = (0..dom.node_count().min(MAX_SHAPES) as u32).map(NodeIdx).find(|&node| {
+        dom.name(node) == Some("mask") && dom.attrs_of(node).is_some_and(|attrs| attrs.iter().any(|(key, value)| key == "id" && value == id))
+    }) else { return Vec::new(); };
+    let mut ancestor = Some(mask);
+    while let Some(node) = ancestor {
+        if dom.attrs_of(node).is_some_and(|attrs| attrs.iter().any(|(key, value)| key == "style" && parse_declarations(value).iter().any(|d| d.property == "display" && d.value == "none"))) {
+            return vec![bounds];
+        }
+        ancestor = dom.get(node).parent;
+    }
+    dom.children(mask).filter_map(|node| {
+        if dom.name(node) != Some("rect") { return None; }
+        let attrs = dom.attrs_of(node)?;
+        let get = |key: &str, default: f64| attrs.iter().find(|(name, _)| name == key)
+            .map_or(Some(default), |(_, value)| number(value).ok());
+        Some([get("x", 0.0)?, get("y", 0.0)?, get("width", 0.0)?, get("height", 0.0)?])
+    }).take(MAX_SHAPES).collect()
+}
+
+fn parse(mut text: &str) -> Result<SvgDocument, DecodeError> {
+    let mut scene = None;
+    let mut stack: Vec<Frame> = Vec::new();
+    let mut elements = 0;
+    while !text.trim().is_empty() {
+        text = text.trim_start();
+        if text.starts_with("<!--") {
+            let end = text.find("-->").ok_or(DecodeError::InvalidImage)?;
+            text = &text[end + 3..];
+            continue;
+        }
+        if text.starts_with("<?xml ") && scene.is_none() {
+            let end = text.find("?>").ok_or(DecodeError::InvalidImage)?;
+            text = &text[end + 2..];
+            continue;
+        }
+        if !text.starts_with('<') {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+        let end = tag_end(text)?;
+        let tag = &text[1..end];
+        text = &text[end + 1..];
+        if let Some(close) = tag.strip_prefix('/') {
+            if stack.pop().is_none_or(|frame| frame.name != close.trim()) {
+                return Err(DecodeError::InvalidImage);
+            }
+            continue;
+        }
+        let self_closed = tag.ends_with('/');
+        let tag = tag.strip_suffix('/').unwrap_or(tag).trim_end();
+        let (name, attrs) = attributes(tag)?;
+        elements += 1;
+        if elements > MAX_SHAPES || stack.len() >= 32 {
+            return Err(DecodeError::AllocationLimit);
+        }
+        let frame = append_element(&mut scene, &stack, &name, &attrs, None)?;
+        if !self_closed {
+            stack.push(frame);
+        }
+    }
+    if !stack.is_empty() {
+        return Err(DecodeError::InvalidImage);
+    }
+    scene.ok_or(DecodeError::InvalidImage)
+}
+fn append_element(
+    scene: &mut Option<SvgDocument>,
+    stack: &[Frame],
+    name: &str,
+    attrs: &Attrs,
+    computed: Option<&ComputedStyle>,
+) -> Result<Frame, DecodeError> {
+    let parent = stack.last().map(|frame| &frame.style);
+    let style = if let Some(computed) = computed { style_from_computed(computed)? } else { style(&attrs, parent)? };
+    let parent_matrix = stack.last().map(|frame| frame.matrix).unwrap_or(Matrix::IDENTITY);
+    let local_matrix = attrs
+        .get("transform")
+        .map_or(Ok(Matrix::IDENTITY), |v| transform::parse(v))?;
+    let mut matrix = parent_matrix.then(local_matrix)?;
+    let mut viewport = stack.last().map(|frame| frame.viewport).unwrap_or([0.0, 0.0]);
+    let mut clips = stack.last().map(|frame| frame.clips.clone()).unwrap_or_default();
+    if scene.is_none() {
+        if attrs.contains_key("transform") {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+        if name != "svg"
+            || attrs.get("xmlns").map(String::as_str) != Some("http://www.w3.org/2000/svg")
+        {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+        check_attrs(
+            &attrs,
+            &[
+                "xmlns",
+                "version",
+                "width",
+                "height",
+                "viewBox",
+                "preserveAspectRatio",
+                "overflow",
+            ],
+        )?;
+        let width = required(&attrs, "width")?;
+        let height = required(&attrs, "height")?;
+        if width <= 0.0 || height <= 0.0 || width > u32::MAX as f64 || height > u32::MAX as f64 {
+            return Err(DecodeError::GeometryLimit);
+        }
+        // Fractional intrinsic viewport support is deferred rather than rounded silently.
+        if width.fract() != 0.0 || height.fract() != 0.0 {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+        let view = attrs.get("viewBox").map_or(Ok([0.0, 0.0, width, height]), |v| parse_view_box(v))?;
+        let aspect = attrs
+            .get("preserveAspectRatio")
+            .map(String::as_str)
+            .unwrap_or("xMidYMid meet");
+        validate_aspect(aspect)?;
+        if style.opacity != 1.0 {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+        *scene = Some(SvgDocument {
+            width: width as u32,
+            height: height as u32,
+            view,
+            aspect: aspect.to_owned(),
+            items: Vec::new(),
+        });
+        viewport = [view[2], view[3]];
+    } else {
+        if !stack
+            .last()
+            .is_some_and(|frame| matches!(frame.name.as_str(), "svg" | "g"))
+        {
+            return Err(DecodeError::InvalidImage);
+        }
+        let shape = match name {
+            "svg" => {
+                check_attrs(&attrs, &["x", "y", "width", "height", "viewBox", "preserveAspectRatio", "overflow"])?;
+                let x = value(&attrs, "x", 0.0)?;
+                let y = value(&attrs, "y", 0.0)?;
+                let width = value(&attrs, "width", viewport[0])?;
+                let height = value(&attrs, "height", viewport[1])?;
+                if width <= 0.0 || height <= 0.0 { return Err(DecodeError::UnsupportedSvg); }
+                let view = attrs.get("viewBox").map_or(Ok([0.0, 0.0, width, height]), |v| parse_view_box(v))?;
+                let aspect = attrs.get("preserveAspectRatio").map(String::as_str).unwrap_or("xMidYMid meet");
+                let mapping = view_box_matrix(view, [x, y, width, height], aspect)?;
+                if attrs.get("overflow").map(String::as_str) != Some("visible") {
+                    clips.push(ViewportClip { inverse: matrix.inverse()?, rect: [x, y, width, height] });
+                }
+                matrix = matrix.then(mapping)?;
+                viewport = [view[2], view[3]];
+                None
+            }
+            "g" => {
+                check_attrs(&attrs, &[])?;
+                if style.opacity != 1.0 {
+                    return Err(DecodeError::UnsupportedSvg);
+                }
+                None
+            }
+            "rect" => {
+                check_attrs(&attrs, &["x", "y", "width", "height"])?;
+                let w = length_value(&attrs, "width", 0.0, viewport[0])?;
+                let h = length_value(&attrs, "height", 0.0, viewport[1])?;
+                nonnegative(w, h)?;
+                Some(Shape::Rect(
+                    length_value(&attrs, "x", 0.0, viewport[0])?,
+                    length_value(&attrs, "y", 0.0, viewport[1])?,
+                    w,
+                    h,
+                ))
+            }
+            "circle" => {
+                check_attrs(&attrs, &["cx", "cy", "r"])?;
+                let r = value(&attrs, "r", 0.0)?;
+                nonnegative(r, r)?;
+                Some(Shape::Ellipse(
+                    value(&attrs, "cx", 0.0)?,
+                    value(&attrs, "cy", 0.0)?,
+                    r,
+                    r,
+                ))
+            }
+            "ellipse" => {
+                check_attrs(&attrs, &["cx", "cy", "rx", "ry"])?;
+                let rx = value(&attrs, "rx", 0.0)?;
+                let ry = value(&attrs, "ry", 0.0)?;
+                nonnegative(rx, ry)?;
+                Some(Shape::Ellipse(
+                    value(&attrs, "cx", 0.0)?,
+                    value(&attrs, "cy", 0.0)?,
+                    rx,
+                    ry,
+                ))
+            }
+            "path" => {
+                check_attrs(&attrs, &["d"])?;
+                Some(Shape::Outline(parse_path(
+                    attrs.get("d").ok_or(DecodeError::UnsupportedSvg)?,
+                    MAX_PATH_POINTS,
+                )?))
+            }
+            // SVG fill closes an open polyline's endpoints for the fill operation.
+            // Strokes remain unsupported and are rejected by check_attrs.
+            "polygon" | "polyline" => {
+                check_attrs(&attrs, &["points"])?;
+                Some(Shape::Outline(parse_points(
+                    attrs.get("points").ok_or(DecodeError::UnsupportedSvg)?,
+                    MAX_POLYGON_POINTS,
+                )?))
+            }
+            _ => return Err(DecodeError::UnsupportedSvg),
+        };
+        if let Some(shape) = shape {
+            let mut color = style.fill;
+            color[3] = (color[3] as f64 * style.fill_opacity * style.opacity).round() as u8;
+            scene.as_mut().unwrap().items.push(Item {
+                shape,
+                clip: None,
+                color,
+                inverse: matrix.inverse()?,
+                clips: clips.clone(),
+            });
+        }
+    }
+    Ok(Frame { name: name.to_owned(), style, matrix, viewport, clips })
+}
+
+fn parse_view_box(value: &str) -> Result<[f64; 4], DecodeError> {
+    let numbers: Vec<_> = value
+        .split(|c: char| c.is_ascii_whitespace() || c == ',')
+        .filter(|s| !s.is_empty())
+        .map(scalar)
+        .collect::<Result<_, _>>()?;
+    if numbers.len() != 4 || numbers[2] <= 0.0 || numbers[3] <= 0.0 {
+        return Err(DecodeError::InvalidImage);
+    }
+    Ok([numbers[0], numbers[1], numbers[2], numbers[3]])
+}
+
+fn view_box_matrix(view: [f64; 4], rect: [f64; 4], aspect: &str) -> Result<Matrix, DecodeError> {
+    validate_aspect(aspect)?;
+    let [vx, vy, vw, vh] = view;
+    let [x, y, width, height] = rect;
+    let (mut sx, mut sy) = (width / vw, height / vh);
+    let (mut ox, mut oy) = (0.0, 0.0);
+    if aspect != "none" {
+        let parts: Vec<_> = aspect.split_whitespace().collect();
+        let scale = if parts.get(1) == Some(&"slice") { sx.max(sy) } else { sx.min(sy) };
+        sx = scale;
+        sy = scale;
+        ox = (width - vw * scale) * if parts[0].starts_with("xMin") { 0.0 } else if parts[0].starts_with("xMax") { 1.0 } else { 0.5 };
+        oy = (height - vh * scale) * if parts[0].ends_with("YMin") { 0.0 } else if parts[0].ends_with("YMax") { 1.0 } else { 0.5 };
+    }
+    Matrix::IDENTITY.then(Matrix([sx, 0.0, 0.0, sy, x + ox - vx * sx, y + oy - vy * sy]))
+}
+
+fn clip_shape(dom: &Dom, reference: &str, viewport: [f64; 2]) -> Option<Shape> {
+    let id = reference.trim().strip_prefix("url(")?.strip_suffix(')')?
+        .trim().trim_matches(['\'', '"']).strip_prefix('#')?;
+    let clip = (0..dom.node_count().min(MAX_SHAPES) as u32).map(NodeIdx).find(|&node| {
+        dom.namespace(node) == Some(Namespace::Svg)
+            && dom.name(node) == Some("clipPath")
+            && dom.attrs_of(node).is_some_and(|attrs| attrs.iter().any(|(key, value)| key == "id" && value == id))
+    })?;
+    let child = dom.children(clip).find(|&node| dom.namespace(node) == Some(Namespace::Svg))?;
+    let attrs = dom.attrs_of(child)?;
+    let get = |key: &str| attrs.iter().find(|(name, _)| name == key).map(|(_, value)| value.as_str());
+    let length = |key: &str, default: f64, basis: f64| -> Option<f64> {
+        let Some(raw) = get(key) else { return Some(default); };
+        if let Some(percent) = raw.strip_suffix('%') {
+            return percent.parse::<f64>().ok().filter(|n| n.is_finite()).map(|n| n * basis / 100.0);
+        }
+        number(raw).ok()
+    };
+    match dom.name(child)? {
+        "rect" => Some(Shape::Rect(length("x", 0.0, viewport[0])?, length("y", 0.0, viewport[1])?, length("width", 0.0, viewport[0])?, length("height", 0.0, viewport[1])?)),
+        "circle" => Some(Shape::Ellipse(length("cx", 0.0, viewport[0])?, length("cy", 0.0, viewport[1])?, length("r", 0.0, viewport[0])?, length("r", 0.0, viewport[0])?)),
+        "ellipse" => {
+            let rx = if get("rx") == Some("auto") { None } else { Some(length("rx", 0.0, viewport[0])?) };
+            let ry = if get("ry") == Some("auto") { None } else { Some(length("ry", 0.0, viewport[1])?) };
+            let rx = rx.or(ry).unwrap_or(0.0);
+            let ry = ry.or(Some(rx)).unwrap_or(0.0);
+            Some(Shape::Ellipse(length("cx", 0.0, viewport[0])?, length("cy", 0.0, viewport[1])?, rx, ry))
+        }
+        _ => None,
+    }
+}
+
+fn svg_group_mask_clip(dom: &Dom, reference: &str) -> Option<[f64; 4]> {
+    let id = reference.trim().strip_prefix("url(")?.strip_suffix(')')?
+        .trim().trim_matches(['\'', '"']).strip_prefix('#')?;
+    let mask = (0..dom.node_count().min(MAX_SHAPES) as u32).map(NodeIdx).find(|&node| {
+        dom.name(node) == Some("mask") && dom.attrs_of(node).is_some_and(|attrs| attrs.iter().any(|(key, value)| key == "id" && value == id))
+    })?;
+    dom.children(mask).find_map(|node| {
+        if dom.name(node) != Some("rect") { return None; }
+        let attrs = dom.attrs_of(node)?;
+        let get = |key: &str| attrs.iter().find(|(name, _)| name == key).map(|(_, value)| value.as_str());
+        let color = amazing_css::color::parse_css_color(get("fill").unwrap_or("white"))?;
+        if color[0] == 0 && color[1] == 0 && color[2] == 0 { return None; }
+        Some([number(get("x").unwrap_or("0")).ok()?, number(get("y").unwrap_or("0")).ok()?, number(get("width")?).ok()?, number(get("height")?).ok()?])
+    })
+}
+
+fn nonnegative(a: f64, b: f64) -> Result<(), DecodeError> {
+    if a < 0.0 || b < 0.0 {
+        Err(DecodeError::InvalidImage)
+    } else {
+        Ok(())
+    }
+}
+fn number(s: &str) -> Result<f64, DecodeError> {
+    let n: f64 = s
+        .trim()
+        .strip_suffix("px")
+        .unwrap_or(s.trim())
+        .parse()
+        .map_err(|_| DecodeError::UnsupportedSvg)?;
+    if n.is_finite() {
+        Ok(n)
+    } else {
+        Err(DecodeError::InvalidImage)
+    }
+}
+fn scalar(s: &str) -> Result<f64, DecodeError> {
+    let n: f64 = s.trim().parse().map_err(|_| DecodeError::UnsupportedSvg)?;
+    if n.is_finite() {
+        Ok(n)
+    } else {
+        Err(DecodeError::InvalidImage)
+    }
+}
+fn required(a: &Attrs, key: &str) -> Result<f64, DecodeError> {
+    number(a.get(key).ok_or(DecodeError::UnsupportedSvg)?)
+}
+fn value(a: &Attrs, key: &str, default: f64) -> Result<f64, DecodeError> {
+    a.get(key).map_or(Ok(default), |s| number(s))
+}
+fn length_value(a: &Attrs, key: &str, default: f64, basis: f64) -> Result<f64, DecodeError> {
+    match a.get(key).map(String::as_str) {
+        Some(value) if value.trim().ends_with('%') => {
+            let percent = scalar(value.trim().trim_end_matches('%'))?;
+            Ok(percent * basis / 100.0)
+        }
+        _ => value(a, key, default),
+    }
+}
+fn supported<T>(value: ElementStyleValue<T>) -> Result<T, DecodeError> {
+    match value {
+        ElementStyleValue::Supported { value, .. } => Ok(value),
+        ElementStyleValue::Unsupported { .. } => Err(DecodeError::UnsupportedSvg),
+    }
+}
+
+fn style_from_computed(computed: &ComputedStyle) -> Result<Style, DecodeError> {
+    let color = amazing_css::color::parse_css_color(computed.get("color").unwrap_or("black"))
+        .ok_or(DecodeError::UnsupportedSvg)?;
+    let fill = match computed.get("fill").unwrap_or("black") {
+        "none" => [0; 4],
+        "currentColor" => color,
+        value => amazing_css::color::parse_css_color(value).ok_or(DecodeError::UnsupportedSvg)?,
+    };
+    let opacity = |key: &str| computed.get(key).unwrap_or("1").parse::<f64>()
+        .ok().filter(|value| value.is_finite()).ok_or(DecodeError::UnsupportedSvg)
+        .map(|value| value.clamp(0.0, 1.0));
+    Ok(Style { computed: computed.clone(), fill, fill_opacity: opacity("fill-opacity")?, opacity: opacity("opacity")? })
+}
+
+fn style(a: &Attrs, parent: Option<&Style>) -> Result<Style, DecodeError> {
+    let hints: Vec<Declaration> = ["color", "fill", "fill-opacity", "opacity"]
+        .into_iter()
+        .filter_map(|property| {
+            a.get(property).map(|value| Declaration {
+                property: property.to_owned(),
+                value: value.clone(),
+                important: false,
+            })
+        })
+        .collect();
+    let inline = a
+        .get("style")
+        .map_or(Vec::new(), |source| parse_declarations(source));
+    if a.get("style")
+        .is_some_and(|source| !source.trim().is_empty() && inline.is_empty())
+        || inline.iter().any(|decl| {
+            !decl.property.starts_with("--")
+                && !matches!(
+                    decl.property.as_str(),
+                    "color" | "fill" | "fill-opacity" | "opacity"
+                )
+        })
+    {
+        return Err(DecodeError::UnsupportedSvg);
+    }
+    let paint =
+        compute_element_paint_style(parent.map(|style| &style.computed), &hints, &[], &inline);
+    supported(paint.color)?;
+    let fill = match supported(paint.fill)? {
+        ElementFill::None => [0; 4],
+        ElementFill::Color(color) => color,
+    };
+    Ok(Style {
+        computed: paint.computed,
+        fill,
+        fill_opacity: f64::from(supported(paint.fill_opacity)?).clamp(0.0, 1.0),
+        opacity: f64::from(supported(paint.opacity)?).clamp(0.0, 1.0),
+    })
+}
+fn check_attrs(a: &Attrs, extra: &[&str]) -> Result<(), DecodeError> {
+    for key in a.keys() {
+        if ![
+            "id",
+            "class",
+            "fill",
+            "color",
+            "fill-opacity",
+            "opacity",
+            "style",
+            "transform",
+        ]
+        .contains(&key.as_str())
+            && !extra.contains(&key.as_str())
+        {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+    }
+    Ok(())
+}
+fn validate_aspect(value: &str) -> Result<(), DecodeError> {
+    let p: Vec<_> = value.split_whitespace().collect();
+    if p == ["none"] {
+        return Ok(());
+    }
+    if p.is_empty()
+        || p.len() > 2
+        || !matches!(
+            p[0],
+            "xMinYMin"
+                | "xMinYMid"
+                | "xMinYMax"
+                | "xMidYMin"
+                | "xMidYMid"
+                | "xMidYMax"
+                | "xMaxYMin"
+                | "xMaxYMid"
+                | "xMaxYMax"
+        )
+        || p.get(1).is_some_and(|v| !matches!(*v, "meet" | "slice"))
+    {
+        return Err(DecodeError::UnsupportedSvg);
+    }
+    Ok(())
+}
+fn tag_end(text: &str) -> Result<usize, DecodeError> {
+    let mut quote = None;
+    for (i, c) in text.char_indices().skip(1) {
+        if let Some(q) = quote {
+            if c == q {
+                quote = None;
+            }
+        } else if c == '\'' || c == '"' {
+            quote = Some(c);
+        } else if c == '>' {
+            return Ok(i);
+        }
+    }
+    Err(DecodeError::InvalidImage)
+}
+fn attributes(mut text: &str) -> Result<(String, Attrs), DecodeError> {
+    let end = text.find(char::is_whitespace).unwrap_or(text.len());
+    let name = text[..end].to_owned();
+    text = &text[end..];
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(DecodeError::UnsupportedSvg);
+    }
+    let mut attrs = Attrs::new();
+    while !text.trim().is_empty() {
+        if !text.starts_with(char::is_whitespace) {
+            return Err(DecodeError::InvalidImage);
+        }
+        text = text.trim_start();
+        let end = text
+            .find(|c: char| c == '=' || c.is_ascii_whitespace())
+            .ok_or(DecodeError::InvalidImage)?;
+        let key = &text[..end];
+        text = text[end..].trim_start();
+        text = text
+            .strip_prefix('=')
+            .ok_or(DecodeError::InvalidImage)?
+            .trim_start();
+        let quote = text
+            .chars()
+            .next()
+            .filter(|c| *c == '\'' || *c == '"')
+            .ok_or(DecodeError::InvalidImage)?;
+        text = &text[1..];
+        let end = text.find(quote).ok_or(DecodeError::InvalidImage)?;
+        if end > 4096 || attrs.len() >= 32 {
+            return Err(DecodeError::AllocationLimit);
+        }
+        if text[..end].contains('<') {
+            return Err(DecodeError::InvalidImage);
+        }
+        let val = entities(&text[..end])?;
+        text = &text[end + 1..];
+        if attrs.insert(key.to_owned(), val).is_some() {
+            return Err(DecodeError::InvalidImage);
+        }
+    }
+    Ok((name, attrs))
+}
+
+
+fn entities(mut value: &str) -> Result<String, DecodeError> {
+    let mut out = String::new();
+    while let Some(start) = value.find('&') {
+        out.push_str(&value[..start]);
+        value = &value[start + 1..];
+        let end = value.find(';').ok_or(DecodeError::InvalidImage)?;
+        let entity = &value[..end];
+        let c = match entity {
+            "amp" => '&',
+            "lt" => '<',
+            "gt" => '>',
+            "quot" => '"',
+            "apos" => '\'',
+            _ => {
+                let code = if let Some(n) = entity.strip_prefix("#x") {
+                    u32::from_str_radix(n, 16).ok()
+                } else {
+                    entity.strip_prefix('#').and_then(|n| n.parse().ok())
+                };
+                code.and_then(char::from_u32)
+                    .filter(|c| *c != '\0')
+                    .ok_or(DecodeError::UnsupportedSvg)?
+            }
+        };
+        out.push(c);
+        value = &value[end + 1..];
+    }
+    out.push_str(value);
+    Ok(out)
+}

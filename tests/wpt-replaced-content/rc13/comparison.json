@@ -1,0 +1,351 @@
+{
+  "schema": 1,
+  "fixed_base": "cb3064b",
+  "pre_rc12_base": "859bb53",
+  "ia_adapter": "7e48a0e",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": "tests/wpt-replaced-content/rc11-svg-manifest.json",
+  "pre_rc12_counts": {
+    "pass": 22,
+    "mismatch": 13,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "recovered_counts": {
+    "pass": 26,
+    "mismatch": 9,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 0
+  },
+  "nonblank_passes": 23,
+  "retained_pass_losses": [],
+  "new_passes": [
+    "svg--shapes--reftests--pathlength-005",
+    "svg--shapes--reftests--polygon-with-filtered-marker",
+    "svg--painting--reftests--marker-implicit-subpaths",
+    "svg--painting--will-change-under-mask"
+  ],
+  "all_hashes_stable": true,
+  "all_nonwhite_stable": true,
+  "cases": [
+    {
+      "id": "svg--shapes--reftests--ellipse-auto-rx-clip-path",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 15720,
+      "reference_nonwhite_pixels": 15720,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--shapes--reftests--ellipse-auto-rx-css-clip-path",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 15720,
+      "reference_nonwhite_pixels": 15720,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--shapes--reftests--ellipse-auto-rx-percent-clip-path",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 10048,
+      "reference_nonwhite_pixels": 10048,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--shapes--reftests--ellipse-auto-rx-textpath",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 0,
+      "reference_nonwhite_pixels": 0,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--shapes--reftests--pathlength-005",
+      "pre_rc12": "mismatch",
+      "recovered": "pass",
+      "nonwhite_pixels": 0,
+      "reference_nonwhite_pixels": 0,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--shapes--reftests--polygon-with-filtered-marker",
+      "pre_rc12": "mismatch",
+      "recovered": "pass",
+      "nonwhite_pixels": 10000,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--foreignObject-overflow",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 10000,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--inner-outer-svg-overflow-auto",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 16200,
+      "reference_nonwhite_pixels": 16200,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--negative-dashoffset-odd-dasharray",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 12551,
+      "reference_nonwhite_pixels": 12551,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--display-none-mask",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 120000,
+      "reference_nonwhite_pixels": 120000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--large-transform-001",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 300000,
+      "reference_nonwhite_pixels": 300000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--marker-context-fill-transform",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 8162,
+      "reference_nonwhite_pixels": 8162,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--marker-implicit-subpaths",
+      "pre_rc12": "mismatch",
+      "recovered": "pass",
+      "nonwhite_pixels": 10000,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--mask-percentage",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 117600,
+      "reference_nonwhite_pixels": 117600,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-001",
+      "pre_rc12": "mismatch",
+      "recovered": "mismatch",
+      "nonwhite_pixels": 10000,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-003",
+      "pre_rc12": "mismatch",
+      "recovered": "mismatch",
+      "nonwhite_pixels": 10000,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-004",
+      "pre_rc12": "mismatch",
+      "recovered": "mismatch",
+      "nonwhite_pixels": 480000,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-005",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 21632,
+      "reference_nonwhite_pixels": 21632,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-006",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 26032,
+      "reference_nonwhite_pixels": 26032,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-007",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 0,
+      "reference_nonwhite_pixels": 0,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-008",
+      "pre_rc12": "mismatch",
+      "recovered": "mismatch",
+      "nonwhite_pixels": 2500,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-009",
+      "pre_rc12": "mismatch",
+      "recovered": "mismatch",
+      "nonwhite_pixels": 2500,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-010",
+      "pre_rc12": "mismatch",
+      "recovered": "mismatch",
+      "nonwhite_pixels": 0,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-non-uniform-scale",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 20000,
+      "reference_nonwhite_pixels": 20000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-with-none-preserve-aspect-ratio",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 10000,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--small-nested-viewbox",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 576,
+      "reference_nonwhite_pixels": 576,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--symbol-in-mask",
+      "pre_rc12": "mismatch",
+      "recovered": "mismatch",
+      "nonwhite_pixels": 10000,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--text-shadow-01",
+      "pre_rc12": "mismatch",
+      "recovered": "mismatch",
+      "nonwhite_pixels": 225,
+      "reference_nonwhite_pixels": 99,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--text-shadow-02",
+      "pre_rc12": "mismatch",
+      "recovered": "mismatch",
+      "nonwhite_pixels": 196,
+      "reference_nonwhite_pixels": 99,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--reftests--text-shadow-03",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 196,
+      "reference_nonwhite_pixels": 196,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--subpixel-clip-path-transform",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 10000,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--svg-with-outline",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 1076,
+      "reference_nonwhite_pixels": 1076,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--text-clip-path-transform",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 20000,
+      "reference_nonwhite_pixels": 20000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--text-mask-transform",
+      "pre_rc12": "pass",
+      "recovered": "pass",
+      "nonwhite_pixels": 20000,
+      "reference_nonwhite_pixels": 20000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    },
+    {
+      "id": "svg--painting--will-change-under-mask",
+      "pre_rc12": "mismatch",
+      "recovered": "pass",
+      "nonwhite_pixels": 10000,
+      "reference_nonwhite_pixels": 10000,
+      "paired_stable": true,
+      "nonwhite_stable": true
+    }
+  ]
+}
