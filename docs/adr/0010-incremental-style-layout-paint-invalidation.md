@@ -1,6 +1,6 @@
 # ADR 0010 — Incremental style, layout and paint invalidation
 
-Status: draft for project review (2026-09-24)
+Status: accepted (2026-09-24); each owner implements its seam behind the full-recompute parity oracle
 Owner: compositor for the design; dom-bindings, css, layout, replaced-content and integrator-assist for implementation
 
 ## Context and target

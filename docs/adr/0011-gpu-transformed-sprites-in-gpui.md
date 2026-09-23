@@ -1,6 +1,6 @@
 # ADR 0011 — GPU transformed color sprites in GPUI
 
-Status: draft for project review (2026-09-24)
+Status: accepted as a local prototype (2026-09-24). Any upstream GPUI submission is an outward-facing action that needs the user's explicit approval first.
 Owner: integrator/platform for GPUI changes; compositor for frame contract and parity
 
 ## Problem
