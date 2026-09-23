@@ -178,6 +178,7 @@ pub struct TreeBuilder {
     shadow_templates: Vec<(NodeIdx, NodeIdx)>,
     allow_declarative_shadow_roots: bool,
     fragment: bool,
+    fragment_context: Option<String>,
 }
 
 impl Default for TreeBuilder {
@@ -206,6 +207,7 @@ impl TreeBuilder {
             shadow_templates: Vec::new(),
             allow_declarative_shadow_roots: true,
             fragment: false,
+            fragment_context: None,
         }
     }
 
@@ -974,7 +976,9 @@ impl TreeBuilder {
                 "template" => Some(*self.template_modes.last().unwrap_or(&Mode::InTemplate)),
                 "frameset" => Some(Mode::InFrameset),
                 "body" => Some(Mode::InBody),
-                "html" if self.fragment => Some(Mode::InBody),
+                "html" if self.fragment => Some(fragment_insertion_mode(
+                    self.fragment_context.as_deref().unwrap_or("html")
+                )),
                 "html" => Some(if self.head.is_none() {
                     Mode::BeforeHead
                 } else {
@@ -2771,14 +2775,10 @@ pub fn build_with_custom_element_host(
     builder.into_dom()
 }
 
-/// Fragment tree construction with only the synthetic `html` root on the open
-/// stack. The context element sets the initial mode but is not a tree child.
-pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
-    let mut builder = TreeBuilder::new();
-    builder.allow_declarative_shadow_roots = false;
-    builder.fragment = true;
-    builder.insert_and_push("html", Vec::new());
-    builder.mode = match context {
+/// The fragment context is the last node used by the reset insertion mode
+/// algorithm, even though it is not on the synthetic open-element stack.
+fn fragment_insertion_mode(context: &str) -> Mode {
+    match context {
         "html" => Mode::BeforeHead,
         "frameset" => Mode::InFrameset,
         "select" => Mode::InSelect,
@@ -2790,10 +2790,21 @@ pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
         "caption" => Mode::InCaption,
         "colgroup" => Mode::InColumnGroup,
         _ => Mode::InBody,
-    };
+    }
+}
+
+/// Fragment tree construction with only the synthetic `html` root on the open
+/// stack. The context element sets the initial mode but is not a tree child.
+pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
+    let mut builder = TreeBuilder::new();
+    builder.allow_declarative_shadow_roots = false;
+    builder.fragment = true;
+    builder.fragment_context = Some(context.to_owned());
+    builder.insert_and_push("html", Vec::new());
+    builder.mode = fragment_insertion_mode(context);
     if context == "template" { builder.template_modes.push(Mode::InTemplate); }
     let mut tokenizer = Tokenizer::new(src.chars().collect());
-    if matches!(context, "textarea" | "title" | "style" | "script" | "noscript" | "plaintext") {
+    if matches!(context, "textarea" | "title" | "style" | "xmp" | "iframe" | "noembed" | "noframes" | "script" | "noscript" | "plaintext") {
         tokenizer.enter_fragment_text_context(context);
     }
     loop {

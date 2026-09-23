@@ -54,6 +54,8 @@ pub const NAMED: &[(&str, &str)] = &[
     ("&mdash;", "\u{2014}"),
     ("&middot;", "\u{00B7}"),
     ("&ndash;", "\u{2013}"),
+    ("&not;", "\u{00AC}"),
+    ("&notin;", "\u{2209}"),
     ("&ntilde;", "\u{00F1}"),
     ("&Ntilde;", "\u{00D1}"),
     ("&oacute;", "\u{00F3}"),
@@ -66,6 +68,7 @@ pub const NAMED: &[(&str, &str)] = &[
     ("&para;", "\u{00B6}"),
     ("&plusmn;", "\u{00B1}"),
     ("&pound;", "\u{00A3}"),
+    ("&prod;", "\u{220F}"),
     ("&QUOT;", "\""),
     ("&quot;", "\""),
     ("&raquo;", "\u{00BB}"),
@@ -95,6 +98,7 @@ pub const NAMED: &[(&str, &str)] = &[
 /// they must NOT decode when immediately followed by `=` or an ASCII
 /// alphanumeric.
 pub const LEGACY_NO_SEMI: &[(&str, &str)] = &[
+    ("&AElig", "\u{00C6}"),
     ("&AMP", "&"),
     ("&COPY", "\u{00A9}"),
     ("&GT", ">"),
@@ -105,6 +109,8 @@ pub const LEGACY_NO_SEMI: &[(&str, &str)] = &[
     ("&copy", "\u{00A9}"),
     ("&gt", ">"),
     ("&lt", "<"),
+    ("&not", "\u{00AC}"),
+    ("&pound", "\u{00A3}"),
     ("&quot", "\""),
     ("&reg", "\u{00AE}"),
 ];
