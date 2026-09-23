@@ -3831,5 +3831,8 @@ include!("builtins_binary_bigint.rs");
 include!("builtins_temporal.rs");
 include!("builtins_temporal_arithmetic.rs");
 include!("builtins_temporal_epoch.rs");
+include!("builtins_std_string.rs");
+include!("builtins_std_number_math.rs");
+include!("builtins_std_json_global.rs");
 include!("interp_regexp.rs");
 include!("interp_tests.rs");

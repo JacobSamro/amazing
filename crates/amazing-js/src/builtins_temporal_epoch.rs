@@ -1,5 +1,4 @@
-// Epoch nanoseconds are retained exactly in i128. BigInt-facing entry points
-// will use the value model supplied by JSB-2.
+// Epoch nanoseconds are retained exactly in i128; the public boundary uses BigInt.
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum StdEpochKind { Instant, ZonedDateTime }
@@ -45,6 +44,16 @@ impl Interpreter {
                     let value = symbol_method(self, method, native);
                     symbol_method_length(&value, count);
                     object.borrow_mut().define(method, symbol_data(value, true, true)).unwrap();
+                }
+                if kind == StdEpochKind::Instant {
+                    for (method, native) in [
+                        ("fromEpochMilliseconds", std_epoch_from_milliseconds as crate::value::NativeFn),
+                        ("fromEpochNanoseconds", std_epoch_from_nanoseconds as crate::value::NativeFn),
+                    ] {
+                        let value = symbol_method(self, method, native);
+                        symbol_method_length(&value, 1);
+                        object.borrow_mut().define(method, symbol_data(value, true, true)).unwrap();
+                    }
                 }
             }
             prototype.borrow_mut().define("constructor", symbol_data(function.clone(), true, true)).unwrap();
@@ -104,7 +113,7 @@ impl Interpreter {
 }
 
 fn std_epoch_make(i: &Interpreter, kind: StdEpochKind, epoch_ns: i128, offset_minutes: i64) -> Result<JsValue, Throw> {
-    if epoch_ns.abs() > 8_640_000_000_000_000_000_000i128 {
+    if !(-8_640_000_000_000_000_000_000i128..=8_640_000_000_000_000_000_000i128).contains(&epoch_ns) {
         return Err(Throw::range_error("instant outside Temporal range"));
     }
     let prototype = STD_EPOCH_PROTOS.with(|registry| registry.borrow().get(&std_weak_id(&i.global_obj))
@@ -182,9 +191,38 @@ fn std_epoch_from_value(i: &mut Interpreter, value: JsValue, kind: StdEpochKind)
 fn std_epoch_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>, kind: StdEpochKind) -> Result<JsValue, Throw> {
     let JsValue::Object(object) = &this else { return Err(Throw::type_error("Temporal constructor requires new")); };
     if !object.borrow().constructed { return Err(Throw::type_error("Temporal constructor requires new")); }
-    // The constructor requires BigInt. Preserve its type check until JSB-2 lands.
-    let _ = (i, args, kind);
-    Err(Throw::type_error("epoch nanoseconds require BigInt"))
+    let epoch_ns = std_epoch_to_nanoseconds(i, &std_reflect_arg(&args, 0))?;
+    let zone = if kind == StdEpochKind::ZonedDateTime {
+        let zone = std_temporal_fixed_offset(&i.to_string(&std_reflect_arg(&args, 1))?)?;
+        let calendar = std_reflect_arg(&args, 2);
+        if !calendar.is_undefined() && !matches!(calendar, JsValue::Str(_)) {
+            return Err(Throw::type_error("Temporal calendar must be a string"));
+        }
+        if !calendar.is_undefined() && !i.to_string(&calendar)?.eq_ignore_ascii_case("iso8601") {
+            return Err(Throw::range_error("unsupported Temporal calendar"));
+        }
+        zone
+    } else { 0 };
+    std_epoch_make(i, kind, epoch_ns, zone)
+}
+fn std_epoch_to_nanoseconds(i: &mut Interpreter, value: &JsValue) -> Result<i128, Throw> {
+    let bigint = i.to_bigint(value)?;
+    bigint.to_radix_string(10).parse::<i128>()
+        .map_err(|_| Throw::range_error("instant outside Temporal range"))
+}
+fn std_epoch_bigint(epoch_ns: i128) -> JsValue {
+    Interpreter::bigint_value(BinaryBigInt::parse_string(&epoch_ns.to_string()).unwrap())
+}
+fn std_epoch_from_nanoseconds(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let epoch_ns = std_epoch_to_nanoseconds(i, &std_reflect_arg(&args, 0))?;
+    std_epoch_make(i, StdEpochKind::Instant, epoch_ns, 0)
+}
+fn std_epoch_from_milliseconds(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let milliseconds = i.to_number(&std_reflect_arg(&args, 0))?;
+    if !milliseconds.is_finite() || milliseconds.fract() != 0.0 || milliseconds.abs() > 8_640_000_000_000_000.0 {
+        return Err(Throw::range_error("invalid epoch milliseconds"));
+    }
+    std_epoch_make(i, StdEpochKind::Instant, milliseconds as i128 * 1_000_000, 0)
 }
 fn std_epoch_instant_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     std_epoch_constructor(i, this, args, StdEpochKind::Instant)
@@ -230,7 +268,7 @@ fn std_epoch_getter(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Resu
         .unwrap_or_default();
     let field = name.strip_prefix("get ").unwrap_or("");
     match field {
-        "epochNanoseconds" => return Err(Throw::type_error("epoch nanoseconds require BigInt")),
+        "epochNanoseconds" => return Ok(std_epoch_bigint(data.epoch_ns)),
         "epochMilliseconds" => return Ok(JsValue::num(data.epoch_ns.div_euclid(1_000_000) as f64)),
         "timeZoneId" => return Ok(JsValue::str(std_epoch_zone_text(data.offset_minutes))),
         "calendarId" => return Ok(JsValue::str("iso8601")),

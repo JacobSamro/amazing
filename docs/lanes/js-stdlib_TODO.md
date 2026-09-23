@@ -71,3 +71,80 @@ calendar arithmetic, and host JavaScript gaps; this is a measured conformance
 tranche, not complete Test262 conformance. Named IANA zones and non-ISO
 calendars remain outside this host's scope. All remaining failures stay
 visible in the pinned corpus rather than being classified away.
+
+## JSS-1 priority interrupt: core built-ins
+
+Added the missing String case conversion, padding, repeat, concatenation,
+search/replacement, Annex B HTML methods, and static `fromCodePoint`/`raw`;
+Number formatting, predicates, constructor and constants; Math constants and
+functions; JSON parse/stringify with reviver, replacer, and indentation; and
+global numeric and URI functions. Case conversion uses Rust's Unicode mappings
+with Turkish/Azeri locale tailoring. Strings and JSON preserve UTF-16 code
+units, including isolated surrogates. `Object.defineProperty` now uses the
+existing `define_own_property` path so descriptors preserve omitted fields;
+the old path overwrote a JSON reviver's nonconfigurable property value.
+
+Full pinned Linux Test262 on fixed Temporal base `b257461` and identical input
+SHA-256 `91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`:
+
+| Run | Pass | Fail | Timeout | Unsupported | Skipped |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Before | 14,142 | 29,443 | 15 | 9,978 | 294 |
+| After | 15,218 | 28,367 | 15 | 9,978 | 294 |
+
+At `(path, variant)` granularity, 2,134 variants newly pass and **zero pass
+variants are lost**. Final classification SHA-256 is
+`0bc07b17895600776cbc5889769fc9b3527f41f47efa0ce1185e31fe3a7761fb`.
+Final selected passes: String 748/1,223, Number 221/340, Math 253/327,
+JSON 65/165, and global 19/29. Linux `amazing-js` nextest passed 216/216 and
+its doctest passed 1/1.
+
+This installs the missing members but does not close every semantic gap.
+`String.prototype.matchAll` still delegates to the existing match result and
+returns an array iterator rather than spec match records. Number radix
+conversion is bounded and does not yet use the shortest-round-trip algorithm.
+Locale casing implements Turkish/Azeri tailoring; full ECMA-402 locale
+selection is outside this host. Most remaining selected failures expose
+underlying engine behavior such as realm error prototypes, boxing, Proxy,
+RegExp, or parser support and remain counted as failures.
+
+## JSS-1 Temporal BigInt epoch integration
+
+After JSB-2 landed, `Temporal.Instant` and `Temporal.ZonedDateTime` constructors
+now convert their epoch argument with `ToBigInt`, enforce the Temporal epoch
+range, and retain exact `i128` nanoseconds. Their `epochNanoseconds` getters
+return a BigInt. `Instant.fromEpochNanoseconds` and
+`Instant.fromEpochMilliseconds` are installed with BigInt and integral Number
+input respectively. ZonedDateTime continues to support UTC and fixed offsets;
+its optional ISO calendar argument rejects non-string values with TypeError.
+
+The rebased core built-ins preserve JSB-2 behavior: `Number(BigInt)` explicitly
+converts the primitive, JSON.stringify throws for BigInt unless `toJSON`
+replaces it, and TypedArray index descriptors dispatch through the binary hook
+inside `define_own_property`. The `matchAll` path observes RegExp `flags`, and
+repeated definitions of a function's `length` retain its configurable
+descriptor. These fixes close the losses found when the earlier core commit was
+combined with JSB-2.
+
+Fixed base `5e837a4830d0c049b5c5883dcd7c7c0ab799dfca`; pinned Test262
+revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`; identical full-input
+SHA-256 `91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`:
+
+| Run | Pass | Fail | Timeout | Unsupported | Skipped |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Base | 20,999 | 22,557 | 15 | 10,007 | 294 |
+| Integrated branch | 23,036 | 20,513 | 22 | 10,007 | 294 |
+
+At `(path, variant)` granularity, **4,053 new passes and zero lost passes**.
+Final full classification SHA-256:
+`8e9283e49199539fff07b602b99501d7b67b8f1ff2d6b1bd82c6387957e6303a`.
+The named `built-ins/Temporal/` selection passes 3,288/4,603 files; two
+consecutive runs have identical classification SHA-256
+`93c39a225d0a1b8efe13fbc096185da8c9c97f7fdc7fc8faa67636e0eb4c6bb1`.
+Linux `amazing-js` nextest passed 235/235 with one skipped; the doctest passed
+1/1. The exact-commit Windows workspace gate on win-002 passed 1,995/1,995
+nextest tests with five skipped and 2/2 doctests.
+
+Remaining Temporal failures include calendar/time-zone behavior beyond the
+UTC/fixed-offset ISO scope, Proxy behavior, and other shared engine semantics.
+They remain failures in the pinned corpus.
