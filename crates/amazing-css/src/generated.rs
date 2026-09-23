@@ -277,7 +277,7 @@ fn resolve_image_url(url: &str, base: Option<&str>) -> String {
     format!("{scheme}://{authority}{normalized}{suffix}")
 }
 
-fn parse_counter_ops(css: &str, default: i32, allow_reversed: bool) -> Option<Vec<(String, i32)>> {
+fn parse_counter_ops(css: &str, default: i32, allow_reversed: bool) -> Option<Vec<(String, i32, bool)>> {
     let tokens = compact(&tokenize(css));
     if tokens == [Token::Ident("none".into())] {
         return Some(Vec::new());
@@ -305,16 +305,16 @@ fn parse_counter_ops(css: &str, default: i32, allow_reversed: bool) -> Option<Ve
         if name.eq_ignore_ascii_case("none") {
             return None;
         }
-        let value = match tokens.get(i + 1) {
+        let (value, explicit) = match tokens.get(i + 1) {
             Some(Token::Number(n))
                 if n.fract() == 0.0 && *n >= i32::MIN as f64 && *n <= i32::MAX as f64 =>
             {
                 i += 1;
-                *n as i32
+                (*n as i32, true)
             }
-            _ => default,
+            _ => (default, false),
         };
-        result.push((name, value));
+        result.push((name, value, explicit));
         i += 1;
     }
     (!result.is_empty()).then_some(result)
@@ -414,6 +414,71 @@ fn ensure_counter(state: &mut State, name: &str) {
     }
 }
 
+fn reset_names_counter(style: &crate::ComputedStyle, name: &str) -> bool {
+    parse_counter_ops(style.get("counter-reset").unwrap_or("none"), 0, true)
+        .unwrap_or_default()
+        .iter()
+        .any(|(raw, _, _)| raw == name || raw == &format!("reversed({name})"))
+}
+
+/// The implicit start of a reversed counter is determined by the increments
+/// in its scope, stopping at the first counter-set. A nested reset obscures
+/// this scope for its subtree.
+fn reversed_initial(dom: &Dom, node: NodeIdx, name: &str, styles: &StyledDom) -> i32 {
+    fn scan_style(
+        style: &crate::ComputedStyle,
+        name: &str,
+        reversed: bool,
+        total: &mut i32,
+        last_step: &mut i32,
+    ) -> bool {
+        let increments = parse_counter_ops(
+            style.get("counter-increment").unwrap_or("none"), 1, false
+        ).unwrap_or_default();
+        let specified = increments.iter().any(|(counter, _, _)| counter == name);
+        let mut increment = increments.iter().filter(|(counter, _, _)| counter == name)
+            .fold(0_i32, |sum, (_, value, _)| sum.saturating_add(*value));
+        if name == "list-item" && style.get("display") == Some("list-item") && !specified {
+            increment = if reversed { -1 } else { 1 };
+        }
+        let negated = increment.saturating_neg();
+        if negated != 0 { *last_step = negated; }
+        if let Some((_, value, _)) = parse_counter_ops(
+            style.get("counter-set").unwrap_or("none"), 0, false
+        ).unwrap_or_default().iter().rev().find(|(counter, _, _)| counter == name) {
+            *total = total.saturating_add(*value);
+            return true;
+        }
+        *total = total.saturating_add(negated);
+        false
+    }
+    fn scan_node(
+        dom: &Dom, node: NodeIdx, root: bool, name: &str, styles: &StyledDom,
+        total: &mut i32, last_step: &mut i32,
+    ) -> bool {
+        let Some(style) = styles.get(node) else { return false };
+        if style.get("display") == Some("none") { return false; }
+        if !root && reset_names_counter(style, name) { return false; }
+        if scan_style(style, name, true, total, last_step) { return true; }
+        for pseudo in [PseudoElement::Before, PseudoElement::Marker] {
+            if let Some(pseudo_style) = styles.get_pseudo(node, pseudo) {
+                if scan_style(pseudo_style, name, true, total, last_step) { return true; }
+            }
+        }
+        for child in dom.children(node) {
+            if scan_node(dom, child, false, name, styles, total, last_step) { return true; }
+        }
+        if let Some(after) = styles.get_pseudo(node, PseudoElement::After) {
+            if scan_style(after, name, true, total, last_step) { return true; }
+        }
+        false
+    }
+    let mut total = 0_i32;
+    let mut last_step = 0_i32;
+    scan_node(dom, node, true, name, styles, &mut total, &mut last_step);
+    total.saturating_add(last_step)
+}
+
 fn evaluate(
     items: &[Item],
     dom: &Dom,
@@ -486,9 +551,10 @@ fn apply_counters(
     node: NodeIdx,
     style: &crate::ComputedStyle,
     state: &mut State,
+    styles: &StyledDom,
 ) -> Vec<String> {
     let mut pushed = Vec::new();
-    for (raw_name, mut value) in
+    for (raw_name, mut value, explicit) in
         parse_counter_ops(style.get("counter-reset").unwrap_or("none"), 0, true).unwrap_or_default()
     {
         let (name, reversed) = if let Some(name) = raw_name
@@ -499,12 +565,8 @@ fn apply_counters(
         } else {
             (raw_name, false)
         };
-        if reversed && value == 0 && dom.name(node) == Some("ol") {
-            value = dom
-                .children(node)
-                .filter(|child| dom.name(*child) == Some("li"))
-                .count() as i32
-                + 1;
+        if reversed && !explicit {
+            value = reversed_initial(dom, node, &name, styles);
         }
         state.counters.entry(name.clone()).or_default().push(value);
         state
@@ -517,22 +579,22 @@ fn apply_counters(
     let mut increments =
         parse_counter_ops(style.get("counter-increment").unwrap_or("none"), 1, false).unwrap_or_default();
     if style.get("display") == Some("list-item")
-        && !increments.iter().any(|(name, _)| name == "list-item")
+        && !increments.iter().any(|(name, _, _)| name == "list-item")
     {
         let step = if state.reversed.get("list-item").and_then(|v| v.last()) == Some(&true) {
             -1
         } else {
             1
         };
-        increments.push(("list-item".into(), step));
+        increments.push(("list-item".into(), step, false));
     }
-    for (name, value) in increments {
+    for (name, value, _) in increments {
         ensure_counter(state, &name);
         if let Some(current) = state.counters.get_mut(&name).and_then(|values| values.last_mut()) {
             *current = current.saturating_add(value);
         }
     }
-    for (name, value) in
+    for (name, value, _) in
         parse_counter_ops(style.get("counter-set").unwrap_or("none"), 0, false).unwrap_or_default()
     {
         ensure_counter(state, &name);
@@ -575,9 +637,15 @@ fn resolve_pseudo(
             _ => None,
         });
         let list_style = style.get("list-style-type").unwrap_or("disc");
-        let items = image_item
-            .map(|image| vec![image])
-            .unwrap_or_else(|| match list_style {
+        let string_marker = match compact(&tokenize(list_style)).as_slice() {
+            [Token::Str(text)] => Some(text.clone()),
+            _ => None,
+        };
+        let items = image_item.map(|image| vec![image]).unwrap_or_else(|| {
+            if let Some(text) = string_marker {
+                return vec![Item::Text(text)];
+            }
+            match list_style {
                 "disc" => vec![Item::Text("• ".into())],
                 "circle" => vec![Item::Text("◦ ".into())],
                 "square" => vec![Item::Text("▪ ".into())],
@@ -586,7 +654,8 @@ fn resolve_pseudo(
                     Item::Counter("list-item".into(), counter_style.into()),
                     Item::Text(". ".into()),
                 ],
-            });
+            }
+        });
         ContentValue { items, alt: None }
     } else {
         match parse_content(css) {
@@ -599,7 +668,7 @@ fn resolve_pseudo(
             *url = resolve_image_url(url, style.url_base("content"));
         }
     }
-    let pushed = apply_counters(dom, node, style, state);
+    let pushed = apply_counters(dom, node, style, state, out);
     let mut content = GeneratedContent {
         runs: evaluate(&value.items, dom, node, style, state),
         alt_text: None,
@@ -622,7 +691,7 @@ fn walk(dom: &Dom, node: NodeIdx, out: &mut StyledDom, state: &mut State) {
         if style.get("display") == Some("none") {
             return;
         }
-        let pushed = apply_counters(dom, node, &style, state);
+        let pushed = apply_counters(dom, node, &style, state, out);
         resolve_pseudo(dom, node, PseudoElement::Before, out, state);
         resolve_pseudo(dom, node, PseudoElement::Marker, out, state);
         for child in dom.children(node) {

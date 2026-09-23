@@ -1198,3 +1198,6 @@ Increment, set, and counter reads instantiate a new zero-valued counter in
 that case; the regression covers `display: contents` descendants and a
 reversed list followed by another list item. The pinned 54-case css-lists
 subset is recorded in `css13-lists-manifest.json`.
+Quoted `list-style-type` values now produce literal marker text after CSS
+escape decoding. An omitted `reversed()` reset value uses the later increments
+in its scope to derive a descending start; explicit values are preserved.
