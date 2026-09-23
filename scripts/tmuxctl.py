@@ -329,6 +329,12 @@ LANE_GRANTS_REWRITE = {
 # IA-CACHE adds exactly one line, `amazing-fetch = { path = "../amazing-fetch" }`,
 # to the shell manifest. Additive, verified at merge.
 LANE_GRANTS["integrator-assist"] += ["crates/amazing-shell-gpui/Cargo.toml", "crates/amazing-shell-gpui/Cargo.lock", "Cargo.lock"]
+# IA-SVG's pinned WPT artifact lives in the image crate. RC-14 does not touch
+# either exact file. The manifest gets only its fetch/net dependency lines;
+# the reftest example rewires SVG painting and data: resource loading.
+LANE_GRANTS["integrator-assist"].append("crates/amazing-image/Cargo.toml")
+LANE_GRANTS_REWRITE["integrator-assist"].append("crates/amazing-image/examples/render_reftest.rs")
+LANE_GRANTS["integrator-assist"].append("crates/amazing-image/examples/render_reftest.rs")
 
 
 def grant_is_rewrite(lane: str, path: str) -> bool:

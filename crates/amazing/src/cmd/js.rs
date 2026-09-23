@@ -112,7 +112,9 @@ pub(crate) fn resolve_script_url(page: &str, source: &str) -> String {
     {
         return mapped;
     }
-    if source.contains("://") || source.starts_with("file:") {
+    if source.contains("://") || source.starts_with("file:")
+        || source.get(..5).is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:"))
+    {
         return source.to_owned();
     }
     if (page.starts_with("http://") || page.starts_with("https://") || page.starts_with("file:"))

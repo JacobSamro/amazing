@@ -18,3 +18,5 @@ image = { version = "=0.25.9", default-features = false, features = ["bmp", "gif
 amazing-html = { path = "../amazing-html" }
 amazing-layout = { path = "../amazing-layout" }
 amazing-paint = { path = "../amazing-paint" }
+amazing-fetch = { path = "../amazing-fetch" }
+amazing-net = { path = "../amazing-net" }
