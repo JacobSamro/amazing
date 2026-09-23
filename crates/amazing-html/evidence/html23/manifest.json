@@ -1,0 +1,62 @@
+{
+  "revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "fixed_base": "d9b253e78e040cb243671871975f9c04db86c2fd",
+  "selection_rule": "All #data cases in seven previously unselected complete files, ordered entities01, entities02, processing-instructions, doctype01, scriptdata01, tests18, webkit02; frozen before parser edits.",
+  "normalization": "Use HTML-22 mechanical probe: remove one section delimiter LF; HTML parse API handles CRLF/CR; typed depth/name/value tree rows, PI serialization strips the closing ?> marker, sorted attributes, exact comparison; ignore parse errors. Unsupported input modes and contexts remain unsupported; panics are crashes.",
+  "contexts": {
+    "document": 369,
+    "div": 3,
+    "select": 1
+  },
+  "modes": {
+    "default": 369,
+    "script-off": 3,
+    "script-on": 1
+  },
+  "sources": [
+    {
+      "path": "html/syntax/parsing/resources/entities01.dat",
+      "sha256": "b73605caac5aed5656184ab8db3f08edff5457ac3186cb04afa28384bca955e3",
+      "bytes": 17640,
+      "cases": 75
+    },
+    {
+      "path": "html/syntax/parsing/resources/entities02.dat",
+      "sha256": "f4e0cd461204b0184709be040c00811b776fbde1a6d002bb1c75d02056d9e54a",
+      "bytes": 4952,
+      "cases": 26
+    },
+    {
+      "path": "html/syntax/parsing/resources/processing-instructions.dat",
+      "sha256": "3d4c6e67b59fda8fa0eb798106a42d244c69a84d7e3a385f9845bfc40071b4f1",
+      "bytes": 12487,
+      "cases": 124
+    },
+    {
+      "path": "html/syntax/parsing/resources/doctype01.dat",
+      "sha256": "f3a286c09d729eeed9aa63e0aec13ab12336af04590c169543e6d1e1ef4723b2",
+      "bytes": 9076,
+      "cases": 37
+    },
+    {
+      "path": "html/syntax/parsing/resources/scriptdata01.dat",
+      "sha256": "e32ea3adc3d68c90e62ea50b3a41bf80369d1491958532bf00787b3509667322",
+      "bytes": 6624,
+      "cases": 26
+    },
+    {
+      "path": "html/syntax/parsing/resources/tests18.dat",
+      "sha256": "5d0019ae43bb4e0b0da9f2e1d57ac0618a607bd8a1324b163ec7a23a1dc120f3",
+      "bytes": 12119,
+      "cases": 36
+    },
+    {
+      "path": "html/syntax/parsing/resources/webkit02.dat",
+      "sha256": "03b215350d352faf110df2cc6eac23a44a7f70945b4ea962f0b17bed103459f7",
+      "bytes": 14921,
+      "cases": 49
+    }
+  ],
+  "total_cases": 373,
+  "retention": "Run full HTML-21 and HTML-22 selections under their existing probes."
+}

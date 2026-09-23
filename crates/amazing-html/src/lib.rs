@@ -107,22 +107,15 @@ pub fn parse_with_custom_element_host(
     tree::build_with_custom_element_host(src, dom, host)
 }
 
-/// Parses an HTML fragment in a supported HTML context and
+/// Parses an HTML fragment in any HTML element context and
 /// returns the fragment children under a standalone document node.
 ///
-/// Other contexts are rejected until their tokenizer
-/// initialization rules are implemented; callers never receive a plausible
-/// but context-insensitive tree.
 /// `noscript` uses this parser's fixed scripting-enabled RAWTEXT behavior;
 /// there is no scripting-disabled fragment mode.
 pub fn parse_fragment(context: &str, src: &str) -> Result<Dom, String> {
     let context = context.to_ascii_lowercase();
-    let supported = [
-        "div", "body", "html", "frameset", "table", "tbody", "thead", "tfoot", "tr", "td", "th", "caption", "colgroup",
-        "textarea", "title", "style", "script", "noscript", "plaintext", "select", "option", "template",
-    ];
-    if !supported.contains(&context.as_str()) {
-        return Err("unsupported HTML fragment context".into());
+    if context.is_empty() || context.chars().any(|c| c.is_ascii_whitespace() || matches!(c, '<' | '>' | '\0')) {
+        return Err("invalid HTML fragment context name".into());
     }
     let normalized;
     let src = if src.contains('\r') {

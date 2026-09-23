@@ -352,7 +352,7 @@ impl Tokenizer {
         self.state = match name {
             "plaintext" => State::PlainText,
             "textarea" | "title" => State::RcData,
-            "style" | "noscript" => State::RawText,
+            "style" | "xmp" | "iframe" | "noembed" | "noframes" | "noscript" => State::RawText,
             "script" => State::ScriptData,
             _ => return,
         };
@@ -2071,6 +2071,26 @@ mod tests {
             vec![Token::StartTag {
                 name: "a".into(),
                 attrs: vec![("href".into(), "?a=&ampx".into())],
+                self_closing: false,
+            }]
+        );
+    }
+
+    #[test]
+    fn html23_named_references_use_longest_match_and_legacy_context_rules() {
+        assert_eq!(
+            tokenize("&notit; &notin; &pound_id &AElig= &prod;_id"),
+            vec![Token::Characters("\u{00ac}it; \u{2209} \u{00a3}_id \u{00c6}= \u{220f}_id".into())]
+        );
+        assert_eq!(
+            tokenize("<div a='&pound_id' b='&pound=23' c='&prod;_id'>"),
+            vec![Token::StartTag {
+                name: "div".into(),
+                attrs: vec![
+                    ("a".into(), "\u{00a3}_id".into()),
+                    ("b".into(), "&pound=23".into()),
+                    ("c".into(), "\u{220f}_id".into()),
+                ],
                 self_closing: false,
             }]
         );
