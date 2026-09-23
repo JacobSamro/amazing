@@ -115,6 +115,97 @@ impl<T: Default + Clone> Allocator<T> for BoundedAlloc {
     }
 }
 
+/// Progress from one bounded incremental decode call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StreamStep {
+    pub consumed: usize,
+    pub written: usize,
+    pub finished: bool,
+}
+
+/// Resumable strict Brotli decoder. The caller retains the encoded input and
+/// supplies fixed output storage; only the bounded decoder window is retained.
+pub struct StreamDecoder {
+    state: BrotliState<BoundedAlloc, BoundedAlloc, BoundedAlloc>,
+    budget: Rc<Budget>,
+    output: usize,
+    limit: usize,
+    finished: bool,
+}
+impl StreamDecoder {
+    pub fn new(limit: usize) -> Self {
+        let budget = Rc::new(Budget::new(MAX_SCRATCH_BYTES));
+        let state = BrotliState::new_strict(
+            BoundedAlloc(budget.clone()),
+            BoundedAlloc(budget.clone()),
+            BoundedAlloc(budget.clone()),
+        );
+        Self {
+            state,
+            budget,
+            output: 0,
+            limit,
+            finished: false,
+        }
+    }
+    pub fn step(&mut self, input: &[u8], output: &mut [u8]) -> Result<StreamStep, DecodeError> {
+        if self.finished {
+            return if input.is_empty() {
+                Ok(StreamStep {
+                    consumed: 0,
+                    written: 0,
+                    finished: true,
+                })
+            } else {
+                Err(DecodeError::TrailingData)
+            };
+        }
+        if output.is_empty() {
+            return Ok(StreamStep {
+                consumed: 0,
+                written: 0,
+                finished: false,
+            });
+        }
+        let room = self.limit.saturating_sub(self.output);
+        let mut available_in = input.len();
+        let mut input_pos = 0;
+        let mut available_out = output.len().min(room.saturating_add(1));
+        let mut output_pos = 0;
+        let mut total_out = 0;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            BrotliDecompressStream(
+                &mut available_in,
+                &mut input_pos,
+                input,
+                &mut available_out,
+                &mut output_pos,
+                output,
+                &mut total_out,
+                &mut self.state,
+            )
+        }))
+        .unwrap_or(BrotliResult::ResultFailure);
+        if let Some(error) = self.budget.error.get() {
+            return Err(error);
+        }
+        if output_pos > room {
+            return Err(DecodeError::OutputLimit);
+        }
+        self.output += output_pos;
+        match result {
+            BrotliResult::ResultFailure => return Err(DecodeError::Invalid),
+            BrotliResult::ResultSuccess => self.finished = true,
+            BrotliResult::NeedsMoreInput | BrotliResult::NeedsMoreOutput => {}
+        }
+        Ok(StreamStep {
+            consumed: input_pos,
+            written: output_pos,
+            finished: self.finished,
+        })
+    }
+}
+
 struct Output {
     bytes: Vec<u8>,
     limit: usize,

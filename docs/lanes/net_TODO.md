@@ -983,3 +983,70 @@ Canonical logs/results/source manifests: integrator checkout
 Sources: [RFC6455](https://www.rfc-editor.org/rfc/rfc6455.html) and the
 [IANA WebSocket close-code registry](https://www.iana.org/assignments/websocket).
 This ticket stops at the protocol/transport boundary.
+
+## NET-9 — pull response bodies
+
+`amazing_net::fetch_stream(input, &FetchOptions, StreamOptions)` returns final
+URL, status, reason and headers after receiving the response head. Each
+`StreamingResponse::next_chunk()` call advances the body and returns at most
+`chunk_bytes`; dropping the response stops reads and closes its owned transport.
+The buffered `fetch` API remains available. Redirect bodies are dropped before
+opening the next URL. HTTP/1.1, negotiated HTTPS h2 and local files use the
+same pull surface; callers drive it on the existing single thread.
+
+| Bound | Default | Hard ceiling |
+| --- | --- | --- |
+| Returned chunk | 8 KiB | 64 KiB |
+| Decoded bytes | `FetchOptions::max_response_bytes` (32 MiB) | 32 MiB |
+| Encoded HTTP body | 32 MiB | 32 MiB |
+| Decoded/encoded cumulative ratio | 1024 plus 64 KiB grace | 4096 plus 64 KiB grace |
+| HTTP/1.1 response head | 64 KiB | 64 KiB |
+| DEFLATE history | 32 KiB | 32 KiB |
+| Brotli decoder scratch | 32 MiB | 32 MiB |
+
+Each transfer/content coding layer has its own cumulative decoded byte cap.
+The final layer checks cumulative decoded bytes against counted encoded bytes;
+a one-byte probe rejects the violating byte in fixed caller storage before
+delivery or body-sized allocation. DEFLATE preserves bit, block, Huffman and
+history state across reads. Gzip/zlib preserve header, checksum and trailer
+state; Brotli uses a resumable strict decoder with bounded scratch. HTTP/1.1
+framing parses Content-Length, chunked and EOF bodies incrementally. HTTP/2
+releases each DATA frame after consumption while retaining cumulative length
+accounting. One-byte input and varied output-size tests compare decoded bytes
+with the buffered decoders, including a real high-expansion Brotli vector.
+
+### NET-9 evidence
+
+The only branch touched was `lane/net`, on fixed base `2021707`. The
+`2021707..origin/dev` diff in all four net-owned crates was empty. The net
+Windows tree was refreshed to that base before NET-9 work and protected with
+`REFRESH-HOLD` during final gates. All builds/tests ran on win-001 with
+`CARGO_TARGET_DIR=C:\Users\server\target\net` and `--locked`; each full
+workspace run held a shared build slot and rebuilt all 20 workspace packages.
+
+| Gate | Run 1 | Run 2 |
+| --- | --- | --- |
+| Workspace nextest | 1327 passed / 0 failed / 3 skipped | identical |
+| Workspace doctests | 2 passed / 0 failed | identical |
+| Network lane nextest | 281 passed / 0 failed / 0 skipped | identical |
+| Network lane doctests | 0 tests | identical |
+| Pinned URL WPT | 864 passed / 0 failed / 0 timeout / 32 unsupported | identical |
+
+Lane native breakdown: net 180, TLS 4, Fetch 87, Brotli 10. The previous
+NET-8 lane count was 271. New coverage includes one-byte compressed input,
+1/2/7/8192-byte decoded output splits, whole-body decoder parity, a real
+1 MiB Brotli expansion rejected by the cumulative ratio, incremental HTTP/1.1
+chunk lines, unclean TLS EOF after complete framing, and authenticated h2
+DATA delivery before the next frame. The initial NET-9 checkpoint's compile
+error and an h2 fixture credit-order error were corrected before these gates.
+
+All 409 tracked workspace source/input hashes matched local files and stayed
+unchanged before and after both final runs. Source manifest SHA-256:
+`c8639be509339e0406b345f909885b20f4d99b8e61ab74534133988e04766990`.
+Pinned URL normalized stdout SHA-256:
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+PSL regeneration, TLS/Brotli fixture pins and decoder feature checks passed;
+neither workspace run emitted a nextest leak notice. Canonical gate logs,
+results, source manifests, recipe and input hashes are under the integrator
+checkout's `.agents/net/net9-final-evidence/`, `net9_gate.py` and
+`net9-inputs.json`. NET-9 stops at this transport API boundary.

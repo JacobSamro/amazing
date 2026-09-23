@@ -22,6 +22,9 @@ struct Stream {
     headers: Option<(u16, Vec<Field>)>,
     trailers: Vec<Field>,
     body: Vec<u8>,
+    received: usize,
+    streaming: bool,
+    head_emitted: bool,
     length: Option<usize>,
     head: bool,
     informational: usize,
@@ -54,6 +57,13 @@ pub struct Client<S> {
     goaway: Option<(u32, u32)>,
     failed: bool,
     frames: usize,
+}
+/// One pull event from a response stream. DATA is bounded by MAX_FRAME.
+#[derive(Debug)]
+pub enum StreamEvent {
+    Head { status: u16, headers: Vec<Field> },
+    Data(Vec<u8>),
+    End { trailers: Vec<Field> },
 }
 impl<S: Read + Write> Client<S> {
     pub fn new(mut io: S, limits: Limits) -> Result<Self, Error> {
@@ -140,6 +150,9 @@ impl<S: Read + Write> Client<S> {
                 headers: None,
                 trailers: Vec::new(),
                 body: Vec::new(),
+                received: 0,
+                streaming: false,
+                head_emitted: false,
                 length: None,
                 head,
                 informational: 0,
@@ -184,6 +197,49 @@ impl<S: Read + Write> Client<S> {
             self.io.take();
         }
         result
+    }
+    /// Start a response whose DATA frames are released one at a time.
+    pub fn start_streaming(&mut self, headers: &[Field], body: &[u8]) -> Result<u32, Error> {
+        let id = self.start(headers, body)?;
+        self.streams.get_mut(&id).unwrap().streaming = true;
+        Ok(id)
+    }
+    /// Drive one stream until its next head, DATA chunk, or end event.
+    pub fn next_event(&mut self, id: u32) -> Result<StreamEvent, Error> {
+        loop {
+            let s = self.streams.get_mut(&id).ok_or(Error::Closed)?;
+            if !s.streaming {
+                return Err(Error::Protocol);
+            }
+            if let Some(error) = s.error {
+                self.remove(id);
+                return Err(match error {
+                    Failure::Reset(code) => Error::StreamReset { stream: id, code },
+                    Failure::Unprocessed => Error::Unprocessed(id),
+                });
+            }
+            if !s.head_emitted {
+                if let Some((status, headers)) = &s.headers {
+                    s.head_emitted = true;
+                    return Ok(StreamEvent::Head {
+                        status: *status,
+                        headers: headers.clone(),
+                    });
+                }
+            }
+            if !s.body.is_empty() {
+                let data = std::mem::take(&mut s.body);
+                self.buffered -= data.len();
+                return Ok(StreamEvent::Data(data));
+            }
+            if s.recv_done {
+                let s = self.remove(id);
+                return Ok(StreamEvent::End {
+                    trailers: s.trailers,
+                });
+            }
+            self.poll()?;
+        }
     }
     pub fn take_reply(&mut self, id: u32) -> Result<Option<Reply>, Error> {
         let stream = self.streams.get(&id).ok_or(Error::Closed)?;
@@ -602,7 +658,7 @@ impl<S: Read + Write> Client<S> {
                 code: 1,
             })?
             .0;
-        if !s.head && status != 304 && s.length.is_some_and(|n| n != s.body.len()) {
+        if !s.head && status != 304 && s.length.is_some_and(|n| n != s.received) {
             return Err(Error::StreamReset {
                 stream: id,
                 code: 1,
@@ -664,7 +720,7 @@ impl<S: Read + Write> Client<S> {
                 code: 1,
             });
         }
-        if data.len() > self.limits.body_bytes.saturating_sub(s.body.len())
+        if data.len() > self.limits.body_bytes.saturating_sub(s.received)
             || data.len()
                 > self
                     .limits
@@ -677,6 +733,7 @@ impl<S: Read + Write> Client<S> {
             .try_reserve_exact(data.len())
             .map_err(|_| Error::Limit)?;
         s.body.extend_from_slice(data);
+        s.received += data.len();
         self.buffered += data.len();
         if frame.flags & 1 != 0 {
             Self::end(s, frame.stream)?;

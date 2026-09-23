@@ -113,6 +113,28 @@ fn multiplex_interleaved_streams_finish_out_of_order() {
     assert_eq!(c.start(&request(), b"").unwrap(), 5);
 }
 #[test]
+fn streaming_events_release_data_before_end_and_keep_cumulative_length() {
+    let (mut c, _) = client(
+        vec![
+            head(1, 4, &[("content-length", "5")]),
+            f(0, 0, 1, b"hel"),
+            f(0, 1, 1, b"lo"),
+        ],
+        Limits {
+            buffered_body_bytes: 3,
+            ..Limits::default()
+        },
+    );
+    let id = c.start_streaming(&request(), b"").unwrap();
+    assert!(matches!(
+        c.next_event(id).unwrap(),
+        StreamEvent::Head { status: 200, .. }
+    ));
+    assert!(matches!(c.next_event(id).unwrap(), StreamEvent::Data(bytes) if bytes == b"hel"));
+    assert!(matches!(c.next_event(id).unwrap(), StreamEvent::Data(bytes) if bytes == b"lo"));
+    assert!(matches!(c.next_event(id).unwrap(), StreamEvent::End { .. }));
+}
+#[test]
 fn reset_is_stream_local_and_idle_reset_is_connection_error() {
     let (mut c, _) = client(
         vec![
@@ -568,6 +590,59 @@ fn authenticated_h2_fetch_and_http1_fallback_use_production_dispatch() {
         assert_eq!(response.body, b"ok");
         thread.join().unwrap().unwrap();
     }
+}
+
+#[test]
+fn authenticated_h2_pull_stream_yields_data_before_second_frame() {
+    use amazing_net_tls::test_support;
+    let (port, thread) = test_support::serve(vec![b"h2".to_vec()], |io| {
+        let mut preface = [0; 24];
+        io.read_exact(&mut preface).unwrap();
+        assert_eq!(&preface, PREFACE);
+        assert_eq!(frame::Frame::read(io).unwrap().kind, 4);
+        frame::write(io, 4, 0, 0, &[]).unwrap();
+        io.flush().unwrap();
+        assert_eq!(frame::Frame::read(io).unwrap().kind, 4);
+        let request = frame::Frame::read(io).unwrap();
+        assert_eq!(request.kind, 1);
+        io.write_all(&head(request.stream, 4, &[("content-length", "5")]))
+            .unwrap();
+        frame::write(io, 0, 0, request.stream, b"hel").unwrap();
+        io.flush().unwrap();
+        let credit = frame::Frame::read(io).unwrap();
+        assert_eq!(
+            (credit.kind, credit.stream, frame::number(&credit.payload)),
+            (8, 0, 3)
+        );
+        let credit = frame::Frame::read(io).unwrap();
+        assert_eq!(
+            (credit.kind, credit.stream, frame::number(&credit.payload)),
+            (8, request.stream, 3)
+        );
+        frame::write(io, 0, 1, request.stream, b"lo").unwrap();
+        io.flush().unwrap();
+        let credit = frame::Frame::read(io).unwrap();
+        assert_eq!(
+            (credit.kind, credit.stream, frame::number(&credit.payload)),
+            (8, 0, 2)
+        );
+    });
+    let url = crate::ParsedUrl::parse(&format!("https://localhost:{port}/")).unwrap();
+    let io = test_support::connect(port).unwrap();
+    let mut response = crate::stream::open_h2(
+        io,
+        &url,
+        &crate::FetchOptions::default(),
+        crate::StreamOptions {
+            chunk_bytes: 3,
+            ..crate::StreamOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(response.next_chunk().unwrap(), Some(b"hel".to_vec()));
+    assert_eq!(response.next_chunk().unwrap(), Some(b"lo".to_vec()));
+    assert_eq!(response.next_chunk().unwrap(), None);
+    thread.join().unwrap().unwrap();
 }
 
 #[test]

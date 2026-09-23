@@ -6,7 +6,7 @@ mod frame;
 mod hpack;
 mod semantics;
 mod tables;
-pub use connection::Client;
+pub use connection::{Client, StreamEvent};
 pub type Field = (Vec<u8>, Vec<u8>);
 pub const PREFACE: &[u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 pub const MAX_FRAME: usize = 16384;
@@ -104,6 +104,46 @@ pub(crate) fn fetch<S: std::io::Read + std::io::Write>(
         }
         _ => crate::NetError::MalformedResponse(e.to_string()),
     };
+    let headers = request_fields(url, options)?;
+    let mut client = Client::new(io, Limits::default()).map_err(map)?;
+    let id = client.start(&headers, &options.body).map_err(map)?;
+    let reply = loop {
+        if let Some(reply) = client.take_reply(id).map_err(map)? {
+            break reply;
+        }
+        client.poll().map_err(map)?;
+    };
+    let mut fields = crate::Headers::new();
+    for (name, value) in reply.headers {
+        let name = std::str::from_utf8(&name)
+            .map_err(|_| crate::NetError::MalformedResponse("non-UTF8 header name".into()))?;
+        let value = String::from_utf8(value)
+            .map_err(|_| crate::NetError::MalformedResponse("non-UTF8 header value".into()))?;
+        fields.insert(name, value);
+    }
+    let body = if options.method.eq_ignore_ascii_case("HEAD") || matches!(reply.status, 204 | 304) {
+        Vec::new()
+    } else {
+        crate::http::decode_body(
+            &reply.body,
+            &fields,
+            false,
+            options.max_response_bytes.min(crate::http::MAX_BODY_BYTES),
+        )?
+    };
+    Ok(crate::Response {
+        url: url.to_string(),
+        status: reply.status,
+        reason: String::new(),
+        headers: fields,
+        body,
+    })
+}
+
+pub(crate) fn request_fields(
+    url: &crate::ParsedUrl,
+    options: &crate::FetchOptions,
+) -> Result<Vec<Field>, crate::NetError> {
     let mut headers = vec![
         (
             b":method".to_vec(),
@@ -159,39 +199,7 @@ pub(crate) fn fetch<S: std::io::Read + std::io::Write>(
             options.body.len().to_string().into_bytes(),
         ));
     }
-    let mut client = Client::new(io, Limits::default()).map_err(map)?;
-    let id = client.start(&headers, &options.body).map_err(map)?;
-    let reply = loop {
-        if let Some(reply) = client.take_reply(id).map_err(map)? {
-            break reply;
-        }
-        client.poll().map_err(map)?;
-    };
-    let mut fields = crate::Headers::new();
-    for (name, value) in reply.headers {
-        let name = std::str::from_utf8(&name)
-            .map_err(|_| crate::NetError::MalformedResponse("non-UTF8 header name".into()))?;
-        let value = String::from_utf8(value)
-            .map_err(|_| crate::NetError::MalformedResponse("non-UTF8 header value".into()))?;
-        fields.insert(name, value);
-    }
-    let body = if options.method.eq_ignore_ascii_case("HEAD") || matches!(reply.status, 204 | 304) {
-        Vec::new()
-    } else {
-        crate::http::decode_body(
-            &reply.body,
-            &fields,
-            false,
-            options.max_response_bytes.min(crate::http::MAX_BODY_BYTES),
-        )?
-    };
-    Ok(crate::Response {
-        url: url.to_string(),
-        status: reply.status,
-        reason: String::new(),
-        headers: fields,
-        body,
-    })
+    Ok(headers)
 }
 #[cfg(test)]
 mod tests;

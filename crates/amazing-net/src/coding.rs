@@ -2,6 +2,7 @@
 //! fallback. Brotli crosses the isolated approved adapter. Each coding layer
 //! has the caller's output ceiling.
 mod inflate;
+pub(crate) mod stream;
 use crate::NetError;
 use inflate::{inflate, Output};
 
@@ -106,6 +107,9 @@ fn zlib(input: &[u8], limit: usize) -> Result<Vec<u8>, NetError> {
 }
 
 fn crc32(bytes: &[u8]) -> u32 {
+    !crc32_update(!0, bytes)
+}
+pub(super) fn crc32_update(mut crc: u32, bytes: &[u8]) -> u32 {
     const TABLE: [u32; 256] = {
         let mut table = [0; 256];
         let mut i = 0;
@@ -121,11 +125,10 @@ fn crc32(bytes: &[u8]) -> u32 {
         }
         table
     };
-    let mut crc = !0u32;
     for &byte in bytes {
         crc = (crc >> 8) ^ TABLE[((crc as u8) ^ byte) as usize];
     }
-    !crc
+    crc
 }
 fn adler32(bytes: &[u8]) -> u32 {
     let (mut a, mut b) = (1u32, 0u32);
