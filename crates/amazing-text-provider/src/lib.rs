@@ -505,16 +505,7 @@ impl TextProvider {
         {
             return Err(TextError::InvalidStyle);
         }
-        if font.bytes.is_empty() || font.bytes.len() > MAX_COMPRESSED_FONT_BYTES {
-            return Err(TextError::ResourceLimit);
-        }
-        let decoded = catch_unwind(AssertUnwindSafe(|| decode_font(font.format, font.bytes)))
-            .map_err(|_| TextError::MalformedFont)??;
-        if decoded.is_empty() || decoded.len() > MAX_SFNT_FONT_BYTES {
-            return Err(TextError::ResourceLimit);
-        }
-        catch_unwind(AssertUnwindSafe(|| validate_font_structure(&decoded)))
-            .map_err(|_| TextError::MalformedFont)??;
+        let decoded = decode_web_font_to_sfnt(font.format, &font.bytes)?;
         if self.fonts.len() >= MAX_FONT_FACES
             || self.font_set_bytes.saturating_add(decoded.len()) > MAX_FONT_SET_BYTES
         {
@@ -954,10 +945,26 @@ impl TextProvider {
     }
 }
 
-fn decode_font(format: FontFormat, bytes: Vec<u8>) -> Result<Vec<u8>, TextError> {
+/// Decodes and validates one untrusted web font using the same per-font limits
+/// and sfnt checks as `TextProvider::register_web_font`.
+pub fn decode_web_font_to_sfnt(format: FontFormat, bytes: &[u8]) -> Result<Vec<u8>, TextError> {
+    if bytes.is_empty() || bytes.len() > MAX_COMPRESSED_FONT_BYTES {
+        return Err(TextError::ResourceLimit);
+    }
+    let decoded = catch_unwind(AssertUnwindSafe(|| decode_font(format, bytes)))
+        .map_err(|_| TextError::MalformedFont)??;
+    if decoded.is_empty() || decoded.len() > MAX_SFNT_FONT_BYTES {
+        return Err(TextError::ResourceLimit);
+    }
+    catch_unwind(AssertUnwindSafe(|| validate_font_structure(&decoded)))
+        .map_err(|_| TextError::MalformedFont)??;
+    Ok(decoded)
+}
+
+fn decode_font(format: FontFormat, bytes: &[u8]) -> Result<Vec<u8>, TextError> {
     match format {
-        FontFormat::OpenType => Ok(bytes),
-        FontFormat::Woff => wuff::decompress_woff1_with_custom_z(&bytes, &mut |compressed,
+        FontFormat::OpenType => Ok(bytes.to_vec()),
+        FontFormat::Woff => wuff::decompress_woff1_with_custom_z(bytes, &mut |compressed,
                                                                                expected_size|
          -> Result<
             Vec<u8>,
@@ -982,7 +989,7 @@ fn decode_font(format: FontFormat, bytes: Vec<u8>) -> Result<Vec<u8>, TextError>
             Ok(output)
         })
         .map_err(|_| TextError::MalformedFont),
-        FontFormat::Woff2 => wuff::decompress_woff2_with_custom_brotli(&bytes, &mut |compressed,
+        FontFormat::Woff2 => wuff::decompress_woff2_with_custom_brotli(bytes, &mut |compressed,
                                                                                      expected_size|
          -> Result<
             Vec<u8>,
@@ -2376,48 +2383,7 @@ mod tests {
         assert_eq!(provider.matching_font(&style, Some("A")), None);
     }
 
-    #[test]
-    #[ignore = "requires AMAZING_WPT_ROOT at the pinned WPT revision"]
-    fn pinned_wpt_sfnt_woff_and_woff2_decode_and_register() {
-        let root = std::env::var("AMAZING_WPT_ROOT").expect("set AMAZING_WPT_ROOT to pinned WPT");
-        for (relative, format) in [
-            ("fonts/Ahem.ttf", FontFormat::OpenType),
-            ("fonts/ahem-visible-zwnj.otf", FontFormat::OpenType),
-            ("fonts/AD.woff", FontFormat::Woff),
-            (
-                "fonts/hasubi-mono/HasubiMono-Regular.woff2",
-                FontFormat::Woff2,
-            ),
-            (
-                "fonts/noto/NotoNaskhArabic-regular.woff2",
-                FontFormat::Woff2,
-            ),
-            (
-                "fonts/noto/NotoSansMongolian-regular.woff2",
-                FontFormat::Woff2,
-            ),
-            (
-                "fonts/noto/NotoSansNko-regular-webfont.woff2",
-                FontFormat::Woff2,
-            ),
-        ] {
-            let bytes = std::fs::read(std::path::Path::new(&root).join(relative)).unwrap();
-            let decoded = decode_font(format, bytes.clone())
-                .unwrap_or_else(|error| panic!("decode {relative}: {error:?}"));
-            validate_font_structure(&decoded)
-                .unwrap_or_else(|error| panic!("sfnt {relative}: {error:?}"));
-            TextProvider::new()
-                .register_web_font(WebFont {
-                    family: relative.into(),
-                    weight: 400,
-                    stretch: 100,
-                    slant: FontSlant::Normal,
-                    format,
-                    bytes,
-                })
-                .unwrap_or_else(|error| panic!("{relative}: {error:?}"));
-        }
-    }
+    include!("web_font_decode_tests.rs");
 
     #[test]
     fn malformed_woff2_fails_closed_without_changing_generation() {
