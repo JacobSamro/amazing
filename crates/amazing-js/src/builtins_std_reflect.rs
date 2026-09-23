@@ -97,6 +97,9 @@ fn std_reflect_get(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Resul
 fn std_reflect_get_own_property_descriptor(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = std_reflect_target(&args)?;
     let key = i.to_property_key(&std_reflect_arg(&args, 1))?;
+    if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
+        return native_object_get_own_property_descriptor(i, JsValue::Undefined, args);
+    }
     let property = if let Some(name) = key.as_string() {
         i.legacy_own_property(&target, name, false)?
     } else { target.borrow().own_prop(&key).cloned() };

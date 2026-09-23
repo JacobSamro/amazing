@@ -893,6 +893,10 @@ fn native_object_set_prototype_of(
         Some(JsValue::Object(object)) => object.clone(),
         _ => return Err(Throw::type_error("setPrototypeOf target is not an object")),
     };
+    if matches!(object.borrow().exotic, Exotic::ModuleNamespace(_)) {
+        if matches!(args.get(1), Some(JsValue::Null)) { return Ok(JsValue::Object(object)); }
+        return Err(Throw::type_error("module namespace prototype is fixed"));
+    }
     let prototype = match args.get(1).cloned().unwrap_or(JsValue::Null) {
         JsValue::Null => None,
         JsValue::Object(prototype) => Some(prototype),
@@ -1113,6 +1117,39 @@ fn native_bound(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<J
         receiver,
         bound_args.into_iter().chain(args).collect(),
     )
+}
+
+fn namespace_define_allowed(
+    i: &mut Interpreter, target: &Obj, key: &PropertyKey, descriptor: &Obj,
+) -> Result<bool, Throw> {
+    let cell = match &target.borrow().exotic {
+        Exotic::ModuleNamespace(exports) => key.as_string()
+            .and_then(|name| exports.get(&name.to_utf8_lossy()).cloned()),
+        _ => None,
+    };
+    let Some(cell) = cell else { return Ok(false); };
+    let has = |name: &str| descriptor.borrow().has_property(name);
+    let descriptor_value = JsValue::Object(descriptor.clone());
+    if has("get") || has("set") { return Ok(false); }
+    if has("configurable") && i.get_prop(&descriptor_value, "configurable")?.to_boolean() {
+        return Ok(false);
+    }
+    if has("enumerable") && !i.get_prop(&descriptor_value, "enumerable")?.to_boolean() {
+        return Ok(false);
+    }
+    if has("writable") && !i.get_prop(&descriptor_value, "writable")?.to_boolean() {
+        return Ok(false);
+    }
+    if has("value") {
+        let proposed = i.get_prop(&descriptor_value, "value")?;
+        let current = cell.read()?;
+        let same = match (&proposed, &current) {
+            (JsValue::Num(a), JsValue::Num(b)) => a.to_bits() == b.to_bits() || a.is_nan() && b.is_nan(),
+            _ => proposed == current,
+        };
+        if !same { return Ok(false); }
+    }
+    Ok(true)
 }
 
 fn native_define_property(
@@ -2308,6 +2345,18 @@ fn native_object_get_own_property_descriptor(
         descriptor.set_own("configurable", JsValue::Bool(true));
         return Ok(JsValue::object(descriptor));
     }
+    if let Exotic::ModuleNamespace(exports) = &object.borrow().exotic {
+        if let Some(cell) = key.as_string().and_then(|name| exports.get(&name.to_utf8_lossy())) {
+            let value = cell.read()?;
+            let mut descriptor = JsObject::ordinary();
+            descriptor.proto = Some(i.object_proto.clone());
+            descriptor.set_own("value", value);
+            descriptor.set_own("writable", JsValue::Bool(true));
+            descriptor.set_own("enumerable", JsValue::Bool(true));
+            descriptor.set_own("configurable", JsValue::Bool(false));
+            return Ok(JsValue::object(descriptor));
+        }
+    }
     let Some(property) = object.borrow().own_prop(&key).cloned() else { return Ok(JsValue::Undefined); };
     let mut descriptor = JsObject::ordinary();
     descriptor.proto = Some(i.object_proto.clone());
@@ -2358,6 +2407,9 @@ fn native_reflect_get(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
 
 fn native_reflect_set(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = reflect_target(&args)?;
+    if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
+        return Ok(JsValue::Bool(false));
+    }
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
     let value = args.get(2).cloned().unwrap_or(JsValue::Undefined);
     i.set_prop(&JsValue::Object(target), key, value)?;
@@ -2377,6 +2429,9 @@ fn native_reflect_has(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
 fn native_reflect_delete_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = reflect_target(&args)?;
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
+        return Ok(JsValue::Bool(target.borrow().own_prop(&key).is_none()));
+    }
     if let Some(deleted) = binary_delete_index(&target, &key) { return Ok(JsValue::Bool(deleted)); }
     let deleted = match key.as_string() {
         Some(name) => match i.legacy_delete(&target, name)? {
@@ -2388,7 +2443,14 @@ fn native_reflect_delete_property(i: &mut Interpreter, _: JsValue, args: Vec<JsV
 }
 
 fn native_reflect_define_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    reflect_target(&args)?;
+    let target = reflect_target(&args)?;
+    if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
+        let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+        let Some(JsValue::Object(descriptor)) = args.get(2) else {
+            return Err(Throw::type_error("property descriptor is not an object"));
+        };
+        return Ok(JsValue::Bool(namespace_define_allowed(i, &target, &key, descriptor)?));
+    }
     native_define_property(i, JsValue::Undefined, args)?;
     Ok(JsValue::Bool(true))
 }
@@ -2476,6 +2538,7 @@ fn native_json_parse(
             }
         } else if ch == '"' {
             in_string = true;
+
         } else if ch.is_whitespace() && !matches!(ch, ' ' | '\t' | '\n' | '\r') {
             return Err(Throw::syntax_error("invalid JSON whitespace"));
         }

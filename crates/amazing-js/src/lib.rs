@@ -40,6 +40,7 @@ pub mod env;
 pub mod errors;
 pub mod interp;
 pub mod lexer;
+pub mod module;
 pub mod parser;
 #[cfg(test)]
 mod regexp_tests;

@@ -221,6 +221,7 @@ impl fmt::Debug for Obj {
             (Exotic::CollectionIterator(_), _) => write!(f, "[collection iterator]"),
             (Exotic::SymbolObject(_), _) => write!(f, "[symbol object]"),
             (Exotic::Generator(_), _) => write!(f, "[generator]"),
+            (Exotic::ModuleNamespace(_), _) => write!(f, "[module namespace]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
     }
@@ -640,6 +641,7 @@ pub enum Exotic {
     CollectionIterator(CollectionIteratorState),
     SymbolObject(JsSymbol),
     Generator(Rc<RefCell<crate::interp::vm::GeneratorState>>),
+    ModuleNamespace(std::collections::BTreeMap<String, crate::env::BindingCell>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
