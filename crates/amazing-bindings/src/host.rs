@@ -161,6 +161,7 @@ pub enum Operation {
     DocumentBody,
     DocumentSetBody,
     DocumentElement,
+    DocumentDoctype,
     DocumentReadyState,
     DocumentURL,
     DocumentURI,
@@ -645,6 +646,19 @@ pub trait BindingHost: Sized {
         &mut self,
         definition: &'static InterfaceDefinition,
     ) -> Result<(), Self::Error>;
+    /// Define the prototype's real %Symbol.toStringTag% data property using
+    /// the interface's qualified name. A string-keyed lookalike is invalid.
+    /// New host capabilities default to a typed unsupported error so an older
+    /// driver continues to compile until its runtime gains symbol keys.
+    fn install_interface_class_string(&mut self, _interface: Interface, _name: &'static str)
+        -> Result<(), Self::Error> {
+        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
+    /// DOMException.prototype inherits %Error.prototype%, including its
+    /// name/message toString behavior. Kept separate from WebIDL inheritance.
+    fn install_dom_exception_error_prototype(&mut self) -> Result<(), Self::Error> {
+        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
     /// Standard Node constants are exposed on Node and its prototype.
     fn install_node_constant(&mut self, name: &'static str, value: u16) -> Result<(), Self::Error>;
     /// Constant on both an interface object and its prototype.
