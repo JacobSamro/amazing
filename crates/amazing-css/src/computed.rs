@@ -761,12 +761,35 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "inset-inline-end", initial: "auto", inherited: false },
     PropertyMetadata { name: "inset-block-start", initial: "auto", inherited: false },
     PropertyMetadata { name: "inset-block-end", initial: "auto", inherited: false },
+    PropertyMetadata { name: "stroke", initial: "none", inherited: true },
+    PropertyMetadata { name: "stroke-width", initial: "1px", inherited: true },
+    PropertyMetadata { name: "stroke-opacity", initial: "1", inherited: true },
+    PropertyMetadata { name: "stroke-linecap", initial: "butt", inherited: true },
+    PropertyMetadata { name: "stroke-linejoin", initial: "miter", inherited: true },
+    PropertyMetadata { name: "stroke-miterlimit", initial: "4", inherited: true },
+    PropertyMetadata { name: "stroke-dasharray", initial: "none", inherited: true },
+    PropertyMetadata { name: "stroke-dashoffset", initial: "0", inherited: true },
+    PropertyMetadata { name: "fill-rule", initial: "nonzero", inherited: true },
+    PropertyMetadata { name: "clip-rule", initial: "nonzero", inherited: true },
+    PropertyMetadata { name: "text-anchor", initial: "start", inherited: true },
+    PropertyMetadata { name: "dominant-baseline", initial: "auto", inherited: true },
+    PropertyMetadata { name: "clip-path", initial: "none", inherited: false },
+    PropertyMetadata { name: "mask", initial: "none", inherited: false },
+    PropertyMetadata { name: "vector-effect", initial: "none", inherited: false },
+    PropertyMetadata { name: "font-size-adjust", initial: "none", inherited: true },
     PropertyMetadata {
         name: "z-index",
         initial: "auto",
         inherited: false,
     },
 ];
+
+pub(crate) fn known_properties() -> impl Iterator<Item = &'static str> {
+    PROPERTIES.iter().map(|property| property.name)
+}
+pub(crate) fn is_inherited_property(name: &str) -> bool {
+    metadata(name).is_some_and(|property| property.inherited)
+}
 
 fn metadata(name: &str) -> Option<PropertyMetadata> {
     PROPERTIES
@@ -1604,7 +1627,7 @@ fn valid_transform_function(tokens: &[Token]) -> bool {
                 && arguments.iter().all(|arg| valid_transform_number(arg))
         }
         "scalex" | "scaley" => arguments.len() == 1 && valid_transform_number(arguments[0]),
-        "rotate" => arguments.len() == 1 && valid_transform_angle(arguments[0]),
+        "rotate" | "skewx" | "skewy" => arguments.len() == 1 && valid_transform_angle(arguments[0]),
         "matrix" => arguments.len() == 6 && arguments.iter().all(|arg| valid_transform_number(arg)),
         _ => false,
     }

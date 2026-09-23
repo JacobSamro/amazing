@@ -175,14 +175,25 @@ pub enum Transform {
     Translate(LengthPercentage, LengthPercentage),
     Scale(f64, f64),
     Rotate(Angle),
+    SkewX(Angle),
+    SkewY(Angle),
     Matrix([f64; 6]),
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SvgPaint { None, CurrentColor, Color([u8; 4]), Url(String) }
+#[derive(Debug, Clone, PartialEq)]
+pub enum SvgResource { None, Url(String) }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComputedValue {
     LengthPercentage(LengthPercentage),
     /// Valid CSS math retained until the consumer supplies a percentage basis.
     LengthPercentageExpression(String),
+    SvgPaint(SvgPaint),
+    SvgResource(SvgResource),
+    SvgDasharray(Vec<LengthPercentage>),
+    SvgKeyword(String),
     Color(Color),
     Number(f64),
     Integer(i32),
@@ -264,6 +275,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         ($ty:ident) => {
             return $ty::parse(css).map(V::$ty)
         };
+    }
+    if crate::svg_presentation::is_svg_property(property) {
+        return crate::svg_presentation::parse_property(property, css);
     }
     match property {
         "display" => {
@@ -468,6 +482,8 @@ fn transforms(css: &str) -> Option<Vec<Transform>> {
         let zero = LengthPercentage::Px(0.0);
         out.push(match name.to_ascii_lowercase().as_str() {
             "rotate" if args.len() == 1 => Transform::Rotate(Angle::parse(arg(0)?)?),
+            "skewx" if args.len() == 1 => Transform::SkewX(Angle::parse(arg(0)?)?),
+            "skewy" if args.len() == 1 => Transform::SkewY(Angle::parse(arg(0)?)?),
             "translate" if (1..=2).contains(&args.len()) => Transform::Translate(
                 LengthPercentage::parse(arg(0)?)?,
                 LengthPercentage::parse(arg(1).unwrap_or("0"))?,

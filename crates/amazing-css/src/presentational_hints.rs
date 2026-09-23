@@ -63,6 +63,9 @@ fn length(input: &str, nonzero: bool) -> Option<String> {
 
 pub(super) fn collect(dom: &Dom, el: NodeIdx, body_link: Option<&str>) -> Vec<(String, String)> {
     let mut out = Vec::new();
+    if dom.namespace(el) == Some(Namespace::Svg) {
+        return crate::svg_presentation::collect(dom, el);
+    }
     if dom.namespace(el) != Some(Namespace::Html) {
         return out;
     }

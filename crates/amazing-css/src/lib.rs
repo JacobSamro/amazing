@@ -45,6 +45,7 @@ mod computed;
 pub mod parser;
 pub mod selectors;
 pub mod syntax;
+mod svg_presentation;
 pub mod values;
 
 pub use cascade::{
