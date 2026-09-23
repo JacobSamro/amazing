@@ -113,6 +113,9 @@ version = "0.0.1"
 [[package]]
 name = "amazing-compositor"
 version = "0.0.1"
+dependencies = [
+ "amazing-paint",
+]
 
 [[package]]
 name = "amazing-css"
