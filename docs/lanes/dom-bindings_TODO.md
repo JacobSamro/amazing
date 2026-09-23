@@ -1188,3 +1188,33 @@ The InterfaceDefinition list now covers every implemented row above; HTMLCollect
 indexed/named property access and iterability remain explicit
 installation gaps. `BindingHost::string` returns `Result<Value, Error>` and
 propagates lone-surrogate rejection without inserting replacement characters.
+The driver must route native `DomError` values through
+`amazing_bindings::dom_exception::throw_dom_error` so exposed failures carry
+the specified DOMException name and legacy code. The mock host currently
+asserts the mapping separately from its `with_dom` error conversion.
+
+### DOM-7 final Windows gate (2026-09-23)
+
+The local lane branch was rebased onto `origin/dev` `a3d9001` (later than the
+required `133db58`). The Windows lane tree was refreshed from that exact dev
+commit with first-party artifact invalidation; all changed source files were
+re-synced, including the granted sibling match arms. Those four sibling files
+have additions only. The exact-source `cargo nextest run --workspace --locked`
+gate passed **1,452/1,452** tests with 3 skipped across 50 binaries. The
+separate `cargo test -p amazing-dom -p amazing-bindings --locked --doc` gate
+passed with 0 doctests in each crate. No local build or test ran.
+
+The pinned `dom/` AFTER selection at WPT
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` passed the unmodified
+upstream known-pass/known-fail proof twice. Both 627-source rounds were
+byte-identical: **2 pass, 248 fail, 30 timeout, 214 error, 133 unsupported**
+files; **83 pass and 2,590 fail** registered subtests, no other subtest
+statuses. Raw SHA-256:
+`0243a4ea04619f7c2125185bd3aa31b9d0520c9a4a13f127be3146666d04fba8`;
+outcome SHA-256:
+`7f939b5fd55441c27861e1cde846283ee4ae76d02add7765a0c4a3a01a10343b`.
+The durable summary is `crates/amazing-dom/tests/wpt-dom7-after.json`.
+Compared with the DOM-5 fixed-base gate, seven files moved from error to fail
+and six additional failing subtests registered. `dev` changed between those
+measurements, and the DOM-7 installer is not yet in the driver, so this is
+not attributed as a DOM-7 conformance improvement.
