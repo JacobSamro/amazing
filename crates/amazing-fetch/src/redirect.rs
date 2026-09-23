@@ -19,6 +19,9 @@ pub fn redirect(
         return Ok(RedirectAction::NotRedirect);
     }
     let plan = request.prepare()?;
+    // Network redirect responses receive CORP checks before the next URL is
+    // adopted, including same-origin redirects carrying their own policy.
+    check_redirect_corp(request, response, &crate::psl::PublicSuffixList)?;
     if plan.taint == ResponseType::Cors {
         cors_check(request, &response.headers)?;
     }

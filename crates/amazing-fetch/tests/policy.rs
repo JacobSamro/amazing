@@ -572,7 +572,8 @@ fn exposed_wildcard_is_literal_with_credentials() {
 fn opaque_filters_hide_everything() {
     let mut r = request(true);
     r.mode = RequestMode::NoCors;
-    let s = response(200, &[("x-secret", "value")]);
+    let mut s = response(200, &[("x-secret", "value"), ("content-type", "image/png")]);
+    s.body = Some(b"\x89PNG\r\n\x1a\nsecret".to_vec());
     assert_eq!(
         filter_response(&r, &s).unwrap(),
         Response::hidden(ResponseType::Opaque)

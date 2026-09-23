@@ -44,6 +44,8 @@ pub struct Request {
     pub referrer: Option<HttpUrl>,
     pub referrer_policy: ReferrerPolicy,
     pub use_cors_preflight: bool,
+    /// Supplied by the embedding; this crate does not derive DOM secure contexts.
+    pub security: SecurityContext,
     pub(crate) taint: ResponseType,
 }
 impl Request {
@@ -60,6 +62,7 @@ impl Request {
             referrer: None,
             referrer_policy: ReferrerPolicy::StrictOriginWhenCrossOrigin,
             use_cors_preflight: false,
+            security: SecurityContext::default(),
             taint: ResponseType::Basic,
         }
     }
@@ -107,6 +110,8 @@ impl Request {
     }
     /// Call before each transport hop. Taint is sticky across redirects.
     pub fn prepare(&mut self) -> Result<FetchPlan, FetchError> {
+        upgrade_mixed_content(self)?;
+        check_request_security(self)?;
         let cross = self.origin != *self.url().origin();
         match self.mode {
             RequestMode::SameOrigin if cross => return Err(FetchError::SameOrigin),

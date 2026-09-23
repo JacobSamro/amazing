@@ -1111,3 +1111,66 @@ recipe and input hashes are in the integrator checkout's
 `.agents/net/net10-final-evidence/`, `net10_gate.py`, and `net10-inputs.json`.
 This ticket stops at the cache policy and storage seam; shell adoption remains
 with the integrator.
+
+## NET-11 — Fetch main-fetch blocking checks
+
+Fixed base: `f830379` (NET-10 merge). Pinned normative snapshots used for
+implementation: [Fetch Living Standard](https://github.com/whatwg/fetch/tree/357bd98924d94b81fbe8608192a2ee1f123b82f4)
+at `357bd98924d94b81fbe8608192a2ee1f123b82f4` (21 September 2026;
+§2.9 bad ports, §2.10 MIME blocking, §3.6 nosniff, §3.7 CORP, §4.1 main fetch),
+and [Mixed Content Level 2](https://github.com/w3c/webappsec-mixed-content/tree/a4eacecdbaab867f6de126c4048662bac2ad4b4)
+at `a4eacecdbaab867f6de126c4048662bac2ad4b4` (§2 authenticated URLs,
+§4.1 upgrade, §4.4 request blocking, §4.5 response blocking). The current
+Fetch snapshot does not contain the ORB algorithm under §3.7; that section is
+CORP. ORB follows the [separate processing-model draft](https://github.com/annevk/orb/tree/61c1be761fca35288b6c90249da66ab563f1074c)
+at `61c1be761fca35288b6c90249da66ab563f1074c`, read 23 September 2026.
+
+`Request::prepare` upgrades eligible no-cors image/audio/video URLs before
+checking the exact Fetch bad-port table and Mixed Content blocking. The
+embedding supplies secure-context state, destination, image-set initiator,
+top-level navigation state, and COEP `require-corp`; this crate cannot infer
+those from a DOM. `redirect` checks a no-cors hop's CORP header before adopting
+its target. `filter_response` applies internal-response checks before exposing
+even an opaque result: Mixed Content, CORP using the pinned PSL, MIME type,
+nosniff, and ORB. Each block has a distinct `FetchError` variant.
+
+ORB reads at most a borrowed 1024-byte body prefix. Its full-body
+JavaScript-versus-JSON parse step has no implementation here: when earlier
+MIME and signature steps have not allowed a response, policy blocks it. A
+streaming transport waits for 1024 bytes or EOF before calling the prefix
+check. This conservative boundary requires neither whole-body buffering nor
+`amazing-js`. No shell or driver adoption is claimed.
+
+Once `fetch()` and element fetching are bound, WPT `fetch/security/` and
+`fetch/api/` can measure bad ports, `fetch/cross-origin-resource-policy/`
+can measure CORP/COEP, `fetch/nosniff/` can measure MIME blocking,
+`fetch/orb/` and `fetch/corb/` can measure opaque blocking, and
+`mixed-content/generic/` and `mixed-content/tentative/` can measure upgrades
+and blocking. Those suites are not counted as passing by the crate tests in
+this ticket; only the existing pinned URL WPT corpus runs as a regression gate.
+
+NET-11 implementation commit `502769e` was tested twice on win-001 from fixed
+base `f830379` with `--locked` and artifact-clean rebuilds under the shared
+build slot. The standalone Fetch crate gate passed 107/0 nextest and 0
+doctests before the final gates. Final results:
+
+| Gate | NET-10 before | NET-11 run 1 | NET-11 run 2 |
+|---|---:|---:|---:|
+| Net lane nextest | 293 pass / 0 fail / 0 skip | 301 / 0 / 0 | 301 / 0 / 0 |
+| Net lane doctests | 0 / 0 | 0 / 0 | 0 / 0 |
+| Workspace nextest | 1357 pass / 0 fail / 3 skip | 1399 / 0 / 3 | 1399 / 0 / 3 |
+| Workspace doctests | 2 / 0 | 2 / 0 | 2 / 0 |
+| Pinned URL WPT | 864 pass / 0 fail / 0 timeout / 32 unsupported | 864 / 0 / 0 / 32 | 864 / 0 / 0 / 32 |
+
+The before columns are NET-10's prior base, so the 42-test workspace increase
+also includes intervening sibling merges; the eight new Fetch tests account
+for the lane increase. All 20 workspace crates rebuilt each run. The 429
+tracked source/input hashes matched the Mac worktree and remained identical
+before, between, and after both passes. Source manifest SHA-256:
+`09bde2087f710da2e61dde1bdaaf3629e6a7355c7522b4975342d5de109b3e10`.
+Pinned URL stdout SHA-256:
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+PSL regeneration, TLS/Brotli fixture pins, dependency feature checks and
+nextest leak-notice checks passed. Logs, results, source manifests, recipe and
+input hashes are in the integrator checkout's `.agents/net/net11-final-evidence/`,
+`net11_gate.py`, and `net11-inputs.json`. NET-11 stops at the policy seam.
