@@ -96,6 +96,15 @@ pub struct ApiRequest {
     origin: Origin,
 }
 impl ApiRequest {
+    /// Bound the response body before dispatch. Zero permits an empty body.
+    pub fn set_response_body_limit(&mut self, bytes: u64) -> Result<(), FetchError> {
+        let limit = usize::try_from(bytes).map_err(|_| FetchError::ResponseTooLarge)?;
+        if limit > super::MAX_API_BODY_BYTES {
+            return Err(FetchError::ResponseTooLarge);
+        }
+        self.response_body_limit = Some(limit);
+        Ok(())
+    }
     /// `base` and `origin` come from the embedding's relevant settings object.
     pub fn new(
         input: ApiRequestInput<'_>,
