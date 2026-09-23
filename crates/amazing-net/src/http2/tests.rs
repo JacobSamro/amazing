@@ -113,6 +113,61 @@ fn multiplex_interleaved_streams_finish_out_of_order() {
     assert_eq!(c.start(&request(), b"").unwrap(), 5);
 }
 #[test]
+fn retained_frame_io_interleaves_two_streams_and_resets_one() {
+    let mut c = Client::new_pending(FrameIo::default(), Limits::default()).unwrap();
+    let preface = c.io_mut().unwrap().take_output();
+    assert!(preface.starts_with(PREFACE));
+    c.io_mut().unwrap().feed(&f(4, 0, 0, &[]));
+    c.poll().unwrap();
+    let one = c.start_streaming(&request(), b"").unwrap();
+    let two = c.start_streaming(&request(), b"").unwrap();
+    assert_eq!((one, two), (1, 3));
+    for frame in [
+        head(1, 4, &[]),
+        head(3, 4, &[]),
+        f(0, 0, 1, b"one"),
+        f(0, 0, 3, b"two"),
+    ] {
+        c.io_mut().unwrap().feed(&frame);
+        c.poll().unwrap();
+    }
+    assert!(matches!(
+        c.next_event_ready(one).unwrap(),
+        Some(StreamEvent::Head { status: 200, .. })
+    ));
+    assert!(matches!(
+        c.next_event_ready(two).unwrap(),
+        Some(StreamEvent::Head { status: 200, .. })
+    ));
+    assert!(
+        matches!(c.next_event_ready(one).unwrap(), Some(StreamEvent::Data(bytes)) if bytes == b"one")
+    );
+    assert!(
+        matches!(c.next_event_ready(two).unwrap(), Some(StreamEvent::Data(bytes)) if bytes == b"two")
+    );
+    c.cancel(one).unwrap();
+    let output = c.io_mut().unwrap().take_output();
+    let mut cursor = Cursor::new(output);
+    let mut reset = false;
+    while let Ok(frame) = frame::Frame::read(&mut cursor) {
+        reset |= frame.kind == 3 && frame.stream == one && frame.payload == 8u32.to_be_bytes();
+    }
+    assert!(reset);
+    assert!(matches!(
+        c.next_event_ready(one),
+        Err(Error::StreamReset { stream: 1, code: 8 })
+    ));
+    c.io_mut().unwrap().feed(&f(0, 1, two, b"!"));
+    c.poll().unwrap();
+    assert!(
+        matches!(c.next_event_ready(two).unwrap(), Some(StreamEvent::Data(bytes)) if bytes == b"!")
+    );
+    assert!(matches!(
+        c.next_event_ready(two).unwrap(),
+        Some(StreamEvent::End { .. })
+    ));
+}
+#[test]
 fn streaming_events_release_data_before_end_and_keep_cumulative_length() {
     let (mut c, _) = client(
         vec![

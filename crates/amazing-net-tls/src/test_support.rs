@@ -71,6 +71,15 @@ where
 pub fn connect(port: u16) -> Result<TlsStream, TlsError> {
     connect_fixture(port, false)
 }
+pub fn connect_nonblocking(port: u16) -> Result<TlsStream, TlsError> {
+    let stream = connect_fixture(port, false)?;
+    stream
+        .inner
+        .sock
+        .set_nonblocking(true)
+        .map_err(transport_error)?;
+    Ok(stream)
+}
 pub fn connect_http1(port: u16) -> Result<TlsStream, TlsError> {
     connect_fixture(port, true)
 }
