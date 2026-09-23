@@ -1,7 +1,7 @@
 //! Bounded SVG polygon/polyline points-list: finite coordinate pairs separated by comma or whitespace.
 use crate::DecodeError;
 
-pub(super) fn parse_points(data: &str, vertex_limit: usize) -> Result<Vec<(f64, f64)>, DecodeError> {
+pub(super) fn parse_points(data: &str, vertex_limit: usize, minimum_vertices: usize) -> Result<Vec<(f64, f64)>, DecodeError> {
     let bytes = data.as_bytes();
     let mut i = 0;
     let mut values = Vec::new();
@@ -74,7 +74,7 @@ pub(super) fn parse_points(data: &str, vertex_limit: usize) -> Result<Vec<(f64, 
             return Err(DecodeError::UnsupportedSvg);
         }
     }
-    if values.len() < 6 || values.len() % 2 != 0 {
+    if values.len() < minimum_vertices.saturating_mul(2) || values.len() % 2 != 0 {
         return Err(DecodeError::UnsupportedSvg);
     }
     Ok(values.chunks_exact(2).map(|v| (v[0], v[1])).collect())

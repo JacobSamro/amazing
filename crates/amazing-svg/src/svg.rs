@@ -680,7 +680,7 @@ fn append_shape_stroke(scene: &mut SvgDocument, name: &str, attrs: &Attrs, compu
         }
         "polygon" | "polyline" => {
             let Some(data) = attrs.get("points") else { return; };
-            let Ok(points) = parse_points(data, MAX_POLYGON_POINTS) else { return; };
+            let Ok(points) = parse_points(data, MAX_POLYGON_POINTS, if name == "polyline" { 2 } else { 3 }) else { return; };
             (points, name == "polygon")
         }
         _ => return,
@@ -945,6 +945,7 @@ fn append_element(
                 Some(Shape::Outline(parse_points(
                     attrs.get("points").ok_or(DecodeError::UnsupportedSvg)?,
                     MAX_POLYGON_POINTS,
+                    if name == "polyline" { 2 } else { 3 },
                 )?))
             }
             _ => return Err(DecodeError::UnsupportedSvg),

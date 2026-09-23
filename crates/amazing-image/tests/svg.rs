@@ -60,6 +60,14 @@ fn byte_svg_strokes_rect_and_line_without_filling_the_line() {
     assert_eq!((decoded.width, decoded.height), (50, 50));
     assert!(decoded.pixels.chunks_exact(4).all(|pixel| pixel == [0, 128, 0, 255]));
 }
+
+#[test]
+fn inherited_byte_polyline_stroke_survives_non_scaling_viewbox() {
+    let source = br#"<svg xmlns='http://www.w3.org/2000/svg' stroke-width='1px' stroke='black' width='50' height='50' viewBox='0 0 50 50'><polyline vector-effect='non-scaling-stroke' points='50 0 0 50'/></svg>"#;
+    let decoded = decode(source, DecodeLimits::default()).unwrap();
+    assert_eq!((decoded.width, decoded.height), (50, 50));
+    assert!(decoded.pixels.chunks_exact(4).any(|pixel| pixel == [0, 0, 0, 255]));
+}
 #[test]
 fn unsupported_svg_fails_whole_image_without_partial_success() {
     for body in [
@@ -459,7 +467,6 @@ fn polylines_reject_malformed_points_and_unsupported_features_whole_image() {
     for polyline in [
         r#"<polyline/>"#,
         r#"<polyline points=""/>"#,
-        r#"<polyline points="0,0 1,0"/>"#,
         r#"<polyline points="0,0 1,0 1"/>"#,
         r#"<polyline points=",0 1,0 1,1"/>"#,
         r#"<polyline points="0,0 1,,0 1,1"/>"#,
