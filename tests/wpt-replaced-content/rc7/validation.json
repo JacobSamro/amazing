@@ -1,0 +1,62 @@
+{
+  "fixed_base": "1a8c222",
+  "build_host": "win-001",
+  "image_nextest": {
+    "passed": 23,
+    "failed": 0,
+    "skipped": 0
+  },
+  "image_doctests": {
+    "passed": 0,
+    "failed": 0
+  },
+  "workspace_nextest": {
+    "passed": 1464,
+    "failed": 0,
+    "skipped": 3
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "input_hashes": {
+    "count": 24,
+    "mac_windows_equal_before": true,
+    "mac_windows_equal_after": true,
+    "unchanged_across_gate": true
+  },
+  "workspace_build_slot": true,
+  "review_fix": {
+    "fixed_base": "1a8c222",
+    "targeted_test": "same_direction_double_wound_path_uses_default_nonzero_fill",
+    "targeted_before": "failed: transparent instead of red at (2,2)",
+    "targeted_after": "passed",
+    "image_nextest": {
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0
+    },
+    "image_doctests": {
+      "passed": 0,
+      "failed": 0
+    },
+    "owned_case_count": 5,
+    "workspace_gate": "not rerun for review correction; previous 1464-pass workspace result belongs to initial RC-7 source",
+    "owned_before": {
+      "passed_non_inert": 4,
+      "cases": 5
+    },
+    "owned_after": {
+      "passed_non_inert": 5,
+      "cases": 5,
+      "repeats": 2,
+      "stable_hashes": true
+    },
+    "input_hashes": {
+      "count": 28,
+      "mac_windows_equal_before": true,
+      "mac_windows_equal_after": true,
+      "unchanged_across_review_gate": true
+    }
+  }
+}

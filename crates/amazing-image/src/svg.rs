@@ -1,7 +1,7 @@
 //! Explicit static SVG image subset, not a general SVG/DOM implementation.
-//! Strict XML subset; rectangles, circles and ellipses with presentation fills.
+//! Strict XML subset; basic shapes and closed straight-line paths with presentation fills.
 //! Bounded inline color/fill declarations use the shared CSS computed-style seam.
-//! No scripts, stylesheets, references, paths, text, strokes or animation.
+//! No scripts, stylesheets, references, curves, text, strokes or animation.
 //! Bounded attribute transforms on groups and shapes are supported.
 use crate::{DecodeError, DecodeLimits};
 use amazing_css::{
@@ -14,20 +14,24 @@ use std::collections::BTreeMap;
 #[path = "svg_transform.rs"]
 mod transform;
 use transform::Matrix;
+#[path = "svg_path.rs"]
+mod path;
+use path::{parse_path, point_in_path};
 
 type Attrs = BTreeMap<String, String>;
 const MAX_SHAPES: usize = 1024;
 const MAX_WORK: usize = 64 * 1024 * 1024;
+const MAX_PATH_POINTS: usize = 1024;
 struct Style {
     computed: ComputedStyle,
     fill: [u8; 4],
     fill_opacity: f64,
     opacity: f64,
 }
-#[derive(Clone, Copy)]
 enum Shape {
     Rect(f64, f64, f64, f64),
     Ellipse(f64, f64, f64, f64),
+    Path(Vec<(f64, f64)>),
 }
 struct Item {
     inverse: Option<Matrix>,
@@ -63,8 +67,14 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> 
     if bytes as u64 > limits.max_rgba_bytes || bytes as u64 > limits.max_decoder_bytes {
         return Err(DecodeError::AllocationLimit);
     }
-    if count
-        .checked_mul(scene.items.len())
+    let shape_work = scene.items.iter().try_fold(0usize, |sum, item| {
+        sum.checked_add(match &item.shape {
+            Shape::Path(points) => points.len(),
+            _ => 1,
+        })
+    });
+    if shape_work
+        .and_then(|work| count.checked_mul(work))
         .is_none_or(|n| n > MAX_WORK)
     {
         return Err(DecodeError::AllocationLimit);
@@ -118,13 +128,14 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> 
                 let px = (x as f64 + 0.5 - ox) / sx + vx;
                 let py = (y as f64 + 0.5 - oy) / sy + vy;
                 let (px, py) = inverse.point(px, py);
-                let inside = match item.shape {
-                    Shape::Rect(rx, ry, w, h) => px >= rx && px < rx + w && py >= ry && py < ry + h,
+                let inside = match &item.shape {
+                    Shape::Rect(rx, ry, w, h) => px >= *rx && px < rx + w && py >= *ry && py < ry + h,
                     Shape::Ellipse(cx, cy, rx, ry) => {
-                        rx > 0.0
-                            && ry > 0.0
+                        *rx > 0.0
+                            && *ry > 0.0
                             && ((px - cx) / rx).powi(2) + ((py - cy) / ry).powi(2) <= 1.0
                     }
+                    Shape::Path(points) => point_in_path(points, px, py),
                 };
                 if inside {
                     blend(
@@ -299,6 +310,13 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
                         rx,
                         ry,
                     ))
+                }
+                "path" => {
+                    check_attrs(&attrs, &["d"])?;
+                    Some(Shape::Path(parse_path(
+                        attrs.get("d").ok_or(DecodeError::UnsupportedSvg)?,
+                        MAX_PATH_POINTS,
+                    )?))
                 }
                 _ => return Err(DecodeError::UnsupportedSvg),
             };

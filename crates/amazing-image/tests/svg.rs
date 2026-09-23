@@ -256,3 +256,53 @@ fn computed_svg_style_resolves_alpha_and_rejects_unsupported_paint() {
         assert_eq!(decode(&svg("", body), Default::default()).unwrap_err(), DecodeError::UnsupportedSvg);
     }
 }
+
+#[test]
+fn closed_paths_fill_relative_concave_and_transformed_outlines() {
+    let absolute = svg("", r#"<path d="M1 1 L6 1 H6 V6 L1 6 Z" fill="red"/>"#);
+    assert_eq!(pixel(&absolute, 2, 2), [255, 0, 0, 255]);
+    assert_eq!(pixel(&absolute, 0, 2), [0; 4]);
+    let relative = svg("", r#"<path d="m1,1 5,0 v5 h-5 z" style="fill: blue"/>"#);
+    assert_eq!(pixel(&relative, 2, 2), [0, 0, 255, 255]);
+    let concave = svg("", r#"<path d="M1 1 H7 V3 H3 V7 H1 Z" fill="lime"/>"#);
+    assert_eq!(pixel(&concave, 2, 5), [0, 255, 0, 255]);
+    assert_eq!(pixel(&concave, 5, 5), [0; 4]);
+    let transformed = svg("", r#"<g transform="translate(1 1)"><path d="M1 1 H4 V4 H1 Z" fill="red" fill-opacity=".5"/></g>"#);
+    assert_eq!(pixel(&transformed, 2, 2), [255, 0, 0, 128]);
+    assert_eq!(pixel(&transformed, 1, 1), [0; 4]);
+}
+
+#[test]
+fn same_direction_double_wound_path_uses_default_nonzero_fill() {
+    let bytes = svg(
+        "",
+        r#"<path d="M1 1 H6 V6 H1 V1 H6 V6 H1 Z" fill="red"/>"#,
+    );
+    assert_eq!(pixel(&bytes, 2, 2), [255, 0, 0, 255]);
+    assert_eq!(pixel(&bytes, 0, 2), [0; 4]);
+}
+
+#[test]
+fn paths_reject_open_curved_malformed_and_unsupported_paint_whole_image() {
+    for path in [
+        r#"<path d="M1 1 L6 1 L6 6"/>"#,
+        r#"<path d="L1 1 L6 1 L6 6 Z"/>"#,
+        r#"<path d="M1 1 L6 1 M2 2 L6 6 Z"/>"#,
+        r#"<path d="M1 1 L6 1 Q4 4 6 6 Z"/>"#,
+        r#"<path d="M1 1 L6 1 A2 2 0 0 0 6 6 Z"/>"#,
+        r#"<path d="M1 1 L6, L6 6 Z"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6 Z,"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6 Z" fill-rule="evenodd"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6 Z" stroke="red"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6 Z" fill="url(#paint)"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6 Z" href="other.svg"/>"#,
+    ] {
+        let body = format!(r#"<rect width="8" height="8" fill="red"/>{path}"#);
+        assert_eq!(decode(&svg("", &body), Default::default()).unwrap_err(), DecodeError::UnsupportedSvg, "{path}");
+    }
+    let oversized = format!("M0 0 {}Z", "1,1 ".repeat(1025));
+    assert_eq!(
+        decode(&svg("", &format!(r#"<path d="{oversized}"/>"#)), Default::default()).unwrap_err(),
+        DecodeError::AllocationLimit
+    );
+}
