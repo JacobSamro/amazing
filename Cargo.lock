@@ -110,6 +110,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "amazing-canvas"
+version = "0.0.1"
+
+[[package]]
 name = "amazing-common"
 version = "0.0.1"
 
