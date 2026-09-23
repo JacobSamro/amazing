@@ -286,7 +286,7 @@ pub struct PropertyTrees {
     pub(crate) effects: Vec<EffectNode>,
     pub(crate) scrolls: Vec<ScrollNode>,
     pub(crate) sticky: Vec<StickyConstraint>,
-    snap_points: Vec<(Vec<f32>, Vec<f32>)>,
+    pub(crate) snap_points: Vec<(Vec<f32>, Vec<f32>)>,
 }
 impl Default for PropertyTrees {
     fn default() -> Self {

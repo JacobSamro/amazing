@@ -9,6 +9,7 @@ mod paint_delta;
 mod paint_view;
 mod property;
 mod quad;
+mod snapshot;
 use amazing_paint::Surface;
 pub use animation::*;
 pub use hit::*;
@@ -16,6 +17,7 @@ pub use paint_delta::*;
 pub use paint_view::*;
 pub use property::*;
 pub use quad::*;
+pub use snapshot::*;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 

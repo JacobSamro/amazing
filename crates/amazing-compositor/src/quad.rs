@@ -110,7 +110,7 @@ pub struct CompositorFrame {
     pub resources: ResourceDelta,
     pub damage: Vec<Rect>,
     pub trees: PropertyTrees,
-    tile_lookup: HashMap<(usize, i32, i32), ResourceId>,
+    pub(crate) tile_lookup: HashMap<(usize, i32, i32), ResourceId>,
 }
 impl CompositorFrame {
     pub fn root(&self) -> &RenderPass {
