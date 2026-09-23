@@ -220,7 +220,7 @@ LANE_GRANTS_REWRITE = {
 }
 # IA-CACHE adds exactly one line, `amazing-fetch = { path = "../amazing-fetch" }`,
 # to the shell manifest. Additive, verified at merge.
-LANE_GRANTS["integrator-assist"].append("crates/amazing-shell-gpui/Cargo.toml")
+LANE_GRANTS["integrator-assist"] += ["crates/amazing-shell-gpui/Cargo.toml", "crates/amazing-shell-gpui/Cargo.lock"]
 
 
 def grant_is_rewrite(lane: str, path: str) -> bool:
