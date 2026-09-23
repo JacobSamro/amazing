@@ -727,3 +727,25 @@ The locked win-002 nextest gates passed on the fixed base: `amazing` **153
 passed / 3 skipped** and workspace **2,026 passed / 5 skipped**. The driver
 package has no library target, so its separate doctest command is N/A.
 Workspace doctests passed **2/2** on win-002.
+
+## IA-GENERATED-IMAGES — decoded URL cache (2026-09-24)
+
+On fixed local `dev` base `c9947a0` containing RC-17b, the page adapter now
+loads CSS generated `content: url(...)` and marker images once per resolved URL.
+`PageMedia` serves the same decoded image to layout's intrinsic-size query and
+paint's URL query, while `<img>` keeps its NodeIdx lookup. GUI layout, media
+loading, and paint use stylesheets with their source URL so the generated key
+stays resolved across all three stages. Owned tests cover shared cache identity
+with an `<img>` and final rendered pixels for generated content.
+
+The pinned RC-17b seven-case generated-content selection at upstream
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, 800×600, stayed **2 pass /
+5 mismatch** in both after sweeps. All classifications and actual image hashes
+matched RC-17b's prior after report, so this adoption claims **zero WPT gains
+and zero losses**. Per-case reports and comparison are under
+`crates/amazing/tests/generated_images/evidence/`.
+
+Final locked win-002 gates passed: `amazing` nextest **155/155** (3 skipped),
+workspace nextest **2,097/2,097** (5 skipped), and workspace doctests **2/2**.
+The three source hashes matched the win-002 gate tree. The driver package has
+no library target for a separate doctest run.

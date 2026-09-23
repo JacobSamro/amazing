@@ -1,5 +1,6 @@
 //! Page resource loading and stylesheet collection.
 use crate::cmd::js::resolve_script_url;
+use std::collections::{HashMap, HashSet};
 #[path = "font_loader.rs"]
 mod font_loader;
 
@@ -22,12 +23,13 @@ fn load_resource(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
 }
 struct PageImage {
     node: amazing_dom::NodeIdx,
-    image: amazing_media::Image,
+    url: String,
 }
 
 #[derive(Default)]
 pub(crate) struct PageMedia {
     images: Vec<PageImage>,
+    decoded: HashMap<String, amazing_media::Image>,
     pub(crate) warnings: Vec<String>,
 }
 
@@ -178,10 +180,14 @@ impl amazing_layout::ReplacedElementProvider for PageMedia {
         self.images
             .iter()
             .find(|entry| entry.node == node)
-            .map(|entry| amazing_layout::IntrinsicSize {
-                width: entry.image.width as f32,
-                height: entry.image.height as f32,
-            })
+            .and_then(|entry| self.intrinsic_size_by_url(&entry.url))
+    }
+
+    fn intrinsic_size_by_url(&self, url: &str) -> Option<amazing_layout::IntrinsicSize> {
+        self.decoded.get(url).map(|image| amazing_layout::IntrinsicSize {
+            width: image.width as f32,
+            height: image.height as f32,
+        })
     }
 }
 
@@ -190,7 +196,11 @@ impl amazing_paint::ImageProvider for PageMedia {
         self.images
             .iter()
             .find(|entry| entry.node == node)
-            .map(|entry| &entry.image)
+            .and_then(|entry| self.image_by_url(&entry.url))
+    }
+
+    fn image_by_url(&self, url: &str) -> Option<&amazing_media::Image> {
+        self.decoded.get(url)
     }
 }
 
@@ -204,6 +214,10 @@ pub(crate) struct PagePaint<'a> {
 impl amazing_paint::ImageProvider for PagePaint<'_> {
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
         amazing_paint::ImageProvider::image(self.media, node)
+    }
+
+    fn image_by_url(&self, url: &str) -> Option<&amazing_media::Image> {
+        amazing_paint::ImageProvider::image_by_url(self.media, url)
     }
 
     fn svg(&self, node: amazing_dom::NodeIdx, width: u32, height: u32, dpr: f32) -> Option<amazing_media::Image> {
@@ -222,8 +236,31 @@ impl amazing_paint::ImageProvider for PagePaint<'_> {
     }
 }
 
-pub(crate) fn load_page_media(dom: &amazing_dom::Dom, page: &str) -> PageMedia {
-    fn walk(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx, page: &str, media: &mut PageMedia) {
+pub(crate) fn load_page_media(
+    dom: &amazing_dom::Dom,
+    page: &str,
+    styled: &amazing_css::StyledDom,
+) -> PageMedia {
+    fn load_image(media: &mut PageMedia, url: &str, attempted: &mut HashSet<String>) {
+        if !attempted.insert(url.to_owned()) {
+            return;
+        }
+        match load_resource(url, 16 * 1024 * 1024)
+            .and_then(|bytes| amazing_media::decode_image(&bytes).map_err(|error| error.to_string()))
+        {
+            Ok(image) => { media.decoded.insert(url.to_owned(), image); }
+            Err(error) => media.warnings.push(format!("image {url:?}: {error}")),
+        }
+    }
+
+    fn walk(
+        dom: &amazing_dom::Dom,
+        node: amazing_dom::NodeIdx,
+        page: &str,
+        styled: &amazing_css::StyledDom,
+        media: &mut PageMedia,
+        attempted: &mut HashSet<String>,
+    ) {
         if dom.name(node) == Some("img") {
             let source = dom
                 .attrs_of(node)
@@ -232,30 +269,41 @@ pub(crate) fn load_page_media(dom: &amazing_dom::Dom, page: &str) -> PageMedia {
                 .filter(|value| !value.trim().is_empty());
             if let Some(source) = source {
                 let resolved = resolve_script_url(page, source);
-                match load_resource(&resolved, 16 * 1024 * 1024)
-                    .and_then(|bytes| {
-                        amazing_media::decode_image(&bytes)
-                            .map_err(|error| error.to_string())
-                    }) {
-                    Ok(image) => {
-                        media.images.push(PageImage {
-                            node,
-                            image,
+                load_image(media, &resolved, attempted);
+                media.images.push(PageImage { node, url: resolved });
+            }
+        }
+        for pseudo in [
+            amazing_css::selectors::PseudoElement::Marker,
+            amazing_css::selectors::PseudoElement::Before,
+            amazing_css::selectors::PseudoElement::After,
+        ] {
+            if let Some(content) = styled.generated_content(node, pseudo) {
+                for run in &content.runs {
+                    if let amazing_css::generated::ContentRun::Image(url) = run {
+                        // CSS image functions need their own rasterizer. The
+                        // decoded resource cache handles URL images only.
+                        let css_image_function = url.split_once('(').is_some_and(|(name, _)| {
+                            matches!(name.to_ascii_lowercase().as_str(),
+                                "linear-gradient" | "repeating-linear-gradient" |
+                                "radial-gradient" | "repeating-radial-gradient" |
+                                "conic-gradient" | "repeating-conic-gradient" |
+                                "image" | "image-set" | "cross-fade" | "element" | "paint")
                         });
+                        if !css_image_function {
+                            load_image(media, url, attempted);
+                        }
                     }
-                    Err(error) => media
-                        .warnings
-                        .push(format!("image {source:?} ({resolved}): {error}")),
                 }
             }
         }
         for child in dom.children(node) {
-            walk(dom, child, page, media);
+            walk(dom, child, page, styled, media, attempted);
         }
     }
 
     let mut media = PageMedia::default();
-    walk(dom, amazing_dom::NodeIdx(0), page, &mut media);
+    walk(dom, amazing_dom::NodeIdx(0), page, styled, &mut media, &mut HashSet::new());
     media
 }
 
@@ -352,9 +400,11 @@ mod tests {
     #[test]
     fn data_urls_supply_image_and_stylesheet_bytes() {
         let dom = amazing_html::parse("<link rel='stylesheet' href='data:text/css,body%7Bcolor%3Ared%7D'><img src='data:image/x-portable-pixmap,P6%0A1%201%0A255%0A%FF%00%00'>");
-        let media = load_page_media(&dom, "C:/pages/test.html");
+        let styled = amazing_css::compute(&dom, &[]);
+        let media = load_page_media(&dom, "C:/pages/test.html", &styled);
         assert_eq!(media.images.len(), 1, "{:?}", media.warnings);
-        assert_eq!((media.images[0].image.width, media.images[0].image.height), (1, 1));
+        let image = amazing_paint::ImageProvider::image(&media, media.images[0].node).unwrap();
+        assert_eq!((image.width, image.height), (1, 1));
         let mut sheets = Vec::new();
         collect_author_css(&dom, amazing_dom::NodeIdx(0), "C:/pages/test.html", &mut sheets).unwrap();
         assert_eq!(sheets.len(), 1);
@@ -383,12 +433,60 @@ mod tests {
             "width=20 height=30 style='width:4px;height:auto'",
         ] {
             let dom = amazing_html::parse(&format!("<img src='pixel.ppm' {attributes}>"));
-            let media = load_page_media(&dom, &page.to_string_lossy());
+            let styled = amazing_css::compute(&dom, &[]);
+            let media = load_page_media(&dom, &page.to_string_lossy(), &styled);
             assert!(media.warnings.is_empty(), "{:?}", media.warnings);
             assert_eq!(media.images.len(), 1);
             let size = media.intrinsic_size(media.images[0].node).unwrap();
             assert_eq!((size.width, size.height), (2.0, 1.0), "{attributes}");
         }
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn generated_images_share_the_decoded_url_cache_with_img_nodes() {
+        let url = "data:image/x-portable-pixmap,P6%0A2%201%0A255%0A%FF%00%00%00%FF%00";
+        let dom = amazing_html::parse(&format!("<img src='{url}'><p>text</p>"));
+        let sheet = amazing_css::parse_stylesheet(&format!("p::before {{ content: url('{url}') }}"));
+        let styled = amazing_css::compute(&dom, &[sheet]);
+        let media = load_page_media(&dom, "https://example.test/page", &styled);
+        assert!(media.warnings.is_empty(), "{:?}", media.warnings);
+        assert_eq!(media.decoded.len(), 1);
+        let img = media.images[0].node;
+        let node_image = amazing_paint::ImageProvider::image(&media, img).unwrap();
+        let generated_image = amazing_paint::ImageProvider::image_by_url(&media, url).unwrap();
+        assert!(std::ptr::eq(node_image, generated_image));
+        assert_eq!(media.intrinsic_size(img), media.intrinsic_size_by_url(url));
+        assert_eq!(media.intrinsic_size_by_url(url).unwrap().width, 2.0);
+        let paint = PagePaint { media: &media, dom: &dom, styles: &styled };
+        assert!(std::ptr::eq(
+            amazing_paint::ImageProvider::image_by_url(&paint, url).unwrap(),
+            generated_image,
+        ));
+    }
+
+    #[test]
+    fn generated_url_pixels_reach_the_rendered_page() {
+        let url = "data:image/x-portable-pixmap,P6%0A2%202%0A255%0A%FF%00%00%FF%00%00%FF%00%00%FF%00%00";
+        let dom = amazing_html::parse("<body></body>");
+        let sheet = amazing_css::parse_stylesheet(&format!(
+            "body {{ margin: 0 }} body::before {{ content: url('{url}') }}"
+        ));
+        let styled = amazing_css::compute(&dom, std::slice::from_ref(&sheet));
+        let media = load_page_media(&dom, "https://example.test/page", &styled);
+        assert!(media.warnings.is_empty(), "{:?}", media.warnings);
+        let text = amazing_text::FallbackTextSystem::new();
+        let layout = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
+            &dom, &[sheet], 100.0, Some(100.0), &text, &media,
+        );
+        let fragment = layout.styled_replaced_fragments().next().unwrap();
+        assert_eq!(fragment.generated_url.as_deref(), Some(url));
+        assert_eq!((fragment.content_box.w, fragment.content_box.h), (2.0, 2.0));
+        let paint = PagePaint { media: &media, dom: &dom, styles: &styled };
+        let surface = amazing_paint::paint_document_with_text_resources(&layout, 100, 100, &text, &paint);
+        assert_eq!(surface.get_pixel(
+            (fragment.content_box.x + 1.0) as u32,
+            (fragment.content_box.y + 1.0) as u32,
+        ), Some([255, 0, 0, 255]));
     }
 }

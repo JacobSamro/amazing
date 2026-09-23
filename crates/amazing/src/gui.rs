@@ -526,8 +526,13 @@ mod windows {
                 eprintln!("amazing gui: stylesheet refresh failed: {error}");
                 return;
             }
-            let css = font_sheets.iter().map(|(source, _)| source.as_str()).collect::<Vec<_>>().join("\n");
-            let media = load_page_media(&host_ref.dom, &page);
+            let sheets = font_sheets.iter().map(|(source, url)| {
+                let mut sheet = amazing_css::parse_stylesheet(source);
+                sheet.base_url = Some(url.clone());
+                sheet
+            }).collect::<Vec<_>>();
+            let styled = amazing_css::compute(&host_ref.dom, &sheets);
+            let media = load_page_media(&host_ref.dom, &page, &styled);
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
             }
@@ -535,9 +540,9 @@ mod windows {
             for warning in &page_text.warnings {
                 eprintln!("amazing gui: {warning}");
             }
-            let mut layout = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
+            let mut layout = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
                 &host_ref.dom,
-                &css,
+                &sheets,
                 width.max(1) as f32,
                 Some(viewport_height),
                 &page_text.provider,
@@ -550,7 +555,6 @@ mod windows {
             let height = amazing_layout::layout_overflow_bottom(&layout)
                 .ceil()
                 .clamp(1.0, 8192.0) as u32;
-            let styled = amazing_css::compute(&host_ref.dom, &[amazing_css::parse_stylesheet(&css)]);
             let paint = PagePaint { media: &media, dom: &host_ref.dom, styles: &styled };
             let surface = amazing_paint::paint_document_with_text_resources(
                 &layout,
@@ -1022,19 +1026,23 @@ mod windows {
             let host_ref = host.borrow();
             collect_author_css(&host_ref.dom, NodeIdx(0), input, &mut font_sheets)?;
         }
-        let css = font_sheets.iter().map(|(source, _)| source.as_str()).collect::<Vec<_>>().join("\n");
+        let sheets = font_sheets.iter().map(|(source, url)| {
+            let mut sheet = amazing_css::parse_stylesheet(source);
+            sheet.base_url = Some(url.clone());
+            sheet
+        }).collect::<Vec<_>>();
         let mut animations = AnimationScene::new();
         let animation_started = Instant::now();
         let initial_animation = {
             let host_ref = host.borrow();
-            let sheets = font_sheets.iter().map(|(source, _)| amazing_css::parse_stylesheet(source)).collect::<Vec<_>>();
             animations.frame(&host_ref.dom, &sheets, 0.)?
         };
         for event in &initial_animation.events {
             js.dispatch_animation_event(event).map_err(|error| error.describe())?;
         }
         let host_ref = host.borrow();
-        let media = load_page_media(&host_ref.dom, input);
+        let styled = amazing_css::compute(&host_ref.dom, &sheets);
+        let media = load_page_media(&host_ref.dom, input, &styled);
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");
         }
@@ -1042,9 +1050,9 @@ mod windows {
         for warning in &page_text.warnings {
             eprintln!("amazing gui: {warning}");
         }
-        let mut root = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
+        let mut root = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
             &host_ref.dom,
-            &css,
+            &sheets,
             width.max(1) as f32,
             Some(700.0),
             &page_text.provider,
@@ -1057,7 +1065,6 @@ mod windows {
         let height = amazing_layout::layout_overflow_bottom(&root)
             .ceil()
             .clamp(1.0, 8192.0) as u32;
-        let styled = amazing_css::compute(&host_ref.dom, &[amazing_css::parse_stylesheet(&css)]);
         let paint = PagePaint { media: &media, dom: &host_ref.dom, styles: &styled };
         let surface = amazing_paint::paint_document_with_text_resources(
             &root,

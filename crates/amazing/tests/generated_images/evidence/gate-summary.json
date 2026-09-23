@@ -1,0 +1,26 @@
+{
+  "fixed_base": "c9947a0",
+  "linux_package": {
+    "passed": 151,
+    "skipped": 1,
+    "before_final_test_added": true
+  },
+  "windows_package": {
+    "passed": 155,
+    "skipped": 3
+  },
+  "windows_workspace": {
+    "passed": 2097,
+    "skipped": 5
+  },
+  "windows_workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "source_sha256": {
+    "crates/amazing/src/page.rs": "fb9057e2ebb3797ae5e8153087deb7a8c4a3b752348e5bf73454ef770aa989a3",
+    "crates/amazing/src/gui.rs": "1b3b6edc99467c2fadc629b7913517d6348ac9ab967e8ce712a45bb6caf82e7f",
+    "crates/amazing/src/cmd/render.rs": "f1d9c1d3e9a0472f6caed3d773bdba86c360c21f7b7d63e1211f3f95f706cc73"
+  },
+  "windows_source_hashes_match": true
+}
