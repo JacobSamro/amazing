@@ -393,6 +393,16 @@ const PROPERTIES: &[PropertyMetadata] = &[
         inherited: true,
     },
     PropertyMetadata {
+        name: "fill",
+        initial: "black",
+        inherited: true,
+    },
+    PropertyMetadata {
+        name: "fill-opacity",
+        initial: "1",
+        inherited: true,
+    },
+    PropertyMetadata {
         name: "grid-auto-columns",
         initial: "auto",
         inherited: false,
@@ -752,7 +762,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
     if metadata(&property).is_some()
         && css_wide_keyword(value).is_none()
         && !contains_var_function(value)
-        && !matches!(property.as_str(), "opacity" | "overflow")
+        && !matches!(property.as_str(), "opacity" | "fill-opacity" | "overflow")
         && values::parse(&property, value).is_none()
     {
         return Vec::new();
@@ -870,7 +880,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         {
             vec![(property, value.to_owned())]
         }
-        "opacity"
+        "opacity" | "fill-opacity"
             if css_wide_keyword(value).is_some()
                 || contains_var_function(value)
                 || valid_opacity(value) =>
@@ -922,6 +932,7 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         | "transform"
         | "transform-style"
         | "opacity"
+        | "fill-opacity"
         | "z-index"
         | "overflow"
         | "overflow-x"
@@ -978,6 +989,27 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         }
         "grid-template" if contains_var_function(value) => deferred_grid_template(value),
         "grid-template" => expand_grid_template(value).unwrap_or_default(),
+        "grid" if css_wide_keyword(value).is_some() => [
+            "grid-template-rows", "grid-template-columns", "grid-auto-rows",
+            "grid-auto-columns", "grid-auto-flow",
+        ].into_iter().map(|name| (name.to_owned(), value.to_owned())).collect(),
+        "grid" if contains_var_function(value) => {
+            let mut template = deferred_grid_template(value);
+            template.extend([
+                ("grid-auto-rows".to_owned(), "auto".to_owned()),
+                ("grid-auto-columns".to_owned(), "auto".to_owned()),
+                ("grid-auto-flow".to_owned(), "row".to_owned()),
+            ]);
+            template
+        },
+        "grid" => expand_grid_template(value).map(|mut template| {
+            template.extend([
+                ("grid-auto-rows".to_owned(), "auto".to_owned()),
+                ("grid-auto-columns".to_owned(), "auto".to_owned()),
+                ("grid-auto-flow".to_owned(), "row".to_owned()),
+            ]);
+            template
+        }).unwrap_or_default(),
         "flex-flow" if !parts.is_empty() => {
             if css_wide_keyword(value).is_some() {
                 vec![
@@ -2532,7 +2564,7 @@ fn compute_normal_value(
     }
     if css_wide_keyword(&value).is_none()
         && values::parse(property.name, &value).is_none()
-        && property.name != "opacity"
+        && !matches!(property.name, "opacity" | "fill-opacity")
     {
         return (default_value(property, parent), property.inherited);
     }
@@ -2556,7 +2588,9 @@ fn compute_normal_value(
     };
     let computed = if property.name == "font-size" {
         computed_font_size(&computed, parent, root_font_px).unwrap_or(computed)
-    } else if property.name == "opacity" {
+    } else if property.name == "display" {
+        values::display_canonical(&computed).unwrap_or(&computed).to_owned()
+    } else if matches!(property.name, "opacity" | "fill-opacity") {
         computed_opacity(&computed).unwrap_or_else(|| property.initial.to_owned())
     } else {
         computed
@@ -2584,7 +2618,7 @@ fn valid_new_paint_property(property: &str, value: &str) -> bool {
             value.trim().to_ascii_lowercase().as_str(),
             "flat" | "preserve-3d"
         ),
-        "opacity" => valid_opacity(value),
+        "opacity" | "fill-opacity" => valid_opacity(value),
         "z-index" => valid_z_index(value),
         "overflow" | "overflow-x" | "overflow-y" => valid_overflow(value),
         "border-top-left-radius"

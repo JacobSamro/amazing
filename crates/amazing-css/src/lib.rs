@@ -46,7 +46,10 @@ pub mod selectors;
 pub mod syntax;
 pub mod values;
 
-pub use cascade::{StyledDom, compute};
+pub use cascade::{
+    ElementFill, ElementPaintStyle, ElementStyleSource, ElementStyleValue, StyledDom,
+    compute, compute_element_paint_style,
+};
 pub use computed::ComputedStyle;
 pub use parser::{
     Declaration, FontFaceRule, FontSource, Rule, Stylesheet, parse_declarations, parse_font_faces,
