@@ -25,6 +25,7 @@ impl Interpreter {
     }
     fn install_builtins(&mut self) {
         self.install_binary_builtins();
+        self.install_bigint_builtins();
         self.define_global("undefined", JsValue::Undefined);
         self.define_global("NaN", JsValue::Num(f64::NAN));
         self.define_global("Infinity", JsValue::Num(f64::INFINITY));
@@ -486,6 +487,7 @@ impl Interpreter {
             let _ = self.set_prop(&number, "NaN", JsValue::Num(f64::NAN));
             let _ = self.set_prop(&number, "MAX_VALUE", JsValue::Num(f64::MAX));
             let _ = self.set_prop(&number, "MIN_VALUE", JsValue::Num(f64::from_bits(1)));
+            let _ = self.set_prop(&number, "MAX_SAFE_INTEGER", JsValue::num(9_007_199_254_740_991.0));
             let _ = self.set_prop(
                 &number,
                 "isNaN",

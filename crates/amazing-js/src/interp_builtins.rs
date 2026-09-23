@@ -1,6 +1,32 @@
 fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     Ok(match a.into_iter().next() {
         Some(value @ JsValue::Object(_)) => value,
+        Some(JsValue::Num(number)) => {
+            let mut object = JsObject::ordinary();
+            object.proto = Some(i.object_proto.clone());
+            object.set_own("[[NumberData]]", JsValue::Num(number));
+            JsValue::object(object)
+        }
+        Some(JsValue::Bool(boolean)) => {
+            let mut object = JsObject::ordinary();
+            object.proto = Some(i.object_proto.clone());
+            object.set_own("[[BooleanData]]", JsValue::Bool(boolean));
+            JsValue::object(object)
+        }
+        Some(JsValue::Str(string)) => {
+            let mut object = JsObject::ordinary();
+            object.proto = Some(i.string_proto.clone());
+            object.set_own("[[StringData]]", JsValue::Str(string));
+            JsValue::object(object)
+        }
+        Some(JsValue::BigInt(value)) => {
+            let mut object = JsObject::ordinary();
+            object.proto = i.global_env.resolve("BigInt")
+                .and_then(|constructor| i.get_prop(&constructor, "prototype").ok())
+                .and_then(|prototype| if let JsValue::Object(object) = prototype { Some(object) } else { None });
+            object.set_own("[[BigIntData]]", JsValue::BigInt(value));
+            JsValue::object(object)
+        }
         Some(JsValue::Symbol(symbol)) => {
             let mut object = JsObject::ordinary();
             object.proto = Some(i.symbol_proto.clone());
@@ -1984,6 +2010,7 @@ fn map_key(value: &JsValue) -> MapKey {
         JsValue::Null => MapKey::Null,
         JsValue::Bool(v) => MapKey::Bool(*v),
         JsValue::Num(v) => MapKey::Num(*v),
+        JsValue::BigInt(v) => MapKey::BigInt(v.clone()),
         JsValue::Str(v) => MapKey::Str(v.clone()),
         JsValue::Symbol(v) => MapKey::Symbol(v.clone()),
         JsValue::Object(v) => MapKey::Object(v.clone()),
@@ -2173,6 +2200,7 @@ fn key_value(key: &MapKey) -> JsValue {
         MapKey::Null => JsValue::Null,
         MapKey::Bool(v) => JsValue::Bool(*v),
         MapKey::Num(v) => JsValue::Num(*v),
+        MapKey::BigInt(v) => JsValue::BigInt(v.clone()),
         MapKey::Str(v) => JsValue::Str(v.clone()),
         MapKey::Symbol(v) => JsValue::Symbol(v.clone()),
         MapKey::Object(v) => JsValue::Object(v.clone()),
@@ -2537,6 +2565,7 @@ fn json_stringify_value(i: &mut Interpreter, value: &JsValue) -> Result<Option<S
         JsValue::Bool(value) => Some(value.to_string()),
         JsValue::Num(value) if value.is_finite() => Some(crate::value::number_to_string(*value)),
         JsValue::Num(_) => Some("null".into()),
+        JsValue::BigInt(_) => return Err(Throw::type_error("BigInt is not JSON serializable")),
         JsValue::Str(value) => Some(json_escape(value)),
         JsValue::Object(object) if object.borrow().func.is_some() => None,
         JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Array) => {
@@ -2644,6 +2673,7 @@ fn native_object_to_string(
         JsValue::Null => "Null",
         JsValue::Bool(_) => "Boolean",
         JsValue::Num(_) => "Number",
+        JsValue::BigInt(_) => "BigInt",
         JsValue::Str(_) => "String",
         JsValue::Symbol(_) => "Symbol",
         JsValue::Object(o) => match &o.borrow().exotic {
@@ -2831,7 +2861,12 @@ fn native_min(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValu
     Ok(JsValue::num(n))
 }
 fn native_number(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let value = JsValue::num(i.to_number(a.first().unwrap_or(&JsValue::Undefined))?);
+    let number = if let Some(argument) = a.first() {
+        let primitive = i.primitive(argument.clone())?;
+        if let JsValue::BigInt(bigint) = &primitive { bigint.to_f64() }
+        else { i.to_number(&primitive)? }
+    } else { 0.0 };
+    let value = JsValue::num(number);
     if let JsValue::Object(object) = &this {
         object.borrow_mut().set_own("[[NumberData]]", value);
         Ok(this)

@@ -105,7 +105,8 @@ fn binary_typed(value: &JsValue) -> Result<(BinaryView, BinaryKind), Throw> {
 }
 fn binary_index(i: &mut Interpreter, value: &JsValue) -> Result<usize, Throw> {
     if matches!(value, JsValue::Undefined) { return Ok(0); }
-    let n = i.to_number(value)?;
+    let primitive = i.primitive_number_hint(value.clone())?;
+    let n = i.to_number(&primitive)?;
     if n.is_nan() || n == 0.0 { return Ok(0); }
     let integer = n.trunc();
     if !integer.is_finite() || integer < 0.0 || integer > 9_007_199_254_740_991.0 {
@@ -222,6 +223,15 @@ fn binary_read(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool)
     let end = offset.checked_add(kind.size()).ok_or_else(|| Throw::range_error("view offset"))?;
     if end > binary_view_bytes(view) { return Err(Throw::range_error("view offset")); }
     let start = view.offset + offset;
+    if kind.big() {
+        let mut raw = [0u8; 8];
+        raw.copy_from_slice(&buffer.bytes[start..start + 8]);
+        if !little { raw.reverse(); }
+        let bits = u64::from_le_bytes(raw);
+        return Ok(Interpreter::bigint_value(if kind == BinaryKind::BigInt64 {
+            BinaryBigInt::from_i64(bits as i64)
+        } else { BinaryBigInt::from_u64(bits) }));
+    }
     Ok(JsValue::num(binary_number(&buffer.bytes[start..start + kind.size()], kind, little)))
 }
 fn binary_write(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool, value: f64) -> Result<(), Throw> {
@@ -232,6 +242,20 @@ fn binary_write(view: &BinaryView, kind: BinaryKind, offset: usize, little: bool
     if buffer.immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
     let start = view.offset + offset;
     buffer.bytes[start..start + kind.size()].copy_from_slice(&binary_encode_number(value, kind, little));
+    Ok(())
+}
+fn binary_write_value(i: &mut Interpreter, view: &BinaryView, kind: BinaryKind, offset: usize, little: bool, value: &JsValue) -> Result<(), Throw> {
+    if !kind.big() { return binary_write(view, kind, offset, little, i.to_number(value)?); }
+    let bigint = i.to_bigint(value)?;
+    let end = offset.checked_add(8).ok_or_else(|| Throw::range_error("view offset"))?;
+    if end > binary_view_bytes(view) { return Err(Throw::range_error("view offset")); }
+    let mut buffer = view.buffer.borrow_mut();
+    if buffer.detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+    if buffer.immutable { return Err(Throw::type_error("immutable ArrayBuffer")); }
+    let mut bytes = bigint.low_u64().to_le_bytes();
+    if !little { bytes.reverse(); }
+    let start = view.offset + offset;
+    buffer.bytes[start..start + 8].copy_from_slice(&bytes);
     Ok(())
 }
 
@@ -309,7 +333,8 @@ impl Interpreter {
         let buffer = binary_buffer(&JsValue::Object(buffer_object.clone()))?;
         let size = kind.map_or(1, BinaryKind::size);
         let bytes_len = buffer.borrow().bytes.len();
-        if buffer.borrow().detached || offset > bytes_len || offset % size != 0
+        if buffer.borrow().detached { return Err(Throw::type_error("detached ArrayBuffer")); }
+        if offset > bytes_len || offset % size != 0
             || length.is_some_and(|len| len > bytes_len - offset) {
             return Err(Throw::range_error("invalid view bounds"));
         }
@@ -333,6 +358,15 @@ impl Interpreter {
     pub fn binding_create_uint8_array(&mut self, bytes: Vec<u8>) -> Result<JsValue, Throw> {
         let buffer = self.binding_create_array_buffer(bytes)?;
         self.binary_new_view(binary_obj(&buffer)?, 0, None, Some(BinaryKind::Uint8))
+    }
+    pub fn binding_detach_array_buffer(&mut self, value: &JsValue) -> Result<(), Throw> {
+        let buffer = binary_buffer(value)?;
+        let mut buffer = buffer.borrow_mut();
+        if buffer.shared { return Err(Throw::type_error("SharedArrayBuffer cannot be detached")); }
+        if buffer.detached { return Ok(()); }
+        buffer.bytes.clear();
+        buffer.detached = true;
+        Ok(())
     }
 
     fn install_binary_builtins(&mut self) {
@@ -481,9 +515,10 @@ fn binary_get_index(_i: &mut Interpreter, object: &Obj, key: &PropertyKey) -> Op
 fn binary_set_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, value: JsValue) -> Option<Result<(), Throw>> {
     let (view, kind, index) = binary_index_view(object, key)?;
     Some((|| {
-        let number = i.to_number(&value)?;
+        let converted = if kind.big() { Interpreter::bigint_value(i.to_bigint(&value)?) }
+            else { JsValue::num(i.to_number(&value)?) };
         if let Some(index) = index.filter(|index| *index < binary_length(&view)) {
-            binary_write(&view, kind, index * kind.size(), true, number)?;
+            binary_write_value(i, &view, kind, index * kind.size(), true, &converted)?;
         }
         Ok(())
     })())
@@ -508,7 +543,7 @@ fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, pro
             || !property.enumerable || !property.writable {
             return Err(Throw::type_error("incompatible TypedArray element descriptor"));
         }
-        binary_write(&view, kind, index * kind.size(), true, i.to_number(&property.value)?)
+        binary_write_value(i, &view, kind, index * kind.size(), true, &property.value)
     })())
 }
 fn binary_define_index_object(i: &mut Interpreter, object: &Obj, key: &PropertyKey, descriptor: &Obj) -> Option<Result<(), Throw>> {
@@ -526,8 +561,7 @@ fn binary_define_index_object(i: &mut Interpreter, object: &Obj, key: &PropertyK
         }
         if has("value") {
             let value = i.get_prop(&JsValue::Object(descriptor.clone()), "value")?;
-            let value = i.to_number(&value)?;
-            binary_write(&view, kind, index * kind.size(), true, value)?;
+            binary_write_value(i, &view, kind, index * kind.size(), true, &value)?;
         }
         Ok(())
     })())
@@ -743,14 +777,12 @@ fn binary_data_view_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue
         "Float64" => BinaryKind::Float64,
         _ => return Err(Throw::type_error("unknown DataView operation")),
     };
-    if kind.big() { return Err(Throw::type_error("BigInt binary operations require BigInt value support")); }
     let view = binary_view(&this)?;
     if view.kind.is_some() { return Err(Throw::type_error("not a DataView")); }
     let offset = binary_index(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let little = args.get(if set { 2 } else { 1 }).is_some_and(JsValue::to_boolean);
     if set {
-        let value = i.to_number(args.get(1).unwrap_or(&JsValue::Undefined))?;
-        binary_write(&view, kind, offset, little, value)?;
+        binary_write_value(i, &view, kind, offset, little, args.get(1).unwrap_or(&JsValue::Undefined))?;
         Ok(JsValue::Undefined)
     } else { binary_read(&view, kind, offset, little) }
 }
@@ -759,7 +791,6 @@ fn binary_typed_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
     binary_require_new(&this)?;
     let name = binary_current_name(i);
     let kind = BinaryKind::from_name(&name).ok_or_else(|| Throw::type_error("TypedArray requires a concrete constructor"))?;
-    if kind.big() { return Err(Throw::type_error("BigInt TypedArrays require BigInt value support")); }
     let first = args.first().cloned().unwrap_or(JsValue::Undefined);
     if let JsValue::Object(object) = &first {
         match binary_state(object) {
@@ -782,7 +813,7 @@ fn binary_typed_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
             _ => {}
         }
     }
-    if matches!(first, JsValue::Undefined | JsValue::Num(_) | JsValue::Bool(_) | JsValue::Null) {
+    if matches!(first, JsValue::Undefined | JsValue::Num(_) | JsValue::BigInt(_) | JsValue::Symbol(_) | JsValue::Bool(_) | JsValue::Null) {
         let length = binary_index(i, &first)?;
         let byte_length = length.checked_mul(kind.size()).ok_or_else(|| Throw::range_error("TypedArray too large"))?;
         if byte_length > 256 * 1024 * 1024 { return Err(Throw::range_error("TypedArray too large")); }
@@ -795,6 +826,9 @@ fn binary_typed_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> 
 fn binary_collect_source(i: &mut Interpreter, source: &JsValue) -> Result<Vec<JsValue>, Throw> {
     let iterator = i.get_prop(source, WellKnownSymbol::Iterator.symbol())?;
     if callable_function(&iterator).is_some() { return i.iterate(source); }
+    if !iterator.is_undefined() && !iterator.is_null() {
+        return Err(Throw::type_error("source @@iterator is not callable"));
+    }
     if matches!(source, JsValue::Null | JsValue::Undefined) { return Err(Throw::type_error("source is nullish")); }
     let length = i.get_prop(source, "length")?;
     let length = i.to_number(&length)?;
@@ -810,8 +844,7 @@ fn binary_typed_from_values(i: &mut Interpreter, kind: BinaryKind, values: Vec<J
     let view = i.binary_new_view(binary_obj(&buffer)?, 0, Some(bytes), Some(kind))?;
     let state = binary_typed(&view)?.0;
     for (index, value) in values.into_iter().enumerate() {
-        let number = i.to_number(&value)?;
-        binary_write(&state, kind, index * kind.size(), true, number)?;
+        binary_write_value(i, &state, kind, index * kind.size(), true, &value)?;
     }
     Ok(view)
 }
@@ -832,10 +865,8 @@ fn binary_typed_static(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
     let result = i.construct(&this, vec![JsValue::num(values.len() as f64)])?;
     let (view, kind) = binary_typed(&result)?;
     if binary_length(&view) < values.len() { return Err(Throw::type_error("TypedArray constructor returned a short array")); }
-    if kind.big() { return Err(Throw::type_error("BigInt TypedArrays require BigInt value support")); }
     for (index, value) in values.iter().enumerate() {
-        let number = i.to_number(value)?;
-        binary_write(&view, kind, index * kind.size(), true, number)?;
+        binary_write_value(i, &view, kind, index * kind.size(), true, value)?;
     }
     Ok(result)
 }
@@ -859,8 +890,7 @@ fn binary_typed_species_from_values(i: &mut Interpreter, source: &JsValue, kind:
         return Err(Throw::type_error("incompatible TypedArray species result"));
     }
     for (index, value) in values.iter().enumerate() {
-        let number = i.to_number(value)?;
-        binary_write(&view, result_kind, index * result_kind.size(), true, number)?;
+        binary_write_value(i, &view, result_kind, index * result_kind.size(), true, value)?;
     }
     Ok(result)
 }
@@ -898,10 +928,11 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             Ok(if name == "includes" { JsValue::Bool(found.is_some()) } else { JsValue::num(found.map_or(-1, |x| x as i64) as f64) })
         }
         "fill" => {
-            let number = i.to_number(&arg(0))?;
+            let fill = if kind.big() { Interpreter::bigint_value(i.to_bigint(&arg(0))?) }
+                else { JsValue::num(i.to_number(&arg(0))?) };
             let start = if args.get(1).is_some_and(|x| !matches!(x, JsValue::Undefined)) { binary_relative(i, args.get(1), length as i64)? } else { 0 };
             let end = binary_relative(i, args.get(2), length as i64)?;
-            for j in start..end { binary_write(&view, kind, j * kind.size(), true, number)?; }
+            for j in start..end { binary_write_value(i, &view, kind, j * kind.size(), true, &fill)?; }
             Ok(this)
         }
         "reverse" | "toReversed" => {
@@ -944,7 +975,7 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
             };
             let offset = binary_index(i, args.get(1).unwrap_or(&JsValue::Undefined))?;
             if offset > length || source_values.len() > length - offset { return Err(Throw::range_error("source does not fit TypedArray")); }
-            for (j, value) in source_values.iter().enumerate() { binary_write(&view, kind, (offset+j)*kind.size(), true, i.to_number(value)?)?; }
+            for (j, value) in source_values.iter().enumerate() { binary_write_value(i, &view, kind, (offset+j)*kind.size(), true, value)?; }
             Ok(JsValue::Undefined)
         }
         "copyWithin" => {
@@ -975,11 +1006,15 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
                 let mut cursor = index;
                 while cursor > 0 {
                     let ordering = if matches!(compare, JsValue::Undefined) {
+                        if let (JsValue::BigInt(a), JsValue::BigInt(b)) = (&copy[cursor - 1], &copy[cursor]) {
+                            a.cmp(b)
+                        } else {
                         let a = copy[cursor - 1].to_number()?;
                         let b = copy[cursor].to_number()?;
                         if a.is_nan() { if b.is_nan() { std::cmp::Ordering::Equal } else { std::cmp::Ordering::Greater } }
                         else if b.is_nan() { std::cmp::Ordering::Less }
                         else { a.total_cmp(&b) }
+                        }
                     } else {
                         let compared = i.call_value(&compare, JsValue::Undefined,
                             vec![copy[cursor - 1].clone(), copy[cursor].clone()])?;
@@ -992,7 +1027,7 @@ fn binary_typed_method(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
                 }
             }
             if name == "toSorted" { binary_typed_from_values(i, kind, copy) }
-            else { for (j,value) in copy.iter().enumerate() { binary_write(&view, kind, j*kind.size(), true, i.to_number(value)?)?; } Ok(this) }
+            else { for (j,value) in copy.iter().enumerate() { binary_write_value(i, &view, kind, j*kind.size(), true, value)?; } Ok(this) }
         }
         "map" | "filter" | "forEach" | "every" | "some" | "find" | "findIndex" | "findLast" | "findLastIndex" => {
             let callback = arg(0);
@@ -1057,7 +1092,6 @@ fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
     }
     let target = args.first().cloned().unwrap_or(JsValue::Undefined);
     let (view, kind) = binary_typed(&target)?;
-    if kind.big() { return Err(Throw::type_error("BigInt Atomics require BigInt value support")); }
     if !kind.integer() || kind == BinaryKind::Uint8Clamped || (matches!(name.as_str(), "wait" | "waitAsync" | "notify")
         && !matches!(kind, BinaryKind::Int32 | BinaryKind::BigInt64)) {
         return Err(Throw::type_error("invalid Atomics TypedArray"));
@@ -1072,6 +1106,26 @@ fn binary_atomics(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
     let offset = index * kind.size();
     let old = binary_read(&view, kind, offset, true)?;
     if name == "load" { return Ok(old); }
+    if kind.big() {
+        let input = i.to_bigint(args.get(2).unwrap_or(&JsValue::Undefined))?;
+        let JsValue::BigInt(old_big) = &old else { unreachable!() };
+        let next = match name.as_str() {
+            "store" | "exchange" => input.clone(),
+            "add" => old_big.add(&input), "sub" => old_big.sub(&input),
+            "and" => old_big.bitwise(&input, ast::BinOp::BitAnd),
+            "or" => old_big.bitwise(&input, ast::BinOp::BitOr),
+            "xor" => old_big.bitwise(&input, ast::BinOp::BitXor),
+            "compareExchange" => {
+                let replacement = i.to_bigint(args.get(3).unwrap_or(&JsValue::Undefined))?;
+                if old_big.as_ref() != &input { return Ok(old); }
+                replacement
+            }
+            "waitAsync" => return Err(Throw::type_error("Atomics.waitAsync is unavailable")),
+            _ => return Err(Throw::type_error("unknown Atomics operation")),
+        };
+        binary_write_value(i, &view, kind, offset, true, &Interpreter::bigint_value(next))?;
+        return Ok(if name == "store" { Interpreter::bigint_value(input) } else { old });
+    }
     let input = i.to_number(args.get(2).unwrap_or(&JsValue::Undefined))?;
     let old_number = old.to_number()?;
     let next = match name.as_str() {
