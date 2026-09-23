@@ -1,8 +1,8 @@
-use crate::host::{DocumentField, DocumentHost, InterfaceBrand, Operation as O};
+use crate::host::{DocumentField, DocumentHost, InterfaceBrand, Operation as O, UrlReflection};
 use amazing_dom::{collection::CollectionFilter, DomError, NodeKind};
 
 pub(crate) fn handles(op: O) -> bool {
-    matches!(op, O::DocumentTitle | O::DocumentSetTitle | O::DocumentHead | O::DocumentBody
+    matches!(op, O::NodeBaseURI | O::DocumentTitle | O::DocumentSetTitle | O::DocumentHead | O::DocumentBody
         | O::DocumentSetBody | O::DocumentElement | O::DocumentDoctype | O::DocumentReadyState | O::DocumentURL
         | O::DocumentURI | O::DocumentCharacterSet | O::DocumentContentType
         | O::DocumentCompatMode | O::DocumentReferrer | O::DocumentGetElementById
@@ -11,8 +11,20 @@ pub(crate) fn handles(op: O) -> bool {
         | O::DocumentActiveElement | O::DocumentHasFocus)
 }
 
-pub(crate) fn invoke<H: DocumentHost>(host: &mut H, op: O, receiver: H::Value,
+pub(crate) fn invoke<H: DocumentHost + UrlReflection>(host: &mut H, op: O, receiver: H::Value,
     args: &[H::Value]) -> Result<H::Value, H::Error> {
+    if op == O::NodeBaseURI {
+        let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected a Node"))?;
+        let (document, href) = host.with_dom(|dom| {
+            let document = dom.owner_document(node).unwrap_or(node);
+            Ok((document, dom.document_base_href(document)?))
+        })?;
+        let units = match href {
+            Some(href) => host.resolve_url(&href)?,
+            None => host.document_field(document, DocumentField::URL)?,
+        };
+        return host.string(&units);
+    }
     let node = host.node_brand(&receiver).ok_or_else(|| host.type_error("Expected a Document"))?;
     let fragment = op == O::FragmentGetElementById;
     host.with_dom(|dom| match &dom.get(node).kind {

@@ -33,7 +33,7 @@ pub struct SlotState {
     pub assigned: Vec<NodeIdx>,
 }
 
-fn custom_element_name(name: &str) -> bool {
+pub(crate) fn custom_element_name(name: &str) -> bool {
     // HTML's valid custom element name uses the shared element-local-name
     // validator, then adds ASCII-case, hyphen, and reserved-name constraints.
     let reserved = [
@@ -107,6 +107,17 @@ impl Dom {
             ) || custom_element_name(name))
             || self.shadow_root_of_host(host).is_some()
         {
+            return Err(DomError::NotSupportedError);
+        }
+        let definition = self.custom_element_definition_of(host).or_else(|| {
+            self.custom_element_definitions(self.get(host).owner_document).into_iter()
+                .find(|(_, definition)| definition.local_name == name
+                    && (definition.name == name
+                        || self.get_attribute_ns(host, None, "is") == Some(definition.name.as_str())))
+                .map(|(id, _)| id)
+        });
+        if definition.is_some_and(|id| self.custom_element_definition(id)
+            .is_some_and(|definition| definition.disable_shadow)) {
             return Err(DomError::NotSupportedError);
         }
         let root = self.create_document_fragment(self.get(host).owner_document)?;

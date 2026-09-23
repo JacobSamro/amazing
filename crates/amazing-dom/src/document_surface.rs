@@ -45,6 +45,17 @@ impl Dom {
         self.document_checked(document)?;
         Ok(self.children(document).find(|node| matches!(self.get(*node).kind, NodeKind::DocumentType { .. })))
     }
+    /// First HTML base element with an href attribute in document tree order.
+    pub fn document_base_href(&self, document: NodeIdx) -> Result<Option<Vec<u16>>, DomError> {
+        self.document_checked(document)?;
+        Ok(self.tree_order(document).into_iter().skip(1).find_map(|node| {
+            (self.namespace(node) == Some(Namespace::Html)
+                && self.local_name(node) == Some("base"))
+                .then(|| self.get_attribute_ns(node, None, "href"))
+                .flatten()
+                .map(|href| href.encode_utf16().collect())
+        }))
+    }
     fn html_root(&self, document: NodeIdx) -> Result<Option<NodeIdx>, DomError> {
         Ok(self.document_element(document)?.filter(|root| self.namespace(*root) == Some(Namespace::Html)
             && self.local_name(*root) == Some("html")))
