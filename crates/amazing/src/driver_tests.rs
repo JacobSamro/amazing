@@ -5,6 +5,32 @@ use amazing_text::TextSystem;
 use std::{cell::RefCell, rc::Rc};
 
 #[test]
+fn shadow_root_uses_its_interface_and_slotchange_reaches_the_event_loop() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body><div id='host'></div></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(
+        host,
+        crate::js_scheduler::JS_CAPACITY,
+    ).unwrap_or_else(|error| panic!("binding installation: {}", error.describe()));
+    assert_eq!(scheduler.run_script(
+        "let parent = document.getElementById('host'); \
+         let shadow = parent.attachShadow({mode: 'open'}); \
+         let slot = document.createElement('slot'); \
+         let changes = 0; \
+         slot.addEventListener('slotchange', () => { changes += 1; }); \
+         shadow.appendChild(slot); \
+         let child = document.createElement('span'); \
+         parent.appendChild(child); \
+         shadow instanceof ShadowRoot && parent.shadowRoot === shadow \
+         && slot.assignedNodes()[0] === child"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
+    scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
+    assert_eq!(scheduler.run_script("changes").unwrap(), amazing_js::value::JsValue::num(1.0));
+}
+
+#[test]
 fn binding_install_mutates_the_parsed_dom_and_keeps_child_nodes_live() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse("<body></body>"),

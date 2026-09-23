@@ -8,7 +8,7 @@ use amazing_bindings::{
     dom_exception::throw_dom_error,
     host::{
         BindingHost, CallbackId, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition,
-        MemberKind, Operation, PlatformKey, RootId, LegacyPlatformHooks, IterableKind,
+        MemberKind, Operation, OptionalHookInstall, PlatformKey, RootId, LegacyPlatformHooks, IterableKind,
         FragmentParser, FragmentContext, SelectorEngine, AbortHost, DocumentHost, DocumentField, UrlReflection,
     },
     install as install_interfaces, invoke,
@@ -242,6 +242,7 @@ impl RuntimeBindingHost<'_> {
             let host = host.borrow();
             return Ok(match &host.dom.get(node).kind {
                 NodeKind::Document => Interface::Document,
+                NodeKind::DocumentFragment if host.dom.is_shadow_root(node) => Interface::ShadowRoot,
                 NodeKind::DocumentFragment => Interface::DocumentFragment,
                 NodeKind::DocumentType { .. } => Interface::DocumentType,
                 NodeKind::Element { .. } => {
@@ -689,6 +690,25 @@ impl BindingHost for RuntimeBindingHost<'_> {
         ));
         let global = self.js.binding_global_object();
         self.define_data_property(&global, definition.name, constructor, true, false, true)
+    }
+    fn install_interface_class_string(&mut self, _interface: Interface, _name: &'static str)
+        -> Result<OptionalHookInstall, Throw> {
+        // Known typed gap: JSRT-6 must provide Symbol keys before
+        // WebIDL's %Symbol.toStringTag% property can be installed correctly.
+        Ok(OptionalHookInstall::NotSupported)
+    }
+    fn install_dom_exception_error_prototype(&mut self) -> Result<OptionalHookInstall, Throw> {
+        let global = self.js.binding_global_object();
+        let error = self.js.binding_get_property(&global, "Error")?;
+        let error_prototype = self.js.binding_get_property(&error, "prototype")?;
+        let dom_exception_prototype = self.prototype(Interface::DOMException)
+            .ok_or_else(|| Throw::type_error("DOMException prototype missing"))?;
+        let (JsValue::Object(dom_exception), JsValue::Object(error)) =
+            (dom_exception_prototype, error_prototype) else {
+                return Err(Throw::type_error("Error prototype missing"));
+            };
+        dom_exception.borrow_mut().proto = Some(error);
+        Ok(OptionalHookInstall::Installed)
     }
     fn install_node_constant(&mut self, name: &'static str, value: u16) -> Result<(), Throw> {
         let prototype = self
