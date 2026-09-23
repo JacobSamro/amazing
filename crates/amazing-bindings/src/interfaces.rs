@@ -1,6 +1,17 @@
 use crate::host::{
-    BindingHost, Interface as I, InterfaceBrand, InterfaceDefinition as D, IterableKind, LegacyPlatformHooks, Member, MemberKind as K, Operation as O,
+    BindingHost, Interface as I, InterfaceBrand, InterfaceDefinition as D, IterableKind, LegacyPlatformHooks, Member, MemberKind as K, Operation as O, OptionalHookInstall,
 };
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OptionalCapability {
+    InterfaceClassString(I),
+    DomExceptionErrorPrototype,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct InstallReport {
+    pub not_installed: Vec<OptionalCapability>,
+}
 const fn method(name: &'static str, operation: O, length: u8) -> Member {
     Member {
         name,
@@ -735,12 +746,18 @@ pub fn html_element_interface(local: &str) -> I {
 /// Constructors require `new`; illegal constructors still expose prototypes.
 /// Runtime defines writable/configurable methods, enumerable configurable
 /// accessors, constructor/prototype links, and the proper function lengths.
-pub fn install<H: BindingHost>(host: &mut H) -> Result<(), H::Error> {
+pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> {
+    let mut report = InstallReport::default();
     for definition in INTERFACES {
         host.install_interface(definition)?;
-        host.install_interface_class_string(definition.interface, definition.name)?;
+        if host.install_interface_class_string(definition.interface, definition.name)?
+            == OptionalHookInstall::NotSupported {
+            report.not_installed.push(OptionalCapability::InterfaceClassString(definition.interface));
+        }
     }
-    host.install_dom_exception_error_prototype()?;
+    if host.install_dom_exception_error_prototype()? == OptionalHookInstall::NotSupported {
+        report.not_installed.push(OptionalCapability::DomExceptionErrorPrototype);
+    }
     host.install_static_method(I::AbortSignal, "abort", O::AbortSignalAbort, 0)?;
     host.install_static_method(I::AbortSignal, "any", O::AbortSignalAny, 1)?;
     host.install_static_method(I::AbortSignal, "timeout", O::AbortSignalTimeout, 1)?;
@@ -818,5 +835,5 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<(), H::Error> {
     for (name, value) in crate::dom_exception::LEGACY_CODES {
         host.install_interface_constant(I::DOMException, name, u32::from(*value))?;
     }
-    Ok(())
+    Ok(report)
 }

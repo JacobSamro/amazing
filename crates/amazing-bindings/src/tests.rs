@@ -1,5 +1,5 @@
 use super::*;
-use crate::host::{AbortHost, BindingHost, CallbackId, DocumentField, DocumentHost, FragmentContext, FragmentParser, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, PlatformKey, SelectorEngine, UrlReflection};
+use crate::host::{AbortHost, BindingHost, CallbackId, DocumentField, DocumentHost, FragmentContext, FragmentParser, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, OptionalHookInstall, PlatformKey, SelectorEngine, UrlReflection};
 use amazing_dom::NodeKind;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -24,6 +24,8 @@ struct Host {
     installed: Vec<Interface>,
     class_strings: Vec<(Interface, &'static str)>,
     dom_exception_error_prototype: bool,
+    skip_optional_hooks: bool,
+    fail_class_string: Option<Interface>,
     constants: Vec<(&'static str, u16)>,
     interface_constants: Vec<(Interface, &'static str, u32)>,
     conversions: Vec<&'static str>,
@@ -156,13 +158,16 @@ impl BindingHost for Host {
         self.installed.push(d.interface);
         Ok(())
     }
-    fn install_interface_class_string(&mut self, interface: Interface, name: &'static str) -> Result<(), String> {
+    fn install_interface_class_string(&mut self, interface: Interface, name: &'static str) -> Result<OptionalHookInstall, String> {
+        if self.fail_class_string == Some(interface) { return Err("class string install failed".into()); }
+        if self.skip_optional_hooks { return Ok(OptionalHookInstall::NotSupported); }
         self.class_strings.push((interface, name));
-        Ok(())
+        Ok(OptionalHookInstall::Installed)
     }
-    fn install_dom_exception_error_prototype(&mut self) -> Result<(), String> {
+    fn install_dom_exception_error_prototype(&mut self) -> Result<OptionalHookInstall, String> {
+        if self.skip_optional_hooks { return Ok(OptionalHookInstall::NotSupported); }
         self.dom_exception_error_prototype = true;
-        Ok(())
+        Ok(OptionalHookInstall::Installed)
     }
     fn install_node_constant(&mut self, n: &'static str, v: u16) -> Result<(), String> {
         self.constants.push((n, v));
@@ -625,7 +630,8 @@ fn processing_instruction_and_range_point_queries_preserve_units() {
 #[test]
 fn installation_orders_parent_interfaces_and_preserves_constant_values() {
     let mut h = Host::default();
-    install(&mut h).unwrap();
+    let report = install(&mut h).unwrap();
+    assert!(report.not_installed.is_empty());
     assert_eq!(h.class_strings,
         INTERFACES.iter().map(|definition| (definition.interface, definition.name)).collect::<Vec<_>>());
     assert!(h.dom_exception_error_prototype);
@@ -641,6 +647,25 @@ fn installation_orders_parent_interfaces_and_preserves_constant_values() {
     assert!(h
         .constants
         .contains(&("DOCUMENT_POSITION_CONTAINED_BY", 16)));
+}
+
+#[test]
+fn unsupported_optional_hooks_are_recorded_without_aborting_installation() {
+    let mut h = Host { skip_optional_hooks: true, ..Host::default() };
+    let report = install(&mut h).unwrap();
+    assert_eq!(h.installed.len(), INTERFACES.len());
+    assert!(h.class_strings.is_empty());
+    assert!(!h.dom_exception_error_prototype);
+    assert_eq!(report.not_installed.len(), INTERFACES.len() + 1);
+    assert_eq!(report.not_installed[0], crate::OptionalCapability::InterfaceClassString(INTERFACES[0].interface));
+    assert_eq!(report.not_installed.last(), Some(&crate::OptionalCapability::DomExceptionErrorPrototype));
+    assert!(h.constants.contains(&("DOCUMENT_FRAGMENT_NODE", 11)));
+}
+
+#[test]
+fn optional_hook_installation_errors_remain_fatal() {
+    let mut h = Host { fail_class_string: Some(INTERFACES[0].interface), ..Host::default() };
+    assert_eq!(install(&mut h), Err("class string install failed".into()));
 }
 
 #[test]

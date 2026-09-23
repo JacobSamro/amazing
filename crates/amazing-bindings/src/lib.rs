@@ -40,7 +40,7 @@ mod html_reflection;
 mod markup_bindings;
 pub use mutation_bindings::deliver_mutation_checkpoint;
 pub use amazing_dom::{Dom, DomError, NodeIdx};
-pub use interfaces::{html_element_interface, install, INTERFACES};
+pub use interfaces::{html_element_interface, install, InstallReport, OptionalCapability, INTERFACES};
 pub use invoke::{invoke, supported_index_count, supported_names};
 
 #[cfg(test)]
