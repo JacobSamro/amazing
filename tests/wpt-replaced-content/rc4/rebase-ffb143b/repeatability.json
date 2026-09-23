@@ -1,0 +1,90 @@
+{
+  "fields": [
+    "id",
+    "classification",
+    "differing_pixels",
+    "max_difference",
+    "actual_sha256",
+    "reference_sha256",
+    "diff_sha256"
+  ],
+  "pairs": [
+    {
+      "kind": "scope",
+      "stable": true,
+      "counts": {
+        "pass": 26,
+        "mismatch": 4,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 18
+      },
+      "unchanged_from_original_after": false,
+      "unchanged_from_original_before": false,
+      "projection_sha256": "c5dd3c4bc04f4b1152f4d54670e060afb179ea4ec5f76a7215ecb394a94566f5"
+    },
+    {
+      "kind": "controls",
+      "stable": true,
+      "counts": {
+        "pass": 22,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged_from_original_after": false,
+      "unchanged_from_original_before": false,
+      "projection_sha256": "fe36809a849f105829f3b555c3b771492cbceeed0297b82eb5f617c681bd2612"
+    },
+    {
+      "kind": "images",
+      "stable": true,
+      "counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged_from_original_after": true,
+      "unchanged_from_original_before": true,
+      "projection_sha256": "c700e2d5e6432127acc7222cbe33658ca29f2e60c671710d5c0dfb5eee30990f"
+    },
+    {
+      "kind": "svg",
+      "stable": true,
+      "counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged_from_original_after": true,
+      "unchanged_from_original_before": true,
+      "projection_sha256": "21310a30039fd932d0886b9d349656e70aee98175be92673e4afe0388c8ec3ec"
+    },
+    {
+      "kind": "focused",
+      "stable": true,
+      "counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "unchanged_from_original_after": true,
+      "unchanged_from_original_before": true,
+      "projection_sha256": "68e51665fb0ba96e3e3c5392a4686a5a30228fd758cafcf38ad702d560e540fd"
+    }
+  ],
+  "owned_diagnostics": {
+    "stable": true,
+    "passed": 9,
+    "total": 9,
+    "unchanged_from_original_after": true
+  },
+  "new_wpt_conformance_passes_claimed": 0
+}

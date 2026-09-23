@@ -1,0 +1,14 @@
+﻿[
+    {
+        "sha256":  "3a90432933bcd0bf74eed0eeb528a9ca70dc882a6598ae3433ef5480a3373b5d",
+        "file":  "rc4-f1d0f50-driver-after.exe",
+        "bytes":  39080960,
+        "built_utc":  "2026-09-20T20:28:34.0693762Z"
+    },
+    {
+        "sha256":  "9bd9df35e2fcf06bce301acaf8ad10d53fcd4571ab762211f7dd23ea7bc753ce",
+        "file":  "rc4-f1d0f50-images-after.exe",
+        "bytes":  5731328,
+        "built_utc":  "2026-09-20T20:28:39.6809590Z"
+    }
+]

@@ -1,0 +1,14 @@
+﻿[
+    {
+        "sha256":  "4556d5de6655d018991cde5f272727e1ed10d574e26fccaf70778dc4ae228043",
+        "file":  "rc4-ffb143b-driver-after.exe",
+        "bytes":  39093760,
+        "built_utc":  "2026-09-23T03:47:39.0623564Z"
+    },
+    {
+        "sha256":  "2fd884c8ac7bb2f55670d5300ce12fca93421f20a1b530a08e8d8bdcbf5c6224",
+        "file":  "rc4-ffb143b-images-after.exe",
+        "bytes":  5731328,
+        "built_utc":  "2026-09-23T03:47:51.3055262Z"
+    }
+]

@@ -357,3 +357,44 @@ Local lane rebased through IA-1 dev `9bf1224`, which changes the driver and WPT
 root mapping; fresh validation of that newer source is unrun pending restored
 server access. No new SSH/SCP attempts after stand-down. REFRESH-HOLD removed
 after the running process ended. Existing before and paired evidence preserved.
+
+### RC-4 current-source resume and co-integrator preflight
+
+After the outage, saved `f1d0f50` reports and executable hashes were collected
+without overwriting the earlier evidence. Their five pinned selections and
+owned 9/9 proof agree across the two runs on classification, pixel differences,
+and actual/reference hashes. They remain historical: compiled lane `552fd1f`
+on dev `f1d0f50` predates IA-1.
+
+RC-4 was rebased to dev `ffb143b6fdc07df7a9681e597f04a8da40f23d06`
+(compiled lane `95dabe37a6b510e5271dee2fc51770eb6b0459e7`). The primary shared
+coordinator refreshed only replaced-content; owned files were re-synced. On
+win-001, 328 Rust/Cargo/harness/fixture inputs matched the Mac, both root and
+isolated-image `cargo metadata --locked` checks passed, and WPT stayed pinned at
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. Root nextest passed
+**1263/1263** with 3 skipped across 42 binaries; separate root doctests passed
+**2/2** across 19 targets. Paint contributed 87 passes. Isolated image nextest
+passed **17/17** across 3 binaries; separate image doctests found 0. Both
+renderers rebuilt. Full gates used the primary shared build slot. Logs and
+artifact hashes are recorded in `tests/wpt-replaced-content/rc4/rebase-ffb143b/`.
+
+Each of five current pinned selections ran twice with stable classification,
+pixel-difference and actual/reference hashes: scope **26 pass / 4 mismatch /
+0 timeout / 0 unsupported / 18 renderer errors**, controls **22 / 2 / 0 / 0 /
+0**, PNG **12/12**, SVG **12/12 raw with zero credit**, focused paint **24/24**.
+Owned 64x64 proof stayed **9/9 twice**, versus the preserved original **0/9
+before**. RC-4 claims no new WPT conformance pass. SVG resources requiring
+unsupported inline CSS still receive zero credit; the bounded transform proof
+covers the owned fixtures only.
+
+Compared with the historical packet, the driver/root mapping now resolves the
+blank reference for `input-checkbox-zero-size.html`, changing its control case
+from unsupported to a raw pass with equal blank hashes. In the broader scope,
+`svg/use-descendant-combinator-003.html` changes from missing-reference
+unsupported to a renderer script TypeError. Those are IA-1 driver/root mapping
+effects and receive no RC-4 credit. All other selected classifications and
+actual/reference hashes are unchanged. The larger root test count likewise
+reflects intervening dev changes, not RC-4.
+
+Stop at RC-4 for co-integrator review and authoritative merged-head validation.
+No remote branch/PR publication or next ticket.
