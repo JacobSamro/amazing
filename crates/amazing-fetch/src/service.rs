@@ -178,7 +178,7 @@ struct Task {
     trusted_subresource: bool,
 }
 
-pub const INITIAL_STREAM_CREDIT: usize = 64 * 1024;
+pub const INITIAL_STREAM_CREDIT: u64 = 64 * 1024;
 struct StreamTask {
     credit: usize,
     head_emitted: bool,
@@ -437,7 +437,7 @@ impl NetworkService {
     /// contract remains available to existing consumers.
     pub fn start_stream(&mut self, request: ApiRequest, context: ClientContext)
         -> Result<ServiceId, ApiError> {
-        self.start_stream_with_credit(request, context, INITIAL_STREAM_CREDIT as u64)
+        self.start_stream_with_credit(request, context, INITIAL_STREAM_CREDIT)
     }
     /// Initial credit may be zero; response metadata and the terminal event
     /// remain visible, while body chunks wait for `grant_credit`.
@@ -447,7 +447,7 @@ impl NetworkService {
     }
     pub fn start_stream_at(&mut self, request: ApiRequest, context: ClientContext,
         now: Instant) -> Result<ServiceId, ApiError> {
-        self.start_stream_with_credit_at(request, context, INITIAL_STREAM_CREDIT as u64, now)
+        self.start_stream_with_credit_at(request, context, INITIAL_STREAM_CREDIT, now)
     }
     pub fn start_stream_with_credit_at(&mut self, request: ApiRequest, context: ClientContext,
         initial_credit: u64, now: Instant) -> Result<ServiceId, ApiError> {
