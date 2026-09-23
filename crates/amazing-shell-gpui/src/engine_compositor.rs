@@ -334,6 +334,14 @@ mod tests {
                 .collect::<Vec<_>>(),
             ids,
         );
+        let source = PaintViewSource::new(&view);
+        let mut fresh = source.compositor(96, 64).unwrap();
+        fresh.set_scroll(ScrollId(1), (0., 8.)).unwrap();
+        let fresh_frame = source.build_frame(&mut fresh, 96, 64).unwrap();
+        let full_scroll = ReferenceCpuPresenter::default()
+            .present(&fresh_frame)
+            .unwrap();
+        assert_eq!(live.reference_pixels().pixels, full_scroll.pixels);
         eprintln!(
             "ia-compositor scroll mode={:?} initial={initial:?} scrolled={:?} full_pixels={}",
             live.mode(),
