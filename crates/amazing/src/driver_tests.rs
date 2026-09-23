@@ -5,6 +5,161 @@ use amazing_text::TextSystem;
 use std::{cell::RefCell, rc::Rc};
 
 #[test]
+fn detached_created_element_has_live_style() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body><div id='content'></div></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    assert_eq!(scheduler.run_script(
+        "let cell = document.createElement('td'); let style = cell.style; \
+         style.cssText = 'font-variant-ligatures: normal'; \
+         document.getElementById('content').appendChild(cell); \
+         cell.style === style && cell.getAttribute('style') === 'font-variant-ligatures: normal'"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
+}
+
+#[test]
+fn constructed_document_has_xml_metadata_without_a_browsing_context() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    assert_eq!(scheduler.run_script(
+        "let doc = new Document(); [doc.URL, doc.documentURI, doc.contentType, \
+         doc.characterSet, doc.compatMode, doc.location].join('|')"
+    ).unwrap(), amazing_js::value::JsValue::str(
+        "about:blank|about:blank|application/xml|UTF-8|CSS1Compat|"));
+}
+
+#[test]
+fn location_exposes_live_url_components_navigation_and_ancestor_origins() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"), native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    scheduler.set_location_url("https://example.test:8443/a?x=1#old");
+    assert_eq!(scheduler.run_script(
+        "[location === window.location, document.location === location, location.href, location.origin, location.protocol, \
+          location.host, location.hostname, location.port, location.pathname, location.search, \
+          location.hash, location.toString(), location.ancestorOrigins.length, \
+          location.ancestorOrigins.item(0), location.ancestorOrigins.contains('x'), \
+          location.ancestorOrigins === location.ancestorOrigins, \
+          Object.getOwnPropertyDescriptor(location, 'origin').configurable, \
+          Object.getOwnPropertyDescriptor(window, 'location').configurable, \
+          Object.getOwnPropertyDescriptor(document, 'location').configurable].join('|')"
+    ).unwrap(), amazing_js::value::JsValue::str(
+        "true|true|https://example.test:8443/a?x=1#old|https://example.test:8443|https:|example.test:8443|example.test|8443|/a|?x=1|#old|https://example.test:8443/a?x=1#old|0||false|true|false|false|false"));
+    assert_eq!(scheduler.run_script(
+        "location.protocol = 'http:'; location.host = 'other.test:8080'; \
+         location.hostname = 'third.test'; location.port = '9000'; location.pathname = '/b'; \
+         location.search = '?y=2'; location.hash = '#new'; location.href"
+    ).unwrap(), amazing_js::value::JsValue::str("http://third.test:9000/b?y=2#new"));
+    assert_eq!(scheduler.run_script(
+        "window.location = '/next'; location.href"
+    ).unwrap(), amazing_js::value::JsValue::str("http://third.test:9000/next"));
+    assert_eq!(scheduler.run_script(
+        "document.location = '/from-document'; location.href"
+    ).unwrap(), amazing_js::value::JsValue::str("http://third.test:9000/from-document"));
+    assert_eq!(scheduler.run_script(
+        "location.assign('after'); location.replace('/replaced'); location.reload(); location.href"
+    ).unwrap(), amazing_js::value::JsValue::str("http://third.test:9000/replaced"));
+    assert_eq!(scheduler.js.take_navigation(), Some("http://third.test:9000/replaced".into()));
+}
+
+#[test]
+fn put_forwards_assignments_keep_live_token_lists_and_location() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body><a id='a'></a><form id='f'></form><output id='o'></output><iframe id='i'></iframe><link id='l'></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    scheduler.js.set_location_url("https://example.test/start");
+    assert_eq!(scheduler.run_script(
+        "let a = document.getElementById('a'), f = document.getElementById('f'), o = document.getElementById('o'), i = document.getElementById('i'), l = document.getElementById('l'); \
+         let r = a.relList, s = i.sandbox, h = o.htmlFor, z = l.sizes; \
+         a.relList = 'noopener noreferrer'; f.relList = 'external'; o.htmlFor = 'one two'; i.sandbox = 'allow-scripts'; l.sizes = '16x16'; \
+         let live = a.relList === r && r.value === 'noopener noreferrer' && f.relList.value === 'external' && \
+             o.htmlFor === h && h.value === 'one two' && i.sandbox === s && s.value === 'allow-scripts' && \
+             l.sizes === z && z.value === '16x16'; \
+         let style = a.style; a.style = 'color: red;'; \
+         location = 'https://example.test/next'; let bareLocation = location.href; \
+         window.location = 'https://example.test/final'; \
+         function shadowLocation() { let location = 'local'; location = 'still local'; return location; } \
+         [live, a.relList === r, f.relList.value, o.htmlFor === h, i.sandbox === s, l.sizes === z, a.style === style, style.cssText, bareLocation, window.location.href, shadowLocation()].join('|')"
+    ).unwrap(), amazing_js::value::JsValue::str("true|true|external|true|true|true|true|color: red;|https://example.test/next|https://example.test/final|still local"));
+}
+
+#[test]
+fn bare_window_event_target_calls_coerce_nullish_this() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    assert_eq!(scheduler.run_script(
+        "let hit = 0; function one() { hit += 1; } function two() { hit += 10; } \
+         addEventListener('load', one); addEventListener.call(undefined, 'load', two); \
+         addEventListener.call(null, 'load', one); \
+         removeEventListener.call(null, 'load', one); \
+         typeof hit"
+    ).unwrap(), amazing_js::value::JsValue::str("number"));
+    scheduler.js.dispatch_dom_event(0, "load").unwrap();
+    assert_eq!(scheduler.run_script("hit").unwrap(), amazing_js::value::JsValue::num(10.0));
+    assert_eq!(scheduler.run_script(
+        "let rejected = false; try { addEventListener.call({}, 'load', one); } catch (error) { rejected = true; } rejected"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
+}
+
+#[test]
+fn dom_parser_documents_share_the_arena_without_running_scripts() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    scheduler.set_location_url("https://example.test/page");
+    for (label, script) in [
+        ("constructor", "var parser = new DOMParser();"),
+        ("HTML", "var html = parser.parseFromString('<title>inert</title><script>window.ran = true</script><p id=inside>ok</p>', 'text/html');"),
+        ("XML", "var xml = parser.parseFromString('<root xmlns=\"urn:x\"><child/></root>', 'application/xml');"),
+        ("XML error", "var bad = parser.parseFromString('<root>', 'application/xml');"),
+    ] {
+        scheduler.run_script(script).unwrap_or_else(|error| panic!("DOMParser {label}: {}", error.describe()));
+    }
+    assert_eq!(scheduler.run_script(
+        "let rejected = false; try { parser.parseFromString('x', 'text/plain'); } catch (error) { rejected = true; } \
+         html !== document && html.URL === 'https://example.test/page' && html.contentType === 'text/html' && \
+         html.characterSet === 'UTF-8' && html.readyState === 'complete' && html.location === null && html.getElementById('inside').textContent === 'ok' && \
+         window.ran === undefined && xml.contentType === 'application/xml' && xml.documentElement.namespaceURI === 'urn:x' && \
+         bad.documentElement.localName === 'parsererror' && rejected"
+    ).unwrap_or_else(|error| panic!("DOMParser script: {}", error.describe())), amazing_js::value::JsValue::Bool(true));
+}
+
+#[test]
+fn xhr_inert_document_hook_decodes_xml_and_reports_parse_failure() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"),
+        native_forwarded: false,
+    }));
+    let mut js = amazing_js::Interpreter::new();
+    js.set_dom_host(host.clone());
+    let bindings = crate::runtime_binding_host::install(&mut js, host.clone()).unwrap();
+    let document = bindings.create_inert_document(&mut js, b"<root>caf\xe9</root>",
+        "application/xml", "https://example.test/response", Some("windows-1252")).unwrap();
+    let borrowed = host.borrow();
+    let dom = &borrowed.dom;
+    assert_eq!(dom.document_metadata(document).unwrap().unwrap().character_set, "windows-1252");
+    assert_eq!(dom.document_metadata(document).unwrap().unwrap().url, "https://example.test/response");
+    let root = dom.document_element(document).unwrap().unwrap();
+    assert_eq!(dom.local_name(root), Some("root"));
+    assert_eq!(dom.character_data(dom.children(root).next().unwrap()).as_deref(), Some("café"));
+    drop(borrowed);
+    assert_eq!(bindings.create_inert_document(&mut js, b"<root>", "application/xml",
+        "https://example.test/response", None), Err(amazing_dom::DomError::SyntaxError));
+}
+
+#[test]
 fn form_collections_and_validity_use_native_brands_and_live_hooks() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse("<form id='f'><input id='a' name='choice' type='radio' value='one' checked><input id='b' name='choice' type='radio' value='two'><input id='required' required></form><select id='s'><option value='old'>old</option></select>"),

@@ -738,6 +738,9 @@ fn native_dom_add_event_listener(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    let this = if this.is_null() || this.is_undefined() {
+        JsValue::Object(i.global_obj.clone())
+    } else { this };
     let node = dom_id(&this)?;
     let event = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let callback = args.get(1).cloned().unwrap_or(JsValue::Undefined);
@@ -753,6 +756,9 @@ fn native_dom_remove_event_listener(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    let this = if this.is_null() || this.is_undefined() {
+        JsValue::Object(i.global_obj.clone())
+    } else { this };
     let node = dom_id(&this)?;
     let event = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let callback = args.get(1).cloned().unwrap_or(JsValue::Undefined);

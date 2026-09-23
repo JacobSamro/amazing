@@ -91,6 +91,7 @@ enum StoreResult {
 }
 
 enum WebObject {
+    DomParser,
     Url(UrlWithSearchParams, Option<u64>),
     Params(UrlSearchParams),
     Blob(Blob),
@@ -132,6 +133,12 @@ pub(crate) struct RuntimeBindings {
 }
 
 impl RuntimeBindings {
+    pub(crate) fn create_inert_document(&self, js: &mut Interpreter, bytes: &[u8],
+        content_type: &str, url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        let mut adapter = RuntimeBindingHost { js, state: self.state.clone() };
+        adapter.create_inert_document(bytes, content_type, url, charset)
+    }
+
     pub(crate) fn set_document_url(&self, url: &str) {
         self.state.borrow_mut().document_url = Some(url.to_owned());
     }
@@ -215,6 +222,31 @@ impl RuntimeBindings {
 }
 
 impl RuntimeBindingHost<'_> {
+    fn materialize_location_unforgeables(&self, wrapper: &JsValue) -> Result<(), Throw> {
+        let JsValue::Object(object) = wrapper else { return Err(Throw::type_error("Location wrapper")); };
+        let prototype = self.prototype(Interface::Location)
+            .ok_or_else(|| Throw::type_error("Location prototype missing"))?;
+        let JsValue::Object(prototype) = prototype else { return Err(Throw::type_error("Location prototype")); };
+        for name in ["href", "origin", "protocol", "host", "hostname", "port",
+            "pathname", "search", "hash", "assign", "replace", "reload",
+            "ancestorOrigins", "toString"] {
+            let Some(mut property) = prototype.borrow().own_prop(name).cloned() else { continue };
+            property.configurable = false;
+            object.borrow_mut().define(name, property)
+                .map_err(|_| Throw::type_error("Cannot install Location member"))?;
+        }
+        Ok(())
+    }
+
+    fn materialize_document_location_unforgeable(&self, wrapper: &JsValue) -> Result<(), Throw> {
+        let JsValue::Object(object) = wrapper else { return Ok(()); };
+        let location_property = { object.borrow().own_prop("location").cloned() };
+        let Some(mut property) = location_property else { return Ok(()); };
+        property.configurable = false;
+        object.borrow_mut().define("location", property)
+            .map_err(|_| Throw::type_error("Cannot install Document.location"))
+    }
+
     fn hook_receiver(&mut self, handle: HostHandle) -> Result<JsValue, Throw> {
         self.wrap_platform_object(PlatformKey { arena: handle.arena, slot: handle.slot,
             generation: handle.generation }, InterfaceBrand(handle.brand))
@@ -244,9 +276,13 @@ impl RuntimeBindingHost<'_> {
 
     fn preserve_legacy_element_extensions(&mut self, node: NodeIdx, wrapper: &JsValue) -> Result<(), Throw> {
         let host = self.state.borrow().host.clone();
-        if !host.borrow().dom.is_connected(node) { return Ok(()); }
+        let connected = host.borrow().dom.is_connected(node);
         let old = self.state.borrow().legacy_elements.get(&node.0).cloned();
-        let old = if let Some(old) = old { old } else {
+        let old = if let Some(old) = old { old } else if !connected {
+            let value = self.js.binding_make_legacy_dom_element(node.0);
+            self.state.borrow_mut().legacy_elements.insert(node.0, value.clone());
+            value
+        } else {
             let document = self.state.borrow().legacy_document.clone();
             let query = self.js.binding_get_property(&document, "querySelectorAll")?;
             let all = binding_call(self.js, &query, &document, &[JsValue::str("*")])?;
@@ -345,6 +381,8 @@ impl RuntimeBindingHost<'_> {
             let host = self.state.borrow().host.clone();
             let host = host.borrow();
             return Ok(match &host.dom.get(node).kind {
+                NodeKind::Document if host.dom.document_metadata(node).ok().flatten()
+                    .is_some_and(|metadata| metadata.content_type != "text/html") => Interface::XMLDocument,
                 NodeKind::Document => Interface::Document,
                 NodeKind::DocumentFragment if host.dom.is_shadow_root(node) => Interface::ShadowRoot,
                 NodeKind::DocumentFragment => Interface::DocumentFragment,
@@ -383,6 +421,8 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::FILTERED_NODE_LIST => Interface::NodeList,
             InterfaceBrand::NAMED_NODE_MAP => Interface::NamedNodeMap,
             InterfaceBrand::DOM_TOKEN_LIST => Interface::DOMTokenList,
+            InterfaceBrand::LOCATION => Interface::Location,
+            InterfaceBrand::DOM_STRING_LIST => Interface::DOMStringList,
             InterfaceBrand::DOM_EXCEPTION => Interface::DOMException,
             InterfaceBrand::DOM_IMPLEMENTATION => Interface::DOMImplementation,
             InterfaceBrand::ABORT_CONTROLLER => Interface::AbortController,
@@ -393,6 +433,7 @@ impl RuntimeBindingHost<'_> {
             InterfaceBrand::FILE => Interface::File,
             InterfaceBrand::FORM_DATA => Interface::FormData,
             InterfaceBrand::FONT_FACE_SET => Interface::FontFaceSet,
+            InterfaceBrand::DOM_PARSER => Interface::DOMParser,
             _ => return Err(Throw::type_error("Unknown platform brand")),
         })
     }
@@ -460,6 +501,18 @@ pub(crate) fn install(
     };
     install_interfaces(&mut adapter)?;
     adapter.install_storage_interfaces()?;
+    let location = adapter.wrap_platform_object(PlatformKey {
+        arena, slot: 0, generation: 1,
+    }, InterfaceBrand::LOCATION)?;
+    adapter.js.binding_replace_location_object(location)?;
+    if let Some(element_prototype) = adapter.prototype(Interface::Element) {
+        adapter.js.binding_install_put_forwards(&element_prototype, "style", "cssText")?;
+    }
+    if let Some(document_prototype) = adapter.prototype(Interface::Document) {
+        adapter.js.binding_install_put_forwards(&document_prototype, "location", "href")?;
+    }
+    let window = adapter.js.binding_global_object();
+    adapter.js.binding_install_put_forwards(&window, "location", "href")?;
     let document = adapter.wrap_node(NodeIdx(0))?;
     // set_dom_host installs an immutable lexical legacy document. Shadow it in
     // a new global environment so every new page script sees the canonical
@@ -504,6 +557,43 @@ impl RuntimeBindingHost<'_> {
 impl BindingHost for RuntimeBindingHost<'_> {
     type Value = JsValue;
     type Error = Throw;
+
+    fn dom_parser_new(&mut self) -> Result<JsValue, Throw> {
+        self.web_allocate(WebObject::DomParser, InterfaceBrand::DOM_PARSER)
+    }
+    fn create_inert_document(&mut self, bytes: &[u8], content_type: &str,
+        url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        let mime = content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+        let (parsed, detected_encoding) = if mime == "text/html" {
+            let decoded = amazing_html::encoding::decode(bytes, charset);
+            (amazing_html::parse_bytes(bytes, charset), decoded.encoding)
+        } else if matches!(mime.as_str(), "text/xml" | "application/xml" | "application/xhtml+xml" | "image/svg+xml")
+            || mime.ends_with("+xml") {
+            let (source, encoding) = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                (String::from_utf8(bytes[3..].to_vec()).map_err(|_| DomError::SyntaxError)?,
+                    amazing_html::encoding::Encoding::Utf8)
+            } else if !bytes.starts_with(&[0xFE, 0xFF]) && !bytes.starts_with(&[0xFF, 0xFE])
+                && charset.is_none_or(|label| label.eq_ignore_ascii_case("UTF-8")) {
+                (String::from_utf8(bytes.to_vec()).map_err(|_| DomError::SyntaxError)?,
+                    amazing_html::encoding::Encoding::Utf8)
+            } else {
+                let decoded = amazing_html::encoding::decode(bytes, charset);
+                if charset.is_some() && !matches!(decoded.source,
+                    amazing_html::encoding::Source::Transport | amazing_html::encoding::Source::Bom) {
+                    return Err(DomError::SyntaxError);
+                }
+                (decoded.text, decoded.encoding)
+            };
+            (amazing_html::parse_xml(&source).map_err(|_| DomError::SyntaxError)?, encoding)
+        } else { return Err(DomError::NotSupportedError); };
+        let character_set = if detected_encoding == amazing_html::encoding::Encoding::Utf8 {
+            "UTF-8"
+        } else { detected_encoding.name() };
+        let host = self.state.borrow().host.clone();
+        let result = host.borrow_mut().dom.import_inert_document(&parsed, url, &mime,
+            character_set);
+        result
+    }
 
     fn global_object(&mut self) -> Result<JsValue, Throw> {
         Ok(self.js.binding_global_object())
@@ -666,6 +756,8 @@ impl BindingHost for RuntimeBindingHost<'_> {
         let brand = match interface {
             Interface::NodeList => InterfaceBrand::NODE_LIST,
             Interface::DOMTokenList => InterfaceBrand::DOM_TOKEN_LIST,
+            Interface::Location => InterfaceBrand::LOCATION,
+            Interface::DOMStringList => InterfaceBrand::DOM_STRING_LIST,
             _ => return Err(Throw::type_error("Unsupported iterable interface")),
         };
         let prototype = self.prototype(interface).ok_or_else(|| Throw::type_error("Missing iterable prototype"))?;
@@ -695,7 +787,14 @@ impl BindingHost for RuntimeBindingHost<'_> {
             },
             &prototype,
         )?;
-        self.materialize_accessors(&value);
+        if brand == InterfaceBrand::LOCATION {
+            self.materialize_location_unforgeables(&value)?;
+        } else {
+            self.materialize_accessors(&value);
+        }
+        if brand == InterfaceBrand::NODE && key.slot == 0 {
+            self.materialize_document_location_unforgeable(&value)?;
+        }
         if brand == InterfaceBrand::NODE {
             if let Some(node) = self.node_from_platform_key(key) {
                 let is_element = {
@@ -1031,6 +1130,29 @@ impl BindingHost for RuntimeBindingHost<'_> {
         }
     }
 
+    fn document_location(&mut self, document: NodeIdx) -> Result<Option<JsValue>, Throw> {
+        if document != NodeIdx(0) { return Ok(None); }
+        let arena = self.state.borrow().arena;
+        self.wrap_platform_object(PlatformKey { arena, slot: 0, generation: 1 },
+            InterfaceBrand::LOCATION).map(Some)
+    }
+    fn location_href(&mut self) -> Result<String, Throw> {
+        Ok(self.js.binding_location_href().to_owned())
+    }
+    fn location_navigate(&mut self, url: &str, replace: bool) -> Result<(), Throw> {
+        self.js.binding_location_navigate(url, replace);
+        self.state.borrow_mut().document_url = Some(url.to_owned());
+        Ok(())
+    }
+    fn location_reload(&mut self) -> Result<(), Throw> {
+        self.js.binding_location_reload();
+        Ok(())
+    }
+    fn location_ancestor_origins(&mut self) -> Result<JsValue, Throw> {
+        let arena = self.state.borrow().arena;
+        self.wrap_platform_object(PlatformKey { arena, slot: 0, generation: 1 },
+            InterfaceBrand::DOM_STRING_LIST)
+    }
     fn url_new(&mut self, url: UrlWithSearchParams) -> Result<JsValue, Throw> {
         self.web_allocate(WebObject::Url(url, None), InterfaceBrand::URL)
     }
@@ -1260,6 +1382,11 @@ impl BindingHost for RuntimeBindingHost<'_> {
         result.map_err(|error| throw_dom_error(self, error))
     }
     fn is_html_document(&self, document: NodeIdx) -> bool {
+        if document != NodeIdx(0) {
+            let host = self.state.borrow().host.clone();
+            return host.borrow().dom.document_metadata(document).ok().flatten()
+                .is_some_and(|metadata| metadata.content_type == "text/html");
+        }
         document == NodeIdx(0)
     }
     fn undefined(&self) -> JsValue {
@@ -1365,20 +1492,39 @@ impl AbortHost for RuntimeBindingHost<'_> {
 
 impl DocumentHost for RuntimeBindingHost<'_> {
     fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, Throw> {
-        if document != NodeIdx(0) { return Err(throw_dom_error(self, DomError::NotSupportedError)); }
+        if document != NodeIdx(0) {
+            let host = self.state.borrow().host.clone();
+            let metadata = { host.borrow().dom.document_metadata(document).ok().flatten().cloned() };
+            let Some(metadata) = metadata else {
+                return Err(throw_dom_error(self, DomError::NotSupportedError));
+            };
+            let value = match field {
+                DocumentField::URL | DocumentField::DocumentURI => metadata.url,
+                DocumentField::CharacterSet => metadata.character_set,
+                DocumentField::ContentType => metadata.content_type,
+                DocumentField::CompatMode => "CSS1Compat".into(),
+                DocumentField::Referrer => String::new(),
+            };
+            return Ok(value.encode_utf16().collect());
+        }
         let value = match field {
             DocumentField::URL | DocumentField::DocumentURI => self.state.borrow().document_url.clone(),
             DocumentField::CharacterSet => self.state.borrow().document_character_set.clone(),
             DocumentField::ContentType => self.state.borrow().document_content_type.clone(),
             DocumentField::Referrer => self.state.borrow().document_referrer.clone(),
             DocumentField::CompatMode => None,
-        }.ok_or_else(|| throw_dom_error(self, DomError::NotSupportedError))?;
+        };
+        let Some(value) = value else {
+            return Err(throw_dom_error(self, DomError::NotSupportedError));
+        };
         Ok(value.encode_utf16().collect())
     }
     fn active_element(&mut self, _document: NodeIdx) -> Result<Option<NodeIdx>, Throw> {
+        if _document != NodeIdx(0) { return Ok(None); }
         Err(throw_dom_error(self, DomError::NotSupportedError))
     }
     fn has_focus(&mut self, _document: NodeIdx) -> Result<bool, Throw> {
+        if _document != NodeIdx(0) { return Ok(false); }
         Err(throw_dom_error(self, DomError::NotSupportedError))
     }
 }

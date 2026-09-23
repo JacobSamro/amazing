@@ -166,6 +166,12 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     if crate::web_bindings::handles(operation) {
         return crate::web_bindings::invoke(host, operation, receiver, args);
     }
+    if crate::location_bindings::handles(operation) {
+        return crate::location_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::parser_bindings::handles(operation) {
+        return crate::parser_bindings::invoke(host, operation, receiver, args);
+    }
     if crate::character_data_bindings::handles(operation) {
         return crate::character_data_bindings::invoke(host, operation, receiver, args);
     }
@@ -314,7 +320,15 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
     let result = host.with_dom(|dom| {
         use ResultValue as R;
         let result = match operation {
-            O::DocumentConstructor => R::Node(dom.create_document()),
+            O::DocumentConstructor => {
+                let document = dom.create_document();
+                dom.set_document_metadata(document, amazing_dom::document_surface::DocumentMetadata {
+                    url: "about:blank".into(), content_type: "application/xml".into(),
+                    character_set: "UTF-8".into(),
+                })?;
+                dom.set_document_ready_state(document, amazing_dom::document_surface::ReadyState::Complete)?;
+                R::Node(document)
+            }
             O::TextConstructor | O::CommentConstructor | O::CreateText | O::CreateComment => {
                 R::Node(character_node(
                     dom,

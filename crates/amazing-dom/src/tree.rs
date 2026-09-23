@@ -441,6 +441,15 @@ impl Dom {
         } else {
             self.nodes[parent.0 as usize].last_child = Some(node);
         }
+        let scope = self.render_scope(parent);
+        let parent_handle = self.render_handle(parent);
+        let previous_sibling = prev.map(|id| self.render_handle(id));
+        let next_sibling = before.map(|id| self.render_handle(id));
+        let new_tokens = self.selector_tokens(node);
+        self.record_render_mutation(node, crate::render_mutation::RenderMutationKind::Tree {
+            parent: parent_handle, previous_sibling, next_sibling, inserted: true, scope,
+            old_tokens: Default::default(), new_tokens,
+        });
         self.reassign_all_slots();
         self.custom_element_tree_inserted(node);
         self.form_tree_inserted(node);
@@ -455,6 +464,15 @@ impl Dom {
             && self.assigned_nodes(parent, false, false).is_ok_and(|nodes| nodes.is_empty());
         let prev = n.prev_sibling;
         let next = n.next_sibling;
+        let scope = self.render_scope(parent);
+        let parent_handle = self.render_handle(parent);
+        let previous_sibling = prev.map(|id| self.render_handle(id));
+        let next_sibling = next.map(|id| self.render_handle(id));
+        let old_tokens = self.selector_tokens(node);
+        self.record_render_mutation(node, crate::render_mutation::RenderMutationKind::Tree {
+            parent: parent_handle, previous_sibling, next_sibling, inserted: false, scope,
+            old_tokens, new_tokens: Default::default(),
+        });
         self.ranges_remove(node, parent);
         self.iterators_remove(node);
         let ancestors = self.inclusive_ancestors(parent);

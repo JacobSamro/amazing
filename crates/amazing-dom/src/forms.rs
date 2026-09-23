@@ -480,6 +480,7 @@ impl Dom {
                 state.value = Some(sanitized);
                 state.dirty_value = true;
                 state.selection = None;
+                self.record_render_full(node, "input value state");
                 Ok(())
             }
         }
@@ -600,9 +601,11 @@ impl Dom {
     }
     pub fn set_input_checked(&mut self, node: NodeIdx, checked: bool) -> Result<(), DomError> {
         self.require_tag(node, &["input"])?;
+        let old_checked = self.input_checked(node)?;
         let state = self.form_state_mut(node);
         state.checked = Some(checked);
         state.dirty_checked = true;
+        self.record_render_state(node, "checked", old_checked, checked);
         if checked && self.input_type(node)? == "radio" {
             let name = self.attr(node, "name").unwrap_or("").to_owned();
             let owner = self.form_owner(node);
@@ -621,7 +624,9 @@ impl Dom {
                 })
                 .collect();
             for peer in peers {
+                let old_peer = self.input_checked(peer)?;
                 self.form_state_mut(peer).checked = Some(false);
+                self.record_render_state(peer, "checked", old_peer, false);
             }
         }
         Ok(())
@@ -723,6 +728,7 @@ impl Dom {
         let state = self.form_state_mut(node);
         state.value = Some(value);
         state.dirty_value = true;
+        self.record_render_full(node, "textarea value state");
         Ok(())
     }
     pub fn option_text(&self, node: NodeIdx) -> Result<Vec<u16>, DomError> {
@@ -800,9 +806,11 @@ impl Dom {
     }
     pub fn set_option_selected(&mut self, option: NodeIdx, selected: bool) -> Result<(), DomError> {
         self.require_tag(option, &["option"])?;
+        let old_selected = self.option_selected(option)?;
         let state = self.form_state_mut(option);
         state.selected = Some(selected);
         state.dirty_selected = true;
+        self.record_render_state(option, "selected", old_selected, selected);
         if selected {
             let mut parent = self.get(option).parent;
             while let Some(node) = parent {
@@ -813,7 +821,9 @@ impl Dom {
                             .into_iter()
                             .filter(|n| *n != option)
                         {
+                            let old_peer = self.option_selected(peer)?;
                             self.form_state_mut(peer).selected = Some(false);
+                            self.record_render_state(peer, "selected", old_peer, false);
                         }
                     }
                     break;
@@ -878,6 +888,7 @@ impl Dom {
         } as u32;
         self.form_state_mut(node).selection =
             Some((start.min(end).min(len), end.min(len), direction));
+        self.record_render_full(node, "selection state");
         Ok(())
     }
     pub fn selection_applicable(&self, node: NodeIdx) -> Result<bool, DomError> {
@@ -900,6 +911,7 @@ impl Dom {
             ],
         )?;
         self.form_state_mut(node).custom_error = message;
+        self.record_render_full(node, "form validity state");
         Ok(())
     }
     pub fn validation_message(&self, node: NodeIdx) -> Result<Vec<u16>, DomError> {
@@ -1142,6 +1154,7 @@ impl Dom {
             state.dirty_checked = false;
             state.selected = None;
             state.dirty_selected = false;
+            self.record_render_full(node, "form reset state");
         }
         Ok(())
     }

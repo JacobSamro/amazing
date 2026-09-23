@@ -6,6 +6,7 @@ use amazing_net::url::{UrlSearchParams, UrlWithSearchParams};
 
 #[derive(Clone)]
 enum WebMock {
+    DomParser,
     Url(UrlWithSearchParams, Option<usize>), Params(UrlSearchParams),
     Blob(Blob), File(File), FormData(FormData), FontFaceSet,
 }
@@ -72,6 +73,20 @@ impl Host {
 impl BindingHost for Host {
     type Value = V;
     type Error = String;
+    fn dom_parser_new(&mut self) -> Result<V, String> {
+        Ok(self.web_push(WebMock::DomParser, InterfaceBrand::DOM_PARSER))
+    }
+    fn create_inert_document(&mut self, bytes: &[u8], content_type: &str,
+        url: &str, charset: Option<&str>) -> Result<NodeIdx, DomError> {
+        if bytes == b"<bad" { return Err(DomError::SyntaxError); }
+        let mut parsed = Dom::new();
+        let html = content_type == "text/html";
+        let name = if bytes.starts_with(b"<parsererror") { "parsererror" }
+            else if html { "html" } else { "root" };
+        parsed.create_element_ns(NodeIdx(0),
+            Some(if html { "http://www.w3.org/1999/xhtml" } else { "urn:test" }), name)?;
+        self.dom.import_inert_document(&parsed, url, content_type, charset.unwrap_or("UTF-8"))
+    }
     fn global_object(&mut self) -> Result<V, String> {
         Err("installation capability unused by this invocation mock".into())
     }
@@ -386,7 +401,8 @@ impl BindingHost for Host {
         result
     }
     fn is_html_document(&self, n: NodeIdx) -> bool {
-        n == NodeIdx(0)
+        n == NodeIdx(0) || self.dom.document_metadata(n).ok().flatten()
+            .is_some_and(|data| data.content_type == "text/html")
     }
     fn undefined(&self) -> V {
         V::Undefined
@@ -453,8 +469,18 @@ impl AbortHost for Host {
     }
 }
 impl DocumentHost for Host {
-    fn document_field(&mut self, _document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, String> {
+    fn document_field(&mut self, document: NodeIdx, field: DocumentField) -> Result<Vec<u16>, String> {
         assert!(!self.arena_borrowed);
+        if let Some(data) = self.dom.document_metadata(document).map_err(|error| error.to_string())? {
+            let value = match field {
+                DocumentField::URL | DocumentField::DocumentURI => data.url.as_str(),
+                DocumentField::CharacterSet => data.character_set.as_str(),
+                DocumentField::ContentType => data.content_type.as_str(),
+                DocumentField::CompatMode => "CSS1Compat",
+                DocumentField::Referrer => "",
+            };
+            return Ok(value.encode_utf16().collect());
+        }
         let value = match field {
             DocumentField::URL | DocumentField::DocumentURI => "https://example.test/page",
             DocumentField::CharacterSet => "UTF-8",
@@ -804,6 +830,107 @@ fn attr_and_named_node_map_keep_identity_and_utf16_value() {
         &[str_value("urn:attr"), str_value("name")]), attr.clone());
     assert_eq!(call(&mut h, O::AttrOwnerElement, attr.clone(), &[]), V::Null);
     assert_eq!(call(&mut h, O::AttrValue, attr, &[]), V::String(vec![0xD800, 0x61]));
+}
+
+// dom/nodes/Element-hasAttribute.html and Element-hasAttributes.html at
+// c2a2fce69e5c2509d9dc28440ec8b42532e5c293.
+#[test]
+fn element_attribute_queries_toggle_and_name_validation_follow_dom_rules() {
+    let mut h = Host::default();
+    let element = h.dom.create_element(NodeIdx(0), "div");
+    let value = V::Node(element);
+    assert_eq!(call(&mut h, O::ElementHasAttributes, value.clone(), &[]), V::Bool(false));
+    assert_eq!(call(&mut h, O::ElementHasAttribute, value.clone(), &[str_value("X")]), V::Bool(false));
+    assert_eq!(call(&mut h, O::ElementToggleAttribute, value.clone(), &[str_value("DATA-X")]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ElementHasAttribute, value.clone(), &[str_value("data-x")]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ElementHasAttributes, value.clone(), &[]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ElementGetAttributeNames, value.clone(), &[]),
+        V::Array(vec![str_value("data-x")]));
+    assert_eq!(call(&mut h, O::ElementToggleAttribute, value.clone(),
+        &[str_value("data-x"), V::Bool(true)]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ElementToggleAttribute, value.clone(),
+        &[str_value("data-x"), V::Bool(false)]), V::Bool(false));
+    assert_eq!(call(&mut h, O::ElementHasAttributes, value.clone(), &[]), V::Bool(false));
+    assert_eq!(invoke(&mut h, O::ElementToggleAttribute, value.clone(), &[str_value("bad name")]),
+        Err("InvalidCharacterError".into()));
+    assert_eq!(invoke(&mut h, O::ElementSetAttribute, value.clone(),
+        &[str_value("bad name"), str_value("x")]), Err("InvalidCharacterError".into()));
+    call(&mut h, O::ElementSetAttributeNS, value.clone(),
+        &[str_value("urn:test"), str_value("p:name"), str_value("value")]);
+    assert_eq!(call(&mut h, O::ElementHasAttribute, value.clone(), &[str_value("p:name")]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ElementHasAttributeNS, value.clone(),
+        &[str_value("urn:test"), str_value("name")]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ElementHasAttributeNS, value.clone(),
+        &[V::Null, str_value("name")]), V::Bool(false));
+    assert_eq!(call(&mut h, O::ElementGetAttributeNames, value.clone(), &[]),
+        V::Array(vec![str_value("p:name")]));
+    assert_eq!(call(&mut h, O::ElementToggleAttribute, value.clone(), &[str_value("p:name")]),
+        V::Bool(false));
+    assert_eq!(call(&mut h, O::ElementHasAttributes, value, &[]), V::Bool(false));
+    let ns_element = h.dom.create_element(NodeIdx(0), "p");
+    let ns_value = V::Node(ns_element);
+    call(&mut h, O::ElementSetAttributeNS, ns_value.clone(),
+        &[str_value("foo"), str_value("x"), str_value("first")]);
+    call(&mut h, O::ElementSetAttributeNS, ns_value.clone(),
+        &[str_value("foo2"), str_value("x"), str_value("second")]);
+    call(&mut h, O::ElementSetAttribute, ns_value.clone(),
+        &[str_value("x"), str_value("changed")]);
+    assert_eq!(call(&mut h, O::ElementGetAttribute, ns_value.clone(), &[str_value("x")]), str_value("changed"));
+    assert_eq!(call(&mut h, O::ElementGetAttributeNS, ns_value.clone(),
+        &[str_value("foo"), str_value("x")]), str_value("changed"));
+    assert_eq!(call(&mut h, O::ElementGetAttributeNS, ns_value.clone(),
+        &[str_value("foo2"), str_value("x")]), str_value("second"));
+    let map = call(&mut h, O::ElementAttributes, ns_value.clone(), &[]);
+    assert_eq!(call(&mut h, O::NamedNodeMapLength, map, &[]), V::Number(2.0));
+    assert_eq!(call(&mut h, O::ElementHasAttributes, ns_value, &[]), V::Bool(true));
+    let svg = call(&mut h, O::CreateElementNS, V::Node(NodeIdx(0)),
+        &[str_value("http://www.w3.org/2000/svg"), str_value("svg")]);
+    call(&mut h, O::ElementSetAttribute, svg.clone(), &[str_value("DATA-X"), str_value("yes")]);
+    assert_eq!(call(&mut h, O::ElementHasAttribute, svg.clone(), &[str_value("DATA-X")]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ElementHasAttribute, svg, &[str_value("data-x")]), V::Bool(false));
+}
+
+#[test]
+fn attribute_names_and_named_node_map_share_cross_namespace_insertion_order() {
+    let mut h = Host::default();
+    let element = V::Node(h.dom.create_element(NodeIdx(0), "div"));
+    call(&mut h, O::ElementSetAttributeNS, element.clone(),
+        &[str_value("urn:a"), str_value("a:first"), str_value("1")]);
+    call(&mut h, O::ElementSetAttribute, element.clone(),
+        &[str_value("plain"), str_value("2")]);
+    call(&mut h, O::ElementSetAttributeNS, element.clone(),
+        &[str_value("urn:b"), str_value("b:last"), str_value("3")]);
+    assert_eq!(call(&mut h, O::ElementGetAttributeNames, element.clone(), &[]),
+        V::Array(vec![str_value("a:first"), str_value("plain"), str_value("b:last")]));
+    let map = call(&mut h, O::ElementAttributes, element, &[]);
+    for (index, name) in ["a:first", "plain", "b:last"].iter().enumerate() {
+        let attr = call(&mut h, O::NamedNodeMapItem, map.clone(), &[V::Number(index as f64)]);
+        assert_eq!(call(&mut h, O::AttrName, attr, &[]), str_value(name));
+    }
+}
+
+#[test]
+fn dom_parser_creates_inert_documents_and_xml_error_document() {
+    let mut h = Host::default();
+    assert!(INTERFACES.iter().any(|definition| definition.interface == Interface::XMLDocument
+        && definition.parent == Some(Interface::Document)));
+    let parser = call(&mut h, O::DOMParserConstructor, V::Undefined, &[]);
+    let html = call(&mut h, O::DOMParserParseFromString, parser.clone(),
+        &[str_value("<p>hello</p>"), str_value("text/html")]);
+    let document = node(html);
+    let metadata = h.dom.document_metadata(document).unwrap().unwrap();
+    assert_eq!(metadata.url, "https://example.test/page");
+    assert_eq!(metadata.content_type, "text/html");
+    assert_eq!(metadata.character_set, "UTF-8");
+    assert_eq!(call(&mut h, O::DocumentURL, V::Node(document), &[]), str_value("https://example.test/page"));
+    assert_eq!(call(&mut h, O::DocumentContentType, V::Node(document), &[]), str_value("text/html"));
+    assert_eq!(h.dom.document_ready_state(document).unwrap().as_str(), "complete");
+    assert_eq!(h.dom.local_name(h.dom.document_element(document).unwrap().unwrap()), Some("html"));
+    let xml_error = node(call(&mut h, O::DOMParserParseFromString, parser.clone(),
+        &[str_value("<bad"), str_value("application/xml")]));
+    assert_eq!(h.dom.local_name(h.dom.document_element(xml_error).unwrap().unwrap()), Some("parsererror"));
+    assert_eq!(invoke(&mut h, O::DOMParserParseFromString, parser,
+        &[str_value("x"), str_value("text/plain")]), Err("TypeError: Unsupported DOMParser content type".into()));
 }
 
 #[test]
@@ -1204,6 +1331,12 @@ fn class_list_is_live_canonical_and_validates_tokens() {
     let element = V::Node(element(&mut h));
     let list = call(&mut h, O::ElementClassList, element.clone(), &[]);
     assert_eq!(call(&mut h, O::ElementClassList, element.clone(), &[]), list);
+    let definition = INTERFACES.iter().find(|definition| definition.interface == Interface::Element).unwrap();
+    assert!(definition.members.iter().any(|member| member.name == "classList"
+        && member.operation == O::ElementSetClassName
+        && member.kind == crate::host::MemberKind::Setter));
+    call(&mut h, O::ElementSetClassName, element.clone(), &[str_value("x")]);
+    assert_eq!(call(&mut h, O::TokenListValue, list.clone(), &[]), str_value("x"));
     call(&mut h, O::ElementSetClassName, element.clone(), &[str_value(" a  b a ")]);
     assert_eq!(call(&mut h, O::TokenListLength, list.clone(), &[]), V::Number(2.));
     assert_eq!(call(&mut h, O::TokenListItem, list.clone(), &[V::Number(1.)]), str_value("b"));
@@ -1587,6 +1720,31 @@ fn wpt_html_token_list_attributes_are_live_and_canonical() {
         assert_eq!(h.dom.attribute_utf16(element, attribute),
             Some("sample".encode_utf16().collect()));
         assert_eq!(call(&mut h, O::TokenListValue, list, &[]), str_value("sample"));
+    }
+}
+
+#[test]
+fn put_forwards_token_list_assignments_update_the_live_value() {
+    let mut h = Host::default();
+    for (tag, interface, getter, setter, attribute) in [
+        ("a", Interface::HTMLAnchorElement, O::ElementRelList, O::ElementSetRelList, "rel"),
+        ("link", Interface::HTMLLinkElement, O::ElementRelList, O::ElementSetRelList, "rel"),
+        ("link", Interface::HTMLLinkElement, O::LinkSizes, O::LinkSetSizes, "sizes"),
+        ("form", Interface::HTMLFormElement, O::FormAttributeGet(crate::host::FormAttribute::RelList),
+            O::FormAttributeSet(crate::host::FormAttribute::RelList), "rel"),
+        ("output", Interface::HTMLOutputElement, O::OutputHtmlFor, O::OutputSetHtmlFor, "for"),
+        ("iframe", Interface::HTMLIFrameElement, O::IFrameSandbox, O::IFrameSetSandbox, "sandbox"),
+    ] {
+        let member = INTERFACES.iter().find(|definition| definition.interface == interface).unwrap()
+            .members.iter().find(|member| member.operation == setter).unwrap();
+        assert_eq!(member.kind, crate::host::MemberKind::Setter);
+        let element = h.dom.create_element(NodeIdx(0), tag);
+        let receiver = V::Node(element);
+        let list = call(&mut h, getter, receiver.clone(), &[]);
+        call(&mut h, setter, receiver.clone(), &[str_value("alpha  beta")]);
+        assert_eq!(call(&mut h, O::TokenListValue, list.clone(), &[]), str_value("alpha  beta"));
+        assert_eq!(h.dom.attribute_utf16(element, attribute), Some("alpha  beta".encode_utf16().collect()));
+        assert_eq!(call(&mut h, getter, receiver, &[]), list);
     }
 }
 

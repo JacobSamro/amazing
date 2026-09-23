@@ -20,6 +20,12 @@ pub(crate) struct NamespacedAttribute {
     pub(crate) value: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AttributeKey {
+    pub(crate) namespace_uri: Option<String>,
+    pub(crate) local_name: String,
+}
+
 /// Borrowed expanded attribute identity from the element's attribute storage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AttributeRef<'a> {
@@ -38,17 +44,15 @@ impl AttributeRef<'_> {
 }
 
 impl Dom {
-    /// Attributes in storage order, including foreign namespaced attributes.
+    /// DOM attribute-name check shared by setAttribute and toggleAttribute.
+    pub fn is_valid_attribute_name(name: &str) -> bool {
+        valid_attribute_name(name)
+    }
+    /// Attributes in insertion order, across all namespaces.
     pub fn attributes_expanded(&self, node: NodeIdx) -> Option<Vec<AttributeRef<'_>>> {
-        let plain = self.attrs_of(node)?;
-        let mut result: Vec<_> = plain.iter().map(|(name, value)| AttributeRef {
-            namespace_uri: None, prefix: None, local_name: name, value,
-        }).collect();
-        result.extend(self.get(node).namespaced_attributes.iter().map(|attr| AttributeRef {
-            namespace_uri: Some(&attr.namespace), prefix: attr.prefix.as_deref(),
-            local_name: &attr.local_name, value: &attr.value,
-        }));
-        Some(result)
+        self.attrs_of(node)?;
+        Some(self.get(node).attribute_order.iter().filter_map(|key|
+            self.attribute_ns(node, key.namespace_uri.as_deref(), &key.local_name)).collect())
     }
     pub fn create_processing_instruction_in(
         &mut self, document: NodeIdx, target: &str, data: &[u16],

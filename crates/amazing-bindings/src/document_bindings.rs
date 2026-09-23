@@ -5,7 +5,7 @@ pub(crate) fn handles(op: O) -> bool {
     matches!(op, O::NodeBaseURI | O::DocumentTitle | O::DocumentSetTitle | O::DocumentHead | O::DocumentBody
         | O::DocumentSetBody | O::DocumentElement | O::DocumentDoctype | O::DocumentReadyState | O::DocumentURL
         | O::DocumentURI | O::DocumentCharacterSet | O::DocumentContentType
-        | O::DocumentCompatMode | O::DocumentReferrer | O::DocumentGetElementById
+        | O::DocumentCompatMode | O::DocumentReferrer | O::DocumentLocation | O::DocumentGetElementById
         | O::FragmentGetElementById | O::DocumentGetElementsByName | O::DocumentForms
         | O::DocumentImages | O::DocumentLinks | O::DocumentScripts
         | O::DocumentActiveElement | O::DocumentHasFocus)
@@ -33,6 +33,9 @@ pub(crate) fn invoke<H: DocumentHost + UrlReflection>(host: &mut H, op: O, recei
         _ => Err(DomError::TypeError),
     })?;
     match op {
+        O::DocumentLocation => match host.document_location(node)? {
+            Some(location) => Ok(location), None => Ok(host.null()),
+        },
         O::DocumentTitle => { let units = host.with_dom(|dom| dom.document_title(node))?; host.string(&units) }
         O::DocumentSetTitle => {
             let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;

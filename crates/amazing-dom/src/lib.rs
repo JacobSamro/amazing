@@ -18,6 +18,7 @@ pub mod attr;
 pub mod collection;
 pub mod abort;
 pub mod document_surface;
+pub mod render_mutation;
 pub mod markup;
 #[cfg(test)] mod markup_tests;
 pub mod event_loop;
@@ -97,6 +98,7 @@ pub enum NodeKind {
 pub struct Node {
     owner_document: NodeIdx,
     namespaced_attributes: Vec<namespace::NamespacedAttribute>,
+    attribute_order: Vec<namespace::AttributeKey>,
     character_data_units: Option<Vec<u16>>,
     prefix: Option<String>,
     pub kind: NodeKind,
@@ -128,8 +130,13 @@ pub struct Dom {
     collections: Vec<collection::LiveCollection>,
     abort_signals: abort::AbortSignals,
     document_states: Vec<(NodeIdx, document_surface::ReadyState)>,
+    document_metadata: Vec<(NodeIdx, document_surface::DocumentMetadata)>,
     token_lists: Vec<(NodeIdx, String)>,
     mutation_generation: u64,
+    node_generations: Vec<u64>,
+    next_node_generation: u64,
+    render_epoch: u64,
+    render_mutations: Vec<render_mutation::RenderMutation>,
     dom_exceptions: Vec<DomExceptionData>,
     traversals: traversal::Traversals,
     shadow_roots: Vec<shadow::ShadowRootData>,
@@ -177,8 +184,13 @@ impl Dom {
             collections: Vec::new(),
             abort_signals: abort::AbortSignals::default(),
             document_states: Vec::new(),
+            document_metadata: Vec::new(),
             token_lists: Vec::new(),
             mutation_generation: 0,
+            node_generations: Vec::new(),
+            next_node_generation: 1,
+            render_epoch: 0,
+            render_mutations: Vec::new(),
             dom_exceptions: Vec::new(),
             traversals: traversal::Traversals::default(),
             shadow_roots: Vec::new(),
@@ -193,6 +205,7 @@ impl Dom {
         dom.nodes.push(Node {
             owner_document: NodeIdx(0),
             namespaced_attributes: Vec::new(),
+            attribute_order: Vec::new(),
             character_data_units: None,
             prefix: None,
             kind: NodeKind::Document,
@@ -202,6 +215,8 @@ impl Dom {
             next_sibling: None,
             prev_sibling: None,
         });
+        dom.node_generations.push(dom.next_node_generation);
+        dom.next_node_generation += 1;
         dom
     }
 
@@ -219,9 +234,15 @@ impl Dom {
         } else {
             NodeIdx(0)
         };
+        let attribute_order = if let NodeKind::Element { attrs, .. } = &kind {
+            attrs.iter().map(|(name, _)| namespace::AttributeKey {
+                namespace_uri: None, local_name: name.clone(),
+            }).collect()
+        } else { Vec::new() };
         self.nodes.push(Node {
             owner_document,
             namespaced_attributes: Vec::new(),
+            attribute_order,
             character_data_units: None,
             prefix: None,
             kind,
@@ -231,6 +252,9 @@ impl Dom {
             next_sibling: None,
             prev_sibling: None,
         });
+        self.node_generations.push(self.next_node_generation);
+        self.next_node_generation = self.next_node_generation.checked_add(1)
+            .expect("DOM node generation exhausted");
         NodeIdx(index)
     }
 
@@ -380,6 +404,12 @@ impl Dom {
         if let NodeKind::Element { attrs: slot, .. } = &mut self.nodes[idx.0 as usize].kind {
             *slot = attrs;
         }
+        let namespaced: Vec<_> = self.nodes[idx.0 as usize].attribute_order.iter()
+            .filter(|key| key.namespace_uri.is_some()).cloned().collect();
+        self.nodes[idx.0 as usize].attribute_order = self.attrs_of(idx).unwrap().iter()
+            .map(|(name, _)| namespace::AttributeKey {
+                namespace_uri: None, local_name: name.clone(),
+            }).chain(namespaced).collect();
     }
 
     pub fn is_text(&self, idx: NodeIdx) -> bool {

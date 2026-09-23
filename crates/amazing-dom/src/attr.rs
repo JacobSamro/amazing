@@ -82,9 +82,9 @@ impl Dom {
     pub fn attribute_nodes(&mut self, element: NodeIdx) -> Result<Vec<NodeIdx>, DomError> {
         self.check_node(element)?;
         if !matches!(self.get(element).kind, NodeKind::Element { .. }) { return Err(DomError::TypeError); }
-        let names: Vec<_> = self.attrs_of(element).unwrap().iter().map(|(name, _)| (None, name.clone())).chain(
-            self.get(element).namespaced_attributes.iter().map(|attr| (Some(attr.namespace.clone()), attr.local_name.clone()))
-        ).collect();
+        let names: Vec<_> = self.attributes_expanded(element).unwrap().into_iter()
+            .map(|attr| (attr.namespace_uri.map(str::to_owned), attr.local_name.to_owned()))
+            .collect();
         Ok(names.into_iter().filter_map(|(uri, local)| self.get_attribute_node(element, uri.as_deref(), &local)).collect())
     }
     pub fn set_attribute_node(&mut self, element: NodeIdx, attr: NodeIdx) -> Result<Option<NodeIdx>, DomError> {
