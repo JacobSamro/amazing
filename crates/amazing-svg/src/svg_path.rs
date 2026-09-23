@@ -146,3 +146,29 @@ pub(super) fn point_in_path(points: &[(f64, f64)], x: f64, y: f64) -> bool {
     }
     winding != 0
 }
+
+pub(super) fn point_on_stroke(
+    points: &[(f64, f64)],
+    x: f64,
+    y: f64,
+    radius: f64,
+    closed: bool,
+) -> bool {
+    if points.len() < 2 || radius <= 0.0 {
+        return false;
+    }
+    let radius_squared = radius * radius;
+    let segments = points.windows(2).map(|pair| (pair[0], pair[1]));
+    let closing = closed.then(|| (*points.last().unwrap(), points[0]));
+    segments.chain(closing).any(|((ax, ay), (bx, by))| {
+        let (dx, dy) = (bx - ax, by - ay);
+        let length_squared = dx * dx + dy * dy;
+        let t = if length_squared > 0.0 {
+            (((x - ax) * dx + (y - ay) * dy) / length_squared).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let (ox, oy) = (x - (ax + t * dx), y - (ay + t * dy));
+        ox * ox + oy * oy <= radius_squared
+    })
+}

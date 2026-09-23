@@ -709,3 +709,53 @@ raster codec adapter. The six DOM model tests move to an image integration test
 so the image test count stays **40/40** across the split. The shell lockfile
 adds only the `amazing-svg` package and the image-to-SVG dependency; the
 IA adapter's scratch fetch/net dependencies are not product dependencies.
+
+## RC-14 — routed paint order and corner radius
+
+The reviewed 12-case selection is frozen in
+`tests/wpt-replaced-content/rc14/focused-manifest.json` before the paint
+changes. It pins WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` and
+contains the two LAYOUT-11 routes with related radius, positioning and
+stacking cases. `fixture-hashes.json` records the upstream test/reference
+inputs; owned fixtures receive no WPT credit.
+
+An auto-z positioned subtree now places its normal-flow descendants before
+its positioned descendants while preserving normal-flow sibling order. Paint
+uses `amazing_layout::values::resolve_corner_radii` for CSS math and each
+axis's percentage basis, then applies its existing radius normalization. The
+layout box does not yet retain the selected font's measured `ch` width, so
+paint passes the layout-style `0.5em` fallback for `ch` expressions.
+
+Primary identified two lost-paint cases within the retained RC-13 SVG set:
+`ellipse-auto-rx-textpath` and `non-scaling-stroke-007` changed from nonblank
+matches to blank matches. RC-14 also restores bounded Ahem text along a
+referenced ellipse, resolving `rx`/`ry: auto` from the other radius, and
+straight-line path strokes with non-scaling width through a nested viewBox.
+Both cases require a painted match; blank equality receives no credit.
+
+The fixed base is pushed `582a6af` (RC-13 plus HTML-15). On Windows, the
+focused 12-case WPT gate moved from **8 pass / 4 mismatch** to **10 pass / 2
+mismatch** twice. All passes were painted. The two gains are exactly
+`all-prop-002` and `calc-border-radius-1`; there were zero pass losses,
+timeouts, unsupported cases or crashes. Classifications and image hashes
+were stable within each before and after pair.
+
+With the exact frozen IA `7e48a0e` adapter, the retained 35 SVG cases stayed
+**26 pass / 9 mismatch** twice. Painted passes rose **23 to 25**. Both routed
+SVG cases remain raw passes and now have matching painted actual/reference
+images: textPath **0 to 5,776** nonwhite pixels, non-scaling stroke **0 to
+1,900**. One raw pass (`pathlength-005`) remains blank. There were zero raw
+or painted pass losses; all 35 after classifications and image hashes were
+stable. The bounded textPath and stroke support does not cover general SVG
+text or arbitrary paths.
+
+The production shell lock needed Cargo's generated `amazing-encoding` entry
+and the `amazing-html` dependency edge from HTML-15. Primary explicitly
+granted this narrow lock change; the IA scratch adapter has no product
+dependency edge. On the fixed Windows tree, paint nextest passed **91/91**
+twice, image nextest with the IA scratch manifest passed **42/42**, and root
+workspace nextest passed **1,720/1,720** with three skipped. With the granted
+production lock update, image nextest also passed **42/42** and its separate
+doctests **0/0**. Separate workspace doctests passed **2/2**. Paired reports,
+pixel counts and input hashes are
+under `tests/wpt-replaced-content/rc14/`.

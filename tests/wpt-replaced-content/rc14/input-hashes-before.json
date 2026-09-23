@@ -1,0 +1,30 @@
+{
+  "fixed_base": "582a6af0962dd3b7e6c94427c14746915aea14ab",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "measured_at": "2026-09-23T17:25:34.179310+00:00",
+  "source_and_lock_sha256": {
+    "crates/amazing-paint/src/display_list.rs": "2869cd97f93b4f568a1e9eef320bd8ebb0b82f97535553d709db26b1e5c6428e",
+    "crates/amazing-paint/src/paint.rs": "285ee012a49177f9a0cdffa6b0f3ccb15d24380a43cc35c9fd2124ffa611af42",
+    "crates/amazing-paint/src/background_raster.rs": "e9cde6c7c088e4da535cc71a604e021dd7682ba4d80127d2d01de93b81f3cfdc",
+    "crates/amazing-paint/src/control_raster.rs": "d58740489fff6b35b511a8c625458bb4861d260a5beab3aff660590717601a72",
+    "Cargo.lock": "30c1b66612223068a45b4f9429f7921b60ef45aae7ed4cdfa029d8610506d25a",
+    "crates/amazing-html/src/lib.rs": "07b9003f62bb2e8f00c6b496544cd96bc7efb04f194e3419cc0153ff7dc1baf3",
+    "tests/wpt-replaced-content/rc14/focused-manifest.json": "65bde0813fbb520f60ca4f8e6465f9c6dc33b82f35f052d9b8652e654a0aa1e4",
+    "tests/wpt-replaced-content/rc14/fixture-hashes.json": "113c8ed2d96df5e06c59847c188cbbbd6e781e39ac6a88cb0e2040361eb52751",
+    "tests/wpt-replaced-content/rc11-svg-manifest.json": "2fdbe12184173e8808ad2c09a6dc2ed41254affaa4bd1d84054e1880e110cfb0",
+    "scripts/run-render-wpt.ps1": "7cdecfacc4c7bdb1170de6a8780bfe1d754835826c79082833ecbd92e04bc2ef",
+    "crates/amazing-svg/src/svg.rs": "766b24556ad98315b9dae9ba40497ef8a0c174ecb3a1b86813e683b2393901f7",
+    "crates/amazing-svg/src/svg_path.rs": "ce00cfe218a04d35a4e692b1f16c1beaf04ed7a1fc12f1f8fd56e0447acfbb6e",
+    "crates/amazing-image/tests/svg_dom.rs": "9cb8d027c66e595876ac595126b48e5c6fc2ace2a28285fffe867d9fc045b249"
+  },
+  "windows_base_match_paths": [
+    "crates/amazing-paint/src/display_list.rs",
+    "crates/amazing-paint/src/paint.rs",
+    "crates/amazing-paint/src/background_raster.rs",
+    "crates/amazing-paint/src/control_raster.rs",
+    "Cargo.lock",
+    "crates/amazing-html/src/lib.rs"
+  ],
+  "windows_fixture_hashes": "26/26 match",
+  "baseline_executable_sha256": "90e5500f03fb1d3eb2ac5c6fda7a6d95ad2cfb3149ce7c21556c89dc0b8efcf8"
+}
