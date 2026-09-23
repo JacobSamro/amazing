@@ -35,7 +35,7 @@ trap cleanup EXIT
 # merged head. Borrowing a lane's tree would overwrite its synced work
 # mid-ticket. Two integrators sharing one tree failed too: one's REFRESH-HOLD
 # silently skipped the other's refresh, and a gate measured the wrong commit.
-ALL_LANES=(js-lang js-runtime dom-bindings layout css net replaced-content html integrator-assist integrator integrator-primary)
+ALL_LANES=(js-lang js-runtime js-vm text dom-bindings layout css net replaced-content html integrator-assist integrator integrator-primary)
 
 # Lanes run this for THEMSELVES, so a bare invocation must not touch anyone
 # else's tree. Refreshing every lane is an integrator action and has to be

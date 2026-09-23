@@ -99,7 +99,13 @@ LANE_PATHS = {
         "crates/amazing-js/src/interp_",
         "crates/amazing-js/src/value.rs",
         "crates/amazing-js/src/env.rs",
+    ],
+    # ADR 0003: the bytecode VM program. Resumable frames for generators and
+    # async, then a tracing GC. The value model and built-ins stay with
+    # js-runtime; the front end and ast.rs stay with js-lang.
+    "js-vm": [
         "crates/amazing-js/src/vm/",
+        "crates/amazing-js/src/vm.rs",
         "crates/amazing-js/src/gc/",
     ],
     "dom-bindings": ["crates/amazing-dom/", "crates/amazing-bindings/"],
@@ -115,8 +121,18 @@ LANE_PATHS = {
         "crates/amazing-paint/",
         "crates/amazing-media/",
         "crates/amazing-image/",
+        # Std-only SVG renderer split out of amazing-image, so the root
+        # workspace can render inline SVG without third-party codecs.
+        "crates/amazing-svg/",
     ],
-    "html": ["crates/amazing-html/"],
+    # ADR 0004: html also owns the WHATWG Encoding crate.
+    "html": ["crates/amazing-html/", "crates/amazing-encoding/"],
+    # Fonts: matching, named fallback, synthesis and OpenType features.
+    "text": [
+        "crates/amazing-text/",
+        "crates/amazing-text-provider/",
+        "crates/amazing-text-prototype/",
+    ],
     # Drains the integrator's routed queue: driver-side work the engine lanes
     # correctly refused to do. Shell files are granted individually below;
     # the exclusive viewport grant is limited to natural intrinsic dimensions.

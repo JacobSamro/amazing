@@ -121,6 +121,10 @@ name = "amazing-dom"
 version = "0.0.1"
 
 [[package]]
+name = "amazing-encoding"
+version = "0.0.1"
+
+[[package]]
 name = "amazing-fetch"
 version = "0.0.1"
 dependencies = [
@@ -193,6 +197,15 @@ dependencies = [
 [[package]]
 name = "amazing-regex"
 version = "0.0.1"
+
+[[package]]
+name = "amazing-svg"
+version = "0.0.1"
+dependencies = [
+ "amazing-css",
+ "amazing-dom",
+ "amazing-media",
+]
 
 [[package]]
 name = "amazing-text"

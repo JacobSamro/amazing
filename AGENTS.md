@@ -232,7 +232,8 @@ waits on them. Plan in years and let the measured gates say where the project
 actually is.
 
 Five locked decisions must be revisited as project-level events before Stage 2:
-single-threaded execution, the tree-walking interpreter, software-only raster,
+single-threaded execution, the tree-walking interpreter (replaced by a bytecode
+VM in ADR 0003), software-only raster,
 the no-sandbox/no-multi-process non-goal, and DevTools/extensions being out of
 scope. Record each in `docs/adr/` rather than editing the locked list silently.
 
@@ -251,7 +252,12 @@ way to drive and monitor them.
 | `layout` | `amazing-layout` | geometry + flex/grid diagnostics |
 | `css` | `amazing-css` | cascade corpus |
 | `net` | `amazing-net`, `amazing-net-tls`, `amazing-fetch` | WPT `fetch/`, `cookies/` |
-| `replaced-content` | `amazing-paint`, `amazing-media`, `amazing-image` | paint diagnostic |
+| `replaced-content` | `amazing-paint`, `amazing-media`, `amazing-image`, `amazing-svg` | pinned SVG/paint WPT selections |
+| `js-runtime` | `amazing-js` interpreter, built-ins, value model | Test262, zero lost passes |
+| `js-vm` | `amazing-js/src/vm`, `gc` (ADR 0003) | Test262 on the VM vs fallback |
+| `html` | `amazing-html`, `amazing-encoding` (ADR 0004) | html5lib trees, WPT `encoding/` |
+| `text` | `amazing-text`, `amazing-text-provider` | pinned `css-fonts` selections |
+| `integrator-assist` | `crates/amazing` driver adoption | WPT through the installed runner |
 
 `amazing-webrtc*` is frozen until `dom-bindings` and `replaced-content` deliver
 HTMLMediaElement. `amazing-html` and a fuzzing lane are added once merge cadence

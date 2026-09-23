@@ -1,0 +1,9 @@
+[package]
+name = "amazing-encoding"
+description = "WHATWG Encoding Standard decoders and encoders from pinned index data"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]

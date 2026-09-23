@@ -1,0 +1,12 @@
+[package]
+name = "amazing-svg"
+description = "Std-only SVG document model and renderer shared by <img> SVG and inline SVG"
+edition = "2021"
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+amazing-css = { path = "../amazing-css" }
+amazing-dom = { path = "../amazing-dom" }
+amazing-media = { path = "../amazing-media" }

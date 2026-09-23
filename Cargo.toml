@@ -15,6 +15,8 @@ members = [
     "crates/amazing-net-tls",
     "crates/amazing-paint",
     "crates/amazing-regex",
+    "crates/amazing-svg",
+    "crates/amazing-encoding",
     "crates/amazing-text",
     "crates/amazing-text-provider",
     "crates/amazing-webrtc",
