@@ -17,16 +17,12 @@ pub fn safelisted_request_header(name: &str, value: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b" *,-.;=".contains(&b)),
         "content-type" => {
             !value.bytes().any(unsafe_byte)
-                && matches!(
-                    value
-                        .split(';')
-                        .next()
-                        .unwrap_or("")
-                        .trim()
-                        .to_ascii_lowercase()
-                        .as_str(),
-                    "application/x-www-form-urlencoded" | "multipart/form-data" | "text/plain"
-                )
+                && crate::MimeType::parse(value).is_some_and(|mime| {
+                    matches!(
+                        mime.essence().as_str(),
+                        "application/x-www-form-urlencoded" | "multipart/form-data" | "text/plain"
+                    )
+                })
         }
         "range" => {
             let Some(v) = value.strip_prefix("bytes=") else {

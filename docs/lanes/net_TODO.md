@@ -1378,3 +1378,35 @@ before delivery; completed GET responses enter the cache. Cache validation
 responses currently go to the network as an unconditional request; conditional
 304 replay remains a follow-up. The existing `PendingFetchApi`, `fetch_api`
 and XHR APIs continue to work.
+
+## NET-17 — MIME records, data: URLs, 304 service revalidation
+
+Fixed base: `55d3fc1a12f2dd226d7a0f4170dd03e2c048a965`. A MIME type is an
+ordered record of lowercase type/subtype and first-wins parameter names.
+Parsing and serialization implement MIME Sniffing §4, including HTTP whitespace,
+quoted strings, invalid parameter omission, and duplicate parameters. Fetch
+§3.5 extraction shares that parser, keeps the last valid Content-Type, and
+inherits charset across equal essences. Nosniff/ORB and XHR now use the record
+instead of splitting at semicolons or commas themselves.
+
+The Fetch §6 data: URL processor runs on the serialized URL without its
+fragment, percent-decodes the body, applies Infra forgiving-base64 when the
+metadata has a final `;base64`, and supplies the default MIME type on parse
+failure. `fetch_api` and `NetworkService` serve it without dispatching HTTP.
+The local scheme returns a basic filtered response in basic and CORS request
+modes; same-origin mode still rejects a cross-origin data URL. Data URL bodies
+share Fetch API's 32 MiB body bound.
+
+`NetworkService` now uses `CacheStore::lookup`'s validator headers for stale
+GET entries. They go directly to the transport after Fetch policy, so a
+conditional request does not alter the public request header guard or cause a
+CORS preflight. On a matching 304, `CacheStore::update_304` merges metadata,
+retains the body, and the service applies current policy to the stored 200
+representation. A malformed or unmatched 304 becomes a transport error.
+
+The native corpus runner measures the four pinned WPT JSON files recorded in
+`crates/amazing-fetch/tests/wpt/PROVENANCE.md`. Before NET-17, the repository
+had no MIME record, data URL processor, forgiving-base64 API, or runner, so the
+four corpus baselines are zero implemented cases (the security code only had
+an ad-hoc MIME essence check). These native results do not claim a broad
+Fetch or MIME WPT percentage.

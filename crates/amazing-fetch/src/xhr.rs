@@ -869,37 +869,20 @@ fn body_length(body: &BodyInput) -> Option<u64> {
     }
 }
 fn valid_mime(mime: &str) -> bool {
-    let essence = mime.trim().split(';').next().unwrap_or("");
-    essence
-        .split_once('/')
-        .is_some_and(|(t, s)| crate::headers::token(t) && crate::headers::token(s))
+    crate::MimeType::parse(mime).is_some()
 }
 fn charset_parameter(mime: &str) -> Option<String> {
-    mime.split(';').skip(1).find_map(|part| {
-        let (name, value) = part.trim().split_once('=')?;
-        (name.trim().eq_ignore_ascii_case("charset") && !value.trim().is_empty())
-            .then(|| value.trim().trim_matches('"').to_owned())
-    })
+    crate::MimeType::parse(mime)?
+        .parameter("charset")
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
 }
 fn force_utf8_charset(mime: &str) -> Option<String> {
-    if !valid_mime(mime) {
+    let mut record = crate::MimeType::parse(mime)?;
+    let charset = record.parameter("charset")?;
+    if charset.eq_ignore_ascii_case("utf-8") {
         return None;
     }
-    let mut changed = false;
-    let mut parts = Vec::new();
-    for (index, part) in mime.split(';').enumerate() {
-        if index > 0 {
-            if let Some((name, value)) = part.trim().split_once('=') {
-                if name.trim().eq_ignore_ascii_case("charset") {
-                    if !value.trim().trim_matches('"').eq_ignore_ascii_case("utf-8") {
-                        parts.push("charset=UTF-8".to_owned());
-                        changed = true;
-                        continue;
-                    }
-                }
-            }
-        }
-        parts.push(part.trim().to_owned());
-    }
-    changed.then(|| parts.join(";"))
+    record.set_parameter("charset", "UTF-8");
+    Some(record.serialize())
 }
