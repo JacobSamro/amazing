@@ -11,6 +11,8 @@
 //! the parent chain: display values and font sizes / line heights.
 
 use amazing_css::{ComputedStyle, StyledDom};
+use amazing_css::generated::ContentRun;
+use amazing_css::selectors::PseudoElement;
 use amazing_dom::{Dom, NodeIdx, NodeKind};
 use amazing_text::{
     Direction, FontSlant, Hyphens, LineBreak, OverflowWrap, ShapingBoundary, TextCombine,
@@ -66,15 +68,21 @@ pub fn build_layout_tree_with_replaced(
                 }
             }
             crate::table_tree::normalize(&mut root);
+            let order = document_order(dom);
+            assign_source_order(&mut root, &order);
             root
         },
-        None => LayoutBox::new(
-            None,
-            Display::Block,
-            root_style,
-            values::ROOT_FONT_SIZE,
-            19.2,
-        ),
+        None => {
+            let mut root = LayoutBox::new(
+                None,
+                Display::Block,
+                root_style,
+                values::ROOT_FONT_SIZE,
+                19.2,
+            );
+            root.source_order = Some(0);
+            root
+        },
     }
 }
 
@@ -125,7 +133,313 @@ fn build_element(
     let classified = classify_children(dom, styled, idx, font_size, fonts, replaced);
     box_.flow = classified.flow;
     box_.positioned = classified.positioned;
+    if styled.pseudo_matched(idx, PseudoElement::FirstLetter)
+        && let Some(first_letter) = styled.get_pseudo(idx, PseudoElement::FirstLetter) {
+        apply_first_letter(dom, idx, first_letter, &mut box_.flow);
+    }
+    box_.first_line_style = styled.pseudo_matched(idx, PseudoElement::FirstLine)
+        .then(|| styled.get_pseudo(idx, PseudoElement::FirstLine).cloned()).flatten();
     box_
+}
+
+/// A generated pseudo-element has its own computed box style, while its text
+/// retains the originating element as its paint/accessibility identity.
+fn generated_box(
+    dom: &Dom,
+    styled: &StyledDom,
+    origin: NodeIdx,
+    pseudo: PseudoElement,
+    parent_font: f32,
+    fonts: &FontSource,
+    replaced: &dyn ReplacedElementProvider,
+) -> Option<LayoutBox> {
+    let style = styled.get_pseudo(origin, pseudo)?.clone();
+    let content = styled.generated_content(origin, pseudo)?;
+    if content.runs.is_empty() || is_display_none(&style) {
+        return None;
+    }
+    let font_size = values::resolve_used_font_size(&style, parent_font);
+    let normal_lh = fonts.scaled_metrics(font_size).line_height;
+    let line_height = values::resolve_used_line_height(&style, font_size, normal_lh);
+    // The marker formatting context remains inline even if an author supplies
+    // `display: flex` or `display: block` on ::marker.
+    let display = if pseudo == PseudoElement::Marker {
+        Display::Inline
+    } else {
+        parse_display(&style)
+    };
+    let mut box_ = LayoutBox::new(
+        Some(origin),
+        display,
+        style.clone(),
+        font_size,
+        line_height,
+    );
+    box_.generated_pseudo = Some(pseudo);
+    box_.outside_marker = pseudo == PseudoElement::Marker
+        && styled
+            .get(origin)
+            .and_then(|style| style.get("list-style-position"))
+            .is_none_or(|value| !value.eq_ignore_ascii_case("inside"));
+    let mut inlines = Vec::new();
+    for (run_index, run) in content.runs.iter().enumerate() {
+        match run {
+            ContentRun::Text(text) if !text.is_empty() => {
+                let mut item =
+                    inline_text(dom, origin, origin, text.clone(), &style, font_size, true);
+                if let InlineNode::Text {
+                    source_mappings, source_order, ..
+                } = &mut item
+                {
+                    source_mappings.clear();
+                    *source_order = Some(((match pseudo {
+                        PseudoElement::Marker => 0_u64,
+                        PseudoElement::Before => 1,
+                        PseudoElement::After => 3,
+                        _ => 2,
+                    }) << 32) | run_index as u64);
+                }
+                inlines.push(item);
+            }
+            ContentRun::Image(url) => inlines.push(crate::replaced::generated_image(
+                origin, url, &style, font_size,
+                ((match pseudo {
+                    PseudoElement::Marker => 0_u64,
+                    PseudoElement::Before => 1,
+                    PseudoElement::After => 3,
+                    _ => 2,
+                }) << 32) | run_index as u64,
+                replaced,
+            )),
+            _ => {}
+        }
+    }
+    if !inlines.is_empty() {
+        box_.flow = match box_.display {
+            Display::Flex | Display::Grid => {
+                let mut item = LayoutBox::new(None, Display::Block, ComputedStyle::default(), font_size, line_height);
+                item.flow = Flow::Inlines(inlines);
+                if box_.display == Display::Flex { Flow::Flex(vec![item]) } else { Flow::Grid(vec![item]) }
+            }
+            Display::Block | Display::Inline => Flow::Inlines(inlines),
+        };
+    }
+    Some(box_)
+}
+
+fn append_generated(
+    dom: &Dom,
+    styled: &StyledDom,
+    origin: NodeIdx,
+    pseudo: PseudoElement,
+    font_size: f32,
+    fonts: &FontSource,
+    replaced: &dyn ReplacedElementProvider,
+    blocks: &mut Vec<LayoutBox>,
+    inlines: &mut Vec<InlineNode>,
+    positioned: &mut Vec<LayoutBox>,
+) {
+    let Some(mut generated) = generated_box(dom, styled, origin, pseudo, font_size, fonts, replaced) else {
+        return;
+    };
+    if generated.outside_marker || is_out_of_flow(&generated.style) {
+        positioned.push(generated);
+    } else if generated.display == Display::Inline {
+        if let Flow::Inlines(items) = &mut generated.flow {
+            inlines.append(items);
+        }
+    } else {
+        flush_anonymous_into(blocks, inlines, positioned, font_size, fonts);
+        blocks.push(generated);
+    }
+}
+
+/// DOM child links, rather than arena allocation ids, define source order.
+/// Each node reserves marker/before/principal/after positions around its
+/// descendants. This also handles nodes inserted before older siblings.
+fn document_order(dom: &Dom) -> std::collections::HashMap<NodeIdx, [u64; 4]> {
+    fn visit(dom: &Dom, node: NodeIdx, next: &mut u64, slots: &mut std::collections::HashMap<NodeIdx, [u64; 4]>) {
+        let mut positions = [0; 4];
+        for position in &mut positions[..3] {
+            *position = *next;
+            *next += 1;
+        }
+        for child in dom.children(node) {
+            visit(dom, child, next, slots);
+        }
+        positions[3] = *next;
+        *next += 1;
+        slots.insert(node, positions);
+    }
+    let mut slots = std::collections::HashMap::new();
+    visit(dom, NodeIdx(0), &mut 0, &mut slots);
+    slots
+}
+
+fn assign_source_order(box_: &mut LayoutBox, order: &std::collections::HashMap<NodeIdx, [u64; 4]>) {
+    let slot = |node: NodeIdx, pseudo: Option<PseudoElement>| -> Option<u64> {
+        let positions = order.get(&node)?;
+        Some(positions[match pseudo {
+            Some(PseudoElement::Marker) => 0,
+            Some(PseudoElement::Before) => 1,
+            Some(PseudoElement::After) => 3,
+            _ => 2,
+        }])
+    };
+    let decode = |raw: u64, node: NodeIdx| -> Option<u64> {
+        let tag = (raw >> 32) as usize;
+        let run = raw as u32 as u64;
+        Some((order.get(&node)?[tag] << 32) | (run + 1))
+    };
+    match &mut box_.flow {
+        Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) => {
+            for child in children {
+                assign_source_order(child, order);
+            }
+        }
+        Flow::Inlines(items) => {
+            for item in items {
+                match item {
+                    InlineNode::Text { node, source_order: Some(value), .. } => {
+                        *value = decode(*value, *node).unwrap_or(0);
+                    }
+                    InlineNode::Replaced { node, replaced, .. } if replaced.generated_url.is_some() => {
+                        replaced.source_order = replaced.source_order.and_then(|value| decode(value, *node));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Flow::Empty => {}
+    }
+    for child in &mut box_.positioned {
+        assign_source_order(child, order);
+    }
+    box_.source_order = box_.node.and_then(|node| slot(node, box_.generated_pseudo))
+        .map(|rank| rank << 32)
+        .or_else(|| match &box_.flow {
+            Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) =>
+                children.iter().filter_map(|child| child.source_order).min(),
+            Flow::Inlines(items) => items.iter().filter_map(|item| match item {
+                InlineNode::Text { node, source_order, .. } =>
+                    (*source_order).or_else(|| slot(*node, None).map(|rank| rank << 32)),
+                InlineNode::Replaced { node, replaced, .. } =>
+                    replaced.source_order.or_else(|| slot(*node, None).map(|rank| rank << 32)),
+                InlineNode::Atomic { node, .. } | InlineNode::Ruby { node, .. } =>
+                    slot(*node, None).map(|rank| rank << 32),
+                _ => None,
+            }).min(),
+            Flow::Empty => None,
+        })
+        .or(Some(0));
+}
+
+fn apply_first_letter(dom: &Dom, origin: NodeIdx, style: &ComputedStyle, flow: &mut Flow) {
+    let items = match flow {
+        Flow::Inlines(items) => items,
+        Flow::Blocks(children) => {
+            if let Some(first) = children.first_mut() {
+                if first.node.is_none() {
+                    apply_first_letter(dom, origin, style, &mut first.flow);
+                }
+            }
+            return;
+        }
+        Flow::Flex(_) | Flow::Grid(_) | Flow::Empty => return,
+    };
+    for index in 0..items.len() {
+        let InlineNode::Text { text, .. } = &items[index] else {
+            continue;
+        };
+        let Some((start, letter)) = text.char_indices().find(|(_, ch)| ch.is_alphanumeric()) else {
+            continue;
+        };
+        // Leading punctuation belongs to ::first-letter; whitespace does not.
+        let leading = text[..start].trim_start_matches(char::is_whitespace).len();
+        let begin = start - leading;
+        let end = start + letter.len_utf8();
+        if begin > 0 {
+            split_text_item(items, index, begin);
+            return style_first_letter(dom, origin, style, items, index + 1, end - begin);
+        }
+        return style_first_letter(dom, origin, style, items, index, end);
+    }
+}
+
+fn style_first_letter(
+    dom: &Dom,
+    origin: NodeIdx,
+    style: &ComputedStyle,
+    items: &mut Vec<InlineNode>,
+    index: usize,
+    end: usize,
+) {
+    split_text_item(items, index, end);
+    if let InlineNode::Text {
+        font_size,
+        style: text,
+        color,
+        background_color,
+        ..
+    } = &mut items[index]
+    {
+        let px = values::resolve_used_font_size(style, *font_size);
+        *font_size = px;
+        *text = Box::new(text_style(dom, origin, style, px, true));
+        *color = style.get("color").unwrap_or("black").to_owned();
+        *background_color = style
+            .get("background-color")
+            .unwrap_or("transparent")
+            .to_owned();
+    }
+}
+
+fn split_text_item(items: &mut Vec<InlineNode>, index: usize, at: usize) {
+    if let InlineNode::Text { text, .. } = &items[index] {
+        if at == 0 || at >= text.len() || !text.is_char_boundary(at) {
+            return;
+        }
+    }
+    let mut right = items[index].clone();
+    if let InlineNode::Text {
+        text,
+        source_mappings,
+        ..
+    } = &mut items[index]
+    {
+        text.truncate(at);
+        for mapping in source_mappings.iter_mut() {
+            if mapping.text_range.start < at && mapping.text_range.end > at {
+                let offset = at - mapping.text_range.start;
+                mapping.text_range.end = at;
+                mapping.source_range.end =
+                    (mapping.source_range.start + offset).min(mapping.source_range.end);
+            }
+        }
+        source_mappings.retain(|mapping| mapping.text_range.start < at);
+    }
+    if let InlineNode::Text {
+        text,
+        source_mappings,
+        ..
+    } = &mut right
+    {
+        *text = text[at..].to_owned();
+        for mapping in source_mappings.iter_mut() {
+            if mapping.text_range.start < at && mapping.text_range.end > at {
+                let offset = at - mapping.text_range.start;
+                mapping.text_range.start = at;
+                mapping.source_range.start =
+                    (mapping.source_range.start + offset).min(mapping.source_range.end);
+            }
+        }
+        source_mappings.retain(|mapping| mapping.text_range.end > at);
+        for mapping in source_mappings {
+            mapping.text_range.start -= at;
+            mapping.text_range.end -= at;
+        }
+    }
+    items.insert(index + 1, right);
 }
 
 /// `display` computed value → [`Display`]. Unknown values fall back to
@@ -583,6 +897,7 @@ fn inline_text(
     };
     InlineNode::Text {
         node,
+        source_order: None,
         text,
         source_mappings,
         font_size,
@@ -1128,6 +1443,15 @@ fn classify_children(
         let mut items: Vec<LayoutBox> = Vec::new();
         let mut run: Vec<InlineNode> = Vec::new();
         let mut positioned = Vec::new();
+        for pseudo in [PseudoElement::Marker, PseudoElement::Before] {
+            if let Some(generated) = generated_box(dom, styled, idx, pseudo, font_size, fonts, replaced) {
+                if generated.outside_marker || is_out_of_flow(&generated.style) {
+                    positioned.push(generated);
+                } else {
+                    items.push(generated);
+                }
+            }
+        }
         for entry in formatting_children(dom, styled, idx, font_size) {
             let child = entry.node;
             let text_parent = styled.get(entry.owner).cloned().unwrap_or_default();
@@ -1177,6 +1501,15 @@ fn classify_children(
             }
         }
         flush_anonymous_into(&mut items, &mut run, &mut positioned, font_size, fonts);
+        if let Some(generated) =
+            generated_box(dom, styled, idx, PseudoElement::After, font_size, fonts, replaced)
+        {
+            if is_out_of_flow(&generated.style) {
+                positioned.push(generated);
+            } else {
+                items.push(generated);
+            }
+        }
         let flow = if own_display == Display::Grid {
             Flow::Grid(items)
         } else {
@@ -1188,6 +1521,23 @@ fn classify_children(
     let mut blocks: Vec<LayoutBox> = Vec::new();
     let mut inlines: Vec<InlineNode> = Vec::new();
     let mut positioned = Vec::new();
+
+    if crate::replaced::kind(dom, idx).is_none() {
+        for pseudo in [PseudoElement::Marker, PseudoElement::Before] {
+            append_generated(
+                dom,
+                styled,
+                idx,
+                pseudo,
+                font_size,
+                fonts,
+                replaced,
+                &mut blocks,
+                &mut inlines,
+                &mut positioned,
+            );
+        }
+    }
 
     for entry in formatting_children(dom, styled, idx, font_size) {
         let child = entry.node;
@@ -1289,6 +1639,20 @@ fn classify_children(
             }
         }
     }
+    if crate::replaced::kind(dom, idx).is_none() {
+        append_generated(
+            dom,
+            styled,
+            idx,
+            PseudoElement::After,
+            font_size,
+            fonts,
+            replaced,
+            &mut blocks,
+            &mut inlines,
+            &mut positioned,
+        );
+    }
     // Trailing inline content: when the container has no block children it
     // IS an inline formatting context — keep the items directly. Otherwise
     // the remainder becomes one last anonymous block.
@@ -1388,6 +1752,21 @@ fn flatten_inline(
     let font_size = values::resolve_used_font_size(&style, parent_font_px);
     let bidi_style = text_style(dom, idx, &style, font_size, true);
     let inline_start = inlines.len();
+
+    for pseudo in [PseudoElement::Marker, PseudoElement::Before] {
+        append_generated(
+            dom,
+            styled,
+            idx,
+            pseudo,
+            font_size,
+            fonts,
+            replaced,
+            blocks_out,
+            inlines,
+            positioned_out,
+        );
+    }
 
     for entry in formatting_children(dom, styled, idx, font_size) {
         let child = entry.node;
@@ -1489,6 +1868,18 @@ fn flatten_inline(
             }
         }
     }
+    append_generated(
+        dom,
+        styled,
+        idx,
+        PseudoElement::After,
+        font_size,
+        fonts,
+        replaced,
+        blocks_out,
+        inlines,
+        positioned_out,
+    );
     if inline_start <= inlines.len() {
         mark_inline_edges(&mut inlines[inline_start..], edge_boundary);
         if bidi_style.unicode_bidi != UnicodeBidi::Normal {
@@ -1515,6 +1906,211 @@ mod tests {
         let styled = amazing_css::compute(&dom, &[]);
         let t = build_layout_tree(&dom, &styled, &FontSource::fallback());
         (dom, t)
+    }
+
+    fn tree_css(html: &str, css: &str) -> (amazing_dom::Dom, LayoutBox) {
+        let dom = amazing_html::parse(html);
+        let styled = amazing_css::compute(&dom, &[amazing_css::parse_stylesheet(css)]);
+        let tree = build_layout_tree(&dom, &styled, &FontSource::fallback());
+        (dom, tree)
+    }
+
+    #[test]
+    fn generated_before_and_after_follow_children() {
+        let (_, root) = tree_css(
+            "<body><div>middle</div></body>",
+            "div::before { content: 'before'; display: block } div::after { content: 'after'; display: block }",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(parts) = &body[0].flow else { panic!("pseudo blocks") };
+        assert_eq!(parts.len(), 3);
+        let text = |part: &LayoutBox| match &part.flow {
+            Flow::Inlines(items) => items.iter().filter_map(|item| match item {
+                InlineNode::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            }).collect::<String>(),
+            _ => String::new(),
+        };
+        assert_eq!(text(&parts[0]), "before");
+        assert_eq!(text(&parts[1]), "middle");
+        assert_eq!(text(&parts[2]), "after");
+        assert!(parts[0].source_order.unwrap() < parts[2].source_order.unwrap());
+    }
+
+    #[test]
+    fn generated_content_becomes_flex_items() {
+        let (_, root) = tree_css(
+            "<body><div><span>real</span></div></body>",
+            "div { display: flex } div::before { content: 'A' } div::after { content: 'Z' }",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Flex(items) = &body[0].flow else { panic!("flex items") };
+        assert_eq!(items.len(), 3);
+        assert!(items[0].source_order.is_some());
+        assert!(items[0].source_order < items[1].source_order);
+        assert!(items[2].source_order.is_some());
+        assert!(items[1].source_order < items[2].source_order);
+    }
+
+    #[test]
+    fn nested_after_boxes_have_distinct_tree_order() {
+        let (_, root) = tree_css(
+            "<body><div><section>x</section></div></body>",
+            "div::after, section::after { content: 'end'; display: block }",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(div) = &body[0].flow else { panic!("div blocks") };
+        let Flow::Blocks(section) = &div[0].flow else { panic!("section blocks") };
+        let inner = section.last().unwrap().source_order.unwrap();
+        let outer = div.last().unwrap().source_order.unwrap();
+        assert!(inner < outer);
+    }
+
+    #[test]
+    fn generated_inline_wrappers_sort_around_block_children() {
+        let (_, root) = tree_css(
+            "<body><div><p>middle</p></div></body>",
+            "div::before { content: 'before' } div::after { content: 'after' }",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(parts) = &body[0].flow else { panic!("div blocks") };
+        assert_eq!(parts.len(), 3);
+        assert!(parts[0].source_order < parts[1].source_order);
+        assert!(parts[1].source_order < parts[2].source_order);
+    }
+
+    #[test]
+    fn source_order_follows_insert_before_not_arena_id() {
+        let mut dom = amazing_html::parse("<body><div>old</div></body>");
+        let html = dom_html(&dom).unwrap();
+        let body = find_element(&dom, html, "body").unwrap();
+        let old = dom.children(body).next().unwrap();
+        let inserted = dom.create_element(body, "div");
+        dom.detach(inserted);
+        dom.attach_before(body, Some(old), inserted);
+        assert!(inserted.0 > old.0);
+        let styled = amazing_css::compute(&dom, &[]);
+        let root = build_layout_tree(&dom, &styled, &FontSource::fallback());
+        let Flow::Blocks(children) = &root.flow else { panic!("block children") };
+        assert_eq!(children[0].node, Some(inserted));
+        assert_eq!(children[1].node, Some(old));
+        assert!(children[0].source_order < children[1].source_order);
+    }
+
+    #[test]
+    fn outside_marker_does_not_change_flow_children() {
+        let (_, root) = tree_css("<body><ul><li>item</li></ul></body>", "");
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(list) = &body[0].flow else { panic!("list blocks") };
+        assert_eq!(list[0].positioned.len(), 1);
+        assert!(list[0].positioned[0].outside_marker);
+        assert!(list[0].positioned[0].source_order < list[0].source_order);
+    }
+
+    #[test]
+    fn marker_ignores_author_display_for_its_formatting_context() {
+        let (_, root) = tree_css(
+            "<body><ol><li>item</li></ol></body>",
+            "li::marker { content: 'X'; display: flex; width: 100px }",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(list) = &body[0].flow else { panic!("list blocks") };
+        let marker = &list[0].positioned[0];
+        assert_eq!(marker.display, Display::Inline);
+        assert!(matches!(marker.flow, Flow::Inlines(_)));
+    }
+
+    #[test]
+    fn list_style_image_uses_generated_url_fragment() {
+        let (_, root) = tree_css(
+            "<body><ul><li>item</li></ul></body>",
+            "li { list-style-image: url(https://example.test/dot.png) }",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(list) = &body[0].flow else { panic!("list blocks") };
+        let marker = &list[0].positioned[0];
+        let Flow::Inlines(items) = &marker.flow else { panic!("marker image") };
+        let InlineNode::Replaced { replaced, .. } = &items[0] else { panic!("replaced marker") };
+        assert_eq!(replaced.generated_url.as_deref(), Some("https://example.test/dot.png"));
+    }
+
+    #[test]
+    fn generated_flex_container_wraps_its_text_in_an_item() {
+        let (_, root) = tree_css(
+            "<body><div>x</div></body>",
+            "div::before { content: 'before'; display: flex }",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Blocks(parts) = &body[0].flow else { panic!("generated block") };
+        let Flow::Flex(items) = &parts[0].flow else { panic!("generated flex") };
+        assert_eq!(items.len(), 1);
+        assert!(matches!(items[0].flow, Flow::Inlines(_)));
+    }
+
+    #[test]
+    fn first_letter_splits_initial_text_run() {
+        let (_, root) = tree_css(
+            "<body><p>Alpha beta</p></body>",
+            "p::first-letter { color: red; font-size: 200% }",
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let Flow::Inlines(items) = &body[0].flow else { panic!("text line") };
+        let texts: Vec<_> = items.iter().filter_map(|item| match item {
+            InlineNode::Text { text, color, .. } => Some((text.as_str(), color.as_str())),
+            _ => None,
+        }).collect();
+        assert_eq!(texts, vec![("A", "red"), ("lpha beta", "black")]);
+    }
+
+    #[test]
+    fn generated_images_on_one_origin_keep_distinct_paint_keys() {
+        let (_, mut root) = tree_css(
+            "<body></body>",
+            "body::before { content: url(a.png) url(b.png) }",
+        );
+        crate::block::layout_root(&mut root, 700.0, &FontSource::fallback());
+        let fragments: Vec<_> = root.styled_replaced_fragments().collect();
+        assert_eq!(fragments.len(), 2);
+        assert_eq!(root.lines[0].replaced.len(), 2);
+        assert_ne!(fragments[0].source_order, fragments[1].source_order);
+        assert_eq!(fragments[0].source_order, root.lines[0].replaced[0].source_order);
+        assert_eq!(fragments[1].source_order, root.lines[0].replaced[1].source_order);
+        assert_eq!(fragments[0].generated_url.as_deref(), Some("a.png"));
+        assert_eq!(fragments[1].generated_url.as_deref(), Some("b.png"));
+    }
+
+    #[test]
+    fn generated_image_uses_url_intrinsic_dimensions() {
+        struct Images;
+        impl ReplacedElementProvider for Images {
+            fn intrinsic_size(&self, _: NodeIdx) -> Option<crate::IntrinsicSize> { None }
+            fn intrinsic_size_by_url(&self, url: &str) -> Option<crate::IntrinsicSize> {
+                (url == "https://example.test/a.png").then_some(crate::IntrinsicSize { width: 7.0, height: 9.0 })
+            }
+        }
+        let dom = amazing_html::parse("<body></body>");
+        let styled = amazing_css::compute(&dom, &[amazing_css::parse_stylesheet(
+            "body::before { content: url(https://example.test/a.png) }",
+        )]);
+        let root = build_layout_tree_with_replaced(&dom, &styled, &FontSource::fallback(), &Images);
+        let Flow::Inlines(items) = &root.flow else { panic!("inline generated image") };
+        let InlineNode::Replaced { size, .. } = &items[0] else { panic!("replaced image") };
+        assert_eq!((size.width, size.height), (7.0, 9.0));
+    }
+
+    #[test]
+    fn first_line_color_stops_at_the_line_break() {
+        let root = crate::layout_document_with_text(
+            "<body><p>one two three four</p></body>",
+            "p { color: blue; width: 40px } p::first-line { color: red }",
+            200.0,
+            &amazing_text::FallbackTextSystem::new(),
+        );
+        let Flow::Blocks(body) = &root.flow else { panic!("body blocks") };
+        let lines = &body[0].lines;
+        assert!(lines.len() > 1);
+        assert!(lines[0].glyphs.iter().all(|glyph| glyph.color == "red"));
+        assert!(lines[1].glyphs.iter().all(|glyph| glyph.color == "blue"));
     }
 
     fn tag_of(b: &LayoutBox, dom: &Dom) -> String {

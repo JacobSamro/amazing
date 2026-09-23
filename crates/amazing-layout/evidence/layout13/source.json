@@ -1,0 +1,18 @@
+{
+  "base": "9e736e2",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "base_archive_sha256": "549b65c22cdadabd6c42e542076392711aeedb69a0b2b9791eac36ff71689337",
+  "candidate_overlay_sha256": "47be8d861436322f16d7b4b0b35190cd8709789bf8ee09553bc89e17dc6fa742",
+  "manifest_sha256": "6ea82bae4f833a313d5e88ffce9d2bbe503498e045c254c60ca20e9b25b38607",
+  "source_sha256": {
+    "crates/amazing-layout/src/box_tree.rs": "2a9010dc7f8517ab091f10318067c6c7efeaacd637b26c3546c86d30fd4f6d02",
+    "crates/amazing-layout/src/inline.rs": "2a375c951a8aaefd04c2afacc2f5cdfbe6f0e45d63afaabdbea0b5f8d7440818",
+    "crates/amazing-layout/src/lib.rs": "329b97e938f3c08adcf94d0e98b4486774a8571474e99fb9714949f258d923e4",
+    "crates/amazing-layout/src/position.rs": "b80f1749a9fe63a58435831c9110f923ff4181ee155fd4be795a0f592fd6ac9c",
+    "crates/amazing-layout/src/replaced.rs": "b2b37b7c26107886d78610618879028d431642ec774ef27f8ea2fe48f39f44f6",
+    "crates/amazing-paint/src/paint.rs": "90a33db8d4d6a87317a5a579497d3ec8f9e39a23b41c6d257b95fdc913c7d3f5"
+  },
+  "baseline_executable_sha256": "E828F9DA04A4BD8663B4878BE497279ADA2D20740A0E21962598C3E44DFD2D88",
+  "candidate_executable_sha256": "8F00A3A7ABA188A095D2D8401AFE62BC1E9914973008C71612A41484A570EE26",
+  "retained_base": "f730427"
+}

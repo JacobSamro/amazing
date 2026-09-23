@@ -1,0 +1,80 @@
+{
+  "base": "f730427",
+  "cases": 184,
+  "before_pass": 158,
+  "after_pass": 159,
+  "suites": {
+    "block-collapse": {
+      "cases": 9,
+      "before_pass": 9,
+      "after_pass": 9,
+      "gains": [],
+      "losses": []
+    },
+    "contents": {
+      "cases": 6,
+      "before_pass": 6,
+      "after_pass": 6,
+      "gains": [],
+      "losses": []
+    },
+    "flex-grid": {
+      "cases": 24,
+      "before_pass": 24,
+      "after_pass": 24,
+      "gains": [],
+      "losses": []
+    },
+    "floats": {
+      "cases": 8,
+      "before_pass": 6,
+      "after_pass": 6,
+      "gains": [],
+      "losses": []
+    },
+    "geometry": {
+      "cases": 61,
+      "before_pass": 41,
+      "after_pass": 42,
+      "gains": [
+        "css-display__display-contents-before-after-002.html"
+      ],
+      "losses": []
+    },
+    "images": {
+      "cases": 12,
+      "before_pass": 12,
+      "after_pass": 12,
+      "gains": [],
+      "losses": []
+    },
+    "paint-compositing": {
+      "cases": 24,
+      "before_pass": 24,
+      "after_pass": 24,
+      "gains": [],
+      "losses": []
+    },
+    "position": {
+      "cases": 12,
+      "before_pass": 12,
+      "after_pass": 12,
+      "gains": [],
+      "losses": []
+    },
+    "tables": {
+      "cases": 12,
+      "before_pass": 10,
+      "after_pass": 10,
+      "gains": [],
+      "losses": []
+    },
+    "text-flow": {
+      "cases": 16,
+      "before_pass": 14,
+      "after_pass": 14,
+      "gains": [],
+      "losses": []
+    }
+  }
+}

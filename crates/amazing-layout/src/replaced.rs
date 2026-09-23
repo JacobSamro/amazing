@@ -25,6 +25,9 @@ pub enum ReplacedKind {
 #[derive(Debug, Clone)]
 pub struct InlineReplaced {
     pub kind: ReplacedKind,
+    /// Resolved URL of CSS generated `content: url(...)`, when applicable.
+    pub generated_url: Option<String>,
+    pub source_order: Option<u64>,
     pub style: ComputedStyle,
     pub font_size: f32,
     pub natural: IntrinsicSize,
@@ -45,6 +48,8 @@ pub(crate) struct Geometry {
 #[derive(Debug)]
 pub struct StyledReplacedFrag<'a> {
     pub node: NodeIdx,
+    pub generated_url: Option<String>,
+    pub source_order: Option<u64>,
     pub kind: ReplacedKind,
     pub style: &'a ComputedStyle,
     pub font_size: f32,
@@ -63,21 +68,23 @@ impl LayoutBox {
             Flow::Inlines(items) => items.as_slice(),
             _ => &[],
         };
-        let boxes: std::collections::HashMap<_, _> = items
-            .iter()
-            .filter_map(|item| match item {
-                InlineNode::Replaced { node, replaced, .. } => Some((node.0, replaced.as_ref())),
-                _ => None,
-            })
-            .collect();
+        let mut boxes: std::collections::HashMap<(u32, Option<u64>), &InlineReplaced> =
+            std::collections::HashMap::new();
+        for item in items {
+            if let InlineNode::Replaced { node, replaced, .. } = item {
+                boxes.insert((node.0, replaced.source_order), replaced);
+            }
+        }
         self.lines
             .iter()
             .flat_map(|line| &line.replaced)
             .filter_map(move |fragment| {
-                let info = boxes.get(&fragment.node.0)?;
+                let info = *boxes.get(&(fragment.node.0, fragment.source_order))?;
                 let g = info.geometry;
                 Some(StyledReplacedFrag {
                     node: fragment.node,
+                    generated_url: info.generated_url.clone(),
+                    source_order: info.source_order,
                     kind: info.kind,
                     style: &info.style,
                     font_size: info.font_size,
@@ -213,6 +220,8 @@ pub(crate) fn construct(
         })?;
     let mut replaced = Box::new(InlineReplaced {
         kind,
+        generated_url: None,
+        source_order: None,
         style: style.clone(),
         font_size,
         natural,
@@ -227,6 +236,42 @@ pub(crate) fn construct(
         size,
         replaced,
     })
+}
+
+/// CSS generated image fragment. Unavailable intrinsic dimensions use the
+/// default 300 by 150 CSS-pixel object size.
+pub(crate) fn generated_image(
+    origin: NodeIdx,
+    url: &str,
+    style: &ComputedStyle,
+    font_size: f32,
+    source_order: u64,
+    provider: &dyn ReplacedElementProvider,
+) -> InlineNode {
+    let natural = provider.intrinsic_size_by_url(url)
+        .filter(|size| size.width.is_finite() && size.height.is_finite()
+            && size.width >= 0.0 && size.height >= 0.0)
+        .map(|size| IntrinsicSize {
+            width: style.scale_used_length(size.width as f64) as f32,
+            height: style.scale_used_length(size.height as f64) as f32,
+        })
+        .unwrap_or(IntrinsicSize { width: 300.0, height: 150.0 });
+    let mut replaced = Box::new(InlineReplaced {
+        kind: ReplacedKind::Image,
+        generated_url: Some(url.to_owned()),
+        source_order: Some(source_order),
+        style: style.clone(),
+        font_size,
+        natural,
+        svg_sizing: None,
+        geometry: Geometry::default(),
+    });
+    let size = replaced.resolve(None, None);
+    InlineNode::Replaced {
+        node: origin,
+        size,
+        replaced,
+    }
 }
 
 fn length(style: &ComputedStyle, name: &str, font: f32, basis: Option<f32>) -> Option<f32> {
@@ -269,8 +314,7 @@ impl InlineReplaced {
             && natural.width > 0.0
             && natural.height > 0.0)
             .then_some(natural.width / natural.height);
-        let mut used_w =
-            w.unwrap_or_else(|| h.zip(ratio).map_or(natural.width, |(h, r)| h * r));
+        let mut used_w = w.unwrap_or_else(|| h.zip(ratio).map_or(natural.width, |(h, r)| h * r));
         let mut used_h = h.unwrap_or_else(|| ratio.map_or(natural.height, |r| used_w / r));
         if w.is_none() && h.is_none() && ratio.is_some() {
             // CSS2.2 10.4: preserve ratio unless opposing constraints require
@@ -318,22 +362,22 @@ pub(crate) fn resolve(items: &mut [InlineNode], width: f32, height: Option<f32>)
 /// Line fitting, baselines, floats and bidi operate on the outer geometry.
 /// Convert to the paint content rectangle only after final visual placement.
 pub(crate) fn finish_lines(lines: &mut [LineBox], items: &[InlineNode]) {
-    let geometry: std::collections::HashMap<_, _> = items
-        .iter()
-        .filter_map(|item| match item {
-            InlineNode::Replaced { node, replaced, .. } => Some((node.0, replaced.geometry)),
-            _ => None,
-        })
-        .collect();
+    let mut geometry = std::collections::HashMap::<(u32, Option<u64>), Geometry>::new();
+    for item in items {
+        if let InlineNode::Replaced { node, replaced, .. } = item {
+            geometry.insert((node.0, replaced.source_order), replaced.geometry);
+        }
+    }
     for ReplacedFrag {
         node,
+        source_order,
         x,
         y,
         width,
         height,
     } in lines.iter_mut().flat_map(|line| &mut line.replaced)
     {
-        if let Some(g) = geometry.get(&node.0) {
+        if let Some(g) = geometry.get(&(node.0, *source_order)) {
             *x += g.margin.left + g.border.left + g.padding.left;
             *y += g.margin.top + g.border.top + g.padding.top;
             *width = g.content.w;
