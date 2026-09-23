@@ -6,7 +6,11 @@ use amazing_ipc::{interface, wire_enum, wire_struct};
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct Viewport {width:u32, height:u32}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct Navigate {url:String, html_bytes:ByteBuf, viewport:Viewport}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct Frame {sequence:u64, width:u32, height:u32, rgba:ByteBuf}}
-wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct FrameReady {sequence:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct FrameReady {sequence:u64, shared:Option<SharedFrameReady>}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct SharedFrameReady {generation:u64, width:u32, height:u32, stride:u32, format:u32, byte_len:u64, handle_id:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct ReleaseFrame {generation:u64}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct AcquireFrame {generation:u64}}
+wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum AcquireResult {Transferred(())=1, Superseded(u64)=2, Busy(())=3}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct SadTab {pid:u32, reason:String}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct Point {x:i32, y:i32}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct ScrollDelta {x:i32, y:i32}}
@@ -23,6 +27,10 @@ wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum NetworkEvent {Pendin
 interface! {pub interface RendererControls(7) => RendererProxy, RendererReceiver {
     fn navigate(request:Navigate) -> Frame = 1;
     fn input(event:InputEvent) -> InputAck = 2;
+    fn navigate_shared(request:Navigate) -> SharedFrameReady = 3;
+    fn release_frame(request:ReleaseFrame) -> bool = 4;
+    fn acquire_frame(request:AcquireFrame) -> AcquireResult = 5;
+    fn frame_received(request:AcquireFrame) -> bool = 6;
 }}
 interface! {pub interface NetworkRequests(8) => NetworkProxy, NetworkReceiver {
     fn start_request(request:StartRequest) -> Started = 1;
@@ -49,5 +57,36 @@ impl Frame {
             ));
         }
         Ok(())
+    }
+}
+
+impl SharedFrameReady {
+    pub fn metadata(
+        &self,
+    ) -> Result<amazing_ipc_platform::FrameMetadata, amazing_ipc_platform::Error> {
+        let metadata = amazing_ipc_platform::FrameMetadata {
+            generation: self.generation,
+            width: self.width,
+            height: self.height,
+            stride: self.stride,
+            format: self.format,
+            byte_len: self.byte_len,
+            handle_id: self.handle_id,
+        };
+        metadata.validate()?;
+        Ok(metadata)
+    }
+}
+impl From<amazing_ipc_platform::FrameMetadata> for SharedFrameReady {
+    fn from(value: amazing_ipc_platform::FrameMetadata) -> Self {
+        Self {
+            generation: value.generation,
+            width: value.width,
+            height: value.height,
+            stride: value.stride,
+            format: value.format,
+            byte_len: value.byte_len,
+            handle_id: value.handle_id,
+        }
     }
 }
