@@ -142,6 +142,25 @@ rebased workspace, not an attributed HTML-only workspace delta.
 This ticket does not change XML byte handling or the HTML-1 XML cascade. Its
 strict XML byte-input idea remains a separate possible ticket after HTML-2.
 
+## HTML-3 — incremental decoded-text parsing (in progress)
+
+`IncrementalParser::push_chunk(&str)` feeds one tokenizer and one `TreeBuilder`;
+`finish()` signals the sole final EOF and returns the DOM. Input chunks must
+already be decoded Unicode. A pending CR normalizes to LF across a chunk
+boundary, including CRLF. The tokenizer pauses on temporary input exhaustion
+and ambiguous `<`, character reference and external-doctype lookahead, then
+releases consumed scalar input. It retains the source of a tag under
+construction for malformed-EOF literal recovery. Current-token fields such as
+an unfinished comment or attribute can still grow with that token.
+
+The Mac-only draft is awaiting the co-integrator's explicit release of the
+Windows html source tree and target before any HTML-3 sync or test. Its planned
+gate compares every scalar-boundary split and a deterministic multi-chunk
+schedule against `parse(&str)` for tags, attributes, comments, doctypes,
+references, RAWTEXT/RCDATA, malformed EOF, CRLF and non-ASCII text. Separate
+tests assert temporary exhaustion, one final EOF and bounded retained input
+after consumed chunks. No byte-stream encoding or driver change is included.
+
 The pinned sample has two measured DTD-entity blockers and no UTF-8 input
 failures among 14 files. A bounded XHTML entity policy is a separate decision;
 do not silently use HTML's entity table or fetch arbitrary external resources.
