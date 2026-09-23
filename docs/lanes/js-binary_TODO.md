@@ -50,26 +50,28 @@ detachment tests run instead of becoming unsupported when they reach the host.
 Pinned Linux Test262 revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`,
 53,872 sources, input hash
 `91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`:
-JSB-1 base `2a2f9b2` had 16,070 pass / 27,281 fail / 15 timeout /
-10,212 unsupported / 294 skipped. JSB-2 had 17,112 pass / 26,449 fail /
-14 timeout / 10,003 unsupported / 294 skipped, with **zero lost passing
+fixed `dev` base `d136fdd` had 19,687 pass / 23,658 fail / 16 timeout /
+10,217 unsupported / 294 skipped. JSB-2 had 20,999 pass / 22,557 fail /
+15 timeout / 10,007 unsupported / 294 skipped, with **zero lost passing
 files and zero lost passing variants**. After classification hash:
-`d67aa6fff95083484fd39b48cc75e911a61bb829a1cf93803b7ba8fcc54b5cf7`.
-Selected pass counts: `built-ins/BigInt` 1→67,
-`TypedArrayConstructors/ctors-bigint` 20→75, `DataView` 361→434,
-`Atomics` 163→207. Linux amazing-js nextest passed 225/225 and its doctest
-passed 1/1.
+`d6dad40499b358008e52a69ae8d82e91441dcee111f1de3822ce320cb8ddc254`.
+Selected pass counts: `built-ins/BigInt` 1→68,
+`TypedArrayConstructors/ctors-bigint` 20→80, `DataView` 368→442,
+`Atomics` 163→207. Linux amazing-js nextest passed 235/235 (one skipped),
+workspace nextest 1,927/1,927 (three skipped), and the crate doctest passed
+1/1. The updated Test262 runner self-test passed.
 
 The authoritative win-002 final gate used the same pinned revision and 53,872
 sources, input hash
 `a2ef5e43ff95da279324b6df9a37740a505b9f8b6c7a11406408af70f453b075`.
-JSB-1 base: 16,070 pass / 27,283 fail / 14 timeout / 10,211 unsupported /
-294 skipped. JSB-2: 17,112 pass / 26,451 fail / 13 timeout /
-10,002 unsupported / 294 skipped. **Zero lost passing files and zero lost
+Fixed `d136fdd` base: 19,687 pass / 23,659 fail / 16 timeout /
+10,216 unsupported / 294 skipped. JSB-2: 20,999 pass / 22,558 fail /
+15 timeout / 10,006 unsupported / 294 skipped. **Zero lost passing files and zero lost
 passing variants**. After classification hash:
-`401976ddd429ed3ce27974abcd6cd9956cd414c68cdbda8c898f55a41cb9f351`.
-win-002 amazing-js nextest passed 225/225, crate doctests 1/1; workspace
-nextest passed 1,779/1,779 with four skipped, workspace doctests 2/2.
+`d34e6f1a04def59753898bd8e519031f07e5f5eb249a5635c5c0737f885fa51c`.
+win-002 amazing-js nextest passed 235/235 (one skipped), crate doctests
+1/1; workspace nextest passed 1,930/1,930 (five skipped), workspace doctests
+2/2. The updated Test262 runner self-test passed on Windows too.
 
 Remaining gaps include BigInt Test262 cases blocked by user-thrown error
 constructor identity, global descriptor handling, and BigInt wrapper property
