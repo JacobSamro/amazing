@@ -24,7 +24,7 @@ fn receiver_valid(dom: &Dom, node: NodeIdx, op: O) -> Result<(), DomError> {
     valid(dom, node)?;
     let kind = &dom.get(node).kind;
     let good = match op {
-        O::CreateText | O::CreateComment | O::CreateFragment => matches!(kind, NodeKind::Document),
+        O::CreateText | O::CreateCDATASection | O::CreateComment | O::CreateFragment => matches!(kind, NodeKind::Document),
         O::Append | O::Prepend | O::ReplaceChildren => matches!(
             kind,
             NodeKind::Element { .. } | NodeKind::Document | NodeKind::DocumentFragment
@@ -47,10 +47,11 @@ fn text_content(dom: &Dom, node: NodeIdx) -> Option<Vec<u16>> {
         NodeKind::Element { .. } | NodeKind::DocumentFragment => Some(
             dom.tree_order(node)
                 .into_iter()
-                .filter(|id| matches!(dom.get(*id).kind, NodeKind::Text { .. }))
+                .filter(|id| matches!(dom.get(*id).kind, NodeKind::Text { .. } | NodeKind::CDATASection { .. }))
                 .flat_map(|id| dom.character_data_utf16(id).unwrap_or_default())
                 .collect(),
         ),
+        NodeKind::Attr { .. } => dom.attr_snapshot(node).ok().map(|attr| attr.value),
         _ => dom.character_data_utf16(node),
     }
 }
@@ -110,6 +111,33 @@ pub fn invoke<H: BindingHost>(
     receiver: H::Value,
     args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    if crate::range_bindings::handles(operation) {
+        return crate::range_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::factories::handles(operation) {
+        return crate::factories::invoke(host, operation, receiver, args);
+    }
+    if crate::collections::handles(operation) {
+        return crate::collections::invoke(host, operation, receiver, args);
+    }
+    if crate::traversal_bindings::handles(operation) {
+        return crate::traversal_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::event_bindings::handles(operation) {
+        return crate::event_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::mutation_bindings::handles(operation) {
+        return crate::mutation_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::dom_exception::handles(operation) {
+        return crate::dom_exception::invoke(host, operation, receiver, args);
+    }
+    if crate::attr_bindings::handles(operation) {
+        return crate::attr_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::tokenlist::handles(operation) {
+        return crate::tokenlist::invoke(host, operation, receiver, args);
+    }
     let constructor = matches!(
         operation,
         O::TextConstructor
@@ -126,7 +154,7 @@ pub fn invoke<H: BindingHost>(
         host.with_dom(|dom| receiver_valid(dom, target, operation))?;
     }
     let required = match operation {
-        O::CreateText | O::CreateComment | O::AppendChild | O::RemoveChild | O::Contains => 1,
+        O::CreateText | O::CreateCDATASection | O::CreateComment | O::AppendChild | O::RemoveChild | O::Contains => 1,
         O::InsertBefore | O::ReplaceChild => 2,
         _ => 0,
     };
@@ -152,6 +180,7 @@ pub fn invoke<H: BindingHost>(
         O::TextConstructor
             | O::CommentConstructor
             | O::CreateText
+            | O::CreateCDATASection
             | O::CreateComment
             | O::SetData
             | O::SetNodeValue
@@ -184,7 +213,7 @@ pub fn invoke<H: BindingHost>(
         None
     };
     let deep = operation == O::CloneNode && args.first().is_some_and(|v| host.to_boolean(v));
-    let html = if operation == O::NodeName {
+    let html = if matches!(operation, O::NodeName | O::CreateCDATASection) {
         let document = host.with_dom(|dom| Ok(dom.owner_document(target).unwrap_or(target)))?;
         host.is_html_document(document)
     } else {
@@ -201,6 +230,12 @@ pub fn invoke<H: BindingHost>(
                     matches!(operation, O::CommentConstructor | O::CreateComment),
                     &data,
                 )?)
+            }
+            O::CreateCDATASection => {
+                if html { return Err(DomError::NotSupportedError); }
+                let node = dom.create_node_in(target, NodeKind::CDATASection { data: String::new() })?;
+                dom.replace_character_data(node, 0, 0, &data)?;
+                R::Node(node)
             }
             O::FragmentConstructor | O::CreateFragment => {
                 R::Node(dom.create_document_fragment(target)?)
@@ -243,7 +278,9 @@ pub fn invoke<H: BindingHost>(
             O::CloneNode => R::Node(dom.clone_node(target, deep)?),
             O::NodeType => R::Number(match dom.get(target).kind {
                 NodeKind::Element { .. } => 1.,
+                NodeKind::Attr { .. } => 2.,
                 NodeKind::Text { .. } => 3.,
+                NodeKind::CDATASection { .. } => 4.,
                 NodeKind::ProcessingInstruction { .. } => 7.,
                 NodeKind::Comment { .. } => 8.,
                 NodeKind::Document => 9.,
@@ -260,7 +297,12 @@ pub fn invoke<H: BindingHost>(
                             name
                         }
                     }
+                    NodeKind::Attr { local_name, prefix, .. } => match prefix {
+                        Some(prefix) => format!("{prefix}:{local_name}"),
+                        None => local_name.clone(),
+                    },
                     NodeKind::Text { .. } => "#text".into(),
+                    NodeKind::CDATASection { .. } => "#cdata-section".into(),
                     NodeKind::Comment { .. } => "#comment".into(),
                     NodeKind::Document => "#document".into(),
                     NodeKind::DocumentFragment => "#document-fragment".into(),
@@ -269,10 +311,14 @@ pub fn invoke<H: BindingHost>(
                 };
                 R::String(name.encode_utf16().collect())
             }
-            O::NodeValue => dom.character_data_utf16(target).map_or(R::Null, R::String),
+            O::NodeValue => if matches!(dom.get(target).kind, NodeKind::Attr { .. }) {
+                R::String(dom.attr_snapshot(target)?.value)
+            } else { dom.character_data_utf16(target).map_or(R::Null, R::String) },
             O::TextContent => text_content(dom, target).map_or(R::Null, R::String),
             O::SetNodeValue => {
-                if dom.character_data(target).is_some() {
+                if matches!(dom.get(target).kind, NodeKind::Attr { .. }) {
+                    dom.set_attr_value(target, data.clone())?;
+                } else if dom.character_data(target).is_some() {
                     set_data(dom, target, &data)?;
                 }
                 R::Undefined
@@ -293,6 +339,7 @@ pub fn invoke<H: BindingHost>(
                         };
                         dom.replace_all(target, node)?;
                     }
+                    NodeKind::Attr { .. } => dom.set_attr_value(target, data.clone())?,
                     _ => set_data(dom, target, &data)?,
                 }
                 R::Undefined
@@ -323,6 +370,7 @@ pub fn invoke<H: BindingHost>(
                 R::Undefined
             }
             O::Length => R::Number(dom.character_data_utf16(target).unwrap().len() as f64),
+            _ => unreachable!("operation routed before node dispatch"),
         };
         Ok(result)
     })?;
@@ -331,7 +379,7 @@ pub fn invoke<H: BindingHost>(
         ResultValue::Null => host.null(),
         ResultValue::Boolean(v) => host.boolean(v),
         ResultValue::Number(v) => host.number(v),
-        ResultValue::String(v) => host.string(&v),
+        ResultValue::String(v) => host.string(&v)?,
         ResultValue::Node(v) => host.wrap_node(v)?,
         ResultValue::Children(v) => host.child_nodes(v)?,
     })

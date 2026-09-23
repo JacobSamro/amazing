@@ -2,8 +2,16 @@
 use crate::{Dom, DomError, NodeIdx, NodeKind};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NodeIterator(usize);
+impl NodeIterator {
+    pub fn slot(self) -> usize { self.0 }
+    pub fn from_slot(slot: usize) -> Self { Self(slot) }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TreeWalker(usize);
+impl TreeWalker {
+    pub fn slot(self) -> usize { self.0 }
+    pub fn from_slot(slot: usize) -> Self { Self(slot) }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NodePointer {
     pub node: NodeIdx,
@@ -28,12 +36,17 @@ impl NodeFilter {
     pub const SKIP: u16 = 3;
     pub const SHOW_ALL: u32 = u32::MAX;
     pub const SHOW_ELEMENT: u32 = 1;
+    pub const SHOW_ATTRIBUTE: u32 = 2;
     pub const SHOW_TEXT: u32 = 4;
+    pub const SHOW_CDATA_SECTION: u32 = 8;
+    pub const SHOW_ENTITY_REFERENCE: u32 = 16;
+    pub const SHOW_ENTITY: u32 = 32;
     pub const SHOW_PROCESSING_INSTRUCTION: u32 = 64;
     pub const SHOW_COMMENT: u32 = 128;
     pub const SHOW_DOCUMENT: u32 = 256;
     pub const SHOW_DOCUMENT_TYPE: u32 = 512;
     pub const SHOW_DOCUMENT_FRAGMENT: u32 = 1024;
+    pub const SHOW_NOTATION: u32 = 2048;
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Traverse {
@@ -368,7 +381,9 @@ impl Dom {
     fn node_show_bit(&self, node: NodeIdx) -> u32 {
         match self.get(node).kind {
             NodeKind::Element { .. } => 1,
+            NodeKind::Attr { .. } => 2,
             NodeKind::Text { .. } => 4,
+            NodeKind::CDATASection { .. } => 8,
             NodeKind::ProcessingInstruction { .. } => 64,
             NodeKind::Comment { .. } => 128,
             NodeKind::Document => 256,

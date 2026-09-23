@@ -29,6 +29,9 @@ impl Dom {
     pub fn clone_node(&mut self, node: NodeIdx, deep: bool) -> Result<NodeIdx, DomError> {
         self.check_node(node)?;
         let copy = self.alloc_unattached(self.get(node).kind.clone());
+        if let NodeKind::Attr { owner_element, .. } = &mut self.nodes[copy.0 as usize].kind {
+            *owner_element = None;
+        }
         if !matches!(self.get(node).kind, NodeKind::Document) {
             self.nodes[copy.0 as usize].owner_document = self.get(node).owner_document;
         }

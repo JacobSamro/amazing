@@ -14,6 +14,7 @@
 #![forbid(unsafe_code)]
 
 pub mod events;
+pub mod attr;
 pub mod event_loop;
 pub mod mutation;
 mod namespace;
@@ -62,6 +63,16 @@ pub enum NodeKind {
     Text {
         data: String,
     },
+    CDATASection {
+        data: String,
+    },
+    Attr {
+        local_name: String,
+        namespace_uri: Option<String>,
+        prefix: Option<String>,
+        value: Vec<u16>,
+        owner_element: Option<NodeIdx>,
+    },
     Comment {
         data: String,
     },
@@ -85,6 +96,12 @@ pub struct Node {
     pub prev_sibling: Option<NodeIdx>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DomExceptionData {
+    pub name: Vec<u16>,
+    pub message: Vec<u16>,
+}
+
 /// Arena-backed DOM.
 #[derive(Debug)]
 pub struct Dom {
@@ -92,6 +109,12 @@ pub struct Dom {
     namespace_uris: Vec<String>,
     mutations: mutation::MutationObservers,
     ranges: Vec<Option<range::AbstractRange>>,
+    static_ranges: Vec<Option<range::StaticRange>>,
+    events: events::EventTargets,
+    external_event_targets: u64,
+    mutation_records: Vec<mutation::RegisteredRecord>,
+    static_node_lists: Vec<Vec<NodeIdx>>,
+    dom_exceptions: Vec<DomExceptionData>,
     traversals: traversal::Traversals,
     /// Doctype name captured by the tree builder (Phase 1). Quirks-mode bits
     /// land here when the layout engine needs them.
@@ -99,12 +122,36 @@ pub struct Dom {
 }
 
 impl Dom {
+    pub fn create_dom_exception(&mut self, name: Vec<u16>, message: Vec<u16>) -> usize {
+        let slot = self.dom_exceptions.len();
+        self.dom_exceptions.push(DomExceptionData { name, message });
+        slot
+    }
+    pub fn dom_exception(&self, slot: usize) -> Option<&DomExceptionData> {
+        self.dom_exceptions.get(slot)
+    }
+    /// Listener and event registry for this document arena.
+    pub fn events(&self) -> &events::EventTargets { &self.events }
+    pub fn events_mut(&mut self) -> &mut events::EventTargets { &mut self.events }
+    pub fn create_event_target(&mut self) -> u64 {
+        let slot = self.external_event_targets;
+        self.external_event_targets += 1;
+        slot
+    }
+    pub fn has_event_target(&self, slot: u64) -> bool { slot < self.external_event_targets }
+
     pub fn new() -> Self {
         let mut dom = Self {
             nodes: Vec::new(),
             namespace_uris: Vec::new(),
             mutations: mutation::MutationObservers::default(),
             ranges: Vec::new(),
+            static_ranges: Vec::new(),
+            events: events::EventTargets::default(),
+            external_event_targets: 0,
+            mutation_records: Vec::new(),
+            static_node_lists: Vec::new(),
+            dom_exceptions: Vec::new(),
             traversals: traversal::Traversals::default(),
             doctype: None,
         };
@@ -298,7 +345,7 @@ impl Dom {
     }
 
     pub fn is_text(&self, idx: NodeIdx) -> bool {
-        matches!(self.get(idx).kind, NodeKind::Text { .. })
+        matches!(self.get(idx).kind, NodeKind::Text { .. } | NodeKind::CDATASection { .. })
     }
 
     /// Depth-first dump in indented-text form — the Phase 1 exit-criteria output.
@@ -350,6 +397,12 @@ impl Dom {
                 out.push('"');
                 out.push_str(data);
                 out.push_str("\"\n");
+            }
+            NodeKind::CDATASection { data } => {
+                out.push_str("<![CDATA["); out.push_str(data); out.push_str("]]>"); out.push('\n');
+            }
+            NodeKind::Attr { local_name, .. } => {
+                out.push_str("@attribute "); out.push_str(local_name); out.push('\n');
             }
             NodeKind::Comment { data } => {
                 out.push_str("<!-- ");

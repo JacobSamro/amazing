@@ -4,6 +4,22 @@ use std::collections::VecDeque;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ObserverId(usize);
+impl ObserverId {
+    pub fn slot(self) -> usize { self.0 }
+    pub fn from_slot(slot: usize) -> Self { Self(slot) }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MutationRecordId(usize);
+impl MutationRecordId {
+    pub fn slot(self) -> usize { self.0 }
+    pub fn from_slot(slot: usize) -> Self { Self(slot) }
+}
+#[derive(Debug, Clone)]
+pub(crate) struct RegisteredRecord {
+    record: MutationRecord,
+    added_nodes: usize,
+    removed_nodes: usize,
+}
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ObserveOptions {
     pub child_list: bool,
@@ -181,6 +197,27 @@ impl MutationObservers {
     }
 }
 impl Dom {
+    pub fn observer_callback(&self, observer: ObserverId) -> Option<u64> {
+        self.mutations.observers.get(observer.0).map(|entry| entry.callback)
+    }
+    pub fn register_mutation_record(&mut self, record: MutationRecord) -> MutationRecordId {
+        let added_nodes = self.static_node_lists.len();
+        self.static_node_lists.push(record.added_nodes.clone());
+        let removed_nodes = self.static_node_lists.len();
+        self.static_node_lists.push(record.removed_nodes.clone());
+        let id = MutationRecordId(self.mutation_records.len());
+        self.mutation_records.push(RegisteredRecord { record, added_nodes, removed_nodes });
+        id
+    }
+    pub fn mutation_record(&self, id: MutationRecordId) -> Option<&MutationRecord> {
+        self.mutation_records.get(id.0).map(|entry| &entry.record)
+    }
+    pub fn mutation_record_lists(&self, id: MutationRecordId) -> Option<(usize, usize)> {
+        self.mutation_records.get(id.0).map(|entry| (entry.added_nodes, entry.removed_nodes))
+    }
+    pub fn static_node_list(&self, slot: usize) -> Option<&[NodeIdx]> {
+        self.static_node_lists.get(slot).map(Vec::as_slice)
+    }
     pub fn create_mutation_observer(&mut self, callback: u64) -> ObserverId {
         let id = ObserverId(self.mutations.observers.len());
         self.mutations.observers.push(Observer {
@@ -335,6 +372,7 @@ impl Dom {
                 attrs.push((name.into(), value.into()));
             }
         }
+        self.sync_attached_attr_value(node, namespace, name, value);
         self.queue_attribute_record(node, namespace, name, old);
         Ok(())
     }
@@ -392,6 +430,7 @@ impl Dom {
         } else if let NodeKind::Element { attrs, .. } = &mut self.nodes[node.0 as usize].kind {
             attrs.retain(|(local, _)| local != name);
         }
+        self.detach_attached_attr(node, namespace, name);
         self.queue_attribute_record(node, namespace, name, Some(old));
         Ok(())
     }
@@ -412,6 +451,7 @@ impl Dom {
     pub fn character_data(&self, node: NodeIdx) -> Option<&str> {
         match &self.get(node).kind {
             NodeKind::Text { data }
+            | NodeKind::CDATASection { data }
             | NodeKind::Comment { data }
             | NodeKind::ProcessingInstruction { data, .. } => Some(data),
             _ => None,
@@ -445,6 +485,7 @@ impl Dom {
         };
         match &mut self.nodes[node.0 as usize].kind {
             NodeKind::Text { data }
+            | NodeKind::CDATASection { data }
             | NodeKind::Comment { data }
             | NodeKind::ProcessingInstruction { data, .. } => *data = string,
             _ => unreachable!(),

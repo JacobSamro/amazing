@@ -29,6 +29,13 @@ impl StaticRange {
         self.0
     }
 }
+/// Immutable boundary snapshot, stored in an append-only arena for wrappers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StaticRangeId(usize);
+impl StaticRangeId {
+    pub fn slot(self) -> usize { self.0 }
+    pub fn from_slot(slot: usize) -> Self { Self(slot) }
+}
 /// Arena-local, non-reused live range handle. `release_range` is a GC seam, not detach().
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Range(usize);
@@ -37,8 +44,24 @@ impl Range {
     pub const START_TO_END: u16 = 1;
     pub const END_TO_END: u16 = 2;
     pub const END_TO_START: u16 = 3;
+    /// Stable arena slot for the binding layer. Slots are never reused.
+    pub fn slot(self) -> usize { self.0 }
+    /// The binding layer validates the slot through `Dom::range` before use.
+    pub fn from_slot(slot: usize) -> Self { Self(slot) }
 }
 impl Dom {
+    pub fn register_static_range(&mut self, start: BoundaryPoint, end: BoundaryPoint) -> Result<StaticRangeId, DomError> {
+        let range = self.create_static_range(start, end)?;
+        let id = StaticRangeId(self.static_ranges.len());
+        self.static_ranges.push(Some(range));
+        Ok(id)
+    }
+    pub fn static_range(&self, id: StaticRangeId) -> Result<StaticRange, DomError> {
+        self.static_ranges.get(id.0).copied().flatten().ok_or(DomError::InvalidStateError)
+    }
+    pub fn release_static_range(&mut self, id: StaticRangeId) {
+        if let Some(slot) = self.static_ranges.get_mut(id.0) { *slot = None; }
+    }
     pub fn node_length(&self, node: NodeIdx) -> usize {
         if let Some(data) = self.character_data_utf16(node) {
             data.len()
@@ -288,6 +311,28 @@ impl Dom {
                 && self.compare_boundary_points(BoundaryPoint::new(parent, i + 1), r.start)?
                     == Ordering::Greater,
         )
+    }
+    pub fn range_is_point_in_range(&self, id: Range, point: BoundaryPoint) -> Result<bool, DomError> {
+        let range = self.range(id)?;
+        self.check_boundary(point)?;
+        if self.root(point.node) != self.root(range.start.node) { return Ok(false); }
+        Ok(self.compare_boundary_points(range.start, point)? != Ordering::Greater
+            && self.compare_boundary_points(point, range.end)? != Ordering::Greater)
+    }
+    pub fn range_compare_point(&self, id: Range, point: BoundaryPoint) -> Result<i16, DomError> {
+        let range = self.range(id)?;
+        self.check_boundary(point)?;
+        if self.root(point.node) != self.root(range.start.node) { return Err(DomError::WrongDocumentError); }
+        Ok(if self.compare_boundary_points(point, range.start)? == Ordering::Less { -1 }
+            else if self.compare_boundary_points(point, range.end)? == Ordering::Greater { 1 }
+            else { 0 })
+    }
+    pub fn range_to_utf16_string(&mut self, id: Range) -> Result<Vec<u16>, DomError> {
+        let fragment = self.range_clone_contents(id)?;
+        Ok(self.tree_order(fragment).into_iter()
+            .filter(|node| self.is_text(*node))
+            .flat_map(|node| self.character_data_utf16(node).unwrap_or_default())
+            .collect())
     }
     pub(crate) fn ranges_insert(&mut self, parent: NodeIdx, before: Option<NodeIdx>, count: usize) {
         let Some(before) = before else {

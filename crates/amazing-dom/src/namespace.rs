@@ -20,7 +20,7 @@ pub(crate) struct NamespacedAttribute {
     pub(crate) value: String,
 }
 
-/// Borrowed expanded attribute identity. No Attr node or separate arena handle.
+/// Borrowed expanded attribute identity from the element's attribute storage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AttributeRef<'a> {
     pub namespace_uri: Option<&'a str>,
@@ -38,6 +38,32 @@ impl AttributeRef<'_> {
 }
 
 impl Dom {
+    pub fn create_processing_instruction_in(
+        &mut self, document: NodeIdx, target: &str, data: &[u16],
+    ) -> Result<NodeIdx, DomError> {
+        if !valid_element_local_name(target) || target.eq_ignore_ascii_case("xml") {
+            return Err(DomError::InvalidCharacterError);
+        }
+        if data.windows(2).any(|pair| pair == [b'?' as u16, b'>' as u16]) {
+            return Err(DomError::InvalidCharacterError);
+        }
+        let node = self.create_node_in(document, NodeKind::ProcessingInstruction {
+            target: target.into(), data: String::new(),
+        })?;
+        self.store_character_data(node, data.to_vec());
+        Ok(node)
+    }
+    /// Create a detached doctype in the associated document's arena.
+    pub fn create_document_type_in(
+        &mut self, document: NodeIdx, name: &str, public_id: &str, system_id: &str,
+    ) -> Result<NodeIdx, DomError> {
+        if !valid_element_local_name(name) {
+            return Err(DomError::InvalidCharacterError);
+        }
+        self.create_node_in(document, NodeKind::DocumentType {
+            name: name.into(), public_id: public_id.into(), system_id: system_id.into(),
+        })
+    }
     /// Creates and appends an element with an explicit namespace URI.
     /// Empty URI means null; name case and prefix are preserved. Name/namespace
     /// validation follows DOM validate-and-extract, not XML parser tokenization.
@@ -179,6 +205,7 @@ impl Dom {
                     .unwrap();
                 attr.prefix = prefix.map(str::to_owned);
             }
+            self.sync_attached_attr_prefix(node, uri, local_name, prefix);
         }
         Ok(())
     }
@@ -265,7 +292,7 @@ fn valid_element_local_name(name: &str) -> bool {
     }
     chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | ':' | '_') || !c.is_ascii())
 }
-fn validate_and_extract<'a>(
+pub(crate) fn validate_and_extract<'a>(
     uri: Option<&str>,
     qualified_name: &'a str,
     attribute: bool,
@@ -295,6 +322,9 @@ fn validate_and_extract<'a>(
         return Err(DomError::NamespaceError);
     }
     Ok((prefix, local))
+}
+pub(crate) fn valid_attribute_name(name: &str) -> bool {
+    !name.is_empty() && !name.chars().any(|c| forbidden(c) || c == '=')
 }
 
 #[cfg(test)]
