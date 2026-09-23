@@ -1148,3 +1148,29 @@ can measure CORP/COEP, `fetch/nosniff/` can measure MIME blocking,
 `mixed-content/generic/` and `mixed-content/tentative/` can measure upgrades
 and blocking. Those suites are not counted as passing by the crate tests in
 this ticket; only the existing pinned URL WPT corpus runs as a regression gate.
+
+NET-11 implementation commit `502769e` was tested twice on win-001 from fixed
+base `f830379` with `--locked` and artifact-clean rebuilds under the shared
+build slot. The standalone Fetch crate gate passed 107/0 nextest and 0
+doctests before the final gates. Final results:
+
+| Gate | NET-10 before | NET-11 run 1 | NET-11 run 2 |
+|---|---:|---:|---:|
+| Net lane nextest | 293 pass / 0 fail / 0 skip | 301 / 0 / 0 | 301 / 0 / 0 |
+| Net lane doctests | 0 / 0 | 0 / 0 | 0 / 0 |
+| Workspace nextest | 1357 pass / 0 fail / 3 skip | 1399 / 0 / 3 | 1399 / 0 / 3 |
+| Workspace doctests | 2 / 0 | 2 / 0 | 2 / 0 |
+| Pinned URL WPT | 864 pass / 0 fail / 0 timeout / 32 unsupported | 864 / 0 / 0 / 32 | 864 / 0 / 0 / 32 |
+
+The before columns are NET-10's prior base, so the 42-test workspace increase
+also includes intervening sibling merges; the eight new Fetch tests account
+for the lane increase. All 20 workspace crates rebuilt each run. The 429
+tracked source/input hashes matched the Mac worktree and remained identical
+before, between, and after both passes. Source manifest SHA-256:
+`09bde2087f710da2e61dde1bdaaf3629e6a7355c7522b4975342d5de109b3e10`.
+Pinned URL stdout SHA-256:
+`584d63e8c231193dda33dfd9e1fdfa5af350afe6ea55839cad3fdc745f24d51f`.
+PSL regeneration, TLS/Brotli fixture pins, dependency feature checks and
+nextest leak-notice checks passed. Logs, results, source manifests, recipe and
+input hashes are in the integrator checkout's `.agents/net/net11-final-evidence/`,
+`net11_gate.py`, and `net11-inputs.json`. NET-11 stops at the policy seam.
