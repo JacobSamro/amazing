@@ -229,7 +229,7 @@ NOISE = tuple(
         r"^\s*directory:\s",
         r"^\s*permissions:\s",
         r"Context \d+%",
-        r"gpt-[\w.\-]+ (medium|high|low|minimal)",
+        r"(?i)gpt-[\w.\-]+ (medium|high|low|minimal|xhigh)",
         r"You have \d+ usage limit",
         r"skills context budget",
         r"Disable unused skills",

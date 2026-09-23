@@ -68,7 +68,9 @@ def stale_minutes(age: str) -> int:
     return {"m": n, "h": n * 60, "d": n * 1440}.get(age[-1], 0)
 
 
-MODEL_RE = re.compile(r"(gpt-[0-9a-z.\-]+) (minimal|low|medium|high|xhigh)")
+# Case-insensitive: a Codex update changed the status bar from "gpt-6-sol" to
+# "GPT-6-Sol", which made every lane look like it had drifted.
+MODEL_RE = re.compile(r"(gpt-[0-9a-z.\-]+) (minimal|low|medium|high|xhigh)", re.I)
 
 
 def server_down() -> str | None:
@@ -135,7 +137,7 @@ def scan(seen: set[str]) -> list[str]:
 
         m = MODEL_RE.search(raw)
         if m:
-            running = f"{m.group(1)} {m.group(2)}"
+            running = f"{m.group(1)} {m.group(2)}".lower()
             expected = f"{tmuxctl.AGENT_MODEL} {tmuxctl.AGENT_EFFORT}"
             if running != expected:
                 key = digest(f"model:{lane}:{running}")
