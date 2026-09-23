@@ -123,7 +123,7 @@ fn native_chrome(
             radii: radius(side * 0.5),
         }
     } else {
-        let authored = resolve_corner_radii(&b.style, &r);
+        let authored = resolve_corner_radii(b, &r);
         RoundedRect {
             x: r.x,
             y: r.y,

@@ -620,88 +620,23 @@ fn fill_rounded_rect_clipped(
     }
 }
 
-fn resolve_corner_radii(style: &ComputedStyle, rect: &amazing_layout::Rect) -> CornerRadii {
-    if let (Some(top_left), Some(top_right), Some(bottom_right), Some(bottom_left)) = (
-        style.get("border-top-left-radius"),
-        style.get("border-top-right-radius"),
-        style.get("border-bottom-right-radius"),
-        style.get("border-bottom-left-radius"),
-    ) {
-        return normalize_radii(
-            CornerRadii {
-                top_left: resolve_radius_pair(top_left, rect.w, rect.h),
-                top_right: resolve_radius_pair(top_right, rect.w, rect.h),
-                bottom_right: resolve_radius_pair(bottom_right, rect.w, rect.h),
-                bottom_left: resolve_radius_pair(bottom_left, rect.w, rect.h),
-            },
-            rect.w,
-            rect.h,
-        );
-    }
-    let Some(value) = style.get("border-radius") else {
-        return CornerRadii::default();
-    };
-    let (horizontal, vertical) = value
-        .split_once('/')
-        .map(|(horizontal, vertical)| (horizontal, Some(vertical)))
-        .unwrap_or((value, None));
-    let horizontal = expand_radius_values(horizontal, rect.w);
-    let vertical = vertical
-        .map(|vertical| expand_radius_values(vertical, rect.h))
-        .unwrap_or(horizontal);
+fn resolve_corner_radii(box_: &LayoutBox, rect: &amazing_layout::Rect) -> CornerRadii {
+    // Layout owns CSS math and axis-specific percentage resolution. The box
+    // carries its used em; it does not yet retain the selected font's ch width.
+    let em = box_.font_size;
+    let ch = em * 0.5;
+    let [top_left, top_right, bottom_right, bottom_left] =
+        amazing_layout::values::resolve_corner_radii(&box_.style, em, ch, rect.w, rect.h);
     normalize_radii(
         CornerRadii {
-            top_left: (horizontal[0], vertical[0]),
-            top_right: (horizontal[1], vertical[1]),
-            bottom_right: (horizontal[2], vertical[2]),
-            bottom_left: (horizontal[3], vertical[3]),
+            top_left,
+            top_right,
+            bottom_right,
+            bottom_left,
         },
         rect.w,
         rect.h,
     )
-}
-
-fn resolve_radius_pair(value: &str, width: f32, height: f32) -> (f32, f32) {
-    let values = value.split_ascii_whitespace().collect::<Vec<_>>();
-    match values.as_slice() {
-        [both] => (resolve_radius(both, width), resolve_radius(both, height)),
-        [horizontal, vertical] => (
-            resolve_radius(horizontal, width),
-            resolve_radius(vertical, height),
-        ),
-        _ => (0.0, 0.0),
-    }
-}
-
-fn expand_radius_values(value: &str, basis: f32) -> [f32; 4] {
-    let values = value
-        .split_ascii_whitespace()
-        .map(|value| resolve_radius(value, basis))
-        .collect::<Vec<_>>();
-    match values.as_slice() {
-        [one] => [*one; 4],
-        [top_left, top_right] => [*top_left, *top_right, *top_left, *top_right],
-        [top_left, other, bottom_right] => [*top_left, *other, *bottom_right, *other],
-        [top_left, top_right, bottom_right, bottom_left] => {
-            [*top_left, *top_right, *bottom_right, *bottom_left]
-        }
-        _ => [0.0; 4],
-    }
-}
-
-fn resolve_radius(value: &str, basis: f32) -> f32 {
-    let value = value.trim().to_ascii_lowercase();
-    if let Some(percent) = value.strip_suffix('%') {
-        percent
-            .parse::<f32>()
-            .ok()
-            .map_or(0.0, |value| basis * value / 100.0)
-            .max(0.0)
-    } else if let Some(px) = value.strip_suffix("px") {
-        px.parse::<f32>().unwrap_or(0.0).max(0.0)
-    } else {
-        0.0
-    }
 }
 
 fn normalize_radii(mut radii: CornerRadii, width: f32, height: f32) -> CornerRadii {
@@ -746,7 +681,7 @@ fn paint_box_shadow(surface: &mut Surface, box_: &LayoutBox, text_color: [u8; 4]
     }
     let border = box_.border_box;
     let spread = shadow.spread;
-    let mut radii = resolve_corner_radii(&box_.style, &border);
+    let mut radii = resolve_corner_radii(box_, &border);
     for radius in [
         &mut radii.top_left,
         &mut radii.top_right,
@@ -1169,7 +1104,7 @@ fn overflow_rounded_clip(box_: &LayoutBox) -> Option<RoundedRect> {
     if !clip_x || !clip_y {
         return None;
     }
-    let outer = resolve_corner_radii(&box_.style, &box_.border_box);
+    let outer = resolve_corner_radii(box_, &box_.border_box);
     if outer == CornerRadii::default() {
         return None;
     }
@@ -1346,7 +1281,7 @@ fn paint_borders(surface: &mut Surface, b: &LayoutBox, text_color: [u8; 4], clip
     let bbw = width_of("bottom");
     let bl = width_of("left");
 
-    let radii = resolve_corner_radii(&b.style, bb);
+    let radii = resolve_corner_radii(b, bb);
     if radii != CornerRadii::default() {
         paint_rounded_border(
             surface,
@@ -1846,6 +1781,51 @@ mod tests {
         assert_eq!(surf.get_pixel(3, 2), Some([0, 0, 0, 255])); // top ink row
         assert_eq!(surf.get_pixel(3, 1), Some([255, 0, 0, 255])); // red above ink
         assert_eq!(surf.get_pixel(3, 9), Some([255, 0, 0, 255])); // red below baseline
+    }
+
+    #[test]
+    fn positioned_child_paints_after_normal_flow_inside_relative_parent() {
+        let mut root = block(&[], 0.0, 0.0, 12.0, 12.0);
+        let mut relative = block(&[("position", "relative")], 0.0, 0.0, 10.0, 10.0);
+        relative.node = Some(amazing_dom::NodeIdx(1));
+        let mut red = block(&[("background-color", "red")], 0.0, 0.0, 8.0, 10.0);
+        red.node = Some(amazing_dom::NodeIdx(3));
+        let mut blue = block(&[("background-color", "blue")], 0.0, 0.0, 8.0, 10.0);
+        blue.node = Some(amazing_dom::NodeIdx(4));
+        let mut green = block(
+            &[("position", "absolute"), ("background-color", "green")],
+            5.0,
+            0.0,
+            5.0,
+            10.0,
+        );
+        // The positioned child precedes both flow siblings in DOM order.
+        green.node = Some(amazing_dom::NodeIdx(2));
+        relative.flow = Flow::Blocks(vec![red, blue]);
+        relative.positioned.push(green);
+        root.flow = Flow::Blocks(vec![relative]);
+
+        let surface = paint_document(&root, 12, 12, &FontSource::fallback());
+        assert_eq!(surface.get_pixel(2, 5), Some([0, 0, 255, 255]));
+        assert_eq!(surface.get_pixel(6, 5), Some([0, 128, 0, 255]));
+        assert_eq!(surface.get_pixel(9, 5), Some([0, 128, 0, 255]));
+        assert_eq!(surface.get_pixel(11, 5), Some(WHITE));
+    }
+
+    #[test]
+    fn calc_border_radius_uses_layouts_axis_specific_used_values() {
+        let b = block(
+            &[("border-radius", "calc((1/32 * 100%) + 5px) calc((1/64 * 100%) - 2px) calc(10px + (1/256 * 100%)) calc((1/16 * 100%) - 3px) / calc((1/32 * 100%) - (1px + (1/128 * 100%))) calc(1/16 * 100%) calc(10px) 3px")],
+            0.0,
+            0.0,
+            512.0,
+            256.0,
+        );
+        let radii = resolve_corner_radii(&b, &b.border_box);
+        assert_eq!(radii.top_left, (21.0, 5.0));
+        assert_eq!(radii.top_right, (6.0, 16.0));
+        assert_eq!(radii.bottom_right, (12.0, 10.0));
+        assert_eq!(radii.bottom_left, (29.0, 3.0));
     }
 
     #[test]

@@ -1,0 +1,78 @@
+﻿{
+    "schema":  1,
+    "pass_nonblank":  8,
+    "cases":  [
+                  {
+                      "id":  "css-cascade__all-prop-002.html",
+                      "classification":  "mismatch",
+                      "nonwhite":  11982,
+                      "ref_nonwhite":  11982
+                  },
+                  {
+                      "id":  "css-values__calc-border-radius-1.html",
+                      "classification":  "mismatch",
+                      "nonwhite":  131072,
+                      "ref_nonwhite":  130988
+                  },
+                  {
+                      "id":  "css-backgrounds__border-radius-horizontal-value-is-zero.html",
+                      "classification":  "pass",
+                      "nonwhite":  14286,
+                      "ref_nonwhite":  14286
+                  },
+                  {
+                      "id":  "css-backgrounds__border-radius-012.html",
+                      "classification":  "pass",
+                      "nonwhite":  1611,
+                      "ref_nonwhite":  1611
+                  },
+                  {
+                      "id":  "css-backgrounds__border-radius-shorthand-002.html",
+                      "classification":  "pass",
+                      "nonwhite":  25563,
+                      "ref_nonwhite":  25563
+                  },
+                  {
+                      "id":  "css-backgrounds__background-clip-content-box-with-border-radius-002.html",
+                      "classification":  "pass",
+                      "nonwhite":  7857,
+                      "ref_nonwhite":  7857
+                  },
+                  {
+                      "id":  "css-borders__border-radius-currentcolor.html",
+                      "classification":  "pass",
+                      "nonwhite":  2053,
+                      "ref_nonwhite":  2053
+                  },
+                  {
+                      "id":  "css-borders__border-radius-greater-than-width.html",
+                      "classification":  "mismatch",
+                      "nonwhite":  20858,
+                      "ref_nonwhite":  21779
+                  },
+                  {
+                      "id":  "css-position__position-absolute-in-inline-005.html",
+                      "classification":  "mismatch",
+                      "nonwhite":  480000,
+                      "ref_nonwhite":  20200
+                  },
+                  {
+                      "id":  "css-position__position-absolute-large-negative-inset.html",
+                      "classification":  "pass",
+                      "nonwhite":  2500,
+                      "ref_nonwhite":  2500
+                  },
+                  {
+                      "id":  "css2-zindex__z-index-abspos-001.xht",
+                      "classification":  "pass",
+                      "nonwhite":  62083,
+                      "ref_nonwhite":  62083
+                  },
+                  {
+                      "id":  "css-transforms__transform-style-stacking-context.html",
+                      "classification":  "pass",
+                      "nonwhite":  10000,
+                      "ref_nonwhite":  10000
+                  }
+              ]
+}

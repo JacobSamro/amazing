@@ -1,0 +1,10 @@
+case	before	after	before_signature	after_signature
+ce-empty	fail	pass	4402bed3b9d58baf	13e2b82f43cfa0e2
+ce-owner	fail	pass	6dbc1ad12a8eed18	093b5cc61a771114
+ce-failure	fail	pass	73720f2dc969043f	b4ef8919c57da61d
+wpt-dsd-basic	fail	pass	2082b84ce0df7f6d	cc1c69f04e50e436
+dsd-closed	fail	pass	479f71d1fab8d598	e3f186476c566ea8
+dsd-invalid	pass	pass	f2e64fdda3bf658f	f2e64fdda3bf658f
+dsd-repeated	fail	pass	71a140c98073475e	432d1054cfd89b10
+dsd-nested	fail	pass	1ef204938e5c69d1	13280232432e7497
+dsd-fragment	pass	pass	eff2376f774aa6e5	eff2376f774aa6e5

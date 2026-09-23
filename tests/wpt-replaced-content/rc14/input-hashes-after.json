@@ -1,0 +1,24 @@
+{
+  "fixed_base": "582a6af0962dd3b7e6c94427c14746915aea14ab",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "measured_at": "2026-09-23T18:55:18.970438+00:00",
+  "source_and_lock_sha256": {
+    "crates/amazing-paint/src/display_list.rs": "d009e1297355a384c0a39759494bb3e4f3f6a3f33c06bbfe6d140533e782e830",
+    "crates/amazing-paint/src/paint.rs": "451d35f24d8330f3f3298182d7b479ce9acd60fa4aa47357ab7604dc32bd5169",
+    "crates/amazing-paint/src/background_raster.rs": "67bd9453fe7502aa6614ea224dcab6e74c180f5c990f2b53fef8ccbb0bdf7afc",
+    "crates/amazing-paint/src/control_raster.rs": "d089ffbb50e5e562edd46f436bb0085dd04c99a481bad0e59f616bfa9a655d3c",
+    "crates/amazing-svg/src/svg.rs": "fe176d363463845a97fa46481a93b8eaf604d45703efa1259e99bf4c9503910a",
+    "crates/amazing-svg/src/svg_path.rs": "8ce3bbb01a18bc1797c948d937e0ab7ccf323d6908d13183a49ff750f738da9b",
+    "crates/amazing-image/tests/svg_dom.rs": "222abd40e135f74bec221975580fe30997484491f3b71b1c3571755b2ccb8d99",
+    "Cargo.lock": "30c1b66612223068a45b4f9429f7921b60ef45aae7ed4cdfa029d8610506d25a",
+    "crates/amazing-html/src/lib.rs": "07b9003f62bb2e8f00c6b496544cd96bc7efb04f194e3419cc0153ff7dc1baf3",
+    "crates/amazing-shell-gpui/Cargo.lock": "321a4566b9bf77258ebefbe9a6e7e23451a104cd955297c8f1ef3c4336ba6a69",
+    "tests/wpt-replaced-content/rc14/focused-manifest.json": "65bde0813fbb520f60ca4f8e6465f9c6dc33b82f35f052d9b8652e654a0aa1e4",
+    "tests/wpt-replaced-content/rc14/fixture-hashes.json": "113c8ed2d96df5e06c59847c188cbbbd6e781e39ac6a88cb0e2040361eb52751",
+    "tests/wpt-replaced-content/rc11-svg-manifest.json": "2fdbe12184173e8808ad2c09a6dc2ed41254affaa4bd1d84054e1880e110cfb0",
+    "scripts/run-render-wpt.ps1": "7cdecfacc4c7bdb1170de6a8780bfe1d754835826c79082833ecbd92e04bc2ef"
+  },
+  "wpt_fixture_hashes": "26/26 match before and after on win-001 target/wpt",
+  "production_executable_sha256": "e4ab3712571f10c8d0959ae6637df5c62fd8e5e19db9d8590db784aa9a656b19",
+  "ia_adapter_executable_sha256": "c155d184a165576289858bf569478112b778cf7d059812389cf7abce9ebe0be6"
+}

@@ -183,7 +183,6 @@ fn emit_context<'a>(
             &mut buckets,
             &mut Vec::new(),
             depth + 1,
-            false,
         ) {
             return false;
         }
@@ -238,7 +237,6 @@ fn walk_middle<'a>(
     buckets: &mut ContextBuckets<'a>,
     inherited_clips: &mut Vec<&'a LayoutBox>,
     depth: usize,
-    in_positioned_phase: bool,
 ) -> bool {
     if depth > MAX_LAYOUT_DEPTH
         || middle.len() >= MAX_DISPLAY_COMMANDS
@@ -269,9 +267,36 @@ fn walk_middle<'a>(
         return true;
     }
 
-    let starts_positioned_phase = !in_positioned_phase && is_positioned(box_);
-    let positioned_phase = in_positioned_phase || starts_positioned_phase;
-    if starts_positioned_phase {
+    if is_positioned(box_) {
+        // An auto-z positioned box remains in its containing context, but its
+        // in-flow descendants still paint before its positioned descendants.
+        // Collect that subtree's flow first, then append its positioned phase
+        // as one source-ordered unit in the containing context.
+        let mut local_flow = Vec::new();
+        let mut local_buckets = ContextBuckets::new();
+        local_buckets.next_order = buckets.next_order;
+        if !walk_middle_contents(
+            box_,
+            &mut local_flow,
+            &mut local_buckets,
+            inherited_clips,
+            depth,
+        ) {
+            return false;
+        }
+        if buckets
+            .middle_phase
+            .len()
+            .checked_add(local_flow.len())
+            .and_then(|n| n.checked_add(local_buckets.middle_phase.len()))
+            .and_then(|n| n.checked_add(inherited_clips.len() * 2))
+            .is_none_or(|n| n > MAX_DISPLAY_COMMANDS)
+        {
+            return false;
+        }
+        buckets.next_order = local_buckets.next_order;
+        buckets.negative.extend(local_buckets.negative);
+        buckets.positive.extend(local_buckets.positive);
         for clip in inherited_clips.iter().copied() {
             buckets
                 .middle_phase
@@ -279,38 +304,44 @@ fn walk_middle<'a>(
                     clip,
                 )));
         }
+        buckets
+            .middle_phase
+            .extend(local_flow.into_iter().map(MiddlePhaseItem::Command));
+        buckets.middle_phase.extend(local_buckets.middle_phase);
+        for _ in inherited_clips.iter() {
+            buckets
+                .middle_phase
+                .push(MiddlePhaseItem::Command(PaintCommand::PopClip));
+        }
+        true
+    } else {
+        walk_middle_contents(box_, middle, buckets, inherited_clips, depth)
     }
-    push_middle_command(
-        positioned_phase,
-        middle,
-        buckets,
-        PaintCommand::PaintDecorations(
-            box_,
-            crate::background::BackgroundPlan::from_style(&box_.style),
-        ),
-    );
+}
+
+fn walk_middle_contents<'a>(
+    box_: &'a LayoutBox,
+    middle: &mut Vec<PaintCommand<'a>>,
+    buckets: &mut ContextBuckets<'a>,
+    inherited_clips: &mut Vec<&'a LayoutBox>,
+    depth: usize,
+) -> bool {
+    middle.push(PaintCommand::PaintDecorations(
+        box_,
+        crate::background::BackgroundPlan::from_style(&box_.style),
+    ));
     let clips = clips_overflow(box_);
     if clips {
-        push_middle_command(
-            positioned_phase,
-            middle,
-            buckets,
-            PaintCommand::PushOverflowClip(box_),
-        );
+        middle.push(PaintCommand::PushOverflowClip(box_));
         inherited_clips.push(box_);
     }
     let Some(controls) = control_commands(box_) else {
         return false;
     };
     for control in controls {
-        push_middle_command(positioned_phase, middle, buckets, control);
+        middle.push(control);
     }
-    push_middle_command(
-        positioned_phase,
-        middle,
-        buckets,
-        PaintCommand::PaintContent(box_),
-    );
+    middle.push(PaintCommand::PaintContent(box_));
     let Some(children) = source_children(box_) else {
         return false;
     };
@@ -323,36 +354,15 @@ fn walk_middle<'a>(
             buckets,
             inherited_clips,
             depth + 1,
-            positioned_phase,
         ) {
             return false;
         }
     }
     if clips {
         inherited_clips.pop();
-        push_middle_command(positioned_phase, middle, buckets, PaintCommand::PopClip);
+        middle.push(PaintCommand::PopClip);
     }
-    if starts_positioned_phase {
-        for _ in inherited_clips.iter() {
-            buckets
-                .middle_phase
-                .push(MiddlePhaseItem::Command(PaintCommand::PopClip));
-        }
-    }
-    true
-}
-
-fn push_middle_command<'a>(
-    positioned_phase: bool,
-    flow: &mut Vec<PaintCommand<'a>>,
-    buckets: &mut ContextBuckets<'a>,
-    command: PaintCommand<'a>,
-) {
-    if positioned_phase {
-        buckets.middle_phase.push(MiddlePhaseItem::Command(command));
-    } else {
-        flow.push(command);
-    }
+    middle.len() <= MAX_DISPLAY_COMMANDS
 }
 
 fn emit_entry<'a>(
