@@ -19,6 +19,16 @@ use crate::value::{
     PromiseState, Property, SetState, Throw,
 };
 
+#[path = "vm/mod.rs"]
+pub mod vm;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ExecutionBackend {
+    #[default]
+    TreeWalk,
+    Bytecode,
+}
+
 #[path = "interp_bindings.rs"]
 mod bindings;
 pub use bindings::BindingPropertyFlags;
@@ -963,7 +973,32 @@ impl Interpreter {
         self.run_program(&p)
     }
 
+    pub fn run_script_with_backend(&mut self, source: &str, backend: ExecutionBackend) -> Result<JsValue, Throw> {
+        let p = crate::parse_script(source).map_err(|e| Throw::syntax_error(e.to_string()))?;
+        self.run_program_with_backend(&p, backend)
+    }
+
+    pub fn run_program_with_backend(&mut self, p: &ast::Program, backend: ExecutionBackend) -> Result<JsValue, Throw> {
+        match backend {
+            ExecutionBackend::TreeWalk => self.run_program(p),
+            ExecutionBackend::Bytecode => vm::compile(p)
+                .map_err(|error| Throw::type_error(error.to_string()))?
+                .run(self, vm::DEFAULT_INSTRUCTION_LIMIT),
+        }
+    }
+
     pub fn run_program(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
+        if std::env::var_os("AMAZING_JS_VM").is_some() {
+            match vm::compile(p) {
+                Ok(code) => {
+                    if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM compiled"); }
+                    return code.run(self, vm::DEFAULT_INSTRUCTION_LIMIT);
+                }
+                Err(_) => {
+                    if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM fallback"); }
+                }
+            }
+        }
         let previous_completion = self.completion.clone();
         self.completion = JsValue::Undefined;
         let env = self.global_env.clone();
@@ -2248,6 +2283,7 @@ impl Interpreter {
         self.completion = JsValue::Undefined;
         let r = (|| -> Result<JsValue, Throw> {
             match fun.body {
+                FunctionBody::Bytecode(code) => code.call(self, fun.env.clone(), fun.is_arrow, this, args),
                 FunctionBody::Native(n) => {
                     self.native_stack.push(o.clone());
                     let result = n(self, this, args);

@@ -468,6 +468,7 @@ pub struct JsFunction {
 pub enum FunctionBody {
     Block(ast::Block),
     Expr(ast::Expr),
+    Bytecode(crate::interp::vm::FunctionCode),
     /// Rust-implemented built-in (`Math.abs`, `Array.prototype.push`, ...).
     Native(NativeFn),
     /// Per-interpreter host operation, independent of AST and VM frame layout.

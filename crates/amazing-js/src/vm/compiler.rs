@@ -1,0 +1,528 @@
+use super::{
+    CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction, Instruction, Program,
+    Register,
+};
+use crate::ast::{
+    self, AssignOp, Binding, Expr, ExprKind, LogicalOp, Stmt, StmtKind, UnOp, VarKind,
+};
+use crate::tokens::Span;
+use crate::value::JsValue;
+use std::rc::Rc;
+
+const MAX_REGISTERS: usize = 65_536;
+const MAX_INSTRUCTIONS: usize = 262_144;
+const MAX_DEPTH: usize = 256;
+
+/// Compile the entire AST before any binding mutation or JavaScript execution.
+pub fn compile(ast: &ast::Program) -> Result<Program, CompileError> {
+    let mut c = Compiler::new(false);
+    c.hoist_functions(&ast.body)?;
+    for statement in &ast.body {
+        c.statement(statement)?;
+    }
+    if c.program.code.len() > MAX_INSTRUCTIONS {
+        return Err(c.error(ast.span, "instruction limit"));
+    }
+    Ok(c.program)
+}
+
+struct Compiler {
+    program: Program,
+    depth: usize,
+}
+
+impl Compiler {
+    fn new(is_function: bool) -> Self {
+        Self {
+            program: Program {
+                code: vec![],
+                registers: 1,
+                references: 0,
+                hoisted: vec![],
+                functions: vec![],
+                is_function,
+            },
+            depth: 0,
+        }
+    }
+
+    fn compile_function(
+        &self,
+        function: &ast::FunctionItem,
+        span: Span,
+    ) -> Result<FunctionCode, CompileError> {
+        if function.is_async || function.is_generator {
+            return Err(self.error(span, "async or generator function"));
+        }
+        let mut params = Vec::new();
+        for param in &function.params {
+            if param.default.is_some() || param.rest {
+                return Err(self.error(param.span, "parameter pattern"));
+            }
+            let Binding::Ident(name) = &param.binding else {
+                return Err(self.error(param.span, "parameter pattern"));
+            };
+            params.push(name.name.clone());
+        }
+        let mut child = Self::new(true);
+        child.hoist_functions(&function.body.body)?;
+        for statement in &function.body.body {
+            child.statement(statement)?;
+        }
+        if child.program.code.len() > MAX_INSTRUCTIONS {
+            return Err(self.error(span, "instruction limit"));
+        }
+        Ok(FunctionCode(Rc::new(CompiledFunction {
+            name: function
+                .name
+                .as_ref()
+                .map(|n| n.name.clone())
+                .unwrap_or_default(),
+            params,
+            program: child.program,
+            is_arrow: false,
+        })))
+    }
+
+    fn compile_arrow(
+        &self,
+        arrow: &ast::ArrowFunc,
+        span: Span,
+    ) -> Result<FunctionCode, CompileError> {
+        if arrow.is_async || arrow.is_generator {
+            return Err(self.error(span, "async or generator function"));
+        }
+        let mut params = Vec::new();
+        for param in &arrow.params {
+            if param.default.is_some() || param.rest {
+                return Err(self.error(param.span, "parameter pattern"));
+            }
+            let Binding::Ident(name) = &param.binding else {
+                return Err(self.error(param.span, "parameter pattern"));
+            };
+            params.push(name.name.clone());
+        }
+        let mut child = Self::new(true);
+        match &arrow.body {
+            ast::ArrowBody::Expr(expression) => {
+                let value = child.expression(expression)?;
+                child.emit(Instruction::Return(value));
+            }
+            ast::ArrowBody::Block(block) => {
+                child.hoist_functions(&block.body)?;
+                for statement in &block.body {
+                    child.statement(statement)?;
+                }
+            }
+        }
+        Ok(FunctionCode(Rc::new(CompiledFunction {
+            name: String::new(),
+            params,
+            program: child.program,
+            is_arrow: true,
+        })))
+    }
+
+    fn hoist_functions(&mut self, statements: &[Stmt]) -> Result<(), CompileError> {
+        for statement in statements {
+            match &statement.kind {
+                StmtKind::Function(function) => {
+                    let Some(name) = &function.name else {
+                        return Err(self.error(statement.span, "anonymous declaration"));
+                    };
+                    let code = self.compile_function(function, statement.span)?;
+                    self.program.functions.push(HoistedFunction {
+                        name: name.name.clone(),
+                        code,
+                    });
+                }
+                StmtKind::Block(block) => self.hoist_functions(&block.body)?,
+                StmtKind::If { then, els, .. } => {
+                    self.hoist_functions(std::slice::from_ref(then.as_ref()))?;
+                    if let Some(els) = els {
+                        self.hoist_functions(std::slice::from_ref(els.as_ref()))?;
+                    }
+                }
+                StmtKind::While { body, .. }
+                | StmtKind::DoWhile { body, .. }
+                | StmtKind::For { body, .. } => {
+                    self.hoist_functions(std::slice::from_ref(body.as_ref()))?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn error(&self, span: Span, message: &'static str) -> CompileError {
+        CompileError { span, message }
+    }
+
+    fn enter(&mut self, span: Span) -> Result<(), CompileError> {
+        if self.depth >= MAX_DEPTH || self.program.code.len() >= MAX_INSTRUCTIONS {
+            return Err(self.error(span, "compiler resource limit"));
+        }
+        self.depth += 1;
+        Ok(())
+    }
+
+    fn register(&mut self, span: Span) -> Result<Register, CompileError> {
+        let register = self.program.registers;
+        if register >= MAX_REGISTERS {
+            return Err(self.error(span, "register limit"));
+        }
+        self.program.registers += 1;
+        Ok(register)
+    }
+
+    fn emit(&mut self, op: Instruction) -> usize {
+        let index = self.program.code.len();
+        self.program.code.push(op);
+        index
+    }
+
+    fn patch(&mut self, index: usize) {
+        let end = self.program.code.len();
+        match &mut self.program.code[index] {
+            Instruction::Jump(target) | Instruction::Branch(_, _, target) => *target = end,
+            _ => unreachable!("compiler only patches branches"),
+        }
+    }
+
+    fn statement(&mut self, statement: &Stmt) -> Result<(), CompileError> {
+        self.enter(statement.span)?;
+        let result = self.statement_inner(statement);
+        self.depth -= 1;
+        result
+    }
+
+    fn statement_inner(&mut self, statement: &Stmt) -> Result<(), CompileError> {
+        match &statement.kind {
+            StmtKind::Empty | StmtKind::Debugger | StmtKind::Function(_) => {}
+            StmtKind::Expression(expression) => {
+                let value = self.expression(expression)?;
+                self.emit(Instruction::Complete(value));
+            }
+            StmtKind::Var(declaration) => {
+                for binding in &declaration.decls {
+                    if self.program.code.len() >= MAX_INSTRUCTIONS {
+                        return Err(self.error(binding.span, "instruction limit"));
+                    }
+                    let Binding::Ident(name) = &binding.binding else {
+                        return Err(self.error(binding.span, "binding pattern"));
+                    };
+                    if declaration.kind == VarKind::Var {
+                        self.program.hoisted.push(name.name.clone());
+                    }
+                    if declaration.kind == VarKind::Const && binding.init.is_none() {
+                        return Err(self.error(binding.span, "const requires an initializer"));
+                    }
+                    let value = match &binding.init {
+                        Some(expression) => self.expression(expression)?,
+                        None => 0, // Register zero is immutable undefined.
+                    };
+                    self.emit(Instruction::Declare(
+                        name.name.clone(),
+                        value,
+                        declaration.kind,
+                    ));
+                }
+            }
+            StmtKind::Block(block) => {
+                self.emit(Instruction::Complete(0));
+                self.emit(Instruction::EnterScope);
+                for child in &block.body {
+                    self.statement(child)?;
+                }
+                self.emit(Instruction::LeaveScope);
+            }
+            StmtKind::If { cond, then, els } => {
+                self.emit(Instruction::Complete(0));
+                let test = self.expression(cond)?;
+                let branch = self.emit(Instruction::Branch(test, Condition::Falsy, 0));
+                self.statement(then)?;
+                let end = self.emit(Instruction::Jump(0));
+                self.patch(branch);
+                if let Some(els) = els {
+                    self.statement(els)?;
+                }
+                self.patch(end);
+            }
+            StmtKind::While { test, body } => {
+                self.emit(Instruction::Complete(0));
+                let start = self.program.code.len();
+                let test = self.expression(test)?;
+                let end = self.emit(Instruction::Branch(test, Condition::Falsy, 0));
+                self.statement(body)?;
+                self.emit(Instruction::Jump(start));
+                self.patch(end);
+            }
+            StmtKind::DoWhile { body, test } => {
+                self.emit(Instruction::Complete(0));
+                let start = self.program.code.len();
+                self.statement(body)?;
+                let condition = self.expression(test)?;
+                self.emit(Instruction::Branch(condition, Condition::Truthy, start));
+            }
+            StmtKind::For {
+                init,
+                test,
+                update,
+                body,
+            } => {
+                self.emit(Instruction::Complete(0));
+                match init {
+                    Some(ast::ForInit::Expr(expression)) => {
+                        self.expression(expression)?;
+                    }
+                    Some(ast::ForInit::Decl(declaration)) if declaration.kind == VarKind::Var => {
+                        self.statement(&Stmt::new(
+                            StmtKind::Var((**declaration).clone()),
+                            statement.span,
+                        ))?;
+                    }
+                    Some(ast::ForInit::Decl(_)) => {
+                        return Err(self.error(statement.span, "lexical for binding"))
+                    }
+                    None => {}
+                }
+                let start = self.program.code.len();
+                let end = if let Some(test) = test {
+                    let value = self.expression(test)?;
+                    Some(self.emit(Instruction::Branch(value, Condition::Falsy, 0)))
+                } else {
+                    None
+                };
+                self.statement(body)?;
+                if let Some(update) = update {
+                    self.expression(update)?;
+                }
+                self.emit(Instruction::Jump(start));
+                if let Some(end) = end {
+                    self.patch(end);
+                }
+            }
+            StmtKind::Throw(expression) => {
+                let value = self.expression(expression)?;
+                self.emit(Instruction::Throw(value));
+            }
+            StmtKind::Return(expression) if self.program.is_function => {
+                let value = if let Some(expression) = expression {
+                    self.expression(expression)?
+                } else {
+                    0
+                };
+                self.emit(Instruction::Return(value));
+            }
+            _ => return Err(self.error(statement.span, "statement kind")),
+        }
+        Ok(())
+    }
+
+    fn expression(&mut self, expression: &Expr) -> Result<Register, CompileError> {
+        self.enter(expression.span)?;
+        let result = self.expression_inner(expression);
+        self.depth -= 1;
+        result
+    }
+
+    fn expression_inner(&mut self, expression: &Expr) -> Result<Register, CompileError> {
+        let dst = self.register(expression.span)?;
+        match &expression.kind {
+            ExprKind::Num(number) if !number.bigint => {
+                self.emit(Instruction::Numeric(dst, number.clone()));
+            }
+            ExprKind::Str(value) => {
+                self.emit(Instruction::Constant(dst, JsValue::str(value.as_str())));
+            }
+            ExprKind::Bool(value) => {
+                self.emit(Instruction::Constant(dst, JsValue::Bool(*value)));
+            }
+            ExprKind::Null => {
+                self.emit(Instruction::Constant(dst, JsValue::Null));
+            }
+            ExprKind::This => {
+                self.emit(Instruction::LoadThis(dst));
+            }
+            ExprKind::Function(function) => {
+                let code = self.compile_function(function, expression.span)?;
+                self.emit(Instruction::MakeFunction(dst, code));
+            }
+            ExprKind::Arrow(arrow) => {
+                let code = self.compile_arrow(arrow, expression.span)?;
+                self.emit(Instruction::MakeFunction(dst, code));
+            }
+            ExprKind::Ident(name) => {
+                self.emit(Instruction::LoadName(dst, name.name.clone(), false));
+            }
+            ExprKind::Paren(inner) => return self.expression(inner),
+            ExprKind::Sequence(items) => {
+                let mut last = 0;
+                for item in items {
+                    last = self.expression(item)?;
+                }
+                return Ok(last);
+            }
+            ExprKind::Unary { op, operand } if !matches!(op, UnOp::Await | UnOp::Delete) => {
+                // Match v1's special handling of typeof x and typeof (x).
+                let name = match &operand.kind {
+                    ExprKind::Ident(name) => Some(name),
+                    ExprKind::Paren(inner) => match &inner.kind {
+                        ExprKind::Ident(name) => Some(name),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let src = if let (UnOp::Typeof, Some(name)) = (op, name) {
+                    let src = self.register(operand.span)?;
+                    self.emit(Instruction::LoadName(src, name.name.clone(), true));
+                    src
+                } else {
+                    self.expression(operand)?
+                };
+                self.emit(Instruction::Unary(dst, *op, src));
+            }
+            ExprKind::Binary { op, left, right } => {
+                let left = self.expression(left)?;
+                let right = self.expression(right)?;
+                self.emit(Instruction::Binary(dst, *op, left, right));
+            }
+            ExprKind::Call {
+                callee,
+                args,
+                optional: false,
+            } => {
+                // Calls into functions from another script may enter the tree walker.
+                // Only calls to this program's bytecode declarations are compiled.
+                if !self.vm_callable(callee) {
+                    return Err(self.error(expression.span, "call target"));
+                }
+                let callee = self.expression(callee)?;
+                let mut arguments = Vec::new();
+                for argument in args {
+                    arguments.push(self.expression(argument)?);
+                }
+                self.emit(Instruction::Call(dst, callee, arguments));
+            }
+            ExprKind::Logical { op, left, right } => {
+                let left = self.expression(left)?;
+                self.emit(Instruction::Move(dst, left));
+                let condition = match op {
+                    LogicalOp::And => Condition::Truthy,
+                    LogicalOp::Or => Condition::Falsy,
+                    LogicalOp::Coalesce => Condition::Nullish,
+                };
+                let rhs = self.emit(Instruction::Branch(left, condition, 0));
+                let end = self.emit(Instruction::Jump(0));
+                self.patch(rhs);
+                let right = self.expression(right)?;
+                self.emit(Instruction::Move(dst, right));
+                self.patch(end);
+            }
+            ExprKind::Conditional {
+                test,
+                consequent,
+                alternate,
+            } => {
+                let test = self.expression(test)?;
+                let branch = self.emit(Instruction::Branch(test, Condition::Falsy, 0));
+                let yes = self.expression(consequent)?;
+                self.emit(Instruction::Move(dst, yes));
+                let end = self.emit(Instruction::Jump(0));
+                self.patch(branch);
+                let no = self.expression(alternate)?;
+                self.emit(Instruction::Move(dst, no));
+                self.patch(end);
+            }
+            ExprKind::Assign {
+                op: AssignOp::Assign,
+                target,
+                value,
+            } => {
+                let (slot, _) = self.reference(target)?;
+                let value = self.expression(value)?;
+                self.emit(Instruction::StoreReference(slot, value));
+                return Ok(value);
+            }
+            ExprKind::Assign { op, target, value } => {
+                let (slot, old) = self.reference(target)?;
+                let binary = match op {
+                    AssignOp::Add => Some(ast::BinOp::Add),
+                    AssignOp::Sub => Some(ast::BinOp::Sub),
+                    AssignOp::Mul => Some(ast::BinOp::Mul),
+                    AssignOp::Div => Some(ast::BinOp::Div),
+                    AssignOp::Rem => Some(ast::BinOp::Rem),
+                    AssignOp::Pow => Some(ast::BinOp::Pow),
+                    AssignOp::Shl => Some(ast::BinOp::Shl),
+                    AssignOp::Shr => Some(ast::BinOp::Shr),
+                    AssignOp::UShr => Some(ast::BinOp::UShr),
+                    AssignOp::BitAnd => Some(ast::BinOp::BitAnd),
+                    AssignOp::BitOr => Some(ast::BinOp::BitOr),
+                    AssignOp::BitXor => Some(ast::BinOp::BitXor),
+                    _ => None,
+                };
+                if let Some(binary) = binary {
+                    let right = self.expression(value)?;
+                    self.emit(Instruction::Binary(dst, binary, old, right));
+                    self.emit(Instruction::StoreReference(slot, dst));
+                } else {
+                    self.emit(Instruction::Move(dst, old));
+                    let condition = match op {
+                        AssignOp::And => Condition::Truthy,
+                        AssignOp::Or => Condition::Falsy,
+                        AssignOp::Nullish => Condition::Nullish,
+                        _ => return Err(self.error(expression.span, "assignment operator")),
+                    };
+                    let rhs = self.emit(Instruction::Branch(old, condition, 0));
+                    let end = self.emit(Instruction::Jump(0));
+                    self.patch(rhs);
+                    let right = self.expression(value)?;
+                    self.emit(Instruction::Move(dst, right));
+                    self.emit(Instruction::StoreReference(slot, dst));
+                    self.patch(end);
+                }
+            }
+            ExprKind::Update { op, prefix, target } => {
+                let (slot, old) = self.reference(target)?;
+                let number = self.register(expression.span)?;
+                self.emit(Instruction::Unary(number, UnOp::Pos, old));
+                let delta = self.register(expression.span)?;
+                let delta_value = if *op == ast::UpdateOp::Inc { 1.0 } else { -1.0 };
+                self.emit(Instruction::Constant(delta, JsValue::num(delta_value)));
+                self.emit(Instruction::Binary(dst, ast::BinOp::Add, number, delta));
+                self.emit(Instruction::StoreReference(slot, dst));
+                if !prefix {
+                    return Ok(old);
+                }
+            }
+            _ => return Err(self.error(expression.span, "expression kind")),
+        }
+        Ok(dst)
+    }
+
+    fn vm_callable(&self, expression: &Expr) -> bool {
+        match &expression.kind {
+            ExprKind::Ident(name) => self.program.functions.iter().any(|f| f.name == name.name),
+            ExprKind::Function(_) => true,
+            ExprKind::Arrow(_) => true,
+            ExprKind::Paren(inner) => self.vm_callable(inner),
+            ExprKind::Call { callee, .. } => self.vm_callable(callee),
+            _ => false,
+        }
+    }
+
+    fn reference(&mut self, expression: &Expr) -> Result<(usize, Register), CompileError> {
+        let mut target = expression;
+        while let ExprKind::Paren(inner) = &target.kind {
+            target = inner;
+        }
+        let ExprKind::Ident(name) = &target.kind else {
+            return Err(self.error(target.span, "assignment target"));
+        };
+        let slot = self.program.references;
+        self.program.references += 1;
+        let old = self.register(expression.span)?;
+        self.emit(Instruction::ResolveName(slot, old, name.name.clone()));
+        Ok((slot, old))
+    }
+}
