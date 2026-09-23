@@ -1,0 +1,80 @@
+{
+  "base": "133db582307bf14fd9cd8ece92a47c9620869f0d",
+  "implementation": "2fb0208adb7cd889798f2a8614b89f6c3abe82db",
+  "windows_tree": "C:/Users/server/src/wt/integrator-assist",
+  "cargo_target_dir": "C:/Users/server/target/integrator-assist",
+  "source_manifest_sha256": "c33983bc84956a8942c348a1d650849c61cc6567c5a7163434a9b94218a7cd04",
+  "source_verification": {
+    "before": {
+      "checked": 719,
+      "missing": 0,
+      "mismatches": 0
+    },
+    "after": {
+      "checked": 719,
+      "missing": 0,
+      "mismatches": 0
+    }
+  },
+  "gates": {
+    "scoped_nextest": {
+      "command": "cargo nextest run -p amazing --locked",
+      "passed": 125,
+      "failed": 0,
+      "skipped": 3,
+      "log_sha256": "7f55f9f9c3caaf947e79e92f594123444571ccd7ca8be96a51a46fae3d0ee19a"
+    },
+    "scoped_doctest": {
+      "command": "cargo test -p amazing --locked --doc",
+      "result": "no library targets found in package amazing",
+      "log_sha256": "1769e5afaad4b6fe49f4b0068acfae916ee710ce77098a0f21ad362ac6c4217d"
+    },
+    "workspace_nextest": {
+      "command": "cargo nextest run --workspace --locked",
+      "passed": 1439,
+      "failed": 0,
+      "skipped": 3,
+      "log_sha256": "0ad6a93474436b60e37f4ffec59c22ac6d9ec5f791647c522e157df0545050a3"
+    },
+    "workspace_doctest": {
+      "command": "cargo test --workspace --locked --doc",
+      "passed": 2,
+      "failed": 0,
+      "summaries": 19,
+      "log_sha256": "3916e689c55a77ad5fb20181b660f061e0171e3b693a68b07e6628ab3fd4d3b9"
+    }
+  },
+  "fixture_metrics": [
+    {
+      "case": "bom",
+      "body_bytes": 39,
+      "chunks": 7,
+      "peak_driver_bytes": 43
+    },
+    {
+      "case": "meta",
+      "body_bytes": 37,
+      "chunks": 5,
+      "peak_driver_bytes": 43
+    },
+    {
+      "case": "utf8",
+      "body_bytes": 12,
+      "chunks": 3,
+      "peak_driver_bytes": 18
+    },
+    {
+      "case": "utf16",
+      "body_bytes": 18,
+      "chunks": 4,
+      "peak_driver_bytes": 22
+    },
+    {
+      "case": "large",
+      "body_bytes": 100007,
+      "chunks": 14,
+      "peak_driver_bytes": 8192
+    }
+  ],
+  "fixture_notes": "Observed on fixed base with delayed first segment; small chunk counts may vary with TCP coalescing. Buffered and streamed DOM/mode equal in all five HTML cases. XML valid DOM/mode and malformed fatal error equal; HTTP 404 rejected from head."
+}
