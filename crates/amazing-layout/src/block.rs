@@ -344,8 +344,11 @@ fn layout_block_in_context(
             );
             let lh = b.line_height;
             let strut = crate::inline::Strut::new(fonts, b.font_size, lh);
+            let soft_wrap = !b.style.get("white-space").is_some_and(|value| {
+                value.eq_ignore_ascii_case("nowrap") || value.eq_ignore_ascii_case("pre")
+            });
             let lines = crate::inline::layout_lines_with_floats(
-                items, content_x, content_y, content_w, &strut, fonts, floats,
+                items, content_x, content_y, content_w, &strut, fonts, floats, soft_wrap,
             );
             let height = lines
                 .last()

@@ -544,6 +544,9 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 base_direction,
                 text,
                 &layout.float_context,
+                !layout.style.get("white-space").is_some_and(|value| {
+                    value.eq_ignore_ascii_case("nowrap") || value.eq_ignore_ascii_case("pre")
+                }),
             ) {
                 let old_height = layout.lines.iter().map(|line| line.height).sum::<f32>();
                 let new_height = if style.writing_mode.is_vertical_flow() {

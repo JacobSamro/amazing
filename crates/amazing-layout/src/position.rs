@@ -110,6 +110,11 @@ fn position_subtree(
             fonts,
         );
         child.margin = specified_margins;
+        let static_anchor = if matches!(box_.display, crate::Display::Grid) {
+            grid_child_static_anchor(box_, child, specified_margins)
+        } else {
+            static_anchor
+        };
         let (x, y) = absolute_origin(
             child,
             containing_block,
@@ -283,6 +288,80 @@ fn static_anchor(parent: &LayoutBox, positioned: &LayoutBox) -> (f32, f32) {
     })
 }
 
+#[derive(Clone, Copy)]
+enum StaticAlign {
+    Start,
+    Center,
+    End,
+}
+
+fn grid_child_static_anchor(
+    parent: &LayoutBox,
+    child: &LayoutBox,
+    margins: values::SidesM,
+) -> (f32, f32) {
+    // Grid 1 §9.2: static position uses the grid container's content edges,
+    // independent of grid-placement properties and the abspos containing block.
+    let parent_rtl = parent.style.get("direction")
+        .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
+    let child_rtl = child.style.get("direction")
+        .is_some_and(|value| value.eq_ignore_ascii_case("rtl"));
+    let choice = |self_property: &str, items_property: &str| {
+        child.style.get(self_property)
+            .filter(|value| !value.eq_ignore_ascii_case("auto"))
+            .or_else(|| parent.style.get(items_property))
+            .unwrap_or("normal")
+    };
+    let horizontal = static_align(choice("justify-self", "justify-items"), parent_rtl, child_rtl, true);
+    let vertical = static_align(choice("align-self", "align-items"), parent_rtl, child_rtl, false);
+    let x = aligned_border_start(
+        parent.content_box.x, parent.content_box.w, child.border_box.w,
+        margins.left.unwrap_or(0.0), margins.right.unwrap_or(0.0), horizontal,
+    );
+    let y = aligned_border_start(
+        parent.content_box.y, parent.content_box.h, child.border_box.h,
+        margins.top.unwrap_or(0.0), margins.bottom.unwrap_or(0.0), vertical,
+    );
+    (x, y)
+}
+
+fn static_align(value: &str, parent_rtl: bool, child_rtl: bool, horizontal: bool) -> StaticAlign {
+    // The safe fallback needs the abspos grid area as its alignment container.
+    // Until that rectangle is carried here, use its start edge rather than
+    // aligning beyond it when a safe position is requested.
+    if value.split_ascii_whitespace().any(|part| part.eq_ignore_ascii_case("safe")) {
+        return if horizontal && parent_rtl { StaticAlign::End } else { StaticAlign::Start };
+    }
+    let keyword = value.split_ascii_whitespace().last().unwrap_or("normal").to_ascii_lowercase();
+    let start = |rtl: bool| if horizontal && rtl { StaticAlign::End } else { StaticAlign::Start };
+    let end = |rtl: bool| if horizontal && rtl { StaticAlign::Start } else { StaticAlign::End };
+    match keyword.as_str() {
+        "center" => StaticAlign::Center,
+        "end" | "flex-end" => end(parent_rtl),
+        "self-start" => start(child_rtl),
+        "self-end" => end(child_rtl),
+        "left" => StaticAlign::Start,
+        "right" => StaticAlign::End,
+        _ => start(parent_rtl),
+    }
+}
+
+fn aligned_border_start(
+    container_start: f32,
+    container_size: f32,
+    border_size: f32,
+    margin_start: f32,
+    margin_end: f32,
+    align: StaticAlign,
+) -> f32 {
+    let free = container_size - border_size - margin_start - margin_end;
+    container_start + margin_start + match align {
+        StaticAlign::Start => 0.0,
+        StaticAlign::Center => free / 2.0,
+        StaticAlign::End => free,
+    }
+}
+
 fn shift_box(box_: &mut LayoutBox, dx: f32, dy: f32) {
     if dx == 0.0 && dy == 0.0 {
         return;
@@ -442,6 +521,40 @@ mod tests {
             };
             assert_eq!(item_count, 1);
             assert_eq!(parent.positioned.len(), 1);
+        }
+    }
+
+    #[test]
+    fn grid_child_static_position_uses_content_box_self_alignment() {
+        for position in ["static", "relative"] {
+            let (dom, root) = layout(
+                "<body><div id=grid><div id=auto></div><div id=start></div><div id=end></div><div id=self_start></div><div id=safe></div></div></body>",
+                &format!(
+                    "body{{margin:0}} #grid{{display:grid;position:{position};width:100px;height:60px;padding:3px 5px;justify-items:center;align-items:center}} \
+                     #grid>div{{position:absolute;width:20px;height:10px;grid-area:2 / 2 / 3 / 3}} \
+                     #start{{justify-self:normal;align-self:start}} #end{{justify-self:end;align-self:end}} \
+                     #self_start{{direction:rtl;justify-self:self-start;align-self:start}} \
+                     #safe{{justify-self:safe end;align-self:safe center}}"
+                ),
+                800.0,
+                600.0,
+            );
+            let grid = find_id(&root, &dom, "grid").unwrap();
+            let x = grid.content_box.x;
+            let y = grid.content_box.y;
+            let auto = find_id(&root, &dom, "auto").unwrap();
+            close(auto.border_box.x, x + 40.0);
+            close(auto.border_box.y, y + 25.0);
+            let start = find_id(&root, &dom, "start").unwrap();
+            close(start.border_box.x, x);
+            close(start.border_box.y, y);
+            let end = find_id(&root, &dom, "end").unwrap();
+            close(end.border_box.x, x + 80.0);
+            close(end.border_box.y, y + 50.0);
+            close(find_id(&root, &dom, "self_start").unwrap().border_box.x, x + 80.0);
+            let safe = find_id(&root, &dom, "safe").unwrap();
+            close(safe.border_box.x, x);
+            close(safe.border_box.y, y);
         }
     }
 

@@ -210,6 +210,7 @@ pub fn layout_lines(
     layout_lines_with_floats(
         items, content_x, content_y, content_width, strut, fonts,
         &crate::floats::FloatContext::default(),
+        true,
     )
 }
 
@@ -221,6 +222,7 @@ pub(crate) fn layout_lines_with_floats(
     strut: &Strut,
     fonts: &FontSource,
     floats: &crate::floats::FloatContext,
+    soft_wrap: bool,
 ) -> Vec<LineBox> {
     let tokens = tokenize(items);
     let atomic_baselines = atomic_baselines(items);
@@ -289,7 +291,7 @@ pub(crate) fn layout_lines_with_floats(
                 } else {
                     0.0
                 };
-                if has_content && cx + space_w + word_w > right_edge.get() + FIT_TOLERANCE_PX {
+                if soft_wrap && has_content && cx + space_w + word_w > right_edge.get() + FIT_TOLERANCE_PX {
                     flush(&mut lines, &mut words, &mut replaced, &mut cx);
                     prepare(&mut cx, word_w, strut.line_height);
                 }
@@ -316,7 +318,7 @@ pub(crate) fn layout_lines_with_floats(
                 } else {
                     0.0
                 };
-                if has_content && cx + space_w + size.width > right_edge.get() + FIT_TOLERANCE_PX {
+                if soft_wrap && has_content && cx + space_w + size.width > right_edge.get() + FIT_TOLERANCE_PX {
                     flush(&mut lines, &mut words, &mut replaced, &mut cx);
                     prepare(&mut cx, size.width, strut.line_height.max(size.height));
                 }
@@ -442,6 +444,7 @@ pub(crate) fn layout_lines_shaped(
     base_direction: amazing_text::Direction,
     text_system: &dyn TextSystem,
     floats: &crate::floats::FloatContext,
+    soft_wrap: bool,
 ) -> Option<Vec<LineBox>> {
     let InlineContainingBlock {
         x: content_x,
@@ -622,6 +625,7 @@ pub(crate) fn layout_lines_shaped(
                     0.0
                 };
                 if has_content
+                    && soft_wrap
                     && may_break_after
                     && cursor + spacing + word.width + break_width > inline_end.get() + FIT_TOLERANCE_PX
                 {
@@ -687,6 +691,7 @@ pub(crate) fn layout_lines_shaped(
                     prepare(&mut cursor, size.width, strut.line_height.max(size.height));
                 }
                 if has_content
+                    && soft_wrap
                     && may_break_after
                     && cursor + size.width > inline_end.get() + FIT_TOLERANCE_PX
                 {
@@ -727,6 +732,7 @@ pub(crate) fn layout_lines_shaped(
                     prepare(&mut cursor, ruby.width, strut.line_height + ruby.line_over);
                 }
                 if has_content
+                    && soft_wrap
                     && may_break_after
                     && cursor + ruby.width > inline_end.get() + FIT_TOLERANCE_PX
                 {
@@ -773,6 +779,7 @@ pub(crate) fn layout_lines_shaped(
                     prepare(&mut cursor, combined.width, strut.line_height);
                 }
                 if has_content
+                    && soft_wrap
                     && may_break_after
                     && cursor + combined.width > inline_end.get() + FIT_TOLERANCE_PX
                 {
