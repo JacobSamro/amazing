@@ -33,6 +33,20 @@ fn dom_host(i: &mut Interpreter) -> Result<Rc<RefCell<dyn DomHost>>, Throw> {
         .ok_or_else(|| Throw::type_error("DOM host is not attached"))
 }
 
+fn dom_mutation<T>(
+    i: &mut Interpreter,
+    operation: impl FnOnce(&mut dyn DomHost) -> Result<T, String>,
+) -> Result<T, Throw> {
+    let host = dom_host(i)?;
+    let result = {
+        let mut borrowed = host.borrow_mut();
+        operation(&mut *borrowed)
+    };
+    // Release the arena borrow before appending native work to the JS outbox.
+    i.flush_native_microtasks()?;
+    result.map_err(Throw::type_error)
+}
+
 fn native_dom_query_selector(
     i: &mut Interpreter,
     _: JsValue,
@@ -104,10 +118,7 @@ fn native_dom_create_element(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    let id = dom_host(i)?
-        .borrow_mut()
-        .create_element(&name)
-        .map_err(Throw::type_error)?;
+    let id = dom_mutation(i, |host| host.create_element(&name))?;
     Ok(i.make_dom_element(id))
 }
 
@@ -117,10 +128,7 @@ fn native_dom_create_text_node(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let text = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    let id = dom_host(i)?
-        .borrow_mut()
-        .create_text_node(&text)
-        .map_err(Throw::type_error)?;
+    let id = dom_mutation(i, |host| host.create_text_node(&text))?;
     Ok(i.make_dom_element(id))
 }
 
@@ -144,10 +152,7 @@ fn native_dom_text_set(
 ) -> Result<JsValue, Throw> {
     let id = dom_id(&this)?;
     let text = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    dom_host(i)?
-        .borrow_mut()
-        .set_text_content(id, &text)
-        .map_err(Throw::type_error)?;
+    dom_mutation(i, |host| host.set_text_content(id, &text))?;
     Ok(JsValue::Undefined)
 }
 
@@ -171,10 +176,7 @@ fn native_dom_inner_html_set(
 ) -> Result<JsValue, Throw> {
     let node = dom_id(&this)?;
     let html = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    dom_host(i)?
-        .borrow_mut()
-        .set_inner_html(node, &html)
-        .map_err(Throw::type_error)?;
+    dom_mutation(i, |host| host.set_inner_html(node, &html))?;
     Ok(JsValue::Undefined)
 }
 
@@ -192,10 +194,7 @@ fn native_dom_title_set(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let title = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    dom_host(i)?
-        .borrow_mut()
-        .set_document_title(&title)
-        .map_err(Throw::type_error)?;
+    dom_mutation(i, |host| host.set_document_title(&title))?;
     Ok(JsValue::Undefined)
 }
 
@@ -341,10 +340,7 @@ fn native_storage_set_item(
     let key = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let value = i.to_string(args.get(1).unwrap_or(&JsValue::Undefined))?;
     let origin = i.location_url.clone();
-    dom_host(i)?
-        .borrow_mut()
-        .storage_set(&origin, &key, &value)
-        .map_err(Throw::type_error)?;
+    dom_mutation(i, |host| host.storage_set(&origin, &key, &value))?;
     Ok(JsValue::Undefined)
 }
 
@@ -355,10 +351,7 @@ fn native_storage_remove_item(
 ) -> Result<JsValue, Throw> {
     let key = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let origin = i.location_url.clone();
-    dom_host(i)?
-        .borrow_mut()
-        .storage_remove(&origin, &key)
-        .map_err(Throw::type_error)?;
+    dom_mutation(i, |host| host.storage_remove(&origin, &key))?;
     Ok(JsValue::Undefined)
 }
 
@@ -368,10 +361,7 @@ fn native_storage_clear(
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let origin = i.location_url.clone();
-    dom_host(i)?
-        .borrow_mut()
-        .storage_clear(&origin)
-        .map_err(Throw::type_error)?;
+    dom_mutation(i, |host| host.storage_clear(&origin))?;
     Ok(JsValue::Undefined)
 }
 
@@ -512,10 +502,7 @@ fn native_dom_set_attribute(
     let id = dom_id(&this)?;
     let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
     let value = i.to_string(args.get(1).unwrap_or(&JsValue::Undefined))?;
-    dom_host(i)?
-        .borrow_mut()
-        .set_attribute(id, &name, &value)
-        .map_err(Throw::type_error)?;
+    dom_mutation(i, |host| host.set_attribute(id, &name, &value))?;
     Ok(JsValue::Undefined)
 }
 
@@ -541,10 +528,7 @@ fn native_dom_remove_attribute(
 ) -> Result<JsValue, Throw> {
     let node = dom_id(&this)?;
     let name = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    dom_host(i)?
-        .borrow_mut()
-        .remove_attribute(node, &name)
-        .map_err(Throw::type_error)?;
+    dom_mutation(i, |host| host.remove_attribute(node, &name))?;
     Ok(JsValue::Undefined)
 }
 
@@ -554,20 +538,15 @@ fn native_dom_append(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let parent = dom_id(&this)?;
-    let host = dom_host(i)?;
     for arg in args {
         match arg {
             JsValue::Object(_) => {
                 let child = dom_id(&arg)?;
-                host.borrow_mut()
-                    .append_child(parent, child)
-                    .map_err(Throw::type_error)?;
+                dom_mutation(i, |host| host.append_child(parent, child))?;
             }
             other => {
                 let text = i.to_string(&other)?;
-                host.borrow_mut()
-                    .append_text(parent, &text)
-                    .map_err(Throw::type_error)?;
+                dom_mutation(i, |host| host.append_text(parent, &text))?;
             }
         }
     }
@@ -593,10 +572,7 @@ fn native_dom_remove(
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let node = dom_id(&this)?;
-    dom_host(i)?
-        .borrow_mut()
-        .remove_node(node)
-        .map_err(Throw::type_error)?;
+    dom_mutation(i, |host| host.remove_node(node))?;
     Ok(JsValue::Undefined)
 }
 
@@ -641,10 +617,7 @@ fn class_tokens(i: &mut Interpreter, node: u32) -> Result<Vec<String>, Throw> {
 }
 
 fn write_class_tokens(i: &mut Interpreter, node: u32, tokens: &[String]) -> Result<(), Throw> {
-    dom_host(i)?
-        .borrow_mut()
-        .set_attribute(node, "class", &tokens.join(" "))
-        .map_err(Throw::type_error)
+    dom_mutation(i, |host| host.set_attribute(node, "class", &tokens.join(" ")))
 }
 
 fn class_list_node(this: &JsValue) -> Result<u32, Throw> {
@@ -1300,7 +1273,7 @@ fn native_promise(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
     let resolve = promise_callback(i, "resolve", &promise, native_promise_resolve);
     let reject = promise_callback(i, "reject", &promise, native_promise_reject);
     if let Err(Throw(value)) = i.call_value(&executor, JsValue::Undefined, vec![resolve, reject]) {
-        settle_promise(&promise, PromiseFate::Rejected(value), i);
+        settle_promise(&promise, PromiseFate::Rejected(value), i)?;
     }
     Ok(JsValue::Object(promise))
 }
@@ -1323,7 +1296,7 @@ fn native_promise_resolve(
             &target,
             PromiseFate::Fulfilled(args.first().cloned().unwrap_or(JsValue::Undefined)),
             i,
-        );
+        )?;
         return Ok(JsValue::Undefined);
     }
     let value = args.first().cloned().unwrap_or(JsValue::Undefined);
@@ -1344,7 +1317,7 @@ fn native_promise_reject(
             &target,
             PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)),
             i,
-        );
+        )?;
         return Ok(JsValue::Undefined);
     }
     Ok(new_promise(
@@ -1353,12 +1326,12 @@ fn native_promise_reject(
     ))
 }
 
-fn settle_promise(target: &Obj, fate: PromiseFate, i: &mut Interpreter) {
+fn settle_promise(target: &Obj, fate: PromiseFate, i: &mut Interpreter) -> Result<(), Throw> {
     let reactions = {
         let mut object = target.borrow_mut();
         let state = match &mut object.exotic {
             Exotic::Promise(state) if matches!(state.state, PromiseFate::Pending) => state,
-            _ => return,
+            _ => return Ok(()),
         };
         let fulfilled = matches!(fate, PromiseFate::Fulfilled(_));
         state.state = fate.clone();
@@ -1368,15 +1341,19 @@ fn settle_promise(target: &Obj, fate: PromiseFate, i: &mut Interpreter) {
             std::mem::take(&mut state.reject_reactions)
         }
     };
+    let mut first_error = None;
     for reaction in reactions {
-        i.jobs.push_back(PromiseJob {
+        if let Err(error) = i.enqueue_promise_job(PromiseJob {
             reaction,
             fate: fate.clone(),
-        });
+        }) {
+            if first_error.is_none() { first_error = Some(error); }
+        }
     }
+    first_error.map_or(Ok(()), Err)
 }
 
-fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut Interpreter) {
+fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut Interpreter) -> Result<(), Throw> {
     let result = match (reaction.handler, fate) {
         (Some(handler), PromiseFate::Fulfilled(value)) => {
             let function = JsValue::Object(Obj(Rc::new(RefCell::new(JsObject::function(handler)))));
@@ -1398,28 +1375,28 @@ fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut In
         (_, PromiseFate::Pending) => PromiseFate::Pending,
     };
     if let PromiseFate::Fulfilled(value) = &result {
-        if adopt_promise_result(&reaction.capability, value, i) {
-            return;
+        if adopt_promise_result(&reaction.capability, value, i)? {
+            return Ok(());
         }
     }
-    settle_promise(&reaction.capability, result, i);
+    settle_promise(&reaction.capability, result, i)
 }
 
-fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) -> bool {
+fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) -> Result<bool, Throw> {
     let Ok(source) = promise_object(value) else {
-        return false;
+        return Ok(false);
     };
     if Rc::ptr_eq(&source.0, &capability.0) {
         settle_promise(
             capability,
             PromiseFate::Rejected(JsValue::str("promise resolution cycle")),
             i,
-        );
-        return true;
+        )?;
+        return Ok(true);
     }
     let state = match &source.borrow().exotic {
         Exotic::Promise(state) => state.state.clone(),
-        _ => return false,
+        _ => return Ok(false),
     };
     match state {
         PromiseFate::Pending => {
@@ -1437,24 +1414,24 @@ fn adopt_promise_result(capability: &Obj, value: &JsValue, i: &mut Interpreter) 
                 });
             }
         }
-        PromiseFate::Fulfilled(value) => i.jobs.push_back(PromiseJob {
+        PromiseFate::Fulfilled(value) => i.enqueue_promise_job(PromiseJob {
             reaction: PendingReaction {
                 handler: None,
                 capability: capability.clone(),
                 is_reject_handler: false,
             },
             fate: PromiseFate::Fulfilled(value),
-        }),
-        PromiseFate::Rejected(value) => i.jobs.push_back(PromiseJob {
+        })?,
+        PromiseFate::Rejected(value) => i.enqueue_promise_job(PromiseJob {
             reaction: PendingReaction {
                 handler: None,
                 capability: capability.clone(),
                 is_reject_handler: true,
             },
             fate: PromiseFate::Rejected(value),
-        }),
+        })?,
     }
-    true
+    Ok(true)
 }
 
 fn native_promise_then(
@@ -1504,7 +1481,7 @@ fn native_promise_then(
                 is_reject_handler: true,
             }
         };
-        i.jobs.push_back(PromiseJob { reaction, fate });
+        i.enqueue_promise_job(PromiseJob { reaction, fate })?;
     }
     Ok(JsValue::Object(result))
 }
@@ -1627,7 +1604,7 @@ fn native_all_fulfill(
         args.first().cloned().unwrap_or(JsValue::Undefined),
     )?;
     if decrement_remaining(&state)? == 0 {
-        settle_promise(&target, PromiseFate::Fulfilled(values), i);
+        settle_promise(&target, PromiseFate::Fulfilled(values), i)?;
     }
     Ok(JsValue::Undefined)
 }
@@ -1642,7 +1619,7 @@ fn native_all_reject(
         &target,
         PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)),
         i,
-    );
+    )?;
     Ok(JsValue::Undefined)
 }
 
@@ -1656,7 +1633,7 @@ fn native_race_fulfill(
         &target,
         PromiseFate::Fulfilled(args.first().cloned().unwrap_or(JsValue::Undefined)),
         i,
-    );
+    )?;
     Ok(JsValue::Undefined)
 }
 
@@ -1670,7 +1647,7 @@ fn native_race_reject(
         &target,
         PromiseFate::Rejected(args.first().cloned().unwrap_or(JsValue::Undefined)),
         i,
-    );
+    )?;
     Ok(JsValue::Undefined)
 }
 
@@ -1701,7 +1678,7 @@ fn native_all_settled_fulfill(
         ),
     )?;
     if decrement_remaining(&state)? == 0 {
-        settle_promise(&target, PromiseFate::Fulfilled(values), i);
+        settle_promise(&target, PromiseFate::Fulfilled(values), i)?;
     }
     Ok(JsValue::Undefined)
 }
@@ -1724,7 +1701,7 @@ fn native_all_settled_reject(
         ),
     )?;
     if decrement_remaining(&state)? == 0 {
-        settle_promise(&target, PromiseFate::Fulfilled(values), i);
+        settle_promise(&target, PromiseFate::Fulfilled(values), i)?;
     }
     Ok(JsValue::Undefined)
 }
@@ -1739,7 +1716,7 @@ fn native_any_fulfill(
         &target,
         PromiseFate::Fulfilled(args.first().cloned().unwrap_or(JsValue::Undefined)),
         i,
-    );
+    )?;
     Ok(JsValue::Undefined)
 }
 
@@ -1756,7 +1733,7 @@ fn native_any_reject(
         args.first().cloned().unwrap_or(JsValue::Undefined),
     )?;
     if decrement_remaining(&state)? == 0 {
-        settle_promise(&target, PromiseFate::Rejected(errors), i);
+        settle_promise(&target, PromiseFate::Rejected(errors), i)?;
     }
     Ok(JsValue::Undefined)
 }
@@ -1811,7 +1788,7 @@ fn native_promise_all(
     let (state, target) = make_combinator_state(i, inputs.len(), values);
     if inputs.is_empty() {
         let values = state_values(&state, "values")?;
-        settle_promise(&target, PromiseFate::Fulfilled(values), i);
+        settle_promise(&target, PromiseFate::Fulfilled(values), i)?;
     } else {
         for (index, input) in inputs.into_iter().enumerate() {
             attach_combinator(
@@ -1864,7 +1841,7 @@ fn native_promise_all_settled(
     let (state, target) = make_combinator_state(i, inputs.len(), values);
     if inputs.is_empty() {
         let values = state_values(&state, "values")?;
-        settle_promise(&target, PromiseFate::Fulfilled(values), i);
+        settle_promise(&target, PromiseFate::Fulfilled(values), i)?;
     } else {
         for (index, input) in inputs.into_iter().enumerate() {
             attach_combinator(
@@ -1897,7 +1874,7 @@ fn native_promise_any(
             &target,
             PromiseFate::Rejected(state_values(&state, "errors")?),
             i,
-        );
+        )?;
     } else {
         for (index, input) in inputs.into_iter().enumerate() {
             attach_combinator(
@@ -2932,11 +2909,10 @@ fn native_set_timeout(
     if callable_function(&callback).is_none() {
         return Err(Throw::type_error("setTimeout callback is not callable"));
     }
-    let delay = i
-        .to_number(args.get(1).unwrap_or(&JsValue::num(0.0)))?
-        .max(0.0)
-        .min(u64::MAX as f64) as u64;
-    let id = i.schedule_timer(callback, delay, args.into_iter().skip(2).collect());
+    // WebIDL `long`: ToNumber, truncate, modulo 2^32, then signed wrap.
+    // The DOM event loop applies nonnegative/nesting timer clamping.
+    let delay = i.to_int32(args.get(1).unwrap_or(&JsValue::num(0.0)))?;
+    let id = i.schedule_timer(callback, delay, args.into_iter().skip(2).collect())?;
     Ok(JsValue::num(id as f64))
 }
 
@@ -2948,7 +2924,7 @@ fn native_clear_timeout(
     let id = i
         .to_number(args.first().unwrap_or(&JsValue::Undefined))?
         .max(0.0) as u32;
-    i.cancel_timer(id);
+    i.cancel_timer(id)?;
     Ok(JsValue::Undefined)
 }
 
@@ -2961,11 +2937,8 @@ fn native_set_interval(
     if callable_function(&callback).is_none() {
         return Err(Throw::type_error("setInterval callback is not callable"));
     }
-    let delay = i
-        .to_number(args.get(1).unwrap_or(&JsValue::num(0.0)))?
-        .max(0.0)
-        .min(u64::MAX as f64) as u64;
-    let id = i.schedule_interval(callback, delay, args.into_iter().skip(2).collect());
+    let delay = i.to_int32(args.get(1).unwrap_or(&JsValue::num(0.0)))?;
+    let id = i.schedule_interval(callback, delay, args.into_iter().skip(2).collect())?;
     Ok(JsValue::num(id as f64))
 }
 
@@ -2980,8 +2953,23 @@ fn native_request_animation_frame(
             "requestAnimationFrame callback is not callable",
         ));
     }
-    let id = i.schedule_timer(callback, 16, vec![JsValue::num(0.0)]);
+    let id = i.schedule_animation_frame(callback)?;
     Ok(JsValue::num(id as f64))
+}
+
+fn native_cancel_animation_frame(
+    i: &mut Interpreter, _: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let id = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?.max(0.0) as u32;
+    i.cancel_animation_frame(id)?;
+    Ok(JsValue::Undefined)
+}
+
+fn native_queue_microtask(
+    i: &mut Interpreter, _: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    i.queue_microtask(args.first().cloned().unwrap_or(JsValue::Undefined))?;
+    Ok(JsValue::Undefined)
 }
 
 // testharness.js distinguishes callback setup from property-object setup with
