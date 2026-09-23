@@ -1634,10 +1634,15 @@ impl Tokenizer {
             | State::AfterAttrValueQuoted
             | State::SelfClosingStart => {
                 // EOF in tag: emit the literal source text back. Attributes
-                // survive because we replay the source slice from '<'.
-                let start = self.tag_start.min(self.pos);
-                let lit: String = self.input[start..self.pos].iter().collect();
-                self.text_buf.push_str(&lit);
+                // survive because we replay the source slice from '<'. An
+                // appropriate RAWTEXT/RCDATA/script end tag has already
+                // entered tag parsing after its name; at EOF the partial end
+                // tag is discarded, rather than becoming text in its element.
+                if !(self.is_end_tag && !self.raw_end.is_empty() && self.raw_end_matches()) {
+                    let start = self.tag_start.min(self.pos);
+                    let lit: String = self.input[start..self.pos].iter().collect();
+                    self.text_buf.push_str(&lit);
+                }
             },
             State::RawTextLessThan | State::RcLessThan | State::ScriptLessThan
             | State::ScriptEscapedLessThan => {
@@ -1741,9 +1746,9 @@ impl Tokenizer {
             }
         }
         if !any_digit {
-            // Parse error: emit U+FFFD, drop "#"/"#x", continue normally.
-            self.pos += i;
-            return Some("\u{FFFD}".to_string());
+            // With no digits, the attempted reference remains literal.
+            // Leave '#' (and a possible 'x') for the data/attribute state.
+            return None;
         }
         let had_semi = self.peek_at(i) == Some(';');
         if !had_semi && in_attr {

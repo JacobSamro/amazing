@@ -1,0 +1,524 @@
+win-run[html]: win-002 from /Users/jMac/Projects/OpenSource/amazing-wt/html (e762837, with uncommitted edits)
+with-build-slot[html]: acquired win-002/slot-1 after 0s
+AUDIT before 35 matched
+   Compiling amazing-encoding v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-encoding)
+   Compiling amazing-common v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-common)
+   Compiling amazing-dom v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-dom)
+   Compiling amazing-html v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-html)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.98s
+────────────
+ Nextest run ID 3911518b-23b6-4c76-ba87-23bb07dfe166 with nextest profile: default
+    Starting 155 tests across 1 binary
+────────────
+     Summary [   0.527s] 155 tests run: 155 passed, 0 skipped
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+   Doc-tests amazing_html
+
+running 1 test
+test crates\amazing-html\src\lib.rs - (line 31) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+all doctests ran in 0.33s; merged doctests compilation took 0.30s
+   Compiling amazing-css v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-css)
+   Compiling amazing-text v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-text)
+   Compiling amazing-media v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-media)
+   Compiling amazing-net-brotli v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-net-brotli)
+   Compiling amazing-net-tls v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-net-tls)
+   Compiling amazing-webrtc v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-webrtc)
+   Compiling amazing-regex v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-regex)
+   Compiling amazing-ipc v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-ipc)
+   Compiling amazing-ipc-platform v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-ipc-platform)
+   Compiling amazing-storage v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-storage)
+   Compiling amazing-text-provider v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-text-provider)
+   Compiling amazing-encoding v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-encoding)
+   Compiling amazing-net v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-net)
+   Compiling amazing-js v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-js)
+   Compiling amazing-webrtc-crypto v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-webrtc-crypto)
+   Compiling amazing-webrtc-codecs v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-webrtc-codecs)
+   Compiling amazing-dom v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-dom)
+   Compiling amazing-fetch v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-fetch)
+   Compiling amazing-layout v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-layout)
+   Compiling amazing-svg v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-svg)
+   Compiling amazing-bindings v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-bindings)
+   Compiling amazing-common v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-common)
+warning: function `map_set_raw` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:1971:4
+     |
+1971 | fn map_set_raw(map: &Obj, key: MapKey, value: JsValue) {
+     |    ^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `native_map` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:1982:4
+     |
+1982 | fn native_map(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^
+
+warning: function `native_map_get` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2001:4
+     |
+2001 | fn native_map_get(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_map_set` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2017:4
+     |
+2017 | fn native_map_set(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_map_has` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2029:4
+     |
+2029 | fn native_map_has(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_map_delete` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2041:4
+     |
+2041 | fn native_map_delete(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_map_clear` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2062:4
+     |
+2062 | fn native_map_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `native_map_keys` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2070:4
+     |
+2070 | fn native_map_keys(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `native_map_values` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2084:4
+     |
+2084 | fn native_map_values(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_map_entries` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2102:4
+     |
+2102 | fn native_map_entries(
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `native_set` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2135:4
+     |
+2135 | fn native_set(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^
+
+warning: function `native_set_add` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2157:4
+     |
+2157 | fn native_set_add(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_set_has` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2172:4
+     |
+2172 | fn native_set_has(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_set_delete` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2183:4
+     |
+2183 | fn native_set_delete(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_set_clear` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2208:4
+     |
+2208 | fn native_set_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `native_set_values` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2216:4
+     |
+2216 | fn native_set_values(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_set_entries` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2230:4
+     |
+2230 | fn native_set_entries(
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `binary_define_index` is never used
+   --> crates\amazing-js\src\builtins_binary.rs:536:4
+    |
+536 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+   --> crates\amazing-js\src\builtins_temporal.rs:951:4
+    |
+951 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates\amazing-js\src\builtins_temporal_epoch.rs:303:4
+    |
+303 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+   Compiling amazing-paint v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-paint)
+   Compiling amazing-compositor v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-compositor)
+   Compiling amazing-process v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-process)
+   Compiling amazing-canvas v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing-canvas)
+warning: `amazing-js` (lib) generated 20 warnings
+warning: `amazing-js` (lib test) generated 20 warnings (20 duplicates)
+   Compiling amazing v0.0.1 (C:\Users\win-002\src\wt\html\crates\amazing)
+warning: unused import: `load_page_text`
+  --> crates\amazing\src\main.rs:19:40
+   |
+19 | use page::{PageMedia, load_page_media, load_page_text};
+   |                                        ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `load_page_text` is never used
+  --> crates\amazing\src\page.rs:41:15
+   |
+41 | pub(crate) fn load_page_text(css: &str, page: &str) -> PageText {
+   |               ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `0` is never read
+  --> crates\amazing\src\runtime_binding_host.rs:44:17
+   |
+44 |     FontFaceSet(NodeIdx, Option<JsValue>),
+   |     ----------- ^^^^^^^
+   |     |
+   |     field in this variant
+   |
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+44 -     FontFaceSet(NodeIdx, Option<JsValue>),
+44 +     FontFaceSet((), Option<JsValue>),
+   |
+
+warning: field `0` is never read
+  --> crates\amazing\src\runtime_binding_host.rs:44:17
+   |
+44 |     FontFaceSet(NodeIdx, Option<JsValue>),
+   |     ----------- ^^^^^^^
+   |     |
+   |     field in this variant
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+help: consider changing the field to be of unit type to suppress this warning while preserving the field numbering, or remove the field
+   |
+44 -     FontFaceSet(NodeIdx, Option<JsValue>),
+44 +     FontFaceSet((), Option<JsValue>),
+   |
+
+warning: `amazing` (bin "amazing" test) generated 2 warnings (1 duplicate)
+warning: `amazing` (bin "amazing") generated 3 warnings (run `cargo fix --bin "amazing" -p amazing` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 36.48s
+────────────
+ Nextest run ID 5b54ea30-2bc5-4246-b411-70b0ae6a5e28 with nextest profile: default
+    Starting 2079 tests across 102 binaries (5 tests skipped)
+────────────
+     Summary [  37.132s] 2079 tests run: 2079 passed, 5 skipped
+warning: function `map_set_raw` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:1971:4
+     |
+1971 | fn map_set_raw(map: &Obj, key: MapKey, value: JsValue) {
+     |    ^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `native_map` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:1982:4
+     |
+1982 | fn native_map(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^
+
+warning: function `native_map_get` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2001:4
+     |
+2001 | fn native_map_get(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_map_set` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2017:4
+     |
+2017 | fn native_map_set(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_map_has` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2029:4
+     |
+2029 | fn native_map_has(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_map_delete` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2041:4
+     |
+2041 | fn native_map_delete(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_map_clear` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2062:4
+     |
+2062 | fn native_map_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `native_map_keys` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2070:4
+     |
+2070 | fn native_map_keys(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `native_map_values` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2084:4
+     |
+2084 | fn native_map_values(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_map_entries` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2102:4
+     |
+2102 | fn native_map_entries(
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `native_set` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2135:4
+     |
+2135 | fn native_set(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^
+
+warning: function `native_set_add` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2157:4
+     |
+2157 | fn native_set_add(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_set_has` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2172:4
+     |
+2172 | fn native_set_has(
+     |    ^^^^^^^^^^^^^^
+
+warning: function `native_set_delete` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2183:4
+     |
+2183 | fn native_set_delete(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_set_clear` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2208:4
+     |
+2208 | fn native_set_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `native_set_values` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2216:4
+     |
+2216 | fn native_set_values(
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `native_set_entries` is never used
+    --> crates\amazing-js\src\interp_builtins.rs:2230:4
+     |
+2230 | fn native_set_entries(
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `binary_define_index` is never used
+   --> crates\amazing-js\src\builtins_binary.rs:536:4
+    |
+536 | fn binary_define_index(i: &mut Interpreter, object: &Obj, key: &PropertyKey, property: &Property) -> Option<Result<(), Throw>> {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_temporal_time_text` is never used
+   --> crates\amazing-js\src\builtins_temporal.rs:951:4
+    |
+951 | fn std_temporal_time_text(fields: &[i64; 10]) -> String {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `std_epoch_text` is never used
+   --> crates\amazing-js\src\builtins_temporal_epoch.rs:303:4
+    |
+303 | fn std_epoch_text(data: &StdEpochData) -> Result<String, Throw> {
+    |    ^^^^^^^^^^^^^^
+
+warning: `amazing-js` (lib) generated 20 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.28s
+   Doc-tests amazing_bindings
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_canvas
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_common
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_compositor
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_css
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_dom
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_encoding
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_fetch
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_html
+
+running 1 test
+test crates\amazing-html\src\lib.rs - (line 31) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+all doctests ran in 0.34s; merged doctests compilation took 0.32s
+   Doc-tests amazing_ipc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_ipc_platform
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_js
+
+running 1 test
+test crates\amazing-js\src\lib.rs - (line 13) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+all doctests ran in 0.33s; merged doctests compilation took 0.31s
+   Doc-tests amazing_layout
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_media
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_net
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_net_brotli
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_net_tls
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_paint
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_process
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_regex
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_storage
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_svg
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_text
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_text_provider
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_webrtc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_webrtc_codecs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests amazing_webrtc_crypto
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+SHA256          F74E3DFE8939189800C1FF9B0AF1D0483D50FA1A19DEFF05A9E3511A42E1C92B       C:\Users\win-002\src\wt\html\...
+SHA256          F74E3DFE8939189800C1FF9B0AF1D0483D50FA1A19DEFF05A9E3511A42E1C92B       C:\Users\win-002\src\wt\html\...
+SHA256          D4208EA36B966FE0C1EE8B8CC6685F1C9A5332E477266A166516945A1BB9EACD       C:\Users\win-002\src\wt\html\...
+SHA256          D4208EA36B966FE0C1EE8B8CC6685F1C9A5332E477266A166516945A1BB9EACD       C:\Users\win-002\src\wt\html\...
+
+
+AUDIT after 35 matched
