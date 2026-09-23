@@ -746,4 +746,79 @@ mod tests {
         let update = i.take_history_update().unwrap();
         assert_eq!((&update.0, update.1), (&"spa2.html".to_string(), true));
     }
+
+    #[test]
+    fn array_sort_is_stable_and_keeps_undefined_before_holes() {
+        let mut i = Interpreter::new();
+        let source = "var a=[,undefined,3,1]; var same=a.sort(); [same===a,a[0]===1,a[1]===3,a[2]===undefined,!(3 in a),Object.keys(a).join(',')==='0,1,2'].join(',')";
+        assert_eq!(i.run_script(source).unwrap(), JsValue::str("true,true,true,true,true,true"));
+        let source = "var a=[{key:1,id:'a'},{key:0,id:'b'},{key:1,id:'c'}]; var b=a.toSorted((x,y)=>x.key-y.key); b.map(x=>x.id).join('')==='bac' && a.map(x=>x.id).join('')==='abc'";
+        assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
+        let source = "var a=[3,2,1]; try { a.sort((x,y)=>{throw new Error('stop')}) } catch(e) {} a.join(',')==='3,2,1'";
+        assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn for_in_tracks_descriptors_prototypes_and_deletion() {
+        let mut i = Interpreter::new();
+        let source = "var a=[1,2], keys=''; for (var key in a) keys+=key; keys==='01'";
+        assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
+        let source = "var p={x:1,y:2}, o=Object.create(p); Object.defineProperty(o,'x',{value:3,enumerable:false}); o.z=4; var keys=''; for(var key in o) keys+=key; keys==='zy'";
+        assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
+        let source = "var o={a:1,b:2,c:3}, keys=''; for(var key in o){ keys+=key; if(key==='a') delete o.b; } keys==='ac'";
+        assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
+        let source = "var keys=''; for(var key in 'ab') keys+=key; keys==='01'";
+        assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn native_error_constructors_inherit_error_constructor() {
+        let mut i = Interpreter::new();
+        let source = "['EvalError','RangeError','ReferenceError','SyntaxError','TypeError','URIError'].every(name => Object.getPrototypeOf(globalThis[name])===Error && Object.getPrototypeOf(globalThis[name].prototype)===Error.prototype)";
+        assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
+    fn object_function_and_boolean_audit_members_work() {
+        let mut i = Interpreter::new();
+        for source in [
+            "Object.is(NaN,NaN) && !Object.is(0,-0) && Object.entries({a:1})[0].join(',')==='a,1'",
+            "var x=Object.fromEntries([['a',1],['b',2]]); x.a===1 && x.b===2",
+            "var x={a:1}; Object.freeze(x); Object.isFrozen(x) && Object.isSealed(x) && Object.getOwnPropertyDescriptor(x,'a').writable===false",
+            "var x=Object.defineProperties({}, {a:{value:1,enumerable:true},b:{value:2}}); Object.keys(x).join(',')==='a' && Object.getOwnPropertyDescriptors(x).b.value===2",
+            "var p={}, x=Object.create(p); p.isPrototypeOf(x) && x.toLocaleString()==='[object Object]'",
+            "Boolean.prototype.valueOf()===false && Boolean.prototype.toString()==='false' && new Boolean(true).valueOf()===true && true.toString()==='true'",
+            "Object.keys(new Boolean(true)).length===0",
+            "typeof Function.prototype.toString.call(Array.prototype.sort)==='string'",
+            "function F(a,b){this.sum=a+b}; var B=F.bind(null,2); var x=new B(3); x.sum===5 && B.name==='bound F' && B.length===1 && !('prototype' in B)",
+            "function f(a,b){return a+b}; f.apply(null,{0:2,1:3,length:2})===5",
+            "var x=Array(3); x.length===3 && !(0 in x) && Array.of(3).length===1 && Array[Symbol.species]===Array",
+            "var x=Object.groupBy([1,2,3], n=>n%2); x[0].join(',')==='2' && x[1].join(',')==='1,3'",
+        ] {
+            assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
+    fn array_and_object_regressions_from_test262_are_covered() {
+        let mut i = Interpreter::new();
+        for source in [
+            "var a=[]; Object.defineProperty(a,'2',{get(){throw new TypeError()},configurable:true}); a.length===3",
+            "var a=new Array(10), n=0; a[0]=a[1]=undefined; a.reduce((x,y)=>{n++;return y}); n===1",
+            "var a=[0,1]; Object.defineProperty(a,'1',{get(){return 1},configurable:false}); try { Object.defineProperties(a,{length:{value:1}}); false } catch(e) { e instanceof TypeError && a.length===2 }",
+            "var A=function(){Object.preventExtensions(this)}; var a=[1]; a.constructor={}; a.constructor[Symbol.species]=A; try {a.flat(); false} catch(e) {e instanceof TypeError}",
+            "try {Object.freeze([]).pop(); false} catch(e) {e instanceof TypeError}",
+            "function f(){return delete arguments.length}; f()===true",
+            "function f(){}; Object.setPrototypeOf(f,{length:42}); delete f.length; Function.prototype.bind.call(f,null,1).length===0",
+            "var x={length:2**53-1}; try {Array.prototype.unshift.call(x,null); false} catch(e) {e instanceof TypeError}",
+            "function f(){return arguments}; var a=f(1,2,3); Array.prototype.indexOf.call(a,2)===1 && Array.from(a).join(',')==='1,2,3'",
+            "function f(){return arguments}; var a=f(1,2,3); a[Symbol.isConcatSpreadable]=true; [].concat(a,a).join(',')==='1,2,3,1,2,3'",
+            "Array.prototype.pop.call(true)===undefined",
+            "Array.prototype.indexOf.call(new String('null'),'l')===2",
+            "var empty=[]; var token={valueOf(){throw new Error('wrong')}}; empty.indexOf(1,token)===-1",
+            "var x={0:'x',4294967295:'y',length:4294967296}; Array.prototype.pop.call(x)==='y' && x.length===4294967295",
+        ] {
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
+        }
+    }
 }

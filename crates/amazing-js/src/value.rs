@@ -840,7 +840,7 @@ impl JsObject {
                 value: JsValue::num(0.0),
                 writable: true,
                 enumerable: false,
-                configurable: true,
+                configurable: false,
                 getter: None,
                 setter: None,
             },
@@ -858,6 +858,15 @@ impl JsObject {
 
     pub fn function(func: JsFunction) -> JsObject {
         let mut o = Self::ordinary();
+        let length = func.params.iter().take_while(|param| !param.rest && param.default.is_none()).count();
+        o.define("name", Property {
+            value: JsValue::str(&func.name), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).unwrap();
+        o.define("length", Property {
+            value: JsValue::num(length as f64), writable: false, enumerable: false,
+            configurable: true, getter: None, setter: None,
+        }).unwrap();
         o.func = Some(func);
         o
     }

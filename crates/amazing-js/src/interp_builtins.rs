@@ -1069,7 +1069,7 @@ fn native_function_apply(
     let receiver = args.first().cloned().unwrap_or(JsValue::Undefined);
     let arguments = match args.get(1) {
         None | Some(JsValue::Undefined) | Some(JsValue::Null) => Vec::new(),
-        Some(value) => i.iterate(value)?,
+        Some(value) => i.create_list_from_array_like(value)?,
     };
     i.call_value(&this, receiver, arguments)
 }
@@ -1084,6 +1084,17 @@ fn native_function_bind(
             "Function.prototype.bind receiver is not callable",
         ));
     }
+    let bound_count = args.len().saturating_sub(1);
+    let target_has_length = matches!(&this, JsValue::Object(object) if object.borrow().own_prop("length").is_some());
+    let target_length = if target_has_length { i.get_prop(&this, "length")? } else { JsValue::Undefined };
+    let target_length = match target_length {
+        JsValue::Num(number) if number.is_finite() => number.trunc().max(0.0),
+        JsValue::Num(number) if number.is_infinite() && number.is_sign_positive() => f64::INFINITY,
+        _ => 0.0,
+    };
+    let target_name = i.get_prop(&this, "name")?;
+    let target_name = match target_name { JsValue::Str(name) => name.to_utf8_lossy(), _ => String::new() };
+    let target_constructible = matches!(&this, JsValue::Object(object) if object.borrow().constructible);
     let data = Obj(Rc::new(RefCell::new(JsObject::ordinary())));
     data.borrow_mut().set_own("target", this);
     data.borrow_mut()
@@ -1092,7 +1103,12 @@ fn native_function_bind(
         .set_own("args", array_values(i, args.into_iter().skip(1).collect())?);
     let bound = Interpreter::native("bound", native_bound, &i.function_proto);
     if let JsValue::Object(function) = &bound {
-        function.borrow_mut().func.as_mut().unwrap().home = Some(data);
+        let mut function = function.borrow_mut();
+        function.func.as_mut().unwrap().home = Some(data);
+        function.constructible = target_constructible;
+        function.delete_own("prototype");
+        function.define("name", Property { value: JsValue::str(format!("bound {target_name}")), writable: false, enumerable: false, configurable: true, getter: None, setter: None }).unwrap();
+        function.define("length", Property { value: JsValue::num((target_length - bound_count as f64).max(0.0)), writable: false, enumerable: false, configurable: true, getter: None, setter: None }).unwrap();
     }
     Ok(bound)
 }
@@ -1110,11 +1126,14 @@ fn native_bound(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<J
         .map(|value| i.iterate(&value))
         .transpose()?
         .unwrap_or_default();
-    i.call_value(
-        &target,
-        receiver,
-        bound_args.into_iter().chain(args).collect(),
-    )
+    let arguments = bound_args.into_iter().chain(args).collect();
+    if let Some(new_target) = i.current_new_target() {
+        let bound = i.native_stack.last().cloned().map(JsValue::Object);
+        let new_target = if bound.as_ref() == Some(&new_target) { target.clone() } else { new_target };
+        i.construct_with_new_target(&target, arguments, new_target)
+    } else {
+        i.call_value(&target, receiver, arguments)
+    }
 }
 
 fn namespace_define_allowed(
@@ -1164,6 +1183,7 @@ fn native_define_property(
     if !i.define_own_property(&target, &key, &descriptor)? {
         return Err(Throw::type_error("could not define property"));
     }
+
     Ok(JsValue::Object(target))
 }
 
@@ -1267,6 +1287,14 @@ fn native_type_error(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    native_error_value(i, args)
+}
+
+fn native_eval_error(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    native_error_value(i, args)
+}
+
+fn native_uri_error(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     native_error_value(i, args)
 }
 
@@ -2735,16 +2763,19 @@ fn native_array_push(
     Ok(JsValue::num(n as f64))
 }
 fn native_array_pop(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let n = i.array_length(&this);
+    let object = array_receiver(i, this)?;
+    let length = i.get_prop(&object, "length")?;
+    let length = i.to_number(&length)?;
+    let n = if length.is_nan() || length <= 0.0 { 0 }
+        else { length.trunc().min(9_007_199_254_740_991.0) as usize };
     if n == 0 {
+        i.set_prop(&object, "length", JsValue::num(0.0))?;
         return Ok(JsValue::Undefined);
     }
     let k = (n - 1).to_string();
-    let v = i.get_prop(&this, &k)?;
-    i.set_prop(&this, "length", JsValue::num((n - 1) as f64))?;
-    if let JsValue::Object(o) = this {
-        o.borrow_mut().delete_own(&k);
-    }
+    let v = i.get_prop(&object, &k)?;
+    array_delete(i, &object, n - 1)?;
+    i.set_prop(&object, "length", JsValue::num((n - 1) as f64))?;
     Ok(v)
 }
 fn native_array_join(
@@ -2794,6 +2825,13 @@ fn native_array(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsVa
         o.proto = Some(i.array_proto.clone());
         o
     });
+    if let [JsValue::Num(length)] = a.as_slice() {
+        if !length.is_finite() || *length < 0.0 || length.fract() != 0.0 || *length > u32::MAX as f64 {
+            return Err(Throw::range_error("invalid array length"));
+        }
+        i.set_prop(&v, "length", JsValue::num(*length))?;
+        return Ok(v);
+    }
     for (n, x) in a.into_iter().enumerate() {
         i.set_prop(&v, &n.to_string(), x)?;
     }
@@ -3276,29 +3314,20 @@ fn native_array_reduce(
     if callable_function(callback).is_none() {
         return Err(Throw::type_error("array reducer is not a function"));
     }
-    let length = i.array_length(&this);
+    let object = array_receiver(i, this)?;
+    let length = array_like_length(i, &object)?;
     let mut index = 0usize;
-    let mut accumulator = if args.len() > 1 {
-        args[1].clone()
-    } else if length > 0 {
-        let value = i.get_prop(&this, "0")?;
-        index = 1;
-        value
-    } else {
-        return Err(Throw::type_error(
-            "reduce of empty array with no initial value",
-        ));
-    };
+    let mut accumulator = args.get(1).cloned();
     while index < length {
-        let value = i.get_prop(&this, &index.to_string())?;
-        accumulator = i.call_value(
-            callback,
-            JsValue::Undefined,
-            vec![accumulator, value, JsValue::num(index as f64), this.clone()],
-        )?;
+        if !array_has(i, &object, index)? { index += 1; continue; }
+        let value = i.get_prop(&object, &index.to_string())?;
+        accumulator = Some(if let Some(current) = accumulator {
+            i.call_value(callback, JsValue::Undefined,
+                vec![current, value, JsValue::num(index as f64), object.clone()])?
+        } else { value });
         index += 1;
     }
-    Ok(accumulator)
+    accumulator.ok_or_else(|| Throw::type_error("reduce of empty array with no initial value"))
 }
 
 fn native_array_slice(
@@ -3335,17 +3364,31 @@ fn native_array_concat(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let mut values = i.iterate(&this)?;
-    for argument in args {
-        if matches!(argument, JsValue::Object(ref object) if matches!(object.borrow().exotic, Exotic::Array))
-            || matches!(argument, JsValue::Str(_))
-        {
-            values.extend(i.iterate(&argument)?);
+    let this = array_receiver(i, this)?;
+    let result = array_result(i, 0);
+    let mut next = 0usize;
+    for item in std::iter::once(this).chain(args) {
+        let spread = if let JsValue::Object(object) = &item {
+            let override_value = i.get_prop(&item, WellKnownSymbol::IsConcatSpreadable.symbol())?;
+            if override_value.is_undefined() { matches!(object.borrow().exotic, Exotic::Array) }
+            else { override_value.to_boolean() }
+        } else { false };
+        if spread {
+            let length = array_like_length(i, &item)?;
+            for index in 0..length {
+                if array_has(i, &item, index)? {
+                    let value = i.get_prop(&item, index.to_string())?;
+                    i.set_prop(&result, next.to_string(), value)?;
+                }
+                next += 1;
+            }
         } else {
-            values.push(argument);
+            i.set_prop(&result, next.to_string(), item)?;
+            next += 1;
         }
     }
-    array_values(i, values)
+    i.set_prop(&result, "length", JsValue::num(next as f64))?;
+    Ok(result)
 }
 
 fn native_array_includes(
@@ -3364,9 +3407,13 @@ fn native_array_index_of(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    let object = array_receiver(i, this)?;
+    let length = array_like_length(i, &object)?;
+    if length == 0 { return Ok(JsValue::num(-1.0)); }
     let search = args.first().cloned().unwrap_or(JsValue::Undefined);
-    for (index, value) in i.iterate(&this)?.into_iter().enumerate() {
-        if value == search {
+    let start = array_index(i, args.get(1), length, 0.0)?;
+    for index in start..length {
+        if array_has(i, &object, index)? && array_get_index(i, &object, index)? == search {
             return Ok(JsValue::num(index as f64));
         }
     }
@@ -3375,27 +3422,14 @@ fn native_array_index_of(
 fn native_boolean(_: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let value = JsValue::Bool(a.first().map(|x| x.to_boolean()).unwrap_or(false));
     if let JsValue::Object(object) = &this {
-        object.borrow_mut().set_own("[[BooleanData]]", value);
+        object.borrow_mut().define("[[BooleanData]]", Property {
+            value, writable: false, enumerable: false, configurable: false,
+            getter: None, setter: None,
+        }).unwrap();
         Ok(this)
     } else {
         Ok(value)
     }
-}
-fn boolean_receiver(this: JsValue) -> Result<bool, Throw> {
-    match this {
-        JsValue::Bool(value) => Ok(value),
-        JsValue::Object(object) => match object.borrow().get_own("[[BooleanData]]") {
-            Some(JsValue::Bool(value)) => Ok(value),
-            _ => Err(Throw::type_error("incompatible Boolean receiver")),
-        },
-        _ => Err(Throw::type_error("incompatible Boolean receiver")),
-    }
-}
-fn native_boolean_to_string(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Ok(JsValue::str(if boolean_receiver(this)? { "true" } else { "false" }))
-}
-fn native_boolean_value_of(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Ok(JsValue::Bool(boolean_receiver(this)?))
 }
 fn native_is_nan(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     Ok(JsValue::Bool(

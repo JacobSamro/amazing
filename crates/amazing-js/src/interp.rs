@@ -6,7 +6,7 @@
 //! real asynchronous job queue remain explicit later milestones.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -56,6 +56,13 @@ enum Flow {
     Break(Option<String>),
     Continue(Option<String>),
     Return(JsValue),
+}
+
+struct ForInState {
+    object: Option<Obj>,
+    object_was_visited: bool,
+    visited_keys: HashSet<crate::value::JsString>,
+    remaining_keys: VecDeque<crate::value::JsString>,
 }
 
 struct PromiseJob {
@@ -260,14 +267,17 @@ impl Interpreter {
             o
         })));
         let array_proto = Obj(Rc::new(RefCell::new({
-            let mut o = JsObject::ordinary();
+            let mut o = JsObject::array();
             o.proto = Some(object_proto.clone());
             o
         })));
         let string_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
-            o.set_own("[[StringData]]", JsValue::str(""));
+            o.define("[[StringData]]", Property {
+                value: JsValue::str(""), writable: false, enumerable: false,
+                configurable: false, getter: None, setter: None,
+            }).unwrap();
             o
         })));
         let number_proto = Obj(Rc::new(RefCell::new({
@@ -288,6 +298,11 @@ impl Interpreter {
             o
         })));
         let symbol_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
+        let boolean_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
             o
@@ -1346,7 +1361,20 @@ impl Interpreter {
             StmtKind::ForIn { left, right, body } => {
                 self.completion = JsValue::Undefined;
                 let v = self.eval_expr(right, env)?;
-                for k in self.enumerable_keys(&v)? {
+                let object = match v {
+                    JsValue::Null | JsValue::Undefined => None,
+                    other => match array_receiver(self, other)? {
+                        JsValue::Object(object) => Some(object),
+                        _ => None,
+                    },
+                };
+                let mut iterator = ForInState {
+                    object,
+                    object_was_visited: false,
+                    visited_keys: HashSet::new(),
+                    remaining_keys: VecDeque::new(),
+                };
+                while let Some(k) = self.next_for_in_key(&mut iterator)? {
                     let iteration_env = for_iteration_env(left, env);
                     self.bind_for(left, JsValue::str(k), &iteration_env)?;
                     match self.exec_stmt(body, &iteration_env)? {
@@ -2185,7 +2213,10 @@ impl Interpreter {
             if let Some(function) = &mut object.func {
                 if function.name.is_empty() {
                     function.name = name.to_string();
-                    object.set_own("name", JsValue::str(name));
+                    object.define("name", Property {
+                        value: JsValue::str(name), writable: false, enumerable: false,
+                        configurable: true, getter: None, setter: None,
+                    }).unwrap();
                 }
             }
         }
@@ -2619,11 +2650,22 @@ impl Interpreter {
             self.bind_pattern(&p.binding, v, ast::VarKind::Let, e)?;
         }
         let argument_count = args.len();
-        let a = JsValue::object(JsObject::array());
+        let a = self.object_value();
         for (i, v) in args.into_iter().enumerate() {
             self.set_prop(&a, &i.to_string(), v)?;
         }
-        self.set_prop(&a, "length", JsValue::num(argument_count as f64))?;
+        if let JsValue::Object(object) = &a {
+            object.borrow_mut().define("length", Property {
+                value: JsValue::num(argument_count as f64), writable: true,
+                enumerable: false, configurable: true, getter: None, setter: None,
+            }).unwrap();
+            if let Some(values) = self.array_proto.borrow().get_own("values") {
+                object.borrow_mut().define(WellKnownSymbol::Iterator.symbol(), Property {
+                    value: values, writable: true, enumerable: false, configurable: true,
+                    getter: None, setter: None,
+                }).unwrap();
+            }
+        }
         e.declare_var("arguments", a)?;
         Ok(())
     }
@@ -2721,15 +2763,6 @@ impl Interpreter {
         })));
         h.borrow_mut()
             .set_own("prototype", JsValue::Object(p.clone()));
-        h.borrow_mut().set_own(
-            "name",
-            JsValue::str(
-                f.name
-                    .as_ref()
-                    .map(|name| name.name.clone())
-                    .unwrap_or_default(),
-            ),
-        );
         h.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(p);
         JsValue::Object(h)
     }
@@ -2756,7 +2789,6 @@ impl Interpreter {
             arrow.lexical_super_constructor = frame.super_constructor.clone();
             arrow.lexical_new_target = frame.new_target.clone();
         }
-        handle.borrow_mut().set_own("name", JsValue::str(""));
         JsValue::Object(handle)
     }
     fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle) -> JsValue {
@@ -2773,7 +2805,6 @@ impl Interpreter {
         });
         o.proto = Some(self.function_proto.clone());
         let handle = Obj(Rc::new(RefCell::new(o)));
-        handle.borrow_mut().set_own("name", JsValue::str(""));
         JsValue::Object(handle)
     }
     fn eval_class(&mut self, c: &ast::ClassItem, e: &EnvHandle) -> Result<JsValue, Throw> {
@@ -3438,7 +3469,13 @@ impl Interpreter {
                 return Err(Throw::range_error("invalid array length"));
             }
         }
-        o.borrow_mut().set_own(&key, x);
+        let existing = o.borrow().own_prop(&key).cloned();
+        if let Some(mut property) = existing {
+            property.value = x;
+            o.borrow_mut().define(&key, property).unwrap();
+        } else {
+            o.borrow_mut().set_own(&key, x);
+        }
         if let Ok(n) = k.parse::<usize>() {
             if matches!(o.borrow().exotic, Exotic::Array) {
                 let len = match o.borrow().get_own("length") {
@@ -3446,8 +3483,9 @@ impl Interpreter {
                     _ => 0.0,
                 };
                 if n as f64 + 1.0 > len {
-                    o.borrow_mut()
-                        .set_own("length", JsValue::num(n as f64 + 1.0));
+                    let mut property = o.borrow().own_prop("length").cloned().unwrap();
+                    property.value = JsValue::num(n as f64 + 1.0);
+                    o.borrow_mut().define("length", property).unwrap();
                 }
             }
         }
@@ -3463,6 +3501,32 @@ impl Interpreter {
             JsValue::Str(s) => Ok((0..s.len()).map(|i| i.to_string().into()).collect()),
             _ => Ok(Vec::new()),
         }
+    }
+    fn next_for_in_key(&mut self, state: &mut ForInState) -> Result<Option<crate::value::JsString>, Throw> {
+        while let Some(object) = state.object.clone() {
+            if !state.object_was_visited {
+                state.remaining_keys = self.own_property_keys(&JsValue::Object(object.clone()))?
+                    .into_iter().filter_map(|key| match key {
+                        PropertyKey::String(name) => Some(name),
+                        PropertyKey::Symbol(_) => None,
+                    }).collect();
+                state.object_was_visited = true;
+            }
+            while let Some(key) = state.remaining_keys.pop_front() {
+                if state.visited_keys.contains(&key) { continue; }
+                let property = match binary_index_descriptor(&object, &PropertyKey::String(key.clone())) {
+                    Some(descriptor) => descriptor,
+                    None => self.legacy_own_property(&object, key.clone(), false)?,
+                };
+                if let Some(property) = property {
+                    state.visited_keys.insert(key.clone());
+                    if property.enumerable { return Ok(Some(key)); }
+                }
+            }
+            state.object = object.borrow().proto.clone();
+            state.object_was_visited = false;
+        }
+        Ok(None)
     }
     fn own_property_keys(&mut self, v: &JsValue) -> Result<Vec<PropertyKey>, Throw> {
         match v {
@@ -3933,6 +3997,8 @@ fn for_iteration_env(left: &ForLeft, env: &EnvHandle) -> EnvHandle {
 include!("interp_install.rs");
 include!("interp_symbol.rs");
 include!("interp_builtins.rs");
+include!("interp_array.rs");
+include!("interp_object_extra.rs");
 include!("builtins_std_object_model.rs");
 include!("builtins_std_reflect.rs");
 include!("builtins_std_collections.rs");

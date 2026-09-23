@@ -67,7 +67,29 @@ impl Interpreter {
                 return result;
             }
         }
-        let fields = self.std_descriptor_fields(descriptor)?;
+
+        let mut fields = self.std_descriptor_fields(descriptor)?;
+        let is_array = matches!(target.borrow().exotic, Exotic::Array);
+        if is_array && key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length") {
+            if let Some(value) = fields.value.take() {
+                let number = self.to_number(&value)?;
+                if !number.is_finite() || number < 0.0 || number.fract() != 0.0 || number > u32::MAX as f64 {
+                    return Err(Throw::range_error("invalid array length"));
+                }
+                if !array_prepare_length_change(target, number as u32) { return Ok(false); }
+                fields.value = Some(JsValue::num(number));
+            }
+        }
+        let extending_array_index = if is_array {
+            array_index_key(key).and_then(|index| {
+                let length = target.borrow().get_own("length")?.to_number().ok()?;
+                (index as f64 >= length).then_some(index)
+            })
+        } else { None };
+        if extending_array_index.is_some() && target.borrow().own_prop("length").is_some_and(|p| !p.writable) {
+            return Ok(false);
+        }
+
         let original = if let Some(name) = key.as_string() {
             self.legacy_own_property(target, name, false)?
         } else { target.borrow().own_prop(key).cloned() }.or_else(|| {
@@ -98,6 +120,11 @@ impl Interpreter {
                 if self.legacy_define(target, name, &property)? { return Ok(true); }
             }
             target.borrow_mut().define(key, property).unwrap();
+            if let Some(index) = extending_array_index {
+                let mut length = target.borrow().own_prop("length").cloned().unwrap();
+                length.value = JsValue::num(index as f64 + 1.0);
+                target.borrow_mut().define("length", length).unwrap();
+            }
             return Ok(true);
         };
         let old_accessor = property.getter.is_some() || property.setter.is_some();
@@ -142,6 +169,11 @@ impl Interpreter {
             if self.legacy_define(target, name, &property)? { return Ok(true); }
         }
         target.borrow_mut().define(key, property).unwrap();
+        if let Some(index) = extending_array_index {
+            let mut length = target.borrow().own_prop("length").cloned().unwrap();
+            length.value = JsValue::num(index as f64 + 1.0);
+            target.borrow_mut().define("length", length).unwrap();
+        }
         Ok(true)
     }
 
