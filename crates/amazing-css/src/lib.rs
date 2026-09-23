@@ -21,8 +21,8 @@
 //!
 //! Crate-level deviations (deliberate, documented per module):
 //! - `@supports` handles static variable-bearing declaration conditions;
-//!   other at-rule bodies (`@media`, `@keyframes`, …) are
-//!   balanced then dropped
+//!   `@keyframes` is retained for the compositor; unsupported at-rule bodies
+//!   such as `@media` are balanced then dropped
 //! - typed computed values cover primitive numeric/color values and common
 //!   layout keywords; remaining compound grammars are explicitly unparsed
 //! - implicit scope requires callers to preserve sheet identity and populate
@@ -38,6 +38,7 @@
 //! [`selectors::parse_selector`] / [`compute`].
 
 pub mod cascade;
+pub mod animation;
 pub mod color;
 mod computed;
 pub mod generated;
@@ -53,6 +54,7 @@ pub use cascade::{
     compute_element_paint_style,
 };
 pub use computed::ComputedStyle;
+pub use animation::{Keyframe, KeyframesRule, keyframes_rules};
 pub use parser::{
     Declaration, FontFaceRule, FontSource, Rule, Stylesheet, parse_declarations, parse_font_faces,
     parse_stylesheet,

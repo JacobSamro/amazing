@@ -11,7 +11,8 @@
 //! Deferred/deviations:
 //! - `@supports` evaluates the static variable-bearing declaration conditions
 //!   used by the computed-value gate; `@layer` and `@scope` retain group context;
-//!   other at-rules are consumed and dropped
+//!   `@keyframes` is retained for the compositor; other at-rules are consumed
+//!   and dropped
 //! - nested style rules remain deferred
 //! - declaration values stay normalized strings; the private computed-value
 //!   module tokenizes them for custom-property substitution and defaulting
@@ -40,6 +41,8 @@ pub struct Rule {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Stylesheet {
     pub rules: Vec<Rule>,
+    /// Animation rules in stylesheet order, including supported group rules.
+    pub keyframes: Vec<crate::animation::KeyframesRule>,
     /// Parent of the stylesheet owner node, for implicit `@scope`.
     pub scope_root: Option<amazing_dom::NodeIdx>,
     /// Final fetched URL, or the document URL for an inline stylesheet.
@@ -450,9 +453,9 @@ pub fn parse_declarations(src: &str) -> Vec<Declaration> {
     p.block_declarations()
 }
 
-struct Parser<'t> {
-    toks: &'t [Token],
-    pos: usize,
+pub(crate) struct Parser<'t> {
+    pub(crate) toks: &'t [Token],
+    pub(crate) pos: usize,
 }
 
 impl Parser<'_> {
@@ -465,7 +468,7 @@ impl Parser<'_> {
     }
 
     /// Skips an at-rule: through the next ';' or its balanced {} block.
-    fn skip_at_rule(&mut self) {
+    pub(crate) fn skip_at_rule(&mut self) {
         debug_assert!(matches!(self.peek(), Some(Token::AtKeyword(_))));
         self.pos = skip_rule_remainder(self.toks, self.pos + 1, true);
     }
@@ -534,7 +537,7 @@ impl Parser<'_> {
     }
 
     /// Reads declarations until the block's closing '}' (consumed) or EOF.
-    fn block_declarations(&mut self) -> Vec<Declaration> {
+    pub(crate) fn block_declarations(&mut self) -> Vec<Declaration> {
         let mut out = Vec::new();
         let mut current: Vec<Token> = Vec::new();
         let mut depth = 0usize;

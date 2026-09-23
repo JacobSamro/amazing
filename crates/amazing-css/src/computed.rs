@@ -176,6 +176,10 @@ impl ComputedStyle {
         }
         let prior_zoom = self.get("zoom").and_then(used_zoom_factor).unwrap_or(1.0);
         for (longhand, expanded) in expand_declaration(property, value) {
+            let expanded = if longhand.starts_with("animation-") || longhand.starts_with("transition-") {
+                let Some(canonical) = crate::animation::canonical(&longhand, &expanded) else { continue };
+                canonical
+            } else { expanded };
             let typed = values::parse(&longhand, &expanded).unwrap_or(ComputedValue::Unparsed);
             self.typed.insert(longhand.clone(), typed);
             // Layout-time synthesis replaces this value, not an author rule.
@@ -226,6 +230,21 @@ struct PropertyMetadata {
 // or paint behavior. Keeping initial/inheritance metadata in one registry is
 // what makes CSS-wide keywords and `all` property-aware.
 const PROPERTIES: &[PropertyMetadata] = &[
+    PropertyMetadata { name: "animation-name", initial: "none", inherited: false },
+    PropertyMetadata { name: "animation-duration", initial: "0s", inherited: false },
+    PropertyMetadata { name: "animation-timing-function", initial: "ease", inherited: false },
+    PropertyMetadata { name: "animation-delay", initial: "0s", inherited: false },
+    PropertyMetadata { name: "animation-iteration-count", initial: "1", inherited: false },
+    PropertyMetadata { name: "animation-direction", initial: "normal", inherited: false },
+    PropertyMetadata { name: "animation-fill-mode", initial: "none", inherited: false },
+    PropertyMetadata { name: "animation-play-state", initial: "running", inherited: false },
+    PropertyMetadata { name: "animation-composition", initial: "replace", inherited: false },
+    PropertyMetadata { name: "animation-timeline", initial: "auto", inherited: false },
+    PropertyMetadata { name: "transition-property", initial: "all", inherited: false },
+    PropertyMetadata { name: "transition-duration", initial: "0s", inherited: false },
+    PropertyMetadata { name: "transition-timing-function", initial: "ease", inherited: false },
+    PropertyMetadata { name: "transition-delay", initial: "0s", inherited: false },
+    PropertyMetadata { name: "transition-behavior", initial: "normal", inherited: false },
     PropertyMetadata { name: "background-image", initial: "none", inherited: false },
     PropertyMetadata { name: "background-position", initial: "0% 0%", inherited: false },
     PropertyMetadata { name: "background-size", initial: "auto", inherited: false },
@@ -877,6 +896,17 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         }
         return expand_list_style(value).unwrap_or_default();
     }
+    if matches!(property.as_str(), "animation" | "transition") {
+        if contains_var_function(value) {
+            let (prefix, names): (&str, &[&str]) = if property == "animation" {
+                (DEFERRED_ANIMATION, &["animation-name", "animation-duration", "animation-timing-function", "animation-delay", "animation-iteration-count", "animation-direction", "animation-fill-mode", "animation-play-state", "animation-composition", "animation-timeline"])
+            } else {
+                (DEFERRED_TRANSITION, &["transition-property", "transition-duration", "transition-timing-function", "transition-delay", "transition-behavior"])
+            };
+            return names.iter().map(|name| ((*name).to_owned(), deferred(prefix, value))).collect();
+        }
+        return crate::animation::expand_shorthand(&property, value).unwrap_or_default();
+    }
     if metadata(&property).is_some()
         && css_wide_keyword(value).is_none()
         && !contains_var_function(value)
@@ -1273,6 +1303,8 @@ fn expand_list_style(value: &str) -> Option<Vec<(String, String)>> {
 const DEFERRED_BACKGROUND: &str = "amazing-internal-background";
 const DEFERRED_FONT: &str = "amazing-internal-font";
 const DEFERRED_LIST_STYLE: &str = "amazing-internal-list-style";
+const DEFERRED_ANIMATION: &str = "amazing-internal-animation";
+const DEFERRED_TRANSITION: &str = "amazing-internal-transition";
 const DEFERRED_BORDER_WIDTH: &str = "amazing-internal-border-side-width";
 const DEFERRED_BORDER_STYLE: &str = "amazing-internal-border-side-style";
 const DEFERRED_BORDER_COLOR: &str = "amazing-internal-border-side-color";
@@ -2928,7 +2960,9 @@ fn compute_normal_value(
             None => value,
         }
     };
-    let computed = if property.name == "font-size" {
+    let computed = if property.name.starts_with("animation-") || property.name.starts_with("transition-") {
+        crate::animation::canonical(property.name, &computed).unwrap_or_else(|| property.initial.to_owned())
+    } else if property.name == "font-size" {
         computed_font_size(&computed, parent, root_font_px).unwrap_or(computed)
     } else if matches!(property.name, "font-feature-settings" | "font-variant-ligatures") {
         canonical_font_feature_value(property.name, &computed).unwrap_or(computed)
@@ -3022,6 +3056,12 @@ fn resolve_deferred_shorthand(property: &str, value: &str) -> Result<String, ()>
     if let Some(inner) = deferred_inner(value, DEFERRED_LIST_STYLE) {
         return expand_list_style(inner).ok_or(())?.into_iter()
             .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());
+    }
+    for (function, shorthand) in [(DEFERRED_ANIMATION, "animation"), (DEFERRED_TRANSITION, "transition")] {
+        if let Some(inner) = deferred_inner(value, function) {
+            return crate::animation::expand_shorthand(shorthand, inner).ok_or(())?.into_iter()
+                .find_map(|(name, value)| (name == property).then_some(value)).ok_or(());
+        }
     }
     if let Some(inner) = deferred_inner(value, DEFERRED_FONT) {
         return expand_font_shorthand(inner).ok_or(())?.into_iter()

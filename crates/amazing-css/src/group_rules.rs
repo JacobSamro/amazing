@@ -75,9 +75,9 @@ pub(super) fn parse(
                                 declarations: vec![],
                             });
                             if block {
-                                sheet
-                                    .rules
-                                    .extend(parse(body, &full, scopes, anonymous, depth + 1).rules);
+                                let inner = parse(body, &full, scopes, anonymous, depth + 1);
+                                sheet.rules.extend(inner.rules);
+                                sheet.keyframes.extend(inner.keyframes);
                             }
                         }
                     }
@@ -85,15 +85,20 @@ pub(super) fn parse(
                         if let Some(scope) = scope_prelude(prelude, !scopes.is_empty()) {
                             let mut inner = scopes.to_vec();
                             inner.push(scope);
-                            sheet
-                                .rules
-                                .extend(parse(body, layer, &inner, anonymous, depth + 1).rules);
+                            let inner_sheet = parse(body, layer, &inner, anonymous, depth + 1);
+                            sheet.rules.extend(inner_sheet.rules);
+                            sheet.keyframes.extend(inner_sheet.keyframes);
                         }
                     }
                     "supports" if block && supports_condition(prelude) => {
-                        sheet
-                            .rules
-                            .extend(parse(body, layer, scopes, anonymous, depth + 1).rules);
+                        let inner = parse(body, layer, scopes, anonymous, depth + 1);
+                        sheet.rules.extend(inner.rules);
+                        sheet.keyframes.extend(inner.keyframes);
+                    }
+                    "keyframes" if block => {
+                        if let Some(rule) = crate::animation::parse_keyframes(prelude, body) {
+                            sheet.keyframes.push(rule);
+                        }
                     }
                     _ => {}
                 }

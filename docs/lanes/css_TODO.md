@@ -1206,3 +1206,16 @@ image and position longhands, including `none`, image URLs, CSS-wide values and
 post-substitution `var()`. The selector parser now accepts `:nth-of-type()` and
 `:nth-last-of-type()` so a structural compound immediately before `::marker`
 can match its originating list item. CSS crate regressions cover both paths.
+
+## CSS-14 animation and transition parsing (2026-09-24)
+
+The CSS crate retains `@keyframes` across ordinary stylesheets and supported
+`@layer`/`@scope`/`@supports` groups. `keyframes_rules(&[Stylesheet])` returns
+last-named definitions with per-frame offsets, timing functions, and validated
+non-important declarations for the compositor. Animation and transition
+longhands have initial values and canonical comma-list computed values;
+shorthands reset omitted components and defer `var()` until substitution.
+`crates/amazing-css/evidence/css14-parsing-manifest.json` freezes 51 upstream
+parsing paths at WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+The Rust parser tests use selected cases from that set; upstream CSSOM
+animation runtime conformance remains a downstream compositor/DOM gate.
