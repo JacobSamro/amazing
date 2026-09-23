@@ -263,6 +263,8 @@ pub enum ClassMember {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassMethod {
     pub key: PropKey,
+    /// Lossless code units when `key` is a quoted string literal.
+    pub key_utf16: Option<Vec<u16>>,
     pub kind: MethodKind,
     pub is_static: bool,
     pub is_generator: bool,
@@ -285,6 +287,8 @@ pub enum MethodKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassField {
     pub key: PropKey,
+    /// Lossless code units when `key` is a quoted string literal.
+    pub key_utf16: Option<Vec<u16>>,
     pub is_static: bool,
     pub init: Option<Expr>,
     pub span: Span,
@@ -309,11 +313,17 @@ pub enum PropKey {
 pub struct Expr {
     pub kind: ExprKind,
     pub span: Span,
+    /// Lossless code units when `kind` is [`ExprKind::Str`].
+    pub string_utf16: Option<Vec<u16>>,
 }
 
 impl Expr {
     pub fn new(kind: ExprKind, span: Span) -> Self {
-        Expr { kind, span }
+        Expr {
+            kind,
+            span,
+            string_utf16: None,
+        }
     }
 }
 
@@ -409,6 +419,10 @@ pub struct TemplateLit {
     /// Cooked quasi strings; always exactly one more quasi than `exprs`
     /// (empty leading/trailing quasis included).
     pub quasis: Vec<String>,
+    /// Cooked quasis as lossless UTF-16 code units, aligned with `quasis`.
+    pub quasis_utf16: Vec<Vec<u16>>,
+    /// Raw source spelling of each quasi as UTF-16 code units.
+    pub raw_quasis_utf16: Vec<Vec<u16>>,
     pub exprs: Vec<Expr>,
 }
 
@@ -438,6 +452,8 @@ pub enum ArrowBody {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Property {
     pub key: PropKey,
+    /// Lossless code units when `key` is a quoted string literal.
+    pub key_utf16: Option<Vec<u16>>,
     pub value: PropValue,
     pub span: Span,
 }

@@ -143,6 +143,10 @@ pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
     pub newline_before: bool,
+    /// Lossless cooked code units for string literals and template chunks.
+    pub cooked_utf16: Option<Vec<u16>>,
+    /// Source spelling of a template chunk, excluding its delimiters.
+    pub raw_utf16: Option<Vec<u16>>,
 }
 
 impl Token {
@@ -151,6 +155,8 @@ impl Token {
             kind,
             span,
             newline_before,
+            cooked_utf16: None,
+            raw_utf16: None,
         }
     }
 }

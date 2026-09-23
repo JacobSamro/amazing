@@ -995,3 +995,25 @@ keep the existing string field alongside the new field during the js-runtime
 Test lone surrogates, paired escapes, code-point escapes, and cooked versus raw
 template text. **JS-7**, briefed in `.agents/js-lang/queued-js7.md`, follows
 only after JS-6 is reported.
+
+## JS-6 handoff
+
+Code commit: `12e5deb` (based on `0871d92`). js-runtime can build directly
+against the field names below.
+
+The lexer now carries lossless UTF-16 code units in `Token.cooked_utf16` for
+string literals and template chunks, and `Token.raw_utf16` for template chunks.
+Both fields have type `Option<Vec<u16>>`; non-string tokens contain `None`.
+
+The AST exposes `Expr.string_utf16: Option<Vec<u16>>` beside
+`ExprKind::Str(String)`. `TemplateLit.quasis_utf16` and
+`TemplateLit.raw_quasis_utf16` are `Vec<Vec<u16>>`, aligned one-for-one with the
+existing `TemplateLit.quasis: Vec<String>`. Quoted object and class keys retain
+their units in `Property.key_utf16`, `ClassMethod.key_utf16`, and
+`ClassField.key_utf16`, each `Option<Vec<u16>>` beside the existing `PropKey`.
+The legacy Rust strings may contain U+FFFD for a lone surrogate; runtime string
+operations must read the UTF-16 fields during the `JsString` migration.
+
+Identifier escapes remain deferred in the lexer. When implemented, they must
+resolve to valid identifier code points; arbitrary UTF-16 code units are for
+string and template values only.
