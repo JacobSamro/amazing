@@ -1,0 +1,103 @@
+{
+  "dev_base": "ffb143b6fdc07df7a9681e597f04a8da40f23d06",
+  "compiled_lane_head": "95dabe37a6b510e5271dee2fc51770eb6b0459e7",
+  "platform": "win-001",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "locked": true,
+  "incremental": false,
+  "root_nextest": {
+    "passed": 1263,
+    "failed": 0,
+    "skipped": 3,
+    "binaries": 42
+  },
+  "root_doctests": {
+    "passed": 2,
+    "failed": 0,
+    "targets": 19,
+    "amazing_html": 1,
+    "amazing_js": 1
+  },
+  "paint_nextest": {
+    "passed": 87,
+    "failed": 0
+  },
+  "image_nextest": {
+    "passed": 17,
+    "failed": 0,
+    "skipped": 0,
+    "binaries": 3
+  },
+  "image_doctests": {
+    "passed": 0,
+    "failed": 0,
+    "ignored": 0
+  },
+  "metadata_exit_codes": {
+    "root": 0,
+    "isolated_image_workspace": 0
+  },
+  "root_driver_build": "passed",
+  "isolated_image_example_build": "passed",
+  "build_inputs_checked": 328,
+  "build_input_mismatches": 0,
+  "refresh": "primary absolute coordinator; lane-only refresh at dev ffb143b, own changes re-synced, root first-party artifacts invalidated; isolated image first-party artifacts invalidated before build",
+  "shared_build_slot": "primary absolute with-build-slot.sh; slot-2",
+  "log_sha256": {
+    "workspace": "845d1981ee2f0e6bba3c11f04281f7b7542dde69c41ad482a44ee1fde42589df",
+    "doctests": "228dc59edd2fa5424a522aefae72268e2aa44913ba167da860f6cabf4c872e3c",
+    "image-tests": "7476a8d33aa9dc26447bb1cec7472a511f6ff8912baef5f6df56a934fcb67505",
+    "image-doctests": "49593a7a1bfe0f2380e55614ca0030f8f8fe75ba3561d2bbba23e80519b42a55",
+    "after-build": "9076fbcbe7dd1765dd7429daceb44a5140606b0a2e5337cfff01852dc3369b94",
+    "after-image-build": "f8f21e127c4f80ae42c2abcfcd3360320a449efc0d48de2b78ab36a4a5f5f7f0"
+  },
+  "reports_collected": true,
+  "repeatability": "five selections and owned proof stable by per-case classification/diff/actual/reference hashes",
+  "current_source_counts_each_run": {
+    "scope": {
+      "pass": 26,
+      "mismatch": 4,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 18
+    },
+    "controls": {
+      "pass": 22,
+      "mismatch": 2,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "images": {
+      "pass": 12,
+      "mismatch": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "svg": {
+      "pass": 12,
+      "mismatch": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0,
+      "new_conformance_credit": 0
+    },
+    "focused": {
+      "pass": 24,
+      "mismatch": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "owned": {
+      "pass": 9,
+      "total": 9
+    }
+  },
+  "unrelated_ia1_mapping_effects": {
+    "scope_svg_use_descendant_combinator_003": "unsupported (reference absent) -> crash (page script TypeError)",
+    "controls_input_checkbox_zero_size": "unsupported (reference absent) -> raw pass (blank reference resolves); no RC-4 credit"
+  },
+  "recorded_at": "2026-09-23T03:56:50.410578+00:00"
+}

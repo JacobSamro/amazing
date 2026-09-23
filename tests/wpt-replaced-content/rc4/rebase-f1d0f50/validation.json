@@ -1,0 +1,84 @@
+{
+  "dev_base": "f1d0f5013a98c50918bae30d1ffec9e69187681f",
+  "compiled_lane_head": "552fd1f291bc94a5d5983ae4aef695904800b7de",
+  "platform": "win-001",
+  "locked": true,
+  "incremental": false,
+  "root_nextest": {
+    "passed": 1261,
+    "failed": 0,
+    "skipped": 3,
+    "binaries": 42
+  },
+  "root_doctests": {
+    "passed": 2,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 19,
+    "amazing_html": 1,
+    "amazing_js": 1
+  },
+  "paint_nextest": {
+    "passed": 87,
+    "failed": 0
+  },
+  "image_nextest": {
+    "passed": 17,
+    "failed": 0,
+    "skipped": 0,
+    "binaries": 3
+  },
+  "image_doctests": {
+    "passed": 0,
+    "failed": 0,
+    "ignored": 0
+  },
+  "metadata_exit_codes": {
+    "root": 0,
+    "isolated_image_workspace": 0
+  },
+  "root_driver_build": "passed",
+  "isolated_image_example_build": "passed",
+  "build_inputs_checked": 207,
+  "build_input_mismatches": 0,
+  "artifact_freshness": "Lane-only refresh with first-party invalidation; own100 files resynced; isolated image first-party artifacts invalidated; shared REFRESH-HOLD set",
+  "shell_source_grant_needed": false,
+  "shell_or_lock_edits": false,
+  "existing_evidence_unchanged_from": "b5031cc6cc8b1cdb9e60810554d957152e12a431",
+  "test_log_sha256": {
+    "workspace": "e9cf9b44bbca7f2295139fcca40c91a3f319362078be6d93172b7fedc0085ef9",
+    "doctests": "b805a18f33a1d10ca3828926cfd315329d0b345370c8d7e68e3be24f77bacf29",
+    "image-tests": "18ecf00e3bb42935441e3b3bd128ca16bb943426a54b4a3c4dad77bffda99737",
+    "image-doctests": "ab5433d265dd3bdc1364f8c4957c589b2bd81b0e33495457f9269f3c17e500ed"
+  },
+  "final_pinned_process_exit": 0,
+  "all_pinned_reports_collected": false,
+  "paired_hash_verification": "pending SSH restoration; counts observed only",
+  "observed_each_run_counts": {
+    "scope": {
+      "pass": 26,
+      "mismatch": 4,
+      "unsupported": 1,
+      "crash": 17
+    },
+    "controls": {
+      "pass": 21,
+      "mismatch": 2,
+      "unsupported": 1
+    },
+    "images": {
+      "pass": 12
+    },
+    "svg": {
+      "pass": 12,
+      "new_conformance_credit": 0
+    },
+    "focused": {
+      "pass": 24
+    },
+    "owned": {
+      "pass": 9
+    }
+  },
+  "superseded_as_current_validation_by_dev": "9bf12246168c7b2bebb4e402853a47baeddc6ee4"
+}

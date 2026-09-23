@@ -1,0 +1,1165 @@
+{
+  "fields": [
+    "id",
+    "classification",
+    "differing_pixels",
+    "max_difference",
+    "actual_sha256",
+    "reference_sha256",
+    "diff_sha256"
+  ],
+  "pairs": [
+    {
+      "runs": [
+        "scope-before-1.json",
+        "scope-before-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "eda7f12e6ef0183228d354ea717cd6dfeeb750bdad8da661e14dd11d799954b5"
+    },
+    {
+      "runs": [
+        "scope-after-1.json",
+        "scope-after-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "eda7f12e6ef0183228d354ea717cd6dfeeb750bdad8da661e14dd11d799954b5"
+    },
+    {
+      "runs": [
+        "controls-before-1.json",
+        "controls-before-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "bb65bab991deba32128e6aa814cbd042e02ecce3dec7044453b488a4cb4df101"
+    },
+    {
+      "runs": [
+        "controls-after-1.json",
+        "controls-after-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "bb65bab991deba32128e6aa814cbd042e02ecce3dec7044453b488a4cb4df101"
+    },
+    {
+      "runs": [
+        "images-before-1.json",
+        "images-before-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "c700e2d5e6432127acc7222cbe33658ca29f2e60c671710d5c0dfb5eee30990f"
+    },
+    {
+      "runs": [
+        "images-after-1.json",
+        "images-after-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "c700e2d5e6432127acc7222cbe33658ca29f2e60c671710d5c0dfb5eee30990f"
+    },
+    {
+      "runs": [
+        "svg-before-1.json",
+        "svg-before-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "21310a30039fd932d0886b9d349656e70aee98175be92673e4afe0388c8ec3ec"
+    },
+    {
+      "runs": [
+        "svg-after-1.json",
+        "svg-after-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "21310a30039fd932d0886b9d349656e70aee98175be92673e4afe0388c8ec3ec"
+    },
+    {
+      "runs": [
+        "focused-before-1.json",
+        "focused-before-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "68e51665fb0ba96e3e3c5392a4686a5a30228fd758cafcf38ad702d560e540fd"
+    },
+    {
+      "runs": [
+        "focused-after-1.json",
+        "focused-after-2.json"
+      ],
+      "stable": true,
+      "projection_sha256": "68e51665fb0ba96e3e3c5392a4686a5a30228fd758cafcf38ad702d560e540fd"
+    }
+  ],
+  "counts": {
+    "scope": {
+      "before": {
+        "pass": 26,
+        "mismatch": 4,
+        "timeout": 0,
+        "unsupported": 1,
+        "crash": 17
+      },
+      "after": {
+        "pass": 26,
+        "mismatch": 4,
+        "timeout": 0,
+        "unsupported": 1,
+        "crash": 17
+      }
+    },
+    "controls": {
+      "before": {
+        "pass": 21,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "crash": 0
+      },
+      "after": {
+        "pass": 21,
+        "mismatch": 2,
+        "timeout": 0,
+        "unsupported": 1,
+        "crash": 0
+      }
+    },
+    "images": {
+      "before": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      }
+    },
+    "svg": {
+      "before": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 12,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      }
+    },
+    "focused": {
+      "before": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 24,
+        "mismatch": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      }
+    }
+  },
+  "changes": {
+    "scope": [
+      {
+        "id": "controls__html__semantics__forms__the-input-element__type-change-to-password.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "controls__html__semantics__forms__the-input-element__range-tick-marks-04.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "controls__html__semantics__forms__the-select-element__customizable-select__select-picker-pseudo-target-text.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "controls__html__semantics__forms__the-input-element__type-change-to-same-type.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "controls__html__semantics__forms__the-textarea-element__multiline-placeholder.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "controls__html__semantics__forms__the-select-element__reset-algorithm-rendering.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "controls__html__semantics__forms__the-input-element__dynamic-value-update.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "controls__html__semantics__forms__the-select-element__customizable-select__select-picker-icon-content-none.html",
+        "before": "mismatch",
+        "after": "mismatch",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "images__html__semantics__embedded-content__the-img-element__animated-webp-update.tentative.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "images__css__css-images__object-fit-fill-svg-002o.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "images__css__css-images__object-position-png-001e.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "images__css__css-images__object-fit-cover-svg-003e.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "images__css__css-images__object-fit-cover-svg-004e.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "images__css__css-images__object-fit-scale-down-svg-001i.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "images__css__css-images__object-view-box-contain-intrinsic-size.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "images__svg__coordinate-systems__view-invalid-viewBox.html",
+        "before": "mismatch",
+        "after": "mismatch",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "svg__svg__painting__text-clip-path-transform.html",
+        "before": "mismatch",
+        "after": "mismatch",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "svg__svg__linking__reftests__use-descendant-combinator-003.html",
+        "before": "unsupported",
+        "after": "unsupported",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "svg__svg__painting__subpixel-clip-path-transform.html",
+        "before": "mismatch",
+        "after": "mismatch",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "svg__css__css-images__object-fit-fill-svg-002o.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "svg__svg__styling__svg-filter-render-cross-origin-frame-in-same-origin-frame.tentative.https.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "svg__svg__painting__reftests__non-scaling-stroke-003.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "svg__css__css-images__object-fit-cover-svg-003e.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "svg__svg__render__reftests__nested-svg-overflow-clip.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "canvas__html__canvas__offscreen__layers__2d.layer.ctm.resetTransform.w.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "canvas__html__canvas__offscreen__layers__2d.layer.clearRect.partial.w.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "canvas__html__canvas__offscreen__layers__2d.layer.nested-ctx-filter.w.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "canvas__html__canvas__element__compositing__2d.composite.grid.no_filter.no_shadow.drawImage.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "canvas__html__canvas__offscreen__layers__2d.layer.css-filters.blur-and-shadow.tentative.w.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "canvas__html__canvas__offscreen__manual__layers__unclosed-layers.w.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "canvas__html__canvas__offscreen__text__2d.text.measure.fillTextCluster-font-change.tentative.w.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "canvas__html__canvas__offscreen__layers__2d.layer.clip-inside-and-outside.ctx-filter.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "embedded__css__css-images__object-fit-fill-svg-002o.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "embedded__svg__styling__svg-filter-render-cross-origin-frame-in-same-origin-frame.tentative.https.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "embedded__css__css-images__object-position-png-001e.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "embedded__css__css-images__object-fit-cover-svg-003e.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "embedded__css__css-images__object-fit-cover-svg-004e.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "embedded__css__css-images__object-fit-scale-down-svg-001o.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "embedded__css__css-images__object-fit-contain-svg-005e.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "embedded__css__css-images__image-orientation__image-orientation-none-image-document.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "media__css__css-images__object-fit-fill-svg-003p.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "media__css__css-images__object-fit-cover-svg-004p.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "media__css__css-images__object-fit-contain-svg-005p.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "media__css__css-images__object-position-svg-002p.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "media__css__css-images__object-fit-cover-svg-001p.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "media__html__semantics__embedded-content__media-elements__track__track-element__track-webvtt-non-snap-to-lines.html",
+        "before": "crash",
+        "after": "crash",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "media__css__css-images__object-fit-contain-png-001p.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "media__html__semantics__embedded-content__the-embed-element__embed-represent-nothing-03.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      }
+    ],
+    "controls": [
+      {
+        "id": "text-input__css__css-ui__appearance-listbox-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "text-input__css__css-ui__webkit-appearance-menulist-button-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "text-input__css__css-ui__webkit-appearance-menulist-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "text-input__html__rendering__widgets__input-password-background-suppresses-appearance.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "checkbox__html__rendering__widgets__input-checkbox-zero-size.html",
+        "before": "unsupported",
+        "after": "unsupported",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "checkbox__css__css-ui__webkit-appearance-checkbox-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "checkbox__css__css-ui__appearance-revert-001.tentative.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "checkbox__css__css-ui__webkit-appearance-searchfield-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "radio__html__rendering__widgets__input-radio-no-centering.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "radio__css__css-ui__webkit-appearance-progress-bar-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "radio__css__css-ui__compute-kind-widget-fallback-props-revert-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "radio__css__css-ui__webkit-appearance-textfield-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "button__html__rendering__widgets__button-layout__centering-004.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "button__html__rendering__widgets__button-layout__block-in-inline.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "button__html__rendering__widgets__button-layout__scrollable-button-centering.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "button__css__css-ui__appearance-menulist-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "select__html__rendering__widgets__the-select-element__option-only-label.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "select__html__semantics__forms__the-select-element__customizable-select__select-base-appearance-writing-modes.html",
+        "before": "mismatch",
+        "after": "mismatch",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "select__html__rendering__widgets__the-select-element__option-empty-label.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "select__html__semantics__forms__the-select-element__customizable-select__select-explicit-size.html",
+        "before": "mismatch",
+        "after": "mismatch",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "textarea__css__css-ui__appearance-checkbox-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "textarea__css__css-ui__appearance-button-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "textarea__html__semantics__forms__the-textarea-element__textarea-newline-bidi.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "textarea__css__css-ui__webkit-appearance-auto-001.html",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      }
+    ],
+    "images": [
+      {
+        "id": "object-fit-fill-png-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-fill-png-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-contain-png-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-contain-png-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-cover-png-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-cover-png-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-none-png-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-none-png-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-scale-down-png-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-scale-down-png-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-position-png-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-position-png-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      }
+    ],
+    "svg": [
+      {
+        "id": "object-fit-fill-svg-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-fill-svg-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-contain-svg-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-contain-svg-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-cover-svg-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-cover-svg-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-none-svg-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-none-svg-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-scale-down-svg-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-fit-scale-down-svg-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-position-svg-001i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "object-position-svg-002i",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      }
+    ],
+    "focused": [
+      {
+        "id": "background__body-propagation-008",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "background__paint-order",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "border__small-width",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "border__small-width-e",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "overflow__clip-margin",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "shadow__simple-offset",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "shadow__currentcolor",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "background__body-propagation",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "radius__zero-horizontal",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "radius__content-clip",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "radius__rounded-clip",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "transform__matrix-scale",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "transform__translate-x-relative",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "transform__translate-list",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "transform__overflow",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "transform__scale-half",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "transform__translate-x",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "transform__translate-y-list",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "transform__translate-reference",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "transform__translate-y",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "transform__scale-double",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "stacking__transform-context",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "opacity__root",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      },
+      {
+        "id": "background__clip-text-transform",
+        "before": "pass",
+        "after": "pass",
+        "actual_changed": false,
+        "reference_changed": false
+      }
+    ]
+  },
+  "new_wpt_conformance_passes_claimed": 0,
+  "owned_diagnostic_fixtures": {
+    "before": {
+      "stable": true,
+      "passed": 0,
+      "total": 9
+    },
+    "after": {
+      "stable": true,
+      "passed": 9,
+      "total": 9
+    }
+  },
+  "fixture_changes": [
+    {
+      "id": "provenance-author-defaults",
+      "before_match": false,
+      "after_match": true,
+      "actual_changed": true,
+      "reference_changed": false
+    },
+    {
+      "id": "provenance-author-initial",
+      "before_match": false,
+      "after_match": true,
+      "actual_changed": true,
+      "reference_changed": false
+    },
+    {
+      "id": "provenance-author-longhands",
+      "before_match": false,
+      "after_match": true,
+      "actual_changed": true,
+      "reference_changed": false
+    },
+    {
+      "id": "svg-translate-scale",
+      "before_match": false,
+      "after_match": true,
+      "actual_changed": true,
+      "reference_changed": false
+    },
+    {
+      "id": "svg-rotate",
+      "before_match": false,
+      "after_match": true,
+      "actual_changed": true,
+      "reference_changed": false
+    },
+    {
+      "id": "svg-matrix",
+      "before_match": false,
+      "after_match": true,
+      "actual_changed": true,
+      "reference_changed": false
+    },
+    {
+      "id": "svg-ellipse",
+      "before_match": false,
+      "after_match": true,
+      "actual_changed": true,
+      "reference_changed": false
+    },
+    {
+      "id": "svg-viewbox",
+      "before_match": false,
+      "after_match": true,
+      "actual_changed": true,
+      "reference_changed": false
+    },
+    {
+      "id": "svg-singular",
+      "before_match": false,
+      "after_match": true,
+      "actual_changed": true,
+      "reference_changed": false
+    }
+  ],
+  "scope_cluster_counts": {
+    "before": {
+      "controls": {
+        "crash": 5,
+        "pass": 2,
+        "mismatch": 1
+      },
+      "images": {
+        "crash": 1,
+        "pass": 6,
+        "mismatch": 1
+      },
+      "svg": {
+        "mismatch": 2,
+        "unsupported": 1,
+        "pass": 4,
+        "crash": 1
+      },
+      "canvas": {
+        "crash": 8
+      },
+      "embedded": {
+        "pass": 7,
+        "crash": 1
+      },
+      "media": {
+        "pass": 7,
+        "crash": 1
+      }
+    },
+    "after": {
+      "controls": {
+        "crash": 5,
+        "pass": 2,
+        "mismatch": 1
+      },
+      "images": {
+        "crash": 1,
+        "pass": 6,
+        "mismatch": 1
+      },
+      "svg": {
+        "mismatch": 2,
+        "unsupported": 1,
+        "pass": 4,
+        "crash": 1
+      },
+      "canvas": {
+        "crash": 8
+      },
+      "embedded": {
+        "pass": 7,
+        "crash": 1
+      },
+      "media": {
+        "pass": 7,
+        "crash": 1
+      }
+    }
+  }
+}

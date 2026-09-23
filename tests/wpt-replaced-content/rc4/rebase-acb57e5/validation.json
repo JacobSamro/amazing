@@ -1,0 +1,39 @@
+{
+  "dev_base": "acb57e596422b454850779e8070f34ee656afa36",
+  "compiled_lane_head": "d8967dd0bf1e9aac1b1e8c2df3ade8fb96cf2251",
+  "implementation": "694f539",
+  "platform": "win-001",
+  "locked": true,
+  "incremental": false,
+  "workspace": {
+    "passed": 1185,
+    "failed": 0,
+    "ignored": 3,
+    "targets": 59
+  },
+  "paint": {
+    "passed": 87,
+    "failed": 0
+  },
+  "image_adapter": {
+    "passed": 17,
+    "failed": 0,
+    "unit": 4,
+    "presentation": 3,
+    "svg": 10
+  },
+  "metadata_exit_codes": {
+    "root": 0,
+    "isolated_image_workspace": 0
+  },
+  "root_driver_build": "passed",
+  "isolated_image_example_build": "passed",
+  "build_inputs_checked": 189,
+  "build_input_mismatches": 0,
+  "artifact_freshness": "Primary refreshed lane tree with first-party invalidation; all owned files re-synced; isolated image target first-party artifacts invalidated before build",
+  "shell_source_grant_needed": false,
+  "original_before_reports_unchanged": true,
+  "original_before_executable_hashes_preserved": true,
+  "superseded_by": "11dd8a8 fleet refresh",
+  "final_pinned_pairs_complete": false
+}

@@ -1,0 +1,63 @@
+{
+  "kind": "owned diagnostic fixtures, not WPT",
+  "viewport": [
+    64,
+    64
+  ],
+  "tests": [
+    {
+      "id": "provenance-author-defaults",
+      "renderer": "driver",
+      "test": "provenance-author-defaults.html",
+      "reference": "provenance-author-defaults-ref.html"
+    },
+    {
+      "id": "provenance-author-initial",
+      "renderer": "driver",
+      "test": "provenance-author-initial.html",
+      "reference": "provenance-author-initial-ref.html"
+    },
+    {
+      "id": "provenance-author-longhands",
+      "renderer": "driver",
+      "test": "provenance-author-longhands.html",
+      "reference": "provenance-author-longhands-ref.html"
+    },
+    {
+      "id": "svg-translate-scale",
+      "renderer": "images",
+      "test": "svg-translate-scale.html",
+      "reference": "svg-translate-scale-ref.html"
+    },
+    {
+      "id": "svg-rotate",
+      "renderer": "images",
+      "test": "svg-rotate.html",
+      "reference": "svg-rotate-ref.html"
+    },
+    {
+      "id": "svg-matrix",
+      "renderer": "images",
+      "test": "svg-matrix.html",
+      "reference": "svg-matrix-ref.html"
+    },
+    {
+      "id": "svg-ellipse",
+      "renderer": "images",
+      "test": "svg-ellipse.html",
+      "reference": "svg-ellipse-ref.html"
+    },
+    {
+      "id": "svg-viewbox",
+      "renderer": "images",
+      "test": "svg-viewbox.html",
+      "reference": "svg-viewbox-ref.html"
+    },
+    {
+      "id": "svg-singular",
+      "renderer": "images",
+      "test": "svg-singular.html",
+      "reference": "svg-singular-ref.html"
+    }
+  ]
+}

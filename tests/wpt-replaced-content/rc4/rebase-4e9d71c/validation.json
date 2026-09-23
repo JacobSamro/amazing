@@ -1,0 +1,31 @@
+{
+  "dev_base": "4e9d71c390d949d03b6adbdd48e55b72fb3ea4b1",
+  "compiled_lane_head": "043292f1968ef71b99f9d7aff9b2225fc7b08a7d",
+  "platform": "win-001",
+  "locked": true,
+  "incremental": false,
+  "root_nextest": {
+    "passed": 1270,
+    "failed": 0,
+    "skipped": 3,
+    "binaries": 42
+  },
+  "root_doctests": {
+    "passed": 2,
+    "failed": 0,
+    "targets": 19,
+    "amazing_html": 1,
+    "amazing_js": 1
+  },
+  "metadata_exit_code": 0,
+  "build_inputs_checked": 329,
+  "build_input_mismatches": 0,
+  "workspace_log_sha256": "fc8db06efe611b08c565b7fc35d5cab1305f17d5d28c9c67d31afe12afe56e98",
+  "doctests_log_sha256": "9cc8931b843847f60fa051c00daeb463726e0bfd1af9b3b396904890858bad86",
+  "refresh": "primary shared coordinator from origin/dev 4e9d71c, only replaced-content; owned files re-synced",
+  "shared_build_slot": "invoked via bash primary with-build-slot.sh; slot-3 acquired after 160 seconds; successful gate queued",
+  "attempt_note": "An earlier PowerShell ErrorActionPreference=Stop command aborted on normal Cargo stderr during compilation before test results; corrected gate ran to completion",
+  "render_evidence": "not repeated; five render pairs and owned proof remain ffb143b-specific",
+  "render_change_review": "dev diff from ffb143b touched only crates/amazing-html/src/encoding.rs, crates/amazing-html/src/lib.rs, docs/lanes/html_TODO.md, scripts/refresh-lane-trees.sh; parse_bytes has no production callers, old parse behavior unchanged apart from formatting; no RC/driver/harness paths changed",
+  "recorded_at": "2026-09-23T04:05:31.951306+00:00"
+}

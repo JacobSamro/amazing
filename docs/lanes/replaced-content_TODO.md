@@ -262,3 +262,158 @@ focused paint retain the same counts and pixel hashes both across repeats and
 against the pre-rebase after runs. Evidence is preserved in
 `tests/wpt-replaced-content/rc3/rebase-156cc13/`. The integrator accepted routing
 of the root-relative reference harness bug; questions.md marks it RESOLVED.
+
+## RC-4 — author provenance and the next unblocked cluster
+
+CSS-4's `ComputedStyle::is_author_specified` is now adopted for control
+background and border longhands. Explicit author transparent/none and initial
+defaults suppress native chrome; absent author styling retains it. The RC-3
+explicit-default ambiguity is resolved by the CSS-owned surface. Author rollback
+through explicit longhands is tested. A distinct `border:revert` shorthand
+provenance defect was exposed and routed to CSS, not guessed around in paint.
+The DOM state/layout glyph provider integration is still separately owned.
+
+Remeasured the unchanged 48-entry scope at WPT
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` on the CSS-4 baseline:
+
+| Remaining cluster | Pass | Mismatch | Unsupported | Renderer error | Dependency-aware priority |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Canvas | 0 | 0 | 0 | 8 | Blocked: DOM/JS context/worker contracts, driver script resource loading |
+| Controls | 2 | 1 | 0 | 5 | Remaining state/text providers and specialized widget/layout behavior |
+| SVG | 4 | 2 | 1 | 1 | Highest unblocked; RC-4 bounded geometry transforms |
+| Images/fitting | 6 | 1 | 0 | 1 | Remaining geometry/resource cases; retain dedicated 12-case PNG gate |
+| Embedded | 7 | 0 | 0 | 1 | Blocked: document lifecycle/origin/process seams |
+| Document media | 7 | 0 | 0 | 1 | Blocked: DOM state/events/timing |
+
+Totals: **26 matches / 4 mismatches / 1 unsupported / 17 renderer errors**,
+no timeout. These are overlapping bounded samples, not broad conformance rates
+or causal estimates. Canvas errors include root-relative script loading failures
+before any paint work; the integrator confirmed Canvas exclusion and routed
+script/reftest-link resolution to integrator-assist. A later ranking should
+remeasure after those blockers land rather than retain these errors as paint debt.
+
+RC-4 expands static SVG image decoding with group/shape matrix, translate,
+scale, rotation with optional pivot, and skew attribute lists. Matrix composition
+and inverse sampling reuse bounded rectangle/ellipse rendering. Singular
+transforms hide their subtree. Parsing has a 32-transform limit; invalid or
+nonfinite/overflowing input fails the complete image. Existing input, depth,
+element, allocation and raster-work limits remain. No dependencies, root graph,
+lockfiles, shell, DOM, layout or CSS files were changed. The existing strict SVG
+subset parser remains; root SVG transforms, CSS, paths, strokes, references,
+text, filters and animation remain unsupported.
+
+Owned headless render proof (not WPT): **0/9 before → 9/9 after**, twice.
+Three cases prove explicit-default provenance changes pixels; six compare SVG
+transforms against equivalent untransformed references. Fixture canvases are
+fixed at 64x64. The retained SVG WPT resource selection still requires inline CSS,
+so no raw match there receives new SVG conformance credit. The next SVG boundary
+is canonical CSS computation/presentation metadata and a non-inert upstream
+selection; general inline SVG geometry remains a separate architectural slice.
+
+Original Windows workspace at dev `3d0c2b0` plus owned implementation:
+**1,135 passed / 0 failed / 3 ignored across 56 targets**. Paint **87 passed**;
+isolated image adapter **17 passed** (4 unit, 3 presentation, 10 SVG), with --locked
+example build green. Before artifacts are from `cc3761e`; intervening dev includes
+DOM/HTML namespace integration and is not credited to RC-4. The lane-only refresh,
+re-sync and isolated-target artifact invalidation precede the final gates.
+Evidence and reproduction are in `tests/wpt-replaced-content/rc4/`.
+
+Original RC-4 repeats: scope **26/4/1/17**, controls **21/2/1**, CSS Images **12/12**,
+SVG **12/12 raw with zero credit**, focused **24/24**, unchanged before/after.
+All ten WPT repeated pairs are stable; actual/reference hashes are unchanged
+across phases. Owned proof **0/9 → 9/9** has stable repeated hashes, changed
+actuals and unchanged references. Source equality was checked across 180 tracked
+Rust/Cargo inputs with zero mismatches. Stop for review; no next ticket started.
+
+
+RC-4 merge gate refreshed on dev `11dd8a8aefd81318fcfe858334e865ed66694cd8`,
+compiled lane HEAD `51ba19fbb4c55386e0822715d27062d4b14b9271`:
+root **nextest 1,209 passed / 0 failed / 3 skipped across 41 binaries**;
+separate **doctests 2 passed / 0 failed** (HTML 1, JS 1; 18 targets).
+Paint contributes 87 passing tests. Isolated image adapter **nextest 17 passed**,
+with **0 doctests present** in its separate doc run. Both renderer builds and
+root/standalone metadata checks pass with `--locked`. No shell source grant or
+lane lockfile edit is needed. The primary's artifact-invalidating fleet refresh,
+owned-file re-sync, and separate image-target invalidation precede these gates;
+191 Rust/Cargo inputs match the Mac. Original before reports and saved executable
+hashes remain unchanged. The partial acb57e5 gate was superseded by the fleet
+refresh and is preserved separately, without a final repeatability claim.
+
+Fresh required gate pairs are complete: scope **26/4/1/17**, controls **21/2/1**,
+PNG **12/12**, SVG **12/12 raw with zero credit**, focused paint **24/24**.
+All five pairs have stable classifications, pixel differences and image hashes,
+also unchanged from original before/after. Owned proof remains **9/9 twice**,
+unchanged from original after; original **0/9** before is preserved. Evidence:
+`tests/wpt-replaced-content/rc4/rebase-11dd8a8/`. RC-4 is ready for co-integrator
+review; no push, shell grant, or next-ticket work.
+
+
+RC-4 subsequent preflight checkpoint: on dev f1d0f50 + compiled lane552fd1f,
+Windows nextest **1261/0/3 skipped**, separate docs **2/0**; image **17/0**, docs0;
+owned proofs9/9 twice. Both pinned runs completed with prior counts unchanged,
+but the fleet SSH outage prevented collecting reports for hash comparison.
+Evidence is labeled incomplete in `rc4/rebase-f1d0f50/`, not a ready gate.
+Local lane rebased through IA-1 dev `9bf1224`, which changes the driver and WPT
+root mapping; fresh validation of that newer source is unrun pending restored
+server access. No new SSH/SCP attempts after stand-down. REFRESH-HOLD removed
+after the running process ended. Existing before and paired evidence preserved.
+
+### RC-4 current-source resume and co-integrator preflight
+
+After the outage, saved `f1d0f50` reports and executable hashes were collected
+without overwriting the earlier evidence. Their five pinned selections and
+owned 9/9 proof agree across the two runs on classification, pixel differences,
+and actual/reference hashes. They remain historical: compiled lane `552fd1f`
+on dev `f1d0f50` predates IA-1.
+
+RC-4 was rebased to dev `ffb143b6fdc07df7a9681e597f04a8da40f23d06`
+(compiled lane `95dabe37a6b510e5271dee2fc51770eb6b0459e7`). The primary shared
+coordinator refreshed only replaced-content; owned files were re-synced. On
+win-001, 328 Rust/Cargo/harness/fixture inputs matched the Mac, both root and
+isolated-image `cargo metadata --locked` checks passed, and WPT stayed pinned at
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. Root nextest passed
+**1263/1263** with 3 skipped across 42 binaries; separate root doctests passed
+**2/2** across 19 targets. Paint contributed 87 passes. Isolated image nextest
+passed **17/17** across 3 binaries; separate image doctests found 0. Both
+renderers rebuilt. Full gates used the primary shared build slot. Logs and
+artifact hashes are recorded in `tests/wpt-replaced-content/rc4/rebase-ffb143b/`.
+
+Each of five current pinned selections ran twice with stable classification,
+pixel-difference and actual/reference hashes: scope **26 pass / 4 mismatch /
+0 timeout / 0 unsupported / 18 renderer errors**, controls **22 / 2 / 0 / 0 /
+0**, PNG **12/12**, SVG **12/12 raw with zero credit**, focused paint **24/24**.
+Owned 64x64 proof stayed **9/9 twice**, versus the preserved original **0/9
+before**. RC-4 claims no new WPT conformance pass. SVG resources requiring
+unsupported inline CSS still receive zero credit; the bounded transform proof
+covers the owned fixtures only.
+
+Compared with the historical packet, the driver/root mapping now resolves the
+blank reference for `input-checkbox-zero-size.html`, changing its control case
+from unsupported to a raw pass with equal blank hashes. In the broader scope,
+`svg/use-descendant-combinator-003.html` changes from missing-reference
+unsupported to a renderer script TypeError. Those are IA-1 driver/root mapping
+effects and receive no RC-4 credit. All other selected classifications and
+actual/reference hashes are unchanged. The larger root test count likewise
+reflects intervening dev changes, not RC-4.
+
+Stop at RC-4 for co-integrator review and authoritative merged-head validation.
+No remote branch/PR publication or next ticket.
+
+### RC-4 HTML-2 named-source workspace checkpoint
+
+After `ffb143b`, dev added HTML-2 `parse_bytes`/encoding (no production caller)
+and a refresh-script change. The only changed paths are `amazing-html`
+`encoding.rs`/`lib.rs`, HTML decision notes, and the refresh script; there are
+no RC, driver, render harness, or fixture changes. RC-4 rebased cleanly to dev
+`4e9d71c390d949d03b6adbdd48e55b72fb3ea4b1`, compiled lane
+`043292f1968ef71b99f9d7aff9b2225fc7b08a7d`. The primary coordinator
+refreshed only the RC Windows tree from origin/dev, RC files were re-synced,
+and 329 Rust/Cargo/harness/fixture hashes matched. Root locked metadata passed.
+Under the primary shared build slot, root nextest passed **1270/1270** with
+3 skipped across 42 binaries and separate doctests passed **2/2** across 19
+targets. See `tests/wpt-replaced-content/rc4/rebase-4e9d71c/`.
+
+The five pinned render pairs and owned proof were not rerun: their committed
+pixel evidence is explicitly for `ffb143b` compiled source. This checkpoint
+claims only the named-source workspace gate. Integrator will stage/rebase an
+integration snapshot on later dev and authoritative-gate the merged head.

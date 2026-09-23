@@ -1,0 +1,54 @@
+{
+  "dev_base": "11dd8a8aefd81318fcfe858334e865ed66694cd8",
+  "compiled_lane_head": "51ba19fbb4c55386e0822715d27062d4b14b9271",
+  "platform": "win-001",
+  "locked": true,
+  "incremental": false,
+  "root_nextest": {
+    "passed": 1209,
+    "failed": 0,
+    "skipped": 3,
+    "binaries": 41
+  },
+  "root_doctests": {
+    "passed": 2,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 18,
+    "amazing_html": 1,
+    "amazing_js": 1
+  },
+  "paint_nextest": {
+    "passed": 87,
+    "failed": 0
+  },
+  "image_nextest": {
+    "passed": 17,
+    "failed": 0,
+    "skipped": 0,
+    "binaries": 3
+  },
+  "image_doctests": {
+    "passed": 0,
+    "failed": 0,
+    "ignored": 0
+  },
+  "metadata_exit_codes": {
+    "root": 0,
+    "isolated_image_workspace": 0
+  },
+  "root_driver_build": "passed",
+  "isolated_image_example_build": "passed",
+  "build_inputs_checked": 191,
+  "build_input_mismatches": 0,
+  "artifact_freshness": "Integrator fleet refresh with first-party invalidation; own files re-synced; isolated image target first-party artifacts invalidated before build",
+  "shell_source_grant_needed": false,
+  "prior_acb57e5_gate_superseded": true,
+  "before_evidence_preserved": {
+    "original_report_blobs_unchanged_from": "955d199",
+    "saved_before_executables_match_original_sha256": true
+  },
+  "final_pinned_pairs_complete": true,
+  "all_five_pinned_pairs_stable": true,
+  "owned_proof_pair_stable": true
+}
