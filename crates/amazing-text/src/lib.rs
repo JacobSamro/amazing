@@ -209,7 +209,9 @@ pub fn resolve_synthesis(
 ) -> FontSynthesis {
     FontSynthesis {
         weight: policy.weight && request.weight > candidate.weight,
-        style: policy.style && request.slant != candidate.slant,
+        style: policy.style
+            && request.slant != FontSlant::Normal
+            && candidate.slant == FontSlant::Normal,
     }
 }
 
@@ -592,8 +594,16 @@ impl TextSystem for FallbackTextSystem {
                         cluster: cluster_start..cluster_end,
                         advance_x,
                         advance_y,
-                        offset_x: if vertical_metrics { -advance * 0.5 } else { 0.0 },
-                        offset_y: if vertical_metrics { metrics.ascent } else { 0.0 },
+                        offset_x: if vertical_metrics {
+                            -advance * 0.5
+                        } else {
+                            0.0
+                        },
+                        offset_y: if vertical_metrics {
+                            metrics.ascent
+                        } else {
+                            0.0
+                        },
                         orientation,
                         flags: GlyphFlags::default(),
                     }
@@ -1078,15 +1088,84 @@ mod tests {
             stretch: 100,
             slant: FontSlant::Italic,
         };
-        let face = |weight, stretch, slant| FontAttributes { weight, stretch, slant };
-        assert!(font_match_rank(request, face(900, 100, FontSlant::Italic))
-            < font_match_rank(request, face(400, 90, FontSlant::Italic)));
-        assert!(font_match_rank(request, face(900, 100, FontSlant::Italic))
-            < font_match_rank(request, face(400, 100, FontSlant::Normal)));
-        assert!(font_match_rank(request, face(500, 100, FontSlant::Italic))
-            < font_match_rank(request, face(300, 100, FontSlant::Italic)));
-        assert!(font_match_rank(request, face(300, 100, FontSlant::Italic))
-            < font_match_rank(request, face(600, 100, FontSlant::Italic)));
+        let face = |weight, stretch, slant| FontAttributes {
+            weight,
+            stretch,
+            slant,
+        };
+        assert!(
+            font_match_rank(request, face(900, 100, FontSlant::Italic))
+                < font_match_rank(request, face(400, 90, FontSlant::Italic))
+        );
+        assert!(
+            font_match_rank(request, face(900, 100, FontSlant::Italic))
+                < font_match_rank(request, face(400, 100, FontSlant::Normal))
+        );
+        assert!(
+            font_match_rank(request, face(500, 100, FontSlant::Italic))
+                < font_match_rank(request, face(300, 100, FontSlant::Italic))
+        );
+        assert!(
+            font_match_rank(request, face(300, 100, FontSlant::Italic))
+                < font_match_rank(request, face(600, 100, FontSlant::Italic))
+        );
+    }
+
+    #[test]
+    fn synthesis_only_adds_missing_weight_and_slant() {
+        let face = |weight, slant| FontAttributes {
+            weight,
+            stretch: 100,
+            slant,
+        };
+        let auto = FontSynthesis {
+            weight: true,
+            style: true,
+        };
+        assert_eq!(
+            resolve_synthesis(
+                face(700, FontSlant::Italic),
+                face(400, FontSlant::Normal),
+                auto
+            ),
+            auto
+        );
+        assert_eq!(
+            resolve_synthesis(
+                face(700, FontSlant::Italic),
+                face(700, FontSlant::Oblique),
+                auto
+            ),
+            FontSynthesis {
+                weight: false,
+                style: false
+            }
+        );
+        assert_eq!(
+            resolve_synthesis(
+                face(400, FontSlant::Normal),
+                face(400, FontSlant::Italic),
+                auto
+            ),
+            FontSynthesis {
+                weight: false,
+                style: false
+            }
+        );
+        assert_eq!(
+            resolve_synthesis(
+                face(700, FontSlant::Italic),
+                face(400, FontSlant::Normal),
+                FontSynthesis {
+                    weight: false,
+                    style: false
+                }
+            ),
+            FontSynthesis {
+                weight: false,
+                style: false
+            }
+        );
     }
 
     #[test]

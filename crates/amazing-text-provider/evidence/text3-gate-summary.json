@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-3",
+  "implementation_base": "e2d7ad6ef21b013f0576a6065408a036caf8c3f4",
+  "windows_tree_base": "6bec0a06626673d690ff0442c6c2706dbc85b2e4",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "server_lock_sha256": "ADD98EE1000FB98B19A993DBF18D9A811C4B31D162FEC0D786804B7465A741C6",
+  "server_text_source_sha256": "DD00ADA53D268978B7F04740770AAA5D97547727A62BBA22B8BC764398EBF2AE",
+  "server_provider_source_sha256": "BED386B87CF6B45747E188A7426181C5B9C6080D6425A86C42DD92AC5FEF33AB",
+  "baseline_executable_sha256": "553C1FBFFCF21E9A27124229589ECAF079466512E7F74827E06C7C7A0590A0CC",
+  "candidate_executable_sha256": "BB58CFB8498815A1307F5BCFCCF9598100CFFBA53B0ED52BA09B843AC1900B7F",
+  "provider_nextest": {
+    "passed": 48,
+    "failed": 0,
+    "skipped": 1
+  },
+  "pinned_wpt_decoder": {
+    "passed": 1,
+    "failed": 0
+  },
+  "workspace_nextest": {
+    "passed": 1781,
+    "failed": 0,
+    "skipped": 4
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "selections": {
+    "font": {
+      "before": "text3-font-before.json",
+      "after": "text3-font-after.json",
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0,
+      "pixel_changes": [
+        {
+          "id": "css-fonts__test-synthetic-italic.html",
+          "classification_before": "pass",
+          "classification_after": "pass",
+          "actual_before": "bd6403aeaee1e42fadfcaa0bd0a46412a6393cce99e489fd4c1960d369d01c96",
+          "actual_after": "fdfa827709d0c4bc686905a39404523ce4dde0f44b3f3f863a4e38cd1044086e"
+        },
+        {
+          "id": "css-fonts__font-variant-ligatures-11.optional.html",
+          "classification_before": "mismatch",
+          "classification_after": "mismatch",
+          "actual_before": "5855392dde42092924c565f07d7498154af1e11c5319bbc0abb2640d9a3c29b8",
+          "actual_after": "eefdfded11a40cf44d0879c71502e67f8cb95cabd09b7010c50aa641ded5ffef"
+        }
+      ]
+    },
+    "flow": {
+      "before": "TEXT-2 retained report, 14 pass / 2 mismatch",
+      "after": "text3-flow-after.json",
+      "after_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0
+    },
+    "shaping": {
+      "before": "TEXT-2 retained report, 12 pass",
+      "after": "text3-shaping-after.json",
+      "after_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0
+    },
+    "vertical": {
+      "before": "TEXT-2 retained report, 11 pass / 9 mismatch",
+      "after": "text3-vertical-after.json",
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_losses": 0
+    }
+  }
+}

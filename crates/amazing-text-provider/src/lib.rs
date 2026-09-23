@@ -285,6 +285,12 @@ impl TextProvider {
         Self::default()
     }
 
+    /// Number of asynchronous font loads still in progress. Font registration
+    /// currently completes synchronously through a caller-owned loader.
+    pub fn pending_font_loads(&self) -> usize {
+        0
+    }
+
     pub fn register_web_font(&mut self, font: WebFont) -> Result<FontKey, TextError> {
         self.register_font_bytes(font, None)
     }
@@ -525,11 +531,25 @@ impl TextProvider {
         ["serif", "sans-serif", "system-ui", "monospace"]
             .iter()
             .find_map(|family| {
-                self.fonts.iter().position(|font| {
-                    font.family == *family
-                        && font.author_face.is_none()
-                        && text.is_none_or(|value| font_covers(font, value))
-                })
+                self.fonts
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, font)| {
+                        font.family == *family
+                            && font.author_face.is_none()
+                            && text.is_none_or(|value| font_covers(font, value))
+                    })
+                    .min_by_key(|(_, font)| {
+                        font_match_rank(
+                            FontAttributes {
+                                weight: style.weight,
+                                stretch: style.stretch,
+                                slant: style.slant,
+                            },
+                            font.attributes_for(style),
+                        )
+                    })
+                    .map(|(index, _)| index)
             })
     }
 
@@ -1840,7 +1860,7 @@ fn rasterize_font_glyph(
         }
         if request.synthesis.style {
             render.transform(Some(zeno::Transform::skew(
-                zeno::Angle::from_degrees(-12.0),
+                zeno::Angle::from_degrees(-14.0),
                 zeno::Angle::ZERO,
             )));
         }
@@ -1958,6 +1978,10 @@ mod tests {
     }
 
     fn synthetic_font(mapped: char) -> Vec<u8> {
+        synthetic_font_with_feature(mapped, None)
+    }
+
+    fn synthetic_font_with_feature(mapped: char, feature: Option<[u8; 4]>) -> Vec<u8> {
         let mut glyf = vec![0u8; 10];
         glyf[0..2].copy_from_slice(&be16(1));
         glyf[6..8].copy_from_slice(&be16(500));
@@ -1998,7 +2022,7 @@ mod tests {
         maxp[4..6].copy_from_slice(&be16(2));
         let loca = [be16(0), be16(0), be16(glyf.len() as u16 / 2)].concat();
         let hmtx = [be16(600), be16(0), be16(500), be16(0)].concat();
-        assemble_sfnt(&[
+        let mut tables: Vec<(&[u8; 4], Vec<u8>)> = vec![
             (b"head", head),
             (b"hhea", hhea),
             (b"maxp", maxp),
@@ -2006,7 +2030,40 @@ mod tests {
             (b"cmap", cmap),
             (b"loca", loca),
             (b"glyf", glyf),
-        ])
+        ];
+        if let Some(tag) = feature {
+            // GSUB: DFLT script, one feature and one ligature lookup mapping
+            // glyphs 1+1 to glyph 1. Glyph count shows whether the tag ran.
+            let mut gsub = [be32(0x0001_0000), be16(10), be16(30), be16(44)].concat();
+            gsub.extend_from_slice(&be16(1));
+            gsub.extend_from_slice(b"DFLT");
+            gsub.extend_from_slice(&be16(8));
+            gsub.extend_from_slice(
+                &[be16(4), be16(0), be16(0), be16(0xFFFF), be16(1), be16(0)].concat(),
+            );
+            gsub.extend_from_slice(&be16(1));
+            gsub.extend_from_slice(&tag);
+            gsub.extend_from_slice(&[be16(8), be16(0), be16(1), be16(0)].concat());
+            gsub.extend_from_slice(
+                &[be16(1), be16(4), be16(4), be16(0), be16(1), be16(8)].concat(),
+            );
+            gsub.extend_from_slice(&[be16(1), be16(8), be16(1), be16(14)].concat());
+            gsub.extend_from_slice(
+                &[
+                    be16(1),
+                    be16(1),
+                    be16(1),
+                    be16(1),
+                    be16(4),
+                    be16(1),
+                    be16(2),
+                    be16(1),
+                ]
+                .concat(),
+            );
+            tables.push((b"GSUB", gsub));
+        }
+        assemble_sfnt(&tables)
     }
 
     #[derive(Default)]
@@ -2507,6 +2564,105 @@ mod tests {
     }
 
     #[test]
+    fn synthetic_bold_changes_the_registered_face_outline() {
+        let mut provider = TextProvider::new();
+        let font = provider
+            .register_web_font(WebFont {
+                family: "Regular only".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
+        let key = GlyphCacheKey::new(provider.generation(), font, GlyphId(1), 30.0, 0, 0).unwrap();
+        let normal = provider
+            .rasterize(GlyphRasterRequest {
+                key,
+                variations: &[],
+                synthesis: amazing_text::FontSynthesis::default(),
+            })
+            .unwrap()
+            .unwrap();
+        let synthesis = amazing_text::FontSynthesis {
+            weight: true,
+            style: false,
+        };
+        let bold = provider
+            .rasterize(GlyphRasterRequest {
+                key: key.with_style(&[], synthesis),
+                variations: &[],
+                synthesis,
+            })
+            .unwrap()
+            .unwrap();
+        assert_ne!((normal.width, normal.data), (bold.width, bold.data));
+    }
+
+    #[test]
+    fn feature_on_and_off_reach_opentype_shaping() {
+        for tag in [*b"liga", *b"clig", *b"dlig", *b"hlig", *b"calt"] {
+            let mut provider = TextProvider::new();
+            provider
+                .register_web_font(WebFont {
+                    family: "Feature fixture".into(),
+                    weight: 400,
+                    stretch: 100,
+                    slant: FontSlant::Normal,
+                    format: FontFormat::OpenType,
+                    bytes: synthetic_font_with_feature('A', Some(tag)),
+                })
+                .unwrap();
+            let shape = |value| {
+                let style = TextStyle {
+                    families: vec!["Feature fixture".into()],
+                    features: vec![amazing_text::FeatureSetting { tag, value }],
+                    ..TextStyle::default()
+                };
+                let spans = [TextSpan {
+                    range: 0..2,
+                    source: 0,
+                    style,
+                    boundary_before: ShapingBoundary::Continue,
+                }];
+                provider
+                    .shape(Paragraph {
+                        text: "AA",
+                        spans: &spans,
+                        sources: &[],
+                        bidi_scopes: &[],
+                        base_direction: Direction::LeftToRight,
+                    })
+                    .unwrap()
+                    .runs
+                    .iter()
+                    .map(|run| run.glyphs.len())
+                    .sum::<usize>()
+            };
+            assert_eq!(shape(0), 2, "{} disabled", String::from_utf8_lossy(&tag));
+            assert_eq!(shape(1), 1, "{} enabled", String::from_utf8_lossy(&tag));
+        }
+    }
+
+    #[test]
+    fn synchronous_registration_has_no_pending_font_loads() {
+        let mut provider = TextProvider::new();
+        assert_eq!(provider.pending_font_loads(), 0);
+        provider
+            .register_web_font(WebFont {
+                family: "Registered".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
+        assert_eq!(provider.pending_font_loads(), 0);
+    }
+
+    #[test]
     fn fallback_selects_a_covering_face_per_grapheme_cluster() {
         let mut provider = TextProvider::new();
         let primary = provider
@@ -2640,6 +2796,40 @@ mod tests {
             serif
         );
         assert_eq!(provider.matching_font(&style, Some("B")), None);
+    }
+
+    #[test]
+    fn installed_fallback_chooses_the_matching_face_within_its_family() {
+        let mut provider = TextProvider::new();
+        provider
+            .register_web_font(WebFont {
+                family: "serif".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
+        let bold = provider
+            .register_web_font(WebFont {
+                family: "serif".into(),
+                weight: 700,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
+        let style = TextStyle {
+            families: vec!["Unknown".into()],
+            weight: 700,
+            ..TextStyle::default()
+        };
+        assert_eq!(
+            provider.fonts[provider.matching_font(&style, Some("A")).unwrap()].key,
+            bold
+        );
     }
 
     #[test]
