@@ -1,0 +1,59 @@
+{
+  "ticket": "COMP-3",
+  "host": "win-002",
+  "base": "a4ab541b17bd94ff65ac14beb65d45c144547184",
+  "crate_nextest": {
+    "passed": 12,
+    "failed": 0
+  },
+  "crate_doctests": {
+    "passed": 0,
+    "failed": 0
+  },
+  "workspace_nextest": {
+    "started": 1853,
+    "exit_code": 0
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "trace": {
+    "pixel_exact_frames": 240,
+    "presentation_excluded_from_timing": true,
+    "scenarios": {
+      "scroll": {
+        "frames": 60,
+        "full_repaint_p50_us": 18565,
+        "full_repaint_p95_us": 28351,
+        "quad_build_p50_us": 172,
+        "quad_build_p95_us": 431,
+        "quad_p50_percent_of_full": 0.93
+      },
+      "rotate": {
+        "frames": 60,
+        "full_repaint_p50_us": 48750,
+        "full_repaint_p95_us": 79632,
+        "quad_build_p50_us": 168,
+        "quad_build_p95_us": 271,
+        "quad_p50_percent_of_full": 0.34
+      },
+      "fade": {
+        "frames": 60,
+        "full_repaint_p50_us": 17374,
+        "full_repaint_p95_us": 18918,
+        "quad_build_p50_us": 126,
+        "quad_build_p95_us": 170,
+        "quad_p50_percent_of_full": 0.73
+      },
+      "animation": {
+        "frames": 60,
+        "full_repaint_p50_us": 39329,
+        "full_repaint_p95_us": 41536,
+        "quad_build_p50_us": 141,
+        "quad_build_p95_us": 218,
+        "quad_p50_percent_of_full": 0.36
+      }
+    }
+  }
+}
