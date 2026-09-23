@@ -1,0 +1,18 @@
+{
+  "fixed_origin_dev": "18fefffe06186af30581cef97d763427af839058",
+  "layout9_rebased_base": "6dee58805c371c8843c54ba3b96341c119f5fb2f",
+  "layout10_source_commit": "0ee1b0f68c277e6a17433cac58e7b8879cc6871b",
+  "source_manifest_files": 33,
+  "source_verified_before_after": true,
+  "nextest": {
+    "run": 1660,
+    "passed": 1660,
+    "skipped": 3
+  },
+  "workspace_doctests": {
+    "run": 2,
+    "passed": 2
+  },
+  "candidate_executable_sha256": "48cbe35387ad961719f08a235f95a0b2925141bd02a3b9ae37d74e038251007e",
+  "log_sha256": "3c851316edd89752b9fc1e5277c4a0dea159e9b93b35779f3c705fd8a75ab9b5"
+}

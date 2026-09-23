@@ -961,3 +961,52 @@ comparison, geometry runs and workspace logs are under
 CSS-9 merged on `dev` as `e0adf15` after this fixed-base LAYOUT-9 gate.
 LAYOUT-10 will re-measure the four named calc cases and two LAYOUT-6 logical
 size exceptions on current `dev`; this ticket did not start that work.
+
+## LAYOUT-10 — CSS-9 calc reach and logical sizing (2026-09-23)
+
+Fixed `origin/dev` base `18fefff` plus rebased LAYOUT-9 `6dee588`.
+The CSS-9 merge in this history is `d2f6d73` (source `4f51acd`); the brief's
+`e0adf15` names the subsequent NET-18 merge. The pinned WPT revision remains
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` at 800×600.
+
+The CSS-9-only immutable baseline now preserves computed mixed `calc()` and
+maps logical size declarations to physical `width`/`height` and min/max
+longhands. Its frozen calc selection improved **16/53 → 31/53**, raw
+**+15/−0**, browser consensus **+14/−0**, without a layout source change.
+`calc-max-height-block-1` and `calc-min-width-block-intrinsic-1` became exact;
+`calc-rounding-003` remains exact and its computed style now contains the
+substituted calc width. CSS-9 also restored `gap-006-rtl`, moving broad
+flex/grid **83/200 → 84/200** with raw and consensus **+1/−0**.
+
+Layout now takes `ComputedValue::LengthPercentageExpression` through the
+shared used-value resolver for physical size, min/max, inset, margin/padding
+longhands, flex basis and limits, intrinsic width, and replaced dimensions.
+The percentage term remains unresolved until the proper containing-block
+basis is available. A definite-height column flex container now collects
+wrapped lines and places them across the cross axis, including logical rows
+that become physical columns under vertical writing modes. The frozen calc
+selection stayed **31/53 → 31/53** with zero losses; broad flex/grid moved
+**84/200 → 86/200**, raw and consensus **+2/−0**, restoring both
+`gap-006-lr` and `flex-flow-008`. The two LAYOUT-6 logical-size exceptions
+now both pass. Column `wrap-reverse` and cross-axis `align-content` modes
+other than stretch remain deferred beyond this ticket.
+
+Both baseline and candidate ran twice on immutable executables with stable
+classifications and actual/reference/diff image hashes. Ten retained
+selections have zero gains and zero losses: focused
+flex/grid **24/24**, geometry **41/61**, tables **10/12**, floats **6/8**,
+block collapse **9/9**, position **12/12**, text flow **14/16**, contents
+**6/6**, paint compositing **24/24**, images **12/12**. One retained
+geometry mismatch, `flex-column-inline-multiline`, changes hashes and improves
+from 4,000 to 3,000 differing pixels; the other nine selections have no
+changed hashes. The geometry count is 41 on the CSS-9-only base and stays 41
+after layout. The unchanged
+`calc-border-radius-1` mismatch is 84 paint pixels; the already routed
+replaced-content request is for `amazing-paint/src/paint.rs::resolve_corner_radii`
+to use layout's calc-aware radius helper.
+
+All raw reports, browser consensus movement, exact source and executable
+hashes, and the workspace gate are in `crates/amazing-layout/evidence/layout10/`.
+The layout crate nextest passed **234/234** and doctests **0/0** on win-001.
+The source-verified workspace gate passed **1660/1660** nextest tests with 3
+skipped and **2/2** workspace doctests. No Mac builds or tests were run.
