@@ -636,7 +636,7 @@ now assigned CSS-5 below. Background shorthand remains deferred pending shell
 stylesheet provenance.
 
 
-## CSS-5 — HTML presentational hints (in progress)
+## CSS-5 — HTML presentational hints (complete on fixed base 2021707)
 
 Assigned 2026-09-21 after CSS-4 and its border rollback follow-up merged.
 The previously queued background shorthand ticket remains deferred; CSS-5 now
@@ -689,9 +689,8 @@ References: [HTML rendering](https://html.spec.whatwg.org/multipage/rendering.ht
 [HTML microsyntaxes](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html),
 [hint origin and rollback](https://drafts.csswg.org/css-cascade-5/#preshint).
 
-Evidence is in progress: clean baseline bb79669, lock E4D68B10, source-verified
-Windows executable and two runs of all eight pinned selections. Final counts,
-image comparisons, workspace gate and source hashes will be recorded after validation.
+Historical pre-outage baseline bb79669 and lock E4D68B10 are superseded by
+the fixed-base 2021707 gate below. Do not present those older results as current.
 
 
 ### Integration boundary discovered by the CLI proof
@@ -737,3 +736,110 @@ broadcast before any SSH/SCP; then verify preserved artifacts and source
 identity before deciding which gates need rerunning. Full background shorthand,
 URL provenance, driver intrinsic-size integration, and context-dependent HTML
 mappings remain queued. No CSS-owned REFRESH-HOLD was present at stand-down.
+
+## CSS-6 — grid grammar and typed values (queued after CSS-5 lands)
+
+Do not start in parallel with CSS-5. Layout owns formatting algorithms; CSS owns
+only specified grammar acceptance and typed computed values. Layout measured
+fixed-base `bebca0f` cases against exact-revision Chrome 154 and Safari 26.6.
+
+1. **Subgrid first:** `valid_grid_track_list` rejects
+   `grid-template-columns: subgrid` and `grid-template-rows: subgrid`, including
+   optional line-name lists, before layout can see them. Nineteen broad cases
+   are blocked; **8 have Chrome/Safari pass consensus**. Accept only the
+   specified grammar and preserve a typed subgrid value for layout.
+2. **Grid Lanes second:** `values.rs` rejects `display: grid-lanes` and
+   `display: inline grid-lanes`, leaving layout with the initial inline value.
+   Of 61 failing cases, **17 have Chrome/Safari pass consensus** and 41 are
+   Chrome-only. The 17 consensus cases make this the largest consensus cluster,
+   so its grammar is worth implementing after subgrid. Grid Lanes is draft CSS
+   Grid Level 3 (formerly masonry). Accept only the specified grammar and keep
+   the computed display value typed.
+
+These are layout-lane measurements, not CSS-6 results. CSS-5 must land and
+stop at its ticket boundary before CSS-6 begins.
+
+
+### CSS-5 final fixed-base gate — 2026-09-23
+
+**Gate base:** `origin/dev` at `2021707` (IA-XML driver dispatch merge),
+rebased lane branch `lane/css`. The CSS Windows tree was refreshed to that
+commit with `tar -m` and first-party Cargo artifact invalidation. The five
+CSS-owned changed files were then re-synced with `tar -m`. The refreshed
+baseline and candidate were built from **238** and **240** verified tracked
+Rust/manifest/selected-render inputs, respectively. Candidate inputs matched
+again after the full workspace, all rendering, and the CLI repetitions.
+
+Fresh Windows results (no Mac build or test):
+
+- `cargo nextest run -p amazing-css --locked`: **168 passed / 0 failed /
+  0 skipped**, including the explicit cellspacing origin/rollback regression.
+- `cargo nextest run --workspace --locked`: **1,329 passed / 0 failed /
+  3 skipped**.
+- `cargo test --workspace --locked --doc`: **2 passed / 0 failed /
+  0 ignored** across 19 targets. Nextest does not include these doctests.
+- Two baseline and two candidate runs of each of nine pinned selections:
+  **36 reports**, WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+  Each before and candidate repeat agrees exactly on classification, pixel
+  count, and actual/reference/diff image SHA256. Every original eight
+  selection has identical before/candidate per-case image hashes.
+
+Counts below are pass / mismatch / unsupported; errors, timeouts, and crashes
+are zero in every run.
+
+| Selection | Baseline | Candidate |
+|---|---:|---:|
+| cascade | 38/32/2 | 38/32/2 |
+| Variables subset | 12/0/0 | 12/0/0 |
+| block-collapse | 9/0/0 | 9/0/0 |
+| position | 12/0/0 | 12/0/0 |
+| text-flow | 14/2/0 | 14/2/0 |
+| flex-grid | 24/0/0 | 24/0/0 |
+| paint-compositing | 24/0/0 | 24/0/0 |
+| text-shaping | 12/0/0 | 12/0/0 |
+| vertical-ruby | 11/9/0 | 11/9/0 |
+| raw cellspacing | 0/1/0 | **1/0/0** |
+
+Cascade differs from the pre-outage 35/24/13 because the current base's XML
+driver dispatch classifies former unsupported XHTML cases; the baseline and
+candidate both read 38/32/2. The cascade per-case normalized SHA256 is
+`2aa504f219f1fbbd68a0e55622d12cd22633b1bdc92b8266d3434c8bb91e60a1`
+for all four runs. The pinned unmodified
+`css-display__display-contents-td-001.html` raw case improves **399
+differing pixels / mismatch -> 0 / pass**, stable in both repeats. This is
+observed with the base's integrated layout; CSS supplies the HTML
+`cellspacing` -> computed `border-spacing` Hint-origin mapping, including 0.
+
+Real CLI proof, repeated twice at 80×50, uses a decoded 32×32 red P6 image,
+CSS `height:32px`, and HTML `width=80%` versus a CSS 64×32 reference.
+Baseline: **1,024 differing pixels**; candidate: **0**. An author-layer
+definite-size override and author `width:auto;height:auto` diagnostics are
+0 before/after with the corrected driver. The repeated proof JSON files are
+identical, SHA256
+`7b3b28cdfaca38cbb2f6a614b8d20dafa924124eb37a7f331cef47fbdd3a9a86`.
+The corrected driver now supplies the image's natural dimensions; the prior
+2044-pixel author-auto diagnostic was historical and is no longer a defect.
+
+Baseline executable SHA256:
+`2735149475AB6D67D3C09AC48932C86693F9C442CFD9D8335189A2581FD91337`.
+Candidate executable SHA256:
+`0CE5458B21F4E021D1D942E6718F121B909C83D533C895B86F2E764C8198142C`.
+Both immutable hashes were verified after rendering. The full evidence,
+per-case hashes, source manifests, logs, and scripts live in the primary
+checkout's `.agents/css/css5-r3-*`; Windows artifacts are in
+`C:/Users/server/target/css/`. The shared-slot wrapper printed an acquired
+slot for each full workspace/render gate.
+
+Two resumed intermediate runs are excluded from final claims: first, a
+474251e run predated later merged input changes; second, its candidate CSS
+was extracted without `tar -m`, leaving Cargo to reuse stale downstream
+artifacts despite byte-correct source. That run had CLI 2044→2044 and
+cellspacing 478→478 and correctly failed the CLI assertion. The final
+2021707 run refreshed and invalidated first-party artifacts, compiled CSS,
+layout, and driver together, and passed the end-to-end proof.
+
+Under the fleet's fixed-base rule, later HTML-only merges do not require
+CSS-5 to chase `dev`: `git diff --name-only 2021707 origin/dev --
+crates/amazing-css` was empty at reporting. The integrator's authoritative
+merged-head gate validates the combined tree. Context-dependent mappings
+listed above remain separate work; CSS-6 is queued below.
