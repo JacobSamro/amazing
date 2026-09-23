@@ -230,9 +230,16 @@ fn layout_block_in_context(
                 let chrome = bl + pl + pr + br_;
                 let available =
                     (cbw - b.margin.left.unwrap_or(0.0) - b.margin.right.unwrap_or(0.0)).max(0.0);
-                content_w = (crate::flex::min_content_width(b, fonts)
+                let (min_width, max_width) = if b.inline_atomic && crate::grid::is_grid_lanes(&b.style) {
+                    (crate::grid::intrinsic_lanes_width(b, fonts, true),
+                        crate::grid::intrinsic_lanes_width(b, fonts, false))
+                } else {
+                    (crate::flex::min_content_width(b, fonts),
+                        crate::flex::max_content_width(b, fonts))
+                };
+                content_w = (min_width
                     .max(available)
-                    .min(crate::flex::max_content_width(b, fonts))
+                    .min(max_width)
                     - chrome)
                     .max(0.0);
             } else {
@@ -296,9 +303,16 @@ fn layout_block_in_context(
             trailing_clearance: false,
         },
         Flow::Grid(children) => StackResult {
-            content_end: crate::grid::layout_grid(
-                children, &b.style, font_px, content_x, content_y, content_w, def_h, fonts,
-            ),
+            content_end: if crate::grid::is_grid_lanes(&b.style) {
+                crate::grid::layout_grid_lanes(
+                    children, &b.style, font_px, content_x, content_y, content_w, def_h, fonts,
+                )
+            } else {
+                crate::grid::layout_grid_with_context(
+                    children, &b.style, b.grid_subgrid.as_ref(), font_px,
+                    content_x, content_y, content_w, def_h, fonts,
+                )
+            },
             trailing: CollapsedMargin::default(),
             trailing_clearance: false,
         },
@@ -476,7 +490,7 @@ pub(crate) fn place_atomic_inlines(parent: &mut LayoutBox) {
 }
 
 fn is_inline_block(style: &ComputedStyle) -> bool {
-    matches!(style.get("display"), Some("inline-block" | "inline flow-root"))
+    matches!(style.get("display"), Some("inline-block" | "inline flow-root" | "inline-grid-lanes"))
 }
 
 fn inline_block_baseline(box_: &LayoutBox) -> f32 {
@@ -708,6 +722,8 @@ pub(crate) fn establishes_bfc(style: &ComputedStyle) -> bool {
                     | "grid"
                     | "inline-flex"
                     | "inline-grid"
+                    | "grid-lanes"
+                    | "inline-grid-lanes"
             )
         )
         || matches!(style.get("position"), Some("absolute" | "fixed"))

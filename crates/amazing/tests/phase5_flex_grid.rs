@@ -742,9 +742,9 @@ fn grid_template_longhand_rejects_reserved_line_names() {
 
     // `[default]` is a reserved custom-ident: the longhand winner is invalid,
     // behaves as unset, and must not create a named line to place into.
-    // The item falls back to the implicit auto column sized by its (empty)
-    // content.
-    assert_eq!(item.content_box.w, 0.0);
+    // The item falls back to the implicit auto column, which stretches to
+    // fill the 100px grid container under justify-content: normal.
+    assert_eq!(item.content_box.w, 100.0);
 }
 
 #[test]

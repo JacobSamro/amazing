@@ -1,0 +1,57 @@
+{
+  "ticket": "LAYOUT-7",
+  "fixed_base": "5c92b4a84361e92afba252c47c02b2958a16353c",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "source_manifest": {
+    "file": "final-sources.json",
+    "sha256": "08ba35ac3bcdc679bf1ee61c1ffc7cde8f2e9cfcd06f7b28fcd9099c2708f388",
+    "files": 273,
+    "verified_on_windows_before_and_after_each_completed_build_step": true
+  },
+  "renderer": {
+    "file_on_windows": "C:/Users/server/target/layout/layout7-v7.exe",
+    "sha256": "7dd5faa2fefde637f53b2237c9a60428e5a62ec6db684c2e99076925e60657f5"
+  },
+  "image_renderer": {
+    "file_on_windows": "C:/Users/server/target/layout/layout7-v7-images.exe",
+    "sha256": "1efe194863355752c9d9f4cf180bf1381c83be0c329d66cf3927ccda5620fb29"
+  },
+  "layout_nextest": {
+    "passed": 224,
+    "failed": 0,
+    "skipped": 0,
+    "log": "layout-nextest.log.gz",
+    "windows_log_sha256": "7233371f4bc283229e2b172c5c43a8bc50c0d03856a070586d756a765b180fdf"
+  },
+  "layout_doctests": {
+    "passed": 0,
+    "failed": 0,
+    "windows_log_sha256": "19dfe16a9b44a05dfb25f90f1404973d545106d1f2c0b159f"
+  },
+  "workspace_nextest_fixed_base": {
+    "passed_before_fail_fast": 59,
+    "failed": 1,
+    "not_run_due_to_fail_fast": 1439,
+    "log": "fixed-base-workspace.log.gz",
+    "windows_log_sha256": "6ba315073fc1dcaa46e39c45fecc4acf7eda0173dd3b60775f0dca1a80fbfdad",
+    "exception": "amazing::phase5_flex_grid::grid_template_longhand_rejects_reserved_line_names",
+    "css_fix_on_dev": "6fcb990",
+    "explanation": "CSS Values 4 \u00a74.2 reserves default as custom-ident. Fixed-base amazing-css accepts invalid grid-column:default, causing two 50px implicit auto columns instead of one 100px column."
+  },
+  "workspace_nextest_excluding_css_exception": {
+    "passed": 1498,
+    "failed": 0,
+    "skipped": 4,
+    "log": "workspace-excluding-css.log.gz",
+    "windows_log_sha256": "a49f888b659bab6ce3c7eb5757b8c620cc038d97cb155fbc8fd308864c67330c"
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0,
+    "log": "workspace-doc.log.gz",
+    "windows_log_sha256": "79b521a4f1c1b3cadd647f6e615390575dbdb616d073b5277788949c2ea7e36f"
+  },
+  "paired_render_summary": "summary.json",
+  "full_run_directory_on_windows": "C:/Users/server/target/layout/layout7-final-wpt",
+  "windows_log_sha256_note": "Hashes are for decompressed raw Windows logs; evidence stores gzip -n archives."
+}

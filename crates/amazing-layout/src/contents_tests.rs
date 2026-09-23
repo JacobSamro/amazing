@@ -113,6 +113,21 @@ fn inline_block_is_one_unbreakable_box_with_shrink_to_fit_width() {
 }
 
 #[test]
+fn inline_grid_lanes_uses_combined_track_intrinsic_width() {
+    for shaped in [false, true] {
+        let (dom, root) = page(
+            "<body><span id=lanes><i></i><i></i><i></i><i></i></span></body>",
+            "#lanes{display:inline grid-lanes;grid-template-columns:repeat(4,auto);column-gap:5px}i{width:20px;height:10px}",
+            shaped,
+        );
+        let lanes = get(&root, id(&dom, "lanes"));
+        assert!(matches!(lanes.flow, Flow::Grid(_)));
+        near(lanes.border_box.w, 95.0);
+        assert_eq!(root.lines.len(), 1);
+    }
+}
+
+#[test]
 fn inline_block_uses_last_line_baseline_or_bottom_margin_edge() {
     for shaped in [false, true] {
         for overflow in ["visible", "hidden"] {
