@@ -222,6 +222,8 @@ LANE_GRANTS.setdefault("text", []).append("crates/amazing/src/page.rs")
 LANE_GRANTS.setdefault("html", []).append("Cargo.lock")
 # js-binary / js-stdlib: one include! line per module in interp.rs and the
 # install calls in interp_install.rs::install_builtins. ADDED LINES ONLY.
+# JS-10: the Test262 host's module capability. ADDED LINES ONLY.
+LANE_GRANTS.setdefault("js-lang", []).append("crates/amazing-js/examples/test262_host.rs")
 LANE_GRANTS.setdefault("js-binary", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
