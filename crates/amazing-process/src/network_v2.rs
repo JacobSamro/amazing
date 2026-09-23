@@ -641,9 +641,26 @@ impl NetworkSession {
             crate::Capabilities(BTreeMap::new()),
             crate::RestartPolicy::Never,
         )?;
-        if let Err(error) = host.ping(timeout) {
-            let _ = host.kill();
-            return Err(error);
+        let ready_deadline = Instant::now() + timeout;
+        loop {
+            let remaining = ready_deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                let _ = host.kill();
+                return Err(crate::Error::Ipc(Error::Timeout));
+            }
+            match host.ping(remaining) {
+                Ok(()) => break,
+                // The child replies to the bootstrap before its Connection
+                // binds interfaces. Retry only this pre-ready response; the
+                // V2 interface is bound before the ping responder.
+                Err(crate::Error::Ipc(Error::Remote(message))) if message == "UnknownInterface" => {
+                    std::thread::yield_now();
+                }
+                Err(error) => {
+                    let _ = host.kill();
+                    return Err(error);
+                }
+            }
         }
         let remote = NetworkProxyV2::new(host.connection.clone(), timeout);
         Ok(Self {

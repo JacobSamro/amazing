@@ -15,6 +15,22 @@ fn read_request(stream: &mut impl Read) {
     }
 }
 
+fn next_reply(session: &NetworkSession, started: &NetworkStarted, credit: u32) -> NetworkReply {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        match session.read(started, credit).unwrap() {
+            NetworkReply::Pending(()) => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "network event timed out"
+                );
+                std::thread::yield_now();
+            }
+            event => return event,
+        }
+    }
+}
+
 fn request(url: &str, origin: &str) -> NetworkStart {
     NetworkStart {
         version: NETWORK_VERSION,
@@ -183,16 +199,19 @@ fn opaque_origin_identity_survives_the_wire() {
 fn network_session_preserves_non_success_head_and_body() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
+    let (consumed_tx, consumed_rx) = std::sync::mpsc::channel();
     let server = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         read_request(&mut stream);
         let body = b"<p>network contract</p>";
         write!(stream, "HTTP/1.1 404 Not Found\r\nContent-Type: text/html; charset=utf-8\r\nX-Test: two\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
         stream.write_all(body).unwrap();
+        consumed_rx.recv_timeout(Duration::from_secs(30)).unwrap();
     });
     let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
     let session = NetworkSession::launch(exe, 7, Duration::from_secs(5)).unwrap();
     let response = session.fetch(request("/index", &origin)).unwrap();
+    consumed_tx.send(()).unwrap();
     server.join().unwrap();
     assert_eq!(response.head.status, 404);
     assert_eq!(response.head.reason, "Not Found");
@@ -287,21 +306,22 @@ fn response_bytes_arrive_under_credit_before_network_completion() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (consumed_tx, consumed_rx) = std::sync::mpsc::channel();
     let server = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         read_request(&mut stream);
         stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 10\r\nConnection: close\r\n\r\nhello").unwrap();
-        release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        release_rx.recv_timeout(Duration::from_secs(30)).unwrap();
         stream.write_all(b"world").unwrap();
+        consumed_rx.recv_timeout(Duration::from_secs(30)).unwrap();
     });
     let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
     let session = NetworkSession::launch(exe, 9, Duration::from_secs(5)).unwrap();
     let started = session.start(request("/stream", &origin)).unwrap();
-    let deadline = std::time::Instant::now() + Duration::from_secs(4);
     let mut first = Vec::new();
     let mut saw_head = false;
-    while std::time::Instant::now() < deadline && first.len() < 5 {
-        match session.read(&started, 3).unwrap() {
+    while first.len() < 5 {
+        match next_reply(&session, &started, 3) {
             NetworkReply::Head(head) => {
                 assert_eq!(head.status, 200);
                 saw_head = true;
@@ -311,29 +331,25 @@ fn response_bytes_arrive_under_credit_before_network_completion() {
                 assert!(chunk.bytes.0.len() <= 3);
                 first.extend_from_slice(&chunk.bytes.0);
             }
-            NetworkReply::Pending(()) => std::thread::sleep(Duration::from_millis(1)),
+            NetworkReply::Pending(()) => unreachable!(),
             NetworkReply::Complete(done) => panic!("stream completed before second half: {done:?}"),
         }
     }
     release_tx.send(()).unwrap();
     assert_eq!(first, b"hello");
     let mut second = Vec::new();
-    let finish_deadline = std::time::Instant::now() + Duration::from_secs(5);
     loop {
-        assert!(
-            std::time::Instant::now() < finish_deadline,
-            "stream completion timed out"
-        );
-        match session.read(&started, 3).unwrap() {
+        match next_reply(&session, &started, 3) {
             NetworkReply::Body(chunk) => {
                 assert!(chunk.bytes.0.len() <= 3);
                 second.extend_from_slice(&chunk.bytes.0);
             }
             NetworkReply::Complete(done) => {
                 assert!(done.error.is_none());
+                consumed_tx.send(()).unwrap();
                 break;
             }
-            NetworkReply::Pending(()) => std::thread::sleep(Duration::from_millis(1)),
+            NetworkReply::Pending(()) => unreachable!(),
             NetworkReply::Head(_) => panic!("duplicate response head"),
         }
     }

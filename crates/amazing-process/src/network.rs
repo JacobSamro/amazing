@@ -158,9 +158,11 @@ impl NetworkRequests for NetworkEndpoint {
 }
 /// Bind the network role's service and liveness responder.
 pub fn serve_network(connection: &Arc<Connection>) {
-    connection.bind(0, crate::Ping);
-    connection.bind(8, NetworkReceiver(NetworkEndpoint::new()));
     crate::network_v2::serve(connection);
+    connection.bind(8, NetworkReceiver(NetworkEndpoint::new()));
+    // The browser uses ping as the readiness barrier. Bind every network
+    // interface before exposing it, so a successful launch cannot race V2.
+    connection.bind(0, crate::Ping);
 }
 /// Browser-side broker: the renderer never owns a direct process handle.
 pub struct NetworkBroker {
