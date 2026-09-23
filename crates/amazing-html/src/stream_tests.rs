@@ -86,6 +86,39 @@ fn script_data_is_invariant_across_every_scalar_boundary() {
 }
 
 #[test]
+fn pending_table_text_places_the_complete_character_run() {
+    for (input, expected) in [
+        ("<table> A<tr><td>x",
+         "#document\n  <html>\n    <head>\n    <body>\n      \" A\"\n      <table>\n        <tbody>\n          <tr>\n            <td>\n              \"x\"\n"),
+        ("<table> \n<tr><td>x",
+         "#document\n  <html>\n    <head>\n    <body>\n      <table>\n        \" \n\"\n        <tbody>\n          <tr>\n            <td>\n              \"x\"\n"),
+        ("<table>&#32;A<tr><td>x",
+         "#document\n  <html>\n    <head>\n    <body>\n      \" A\"\n      <table>\n        <tbody>\n          <tr>\n            <td>\n              \"x\"\n"),
+        ("<table><tbody> \nA<tr><td>x",
+         "#document\n  <html>\n    <head>\n    <body>\n      \" \nA\"\n      <table>\n        <tbody>\n          <tr>\n            <td>\n              \"x\"\n"),
+        ("<table><tr> A<td>x",
+         "#document\n  <html>\n    <head>\n    <body>\n      \" A\"\n      <table>\n        <tbody>\n          <tr>\n            <td>\n              \"x\"\n"),
+        ("<table><tr><td><table> B</table>C",
+         "#document\n  <html>\n    <head>\n    <body>\n      <table>\n        <tbody>\n          <tr>\n            <td>\n              \" B\"\n              <table>\n              \"C\"\n"),
+        ("<table> A",
+         "#document\n  <html>\n    <head>\n    <body>\n      \" A\"\n      <table>\n"),
+        ("<body>lead<table> A<tr><td>x",
+         "#document\n  <html>\n    <head>\n    <body>\n      \"lead A\"\n      <table>\n        <tbody>\n          <tr>\n            <td>\n              \"x\"\n"),
+    ] {
+        assert_eq!(parse(input).dump(NodeIdx(0)), expected, "one-shot: {input:?}");
+        assert_all_splits(input);
+    }
+}
+
+#[test]
+fn pending_table_text_keeps_reference_and_scalar_chunk_order() {
+    let expected = parse("<table>&#32;A<tr><td>x").dump(NodeIdx(0));
+    assert_eq!(streamed(&["<table>&", "#", "3", "2", ";", "A<tr><td>x"]), expected);
+    assert_eq!(streamed(&["<table>", " ", "𐐷", "é", "<tr><td>x"]),
+        parse("<table> 𐐷é<tr><td>x").dump(NodeIdx(0)));
+}
+
+#[test]
 fn temporary_exhaustion_does_not_resolve_ambiguous_tokens() {
     let mut tok = Tokenizer::streaming();
     tok.push_chars("<meta char".chars());

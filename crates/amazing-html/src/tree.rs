@@ -16,9 +16,6 @@
 //! - Scope terminator sets omit `template`.
 //! - Quirks-mode differences are not modelled; the no-quirks rules always
 //!   apply (e.g. `<table>` always closes an open `<p>`).
-//! - The "in table text" pending-character buffer is collapsed: non-
-//!   whitespace characters in table context are foster-parented token by
-//!   token instead of being collected and flushed together.
 //!
 //! The tokenizer owns RAWTEXT/RCDATA switching (script/style/textarea/
 //! title), so this module only implements the "text" insertion-mode
@@ -109,6 +106,7 @@ enum Mode {
     InSelect,
     Text,
     InTable,
+    InTableText,
     InTableBody,
     InRow,
     InCell,
@@ -138,6 +136,9 @@ pub struct TreeBuilder {
     mode: Mode,
     /// Return mode for "text" (the "original insertion mode").
     orig_mode: Mode,
+    /// Return mode and pending characters for the "in table text" rules.
+    table_text_return_mode: Mode,
+    pending_table_text: String,
     /// Stack of open elements; `open[0]` is the `html` element once
     /// synthesized. The document node lives outside this stack.
     open: Vec<NodeIdx>,
@@ -165,6 +166,8 @@ impl TreeBuilder {
             dom: Dom::new(),
             mode: Mode::Initial,
             orig_mode: Mode::Initial,
+            table_text_return_mode: Mode::Initial,
+            pending_table_text: String::new(),
             open: Vec::new(),
             head: None,
             form: None,
@@ -203,6 +206,12 @@ impl TreeBuilder {
     // ---- token routing ----
 
     fn process_token(&mut self, tok: Token) {
+        // Pending table text must flush before every non-character token,
+        // including the non-HTML processing-instruction extension below.
+        if self.mode == Mode::InTableText {
+            self.in_table_text(tok);
+            return;
+        }
         if let Token::ProcessingInstruction { target, data } = &tok {
             let parent = match self.mode {
                 Mode::Initial
@@ -244,6 +253,7 @@ impl TreeBuilder {
             Mode::InSelect => self.in_select(tok),
             Mode::Text => self.text_mode(tok),
             Mode::InTable => self.in_table(tok),
+            Mode::InTableText => unreachable!("handled before token routing"),
             Mode::InTableBody => self.in_table_body(tok),
             Mode::InRow => self.in_row(tok),
             Mode::InCell => self.in_cell(tok),
@@ -1924,12 +1934,10 @@ impl TreeBuilder {
     fn in_table(&mut self, tok: Token) {
         match tok {
             Token::Characters(data) => {
-                if data.chars().all(is_ws_char) {
-                    self.insert_text(&data);
-                } else {
-                    self.foster = true;
-                    self.in_body(Token::Characters(data));
-                }
+                self.table_text_return_mode = self.mode;
+                self.pending_table_text.clear();
+                self.pending_table_text.push_str(&data);
+                self.mode = Mode::InTableText;
             },
             Token::Comment(data) => self.insert_comment_here(&data),
             Token::Doctype { .. } => {},
@@ -1939,6 +1947,29 @@ impl TreeBuilder {
             Token::EndTag { name } => self.in_table_end_tag(&name),
             Token::Eof => {},
             Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
+        }
+    }
+
+    /// Accumulate adjacent character tokens before deciding their insertion
+    /// place. A non-whitespace scalar makes the entire run foster-parented;
+    /// otherwise it belongs under the current table-family element.
+    fn in_table_text(&mut self, tok: Token) {
+        match tok {
+            Token::Characters(data) => self.pending_table_text.push_str(&data),
+            other => {
+                let data = std::mem::take(&mut self.pending_table_text);
+                self.mode = self.table_text_return_mode;
+                if !data.is_empty() {
+                    if data.chars().all(is_ws_char) {
+                        self.insert_text(&data);
+                    } else {
+                        self.foster = true;
+                        self.in_body(Token::Characters(data));
+                        self.foster = false;
+                    }
+                }
+                self.process_token(other);
+            },
         }
     }
 
