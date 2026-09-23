@@ -9,11 +9,9 @@
 //! (`<b>1<p>2</b>3</p>`, `<b>1<i>2</b>3</i>`) come out browser-shaped.
 //!
 //! Deviations from full spec (deliberate, mirroring lib.rs):
-//! - `template` is ignored everywhere; no "in template" insertion modes.
 //! - `noscript` content is parsed as raw text regardless of scripting flag.
 //! - Foreign content implements namespace-aware SVG/MathML tree construction
 //!   and integration points, but not every foreign-attribute adjustment.
-//! - Scope terminator sets omit `template`.
 //! - Quirks-mode differences are not modelled; the no-quirks rules always
 //!   apply (e.g. `<table>` always closes an open `<p>`).
 //!
@@ -33,9 +31,9 @@ const VOID_ELEMENTS: &[&str] = &[
     "input", "link", "meta", "param", "source", "track", "wbr", "frame",
 ];
 
-/// Default-scope terminator element names (§13.2.4.3). `template` omitted.
+/// Default-scope terminator element names (§13.2.4.3).
 const SCOPE_TERMINATORS: &[&str] =
-    &["applet", "caption", "html", "table", "td", "th", "marquee", "object"];
+    &["applet", "caption", "html", "table", "td", "th", "marquee", "object", "template"];
 
 /// Extra terminators for "in button scope".
 const BUTTON_SCOPE_EXTRA: &[&str] = &["button"];
@@ -93,8 +91,7 @@ fn strip_leading_lf(mut s: String) -> String {
     s
 }
 
-/// Insertion modes (§13.2.4.1). `InTemplate*` modes are folded away (see
-/// module deviation list). Current WHATWG select recovery is part of the
+/// Insertion modes (§13.2.4.1). Current WHATWG select recovery is part of the
 /// in-body rules.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Mode {
@@ -102,6 +99,7 @@ enum Mode {
     BeforeHtml,
     BeforeHead,
     InHead,
+    InTemplate,
     AfterHead,
     InBody,
     InSelect,
@@ -175,6 +173,7 @@ pub struct TreeBuilder {
     /// and cleared after every token.
     foster: bool,
     fmt: Vec<FmtEntry>,
+    template_modes: Vec<Mode>,
 }
 
 impl Default for TreeBuilder {
@@ -199,6 +198,7 @@ impl TreeBuilder {
             skip_next_lf: false,
             foster: false,
             fmt: Vec::new(),
+            template_modes: Vec::new(),
         }
     }
 
@@ -266,6 +266,26 @@ impl TreeBuilder {
     }
 
     fn process_token_in_html(&mut self, tok: Token) {
+        if self.mode != Mode::Text && self.mode != Mode::InTableText {
+            if tok == Token::Eof && self.stack_has("template") {
+                self.close_template();
+                self.process_token_in_html(tok);
+                return;
+            }
+            if !matches!(self.mode, Mode::Initial | Mode::BeforeHtml | Mode::BeforeHead | Mode::AfterHead | Mode::InHead) {
+                match &tok {
+                    Token::StartTag { name, attrs, .. } if name == "template" => {
+                        self.start_template(attrs.clone());
+                        return;
+                    },
+                    Token::EndTag { name } if name == "template" => {
+                        self.close_template();
+                        return;
+                    },
+                    _ => {},
+                }
+            }
+        }
         let self_closing_foreign_root = match &tok {
             Token::StartTag { name, self_closing: true, .. } if name == "svg" => {
                 Some((Namespace::Svg, "svg"))
@@ -280,6 +300,7 @@ impl TreeBuilder {
             Mode::BeforeHtml => self.before_html(tok),
             Mode::BeforeHead => self.before_head(tok),
             Mode::InHead => self.in_head(tok),
+            Mode::InTemplate => self.in_template(tok),
             Mode::AfterHead => self.after_head(tok),
             Mode::InBody => self.in_body(tok),
             Mode::InSelect => self.in_select(tok),
@@ -729,7 +750,8 @@ impl TreeBuilder {
         let Some(&target) = self.open.last() else {
             return (NodeIdx(0), None);
         };
-        self.adjusted_insertion_place_for(target)
+        let (parent, before) = self.adjusted_insertion_place_for(target);
+        (self.dom.template_contents(parent).unwrap_or(parent), before)
     }
 
     fn alloc_element(
@@ -937,6 +959,7 @@ impl TreeBuilder {
                 "caption" => Some(Mode::InCaption),
                 "colgroup" => Some(Mode::InColumnGroup),
                 "table" => Some(Mode::InTable),
+                "template" => Some(*self.template_modes.last().unwrap_or(&Mode::InTemplate)),
                 "frameset" => Some(Mode::InFrameset),
                 "body" => Some(Mode::InBody),
                 "html" => Some(if self.head.is_none() {
@@ -1436,6 +1459,47 @@ impl TreeBuilder {
         self.mode = Mode::AfterHead;
     }
 
+    fn start_template(&mut self, attrs: Vec<(String, String)>) {
+        let template = self.insert_and_push("template", attrs);
+        self.dom.ensure_template_contents(template).expect("HTML template contents");
+        self.fmt.push(FmtEntry::Marker);
+        self.frameset_ok = false;
+        self.mode = Mode::InTemplate;
+        self.template_modes.push(Mode::InTemplate);
+    }
+
+    fn close_template(&mut self) {
+        if !self.stack_has("template") { return; }
+        self.generate_implied_end_tags(None);
+        self.pop_until("template");
+        self.clear_fmt_to_marker();
+        self.template_modes.pop();
+        self.reset_insertion_mode();
+    }
+
+    fn in_template(&mut self, tok: Token) {
+        match &tok {
+            Token::Characters(_) | Token::Comment(_) | Token::Doctype { .. } => self.in_body(tok),
+            Token::StartTag { name, .. } if matches!(name.as_str(),
+                "base" | "basefont" | "bgsound" | "link" | "meta" | "noframes" | "script" | "style" | "title") => self.in_head(tok),
+            Token::StartTag { name, .. } => {
+                let next = match name.as_str() {
+                    "caption" | "colgroup" | "tbody" | "tfoot" | "thead" => Mode::InTable,
+                    "col" => Mode::InColumnGroup,
+                    "tr" => Mode::InTableBody,
+                    "td" | "th" => Mode::InRow,
+                    _ => Mode::InBody,
+                };
+                *self.template_modes.last_mut().expect("template mode") = next;
+                self.mode = next;
+                self.process_token(tok);
+            },
+            Token::EndTag { .. } => {},
+            Token::Eof => {},
+            Token::ProcessingInstruction { .. } => unreachable!("handled by dispatcher"),
+        }
+    }
+
     fn in_head(&mut self, tok: Token) {
         match tok {
             Token::Characters(data) => {
@@ -1462,7 +1526,7 @@ impl TreeBuilder {
                     "title" | "noframes" | "style" | "script" | "noscript" => {
                         self.start_generic_text_element(name, attrs);
                     },
-                    "template" => {}, // deviation: ignored
+                    "template" => self.start_template(attrs),
                     "head" => {},
                     _ => {
                         self.leave_head();
@@ -1480,7 +1544,8 @@ impl TreeBuilder {
                     self.leave_head();
                     self.after_head(Token::EndTag { name: name.clone() });
                 },
-                _ => {}, // template and strays ignored
+                "template" => self.close_template(),
+                _ => {},
             },
             other => {
                 self.leave_head();
@@ -2619,12 +2684,12 @@ pub fn build_with_custom_element_host(
 pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
     let mut builder = TreeBuilder::new();
     builder.insert_and_push("html", Vec::new());
-    let virtual_context = matches!(context, "textarea" | "title" | "style" | "script" | "noscript" | "plaintext" | "select" | "option");
+    let virtual_context = matches!(context, "textarea" | "title" | "style" | "script" | "noscript" | "plaintext" | "select" | "option" | "template");
     if !virtual_context {
         builder.insert_and_push(context, Vec::new());
     }
     builder.mode = if virtual_context {
-        if context == "select" { Mode::InSelect } else { Mode::InBody }
+        if context == "select" { Mode::InSelect } else if context == "template" { Mode::InTemplate } else { Mode::InBody }
     } else {
         match context {
             "table" => Mode::InTable,
@@ -2636,6 +2701,7 @@ pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
             _ => Mode::InBody,
         }
     };
+    if context == "template" { builder.template_modes.push(Mode::InTemplate); }
     let mut tokenizer = Tokenizer::new(src.chars().collect());
     if matches!(context, "textarea" | "title" | "style" | "script" | "noscript" | "plaintext") {
         tokenizer.enter_fragment_text_context(context);
