@@ -468,6 +468,13 @@ impl Parser {
         if !crate::unicode_sets::supported(&name) {
             return self.error("unsupported Unicode property");
         }
+        if !self.flags.unicode_sets
+            && crate::unicode_sets::strings(&name)
+                .iter()
+                .any(|sequence| sequence.len() != 1)
+        {
+            return self.error("property of strings requires the v flag");
+        }
         if inverse
             && crate::unicode_sets::strings(&name)
                 .iter()

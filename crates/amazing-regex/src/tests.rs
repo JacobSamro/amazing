@@ -283,6 +283,17 @@ fn syntax_errors_and_bounds() {
 
 #[test]
 fn unicode_sets_operations_strings_and_properties() {
+    for property in [
+        "Basic_Emoji",
+        "Emoji_Keycap_Sequence",
+        "RGI_Emoji",
+        "RGI_Emoji_Flag_Sequence",
+        "RGI_Emoji_Modifier_Sequence",
+        "RGI_Emoji_Tag_Sequence",
+        "RGI_Emoji_ZWJ_Sequence",
+    ] {
+        assert!(Regex::new(&format!(r"\p{{{property}}}"), "u").is_err());
+    }
     let accepts = [
         (r"^[a-z--[aeiou]]+$", "bcdf"),
         (r"^[[a-z]&&[def]]+$", "fed"),
