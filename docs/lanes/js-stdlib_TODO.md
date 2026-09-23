@@ -35,9 +35,39 @@ iterator abrupt completion and newer Iterator methods. Error constructor
 realm identity is being addressed by JSB-1. These failures stay visible in
 the pinned corpus and are not counted as unsupported.
 
-## Next: Temporal
+## JSS-1, area 4: Temporal ISO surface
 
-Implement ISO calendar Temporal types with UTC and fixed offset time zones.
-Store epoch nanoseconds as `i128` internally. JSB-2 owns arbitrary precision
-BigInt and must land before BigInt-returning Temporal getters can be exposed.
-Named IANA zones and non-ISO calendars remain outside this host's scope.
+The lane has installed the ISO method and accessor surfaces for Duration,
+Instant, PlainDate, PlainTime, PlainDateTime, PlainYearMonth, PlainMonthDay,
+ZonedDateTime, and Temporal.Now. Instant and ZonedDateTime retain exact epoch
+nanoseconds in private `i128` slots. UTC and minute-precision fixed offsets
+are supported. Plain values also use private slots, so own-key reflection
+does not expose their fields.
+
+The implementation includes ISO parsing and formatting, calendar fields,
+plain-type conversions, arithmetic, differences, rounding, Duration totals,
+and the UTC/fixed-offset Now factories. The pinned `built-ins/Temporal`
+selection rose from 612/4,603 at the first constructor checkpoint to
+**1,449/4,603** in the final full-corpus run. Each selected snapshot retained
+all previously passing files.
+
+Against the exact areas 1–3 commit `441df906ee261f22f4fef882cbdb420785585ff7`,
+the full pinned Linux Test262 run moved from **12,691 pass / 30,894 fail /
+15 timeout / 9,978 unsupported / 294 skipped** to **14,142 pass / 29,443
+fail / 15 timeout / 9,978 unsupported / 294 skipped**. The input SHA-256 is
+identical (`91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`),
+with **2,902 new passing variants and zero lost variants**. The final
+classification SHA-256 is
+`06a0b700d7a3279be72d95f050242e437b128a3674ea59942c53a4be2b9e2ee3`.
+Linux `amazing-js` nextest passed 216/216, and its doctest passed 1/1.
+
+JSB-2 owns arbitrary-precision BigInt. Until it lands, constructors that
+require BigInt epoch nanoseconds and BigInt-returning epoch getters throw;
+the internal `i128` representation and string/Now factories allow the other
+methods to run. JSB-1 owns realm error prototypes; many Test262 negative
+assertions currently observe the wrong thrown-object prototype. About 750
+Temporal files still fail for other reasons, including parser, option-order,
+calendar arithmetic, and host JavaScript gaps; this is a measured conformance
+tranche, not complete Test262 conformance. Named IANA zones and non-ISO
+calendars remain outside this host's scope. All remaining failures stay
+visible in the pinned corpus rather than being classified away.
