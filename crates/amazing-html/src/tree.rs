@@ -464,6 +464,28 @@ impl TreeBuilder {
         }
     }
 
+    /// WHATWG "adjust foreign attributes" table. Names outside this table,
+    /// even names containing a colon, retain a null namespace.
+    fn foreign_attribute_identity(name: &str) -> Option<(&'static str, Option<&'static str>, &'static str)> {
+        const XLINK: &str = "http://www.w3.org/1999/xlink";
+        const XML: &str = "http://www.w3.org/XML/1998/namespace";
+        const XMLNS: &str = "http://www.w3.org/2000/xmlns/";
+        match name {
+            "xlink:actuate" => Some((XLINK, Some("xlink"), "actuate")),
+            "xlink:arcrole" => Some((XLINK, Some("xlink"), "arcrole")),
+            "xlink:href" => Some((XLINK, Some("xlink"), "href")),
+            "xlink:role" => Some((XLINK, Some("xlink"), "role")),
+            "xlink:show" => Some((XLINK, Some("xlink"), "show")),
+            "xlink:title" => Some((XLINK, Some("xlink"), "title")),
+            "xlink:type" => Some((XLINK, Some("xlink"), "type")),
+            "xml:lang" => Some((XML, Some("xml"), "lang")),
+            "xml:space" => Some((XML, Some("xml"), "space")),
+            "xmlns" => Some((XMLNS, None, "xmlns")),
+            "xmlns:xlink" => Some((XMLNS, Some("xmlns"), "xlink")),
+            _ => None,
+        }
+    }
+
     fn insert_foreign_element(
         &mut self,
         name: &str,
@@ -487,12 +509,25 @@ impl TreeBuilder {
                 *attribute_name = adjusted.to_owned();
             }
         }
+        let mut ordinary_attrs = Vec::new();
+        let mut expanded_attrs = Vec::new();
+        for (name, value) in attrs {
+            if let Some((uri, prefix, local_name)) = Self::foreign_attribute_identity(&name) {
+                expanded_attrs.push((uri, prefix, local_name, value));
+            } else {
+                ordinary_attrs.push((name, value));
+            }
+        }
         let (parent, before) = self.insertion_place();
         let idx = self.dom.alloc_unattached(NodeKind::Element {
             name: local_name.to_owned(),
-            attrs,
+            attrs: ordinary_attrs,
             namespace,
         });
+        for (uri, prefix, local_name, value) in expanded_attrs {
+            self.dom.set_attribute_expanded(idx, Some(uri), prefix, local_name, &value)
+                .expect("foreign attribute table has valid expanded identities");
+        }
         self.dom.attach_before(parent, before, idx);
         self.open.push(idx);
         idx
@@ -2776,8 +2811,86 @@ mod tests {
         let dom = build("<svg viewbox='' preserveaspectratio=''><g xlink:href='x'></g></svg><math><mn definitionurl='u'>");
         let dump = dom.dump(NodeIdx(0));
         assert!(dump.contains("<svg svg viewBox=\"\" preserveAspectRatio=\"\">"));
-        assert!(dump.contains("<svg g xlink:href=\"x\">"));
+        assert!(dump.contains("<svg g>"));
         assert!(dump.contains("<math mn definitionURL=\"u\">"));
+        let svg = dom.children(NodeIdx(0)).flat_map(|n| dom.children(n))
+            .flat_map(|n| dom.children(n)).find(|n| dom.name(*n) == Some("svg")).unwrap();
+        let g = dom.children(svg).next().unwrap();
+        let href = dom.attribute_ns(g, Some("http://www.w3.org/1999/xlink"), "href").unwrap();
+        assert_eq!((href.prefix, href.local_name, href.qualified_name(), href.value),
+            (Some("xlink"), "href", "xlink:href".into(), "x"));
+    }
+
+    fn find_element(dom: &Dom, root: NodeIdx, namespace: Namespace, name: &str) -> Option<NodeIdx> {
+        if dom.namespace(root) == Some(namespace) && dom.name(root) == Some(name) {
+            return Some(root);
+        }
+        dom.children(root).find_map(|child| find_element(dom, child, namespace, name))
+    }
+
+    #[test]
+    fn foreign_attribute_table_has_expanded_identity_in_svg_and_mathml() {
+        const XLINK: &str = "http://www.w3.org/1999/xlink";
+        const XML: &str = "http://www.w3.org/XML/1998/namespace";
+        const XMLNS: &str = "http://www.w3.org/2000/xmlns/";
+        let table = [
+            ("xlink:actuate", XLINK, Some("xlink"), "actuate"),
+            ("xlink:arcrole", XLINK, Some("xlink"), "arcrole"),
+            ("xlink:href", XLINK, Some("xlink"), "href"),
+            ("xlink:role", XLINK, Some("xlink"), "role"),
+            ("xlink:show", XLINK, Some("xlink"), "show"),
+            ("xlink:title", XLINK, Some("xlink"), "title"),
+            ("xlink:type", XLINK, Some("xlink"), "type"),
+            ("xml:lang", XML, Some("xml"), "lang"),
+            ("xml:space", XML, Some("xml"), "space"),
+            ("xmlns", XMLNS, None, "xmlns"),
+            ("xmlns:xlink", XMLNS, Some("xmlns"), "xlink"),
+        ];
+        let attrs = table.iter().enumerate().map(|(i, (name, _, _, _))| {
+            format!(" {name}='{i}'")
+        }).collect::<String>();
+        let dom = build(&format!("<svg{attrs} viewbox='0' data:x='s'></svg><math{attrs} definitionurl='u' odd:piece='m'></math>"));
+        let svg = find_element(&dom, NodeIdx(0), Namespace::Svg, "svg").unwrap();
+        let math = find_element(&dom, NodeIdx(0), Namespace::MathMl, "math").unwrap();
+        for node in [svg, math] {
+            for (i, (qualified, uri, prefix, local)) in table.iter().enumerate() {
+                let attr = dom.attribute_ns(node, Some(uri), local).unwrap();
+                assert_eq!(attr.namespace_uri, Some(*uri), "{qualified}");
+                assert_eq!(attr.prefix, *prefix, "{qualified}");
+                assert_eq!(attr.local_name, *local, "{qualified}");
+                assert_eq!(attr.qualified_name(), *qualified, "{qualified}");
+                assert_eq!(attr.value, i.to_string(), "{qualified}");
+                assert_eq!(dom.attribute_ns(node, None, qualified), None, "{qualified}");
+            }
+        }
+        let view_box = dom.attribute_ns(svg, None, "viewBox").unwrap();
+        assert_eq!((view_box.prefix, view_box.local_name, view_box.value), (None, "viewBox", "0"));
+        let definition_url = dom.attribute_ns(math, None, "definitionURL").unwrap();
+        assert_eq!((definition_url.prefix, definition_url.local_name, definition_url.value), (None, "definitionURL", "u"));
+        for (node, name, value) in [(svg, "data:x", "s"), (math, "odd:piece", "m")] {
+            let attr = dom.attribute_ns(node, None, name).unwrap();
+            assert_eq!((attr.namespace_uri, attr.prefix, attr.local_name, attr.qualified_name(), attr.value),
+                (None, None, name, name.into(), value));
+        }
+    }
+
+    #[test]
+    fn nested_foreign_elements_adjust_attributes_but_html_children_do_not() {
+        const XLINK: &str = "http://www.w3.org/1999/xlink";
+        const XML: &str = "http://www.w3.org/XML/1998/namespace";
+        const XMLNS: &str = "http://www.w3.org/2000/xmlns/";
+        let dom = build("<svg><g xlink:href='g'><foreignObject><div xlink:href='h' xml:lang='fr'></div></foreignObject></g></svg><math><mn xml:space='preserve' xmlns='urn:m' strange:token='z'></mn></math>");
+        let g = find_element(&dom, NodeIdx(0), Namespace::Svg, "g").unwrap();
+        let div = find_element(&dom, NodeIdx(0), Namespace::Html, "div").unwrap();
+        let mn = find_element(&dom, NodeIdx(0), Namespace::MathMl, "mn").unwrap();
+        assert_eq!(dom.attribute_ns(g, Some(XLINK), "href").unwrap().qualified_name(), "xlink:href");
+        assert_eq!(dom.attribute_ns(mn, Some(XML), "space").unwrap().value, "preserve");
+        assert_eq!(dom.attribute_ns(mn, Some(XMLNS), "xmlns").unwrap().prefix, None);
+        assert_eq!(dom.attribute_ns(mn, None, "strange:token").unwrap().local_name, "strange:token");
+        assert_eq!(dom.attribute_ns(div, Some(XLINK), "href"), None);
+        assert_eq!(dom.attribute_ns(div, Some(XML), "lang"), None);
+        assert_eq!(dom.attribute_ns(div, None, "xlink:href").unwrap().local_name, "xlink:href");
+        assert_eq!(dom.attribute_ns(div, None, "xml:lang").unwrap().prefix, None);
     }
 
     #[test]
