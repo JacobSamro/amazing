@@ -7,6 +7,7 @@ mod dom_host;
 mod document;
 mod gpu;
 mod gui;
+mod js_scheduler;
 mod page;
 #[cfg(test)]
 mod driver_tests;

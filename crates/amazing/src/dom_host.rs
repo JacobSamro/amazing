@@ -4,6 +4,7 @@ use crate::cmd::js::resolve_script_url;
 
 pub(crate) struct BrowserDomHost {
     pub(crate) dom: amazing_dom::Dom,
+    pub(crate) native_forwarded: bool,
 }
 
 impl BrowserDomHost {
@@ -542,5 +543,23 @@ impl amazing_js::DomHost for BrowserDomHost {
             declarations.push((property, value.trim().to_string()));
         }
         self.write_style_declarations(idx, &declarations)
+    }
+
+    fn pending_native_microtasks(&self) -> Vec<amazing_js::interp::NativeMicrotaskRequest> {
+        if self.dom.mutation_microtask_pending() && !self.native_forwarded {
+            vec![amazing_js::interp::NativeMicrotaskRequest {
+                global: crate::js_scheduler::GLOBAL.0,
+                kind: amazing_js::interp::NativeMicrotaskKind::MutationObserver,
+            }]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn acknowledge_native_microtask(&mut self, request: amazing_js::interp::NativeMicrotaskRequest) {
+        debug_assert_eq!(request.global, crate::js_scheduler::GLOBAL.0);
+        debug_assert_eq!(request.kind, amazing_js::interp::NativeMicrotaskKind::MutationObserver);
+        debug_assert!(self.dom.mutation_microtask_pending());
+        self.native_forwarded = true;
     }
 }

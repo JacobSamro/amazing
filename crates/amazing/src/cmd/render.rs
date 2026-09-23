@@ -200,6 +200,7 @@ pub(crate) fn render_surface(
     let scripting = document.kind == DocumentKind::Html;
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: document.dom,
+        native_forwarded: false,
     }));
     if scripting {
         execute_inline_scripts(&host, html_path)?;

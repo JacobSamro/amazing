@@ -61,9 +61,9 @@ pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &
     if scripts.is_empty() {
         return Ok(());
     }
-    let mut js = amazing_js::Interpreter::new();
-    js.set_dom_host(host.clone());
-    js.set_location_url(page);
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
+        .map_err(|error| error.describe())?;
+    scheduler.js.set_location_url(page);
     let handlers = {
         let host_ref = host.borrow();
         let mut handlers = Vec::new();
@@ -71,7 +71,7 @@ pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &
         handlers
     };
     for (node, event, body) in handlers {
-        js.install_inline_handler(node, &event, &body)
+        scheduler.install_inline_handler(node, &event, &body)
             .map_err(|error| format!("inline onclick failed: {}", error.describe()))?;
     }
     for script in scripts {
@@ -87,18 +87,20 @@ pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &
             }
             None => script.body,
         };
-        js.run_script(&source)
+        scheduler.run_script(&source)
             .map_err(|error| format!("page script failed: {}", error.describe()))?;
     }
-    js.dispatch_dom_event(0, "DOMContentLoaded")
+    scheduler.dispatch_dom_event(0, "DOMContentLoaded")
         .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;
-    js.dispatch_dom_event(0, "load")
+    scheduler.dispatch_dom_event(0, "load")
         .map_err(|error| format!("load listener failed: {}", error.describe()))?;
     let body = host.borrow_mut().query_selector("body");
     if let Some(body) = body {
-        js.dispatch_dom_event(body, "load")
+        scheduler.dispatch_dom_event(body, "load")
             .map_err(|error| format!("body load listener failed: {}", error.describe()))?;
     }
+    scheduler.pump_at(std::time::Duration::from_millis(16), true)
+        .map_err(|error| format!("page event loop failed: {}", error.describe()))?;
     Ok(())
 }
 
@@ -134,10 +136,17 @@ pub(crate) fn cmd_run(path: Option<&str>) -> ExitCode {
         Ok(s) => s,
         Err(code) => return code,
     };
-    let mut js = amazing_js::Interpreter::new();
-    match js.run_script(&source) {
+    let host = Rc::new(RefCell::new(BrowserDomHost { dom: amazing_dom::Dom::new(), native_forwarded: false }));
+    let mut scheduler = match crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY) {
+        Ok(scheduler) => scheduler,
+        Err(error) => { eprintln!("amazing run: {}", error.describe()); return ExitCode::FAILURE; }
+    };
+    let entry = scheduler.run_script(&source);
+    let checkpoint = scheduler.pump_at(std::time::Duration::from_millis(16), true);
+    let result = entry.and_then(|value| checkpoint.map(|_| value));
+    match result {
         Ok(value) => {
-            for line in js.output.borrow().iter() {
+            for line in scheduler.js.output.borrow().iter() {
                 println!("{line}");
             }
             println!("=> {:?}", value);
@@ -183,12 +192,18 @@ pub(crate) fn cmd_domrun(args: &[String]) -> ExitCode {
     };
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: document.dom,
+        native_forwarded: false,
     }));
-    let mut js = amazing_js::Interpreter::new();
-    js.set_dom_host(host.clone());
-    match js.run_script(&script) {
+    let mut scheduler = match crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY) {
+        Ok(scheduler) => scheduler,
+        Err(error) => { eprintln!("amazing domrun: {}", error.describe()); return ExitCode::FAILURE; }
+    };
+    let entry = scheduler.run_script(&script);
+    let checkpoint = scheduler.pump_at(std::time::Duration::from_millis(16), true);
+    let result = entry.and_then(|value| checkpoint.map(|_| value));
+    match result {
         Ok(value) => {
-            for line in js.output.borrow().iter() {
+            for line in scheduler.js.output.borrow().iter() {
                 println!("{line}");
             }
             println!("=> {:?}", value);
