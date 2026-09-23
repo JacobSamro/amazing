@@ -52,6 +52,7 @@ impl Dom {
     pub fn serialize_children(&self, parent: NodeIdx) -> Result<Vec<u16>, DomError> {
         self.check_node(parent)?;
         let mut out = Vec::new();
+        let parent = self.template_contents(parent).unwrap_or(parent);
         for child in self.children(parent) { self.serialize_node_into(child, &mut out); }
         Ok(out)
     }
@@ -76,7 +77,8 @@ impl Dom {
                 append(out, ">");
                 let is_html = self.namespace_uri(node) == Some("http://www.w3.org/1999/xhtml");
                 if is_html && void_element(self.local_name(node).unwrap()) { return; }
-                for child in self.children(node) { self.serialize_node_into(child, out); }
+                let contents = self.template_contents(node).unwrap_or(node);
+                for child in self.children(contents) { self.serialize_node_into(child, out); }
                 append(out, "</"); append(out, &name); append(out, ">");
             }
             NodeKind::Text { .. } => {
@@ -146,7 +148,17 @@ impl Dom {
                 return Err(DomError::NotSupportedError),
         };
         self.pre_insert(created, parent, None)?;
-        for child in source.children(node) { self.import_node_into(source, child, document, created)?; }
+        if source.is_html_template(node) {
+            let destination = self.ensure_template_contents(created)?;
+            if let Some(contents) = source.template_contents(node) {
+                let inert = self.owner_document(destination).ok_or(DomError::InvalidStateError)?;
+                for child in source.children(contents) {
+                    self.import_node_into(source, child, inert, destination)?;
+                }
+            }
+        } else {
+            for child in source.children(node) { self.import_node_into(source, child, document, created)?; }
+        }
         Ok(())
     }
 }

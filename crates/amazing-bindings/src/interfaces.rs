@@ -604,7 +604,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLTrackElement, name: "HTMLTrackElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLCanvasElement, name: "HTMLCanvasElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: SCRIPT },
-    D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[getter("content", O::TemplateContent)] },
     D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: SLOT },
     D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLEmbedElement, name: "HTMLEmbedElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },

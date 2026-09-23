@@ -63,6 +63,9 @@ impl Dom {
         }
         let id = self.alloc_unattached(kind);
         self.nodes[id.0 as usize].owner_document = document;
+        if self.is_html_template(id) {
+            self.ensure_template_contents(id)?;
+        }
         Ok(id)
     }
     pub fn owner_document(&self, node: NodeIdx) -> Option<NodeIdx> {
@@ -366,6 +369,7 @@ impl Dom {
         self.custom_element_adopted(node, old_document, document);
         for id in self.shadow_including_tree_order(node) {
             self.nodes[id.0 as usize].owner_document = document;
+            self.adopt_template_contents(id, document);
         }
     }
     fn insertion_nodes(&self, node: NodeIdx) -> Vec<NodeIdx> {

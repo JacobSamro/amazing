@@ -25,6 +25,8 @@ pub mod mutation;
 pub mod shadow;
 pub mod custom_elements;
 pub mod forms;
+mod template;
+#[cfg(test)] mod template_tests;
 mod namespace;
 mod node_mixins;
 pub use node_mixins::NodeOrString;
@@ -134,6 +136,8 @@ pub struct Dom {
     custom_elements: custom_elements::CustomElements,
     form_states: Vec<Option<forms::ControlState>>,
     radio_lists: Vec<(NodeIdx, Vec<u16>)>,
+    template_contents: Vec<(NodeIdx, NodeIdx)>,
+    template_owner_documents: Vec<(NodeIdx, NodeIdx)>,
     /// Doctype name captured by the tree builder (Phase 1). Quirks-mode bits
     /// land here when the layout engine needs them.
     pub doctype: Option<String>,
@@ -181,6 +185,8 @@ impl Dom {
             custom_elements: custom_elements::CustomElements::default(),
             form_states: Vec::new(),
             radio_lists: Vec::new(),
+            template_contents: Vec::new(),
+            template_owner_documents: Vec::new(),
             doctype: None,
         };
         dom.nodes.push(Node {
@@ -292,6 +298,9 @@ impl Dom {
         });
         let document = self.get(parent).owner_document;
         self.set_subtree_document(idx, document);
+        if self.is_html_template(idx) {
+            self.ensure_template_contents(idx).expect("attached HTML template");
+        }
         self.ranges_insert(parent, before, 1);
         self.link_before(parent, before, idx);
         self.queue_tree_record(parent, vec![idx], vec![], previous, before);

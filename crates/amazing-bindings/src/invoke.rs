@@ -426,6 +426,7 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
             O::PreviousSibling => node_result(dom.get(target).prev_sibling),
             O::NextSibling => node_result(dom.get(target).next_sibling),
             O::ChildNodes => R::Children(target),
+            O::TemplateContent => R::Node(dom.ensure_template_contents(target)?),
             O::HasChildNodes => R::Boolean(dom.get(target).first_child.is_some()),
             O::IsConnected => R::Boolean(dom.is_connected(target)),
             O::Contains => {
