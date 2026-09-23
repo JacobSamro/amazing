@@ -41,6 +41,7 @@ impl Dom {
         self.nodes[copy.0 as usize].character_data_units =
             self.get(node).character_data_units.clone();
         self.nodes[copy.0 as usize].prefix = self.get(node).prefix.clone();
+        self.clone_form_state(node, copy);
         if deep {
             let children: Vec<_> = self.children(node).collect();
             for child in children {
