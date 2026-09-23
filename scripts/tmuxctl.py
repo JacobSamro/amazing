@@ -185,10 +185,18 @@ LANE_GRANTS.setdefault("layout", []).append("crates/amazing/tests/phase5_flex_gr
 # in exactly these files. Granted for the MECHANICAL string-API migration only
 # (read the diff at merge); no behaviour changes.
 LANE_GRANTS.setdefault("js-runtime", []).extend([
+    # JSRT-5 also: the two JsString compile fixes in runtime_binding_host.rs
+    # plus switching string/string_units/to_dom_string to the lossless
+    # binding_* facade (drops the lone-surrogate TypeError). Nothing else.
+    "crates/amazing/src/runtime_binding_host.rs",
     "crates/amazing/src/cmd/wpt_harness.rs",
     "crates/amazing/src/cmd/js.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
 ])
+# JSVM-1: one additive dispatch hook in interp.rs that tries the VM and falls
+# back atomically (ADR 0003). ADDED LINES ONLY; everything else in interp.rs
+# is js-runtime's.
+LANE_GRANTS.setdefault("js-vm", []).append("crates/amazing-js/src/interp.rs")
 LANE_GRANTS["integrator-assist"] = [
     "crates/amazing-shell-gpui/src/session_state.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
@@ -247,6 +255,7 @@ LANE_GRANTS_REWRITE = {
     ],
     "layout": ["crates/amazing/tests/phase5_flex_grid.rs"],
     "js-runtime": [
+        "crates/amazing/src/runtime_binding_host.rs",
         "crates/amazing/src/cmd/wpt_harness.rs",
         "crates/amazing/src/cmd/js.rs",
         "crates/amazing-shell-gpui/src/dom_runtime.rs",

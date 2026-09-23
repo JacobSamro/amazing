@@ -101,7 +101,12 @@ echo "refreshing lane trees to $REF ($COMMIT): ${LANES[*]}"
 
 git archive --format=tar -o "$ARCHIVE_LOCAL" "$REF"
 
-scp -q -i "$KEY" "$ARCHIVE_LOCAL" "$HOST:${ARCHIVE_REMOTE//\\//}"
+# Bulk uploads bypass the shared ControlMaster. Every ssh/scp to win-001 rides
+# one TCP connection, so a 45 MB archive starves every other lane's commands:
+# a 5 MB probe took 69 s through the master against 3.7 s on its own
+# connection (2026-09-23). MaxStartups is 50, so a dedicated connection per
+# bulk transfer is safe; short commands still use the master.
+scp -q -o ControlPath=none -i "$KEY" "$ARCHIVE_LOCAL" "$HOST:${ARCHIVE_REMOTE//\\//}"
 
 # cmd.exe mangles loops and quoted paths, so drive this from PowerShell. The
 # script is passed as UTF-16LE base64 per the AGENTS.md build-server notes.

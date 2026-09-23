@@ -36,6 +36,14 @@ cleared by itself once the retries stopped -- the box was never rebooted and had
 ~49 GB RAM free. Measured after multiplexing: **0.16s per command vs 0.68s** with
 a fresh connection.
 
+**Bulk transfers use their own connection.** The shared master is one TCP
+connection, so a large `scp` starves every other lane's commands. On
+2026-09-23 a 5 MB file took 69 s through the master and 3.7 s on a fresh
+connection, while four 45 MB refresh archives sat stuck in it. Any upload
+bigger than about 1 MB (archives, evidence bundles) uses
+`scp -o ControlPath=none …`. `refresh-lane-trees.sh` already does this.
+Short commands keep using the master.
+
 Server limits were raised on 2026-09-22 to `MaxSessions 50` (channels per
 connection) and `MaxStartups 50:30:100`; the previous config is kept as
 `C:\ProgramData\ssh\sshd_config.bak-20260922202601`. Verified: 20 concurrent
