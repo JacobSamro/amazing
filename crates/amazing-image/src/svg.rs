@@ -5,9 +5,10 @@
 //! Bounded attribute transforms on groups and shapes are supported.
 use crate::{DecodeError, DecodeLimits};
 use amazing_css::{
-    ComputedStyle, Declaration, ElementFill, ElementStyleValue, compute_element_paint_style,
-    parse_declarations,
+    ComputedStyle, Declaration, ElementFill, ElementStyleValue, StyledDom,
+    compute_element_paint_style, parse_declarations,
 };
+use amazing_dom::{Dom, Namespace, NodeIdx, NodeKind};
 use amazing_media::Image;
 use std::collections::BTreeMap;
 
@@ -42,7 +43,8 @@ struct Item {
     shape: Shape,
     color: [u8; 4],
 }
-struct Scene {
+/// A bounded SVG scene shared by byte resources and inline DOM subtrees.
+pub struct SvgDocument {
     width: u32,
     height: u32,
     view: [f64; 4],
@@ -57,15 +59,36 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> 
     }
     let text = std::str::from_utf8(bytes).map_err(|_| DecodeError::InvalidImage)?;
     let scene = parse(text.trim_start_matches('\u{feff}'))?;
-    if scene.width == 0
-        || scene.height == 0
-        || scene.width > limits.max_dimension
-        || scene.height > limits.max_dimension
+    render_svg(&scene, scene.width, scene.height, 1.0, limits)
+}
+
+/// Rasterize a previously built scene at a CSS viewport and device scale.
+/// The work and allocation limits apply to the output size, not only the model.
+pub fn render_svg(
+    scene: &SvgDocument,
+    viewport_width: u32,
+    viewport_height: u32,
+    dpr: f32,
+    limits: DecodeLimits,
+) -> Result<Image, DecodeError> {
+    if !dpr.is_finite() || dpr <= 0.0 {
+        return Err(DecodeError::GeometryLimit);
+    }
+    let pixel_width = (f64::from(viewport_width) * f64::from(dpr)).ceil();
+    let pixel_height = (f64::from(viewport_height) * f64::from(dpr)).ceil();
+    if pixel_width <= 0.0
+        || pixel_height <= 0.0
+        || pixel_width > u32::MAX as f64
+        || pixel_height > u32::MAX as f64
     {
         return Err(DecodeError::GeometryLimit);
     }
-    let count = (scene.width as usize)
-        .checked_mul(scene.height as usize)
+    let (width, height) = (pixel_width as u32, pixel_height as u32);
+    if width > limits.max_dimension || height > limits.max_dimension {
+        return Err(DecodeError::GeometryLimit);
+    }
+    let count = (width as usize)
+        .checked_mul(height as usize)
         .ok_or(DecodeError::AllocationLimit)?;
     let bytes = count.checked_mul(4).ok_or(DecodeError::AllocationLimit)?;
     if bytes as u64 > limits.max_rgba_bytes || bytes as u64 > limits.max_decoder_bytes {
@@ -84,12 +107,12 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> 
         return Err(DecodeError::AllocationLimit);
     }
     let mut image = Image {
-        width: scene.width,
-        height: scene.height,
+        width,
+        height,
         pixels: vec![0; bytes],
     };
     let [vx, vy, vw, vh] = scene.view;
-    let (mut sx, mut sy) = (scene.width as f64 / vw, scene.height as f64 / vh);
+    let (mut sx, mut sy) = (width as f64 / vw, height as f64 / vh);
     let (mut ox, mut oy) = (0.0, 0.0);
     if scene.aspect != "none" {
         let parts: Vec<_> = scene.aspect.split_whitespace().collect();
@@ -101,8 +124,8 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> 
         sx = scale;
         sy = scale;
         let align = parts[0];
-        let leftover_x = scene.width as f64 - vw * sx;
-        let leftover_y = scene.height as f64 - vh * sy;
+        let leftover_x = width as f64 - vw * sx;
+        let leftover_y = height as f64 - vh * sy;
         ox = leftover_x
             * if align.starts_with("xMin") {
                 0.0
@@ -123,17 +146,19 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> 
     if ![sx, sy, ox, oy].iter().all(|n| n.is_finite()) || sx <= 0.0 || sy <= 0.0 {
         return Err(DecodeError::GeometryLimit);
     }
-    for item in scene.items {
+    for item in &scene.items {
         let Some(inverse) = item.inverse else {
             continue;
         };
-        for y in 0..scene.height {
-            for x in 0..scene.width {
+        for y in 0..height {
+            for x in 0..width {
                 let px = (x as f64 + 0.5 - ox) / sx + vx;
                 let py = (y as f64 + 0.5 - oy) / sy + vy;
                 let (px, py) = inverse.point(px, py);
                 let inside = match &item.shape {
-                    Shape::Rect(rx, ry, w, h) => px >= *rx && px < rx + w && py >= *ry && py < ry + h,
+                    Shape::Rect(rx, ry, w, h) => {
+                        px >= *rx && px < rx + w && py >= *ry && py < ry + h
+                    }
                     Shape::Ellipse(cx, cy, rx, ry) => {
                         *rx > 0.0
                             && *ry > 0.0
@@ -143,8 +168,7 @@ pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<Image, DecodeError> 
                 };
                 if inside {
                     blend(
-                        &mut image.pixels[(y as usize * scene.width as usize + x as usize) * 4..]
-                            [..4],
+                        &mut image.pixels[(y as usize * width as usize + x as usize) * 4..][..4],
                         item.color,
                     );
                 }
@@ -165,7 +189,144 @@ fn blend(dest: &mut [u8], source: [u8; 4]) {
     }
     dest[3] = (a * 255.0).round() as u8;
 }
-fn parse(mut text: &str) -> Result<Scene, DecodeError> {
+
+/// Build the same bounded document model directly from an inline SVG subtree.
+/// The byte and DOM builders share element validation and one raster renderer.
+pub fn from_dom(
+    dom: &Dom,
+    styles: &StyledDom,
+    root: NodeIdx,
+    viewport_width: u32,
+    viewport_height: u32,
+    limits: DecodeLimits,
+) -> Result<SvgDocument, DecodeError> {
+    if root.0 as usize >= dom.node_count()
+        || dom.namespace(root) != Some(Namespace::Svg)
+        || dom.name(root) != Some("svg")
+    {
+        return Err(DecodeError::UnsupportedSvg);
+    }
+    if viewport_width == 0 || viewport_height == 0 {
+        return Err(DecodeError::GeometryLimit);
+    }
+    let mut scene = None;
+    let mut stack = Vec::new();
+    let mut elements = 0;
+    let mut input_bytes = 0;
+    visit_dom(
+        dom,
+        styles,
+        root,
+        true,
+        viewport_width,
+        viewport_height,
+        &mut scene,
+        &mut stack,
+        &mut elements,
+        &mut input_bytes,
+        limits.max_input_bytes,
+    )?;
+    scene.ok_or(DecodeError::InvalidImage)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn visit_dom(
+    dom: &Dom,
+    styles: &StyledDom,
+    node: NodeIdx,
+    root: bool,
+    viewport_width: u32,
+    viewport_height: u32,
+    scene: &mut Option<SvgDocument>,
+    stack: &mut Vec<(String, Style, Matrix)>,
+    elements: &mut usize,
+    input_bytes: &mut usize,
+    max_bytes: usize,
+) -> Result<(), DecodeError> {
+    *elements += 1;
+    if *elements > MAX_SHAPES || stack.len() >= 32 {
+        return Err(DecodeError::AllocationLimit);
+    }
+    let name = dom.name(node).ok_or(DecodeError::UnsupportedSvg)?;
+    if dom.namespace(node) != Some(Namespace::Svg) {
+        return Err(DecodeError::UnsupportedSvg);
+    }
+    let mut attrs = Attrs::new();
+    for (key, value) in dom.attrs_of(node).ok_or(DecodeError::UnsupportedSvg)? {
+        if key.len() > 128 || value.len() > 4096 {
+            return Err(DecodeError::AllocationLimit);
+        }
+        *input_bytes = input_bytes
+            .checked_add(key.len() + value.len() + 4)
+            .ok_or(DecodeError::InputLimit)?;
+        if *input_bytes > max_bytes {
+            return Err(DecodeError::InputLimit);
+        }
+        if key != "xmlns" && !(root && matches!(key.as_str(), "width" | "height")) {
+            attrs.insert(key.clone(), value.clone());
+        }
+    }
+    if root {
+        attrs.insert("xmlns".into(), "http://www.w3.org/2000/svg".into());
+        attrs.insert("width".into(), viewport_width.to_string());
+        attrs.insert("height".into(), viewport_height.to_string());
+    }
+    // The document cascade currently omits SVG presentation hints. Preserve a
+    // hint if its computed value is merely initial or inherited from the parent;
+    // a distinct noninitial computed result can represent an author selector.
+    if let Some(computed) = styles.get(node) {
+        for key in ["color", "fill", "fill-opacity", "opacity"] {
+            let Some(value) = computed.get(key) else {
+                continue;
+            };
+            let initial = if matches!(key, "color" | "fill") {
+                "black"
+            } else {
+                "1"
+            };
+            let inherited = dom
+                .get(node)
+                .parent
+                .and_then(|p| styles.get(p))
+                .and_then(|s| s.get(key));
+            if value != initial && (!attrs.contains_key(key) || Some(value) != inherited) {
+                if value.len() > 4096 {
+                    return Err(DecodeError::AllocationLimit);
+                }
+                attrs.insert(key.into(), value.into());
+            }
+        }
+    }
+    if attrs.len() > 32 {
+        return Err(DecodeError::AllocationLimit);
+    }
+    let (style, matrix) = append_element(scene, stack, name, &attrs)?;
+    stack.push((name.to_owned(), style, matrix));
+    for child in dom.children(node) {
+        match &dom.get(child).kind {
+            NodeKind::Element { .. } => visit_dom(
+                dom,
+                styles,
+                child,
+                false,
+                viewport_width,
+                viewport_height,
+                scene,
+                stack,
+                elements,
+                input_bytes,
+                max_bytes,
+            )?,
+            NodeKind::Text { data } if data.trim().is_empty() => {}
+            NodeKind::Comment { .. } => {}
+            _ => return Err(DecodeError::UnsupportedSvg),
+        }
+    }
+    stack.pop();
+    Ok(())
+}
+
+fn parse(mut text: &str) -> Result<SvgDocument, DecodeError> {
     let mut scene = None;
     let mut stack: Vec<(String, Style, Matrix)> = Vec::new();
     let mut elements = 0;
@@ -200,149 +361,7 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
         if elements > MAX_SHAPES || stack.len() >= 32 {
             return Err(DecodeError::AllocationLimit);
         }
-        let parent = stack.last().map(|(_, s, _)| s);
-        let style = style(&attrs, parent)?;
-        let parent_matrix = stack.last().map(|(_, _, m)| *m).unwrap_or(Matrix::IDENTITY);
-        let local_matrix = attrs
-            .get("transform")
-            .map_or(Ok(Matrix::IDENTITY), |v| transform::parse(v))?;
-        let matrix = parent_matrix.then(local_matrix)?;
-        if scene.is_none() {
-            if attrs.contains_key("transform") {
-                return Err(DecodeError::UnsupportedSvg);
-            }
-            if name != "svg"
-                || attrs.get("xmlns").map(String::as_str) != Some("http://www.w3.org/2000/svg")
-            {
-                return Err(DecodeError::UnsupportedSvg);
-            }
-            check_attrs(
-                &attrs,
-                &[
-                    "xmlns",
-                    "version",
-                    "width",
-                    "height",
-                    "viewBox",
-                    "preserveAspectRatio",
-                ],
-            )?;
-            let width = required(&attrs, "width")?;
-            let height = required(&attrs, "height")?;
-            if width <= 0.0 || height <= 0.0 || width > u32::MAX as f64 || height > u32::MAX as f64
-            {
-                return Err(DecodeError::GeometryLimit);
-            }
-            // Fractional intrinsic viewport support is deferred rather than rounded silently.
-            if width.fract() != 0.0 || height.fract() != 0.0 {
-                return Err(DecodeError::UnsupportedSvg);
-            }
-            let view = if let Some(v) = attrs.get("viewBox") {
-                let numbers: Vec<_> = v
-                    .split(|c: char| c.is_ascii_whitespace() || c == ',')
-                    .filter(|s| !s.is_empty())
-                    .map(scalar)
-                    .collect::<Result<_, _>>()?;
-                if numbers.len() != 4 || numbers[2] <= 0.0 || numbers[3] <= 0.0 {
-                    return Err(DecodeError::InvalidImage);
-                }
-                [numbers[0], numbers[1], numbers[2], numbers[3]]
-            } else {
-                [0.0, 0.0, width, height]
-            };
-            let aspect = attrs
-                .get("preserveAspectRatio")
-                .map(String::as_str)
-                .unwrap_or("xMidYMid meet");
-            validate_aspect(aspect)?;
-            if style.opacity != 1.0 {
-                return Err(DecodeError::UnsupportedSvg);
-            }
-            scene = Some(Scene {
-                width: width as u32,
-                height: height as u32,
-                view,
-                aspect: aspect.to_owned(),
-                items: Vec::new(),
-            });
-        } else {
-            if !stack
-                .last()
-                .is_some_and(|(name, _, _)| matches!(name.as_str(), "svg" | "g"))
-            {
-                return Err(DecodeError::InvalidImage);
-            }
-            let shape = match name.as_str() {
-                "g" => {
-                    check_attrs(&attrs, &[])?;
-                    if style.opacity != 1.0 {
-                        return Err(DecodeError::UnsupportedSvg);
-                    }
-                    None
-                }
-                "rect" => {
-                    check_attrs(&attrs, &["x", "y", "width", "height"])?;
-                    let w = value(&attrs, "width", 0.0)?;
-                    let h = value(&attrs, "height", 0.0)?;
-                    nonnegative(w, h)?;
-                    Some(Shape::Rect(
-                        value(&attrs, "x", 0.0)?,
-                        value(&attrs, "y", 0.0)?,
-                        w,
-                        h,
-                    ))
-                }
-                "circle" => {
-                    check_attrs(&attrs, &["cx", "cy", "r"])?;
-                    let r = value(&attrs, "r", 0.0)?;
-                    nonnegative(r, r)?;
-                    Some(Shape::Ellipse(
-                        value(&attrs, "cx", 0.0)?,
-                        value(&attrs, "cy", 0.0)?,
-                        r,
-                        r,
-                    ))
-                }
-                "ellipse" => {
-                    check_attrs(&attrs, &["cx", "cy", "rx", "ry"])?;
-                    let rx = value(&attrs, "rx", 0.0)?;
-                    let ry = value(&attrs, "ry", 0.0)?;
-                    nonnegative(rx, ry)?;
-                    Some(Shape::Ellipse(
-                        value(&attrs, "cx", 0.0)?,
-                        value(&attrs, "cy", 0.0)?,
-                        rx,
-                        ry,
-                    ))
-                }
-                "path" => {
-                    check_attrs(&attrs, &["d"])?;
-                    Some(Shape::Outline(parse_path(
-                        attrs.get("d").ok_or(DecodeError::UnsupportedSvg)?,
-                        MAX_PATH_POINTS,
-                    )?))
-                }
-                // SVG fill closes an open polyline's endpoints for the fill operation.
-                // Strokes remain unsupported and are rejected by check_attrs.
-                "polygon" | "polyline" => {
-                    check_attrs(&attrs, &["points"])?;
-                    Some(Shape::Outline(parse_points(
-                        attrs.get("points").ok_or(DecodeError::UnsupportedSvg)?,
-                        MAX_POLYGON_POINTS,
-                    )?))
-                }
-                _ => return Err(DecodeError::UnsupportedSvg),
-            };
-            if let Some(shape) = shape {
-                let mut color = style.fill;
-                color[3] = (color[3] as f64 * style.fill_opacity * style.opacity).round() as u8;
-                scene.as_mut().unwrap().items.push(Item {
-                    shape,
-                    color,
-                    inverse: matrix.inverse()?,
-                });
-            }
-        }
+        let (style, matrix) = append_element(&mut scene, &stack, &name, &attrs)?;
         if !self_closed {
             stack.push((name, style, matrix));
         }
@@ -352,6 +371,157 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
     }
     scene.ok_or(DecodeError::InvalidImage)
 }
+fn append_element(
+    scene: &mut Option<SvgDocument>,
+    stack: &[(String, Style, Matrix)],
+    name: &str,
+    attrs: &Attrs,
+) -> Result<(Style, Matrix), DecodeError> {
+    let parent = stack.last().map(|(_, s, _)| s);
+    let style = style(&attrs, parent)?;
+    let parent_matrix = stack.last().map(|(_, _, m)| *m).unwrap_or(Matrix::IDENTITY);
+    let local_matrix = attrs
+        .get("transform")
+        .map_or(Ok(Matrix::IDENTITY), |v| transform::parse(v))?;
+    let matrix = parent_matrix.then(local_matrix)?;
+    if scene.is_none() {
+        if attrs.contains_key("transform") {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+        if name != "svg"
+            || attrs.get("xmlns").map(String::as_str) != Some("http://www.w3.org/2000/svg")
+        {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+        check_attrs(
+            &attrs,
+            &[
+                "xmlns",
+                "version",
+                "width",
+                "height",
+                "viewBox",
+                "preserveAspectRatio",
+            ],
+        )?;
+        let width = required(&attrs, "width")?;
+        let height = required(&attrs, "height")?;
+        if width <= 0.0 || height <= 0.0 || width > u32::MAX as f64 || height > u32::MAX as f64 {
+            return Err(DecodeError::GeometryLimit);
+        }
+        // Fractional intrinsic viewport support is deferred rather than rounded silently.
+        if width.fract() != 0.0 || height.fract() != 0.0 {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+        let view = if let Some(v) = attrs.get("viewBox") {
+            let numbers: Vec<_> = v
+                .split(|c: char| c.is_ascii_whitespace() || c == ',')
+                .filter(|s| !s.is_empty())
+                .map(scalar)
+                .collect::<Result<_, _>>()?;
+            if numbers.len() != 4 || numbers[2] <= 0.0 || numbers[3] <= 0.0 {
+                return Err(DecodeError::InvalidImage);
+            }
+            [numbers[0], numbers[1], numbers[2], numbers[3]]
+        } else {
+            [0.0, 0.0, width, height]
+        };
+        let aspect = attrs
+            .get("preserveAspectRatio")
+            .map(String::as_str)
+            .unwrap_or("xMidYMid meet");
+        validate_aspect(aspect)?;
+        if style.opacity != 1.0 {
+            return Err(DecodeError::UnsupportedSvg);
+        }
+        *scene = Some(SvgDocument {
+            width: width as u32,
+            height: height as u32,
+            view,
+            aspect: aspect.to_owned(),
+            items: Vec::new(),
+        });
+    } else {
+        if !stack
+            .last()
+            .is_some_and(|(name, _, _)| matches!(name.as_str(), "svg" | "g"))
+        {
+            return Err(DecodeError::InvalidImage);
+        }
+        let shape = match name {
+            "g" => {
+                check_attrs(&attrs, &[])?;
+                if style.opacity != 1.0 {
+                    return Err(DecodeError::UnsupportedSvg);
+                }
+                None
+            }
+            "rect" => {
+                check_attrs(&attrs, &["x", "y", "width", "height"])?;
+                let w = value(&attrs, "width", 0.0)?;
+                let h = value(&attrs, "height", 0.0)?;
+                nonnegative(w, h)?;
+                Some(Shape::Rect(
+                    value(&attrs, "x", 0.0)?,
+                    value(&attrs, "y", 0.0)?,
+                    w,
+                    h,
+                ))
+            }
+            "circle" => {
+                check_attrs(&attrs, &["cx", "cy", "r"])?;
+                let r = value(&attrs, "r", 0.0)?;
+                nonnegative(r, r)?;
+                Some(Shape::Ellipse(
+                    value(&attrs, "cx", 0.0)?,
+                    value(&attrs, "cy", 0.0)?,
+                    r,
+                    r,
+                ))
+            }
+            "ellipse" => {
+                check_attrs(&attrs, &["cx", "cy", "rx", "ry"])?;
+                let rx = value(&attrs, "rx", 0.0)?;
+                let ry = value(&attrs, "ry", 0.0)?;
+                nonnegative(rx, ry)?;
+                Some(Shape::Ellipse(
+                    value(&attrs, "cx", 0.0)?,
+                    value(&attrs, "cy", 0.0)?,
+                    rx,
+                    ry,
+                ))
+            }
+            "path" => {
+                check_attrs(&attrs, &["d"])?;
+                Some(Shape::Outline(parse_path(
+                    attrs.get("d").ok_or(DecodeError::UnsupportedSvg)?,
+                    MAX_PATH_POINTS,
+                )?))
+            }
+            // SVG fill closes an open polyline's endpoints for the fill operation.
+            // Strokes remain unsupported and are rejected by check_attrs.
+            "polygon" | "polyline" => {
+                check_attrs(&attrs, &["points"])?;
+                Some(Shape::Outline(parse_points(
+                    attrs.get("points").ok_or(DecodeError::UnsupportedSvg)?,
+                    MAX_POLYGON_POINTS,
+                )?))
+            }
+            _ => return Err(DecodeError::UnsupportedSvg),
+        };
+        if let Some(shape) = shape {
+            let mut color = style.fill;
+            color[3] = (color[3] as f64 * style.fill_opacity * style.opacity).round() as u8;
+            scene.as_mut().unwrap().items.push(Item {
+                shape,
+                color,
+                inverse: matrix.inverse()?,
+            });
+        }
+    }
+    Ok((style, matrix))
+}
+
 fn nonnegative(a: f64, b: f64) -> Result<(), DecodeError> {
     if a < 0.0 || b < 0.0 {
         Err(DecodeError::InvalidImage)
@@ -404,21 +574,23 @@ fn style(a: &Attrs, parent: Option<&Style>) -> Result<Style, DecodeError> {
             })
         })
         .collect();
-    let inline = a.get("style").map_or(Vec::new(), |source| parse_declarations(source));
-    if a.get("style").is_some_and(|source| !source.trim().is_empty() && inline.is_empty())
+    let inline = a
+        .get("style")
+        .map_or(Vec::new(), |source| parse_declarations(source));
+    if a.get("style")
+        .is_some_and(|source| !source.trim().is_empty() && inline.is_empty())
         || inline.iter().any(|decl| {
             !decl.property.starts_with("--")
-                && !matches!(decl.property.as_str(), "color" | "fill" | "fill-opacity" | "opacity")
+                && !matches!(
+                    decl.property.as_str(),
+                    "color" | "fill" | "fill-opacity" | "opacity"
+                )
         })
     {
         return Err(DecodeError::UnsupportedSvg);
     }
-    let paint = compute_element_paint_style(
-        parent.map(|style| &style.computed),
-        &hints,
-        &[],
-        &inline,
-    );
+    let paint =
+        compute_element_paint_style(parent.map(|style| &style.computed), &hints, &[], &inline);
     supported(paint.color)?;
     let fill = match supported(paint.fill)? {
         ElementFill::None => [0; 4],
@@ -536,6 +708,63 @@ fn attributes(mut text: &str) -> Result<(String, Attrs), DecodeError> {
         }
     }
     Ok((name, attrs))
+}
+
+#[cfg(test)]
+mod dom_model_tests {
+    use super::*;
+
+    #[test]
+    fn byte_and_dom_builders_share_rect_renderer() {
+        let bytes = br##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8"><rect x="1" y="2" width="4" height="3" fill="#f00"/></svg>"##;
+        let expected = decode(bytes, DecodeLimits::default()).unwrap();
+        let dom = amazing_html::parse(
+            "<svg width='8' height='8' viewBox='0 0 8 8'><rect x='1' y='2' width='4' height='3' fill='#f00'></rect></svg>",
+        );
+        let root = (0..dom.node_count() as u32)
+            .map(NodeIdx)
+            .find(|&n| dom.name(n) == Some("svg"))
+            .unwrap();
+        let styled = amazing_css::compute(&dom, &[]);
+        let model = from_dom(&dom, &styled, root, 8, 8, DecodeLimits::default()).unwrap();
+        let actual = render_svg(&model, 8, 8, 1.0, DecodeLimits::default()).unwrap();
+        assert_eq!(actual.pixels, expected.pixels);
+        assert!(
+            actual
+                .pixels
+                .chunks_exact(4)
+                .any(|px| px == [255, 0, 0, 255])
+        );
+    }
+
+    #[test]
+    fn document_selector_overrides_svg_presentation_hint() {
+        let dom = amazing_html::parse(
+            "<style>rect { fill: blue }</style><svg width='8' height='8'><rect width='8' height='8' fill='red'></rect></svg>",
+        );
+        let root = (0..dom.node_count() as u32)
+            .map(NodeIdx)
+            .find(|&n| dom.name(n) == Some("svg"))
+            .unwrap();
+        let sheet = amazing_css::parse_stylesheet("rect { fill: blue }");
+        let styled = amazing_css::compute(&dom, &[sheet]);
+        let model = from_dom(&dom, &styled, root, 8, 8, DecodeLimits::default()).unwrap();
+        let image = render_svg(&model, 8, 8, 1.0, DecodeLimits::default()).unwrap();
+        assert_eq!(&image.pixels[..4], &[0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn byte_and_dom_builders_share_group_transform_and_inherited_fill() {
+        let bytes = br##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><g transform="translate(1 0)" fill="#00f"><circle cx="2" cy="3" r="2"/></g></svg>"##;
+        let expected = decode(bytes, DecodeLimits::default()).unwrap();
+        let dom = amazing_html::parse("<svg width='8' height='8'><g transform='translate(1 0)' fill='#00f'><circle cx='2' cy='3' r='2'></circle></g></svg>");
+        let root = (0..dom.node_count() as u32).map(NodeIdx).find(|&n| dom.name(n) == Some("svg")).unwrap();
+        let styled = amazing_css::compute(&dom, &[]);
+        let model = from_dom(&dom, &styled, root, 8, 8, DecodeLimits::default()).unwrap();
+        let actual = render_svg(&model, 8, 8, 1.0, DecodeLimits::default()).unwrap();
+        assert_eq!(actual.pixels, expected.pixels);
+        assert!(actual.pixels.chunks_exact(4).any(|px| px == [0, 0, 255, 255]));
+    }
 }
 fn entities(mut value: &str) -> Result<String, DecodeError> {
     let mut out = String::new();

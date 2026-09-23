@@ -649,3 +649,25 @@ paths** in the frozen selection. RC-11 stops with a ranked evidence report and
 cross-lane requests in `questions.md`. No image/paint source was changed; no
 after sweep or conformance gain/loss is claimed. Evidence and reproduction:
 `tests/wpt-replaced-content/rc11/` and `rc11-inventory.json`.
+
+## RC-12 — shared SVG document model for byte resources and inline DOM
+
+RC-12 introduces a public bounded `SvgDocument` model in `amazing-image`. The
+existing byte parser builds it; the inline path takes a `Dom`, SVG root
+`NodeIdx`, `StyledDom`, and content viewport, then builds the same model.
+`render_svg` rasterizes either model at the requested viewport and DPR under
+the existing geometry, output-byte, shape and raster-work limits. The byte
+`<img>` decoder still uses its intrinsic viewport. Literal byte/DOM trees
+compare RGBA pixels, including a document selector overriding a presentation
+hint. The DOM builder preserves SVG hints when the current whole-document CSS
+cascade only exposes initial paint values; explicit author declarations equal
+to an initial value remain ambiguous until CSS supplies hint provenance.
+
+`amazing-paint::ImageProvider` has a defaulted `svg(node, width, height, dpr)`
+method. Paint asks it for a raster at a replaced content rectangle, then uses
+its existing clipped, source-over image blit. The driver can return `None` for
+non-SVG nodes. Integrator-assist owns that adapter and WPT artifact. LAYOUT-9's
+`ReplacedKind::Svg` control exclusion will be applied once its seam merges.
+The frozen 32 inline WPT outcomes are the conformance gate; these unit tests
+and paint seam alone receive no WPT credit. External before/after results,
+source hashes, workspace gate and final status belong in the RC-12 report.

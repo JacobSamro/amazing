@@ -2,7 +2,7 @@
 //! Animation, ICC color management and EXIF orientation are not implemented.
 #![forbid(unsafe_code)]
 
-mod svg;
+pub mod svg;
 
 use image::ImageDecoder;
 use std::io::Cursor;
