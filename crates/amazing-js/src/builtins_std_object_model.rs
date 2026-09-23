@@ -58,6 +58,11 @@ impl Interpreter {
     }
 
     fn define_own_property(&mut self, target: &Obj, key: &PropertyKey, descriptor: &JsValue) -> Result<bool, Throw> {
+        if let JsValue::Object(descriptor_object) = descriptor {
+            if let Some(result) = binary_define_index_object(self, target, key, descriptor_object) {
+                return result;
+            }
+        }
         let fields = self.std_descriptor_fields(descriptor)?;
         let original = if let Some(name) = key.as_string() {
             self.legacy_own_property(target, name, false)?

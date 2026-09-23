@@ -1120,8 +1120,6 @@ fn native_define_property(
     };
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
     let descriptor = args.get(2).cloned().unwrap_or(JsValue::Undefined);
-        }
-    }
     if !i.define_own_property(&target, &key, &descriptor)? {
         return Err(Throw::type_error("could not define property"));
     }
