@@ -118,14 +118,15 @@ without a new bound; it needs a poison/fail-closed protocol before any JS entry
 can proceed. A second native request before the first is acknowledged is a
 contract error, not normal capacity pressure.
 
-## BindingHost review proposal — fixed base d42609d
+## BindingHost accepted contract — fixed base d42609d
 
 Branch `lane/js-runtime-bindinghost` begins at merged JS-4 commit `d42609d`.
-This proposes method vocabulary for dom-bindings to draft first in its owned
+This records method vocabulary that dom-bindings drafted first in its owned
 `amazing_bindings::host::BindingHost` trait. The trait, `InterfaceDefinition`,
 `Member` and `Operation` are declared in `amazing-bindings`, which depends only
-on `amazing-dom`. js-runtime reviews the resulting trait text before any
-installer is implemented. The driver-local `RuntimeBindingHost` implementation
+on `amazing-dom`. js-runtime accepts the active trait text, including
+`string(&[u16]) -> Value` and fallible `to_dom_string() -> Vec<u16>`, as the
+initial synchronous DOM contract. The driver-local `RuntimeBindingHost` implementation
 belongs to integrator-assist; the driver imports both crates and lends its
 existing parsed `Dom`. Neither JS nor bindings adds a dependency on the other.
 
@@ -160,11 +161,13 @@ through a global/thread-local registry, and no JS value is hidden in a Rust
 closure without a declared root. The VM can call the same `NativeId` dispatcher
 without executing an AST body or reading a tree-walker frame.
 
-`Value: Clone` in `BindingHost` represents a short-lived rooted local token. Cloning
-does not extend it beyond the native entry; use after scope end or on another
-heap is rejected. The runtime traces receiver, arguments, returned value and
-original thrown value until each native entry closes; nested entry adds a new
-scope and promotes its result/error into the caller scope. Long-lived listeners,
+`Value: Clone` in `BindingHost` must eventually represent a short-lived rooted
+local token. Under the future collector, cloning cannot extend it beyond the
+native entry; use after scope end or on another heap must be rejected. The
+runtime must trace receiver, arguments, returned value and original thrown
+value until each native entry closes; nested entry adds a new scope and
+promotes its result/error into the caller scope. The current `Rc` value model
+does not claim these collector guarantees. Long-lived listeners,
 jobs and callbacks use separate persistent roots with explicit release. The
 wrapper cache is weak and does not root every DOM node. JS-4 scheduler tokens
 remain interpreter-owned roots and dispatch one job at a time.
@@ -195,23 +198,58 @@ outbox admission. The DOM queued flag remains set until checkpoint. The driver
 owns accepted requests after `take_scheduling_requests()` and appends them to
 its event loop before another JS entry.
 
-Current runtime gaps to close after trait acceptance: `JsValue::Str(Rc<str>)`
-cannot represent lone UTF-16 surrogates, so `string(&[u16])` and
-`to_dom_string` cannot yet fulfill their WebIDL contract by replacing invalid
-code units. The runtime needs a lossless JS string representation shared with
-both backends; coordinate parser/string construction with js-lang before changing
-it. `FunctionBody::Native(NativeFn)` is a tree-walker function pointer with no
-dispatch ID, and `JsObject` lacks an engine-private host identity slot. Add
-backend-neutral native dispatch and private slots in runtime-owned files after
-the vocabulary is accepted. Do not claim the current representation meets the
-trait merely because the method names can be implemented.
+The remaining string gap is `JsValue::Str(Rc<str>)`: it cannot represent lone
+UTF-16 surrogates, so `string(&[u16])` and `to_dom_string` cannot yet fulfill
+their WebIDL contract. The runtime needs lossless `JsString` shared with both
+backends, after js-lang adds the additive AST field. Do not claim string
+methods work by replacing invalid code units.
 
-Review sequence: dom-bindings drafts the trait text in its owned file and
-routes it to js-runtime; js-runtime accepts or requests a concrete vocabulary
-change before anybody implements the installer. Confirm the driver can identify
+The active trait text has js-runtime's acceptance for this first synchronous
+slice. The additional commented installation vocabulary in the DOM draft still
+needs one change before becoming active methods: `construct_only: bool` on
+`create_native_function` cannot distinguish call-only methods from functions
+that permit both call and construction. Use an explicit `CallOnly`,
+`ConstructOnly`, `CallAndConstruct` policy. The other proposed installation
+methods (`global_object`, `create_object`, `define_data_property`,
+`define_accessor_property`, `get_property`, `set_property`) are accepted with
+ordinary JS receiver, descriptor and exception semantics. Confirm the driver can identify
 the same parsed arena and its document wrapper and can provide per-instance
 native dispatch. The initial acceptance cases are a single installer used by
 both execution backends, stable Node/NodeList identity, constructor `newTarget`,
 reentrant DOMString conversion without an arena borrow, preserved thrown-object
 identity, and P/native-M/Q scheduling order through the adapter. These are
 contract tests, not claimed WPT gains.
+
+### Non-string runtime capability slice
+
+The first runtime slice adds `FunctionBody::HostNative(HostFunctionId,
+HostCallPolicy)` and a per-interpreter dispatcher. Native entry receives rooted
+receiver, arguments and optional `newTarget`; nested entry clones the callable
+handle before dispatch, so no dispatcher slot borrow spans reentry. The public
+binding facade creates objects and native functions, defines data and accessor
+descriptors, performs get/set/call/construct, non-string boolean/number/nullish/
+callability checks, and preserves thrown JS value identity. There is no
+`Operation`, AST or VM frame type in that facade. Existing built-in `NativeFn`
+continues to work, but a VM can dispatch the host ID through the same facade.
+
+`HostHandle` combines arena, slot, generation and private brand. The runtime
+adds realm identity in an internal `JsObject` slot and uses a weak per-interpreter
+canonical wrapper cache. The driver must validate arena/slot/generation against
+its live DOM before using a returned handle. No BindingHost string method or
+driver installer is claimed by this slice. Windows amazing-js gate on fixed
+base `d42609d`: nextest 174/174, separate doctest 1/1.
+
+### Lossless JS string migration decision
+
+The integrator requires an opaque `JsString` in runtime-owned `value.rs` with
+lossless UTF-16 code-unit storage and method-only access; `JsValue::Str`
+migrates to it. Length, indexing, `charCodeAt`, concatenation, comparison and
+ToString use code units, and regex execution uses amazing-regex's existing
+`exec_utf16` path. The representation may later optimize one-byte strings
+without changing callers. js-lang first adds a UTF-16 field beside existing
+lexer/AST string fields, preserving additive `ast.rs` compatibility. Only then
+does js-runtime migrate the runtime value representation. No BindingHost string
+method is implemented before `JsString` lands; object, function, property and
+private identity capabilities may proceed meanwhile. Exit evidence is full
+Test262 before/after with no regression from 10,314 passing files and a JS →
+DOM → JS lone-surrogate round-trip test.

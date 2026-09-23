@@ -1,0 +1,382 @@
+//! Backend-neutral operations used by an embedding's binding adapter.
+//!
+//! These methods expose JavaScript semantics, not AST bodies or VM registers.
+//! DOM types and WebIDL policy remain in the driver and amazing-bindings.
+
+use super::*;
+use crate::value::HostIdentity;
+
+/// Attributes of an own property installed by native bindings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BindingPropertyFlags {
+    pub writable: bool,
+    pub enumerable: bool,
+    pub configurable: bool,
+}
+
+impl BindingPropertyFlags {
+    pub const METHOD: Self = Self { writable: true, enumerable: false, configurable: true };
+    pub const CONSTANT: Self = Self { writable: false, enumerable: true, configurable: false };
+}
+
+impl Interpreter {
+    /// Set the instance-owned native dispatcher before installing host functions.
+    /// The dispatcher must not capture unrooted JS values in its Rust closure.
+    pub fn set_host_native_dispatcher(&mut self, dispatch: Rc<HostNativeDispatch>) {
+        self.host_native_dispatch = Some(dispatch);
+    }
+
+    pub fn binding_global_object(&self) -> JsValue {
+        JsValue::Object(self.global_obj.clone())
+    }
+
+    /// `None` selects a null prototype; pass `binding_global_object`'s
+    /// prototype or another object when inheritance is required.
+    pub fn binding_create_object(&self, prototype: Option<&JsValue>) -> Result<JsValue, Throw> {
+        let mut object = JsObject::ordinary();
+        object.proto = match prototype {
+            Some(JsValue::Object(proto)) => Some(proto.clone()),
+            Some(_) => return Err(Throw::type_error("prototype must be an object or null")),
+            None => None,
+        };
+        Ok(JsValue::object(object))
+    }
+
+    pub fn binding_object_prototype(&self) -> JsValue {
+        JsValue::Object(self.object_proto.clone())
+    }
+
+    /// Return the canonical live wrapper for this arena-local host handle.
+    /// The cache is weak, so a detached and otherwise unreachable wrapper can
+    /// be collected. The driver validates arena, slot and generation against
+    /// its DOM before using a handle returned by `binding_host_handle`.
+    pub fn binding_wrap_host(
+        &mut self,
+        handle: HostHandle,
+        prototype: &JsValue,
+    ) -> Result<JsValue, Throw> {
+        if let Some(existing) = self.host_cache.get(&handle).and_then(Weak::upgrade) {
+            return Ok(JsValue::Object(Obj(existing)));
+        }
+        let JsValue::Object(prototype) = prototype else {
+            return Err(Throw::type_error("host wrapper prototype must be an object"));
+        };
+        let mut object = JsObject::ordinary();
+        object.proto = Some(prototype.clone());
+        object.host_identity = Some(HostIdentity { realm: self.host_realm, handle });
+        let wrapper = JsValue::object(object);
+        if let JsValue::Object(object) = &wrapper {
+            self.host_cache.insert(handle, Rc::downgrade(&object.0));
+        }
+        Ok(wrapper)
+    }
+
+    /// Inspect a private brand. A writable JS property cannot forge it.
+    pub fn binding_host_handle(&self, value: &JsValue, brand: u64) -> Option<HostHandle> {
+        let JsValue::Object(object) = value else { return None; };
+        let identity = object.borrow().host_identity?;
+        (identity.realm == self.host_realm && identity.handle.brand == brand)
+            .then_some(identity.handle)
+    }
+
+    /// Create a callable whose behavior is selected by an interpreter-local ID.
+    /// The dispatcher receives the original receiver and `newTarget`.
+    pub fn binding_create_native_function(
+        &self,
+        id: HostFunctionId,
+        name: &str,
+        length: u8,
+        policy: HostCallPolicy,
+    ) -> JsValue {
+        let mut object = JsObject::function(JsFunction {
+            name: name.into(),
+            params: Vec::new(),
+            body: FunctionBody::HostNative(id, policy, self.host_realm),
+            is_arrow: false,
+            is_async: false,
+            is_generator: false,
+            env: self.global_env.clone(),
+            home: None,
+            proto_for_new: None,
+        });
+        object.proto = Some(self.function_proto.clone());
+        let _ = object.define("name", Property {
+            value: JsValue::str(name),
+            writable: false,
+            enumerable: false,
+            configurable: true,
+            getter: None,
+            setter: None,
+        });
+        let _ = object.define("length", Property {
+            value: JsValue::num(length as f64),
+            writable: false,
+            enumerable: false,
+            configurable: true,
+            getter: None,
+            setter: None,
+        });
+        if policy != HostCallPolicy::CallOnly {
+            let mut proto = JsObject::ordinary();
+            proto.proto = Some(self.object_proto.clone());
+            object.set_own("prototype", JsValue::object(proto));
+        }
+        JsValue::object(object)
+    }
+
+    fn binding_owner(object: &JsValue) -> Result<Obj, Throw> {
+        match object {
+            JsValue::Object(object) => Ok(object.clone()),
+            _ => Err(Throw::type_error("property owner must be an object")),
+        }
+    }
+
+    fn binding_can_define(owner: &Obj, name: &str) -> Result<(), Throw> {
+        let object = owner.borrow();
+        if object.own_prop(name).is_some_and(|prop| !prop.configurable) {
+            return Err(Throw::type_error("cannot redefine a non-configurable property"));
+        }
+        if object.own_prop(name).is_none() && !object.extensible {
+            return Err(Throw::type_error("object is not extensible"));
+        }
+        Ok(())
+    }
+
+    pub fn binding_define_data_property(
+        &mut self,
+        owner: &JsValue,
+        name: &str,
+        value: JsValue,
+        flags: BindingPropertyFlags,
+    ) -> Result<(), Throw> {
+        let owner = Self::binding_owner(owner)?;
+        Self::binding_can_define(&owner, name)?;
+        owner.borrow_mut().define(name, Property {
+            value,
+            writable: flags.writable,
+            enumerable: flags.enumerable,
+            configurable: flags.configurable,
+            getter: None,
+            setter: None,
+        }).map_err(|_| Throw::type_error("could not define property"))
+    }
+
+    /// Accessors are stored as runtime callables, independent of their body
+    /// kind. A reentrant getter/setter runs after the object borrow is released.
+    pub fn binding_define_accessor_property(
+        &mut self,
+        owner: &JsValue,
+        name: &str,
+        getter: Option<&JsValue>,
+        setter: Option<&JsValue>,
+        enumerable: bool,
+        configurable: bool,
+    ) -> Result<(), Throw> {
+        fn callable(value: Option<&JsValue>) -> Result<Option<Box<JsFunction>>, Throw> {
+            value.map(|value| match value {
+                JsValue::Object(object) => object.borrow().func.clone()
+                    .map(Box::new).ok_or_else(|| Throw::type_error("accessor is not callable")),
+                _ => Err(Throw::type_error("accessor is not callable")),
+            }).transpose()
+        }
+        let getter = callable(getter)?;
+        let setter = callable(setter)?;
+        let owner = Self::binding_owner(owner)?;
+        Self::binding_can_define(&owner, name)?;
+        owner.borrow_mut().define(name, Property {
+            value: JsValue::Undefined,
+            writable: false,
+            enumerable,
+            configurable,
+            getter,
+            setter,
+        }).map_err(|_| Throw::type_error("could not define property"))
+    }
+
+    pub fn binding_get_property(&mut self, object: &JsValue, name: &str) -> Result<JsValue, Throw> {
+        self.get_prop(object, name)
+    }
+
+    pub fn binding_set_property(
+        &mut self,
+        object: &JsValue,
+        name: &str,
+        value: JsValue,
+    ) -> Result<(), Throw> {
+        // The legacy assignment helper handles own descriptors but does not
+        // walk inherited setters. Installed interface members live on a
+        // prototype, so honor the first inherited descriptor here.
+        if let JsValue::Object(receiver) = object {
+            if receiver.borrow().own_prop(name).is_none() {
+                let mut cursor = receiver.borrow().proto.clone();
+                while let Some(prototype) = cursor {
+                    let descriptor = prototype.borrow().own_prop(name).cloned();
+                    if let Some(descriptor) = descriptor {
+                        if let Some(setter) = descriptor.setter {
+                            let callable = JsValue::object(JsObject::function(*setter));
+                            self.call_value(&callable, object.clone(), vec![value])?;
+                            return Ok(());
+                        }
+                        if descriptor.getter.is_some() || !descriptor.writable {
+                            return Err(Throw::type_error("property has no writable setter"));
+                        }
+                        break;
+                    }
+                    cursor = prototype.borrow().proto.clone();
+                }
+            }
+        }
+        self.set_prop(object, name, value)
+    }
+
+    pub fn binding_construct(&mut self, function: &JsValue, args: Vec<JsValue>)
+        -> Result<JsValue, Throw> {
+        self.construct(function, args)
+    }
+
+    pub fn binding_to_boolean(&self, value: &JsValue) -> bool {
+        value.to_boolean()
+    }
+
+    pub fn binding_to_number(&mut self, value: &JsValue) -> Result<f64, Throw> {
+        self.to_number(value)
+    }
+
+    pub fn binding_is_nullish(&self, value: &JsValue) -> bool {
+        matches!(value, JsValue::Null | JsValue::Undefined)
+    }
+
+    pub fn binding_is_callable(&self, value: &JsValue) -> bool {
+        matches!(value, JsValue::Object(object) if object.borrow().func.is_some())
+    }
+
+    /// Preserve arbitrary thrown JS values, including object identity.
+    pub fn binding_throw(&self, value: JsValue) -> Throw {
+        Throw(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn host_dispatch_is_per_instance_reentrant_and_preserves_new_target() {
+        let mut interpreter = Interpreter::new();
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let calls_for_dispatch = calls.clone();
+        interpreter.set_host_native_dispatcher(Rc::new(move |runtime, id, this, args, new_target| {
+            calls_for_dispatch.borrow_mut().push((id.0, new_target.is_some()));
+            // Nested entry must not borrow the dispatch slot or the caller frame.
+            assert_eq!(runtime.run_script("1 + 2")?, JsValue::num(3.0));
+            if new_target.is_some() {
+                runtime.binding_set_property(&this, "value", args[0].clone())?;
+                Ok(this)
+            } else {
+                Ok(args[0].clone())
+            }
+        }));
+        let ordinary = interpreter.binding_create_native_function(
+            HostFunctionId(7), "read", 1, HostCallPolicy::CallOnly,
+        );
+        let mut foreign = Interpreter::new();
+        foreign.set_host_native_dispatcher(Rc::new(|_, _, _, _, _| Ok(JsValue::num(99.0))));
+        assert!(foreign.call_value(&ordinary, JsValue::Undefined, vec![]).is_err());
+        let constructor = interpreter.binding_create_native_function(
+            HostFunctionId(8), "Host", 1, HostCallPolicy::ConstructOnly,
+        );
+        let global = interpreter.binding_global_object();
+        interpreter.binding_define_data_property(
+            &global, "read", ordinary, BindingPropertyFlags::METHOD,
+        ).unwrap();
+        interpreter.binding_define_data_property(
+            &global, "Host", constructor.clone(), BindingPropertyFlags::METHOD,
+        ).unwrap();
+        assert_eq!(interpreter.run_script("read(4)").unwrap(), JsValue::num(4.0));
+        assert!(interpreter.run_script("Host(4)").is_err());
+        let result = interpreter.binding_construct(&constructor, vec![JsValue::num(9.0)]).unwrap();
+        assert_eq!(interpreter.binding_get_property(&result, "value").unwrap(), JsValue::num(9.0));
+        assert_eq!(&*calls.borrow(), &[(7, false), (8, true)]);
+    }
+
+    #[test]
+    fn native_accessor_reenters_without_an_object_borrow() {
+        let mut interpreter = Interpreter::new();
+        let stored = Rc::new(Cell::new(2.0));
+        let state = stored.clone();
+        interpreter.set_host_native_dispatcher(Rc::new(move |runtime, id, _, args, _| {
+            assert_eq!(runtime.run_script("6 * 7")?, JsValue::num(42.0));
+            if id.0 == 1 {
+                Ok(JsValue::num(state.get()))
+            } else {
+                if let JsValue::Num(n) = args[0] { state.set(n); }
+                Ok(JsValue::Undefined)
+            }
+        }));
+        let prototype = interpreter.binding_object_prototype();
+        let object = interpreter.binding_create_object(Some(&prototype)).unwrap();
+        let get = interpreter.binding_create_native_function(
+            HostFunctionId(1), "get value", 0, HostCallPolicy::CallOnly,
+        );
+        let set = interpreter.binding_create_native_function(
+            HostFunctionId(2), "set value", 1, HostCallPolicy::CallOnly,
+        );
+        interpreter.binding_define_accessor_property(
+            &object, "value", Some(&get), Some(&set), true, true,
+        ).unwrap();
+        assert_eq!(interpreter.binding_get_property(&object, "value").unwrap(), JsValue::num(2.0));
+        interpreter.binding_set_property(&object, "value", JsValue::num(5.0)).unwrap();
+        assert_eq!(interpreter.binding_get_property(&object, "value").unwrap(), JsValue::num(5.0));
+        interpreter.binding_define_accessor_property(
+            &prototype, "inherited", Some(&get), Some(&set), true, true,
+        ).unwrap();
+        interpreter.binding_set_property(&object, "inherited", JsValue::num(8.0)).unwrap();
+        assert_eq!(interpreter.binding_get_property(&object, "inherited").unwrap(), JsValue::num(8.0));
+        if let JsValue::Object(object) = &object {
+            assert!(object.borrow().get_own("inherited").is_none());
+        }
+        assert_eq!(stored.get(), 8.0);
+    }
+
+    #[test]
+    fn property_flags_and_thrown_object_identity_are_preserved() {
+        let mut interpreter = Interpreter::new();
+        let object = interpreter.binding_create_object(None).unwrap();
+        interpreter.binding_define_data_property(
+            &object, "constant", JsValue::num(3.0), BindingPropertyFlags::CONSTANT,
+        ).unwrap();
+        assert!(interpreter.binding_set_property(&object, "constant", JsValue::num(4.0)).is_err());
+        assert!(interpreter.binding_define_data_property(
+            &object, "constant", JsValue::num(4.0), BindingPropertyFlags::METHOD,
+        ).is_err());
+        let thrown = interpreter.binding_throw(object.clone());
+        assert_eq!(thrown.0, object);
+    }
+
+    #[test]
+    fn host_wrappers_are_canonical_weak_private_and_realm_scoped() {
+        let mut interpreter = Interpreter::new();
+        let prototype = interpreter.binding_object_prototype();
+        let handle = HostHandle { arena: 9, slot: 4, generation: 0, brand: 17 };
+        let first = interpreter.binding_wrap_host(handle, &prototype).unwrap();
+        let again = interpreter.binding_wrap_host(handle, &prototype).unwrap();
+        assert_eq!(first, again);
+        assert_eq!(interpreter.binding_host_handle(&first, 17), Some(handle));
+        assert_eq!(interpreter.binding_host_handle(&first, 18), None);
+        let forged = interpreter.binding_create_object(Some(&prototype)).unwrap();
+        interpreter.binding_define_data_property(
+            &forged, "host_identity", JsValue::num(4.0), BindingPropertyFlags::METHOD,
+        ).unwrap();
+        assert_eq!(interpreter.binding_host_handle(&forged, 17), None);
+        assert_eq!(Interpreter::new().binding_host_handle(&first, 17), None);
+        let weak = if let JsValue::Object(object) = &first {
+            Rc::downgrade(&object.0)
+        } else { unreachable!() };
+        drop(first);
+        drop(again);
+        assert!(weak.upgrade().is_none());
+        let replacement = interpreter.binding_wrap_host(handle, &prototype).unwrap();
+        assert_eq!(interpreter.binding_host_handle(&replacement, 17), Some(handle));
+    }
+}

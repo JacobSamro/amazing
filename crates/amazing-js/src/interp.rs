@@ -6,17 +6,33 @@
 //! real asynchronous job queue remain explicit later milestones.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, VecDeque};
-use std::rc::Rc;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey, StmtKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
-    number_to_string, Exotic, FunctionBody, JsFunction, JsObject, JsValue, MapKey, MapState, Obj,
-    PendingReaction, PromiseFate, PromiseState, Property, SetState, Throw,
+    number_to_string, Exotic, FunctionBody, HostCallPolicy, HostFunctionId, HostHandle,
+    JsFunction, JsObject, JsValue, MapKey, MapState, Obj, PendingReaction, PromiseFate,
+    PromiseState, Property, SetState, Throw,
 };
+
+#[path = "interp_bindings.rs"]
+mod bindings;
+pub use bindings::BindingPropertyFlags;
+
+/// The embedding's per-interpreter native entry point. `new_target` is present
+/// only for construction. The callable is cloned before invocation, so a nested
+/// JavaScript entry never holds a borrow of its registration slot.
+pub type HostNativeDispatch = dyn Fn(
+    &mut Interpreter,
+    HostFunctionId,
+    JsValue,
+    Vec<JsValue>,
+    Option<JsValue>,
+) -> Result<JsValue, Throw>;
 
 pub const MAX_CALL_DEPTH: u32 = 512;
 
@@ -86,6 +102,7 @@ struct ExternalScheduling {
 }
 
 static NEXT_SCHEDULER_OWNER: AtomicU64 = AtomicU64::new(1);
+static NEXT_HOST_REALM: AtomicU64 = AtomicU64::new(1);
 
 struct TimerJob {
     id: u32,
@@ -183,6 +200,9 @@ pub struct Interpreter {
     pub output: RefCell<Vec<String>>,
     depth: u32,
     native_stack: Vec<Obj>,
+    host_native_dispatch: Option<Rc<HostNativeDispatch>>,
+    host_realm: u64,
+    host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
     jobs: VecDeque<Job>,
     external_scheduling: Option<ExternalScheduling>,
     completion: JsValue,
@@ -257,6 +277,9 @@ impl Interpreter {
             output: RefCell::new(Vec::new()),
             depth: 0,
             native_stack: Vec::new(),
+            host_native_dispatch: None,
+            host_realm: NEXT_HOST_REALM.fetch_add(1, Ordering::Relaxed),
+            host_cache: HashMap::new(),
             jobs: VecDeque::new(),
             external_scheduling: None,
             completion: JsValue::Undefined,
@@ -2137,6 +2160,16 @@ impl Interpreter {
         this: JsValue,
         args: Vec<JsValue>,
     ) -> Result<JsValue, Throw> {
+        self.call_value_with_new_target(f, this, args, None)
+    }
+
+    fn call_value_with_new_target(
+        &mut self,
+        f: &JsValue,
+        this: JsValue,
+        args: Vec<JsValue>,
+        new_target: Option<JsValue>,
+    ) -> Result<JsValue, Throw> {
         let o = match f {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("value is not callable")),
@@ -2163,6 +2196,25 @@ impl Interpreter {
                     let result = n(self, this, args);
                     self.native_stack.pop();
                     result
+                }
+                FunctionBody::HostNative(id, policy, realm) => {
+                    if realm != self.host_realm {
+                        return Err(Throw::type_error("host function belongs to another interpreter"));
+                    }
+                    let constructing = new_target.is_some();
+                    if (constructing && policy == HostCallPolicy::CallOnly)
+                        || (!constructing && policy == HostCallPolicy::ConstructOnly)
+                    {
+                        return Err(Throw::type_error(if constructing {
+                            "host function is not a constructor"
+                        } else {
+                            "host constructor requires new"
+                        }));
+                    }
+                    let dispatch = self.host_native_dispatch.clone().ok_or_else(|| {
+                        Throw::type_error("host function dispatcher is not installed")
+                    })?;
+                    dispatch(self, id, this, args, new_target)
                 }
                 FunctionBody::Expr(x) => {
                     let e = EnvHandle::new(EnvKind::Function, Some(fun.env.clone()));
@@ -2251,7 +2303,12 @@ impl Interpreter {
             x.proto = Some(proto);
             x
         })));
-        let v = self.call_value(f, JsValue::Object(obj.clone()), args)?;
+        let v = self.call_value_with_new_target(
+            f,
+            JsValue::Object(obj.clone()),
+            args,
+            Some(f.clone()),
+        )?;
         if v.is_object() {
             Ok(v)
         } else {
