@@ -35,6 +35,7 @@ pub use abort_bindings::fire_abort_timeout;
 mod mutation_bindings;
 mod shadow_bindings;
 mod custom_element_bindings;
+mod form_bindings;
 mod attr_bindings;
 mod tokenlist;
 mod html_reflection;

@@ -974,12 +974,13 @@ fn class_list_is_live_canonical_and_validates_tokens() {
 fn html_collection_binding_and_legacy_hooks_are_live() {
     let mut h = Host::default();
     install(&mut h).unwrap();
-    assert_eq!(h.legacy.len(), 5);
+    assert_eq!(h.legacy.len(), 8);
     assert_eq!(h.legacy[0].0, InterfaceBrand::COLLECTION);
     assert_eq!(h.legacy[0].1.named_getter, Some(O::HTMLCollectionNamedGetter));
     assert!(h.legacy[0].1.unenumerable_names);
-    assert!(h.legacy.iter().all(|(_, hooks)| !hooks.override_builtins
-        && hooks.indexed_setter.is_none() && hooks.named_setter.is_none()
+    assert!(h.legacy.iter().all(|(brand, hooks)| !hooks.override_builtins
+        && (hooks.indexed_setter.is_none() || *brand == InterfaceBrand::OPTIONS)
+        && hooks.named_setter.is_none()
         && hooks.named_deleter.is_none()));
     assert!(h.iterables.contains(&(Interface::NodeList, IterableKind::Values)));
     assert!(h.iterables.contains(&(Interface::DOMTokenList, IterableKind::Values)));

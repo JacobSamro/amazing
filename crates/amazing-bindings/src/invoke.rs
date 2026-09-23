@@ -98,6 +98,8 @@ pub fn supported_index_count<H: BindingHost>(
     host: &mut H, operation: O, receiver: &H::Value,
 ) -> Result<u32, H::Error> {
     match operation {
+        O::FormCollectionSupportedIndexCount | O::OptionsSupportedIndexCount | O::RadioNodeListSupportedIndexCount =>
+            crate::form_bindings::supported_index_count(host, operation, receiver),
         O::HTMLCollectionSupportedIndexCount | O::NodeListSupportedIndexCount =>
             crate::collections::supported_index_count(host, operation, receiver),
         O::TokenListSupportedIndexCount => crate::tokenlist::supported_index_count(host, receiver),
@@ -109,7 +111,11 @@ pub fn supported_index_count<H: BindingHost>(
 pub fn supported_names<H: BindingHost>(
     host: &mut H, operation: O, receiver: &H::Value,
 ) -> Result<Vec<Vec<u16>>, H::Error> {
-    crate::collections::supported_names(host, operation, receiver)
+    if crate::form_bindings::handles_supported_names(operation) {
+        crate::form_bindings::supported_names(host, operation, receiver)
+    } else {
+        crate::collections::supported_names(host, operation, receiver)
+    }
 }
 fn nullable_node<H: BindingHost>(
     host: &mut H,
@@ -149,6 +155,9 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
 ) -> Result<H::Value, H::Error> {
     if crate::custom_element_bindings::handles(operation) {
         return crate::custom_element_bindings::invoke(host, operation, receiver, args);
+    }
+    if crate::form_bindings::handles(operation) {
+        return crate::form_bindings::invoke(host, operation, receiver, args);
     }
     if crate::shadow_bindings::handles(operation) {
         return crate::shadow_bindings::invoke(host, operation, receiver, args);

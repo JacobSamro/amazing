@@ -75,6 +75,10 @@ pub(crate) fn dispatch_slotchange_event<H: BindingHost>(host: &mut H, slot: amaz
     dispatch_native_event(host, EventTarget::Node(slot), "slotchange",
         EventInit { bubbles: true, cancelable: false, composed: false })
 }
+pub(crate) fn dispatch_invalid_event<H: BindingHost>(host: &mut H, node: amazing_dom::NodeIdx) -> Result<(), H::Error> {
+    dispatch_native_event(host, EventTarget::Node(node), "invalid",
+        EventInit { bubbles: false, cancelable: true, composed: false })
+}
 fn dispatch_native_event<H: BindingHost>(host: &mut H, target: EventTarget, kind: &str, init: EventInit) -> Result<(), H::Error> {
     let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(
         Event::new(kind, init, Duration::ZERO))))?;

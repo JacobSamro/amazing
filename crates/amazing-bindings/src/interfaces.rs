@@ -385,6 +385,83 @@ const INPUT: &[Member] = &[
     getter("name", O::ElementName), setter("name", O::ElementSetName),
     getter("disabled", O::ElementDisabled), setter("disabled", O::ElementSetDisabled),
     getter("placeholder", O::InputPlaceholder), setter("placeholder", O::InputSetPlaceholder),
+    getter("form", O::FormControlForm),
+    getter("value", O::InputValue), setter("value", O::InputSetValue),
+    getter("defaultValue", O::InputDefaultValue), setter("defaultValue", O::InputSetDefaultValue),
+    getter("checked", O::InputChecked), setter("checked", O::InputSetChecked),
+    getter("defaultChecked", O::InputDefaultChecked), setter("defaultChecked", O::InputSetDefaultChecked),
+    getter("valueAsNumber", O::InputValueAsNumber), setter("valueAsNumber", O::InputSetValueAsNumber),
+    getter("valueAsDate", O::InputValueAsDate), setter("valueAsDate", O::InputSetValueAsDate),
+    getter("selectionStart", O::InputSelectionStart), setter("selectionStart", O::InputSetSelectionStart),
+    getter("selectionEnd", O::InputSelectionEnd), setter("selectionEnd", O::InputSetSelectionEnd),
+    getter("selectionDirection", O::InputSelectionDirection), setter("selectionDirection", O::InputSetSelectionDirection),
+    method("select", O::InputSelect, 0), method("setSelectionRange", O::InputSetSelectionRange, 2),
+    getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
+    getter("validationMessage", O::ControlValidationMessage),
+    method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
+    method("setCustomValidity", O::ControlSetCustomValidity, 1),
+];
+const FORM: &[Member] = &[
+    getter("elements", O::FormElements), getter("length", O::FormLength),
+    method("reset", O::FormReset, 0), method("checkValidity", O::FormCheckValidity, 0),
+    method("reportValidity", O::FormReportValidity, 0),
+];
+const FORM_CONTROL: &[Member] = &[
+    getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
+    getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
+    getter("validationMessage", O::ControlValidationMessage),
+    method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
+    method("setCustomValidity", O::ControlSetCustomValidity, 1),
+];
+const TEXTAREA: &[Member] = &[
+    getter("form", O::FormControlForm), getter("value", O::TextAreaValue), setter("value", O::TextAreaSetValue),
+    getter("defaultValue", O::TextAreaDefaultValue), setter("defaultValue", O::TextAreaSetDefaultValue),
+    getter("selectionStart", O::InputSelectionStart), setter("selectionStart", O::InputSetSelectionStart),
+    getter("selectionEnd", O::InputSelectionEnd), setter("selectionEnd", O::InputSetSelectionEnd),
+    getter("selectionDirection", O::InputSelectionDirection), setter("selectionDirection", O::InputSetSelectionDirection),
+    method("select", O::InputSelect, 0), method("setSelectionRange", O::InputSetSelectionRange, 2),
+    getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
+    getter("validationMessage", O::ControlValidationMessage),
+    method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
+    method("setCustomValidity", O::ControlSetCustomValidity, 1),
+];
+const SELECT: &[Member] = &[
+    getter("form", O::FormControlForm), getter("value", O::SelectValue), setter("value", O::SelectSetValue),
+    getter("selectedIndex", O::SelectSelectedIndex), setter("selectedIndex", O::SelectSetSelectedIndex),
+    getter("options", O::SelectOptions), getter("length", O::SelectLength),
+    getter("multiple", O::SelectMultiple), setter("multiple", O::SelectSetMultiple),
+    method("add", O::SelectAdd, 1), method("remove", O::SelectRemove, 0),
+    getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
+    getter("validationMessage", O::ControlValidationMessage),
+    method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
+    method("setCustomValidity", O::ControlSetCustomValidity, 1),
+];
+const OPTION: &[Member] = &[
+    getter("value", O::OptionValue), setter("value", O::OptionSetValue),
+    getter("selected", O::OptionSelected), setter("selected", O::OptionSetSelected),
+    getter("defaultSelected", O::OptionDefaultSelected), setter("defaultSelected", O::OptionSetDefaultSelected),
+    getter("text", O::OptionText), setter("text", O::OptionSetText),
+];
+const VALIDITY: &[Member] = &[
+    getter("valueMissing", O::ValidityValueMissing), getter("typeMismatch", O::ValidityTypeMismatch),
+    getter("patternMismatch", O::ValidityPatternMismatch), getter("tooLong", O::ValidityTooLong),
+    getter("tooShort", O::ValidityTooShort), getter("rangeUnderflow", O::ValidityRangeUnderflow),
+    getter("rangeOverflow", O::ValidityRangeOverflow), getter("stepMismatch", O::ValidityStepMismatch),
+    getter("badInput", O::ValidityBadInput), getter("customError", O::ValidityCustomError),
+    getter("valid", O::ValidityValid),
+];
+const FORM_COLLECTION: &[Member] = &[
+    getter("length", O::FormCollectionLength), method("item", O::FormCollectionItem, 1),
+    method("namedItem", O::FormCollectionNamedItem, 1),
+];
+const OPTIONS_COLLECTION: &[Member] = &[
+    getter("length", O::OptionsLength), method("item", O::OptionsItem, 1),
+    method("namedItem", O::OptionsNamedItem, 1), method("add", O::SelectAdd, 1),
+    method("remove", O::SelectRemove, 1),
+];
+const RADIO_LIST: &[Member] = &[
+    getter("length", O::RadioNodeListLength), method("item", O::RadioNodeListItem, 1),
+    getter("value", O::RadioNodeListValue), setter("value", O::RadioNodeListSetValue),
 ];
 const SCRIPT: &[Member] = &[
     getter("src", O::ElementSrc), setter("src", O::ElementSetSrc),
@@ -496,13 +573,13 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLTableRowElement, name: "HTMLTableRowElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLTableCellElement, name: "HTMLTableCellElement", parent: Some(I::HTMLElement), constructor: None, members: CELL },
     D { interface: I::HTMLTableColElement, name: "HTMLTableColElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLFormElement, name: "HTMLFormElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLFormElement, name: "HTMLFormElement", parent: Some(I::HTMLElement), constructor: None, members: FORM },
     D { interface: I::HTMLInputElement, name: "HTMLInputElement", parent: Some(I::HTMLElement), constructor: None, members: INPUT },
-    D { interface: I::HTMLButtonElement, name: "HTMLButtonElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLSelectElement, name: "HTMLSelectElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLOptionElement, name: "HTMLOptionElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLButtonElement, name: "HTMLButtonElement", parent: Some(I::HTMLElement), constructor: None, members: FORM_CONTROL },
+    D { interface: I::HTMLSelectElement, name: "HTMLSelectElement", parent: Some(I::HTMLElement), constructor: None, members: SELECT },
+    D { interface: I::HTMLOptionElement, name: "HTMLOptionElement", parent: Some(I::HTMLElement), constructor: None, members: OPTION },
     D { interface: I::HTMLOptGroupElement, name: "HTMLOptGroupElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLTextAreaElement, name: "HTMLTextAreaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLTextAreaElement, name: "HTMLTextAreaElement", parent: Some(I::HTMLElement), constructor: None, members: TEXTAREA },
     D { interface: I::HTMLLabelElement, name: "HTMLLabelElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLFieldSetElement, name: "HTMLFieldSetElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -628,6 +705,10 @@ pub static INTERFACES: &[D] = &[
         members: NODE_LIST,
     },
     D { interface: I::HTMLCollection, name: "HTMLCollection", parent: None, constructor: None, members: HTML_COLLECTION },
+    D { interface: I::HTMLFormControlsCollection, name: "HTMLFormControlsCollection", parent: Some(I::HTMLCollection), constructor: None, members: FORM_COLLECTION },
+    D { interface: I::HTMLOptionsCollection, name: "HTMLOptionsCollection", parent: Some(I::HTMLCollection), constructor: None, members: OPTIONS_COLLECTION },
+    D { interface: I::RadioNodeList, name: "RadioNodeList", parent: Some(I::NodeList), constructor: None, members: RADIO_LIST },
+    D { interface: I::ValidityState, name: "ValidityState", parent: None, constructor: None, members: VALIDITY },
     D {
         interface: I::NodeIterator,
         name: "NodeIterator",
@@ -786,6 +867,27 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
         named_deleter: None,
         override_builtins: false,
         unenumerable_names: true,
+    })?;
+    host.define_legacy_platform_object(InterfaceBrand::FORM_CONTROLS, LegacyPlatformHooks {
+        supported_index_count: O::FormCollectionSupportedIndexCount,
+        supported_names: Some(O::FormCollectionSupportedNames),
+        indexed_getter: O::FormCollectionIndexedGetter, indexed_setter: None,
+        named_getter: Some(O::FormCollectionNamedGetter), named_setter: None, named_deleter: None,
+        override_builtins: false, unenumerable_names: true,
+    })?;
+    host.define_legacy_platform_object(InterfaceBrand::OPTIONS, LegacyPlatformHooks {
+        supported_index_count: O::OptionsSupportedIndexCount,
+        supported_names: Some(O::OptionsSupportedNames),
+        indexed_getter: O::OptionsIndexedGetter, indexed_setter: Some(O::OptionsIndexedSetter),
+        named_getter: None, named_setter: None, named_deleter: None,
+        override_builtins: false, unenumerable_names: true,
+    })?;
+    host.define_legacy_platform_object(InterfaceBrand::RADIO_NODE_LIST, LegacyPlatformHooks {
+        supported_index_count: O::RadioNodeListSupportedIndexCount,
+        supported_names: None,
+        indexed_getter: O::RadioNodeListIndexedGetter, indexed_setter: None,
+        named_getter: None, named_setter: None, named_deleter: None,
+        override_builtins: false, unenumerable_names: false,
     })?;
     for brand in [InterfaceBrand::NODE_LIST, InterfaceBrand::STATIC_NODE_LIST, InterfaceBrand::FILTERED_NODE_LIST] {
         host.define_legacy_platform_object(brand, LegacyPlatformHooks {
