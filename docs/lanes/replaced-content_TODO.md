@@ -531,3 +531,16 @@ shape-based references and a blank control. The fixed-base before executable
 was **0/4**, each actual identical to blank. The first after render was
 **4/4 non-inert**, with all actuals equal to references and 576–1,024 pixels
 different from blank. Final repeat and gate evidence: `tests/wpt-replaced-content/rc7/`.
+
+### RC-7 preflight correction — default nonzero path fill
+
+Code review found the path containment check counting even-odd crossings,
+although SVG's initial `fill-rule` is `nonzero`. A literal single closed
+`M/H/V/Z` path tracing one square twice in the same direction was accepted
+but rendered blank at its center. The image regression failed before the fix
+with transparent versus red at `(2,2)`. The containment check now accumulates
+signed ray crossings, so winding `2` fills the square. Explicit `fill-rule`
+remains unsupported by the strict static decoder. The owned HTML resource
+corpus adds a matching double-wound/reference/blank case, moving the expanded
+five-case proof from **4/5** before the correction to **5/5 non-inert** after.
+Final repeated hashes and Windows package gate are in the RC-7 evidence packet.

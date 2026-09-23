@@ -273,6 +273,16 @@ fn closed_paths_fill_relative_concave_and_transformed_outlines() {
 }
 
 #[test]
+fn same_direction_double_wound_path_uses_default_nonzero_fill() {
+    let bytes = svg(
+        "",
+        r#"<path d="M1 1 H6 V6 H1 V1 H6 V6 H1 Z" fill="red"/>"#,
+    );
+    assert_eq!(pixel(&bytes, 2, 2), [255, 0, 0, 255]);
+    assert_eq!(pixel(&bytes, 0, 2), [0; 4]);
+}
+
+#[test]
 fn paths_reject_open_curved_malformed_and_unsupported_paint_whole_image() {
     for path in [
         r#"<path d="M1 1 L6 1 L6 6"/>"#,

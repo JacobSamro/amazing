@@ -131,15 +131,19 @@ pub(super) fn parse_path(data: &str, limit: usize) -> Result<Vec<(f64, f64)>, De
 }
 
 pub(super) fn point_in_path(points: &[(f64, f64)], x: f64, y: f64) -> bool {
-    let mut inside = false;
+    // SVG's default fill-rule is nonzero. Count signed ray crossings so a
+    // same-direction loop around an area twice still fills it.
+    let mut winding = 0_i32;
     let mut previous = *points.last().unwrap();
     for &next in points {
         if (previous.1 > y) != (next.1 > y) {
             let crossing = previous.0 + (y - previous.1) * (next.0 - previous.0)
                 / (next.1 - previous.1);
-            if x < crossing { inside = !inside; }
+            if x < crossing {
+                winding += if next.1 > previous.1 { 1 } else { -1 };
+            }
         }
         previous = next;
     }
-    inside
+    winding != 0
 }

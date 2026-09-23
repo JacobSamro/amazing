@@ -25,6 +25,11 @@
       "id": "transformed",
       "test": "transformed.html",
       "reference": "transformed-ref.html"
+    },
+    {
+      "id": "double-wound",
+      "test": "double-wound.html",
+      "reference": "double-wound-ref.html"
     }
   ]
 }
