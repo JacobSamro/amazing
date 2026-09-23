@@ -90,6 +90,28 @@ fn position_subtree(
         .collect();
     let mut positioned = std::mem::take(&mut box_.positioned);
     for (child, static_anchor) in positioned.iter_mut().zip(anchors) {
+        if child.outside_marker {
+            let width = match &child.flow {
+                Flow::Inlines(items) => items
+                    .iter()
+                    .map(|item| match item {
+                        crate::InlineNode::Text {
+                            text, font_size, ..
+                        } => fonts.measure(text, *font_size),
+                        crate::InlineNode::Replaced { size, .. } => size.width,
+                        _ => 0.0,
+                    })
+                    .sum::<f32>(),
+                _ => 0.0,
+            }
+            .max(1.0);
+            child.style.set("width", &format!("{width}px"));
+            layout_block(child, 0.0, 0.0, width, fonts);
+            let x = box_.content_box.x - child.border_box.w;
+            let y = box_.content_box.y;
+            shift_box(child, x - child.border_box.x, y - child.border_box.y);
+            continue;
+        }
         if child.inline_atomic {
             position_subtree(child, viewport, own_padding_box, descendant_positioned_cb, fonts);
             continue;

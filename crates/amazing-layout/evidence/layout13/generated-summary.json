@@ -1,0 +1,121 @@
+{
+  "base": "9e736e2",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "cases": 127,
+  "before": {
+    "pass": 44,
+    "mismatch": 69,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 14
+  },
+  "after": {
+    "pass": 50,
+    "mismatch": 63,
+    "error": 0,
+    "timeout": 0,
+    "unsupported": 0,
+    "crash": 14
+  },
+  "gains": [
+    "css__css-flexbox__flexbox-with-pseudo-elements-001.html",
+    "css__css-flexbox__flexbox-with-pseudo-elements-002.html",
+    "css__css-flexbox__flexbox-with-pseudo-elements-003.html",
+    "css__css-lists__counter-002.html",
+    "css__css-lists__counter-003.html",
+    "css__css-lists__counter-list-item.html",
+    "css__css-lists__counters-001.html",
+    "css__css-lists__counters-002.html",
+    "css__css-lists__foo-counter-reversed-006a.html",
+    "css__css-pseudo__first-line-line-height-003.html",
+    "css__css-pseudo__first-line-on-ancestor-block.html",
+    "css__css-pseudo__first-line-with-before-after.html",
+    "css__css-pseudo__marker-content-006.html",
+    "css__css-pseudo__marker-overflow-wrap.html",
+    "css__css-pseudo__marker-text-emphasis.html",
+    "css__css-pseudo__marker-unicode-bidi-normal.html",
+    "css__css-pseudo__marker-word-break.html"
+  ],
+  "losses": [
+    {
+      "id": "css__css-lists__list-marker-symbol-bidi.html",
+      "owner": "layout/text LAYOUT-14",
+      "bug": "inline.rs::shape_chunk plaintext bidi scope/marker isolation differs from span reference in RTL column",
+      "before": "pass",
+      "after": "mismatch"
+    },
+    {
+      "id": "css__css-lists__list-style-image-gradients.html",
+      "owner": "CSS/paint",
+      "bug": "generated.rs: gradient list-style-image is not produced as an image marker; paint lacks gradient generated-image raster",
+      "before": "pass",
+      "after": "mismatch"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-001a.html",
+      "owner": "CSS",
+      "bug": "computed.rs: list-style shorthand none is not expanded, so the reference paints a UA marker plus ::before",
+      "before": "pass",
+      "after": "mismatch"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-001b.html",
+      "owner": "CSS",
+      "bug": "computed.rs: list-style shorthand none is not expanded, so the reference paints a UA marker plus ::before",
+      "before": "pass",
+      "after": "mismatch"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-002.html",
+      "owner": "CSS",
+      "bug": "computed.rs: list-style shorthand none is not expanded, so the reference paints a UA marker plus ::before",
+      "before": "pass",
+      "after": "mismatch"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-003.html",
+      "owner": "CSS",
+      "bug": "computed.rs: list-style shorthand none is not expanded, so the reference paints a UA marker plus ::before",
+      "before": "pass",
+      "after": "mismatch"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-005a.html",
+      "owner": "CSS",
+      "bug": "computed.rs: list-style shorthand none is not expanded, so the reference paints a UA marker plus ::before",
+      "before": "pass",
+      "after": "mismatch"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-005b.html",
+      "owner": "CSS",
+      "bug": "computed.rs: list-style shorthand none is not expanded, so the reference paints a UA marker plus ::before",
+      "before": "pass",
+      "after": "mismatch"
+    },
+    {
+      "id": "css__css-lists__list-style-type-string-006.html",
+      "owner": "CSS",
+      "bug": "computed.rs: list-style shorthand none is not expanded, so the reference paints a UA marker plus ::before",
+      "before": "pass",
+      "after": "mismatch"
+    },
+    {
+      "id": "css__css-lists__marker-dynamic-content-change.html",
+      "owner": "integrator DOM/render-WPT",
+      "bug": "cmd/wpt.rs::cmd_render_wpt does not dispatch TestRendered or wait for reftest-wait; paints FAIL before classList mutation",
+      "before": "pass",
+      "after": "mismatch"
+    },
+    {
+      "id": "css__css-pseudo__marker-content-001c.html",
+      "owner": "CSS",
+      "bug": "selectors.rs: nth-of-type(2)::marker fails to match, leaving the second marker at 1 instead of 2",
+      "before": "pass",
+      "after": "mismatch"
+    }
+  ],
+  "baseline_executable_sha256": "E828F9DA04A4BD8663B4878BE497279ADA2D20740A0E21962598C3E44DFD2D88",
+  "candidate_executable_sha256": "8F00A3A7ABA188A095D2D8401AFE62BC1E9914973008C71612A41484A570EE26"
+}

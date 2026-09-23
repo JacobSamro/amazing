@@ -111,6 +111,11 @@ pub struct IntrinsicSize {
 /// layout owns used-size resolution and needs the original image aspect ratio.
 pub trait ReplacedElementProvider {
     fn intrinsic_size(&self, node: NodeIdx) -> Option<IntrinsicSize>;
+
+    /// Natural dimensions of a CSS generated image, keyed by its resolved URL.
+    fn intrinsic_size_by_url(&self, _url: &str) -> Option<IntrinsicSize> {
+        None
+    }
 }
 
 /// Adapter used by callers that have no decoded replaced content.
@@ -150,6 +155,13 @@ pub enum Display {
 pub struct LayoutBox {
     /// Origin DOM element; `None` for anonymous blocks (§9.2.1).
     pub node: Option<NodeIdx>,
+    /// Source-order key for synthetic boxes.
+    pub source_order: Option<u64>,
+    pub(crate) generated_pseudo: Option<amazing_css::selectors::PseudoElement>,
+    /// Computed ::first-line style; applied to the first formatted line.
+    pub first_line_style: Option<ComputedStyle>,
+    /// A list marker outside the principal list-item box.
+    pub(crate) outside_marker: bool,
     pub display: Display,
     /// The element's computed declarations (raw strings; lengths resolve at
     /// layout time when the containing-block width is known).
@@ -202,6 +214,10 @@ impl LayoutBox {
     ) -> Self {
         LayoutBox {
             node,
+            source_order: None,
+            generated_pseudo: None,
+            first_line_style: None,
+            outside_marker: false,
             display,
             style,
             font_size,
@@ -284,6 +300,7 @@ pub enum InlineNode {
     /// the effective font size of the inline chain it came from.
     Text {
         node: NodeIdx,
+        source_order: Option<u64>,
         text: String,
         source_mappings: Vec<TextSourceMapping>,
         font_size: f32,
@@ -378,6 +395,8 @@ pub struct GlyphFrag {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ReplacedFrag {
     pub node: NodeIdx,
+    /// Identity of a generated image; `None` for the element's own content.
+    pub source_order: Option<u64>,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -566,13 +585,21 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
                 }
                 layout.line_height = line_height;
                 layout.lines = lines;
+                if let Some(color) = layout.first_line_style.as_ref().and_then(|style| style.get("color")) {
+                    if let Some(first) = layout.lines.first_mut() {
+                        for glyph in &mut first.glyphs { glyph.color = color.to_owned(); }
+                    }
+                }
             }
         }
     }
     match &mut layout.flow {
         Flow::Blocks(children) => {
             let mut shift = 0.0;
-            for child in children {
+            for (index, child) in children.iter_mut().enumerate() {
+                if index == 0 && child.first_line_style.is_none() {
+                    child.first_line_style = layout.first_line_style.clone();
+                }
                 if shift != 0.0 {
                     flex::translate(child, 0.0, shift);
                 }

@@ -2083,6 +2083,7 @@ mod tests {
             decorations: Vec::new(),
             replaced: vec![amazing_layout::ReplacedFrag {
                 node,
+                source_order: None,
                 x: 1.0,
                 y: 0.0,
                 width: 2.0,
@@ -2134,6 +2135,7 @@ mod tests {
             decorations: Vec::new(),
             replaced: vec![amazing_layout::ReplacedFrag {
                 node,
+                source_order: None,
                 x: 1.0,
                 y: 0.0,
                 width: 2.0,

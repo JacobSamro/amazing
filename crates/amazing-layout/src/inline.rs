@@ -57,6 +57,7 @@ pub(crate) enum Token {
     Break,
     Replaced {
         node: NodeIdx,
+        source_order: Option<u64>,
         size: IntrinsicSize,
         space_before: bool,
     },
@@ -104,8 +105,13 @@ pub(crate) fn tokenize(items: &[InlineNode]) -> Vec<Token> {
                 }
             }
             InlineNode::Replaced { node, size, .. } | InlineNode::Atomic { node, size, .. } => {
+                let source_order = match item {
+                    InlineNode::Replaced { replaced, .. } => replaced.source_order,
+                    _ => None,
+                };
                 tokens.push(Token::Replaced {
                     node: *node,
+                    source_order,
                     size: *size,
                     space_before: pending_space,
                 });
@@ -307,6 +313,7 @@ pub(crate) fn layout_lines_with_floats(
             }
             Token::Replaced {
                 node,
+                source_order,
                 size,
                 space_before,
             } => {
@@ -325,6 +332,7 @@ pub(crate) fn layout_lines_with_floats(
                 let x = cx + if cx > line_left.get() { space_w } else { 0.0 };
                 replaced.push(ReplacedFrag {
                     node,
+                    source_order,
                     x,
                     y: 0.0,
                     width: size.width,
@@ -380,7 +388,7 @@ struct ShapedRuby {
 
 #[derive(Debug, Clone)]
 enum AtomicInline {
-    Replaced(NodeIdx, IntrinsicSize),
+    Replaced(NodeIdx, IntrinsicSize, Option<u64>),
     Combined(ShapedRuby),
 }
 
@@ -416,6 +424,7 @@ enum ShapedUnit {
     Break,
     Replaced {
         node: NodeIdx,
+        source_order: Option<u64>,
         size: IntrinsicSize,
         range: Range<usize>,
         context: Rc<ShapedContext>,
@@ -683,6 +692,7 @@ pub(crate) fn layout_lines_shaped(
             }
             ShapedUnit::Replaced {
                 node,
+                source_order,
                 size,
                 range,
                 context,
@@ -712,6 +722,7 @@ pub(crate) fn layout_lines_shaped(
                 }
                 replaced.push(ReplacedFrag {
                     node,
+                    source_order,
                     x: cursor,
                     y: 0.0,
                     width: size.width,
@@ -957,11 +968,10 @@ fn reshape_visual_line(
     let mut pen = start_x;
     let mut active_source = None;
     let mut decoration_start = pen;
-    let replaced_by_node = replaced
-        .iter()
-        .enumerate()
-        .map(|(index, fragment)| (fragment.node.0, index))
-        .collect::<HashMap<_, _>>();
+    let mut replaced_by_node = HashMap::<(u32, Option<u64>), usize>::new();
+    for (index, fragment) in replaced.iter().enumerate() {
+        replaced_by_node.insert((fragment.node.0, fragment.source_order), index);
+    }
     for run in line.runs {
         if active_source != Some(run.source) {
             finish_visual_decoration(
@@ -983,8 +993,8 @@ fn reshape_visual_line(
             let character = context.text[glyph.cluster.clone()].chars().next();
             if character == Some('\u{fffc}') {
                 match context.atomics.get(&glyph.cluster.start) {
-                    Some(AtomicInline::Replaced(node, size)) => {
-                        if let Some(index) = replaced_by_node.get(&node.0)
+                    Some(AtomicInline::Replaced(node, size, source_order)) => {
+                        if let Some(index) = replaced_by_node.get(&(node.0, *source_order))
                             && let Some(fragment) = replaced.get_mut(*index)
                         {
                             fragment.x = if vertical { start_x } else { pen };
@@ -1721,7 +1731,11 @@ fn shape_chunk(
                     source: node.0,
                     source_range: 0..0,
                 });
-                atomics.insert(start, AtomicInline::Replaced(*node, *size));
+                let source_order = match item {
+                    InlineNode::Replaced { replaced, .. } => replaced.source_order,
+                    _ => None,
+                };
+                atomics.insert(start, AtomicInline::Replaced(*node, *size, source_order));
                 previous_after = ShapingBoundary::Hard;
                 continue;
             }
@@ -1888,9 +1902,10 @@ fn shape_chunk(
             TextUnit::Atomic { offset, atomic } => {
                 let end = offset + '\u{fffc}'.len_utf8();
                 match atomic {
-                    AtomicInline::Replaced(node, size) => units.push(ShapedUnit::Replaced {
+                    AtomicInline::Replaced(node, size, source_order) => units.push(ShapedUnit::Replaced {
                         node,
                         size,
+                        source_order,
                         range: offset..end,
                         context: Rc::clone(&context),
                     }),
@@ -2321,6 +2336,7 @@ mod tests {
         let len = t.len();
         InlineNode::Text {
             node: NodeIdx(99),
+            source_order: None,
             text: t.into(),
             source_mappings: (!t.is_empty())
                 .then_some(crate::TextSourceMapping {

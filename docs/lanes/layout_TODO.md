@@ -1106,3 +1106,35 @@ passed layout **238/238** nextest and **0/0** doctests, plus workspace
 **1843/1843** nextest (5 skipped) and **2/2** doctests. Evidence,
 source/executable hashes, and the seven broad gain IDs are under
 `crates/amazing-layout/evidence/layout12/`.
+
+## LAYOUT-13 — generated boxes and pseudo-element layout
+
+On integrated CSS-13 base `9e736e2`, layout constructs `::marker`, `::before`, and
+`::after` boxes from computed pseudo styles and generated text/image runs,
+including list marker placement, flex/grid generated items, and initial
+`::first-letter`/`::first-line` styling. Tree-order `source_order` uses DOM child
+links rather than arena ids; generated image fragments carry a resolved URL and
+an `(origin, source_order)` identity through shaped line layout. Paint RC-17 owns
+consuming those fields. The default URL intrinsic-size provider method is in
+`amazing-layout::ReplacedElementProvider`; two paint test literals were updated
+with integrator approval.
+
+Pinned Windows generated selection: **44/127 → 50/127**, 17 gains and 11
+primary-accepted, individually owned exceptions in
+`crates/amazing-layout/evidence/layout13/generated-summary.json`. Seven losses
+are CSS `list-style` shorthand expansion in reference pages; one is CSS
+`nth-of-type(2)::marker` matching; one is CSS/paint gradient image markers; one
+is the render-WPT `TestRendered` event; one is plaintext bidi marker isolation
+(`inline.rs::shape_chunk`, queued with LAYOUT-14). The CSS counter-scope,
+quoted marker, and reversed-start fixes are included in `9e736e2`. Fourteen
+page-script/DOM crashes remain on both sides. Ten retained selections on the
+preceding CSS-13 base moved **158/184 → 159/184** with zero losses; the
+integrator rechecks them at merge. Final win-002 gate: layout **251/251**,
+workspace **1963/1963** (5 skipped), doctests **2/2**. Raw reports and hashes
+are in `crates/amazing-layout/evidence/layout13/`.
+
+Next layout work is LAYOUT-14, beginning with preserving the text provider's
+line-break opportunity around U+FFFC in `inline.rs::split_atomic_units`. It
+also owns style-aware font-relative units, full font-feature precedence,
+vertical text and bidi corrections, and TEXT-8 computed `TextStyle` stretch
+and oblique angle fields (`stretch_percent`, `oblique_angle_degrees`).
