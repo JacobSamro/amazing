@@ -1193,3 +1193,11 @@ image runs resolve relative URLs against that URL; a default `::marker` uses
 `list-style-image` before falling back to `list-style-type` text. TEXT-6's
 driver pipeline now populates `base_url` for fetched and inline stylesheets,
 including the final response URL after a redirect.
+Counter scope stacks can remain empty after an explicit reset's scope ends.
+Increment, set, and counter reads instantiate a new zero-valued counter in
+that case; the regression covers `display: contents` descendants and a
+reversed list followed by another list item. The pinned 54-case css-lists
+subset is recorded in `css13-lists-manifest.json`.
+Quoted `list-style-type` values now produce literal marker text after CSS
+escape decoding. An omitted `reversed()` reset value uses the later increments
+in its scope to derive a descending start; explicit values are preserved.

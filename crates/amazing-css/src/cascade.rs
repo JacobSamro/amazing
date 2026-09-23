@@ -1232,6 +1232,21 @@ mod tests {
     }
 
     #[test]
+    fn quoted_list_style_type_is_literal_marker_text_including_escapes() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let list = dom.create_element(body, "ul");
+        let plain = dom.create_element(list, "li");
+        let escaped = dom.create_element(list, "li");
+        dom.set_attrs(escaped, vec![("class".into(), "escaped".into())]);
+        let css = parse_stylesheet(r##"li { list-style-type: "# " } li.escaped { list-style-type: "\23\20" }"##);
+        let styled = compute(&dom, &[css]);
+        assert_eq!(styled.generated_content(plain, PseudoElement::Marker).unwrap().text(), "# ");
+        assert_eq!(styled.generated_content(escaped, PseudoElement::Marker).unwrap().text(), "# ");
+    }
+
+    #[test]
     fn generated_images_use_winning_stylesheet_url_and_inherited_marker_image() {
         use crate::generated::ContentRun;
         let mut dom = Dom::new();
@@ -1332,6 +1347,63 @@ mod tests {
                 .text(),
             "II"
         );
+    }
+
+    #[test]
+    fn counters_reinstantiate_after_display_contents_reset_scope_ends() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let contents = dom.create_element(body, "div");
+        dom.set_attrs(contents, vec![("class".into(), "contents".into())]);
+        let reset = dom.create_element(contents, "div");
+        dom.set_attrs(reset, vec![("class".into(), "reset".into())]);
+        let touch = dom.create_element(contents, "div");
+        dom.set_attrs(touch, vec![("class".into(), "touch".into())]);
+        let value = dom.create_element(touch, "span");
+        let following = dom.create_element(contents, "span");
+        let css = parse_stylesheet(".contents { display: contents } .reset { counter-reset: x 4 y 9 } .touch { counter-increment: x 2; counter-set: y 7 } span::before { content: counter(x) '/' counters(y, '.') }");
+        let styles = compute(&dom, &[css]);
+        for node in [value, following] {
+            assert_eq!(styles.generated_content(node, PseudoElement::Before).unwrap().text(), "2/7");
+        }
+    }
+
+    #[test]
+    fn reversed_list_popped_scope_allows_counter_reads_and_later_increment() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let list = dom.create_element(body, "ol");
+        dom.set_attrs(list, vec![("reversed".into(), "".into())]);
+        let in_list = dom.create_element(list, "li");
+        let reader = dom.create_element(body, "p");
+        let later = dom.create_element(body, "li");
+        let css = parse_stylesheet("p::before { content: counter(list-item) '/' counters(list-item, '.') } li::before { content: counter(list-item) }");
+        let styles = compute(&dom, &[css]);
+        assert_eq!(styles.generated_content(in_list, PseudoElement::Before).unwrap().text(), "1");
+        assert_eq!(styles.generated_content(reader, PseudoElement::Before).unwrap().text(), "0/0");
+        assert_eq!(styles.generated_content(later, PseudoElement::Before).unwrap().text(), "1");
+    }
+
+    #[test]
+    fn reversed_counters_derive_initial_value_and_respect_explicit_start() {
+        let mut dom = Dom::new();
+        let root = dom.create_element(NodeIdx(0), "html");
+        let body = dom.create_element(root, "body");
+        let dynamic = dom.create_element(body, "div");
+        dom.set_attrs(dynamic, vec![("class".into(), "dynamic".into())]);
+        let first = dom.create_element(dynamic, "span");
+        let second = dom.create_element(dynamic, "span");
+        let explicit = dom.create_element(body, "div");
+        dom.set_attrs(explicit, vec![("class".into(), "explicit".into())]);
+        let third = dom.create_element(explicit, "span");
+        let fourth = dom.create_element(explicit, "span");
+        let css = parse_stylesheet(".dynamic { counter-reset: reversed(c) } .explicit { counter-reset: reversed(c) 10 } span { counter-increment: c -1 } span::before { content: counter(c) }");
+        let styles = compute(&dom, &[css]);
+        for (node, expected) in [(first, "2"), (second, "1"), (third, "9"), (fourth, "8")] {
+            assert_eq!(styles.generated_content(node, PseudoElement::Before).unwrap().text(), expected);
+        }
     }
 
     #[test]
