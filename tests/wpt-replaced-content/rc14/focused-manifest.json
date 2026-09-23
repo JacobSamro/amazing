@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "RC-14 reviewed static match reftests",
+    "rule": "The two LAYOUT-11 paint routes plus four CSS Backgrounds radius, two CSS Borders radius, two positioned, one CSS2 z-index and one transform stacking-context control; selected before paint edits, no scripts in tests."
+  },
+  "sparse_paths": [
+    "css/css-cascade",
+    "css/css-values",
+    "css/css-backgrounds",
+    "css/css-borders",
+    "css/css-position",
+    "css/CSS2/zindex",
+    "css/css-transforms",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "css-cascade__all-prop-002.html",
+      "test": "css/css-cascade/all-prop-002.html"
+    },
+    {
+      "id": "css-values__calc-border-radius-1.html",
+      "test": "css/css-values/calc-border-radius-1.html"
+    },
+    {
+      "id": "css-backgrounds__border-radius-horizontal-value-is-zero.html",
+      "test": "css/css-backgrounds/border-radius-horizontal-value-is-zero.html"
+    },
+    {
+      "id": "css-backgrounds__border-radius-012.html",
+      "test": "css/css-backgrounds/border-radius-012.html"
+    },
+    {
+      "id": "css-backgrounds__border-radius-shorthand-002.html",
+      "test": "css/css-backgrounds/border-radius-shorthand-002.html"
+    },
+    {
+      "id": "css-backgrounds__background-clip-content-box-with-border-radius-002.html",
+      "test": "css/css-backgrounds/background-clip-content-box-with-border-radius-002.html"
+    },
+    {
+      "id": "css-borders__border-radius-currentcolor.html",
+      "test": "css/css-borders/border-radius-currentcolor.html"
+    },
+    {
+      "id": "css-borders__border-radius-greater-than-width.html",
+      "test": "css/css-borders/border-radius-greater-than-width.html"
+    },
+    {
+      "id": "css-position__position-absolute-in-inline-005.html",
+      "test": "css/css-position/position-absolute-in-inline-005.html"
+    },
+    {
+      "id": "css-position__position-absolute-large-negative-inset.html",
+      "test": "css/css-position/position-absolute-large-negative-inset.html"
+    },
+    {
+      "id": "css2-zindex__z-index-abspos-001.xht",
+      "test": "css/CSS2/zindex/z-index-abspos-001.xht"
+    },
+    {
+      "id": "css-transforms__transform-style-stacking-context.html",
+      "test": "css/css-transforms/transform-style-stacking-context.html"
+    }
+  ]
+}
