@@ -1,17 +1,20 @@
 # CSS lane decision map
 
-## CSS-8 — cascade corpus triage (fixed base `945ca38`)
+## CSS-8 — cascade corpus triage (final gate base `6fcb990`)
 
-The pinned 72-case cascade selection is 38 pass / 32 mismatch / 2 unsupported
-on the fixed base and 55 pass / 15 mismatch / 2 unsupported after CSS-8. The table records the **first observed blocker** in each
-mismatch: 21 CSS-owned, 11 routed elsewhere. Chrome 154.0.8016.0 and Safari
-26.6 statuses come from the [exact-revision wpt.fyi search API](https://wpt.fyi/api/search?run_ids=5182906107691008,5141363439173632&q=/css/);
+The 32 original mismatches were triaged on base `945ca38`: 21 CSS-owned
+and 11 routed elsewhere. After the grid-line and DOM merges, the fixed-base
+72-case cascade selection is 39 pass / 31 mismatch / 2 unsupported on
+`6fcb990`, and 56 pass / 14 mismatch / 2 unsupported after CSS-8. The table
+retains each original first blocker and records the final rebased transition.
+Chrome 154.0.8016.0 and Safari 26.6 statuses come from the
+[exact-revision wpt.fyi search API](https://wpt.fyi/api/search?run_ids=5182906107691008,5141363439173632&q=/css/);
 both runs report WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
 "pass / fail" means Chrome / Safari. A CSS first blocker can still need
 layout or paint adoption after it is removed; the table does not promise a
 render pass from parser work alone.
 
-| Mismatch case | First feature/root cause | Owner | Chrome / Safari | Amazing fixed base → CSS-8 |
+| Original mismatch case | First feature/root cause | Owner | Chrome / Safari | Rebased base → CSS-8 |
 |---|---|---|---|---|
 | `css-cascade__revert-layer-011.html` | @property + paused @keyframes custom-property interpolation; animation stage absent | integrator (animation) | pass / pass | mismatch → mismatch |
 | `css-cascade__all-prop-002.html` | `all: inherit` creates inline containers; nested inline/block box layout | layout | pass / pass | mismatch → mismatch |
@@ -30,7 +33,7 @@ render pass from parser work alone.
 | `css-values__calc-min-width-block-intrinsic-1.html` | `min-width: calc(...)` rejected before intrinsic sizing | css | pass / fail | mismatch → mismatch |
 | `css-values__ch-unit-008.html` | `5ch` accepted as typed unit but used width lacks zero-glyph metric | layout | pass / pass | mismatch → mismatch |
 | `css-values__calc-invalid-range-clamping.html` | `border-radius: calc(-10px)` rejected instead of computed clamping | css | pass / pass | mismatch → pass |
-| `css-values__calc-rounding-003.html` | `margin-inline` shorthand missing; width `calc()` also rejected | css | pass / pass | mismatch → mismatch |
+| `css-values__calc-rounding-003.html` | original base lacked `margin-inline` and width `calc()`; upstream base already renders this case | css | pass / pass | pass → pass |
 | `css-color__deprecated-sameas-017.html` | `@supports` system color `ThreeDFace` and ButtonFace palette unsupported | css | pass / pass | mismatch → pass |
 | `css-color__hwb-005.html` | `hwb()` color conversion unsupported | css | pass / pass | mismatch → pass |
 | `css-color__a98rgb-001.html` | `color(a98-rgb ...)` color-space conversion unsupported | css | pass / pass | mismatch → pass |
@@ -50,22 +53,29 @@ Seventeen cases moved from mismatch to pass: important `revert-layer`, nine
 Selectors 4 cases (`:has`, `:dir`, four `:lang`, and three filtered `:nth`),
 computed clamping of a negative `calc()` radius, and six CSS Color 4 cases
 (system color aliases, HWB, A98 RGB, modern HSL, and LCH). No pass was lost.
-The remaining 15 mismatches comprise four CSS math/used-value cases and the
-11 routed non-CSS blockers listed in `questions.md`. `margin-inline` now
-expands in CSS computation, but `calc-rounding-003` still needs width math
-and used-value handling. The other three math cases similarly need layout's
-mixed length/percentage and intrinsic sizing consumption; these adoption
-requests are in `questions.md`.
+The remaining 14 mismatches comprise three CSS math/used-value cases and
+the 11 routed non-CSS blockers listed in `questions.md`. `margin-inline` now
+expands in CSS computation; `calc-rounding-003` already passed on the rebased
+base. The three remaining math cases need layout's mixed length/percentage
+and intrinsic sizing consumption. Their adoption requests are in
+`questions.md`.
 
-Evidence: fixed base `945ca38`, WPT
+Evidence: final fixed base `6fcb990`, WPT
 `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, two stable runs on each
-side, baseline projection SHA256 `f37502291258b2e9f2befcf90690c7c029e62a7e07b88d575f038baedb89a14c`.
-The candidate executable SHA256 is
-`434b65bb2cfbaa317c24a07ac94e93e71b72a33d5bad28bcccec4d0dac916fa2`.
-The final per-case projections and nine downstream comparisons are in
-`.agents/css/css8-final3-summary.json`; the eight other selections have
-identical per-case classifications, pixel counts, and image hashes
-before/after.
+side. Baseline and candidate per-case projection SHA256 values are
+`72e11773d593ab7e927c2a0c317daa76f496f96d3ae1fdb5cd9ca4e443377a86`
+and `749e0f97c7f8fe10d3e6eab13da495d0340090b39d1e2bbcdf5042c5a36b23a8`.
+Their immutable executable SHA256 values are
+`963f2eef5caffe559c75717b2725ab5f080688a1568dd63f3ca5a46ba6e237be`
+and `ef5355c7f809a02012076b8aab850724cf41931f2578afe13b74177fb30cce54`.
+The final per-case reports and all nine selections are summarized in
+`.agents/css/css8-rebase-final-summary.json`; the eight other selections have
+identical classifications, pixel counts, and image hashes before/after.
+No pass was lost. On win-001, CSS nextest passed 187/187 and doctests 0/0;
+workspace nextest passed 1,562/1,562 with 3 skipped and workspace doctests
+passed 2/2. The fixed-base source hash and both executable hashes remained
+stable through the render sweep. `origin/dev` later reached `55d3fc1` with no
+changes under `crates/amazing-css` since `6fcb990`.
 
 ## CSS-7 — consumer adoption
 
