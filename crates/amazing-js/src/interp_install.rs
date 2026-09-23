@@ -116,16 +116,15 @@ impl Interpreter {
                 .set_own("prototype", JsValue::Object(self.function_proto.clone()));
         }
         self.define_global("Function", function_ctor);
-        self.object_proto.borrow_mut().set_own(
-            "hasOwnProperty",
-            Self::native(
-                "hasOwnProperty",
-                native_has_own_property,
-                &self.function_proto,
-            ),
-        );
+        let has_own_property = symbol_method(self, "hasOwnProperty", native_has_own_property);
+        symbol_method_length(&has_own_property, 1);
+        self.object_proto.borrow_mut().set_own("hasOwnProperty", has_own_property);
+        let property_is_enumerable = symbol_method(self, "propertyIsEnumerable", native_property_is_enumerable);
+        symbol_method_length(&property_is_enumerable, 1);
+        self.object_proto.borrow_mut().set_own("propertyIsEnumerable", property_is_enumerable);
         let object_ctor = Self::native("Object", native_object, &self.function_proto);
         if let JsValue::Object(o) = &object_ctor {
+            o.borrow_mut().set_own("prototype", JsValue::Object(self.object_proto.clone()));
             let _ = self.set_prop(
                 &JsValue::Object(o.clone()),
                 "keys",
@@ -175,6 +174,9 @@ impl Interpreter {
                     native_object_set_prototype_of as crate::value::NativeFn,
                 ),
                 ("hasOwn", native_object_has_own as crate::value::NativeFn),
+                ("getOwnPropertyNames", native_object_get_own_property_names as crate::value::NativeFn),
+                ("getOwnPropertySymbols", native_object_get_own_property_symbols as crate::value::NativeFn),
+                ("getOwnPropertyDescriptor", native_object_get_own_property_descriptor as crate::value::NativeFn),
             ] {
                 let _ = self.set_prop(
                     &JsValue::Object(o.clone()),
@@ -184,6 +186,21 @@ impl Interpreter {
             }
         }
         self.define_global("Object", object_ctor);
+        let reflect = self.object_value();
+        if let JsValue::Object(object) = &reflect {
+            for (name, native) in [
+                ("ownKeys", native_reflect_own_keys as crate::value::NativeFn),
+                ("get", native_reflect_get as crate::value::NativeFn),
+                ("set", native_reflect_set as crate::value::NativeFn),
+                ("has", native_reflect_has as crate::value::NativeFn),
+                ("deleteProperty", native_reflect_delete_property as crate::value::NativeFn),
+                ("defineProperty", native_reflect_define_property as crate::value::NativeFn),
+                ("getOwnPropertyDescriptor", native_object_get_own_property_descriptor as crate::value::NativeFn),
+            ] {
+                object.borrow_mut().set_own(name, Self::native(name, native, &self.function_proto));
+            }
+        }
+        self.define_global("Reflect", reflect);
         self.define_global(
             "Array",
             Self::native("Array", native_array, &self.function_proto),
@@ -212,15 +229,7 @@ impl Interpreter {
         }
         self.define_global("Map", Self::native("Map", native_map, &self.function_proto));
         self.define_global("Set", Self::native("Set", native_set, &self.function_proto));
-        let symbol_ctor = Self::native("Symbol", native_symbol, &self.function_proto);
-        if let JsValue::Object(symbol) = &symbol_ctor {
-            let _ = self.set_prop(
-                &JsValue::Object(symbol.clone()),
-                "iterator",
-                JsValue::str("@@iterator"),
-            );
-        }
-        self.define_global("Symbol", symbol_ctor);
+        self.install_symbols();
         let date_ctor = Self::native("Date", native_date, &self.function_proto);
         if let JsValue::Object(object) = &date_ctor {
             object
@@ -295,15 +304,17 @@ impl Interpreter {
             "toString",
             Self::native("toString", native_date_to_string, &self.function_proto),
         );
+        let object_to_string = symbol_method(self, "toString", native_object_to_string);
         let _ = self.set_prop(
             &JsValue::Object(self.object_proto.clone()),
             "toString",
-            Self::native("toString", native_object_to_string, &self.function_proto),
+            object_to_string,
         );
+        let object_value_of = symbol_method(self, "valueOf", native_object_value_of);
         let _ = self.set_prop(
             &JsValue::Object(self.object_proto.clone()),
             "valueOf",
-            Self::native("valueOf", native_object_value_of, &self.function_proto),
+            object_value_of,
         );
         for (name, function) in [
             ("call", native_function_call as crate::value::NativeFn),

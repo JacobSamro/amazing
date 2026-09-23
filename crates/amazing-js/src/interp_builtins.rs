@@ -1,12 +1,14 @@
 fn native_object(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Ok(a.into_iter()
-        .next()
-        .filter(|v| v.is_object())
-        .unwrap_or_else(|| i.object_value()))
-}
-
-fn native_symbol(_: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    Ok(JsValue::str("@@symbol"))
+    Ok(match a.into_iter().next() {
+        Some(value @ JsValue::Object(_)) => value,
+        Some(JsValue::Symbol(symbol)) => {
+            let mut object = JsObject::ordinary();
+            object.proto = Some(i.symbol_proto.clone());
+            object.exotic = Exotic::SymbolObject(symbol);
+            JsValue::object(object)
+        }
+        _ => i.object_value(),
+    })
 }
 
 fn dom_id(this: &JsValue) -> Result<u32, Throw> {
@@ -834,11 +836,12 @@ fn native_object_create(
 }
 
 fn native_object_get_prototype_of(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     match args.first() {
+        Some(JsValue::Symbol(_)) => Ok(JsValue::Object(i.symbol_proto.clone())),
         Some(JsValue::Object(object)) => Ok(object
             .borrow()
             .proto
@@ -874,16 +877,15 @@ fn native_object_has_own(
 ) -> Result<JsValue, Throw> {
     let object = match args.first() {
         Some(JsValue::Object(object)) => object,
+        Some(JsValue::Symbol(_)) => return Ok(JsValue::Bool(false)),
         _ => return Err(Throw::type_error("hasOwn target is not an object")),
     };
-    let key = match args.get(1) {
-        Some(JsValue::Str(key)) => key.to_string(),
-        Some(JsValue::Num(key)) => crate::value::number_to_string(*key),
-        Some(JsValue::Bool(key)) => key.to_string(),
-        Some(JsValue::Null) => "null".into(),
-        _ => "undefined".into(),
+    let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    let own = match key.as_string() {
+        Some(name) => i.legacy_own_property(object, name, false)?.is_some(),
+        None => object.borrow().own_prop(&key).is_some(),
     };
-    Ok(JsValue::Bool(i.legacy_own_property(object, &key, false)?.is_some()))
+    Ok(JsValue::Bool(own))
 }
 
 fn native_array_is_array(
@@ -1097,7 +1099,9 @@ fn native_define_property(
         getter,
         setter,
     };
-    if i.legacy_define(&target, &key, &property)? { return Ok(JsValue::Object(target)); }
+    if let Some(name) = key.as_string() {
+        if i.legacy_define(&target, name, &property)? { return Ok(JsValue::Object(target)); }
+    }
     target
         .borrow_mut()
         .define(&key, property)
@@ -1915,6 +1919,7 @@ fn map_key(value: &JsValue) -> MapKey {
         JsValue::Bool(v) => MapKey::Bool(*v),
         JsValue::Num(v) => MapKey::Num(*v),
         JsValue::Str(v) => MapKey::Str(v.clone()),
+        JsValue::Symbol(v) => MapKey::Symbol(v.clone()),
         JsValue::Object(v) => MapKey::Object(v.clone()),
     }
 }
@@ -2103,6 +2108,7 @@ fn key_value(key: &MapKey) -> JsValue {
         MapKey::Bool(v) => JsValue::Bool(*v),
         MapKey::Num(v) => JsValue::Num(*v),
         MapKey::Str(v) => JsValue::Str(v.clone()),
+        MapKey::Symbol(v) => JsValue::Symbol(v.clone()),
         MapKey::Object(v) => JsValue::Object(v.clone()),
     }
 }
@@ -2231,6 +2237,118 @@ fn native_object_keys(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Resul
     array_values(i, keys)
 }
 
+fn native_object_get_own_property_names(
+    i: &mut Interpreter, _: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let value = args.first().unwrap_or(&JsValue::Undefined);
+    if matches!(value, JsValue::Undefined | JsValue::Null) {
+        return Err(Throw::type_error("cannot get property names of nullish value"));
+    }
+    let keys = i.own_property_keys(value)?.into_iter().filter_map(|key| match key {
+        PropertyKey::String(name) => Some(JsValue::Str(name)), PropertyKey::Symbol(_) => None,
+    }).collect();
+    array_values(i, keys)
+}
+
+fn native_object_get_own_property_symbols(
+    i: &mut Interpreter, _: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let value = args.first().unwrap_or(&JsValue::Undefined);
+    if matches!(value, JsValue::Undefined | JsValue::Null) {
+        return Err(Throw::type_error("cannot get symbols of nullish value"));
+    }
+    let keys = i.own_property_keys(value)?.into_iter().filter_map(|key| match key {
+        PropertyKey::Symbol(symbol) => Some(JsValue::Symbol(symbol)), PropertyKey::String(_) => None,
+    }).collect();
+    array_values(i, keys)
+}
+
+fn native_object_get_own_property_descriptor(
+    i: &mut Interpreter, _: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let Some(target) = args.first() else { return Err(Throw::type_error("missing object")); };
+    if matches!(target, JsValue::Symbol(_)) { return Ok(JsValue::Undefined); }
+    let JsValue::Object(object) = target else { return Err(Throw::type_error("property descriptor target is not an object")); };
+    let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    let Some(property) = object.borrow().own_prop(&key).cloned() else { return Ok(JsValue::Undefined); };
+    let mut descriptor = JsObject::ordinary();
+    descriptor.proto = Some(i.object_proto.clone());
+    descriptor.set_own("enumerable", JsValue::Bool(property.enumerable));
+    descriptor.set_own("configurable", JsValue::Bool(property.configurable));
+    if property.getter.is_some() || property.setter.is_some() {
+        let accessor = |function: Option<Box<JsFunction>>| function.map(|f| {
+            let mut object = JsObject::function(*f);
+            object.proto = Some(i.function_proto.clone());
+            JsValue::object(object)
+        }).unwrap_or(JsValue::Undefined);
+        descriptor.set_own("get", accessor(property.getter));
+        descriptor.set_own("set", accessor(property.setter));
+    } else {
+        descriptor.set_own("value", property.value);
+        descriptor.set_own("writable", JsValue::Bool(property.writable));
+    }
+    Ok(JsValue::object(descriptor))
+}
+
+fn native_reflect_own_keys(
+    i: &mut Interpreter, _: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let Some(JsValue::Object(object)) = args.first() else { return Err(Throw::type_error("Reflect.ownKeys requires an object")); };
+    let keys = i.own_property_keys(&JsValue::Object(object.clone()))?.into_iter().map(|key| match key {
+        PropertyKey::String(name) => JsValue::Str(name), PropertyKey::Symbol(symbol) => JsValue::Symbol(symbol),
+    }).collect();
+    array_values(i, keys)
+}
+
+fn reflect_target(args: &[JsValue]) -> Result<Obj, Throw> {
+    match args.first() {
+        Some(JsValue::Object(object)) => Ok(object.clone()),
+        _ => Err(Throw::type_error("Reflect target is not an object")),
+    }
+}
+
+fn native_reflect_get(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let target = reflect_target(&args)?;
+    let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    let receiver = args.get(2).cloned().unwrap_or_else(|| JsValue::Object(target.clone()));
+    i.get_prop_receiver(&JsValue::Object(target), &key, receiver)
+}
+
+fn native_reflect_set(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let target = reflect_target(&args)?;
+    let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    let value = args.get(2).cloned().unwrap_or(JsValue::Undefined);
+    i.set_prop(&JsValue::Object(target), key, value)?;
+    Ok(JsValue::Bool(true))
+}
+
+fn native_reflect_has(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let target = reflect_target(&args)?;
+    let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    Ok(JsValue::Bool(match key.as_string() {
+        Some(name) => i.legacy_has_property(&target, name)?,
+        None => target.borrow().has_property(&key),
+    }))
+}
+
+fn native_reflect_delete_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let target = reflect_target(&args)?;
+    let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    let deleted = match key.as_string() {
+        Some(name) => match i.legacy_delete(&target, name)? {
+            Some(value) => value, None => target.borrow_mut().delete_own(&key),
+        },
+        None => target.borrow_mut().delete_own(&key),
+    };
+    Ok(JsValue::Bool(deleted))
+}
+
+fn native_reflect_define_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    reflect_target(&args)?;
+    native_define_property(i, JsValue::Undefined, args)?;
+    Ok(JsValue::Bool(true))
+}
+
 fn native_object_values(
     i: &mut Interpreter,
     _: JsValue,
@@ -2255,7 +2373,7 @@ fn native_object_assign(
         _ => return Err(Throw::type_error("Object.assign target is not an object")),
     };
     for source in args.iter().skip(1) {
-        for key in i.enumerable_keys(source)? {
+        for key in i.enumerable_property_keys(source)? {
             let value = i.get_prop(source, &key)?;
             i.set_prop(&target, &key, value)?;
         }
@@ -2303,7 +2421,7 @@ fn json_escape(value: &crate::value::JsString) -> String {
 
 fn json_stringify_value(i: &mut Interpreter, value: &JsValue) -> Result<Option<String>, Throw> {
     Ok(match value {
-        JsValue::Undefined => None,
+        JsValue::Undefined | JsValue::Symbol(_) => None,
         JsValue::Null => Some("null".into()),
         JsValue::Bool(value) => Some(value.to_string()),
         JsValue::Num(value) if value.is_finite() => Some(crate::value::number_to_string(*value)),
@@ -2410,15 +2528,32 @@ fn native_object_to_string(
     this: JsValue,
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let s = match this {
-        JsValue::Object(o) if matches!(o.borrow().exotic, Exotic::Array) => "[object Array]",
-        JsValue::Object(_) => "[object Object]",
-        JsValue::Null => "[object Null]",
-        JsValue::Undefined => "[object Undefined]",
-        _ => "[object Object]",
+    let base = match &this {
+        JsValue::Undefined => "Undefined",
+        JsValue::Null => "Null",
+        JsValue::Bool(_) => "Boolean",
+        JsValue::Num(_) => "Number",
+        JsValue::Str(_) => "String",
+        JsValue::Symbol(_) => "Symbol",
+        JsValue::Object(o) => match &o.borrow().exotic {
+            Exotic::Array => "Array",
+            Exotic::Map(_) => "Map",
+            Exotic::Set(_) => "Set",
+            Exotic::RegExp(_) => "RegExp",
+            Exotic::Error => "Error",
+            Exotic::Promise(_) => "Promise",
+            _ => if o.borrow().func.is_some() { "Function" } else { "Object" },
+        },
     };
-    let _ = i;
-    Ok(JsValue::str(s))
+    if matches!(this, JsValue::Undefined | JsValue::Null) {
+        return Ok(JsValue::str(format!("[object {base}]")));
+    }
+    let tag = i.get_prop(&this, WellKnownSymbol::ToStringTag.symbol())?;
+    let tag = match tag { JsValue::Str(value) => value, _ => base.into() };
+    let mut units: Vec<u16> = "[object ".encode_utf16().collect();
+    units.extend_from_slice(tag.units());
+    units.push(b']' as u16);
+    Ok(JsValue::str_units(units))
 }
 fn native_object_value_of(
     _: &mut Interpreter,
@@ -2612,7 +2747,11 @@ fn native_string_from_char_code(
 }
 
 fn native_string(i: &mut Interpreter, this: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let value = JsValue::str(i.to_js_string(a.first().unwrap_or(&JsValue::Undefined))?);
+    let value = match a.first() {
+        None => JsValue::str(""),
+        Some(JsValue::Symbol(symbol)) if !this.is_object() => JsValue::str_units(symbol.descriptive_units()),
+        Some(value) => JsValue::str(i.to_js_string(value)?),
+    };
     if let JsValue::Object(object) = &this {
         object.borrow_mut().set_own("[[StringData]]", value);
         Ok(this)
@@ -3202,6 +3341,18 @@ fn native_has_own_property(
         JsValue::Undefined,
         vec![this, args.first().cloned().unwrap_or(JsValue::Undefined)],
     )
+}
+
+fn native_property_is_enumerable(
+    i: &mut Interpreter, this: JsValue, args: Vec<JsValue>,
+) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = this else { return Err(Throw::type_error("propertyIsEnumerable receiver is not an object")); };
+    let key = i.to_property_key(args.first().unwrap_or(&JsValue::Undefined))?;
+    let property = match key.as_string() {
+        Some(name) => i.legacy_own_property(&object, name, false)?,
+        None => object.borrow().own_prop(&key).cloned(),
+    };
+    Ok(JsValue::Bool(property.is_some_and(|property| property.enumerable)))
 }
 
 fn native_array_some(

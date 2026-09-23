@@ -383,3 +383,55 @@ skipped), 2/2 doctests, and 129/129 amazing crate cases. An eager iterator
 safety bound of 100,000 entries avoids
 unstable runner deadline races in four iterator-close tests pending lazy
 consumption.
+
+### JSRT-6 real Symbols and property keys
+
+Fixed base: `cb3064b`. `JsValue::Symbol` has identity separate from its
+optional UTF-16 description. Thirteen well-known symbols have stable identities;
+ordinary symbols use a distinct ID range, and `Symbol.for`/`keyFor` use an
+interpreter registry. Object property storage now holds a `PropertyKey` enum so
+computed access, assignment, deletion, descriptors, object spread, own-key
+enumeration, and the binding facade never stringify a Symbol. Own-key order is
+array indices ascending, remaining strings in insertion order, then symbols
+in insertion order; string-only consumers such as `Object.keys` and `for...in`
+exclude symbols. `@@toPrimitive`, `@@hasInstance`, and `@@toStringTag` enter their
+respective runtime operations. JSRT-4's iterable string stand-ins are replaced
+by the real iterator symbol. The integrator granted a method-only change to
+the driver `install_interface_class_string` hook; DOMException's Error
+prototype hook was already installed.
+
+The pinned full Test262 BEFORE sweep on win-001 at fixed base `cb3064b`
+finished with 10,965 pass, 32,636 fail, 16 timeout, 9,961 unsupported, and
+294 skipped across 53,872 files. Frozen host SHA-256 is
+`b12757b8d86319f8dd05631bc406c5516384f5d0c99017cb9d7f9738ad84493f`;
+classification SHA-256 is
+`bfdcb4a0cc96fa1eafe5ac14af911860d6c00b741be5426917a228d5ae0382c5`.
+The measured baseline is 100 passes above JSRT-5's prior 10,865; use this
+fixed-base measurement for JSRT-6. The first corrected full AFTER sweep on
+frozen host SHA-256
+`e125b6f25ab2f740f2f28807cd955977781987e260a33de2791a04c5119c8731`
+passes 11,965 files, with 31,624 fail, 16 timeout, 9,973 unsupported, and
+294 skipped. Its classification SHA-256 is
+`8461750b5e6a7d8f1dcacf040e057ad92a3bb4147551e56a1e4538ed30be0798`.
+There are 1,000 fail-to-pass transitions, 12 fail-to-unsupported transitions,
+and zero lost file or variant passes. The 12 unsupported files reach the
+existing `host.createRealm` limit: eleven cross-realm Error/RegExp files and
+`staging/sm/Symbol/toPrimitive.js`. `built-ins/Symbol` rises from 0 to 52
+passes; its remaining 29 failures and 17 unsupported files are separately
+reported. The fixed-base Windows workspace gate passes 1,710 nextest cases
+with three skipped and both doctests. The second full AFTER sweep on the
+same frozen host reproduces all 53,872 file statuses and reasons, all 102,918
+variant statuses and reasons, the same counts, and the exact classification
+hash above. js-vm's `FunctionBody::Bytecode`
+value.rs addition is coordinated as an additive sibling change.
+
+The final integration base is `2c1a3e82160333425ce10e97d2a84d4e550bc26b`
+(JSVM-1), with this ticket at `147643c7b3edc26896a064629695404dbf80ff64`.
+After the clean rebase, the win-001 lane tree was refreshed to that base and
+this ticket's files re-synced. The final Windows workspace gate completed:
+`cargo nextest run --workspace --locked` passed 1,745 tests, with zero failures
+and three skipped; `cargo test --workspace --locked --doc` passed both doctests.
+The `amazing-js` scoped gate passed 216/216 on this integration base. The
+intervening `origin/dev` advance to `7c6824b8a12a50ea6ba99688678b98617bd27f26`
+did not touch this ticket's owned or granted files, so the final gate remains
+on this recorded fixed base; the integrator gates the merged head.

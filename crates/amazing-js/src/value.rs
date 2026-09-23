@@ -16,13 +16,15 @@
 //!   cloning keeps ownership simple.
 //!
 //! Deferred (documented): BigInt (literals parse but evaluate to a thrown
-//! error), Symbols, Proxies, getters/setters on ordinary objects (accessor
+//! error), Proxies, getters/setters on ordinary objects (accessor
 //! storage exists in [`Property`] but is only exercised by class accessors),
 //! integer-indexed exotics, shared array buffers.
 
 use std::cell::RefCell;
 use std::fmt;
+use std::hash::Hash;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::ast;
 
@@ -72,6 +74,90 @@ impl fmt::Debug for JsString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.to_utf8_lossy().fmt(f) }
 }
 
+static NEXT_SYMBOL_ID: AtomicU64 = AtomicU64::new(1024);
+
+/// A Symbol primitive. Identity is independent of its optional description.
+#[derive(Clone)]
+pub struct JsSymbol {
+    id: u64,
+    description: Option<JsString>,
+}
+
+impl JsSymbol {
+    pub fn new(description: Option<JsString>) -> Self {
+        Self { id: NEXT_SYMBOL_ID.fetch_add(1, Ordering::Relaxed), description }
+    }
+    pub fn description(&self) -> Option<&JsString> { self.description.as_ref() }
+    pub fn descriptive_units(&self) -> Vec<u16> {
+        let mut units: Vec<u16> = "Symbol(".encode_utf16().collect();
+        if let Some(description) = &self.description { units.extend_from_slice(description.units()); }
+        units.push(b')' as u16);
+        units
+    }
+    pub fn descriptive_string(&self) -> String {
+        format!("Symbol({})", self.description.as_ref().map(JsString::to_utf8_lossy).unwrap_or_default())
+    }
+}
+impl PartialEq for JsSymbol { fn eq(&self, other: &Self) -> bool { self.id == other.id } }
+impl Eq for JsSymbol {}
+impl std::hash::Hash for JsSymbol {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.id.hash(state); }
+}
+impl fmt::Debug for JsSymbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.descriptive_string()) }
+}
+
+/// Well-known Symbols have stable identity across interpreters in this agent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum WellKnownSymbol {
+    Iterator, AsyncIterator, HasInstance, ToPrimitive, ToStringTag,
+    IsConcatSpreadable, Species, Unscopables, Match, MatchAll, Replace, Search, Split,
+}
+
+impl WellKnownSymbol {
+    pub const ALL: [Self; 13] = [
+        Self::Iterator, Self::AsyncIterator, Self::HasInstance, Self::ToPrimitive,
+        Self::ToStringTag, Self::IsConcatSpreadable, Self::Species, Self::Unscopables,
+        Self::Match, Self::MatchAll, Self::Replace, Self::Search, Self::Split,
+    ];
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Iterator => "iterator", Self::AsyncIterator => "asyncIterator",
+            Self::HasInstance => "hasInstance", Self::ToPrimitive => "toPrimitive",
+            Self::ToStringTag => "toStringTag", Self::IsConcatSpreadable => "isConcatSpreadable",
+            Self::Species => "species", Self::Unscopables => "unscopables",
+            Self::Match => "match", Self::MatchAll => "matchAll", Self::Replace => "replace",
+            Self::Search => "search", Self::Split => "split",
+        }
+    }
+    pub fn symbol(self) -> JsSymbol {
+        let id = match self {
+            Self::Iterator => 1, Self::AsyncIterator => 2, Self::HasInstance => 3,
+            Self::ToPrimitive => 4, Self::ToStringTag => 5, Self::IsConcatSpreadable => 6,
+            Self::Species => 7, Self::Unscopables => 8, Self::Match => 9,
+            Self::MatchAll => 10, Self::Replace => 11, Self::Search => 12, Self::Split => 13,
+        };
+        JsSymbol { id, description: Some(JsString::from(format!("Symbol.{}", self.name()))) }
+    }
+}
+
+/// ECMAScript property keys are either UTF-16 strings or Symbol identities.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum PropertyKey { String(JsString), Symbol(JsSymbol) }
+impl PropertyKey {
+    pub fn as_string(&self) -> Option<&JsString> {
+        match self { Self::String(value) => Some(value), Self::Symbol(_) => None }
+    }
+}
+impl From<JsString> for PropertyKey { fn from(value: JsString) -> Self { Self::String(value) } }
+impl From<&JsString> for PropertyKey { fn from(value: &JsString) -> Self { Self::String(value.clone()) } }
+impl From<&str> for PropertyKey { fn from(value: &str) -> Self { Self::String(value.into()) } }
+impl From<String> for PropertyKey { fn from(value: String) -> Self { Self::String(value.into()) } }
+impl From<&String> for PropertyKey { fn from(value: &String) -> Self { Self::String(value.into()) } }
+impl From<JsSymbol> for PropertyKey { fn from(value: JsSymbol) -> Self { Self::Symbol(value) } }
+impl From<&JsSymbol> for PropertyKey { fn from(value: &JsSymbol) -> Self { Self::Symbol(value.clone()) } }
+impl From<&PropertyKey> for PropertyKey { fn from(value: &PropertyKey) -> Self { value.clone() } }
+
 /// A JavaScript value (spec §6.1).
 #[derive(Clone)]
 pub enum JsValue {
@@ -80,6 +166,7 @@ pub enum JsValue {
     Bool(bool),
     Num(f64),
     Str(JsString),
+    Symbol(JsSymbol),
     Object(Obj),
 }
 
@@ -127,6 +214,9 @@ impl fmt::Debug for Obj {
             (Exotic::RegExp(_), _) => write!(f, "[regexp]"),
             (Exotic::Promise(_), _) => write!(f, "[promise]"),
             (Exotic::LegacyIterator(_), _) => write!(f, "[array iterator]"),
+            (Exotic::SequenceIterator(_), _) => write!(f, "[sequence iterator]"),
+            (Exotic::CollectionIterator(_), _) => write!(f, "[collection iterator]"),
+            (Exotic::SymbolObject(_), _) => write!(f, "[symbol object]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
     }
@@ -142,6 +232,7 @@ impl PartialEq for JsValue {
             (JsValue::Bool(a), JsValue::Bool(b)) => a == b,
             (JsValue::Num(a), JsValue::Num(b)) => a == b, // f64 eq: NaN!=NaN, +0==-0
             (JsValue::Str(a), JsValue::Str(b)) => a == b,
+            (JsValue::Symbol(a), JsValue::Symbol(b)) => a == b,
             (JsValue::Object(a), JsValue::Object(b)) => Rc::ptr_eq(&a.0, &b.0),
             _ => false,
         }
@@ -156,6 +247,7 @@ impl fmt::Debug for JsValue {
             JsValue::Bool(b) => write!(f, "{b}"),
             JsValue::Num(n) => write!(f, "{n}"),
             JsValue::Str(s) => write!(f, "{s:?}"),
+            JsValue::Symbol(s) => write!(f, "{s:?}"),
             JsValue::Object(_) => write!(f, "[object]"),
         }
     }
@@ -213,6 +305,7 @@ impl JsValue {
             JsValue::Bool(b) => *b,
             JsValue::Num(n) => *n != 0.0 && !n.is_nan(),
             JsValue::Str(s) => !s.is_empty(),
+            JsValue::Symbol(_) => true,
             JsValue::Object(_) => true,
         }
     }
@@ -229,6 +322,7 @@ impl JsValue {
             JsValue::Bool(b) => Ok(if *b { 1.0 } else { 0.0 }),
             JsValue::Num(n) => Ok(*n),
             JsValue::Str(s) => Ok(string_to_number(&s.to_utf8_lossy())),
+            JsValue::Symbol(_) => Err(Throw::type_error("cannot convert Symbol to number")),
             JsValue::Object(_) => Err(Throw::type_error(
                 "object passed to primitive ToNumber without conversion",
             )),
@@ -347,6 +441,7 @@ pub fn to_display_string(v: &JsValue) -> String {
         JsValue::Bool(b) => b.to_string(),
         JsValue::Num(n) => number_to_string(*n),
         JsValue::Str(s) => s.to_string(),
+        JsValue::Symbol(s) => s.descriptive_string(),
         JsValue::Object(_) => "[object Object]".into(),
     }
 }
@@ -502,6 +597,29 @@ pub enum Exotic {
     Promise(PromiseState),
     RegExp(Rc<amazing_regex::Regex>),
     LegacyIterator(LegacyIteratorState),
+    SequenceIterator(SequenceIteratorState),
+    CollectionIterator(CollectionIteratorState),
+    SymbolObject(JsSymbol),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SequenceIteratorKind { ArrayKeys, ArrayValues, ArrayEntries, String }
+
+#[derive(Debug, Clone)]
+pub struct SequenceIteratorState {
+    pub target: JsValue,
+    pub next_index: usize,
+    pub kind: SequenceIteratorKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CollectionIteratorKind { MapEntries, SetValues }
+
+#[derive(Debug, Clone)]
+pub struct CollectionIteratorState {
+    pub target: Obj,
+    pub next_index: usize,
+    pub kind: CollectionIteratorKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -528,6 +646,7 @@ pub struct MapState {
 #[derive(Debug, Clone)]
 pub enum MapKey {
     Str(JsString),
+    Symbol(JsSymbol),
     Num(f64),
     Bool(bool),
     Null,
@@ -540,6 +659,7 @@ impl MapKey {
     pub fn same(&self, other: &MapKey) -> bool {
         match (self, other) {
             (MapKey::Str(a), MapKey::Str(b)) => a == b,
+            (MapKey::Symbol(a), MapKey::Symbol(b)) => a == b,
             // NaN === NaN under SameValueZero; -0 and +0 are one key.
             (MapKey::Num(a), MapKey::Num(b)) => (a.is_nan() && b.is_nan()) || (*a == *b),
             (MapKey::Bool(a), MapKey::Bool(b)) => a == b,
@@ -554,6 +674,7 @@ impl MapKey {
     pub fn describe(&self) -> String {
         match self {
             MapKey::Str(s) => s.to_string(),
+            MapKey::Symbol(symbol) => symbol.descriptive_string(),
             MapKey::Num(n) => number_to_string(*n),
             MapKey::Bool(b) => b.to_string(),
             MapKey::Null => "null".into(),
@@ -608,7 +729,7 @@ pub struct PendingReaction {
 /// slot, and an exotic payload.
 #[derive(Debug, Clone)]
 pub struct JsObject {
-    props: Vec<(JsString, Property)>,
+    props: Vec<(PropertyKey, Property)>,
     pub proto: Option<Obj>,
     pub exotic: Exotic,
     /// Whether new own properties may be created.
@@ -650,7 +771,7 @@ impl JsObject {
         // length is a real own property: writable but non-enumerable per
         // spec §10.4.2.5 property attributes.
         o.props.push((
-            "length".into(),
+            PropertyKey::from("length"),
             Property {
                 value: JsValue::num(0.0),
                 writable: true,
@@ -679,7 +800,7 @@ impl JsObject {
 
     /// Define an own property, replacing any existing entry in place
     /// (preserving its position). Infallible for our ordinary-model subset.
-    pub fn define(&mut self, key: impl Into<JsString>, prop: Property) -> Result<(), ()> {
+    pub fn define(&mut self, key: impl Into<PropertyKey>, prop: Property) -> Result<(), ()> {
         let key = key.into();
         if let Some(slot) = self.props.iter_mut().find(|(k, _)| k == &key) {
             slot.1 = prop;
@@ -690,11 +811,11 @@ impl JsObject {
     }
 
     /// Shorthand for a full-rights data property.
-    pub fn set_own(&mut self, key: impl Into<JsString>, value: JsValue) {
+    pub fn set_own(&mut self, key: impl Into<PropertyKey>, value: JsValue) {
         let _ = self.define(key, Property::data(value));
     }
 
-    pub fn get_own(&self, key: impl Into<JsString>) -> Option<JsValue> {
+    pub fn get_own(&self, key: impl Into<PropertyKey>) -> Option<JsValue> {
         let key = key.into();
         self.props
             .iter()
@@ -702,12 +823,12 @@ impl JsObject {
             .map(|(_, p)| p.value.clone())
     }
 
-    pub fn own_prop(&self, key: impl Into<JsString>) -> Option<&Property> {
+    pub fn own_prop(&self, key: impl Into<PropertyKey>) -> Option<&Property> {
         let key = key.into();
         self.props.iter().find(|(k, _)| k == &key).map(|(_, p)| p)
     }
 
-    pub fn delete_own(&mut self, key: impl Into<JsString>) -> bool {
+    pub fn delete_own(&mut self, key: impl Into<PropertyKey>) -> bool {
         let key = key.into();
         if let Some(pos) = self.props.iter().position(|(k, _)| k == &key) {
             if !self.props[pos].1.configurable {
@@ -722,21 +843,41 @@ impl JsObject {
 
     /// Own enumerable keys in insertion order (for-in / Object.keys).
     pub fn own_keys_enumerable(&self) -> Vec<JsString> {
-        self.props
-            .iter()
-            .filter(|(_, p)| p.enumerable)
-            .map(|(k, _)| k.clone())
-            .collect()
+        self.own_property_keys().into_iter().filter_map(|key| match key {
+            PropertyKey::String(name) if self.own_prop(&name).is_some_and(|p| p.enumerable) => Some(name),
+            _ => None,
+        }).collect()
     }
 
-    /// All own keys in insertion order (getOwnPropertyNames-lite).
+    /// All own string keys in ECMAScript key order.
     pub fn own_keys(&self) -> Vec<JsString> {
-        self.props.iter().map(|(k, _)| k.clone()).collect()
+        self.own_property_keys().into_iter().filter_map(|key| match key {
+            PropertyKey::String(name) => Some(name), PropertyKey::Symbol(_) => None,
+        }).collect()
+    }
+
+    /// [[OwnPropertyKeys]]: array indices ascending, other strings in insertion
+    /// order, and Symbols in insertion order.
+    pub fn own_property_keys(&self) -> Vec<PropertyKey> {
+        let mut indices = Vec::new();
+        let mut strings = Vec::new();
+        let mut symbols = Vec::new();
+        for (key, _) in &self.props {
+            match key {
+                PropertyKey::String(name) => match array_index(name) {
+                    Some(index) => indices.push((index, key.clone())),
+                    None => strings.push(key.clone()),
+                },
+                PropertyKey::Symbol(_) => symbols.push(key.clone()),
+            }
+        }
+        indices.sort_by_key(|(index, _)| *index);
+        indices.into_iter().map(|(_, key)| key).chain(strings).chain(symbols).collect()
     }
 
     /// §7.3.20/§10.4 proto-chain lookup: walks own props then prototypes.
     /// Returns None when the chain ends without the key anywhere.
-    pub fn lookup(&self, key: impl Into<JsString>) -> Option<JsValue> {
+    pub fn lookup(&self, key: impl Into<PropertyKey>) -> Option<JsValue> {
         let key = key.into();
         if let Some(v) = self.get_own(&key) {
             return Some(v);
@@ -748,7 +889,7 @@ impl JsObject {
     }
 
     /// Whether the key exists anywhere on the chain (the `in` operator).
-    pub fn has_property(&self, key: impl Into<JsString>) -> bool {
+    pub fn has_property(&self, key: impl Into<PropertyKey>) -> bool {
         let key = key.into();
         self.get_own(&key).is_some()
             || self
@@ -756,6 +897,19 @@ impl JsObject {
                 .as_ref()
                 .is_some_and(|p| p.borrow().has_property(&key))
     }
+}
+
+fn array_index(name: &JsString) -> Option<u32> {
+    let units = name.units();
+    if units.is_empty() || units.len() > 10 || (units.len() > 1 && units[0] == b'0' as u16) {
+        return None;
+    }
+    let mut value = 0u64;
+    for unit in units {
+        if !(*unit >= b'0' as u16 && *unit <= b'9' as u16) { return None; }
+        value = value * 10 + u64::from(*unit - b'0' as u16);
+    }
+    (value < u64::from(u32::MAX)).then_some(value as u32)
 }
 
 #[cfg(test)]
@@ -770,10 +924,31 @@ mod tests {
         assert_eq!(JsValue::num(0.0), JsValue::num(-0.0)); // +0 === -0
         assert_ne!(JsValue::num(f64::NAN), JsValue::num(f64::NAN)); // NaN !== NaN
         assert_eq!(JsValue::str("a"), JsValue::str("a"));
+        let symbol = JsValue::Symbol(JsSymbol::new(Some("a".into())));
+        assert_eq!(symbol, symbol.clone());
+        assert_ne!(symbol, JsValue::Symbol(JsSymbol::new(Some("a".into()))));
         let o = JsValue::object(JsObject::ordinary());
         assert_eq!(o, o.clone()); // identity
         let p = JsValue::object(JsObject::ordinary());
         assert_ne!(o, p);
+    }
+
+    #[test]
+    fn own_property_keys_order_indices_strings_and_symbols() {
+        let first = JsSymbol::new(Some("first".into()));
+        let second = JsSymbol::new(Some("second".into()));
+        let mut object = JsObject::ordinary();
+        for key in [PropertyKey::from("b"), PropertyKey::from("2"),
+            PropertyKey::from(&first), PropertyKey::from("1"),
+            PropertyKey::from("a"), PropertyKey::from(&second)] {
+            object.set_own(key, JsValue::Bool(true));
+        }
+        assert_eq!(object.own_property_keys(), vec![
+            PropertyKey::from("1"), PropertyKey::from("2"),
+            PropertyKey::from("b"), PropertyKey::from("a"),
+            PropertyKey::from(first), PropertyKey::from(second),
+        ]);
+        assert_eq!(object.own_keys(), vec!["1", "2", "b", "a"]);
     }
 
     #[test]
