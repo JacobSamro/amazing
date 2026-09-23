@@ -30,13 +30,16 @@
 //! - Full Unicode identifier classes: identifiers use the simplified rule
 //!   `char::is_alphabetic | $ | _` (start) and `+ is_numeric | digits`
 //!   (continuation). `\u{…}` escapes inside identifier names, ID_Start /
-//!   ID_Continue property data, and ZWNJ/ZWJ joining are deferred.
+//!   ID_Continue property data, and ZWNJ/ZWJ joining are deferred. Identifier
+//!   escapes, when added, must name valid identifier code points rather than
+//!   arbitrary UTF-16 code units; string escapes have different rules.
 //! - Unicode Space_Separator category beyond NBSP/BOM (e.g. U+2000..U+200A).
 //! - HTML-like comments (`<!--` … `-->`, Annex B).
 //! - Legacy (Annex B) octal literals: `0123` lexes as *decimal* 123, and
 //!   strict-mode early errors around them are deferred with all strict
 //!   checks. Non-octal decimals like `089` behave correctly.
-//! - Tagged templates need raw (uncooked) chunk text, which is not kept.
+//! - Tagged template evaluation is deferred; raw (uncooked) chunk text is
+//!   retained in UTF-16 for the runtime migration.
 //! - Decorators (`@`) are rejected.
 
 use crate::errors::SyntaxError;
@@ -303,7 +306,7 @@ impl Lexer {
     ) -> Result<Token, SyntaxError> {
         let quote = self.cur().expect("caller checked");
         self.advance();
-        let mut value = String::new();
+        let mut units = Vec::new();
         loop {
             match self.cur() {
                 None | Some('\n') => {
@@ -315,17 +318,20 @@ impl Lexer {
                 }
                 Some('\\') => {
                     self.advance();
-                    if let Some(c) = self.read_escape()? {
-                        value.push(c);
+                    if let Some(code_point) = self.read_escape()? {
+                        push_code_point(&mut units, code_point, self.loc())?;
                     }
                 }
                 Some(c) => {
-                    value.push(c);
+                    push_char(&mut units, c);
                     self.advance();
                 }
             }
         }
-        Ok(self.mk(TokenKind::Str(value), start, newline_before))
+        let value = String::from_utf16_lossy(&units);
+        let mut token = self.mk(TokenKind::Str(value), start, newline_before);
+        token.cooked_utf16 = Some(units);
+        Ok(token)
     }
 
     fn template_open(
@@ -335,12 +341,15 @@ impl Lexer {
         toks: &mut Vec<Token>,
     ) -> Result<(), SyntaxError> {
         self.advance(); // opening backtick
-        let (cooked, tail) = self.scan_template_part()?;
-        toks.push(self.mk(
+        let (cooked, cooked_utf16, raw_utf16, tail) = self.scan_template_part()?;
+        let mut token = self.mk(
             TokenKind::TemplatePart { cooked, tail },
             start,
             newline_before,
-        ));
+        );
+        token.cooked_utf16 = Some(cooked_utf16);
+        token.raw_utf16 = Some(raw_utf16);
+        toks.push(token);
         if !tail {
             toks.push(self.mk(TokenKind::Punct(Punct::DollarBrace), start, false));
             self.template_bases.push(self.brace_depth);
@@ -358,12 +367,15 @@ impl Lexer {
         if self.template_bases.last() == Some(&self.brace_depth) {
             // Closes a `${` substitution; the following template chunk is
             // scanned right away so the parser never sees this `}`.
-            let (cooked, tail) = self.scan_template_part()?;
-            toks.push(self.mk(
+            let (cooked, cooked_utf16, raw_utf16, tail) = self.scan_template_part()?;
+            let mut token = self.mk(
                 TokenKind::TemplatePart { cooked, tail },
                 start,
                 newline_before,
-            ));
+            );
+            token.cooked_utf16 = Some(cooked_utf16);
+            token.raw_utf16 = Some(raw_utf16);
+            toks.push(token);
             if tail {
                 self.template_bases.pop();
             } else {
@@ -380,37 +392,50 @@ impl Lexer {
 
     /// Scans cooked template text up to the closing backtick (returns
     /// `tail = true`) or up to `${` (consumes it, returns `tail = false`).
-    fn scan_template_part(&mut self) -> Result<(String, bool), SyntaxError> {
-        let mut cooked = String::new();
+    fn scan_template_part(&mut self) -> Result<(String, Vec<u16>, Vec<u16>, bool), SyntaxError> {
+        let raw_start = self.idx;
+        let mut cooked_utf16 = Vec::new();
         loop {
             match self.cur() {
                 None => return Err(syntax_error("unterminated template literal", self.loc())),
                 Some('`') => {
+                    let raw_utf16 = self.raw_template_units(raw_start);
                     self.advance();
-                    return Ok((cooked, true));
+                    let cooked = String::from_utf16_lossy(&cooked_utf16);
+                    return Ok((cooked, cooked_utf16, raw_utf16, true));
                 }
                 Some('$') if self.peek(1) == Some('{') => {
+                    let raw_utf16 = self.raw_template_units(raw_start);
                     self.advance();
                     self.advance();
-                    return Ok((cooked, false));
+                    let cooked = String::from_utf16_lossy(&cooked_utf16);
+                    return Ok((cooked, cooked_utf16, raw_utf16, false));
                 }
                 Some('\\') => {
                     self.advance();
-                    if let Some(c) = self.read_escape()? {
-                        cooked.push(c);
+                    if let Some(code_point) = self.read_escape()? {
+                        push_code_point(&mut cooked_utf16, code_point, self.loc())?;
                     }
                 }
                 Some(c) => {
-                    cooked.push(c);
+                    push_char(&mut cooked_utf16, c);
                     self.advance();
                 }
             }
         }
     }
 
+    fn raw_template_units(&self, start: usize) -> Vec<u16> {
+        self.chars[start..self.idx]
+            .iter()
+            .collect::<String>()
+            .encode_utf16()
+            .collect()
+    }
+
     /// Reads the character(s) after a `\`. `Ok(None)` = escape sequence
     /// producing nothing (line continuation). Caller has consumed the `\`.
-    fn read_escape(&mut self) -> Result<Option<char>, SyntaxError> {
+    fn read_escape(&mut self) -> Result<Option<u32>, SyntaxError> {
         let c = match self.cur() {
             Some(c) => c,
             None => return Err(syntax_error("unterminated escape sequence", self.loc())),
@@ -426,16 +451,16 @@ impl Lexer {
             '0' if !self.cur().is_some_and(|c| c.is_ascii_digit()) => '\0',
             'x' => {
                 let v = self.take_hex(2)?;
-                char_at(v, self.loc())?
+                return Ok(Some(v));
             }
             'u' => {
                 if self.cur() == Some('{') {
                     self.advance();
                     let v = self.take_hex_braced()?;
-                    char_at(v, self.loc())?
+                    return Ok(Some(v));
                 } else {
                     let v = self.take_hex(4)?;
-                    char_at(v, self.loc())?
+                    return Ok(Some(v));
                 }
             }
             // Line continuation: backslash-newline yields nothing. Lone CR
@@ -445,7 +470,7 @@ impl Lexer {
             // octal lookalikes like `\1`) is the character itself.
             other => other,
         };
-        Ok(Some(ch))
+        Ok(Some(ch as u32))
     }
 
     fn take_hex(&mut self, n: usize) -> Result<u32, SyntaxError> {
@@ -830,9 +855,24 @@ fn hex_digit(c: char) -> Option<u32> {
     c.to_digit(16)
 }
 
-/// Converts a scanned code point, rejecting out-of-range values.
-fn char_at(v: u32, at: SourceLocation) -> Result<char, SyntaxError> {
-    char::from_u32(v).ok_or_else(|| syntax_error("invalid Unicode code point in escape", at))
+fn push_char(units: &mut Vec<u16>, c: char) {
+    let mut pair = [0; 2];
+    units.extend_from_slice(c.encode_utf16(&mut pair));
+}
+
+/// `\uHHHH` and `\u{...}` can denote a lone surrogate. Keep it as one code
+/// unit rather than asking Rust for a Unicode scalar value.
+fn push_code_point(units: &mut Vec<u16>, v: u32, at: SourceLocation) -> Result<(), SyntaxError> {
+    if v <= 0xffff {
+        units.push(v as u16);
+    } else if v <= 0x10ffff {
+        let pair = v - 0x10000;
+        units.push(0xd800 | (pair >> 10) as u16);
+        units.push(0xdc00 | (pair & 0x3ff) as u16);
+    } else {
+        return Err(syntax_error("invalid Unicode code point in escape", at));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -952,6 +992,37 @@ mod tests {
         );
         // U+2028/U+2029 are legal inside strings.
         assert_eq!(kinds("'a b'"), vec![TokenKind::Str("a b".into())]);
+    }
+
+    #[test]
+    fn string_and_template_escapes_keep_utf16_code_units() {
+        let tokens = tokenize("'\\uD800' '\\uD83D\\uDE00' '\\u{1F600}' '\\u{D800}'")
+            .expect("valid JS string escapes");
+        assert_eq!(tokens[0].cooked_utf16.as_deref(), Some(&[0xd800][..]));
+        assert_eq!(
+            tokens[1].cooked_utf16.as_deref(),
+            Some(&[0xd83d, 0xde00][..])
+        );
+        assert_eq!(tokens[2].cooked_utf16, tokens[1].cooked_utf16);
+        assert_eq!(tokens[3].cooked_utf16.as_deref(), Some(&[0xd800][..]));
+        assert_eq!(tokens[0].kind, TokenKind::Str("\u{fffd}".into()));
+        assert_eq!(tokens[1].kind, TokenKind::Str("😀".into()));
+
+        let tokens = tokenize("`\\uD800\\n${x}\\uD83D\\uDE00`").expect("template");
+        assert_eq!(tokens[0].cooked_utf16.as_deref(), Some(&[0xd800, 10][..]));
+        assert_eq!(
+            tokens[0].raw_utf16,
+            Some("\\uD800\\n".encode_utf16().collect())
+        );
+        assert_eq!(
+            tokens[3].cooked_utf16.as_deref(),
+            Some(&[0xd83d, 0xde00][..])
+        );
+        assert_eq!(
+            tokens[3].raw_utf16,
+            Some("\\uD83D\\uDE00".encode_utf16().collect())
+        );
+        assert!(tokenize("'\\u{110000}'").is_err());
     }
 
     #[test]

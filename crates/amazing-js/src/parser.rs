@@ -1135,9 +1135,9 @@ impl Parser {
                 kind = MethodKind::Set;
             }
         }
-        let key = if let TokenKind::PrivateIdent(name) = self.cur().kind.clone() {
+        let (key, key_utf16) = if let TokenKind::PrivateIdent(name) = self.cur().kind.clone() {
             let t = self.bump();
-            PropKey::Private(Ident::new(name, t.span))
+            (PropKey::Private(Ident::new(name, t.span)), None)
         } else {
             self.parse_prop_key()?
         };
@@ -1167,6 +1167,7 @@ impl Parser {
             let body = body?;
             return Ok(ClassMember::Method(ClassMethod {
                 key,
+                key_utf16,
                 kind: actual_kind,
                 is_static,
                 is_generator,
@@ -1200,6 +1201,7 @@ impl Parser {
         }
         Ok(ClassMember::Field(ClassField {
             key,
+            key_utf16,
             is_static,
             init,
             span: self.span_from(start),
@@ -1248,26 +1250,26 @@ impl Parser {
 
     /// Property key: identifier (reserved words included), string, numeric
     /// literal, or `[expr]`.
-    fn parse_prop_key(&mut self) -> Result<PropKey, SyntaxError> {
+    fn parse_prop_key(&mut self) -> Result<(PropKey, Option<Vec<u16>>), SyntaxError> {
         match self.cur().kind.clone() {
-            TokenKind::Ident(_) => Ok(PropKey::Ident(self.expect_ident()?)),
+            TokenKind::Ident(_) => Ok((PropKey::Ident(self.expect_ident()?), None)),
             TokenKind::Keyword(k) => {
                 let t = self.bump();
-                Ok(PropKey::Ident(Ident::new(k.spelling(), t.span)))
+                Ok((PropKey::Ident(Ident::new(k.spelling(), t.span)), None))
             }
             TokenKind::Str(s) => {
-                self.bump();
-                Ok(PropKey::Str(s))
+                let token = self.bump();
+                Ok((PropKey::Str(s), token.cooked_utf16))
             }
             TokenKind::Numeric(n) => {
                 self.bump();
-                Ok(PropKey::Num(n))
+                Ok((PropKey::Num(n), None))
             }
             TokenKind::Punct(Punct::LBracket) => {
                 self.bump();
                 let e = self.parse_assignment_expr()?;
                 self.expect_punct(Punct::RBracket)?;
-                Ok(PropKey::Computed(Box::new(e)))
+                Ok((PropKey::Computed(Box::new(e)), None))
             }
             other => Err(self.err(format!(
                 "expected property name, found {}",
@@ -1515,7 +1517,9 @@ impl Parser {
                 && matches!(left.kind, ExprKind::PrivateName(_))
                 && matches!(right.kind, ExprKind::Arrow(_))
             {
-                return Err(self.err("private brand `in` requires a shift-expression right operand"));
+                return Err(
+                    self.err("private brand `in` requires a shift-expression right operand")
+                );
             }
             // The flags above only see operators at the *current* precedence
             // level; `a ?? b || c` slips past them because the right-operand
@@ -1874,8 +1878,10 @@ impl Parser {
                 Ok(Expr::new(ExprKind::Num(n), self.span_from(start)))
             }
             TokenKind::Str(s) => {
-                self.bump();
-                Ok(Expr::new(ExprKind::Str(s), self.span_from(start)))
+                let token = self.bump();
+                let mut expr = Expr::new(ExprKind::Str(s), self.span_from(start));
+                expr.string_utf16 = token.cooked_utf16;
+                Ok(expr)
             }
             TokenKind::PrivateIdent(name) => {
                 let t = self.bump();
@@ -1984,7 +1990,10 @@ impl Parser {
         // Plain identifier reference.
         let id = self.expect_ident()?;
         if id.name == "arguments" && self.in_class_field_initializer > 0 {
-            return Err(self.err_at(id.span.start, "arguments is forbidden in a class field initializer"));
+            return Err(self.err_at(
+                id.span.start,
+                "arguments is forbidden in a class field initializer",
+            ));
         }
         Ok(Expr::new(ExprKind::Ident(id), self.span_from(start)))
     }
@@ -2080,11 +2089,15 @@ impl Parser {
 
     fn parse_template_lit(&mut self) -> Result<TemplateLit, SyntaxError> {
         let t0 = self.bump();
+        let first_utf16 = t0.cooked_utf16.unwrap_or_default();
+        let first_raw_utf16 = t0.raw_utf16.unwrap_or_default();
         let (first, tail0) = match t0.kind {
             TokenKind::TemplatePart { cooked, tail } => (cooked, tail),
             _ => return Err(self.err("expected template literal")),
         };
         let mut quasis = vec![first];
+        let mut quasis_utf16 = vec![first_utf16];
+        let mut raw_quasis_utf16 = vec![first_raw_utf16];
         let mut exprs = Vec::new();
         let mut tail = tail0;
         while !tail {
@@ -2096,9 +2109,13 @@ impl Parser {
             // The closing `}` was absorbed by the lexer together with the
             // next chunk, so a TemplatePart must follow directly.
             let t = self.bump();
+            let cooked_utf16 = t.cooked_utf16.unwrap_or_default();
+            let raw_utf16 = t.raw_utf16.unwrap_or_default();
             match t.kind {
                 TokenKind::TemplatePart { cooked, tail: t2 } => {
                     quasis.push(cooked);
+                    quasis_utf16.push(cooked_utf16);
+                    raw_quasis_utf16.push(raw_utf16);
                     tail = t2;
                 }
                 other => {
@@ -2109,7 +2126,12 @@ impl Parser {
                 }
             }
         }
-        Ok(TemplateLit { quasis, exprs })
+        Ok(TemplateLit {
+            quasis,
+            quasis_utf16,
+            raw_quasis_utf16,
+            exprs,
+        })
     }
 
     fn parse_array_literal(&mut self) -> Result<Expr, SyntaxError> {
@@ -2193,12 +2215,13 @@ impl Parser {
             }
         }
         let key_start = self.cur_loc();
-        let key = self.parse_prop_key()?;
+        let (key, key_utf16) = self.parse_prop_key()?;
         if self.at_punct(Punct::Colon) {
             self.bump();
             let value = self.parse_assignment_expr()?;
             return Ok(ObjElem::Prop(Property {
                 key,
+                key_utf16,
                 value: PropValue::Init(value),
                 span: self.span_from(key_start),
             }));
@@ -2208,8 +2231,10 @@ impl Parser {
             let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block())?;
             return Ok(ObjElem::Prop(Property {
                 key: key.clone(),
+                key_utf16: key_utf16.clone(),
                 value: PropValue::Method(ClassMethod {
                     key,
+                    key_utf16,
                     kind,
                     is_static: false,
                     is_generator,
@@ -2230,6 +2255,7 @@ impl Parser {
                 let value = PropValue::Shorthand(Ident::new(id.name.clone(), id.span));
                 Ok(ObjElem::Prop(Property {
                     key,
+                    key_utf16,
                     value,
                     span: self.span_from(start),
                 }))
@@ -2766,6 +2792,68 @@ mod tests {
             t.exprs[0].kind,
             ExprKind::Binary { op: BinOp::Add, .. }
         ));
+    }
+
+    #[test]
+    fn string_literals_and_property_keys_keep_lossless_utf16() {
+        let StmtKind::Expression(string) = stmt_kind("'\\uD800'") else {
+            panic!("expected string expression")
+        };
+        assert_eq!(string.string_utf16, Some(vec![0xd800]));
+        assert!(matches!(string.kind, ExprKind::Str(_)));
+
+        let StmtKind::Expression(pair) = stmt_kind("'\\uD83D\\uDE00'") else {
+            panic!("expected string expression")
+        };
+        assert_eq!(pair.string_utf16, Some(vec![0xd83d, 0xde00]));
+        let StmtKind::Expression(code_point) = stmt_kind("'\\u{1F600}'") else {
+            panic!("expected string expression")
+        };
+        assert_eq!(code_point.string_utf16, pair.string_utf16);
+
+        let ExprKind::Paren(object) = expr_kind("({ '\\uD800': 1 })") else {
+            panic!("expected parenthesized object")
+        };
+        let ExprKind::Object(elements) = object.kind else {
+            panic!("expected object expression")
+        };
+        let ObjElem::Prop(property) = &elements[0] else {
+            panic!("expected property")
+        };
+        assert_eq!(property.key_utf16, Some(vec![0xd800]));
+        let StmtKind::Class(class) = stmt_kind("class C { '\\uD800'() {} }") else {
+            panic!("expected class")
+        };
+        let ClassMember::Method(method) = &class.members[0] else {
+            panic!("expected class method")
+        };
+        assert_eq!(method.key_utf16, Some(vec![0xd800]));
+    }
+
+    #[test]
+    fn template_cooked_and_raw_quasis_keep_distinct_utf16() {
+        let ExprKind::Template(template) = expr_kind("`\\uD800\\n${1}\\uD83D\\uDE00`") else {
+            panic!("expected template")
+        };
+        assert_eq!(
+            template.quasis_utf16,
+            vec![vec![0xd800, 10], vec![0xd83d, 0xde00]]
+        );
+        assert_eq!(
+            template.raw_quasis_utf16,
+            vec![
+                "\\uD800\\n".encode_utf16().collect::<Vec<_>>(),
+                "\\uD83D\\uDE00".encode_utf16().collect::<Vec<_>>()
+            ]
+        );
+        let ExprKind::Template(code_point) = expr_kind("`\\u{1F600}`") else {
+            panic!("expected template")
+        };
+        assert_eq!(code_point.quasis_utf16, vec![vec![0xd83d, 0xde00]]);
+        assert_eq!(
+            code_point.raw_quasis_utf16,
+            vec!["\\u{1F600}".encode_utf16().collect::<Vec<_>>()]
+        );
     }
 
     #[test]
