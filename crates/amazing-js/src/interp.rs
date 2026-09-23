@@ -232,6 +232,8 @@ pub struct Interpreter {
     external_scheduling: Option<ExternalScheduling>,
     completion: JsValue,
     frames: Vec<CallFrame>,
+    strict_eval_context: bool,
+    direct_eval_call: bool,
     dom_host: Option<Rc<RefCell<dyn DomHost>>>,
     dom_listeners: Vec<DomListener>,
     timers: Vec<TimerJob>,
@@ -339,6 +341,8 @@ impl Interpreter {
             external_scheduling: None,
             completion: JsValue::Undefined,
             frames: Vec::new(),
+            strict_eval_context: false,
+            direct_eval_call: false,
             dom_host: None,
             dom_listeners: Vec::new(),
             timers: Vec::new(),
@@ -1010,7 +1014,14 @@ impl Interpreter {
     }
 
     pub fn run_program(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
-        self.run_program_inner(p).map_err(|th| self.normalize_throw(th))
+        let previous_strict = self.strict_eval_context;
+        if p.body.iter().take_while(|stmt| matches!(&stmt.kind, StmtKind::Expression(ast::Expr { kind: ExprKind::Str(_), .. })))
+            .any(|stmt| matches!(&stmt.kind, StmtKind::Expression(ast::Expr { kind: ExprKind::Str(value), .. }) if value == "use strict")) {
+            self.strict_eval_context = true;
+        }
+        let result = self.run_program_inner(p).map_err(|th| self.normalize_throw(th));
+        self.strict_eval_context = previous_strict;
+        result
     }
 
     fn run_program_inner(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
@@ -1048,6 +1059,14 @@ impl Interpreter {
         Ok(result)
     }
 
+    /// Module declaration instantiation hoists functions before dependency
+    /// evaluation. The module linker owns the environment and import cells.
+    pub fn prepare_module(&mut self, program: &ast::Program) -> Result<(), Throw> {
+        let env = self.global_env.clone();
+        self.hoist(&program.body, &env)
+    }
+
+
     fn hoist(&mut self, body: &[ast::Stmt], env: &EnvHandle) -> Result<(), Throw> {
         for s in body {
             match &s.kind {
@@ -1078,7 +1097,8 @@ impl Interpreter {
                     }
                     self.hoist(std::slice::from_ref(body), env)?;
                 }
-                StmtKind::ForIn { left, body, .. } | StmtKind::ForOf { left, body, .. } => {
+                StmtKind::ForIn { left, body, .. } | StmtKind::ForOf { left, body, .. }
+                | StmtKind::ForAwaitOf { left, body, .. } => {
                     if let ForLeft::Decl(d) = left {
                         self.hoist_var(d, env)?;
                     }
@@ -1266,6 +1286,7 @@ impl Interpreter {
                 self.completion = JsValue::Undefined;
                 self.loop_while(test, body, env, None)
             }
+            StmtKind::With { .. } => Err(Throw::type_error("with statement is not implemented")),
             StmtKind::DoWhile { body, test } => {
                 self.completion = JsValue::Undefined;
                 self.loop_do_while(body, test, env, None)
@@ -1305,6 +1326,7 @@ impl Interpreter {
                 let v = self.eval_expr(right, env)?;
                 self.exec_for_of(left, &v, body, env)
             }
+            StmtKind::ForAwaitOf { .. } => Err(Throw::type_error("async iteration is not implemented")),
             StmtKind::Switch { disc, cases } => {
                 self.completion = JsValue::Undefined;
                 let d = self.eval_expr(disc, env)?;
@@ -1586,6 +1608,10 @@ impl Interpreter {
             )),
             ExprKind::RegExp(regex) => self.make_regexp(regex.clone()),
             ExprKind::Num(n) => self.numeric(n),
+            ExprKind::BigInt(digits) => BinaryBigInt::parse_radix(digits, 10)
+                .map(Self::bigint_value)
+                .ok_or_else(|| Throw::syntax_error("invalid BigInt literal")),
+            ExprKind::TaggedTemplate { .. } => Err(Throw::type_error("tagged templates are not implemented")),
             ExprKind::Str(s) => Ok(match &e.string_utf16 {
                 Some(units) => JsValue::str_units(units.clone()),
                 None => JsValue::str(s.as_str()),
@@ -1596,6 +1622,11 @@ impl Interpreter {
                 .identifier_value(env, &i.name)?
                 .ok_or_else(|| Throw::reference_error(format!("{} is not defined", i.name))),
             ExprKind::This => env.resolve_this_checked(),
+            ExprKind::NewTarget => Err(Throw::type_error("new.target is not implemented")),
+            ExprKind::DynamicImport(_) => Err(Throw::type_error("dynamic import is not implemented")),
+            ExprKind::DynamicImportPhase { .. } => Err(Throw::type_error("dynamic import phase is not implemented")),
+            ExprKind::ImportMeta => env.resolve("\0import.meta")
+                .ok_or_else(|| Throw::type_error("import.meta is only available in modules")),
             ExprKind::Super => {
                 let home = self
                     .frames
@@ -1695,6 +1726,9 @@ impl Interpreter {
                                     .resolve(&i.name)
                                     .ok_or_else(|| Throw::reference_error(i.name.clone()))?,
                                 ast::PropValue::Init(x) => self.eval_expr(x, env)?,
+                                ast::PropValue::CoverInitializedName { .. } => {
+                                    return Err(Throw::syntax_error("cover initialized name outside assignment pattern"));
+                                }
                                 ast::PropValue::Method(m) => self.method_value(m, env),
                             };
                             // Object-literal PropertyDefinition uses CreateDataProperty,
@@ -2265,6 +2299,17 @@ impl Interpreter {
                                 ast::PropValue::Init(expression) => {
                                     self.assign_pattern_expr(expression, &item, env)?;
                                 }
+                                ast::PropValue::CoverInitializedName { binding, default } => {
+                                    let assigned = if matches!(&item, JsValue::Undefined) {
+                                        self.eval_expr(default, env)?
+                                    } else {
+                                        item
+                                    };
+                                    let reference = ast::Expr::new(
+                                        ExprKind::Ident(binding.clone()), binding.span,
+                                    );
+                                    self.assign_pattern_expr(&reference, &assigned, env)?;
+                                }
                                 ast::PropValue::Method(_) => {
                                     return Err(Throw::reference_error(
                                         "method is not an assignment target",
@@ -2322,7 +2367,11 @@ impl Interpreter {
             return Ok(JsValue::Undefined);
         }
         let argv = self.eval_args(args, e)?;
-        self.call_value(&f, this, argv)
+        let previous_direct_eval = self.direct_eval_call;
+        self.direct_eval_call = matches!(&c.kind, ExprKind::Ident(name) if name.name == "eval");
+        let result = self.call_value(&f, this, argv);
+        self.direct_eval_call = previous_direct_eval;
+        result
     }
     fn eval_args(&mut self, xs: &[ast::Expr], e: &EnvHandle) -> Result<Vec<JsValue>, Throw> {
         let mut out = Vec::new();

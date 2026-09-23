@@ -1263,8 +1263,11 @@ fn native_date_to_string(
 
 fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    let program =
-        crate::parse_script(&source).map_err(|error| Throw::syntax_error(error.to_string()))?;
+    let program = if i.strict_eval_context && i.direct_eval_call {
+        crate::parser::parse_script_strict(&source)
+    } else {
+        crate::parse_script(&source)
+    }.map_err(|error| Throw::syntax_error(error.to_string()))?;
     i.run_program(&program)
 }
 

@@ -16,12 +16,17 @@ impl Parser {
         };
         let saved_async = self.in_async;
         let saved_generator = self.in_generator;
+        let saved_static_block = self.in_static_block;
+        self.in_static_block = 0;
         self.in_async = usize::from(is_async);
         self.in_generator = usize::from(is_generator);
+        self.in_new_target += 1;
         let params = self.parse_params();
         if params.is_err() {
             self.in_async = saved_async;
             self.in_generator = saved_generator;
+            self.in_new_target -= 1;
+            self.in_static_block = saved_static_block;
         }
         let params = params?;
         self.in_function += 1;
@@ -38,13 +43,52 @@ impl Parser {
         self.in_async = saved_async;
         self.in_generator = saved_generator;
         self.in_function -= 1;
+        self.in_new_target -= 1;
+        self.in_static_block = saved_static_block;
+        let body = body?;
+        if self.strict_script || has_use_strict(&body) {
+            if let Some(at) = self.tokens.borrow().legacy_escape_in(body.span) {
+                return Err(self.err_at(at, "legacy string escape is forbidden in strict mode"));
+            }
+        }
+        self.validate_scope_names(&body.body, false)?;
+        self.validate_function_params(&params, &body, is_async || is_generator)?;
+        if has_use_strict(&body) {
+            self.validate_strict_statements(&body.body)?;
+        }
         Ok(FunctionItem {
             name,
             params,
-            body: body?,
+            body,
             is_async,
             is_generator,
         })
+    }
+
+    pub(super) fn validate_function_params(
+        &self,
+        params: &[Param],
+        body: &Block,
+        force_unique: bool,
+    ) -> Result<(), SyntaxError> {
+        let strict = self.strict_script || has_use_strict(body);
+        let simple = params.iter().all(|param| !param.rest && param.default.is_none()
+            && matches!(param.binding, Binding::Ident(_)));
+        if !simple && has_use_strict(body) {
+            return Err(self.err_at(body.span.start, "use strict directive with non-simple parameters"));
+        }
+        let mut seen = HashSet::new();
+        for param in params {
+            for name in binding_names(&param.binding) {
+                if (strict || force_unique || !simple) && !seen.insert(name.name.clone()) {
+                    return Err(self.err_at(name.span.start, "duplicate parameter"));
+                }
+                if strict && matches!(name.name.as_str(), "eval" | "arguments" | "implements" | "interface" | "package" | "private" | "protected" | "public" | "static" | "yield" | "let") {
+                    return Err(self.err_at(name.span.start, "invalid strict parameter name"));
+                }
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn parse_params(&mut self) -> Result<Vec<Param>, SyntaxError> {
@@ -78,6 +122,12 @@ impl Parser {
                     span: self.span_from(pstart),
                 });
                 if !self.eat_punct(Punct::Comma) {
+                    break;
+                }
+                if rest {
+                    return Err(self.err("rest parameter must be last and cannot have a trailing comma"));
+                }
+                if self.at_punct(Punct::RParen) {
                     break;
                 }
             }
@@ -133,7 +183,10 @@ impl Parser {
         self.in_function += 1;
         self.in_async += usize::from(is_async);
         self.in_generator += usize::from(is_generator);
+        let saved_static_block = self.in_static_block;
+        self.in_static_block = 0;
         let r = f(self);
+        self.in_static_block = saved_static_block;
         self.in_generator -= usize::from(is_generator);
         self.in_async -= usize::from(is_async);
         self.in_function -= 1;
@@ -144,27 +197,79 @@ impl Parser {
 
     /// Parses everything after the `class` keyword (consumed here).
     pub(super) fn parse_class_rest(&mut self) -> Result<ClassItem, SyntaxError> {
+        let saved_strict = self.strict_script;
+        self.strict_script = true;
+        let result = self.parse_class_rest_inner();
+        self.strict_script = saved_strict;
+        result
+    }
+
+    fn parse_class_rest_inner(&mut self) -> Result<ClassItem, SyntaxError> {
         self.bump(); // class
         let name = if matches!(self.cur().kind, TokenKind::Ident(_)) {
-            Some(self.expect_ident()?)
+            let id = self.expect_ident()?;
+            if matches!(id.name.as_str(), "eval" | "arguments" | "implements" | "interface" | "let" | "package" | "private" | "protected" | "public" | "static" | "yield") {
+                return Err(self.err_at(id.span.start, "invalid class name in strict mode"));
+            }
+            Some(id)
         } else {
             None
         };
         let super_class = if self.eat_kw(crate::tokens::Keyword::Extends) {
-            Some(self.parse_assignment_expr()?)
+            let heritage = self.parse_assignment_expr()?;
+            if matches!(heritage.kind, ExprKind::Arrow(_)) {
+                return Err(self.err_at(heritage.span.start, "class heritage cannot be an unparenthesized arrow"));
+            }
+            Some(heritage)
         } else {
             None
         };
         self.expect_punct(Punct::Lbrace)?;
         self.private_scopes.push(PrivateScope::default());
+        self.class_heritage.push(super_class.is_some());
         let mut members = Vec::new();
         while !self.at_punct(Punct::Rbrace) {
             if self.at_eof() {
                 return Err(self.err("unterminated class body: expected `}`"));
             }
+            if self.word("static") && self.nth_punct(1, Punct::Lbrace) {
+                self.bump();
+                let saved = (self.in_function, self.in_generator, self.in_async,
+                    self.in_new_target, self.loop_depth, self.switch_depth,
+                    std::mem::take(&mut self.labels));
+                self.in_function = 0;
+                self.in_generator = 0;
+                self.in_async = 0;
+                self.in_new_target = 0;
+                self.loop_depth = 0;
+                self.switch_depth = 0;
+                self.in_static_block += 1;
+                let block = self.parse_block();
+                self.in_static_block -= 1;
+                (self.in_function, self.in_generator, self.in_async,
+                    self.in_new_target, self.loop_depth, self.switch_depth, self.labels) = saved;
+                let block = block?;
+                self.validate_scope_names(&block.body, true)?;
+                self.validate_strict_statements(&block.body)?;
+                members.push(ClassMember::StaticBlock(block));
+                continue;
+            }
+            if self.eat_punct(Punct::Semi) {
+                continue;
+            }
             members.push(self.parse_class_member()?);
         }
         self.bump(); // }
+        self.class_heritage.pop();
+        let mut constructor_seen = false;
+        for member in &members {
+            if let ClassMember::Method(method) = member {
+                if method.kind == MethodKind::Constructor {
+                    if constructor_seen { return Err(self.err_at(method.span.start, "duplicate class constructor")); }
+                    constructor_seen = true;
+                }
+            }
+        }
         let scope = self.private_scopes.pop().expect("class scope");
         for use_name in scope.uses {
             if !scope.declared.contains_key(&use_name.name) {
@@ -206,6 +311,9 @@ impl Parser {
         if is_static {
             self.bump();
         }
+        let is_accessor = self.word("accessor") && !self.nth(1).newline_before
+            && self.nth_starts_member_key(1);
+        if is_accessor { self.bump(); }
         // Modifier order is fixed by the grammar: `async` precedes `*`
         // (`async *ag() {}`; bare `*g()` and `async m()` are the other combos).
         let is_async =
@@ -216,10 +324,10 @@ impl Parser {
         let is_generator = self.eat_punct(Punct::Star);
         let mut kind = MethodKind::Method;
         if !is_generator && !is_async {
-            if self.word("get") && self.nth_starts_member_key(1) {
+            if self.word("get") && !self.nth(1).newline_before && self.nth_starts_member_key(1) {
                 self.bump();
                 kind = MethodKind::Get;
-            } else if self.word("set") && self.nth_starts_member_key(1) {
+            } else if self.word("set") && !self.nth(1).newline_before && self.nth_starts_member_key(1) {
                 self.bump();
                 kind = MethodKind::Set;
             }
@@ -231,6 +339,14 @@ impl Parser {
             self.parse_prop_key()?
         };
         if self.at_punct(Punct::LParen) {
+            if is_accessor { return Err(self.err_at(start, "accessor fields cannot be methods")); }
+            if is_static && prop_key_name(&key) == Some("prototype") {
+                return Err(self.err_at(start, "static class methods cannot be named prototype"));
+            }
+            if !is_static && kind != MethodKind::Method
+                && prop_key_name(&key) == Some("constructor") {
+                return Err(self.err_at(start, "constructor cannot be an accessor"));
+            }
             if !is_static
                 && (is_async || is_generator)
                 && prop_key_name(&key) == Some("constructor")
@@ -239,10 +355,20 @@ impl Parser {
             }
             self.in_async += usize::from(is_async);
             self.in_generator += usize::from(is_generator);
+            self.in_new_target += 1;
+            let saved_static_block = self.in_static_block;
+            self.in_static_block = 0;
             let params = self.parse_params();
             self.in_generator -= usize::from(is_generator);
             self.in_async -= usize::from(is_async);
-            let params = params?;
+            let params = match params {
+                Ok(params) => params,
+                Err(error) => {
+                    self.in_new_target -= 1;
+                    self.in_static_block = saved_static_block;
+                    return Err(error);
+                }
+            };
             let actual_kind = if kind == MethodKind::Method
                 && !is_static
                 && prop_key_name(&key) == Some("constructor")
@@ -251,16 +377,21 @@ impl Parser {
             } else {
                 kind
             };
+            self.validate_accessor_arity(actual_kind, &params, start)?;
             self.declare_private(&key, actual_kind, is_static)?;
             let saved_field = self.in_class_field_initializer;
             let saved_super = self.super_call_allowed;
             self.in_class_field_initializer = 0;
-            self.super_call_allowed = actual_kind == MethodKind::Constructor;
+            self.super_call_allowed = actual_kind == MethodKind::Constructor
+                && self.class_heritage.last().copied().unwrap_or(false);
             let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block());
+            self.in_new_target -= 1;
+            self.in_static_block = saved_static_block;
             self.super_call_allowed = saved_super;
             self.in_class_field_initializer = saved_field;
             let body = body?;
             self.validate_method_params(&params, true, has_use_strict(&body))?;
+            self.validate_strict_statements(&body.body)?;
             return Ok(ClassMember::Method(ClassMethod {
                 key,
                 key_utf16,
@@ -278,6 +409,12 @@ impl Parser {
             return Err(self.err(
                 "only methods may use `*`, `async`, `get`, or `set` without a parameter list",
             ));
+        }
+        if prop_key_name(&key) == Some("constructor") {
+            return Err(self.err_at(start, "class fields cannot be named constructor"));
+        }
+        if is_static && prop_key_name(&key) == Some("prototype") {
+            return Err(self.err_at(start, "static class fields cannot be named prototype"));
         }
         self.declare_private(&key, MethodKind::Method, is_static)?;
         let init = if self.eat_punct(Punct::Eq) {
@@ -299,6 +436,7 @@ impl Parser {
             key,
             key_utf16,
             is_static,
+            is_accessor,
             init,
             span: self.span_from(start),
         }))
@@ -336,6 +474,23 @@ impl Parser {
         Ok(())
     }
 
+    pub(super) fn validate_accessor_arity(
+        &self,
+        kind: MethodKind,
+        params: &[Param],
+        at: SourceLocation,
+    ) -> Result<(), SyntaxError> {
+        match kind {
+            MethodKind::Get if !params.is_empty() => {
+                Err(self.err_at(at, "getter must have no parameters"))
+            }
+            MethodKind::Set if params.len() != 1 || params[0].rest => {
+                Err(self.err_at(at, "setter must have exactly one non-rest parameter"))
+            }
+            _ => Ok(()),
+        }
+    }
+
     pub(super) fn use_private(&mut self, id: Ident) -> Result<(), SyntaxError> {
         let Some(scope) = self.private_scopes.last_mut() else {
             return Err(self.err_at(id.span.start, "private name outside class"));
@@ -348,7 +503,10 @@ impl Parser {
     /// literal, or `[expr]`.
     pub(super) fn parse_prop_key(&mut self) -> Result<(PropKey, Option<Vec<u16>>), SyntaxError> {
         match self.cur().kind.clone() {
-            TokenKind::Ident(_) => Ok((PropKey::Ident(self.expect_ident()?), None)),
+            TokenKind::Ident(name) => {
+                let token = self.bump();
+                Ok((PropKey::Ident(Ident::new(name, token.span)), None))
+            }
             TokenKind::Keyword(k) => {
                 let t = self.bump();
                 Ok((PropKey::Ident(Ident::new(k.spelling(), t.span)), None))
@@ -363,7 +521,11 @@ impl Parser {
             }
             TokenKind::Punct(Punct::LBracket) => {
                 self.bump();
-                let e = self.parse_assignment_expr()?;
+                let saved_no_in = self.no_in;
+                self.no_in = false;
+                let e = self.parse_assignment_expr();
+                self.no_in = saved_no_in;
+                let e = e?;
                 self.expect_punct(Punct::RBracket)?;
                 Ok((PropKey::Computed(Box::new(e)), None))
             }

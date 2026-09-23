@@ -17,8 +17,8 @@
 //!   the previous statement end (ASI) and the `++` begin a new one.
 //!
 //! Implemented:
-//! - Every statement kind listed in [`crate::ast`]; `import`/`export`
-//!   rejected as "modules deferred".
+//! - Script statements and a separate strict Module goal for static imports,
+//!   exports, attributes, and top-level await syntax.
 //! - Expression grammar with correct precedence: assignment (right-assoc,
 //!   all 16 operators), conditional, `??`, `||`, `&&`, bitwise, equality
 //!   (incl. `===`/`!==`), relational (`< > <= >= instanceof in`, with the
@@ -36,14 +36,13 @@
 //!   functions; `await` in async-flagged functions.
 //!
 //! Deferred (documented, not implemented):
-//! - Modules (`import`/`export`) and top-level `await`.
+//! - Asynchronous module evaluation and dynamic import execution.
 //! - Destructuring assignment targets, computed pattern keys, and full
 //!   iterator-closing/error semantics (basic declaration/parameter/for-head
 //!   array/object patterns are implemented).
-//! - Tagged templates. RegExp literal support uses parser-selected lexical goals.
-//! - `with`, `new.target`, `import.meta`, labels-on-non-loop `continue`
-//!   subtleties beyond loop/switch depth checks, strict-mode early errors,
-//!   duplicate-binding checks, getter/setter arity validation, `for await`.
+//! - Runtime execution of tagged templates, `with`, `new.target`,
+//!   `import.meta`, and `for await`; their syntax is represented in the AST.
+//!   RegExp literal support uses parser-selected lexical goals.
 //! - Sloppy-mode `yield`/`await` as identifiers: `yield` is always the
 //!   keyword here; `await` stays an identifier outside async functions.
 
@@ -58,10 +57,218 @@ mod statements;
 mod functions;
 #[path = "parser_expressions.rs"]
 mod expressions;
+#[path = "parser_cover.rs"]
+mod cover;
+#[path = "parser_module.rs"]
+mod module;
 
-/// Parses a full script (modules are deferred; see module docs).
+/// Parses a full script; static imports and exports require [`parse_module`].
 pub fn parse_script(src: &str) -> Result<Program, SyntaxError> {
     Parser::new(src).parse_program()
+}
+
+pub(crate) fn parse_script_strict(src: &str) -> Result<Program, SyntaxError> {
+    let mut parser = Parser::new(src);
+    parser.strict_script = true;
+    parser.parse_program()
+}
+
+/// Parses source under the Module grammar goal (always strict).
+pub fn parse_module(src: &str) -> Result<Module, SyntaxError> {
+    let mut parser = Parser::new(src);
+    parser.strict_script = true;
+    parser.module_goal = true;
+    parser.tokens.borrow_mut().set_module_goal();
+    parser.in_async = 1; // top-level await is valid in a module
+    parser.parse_module()
+}
+
+#[cfg(test)]
+mod js10_grammar_tests {
+    use super::*;
+
+    #[test]
+    fn using_declarations_keep_resource_kind() {
+        let script = parse_script("{ using resource = value; }").unwrap();
+        let StmtKind::Block(block) = &script.body[0].kind else { panic!("block") };
+        assert!(matches!(&block.body[0].kind, StmtKind::Var(decl) if decl.resource_kind == Some(ResourceKind::Using)));
+        assert!(parse_script("using resource = value;").is_err());
+        assert!(parse_script("{ using resource; }").is_err());
+        assert!(parse_script("{ using [resource] = value; }").is_ok());
+        let module = parse_module("await using resource = value;").unwrap();
+        assert!(module.has_top_level_await);
+        for source in [
+            "async function f() { if (true) await using x = null; }",
+            "async function f() { while (true) await using x = null; }",
+            "async function f() { switch (x) { case 1: await using y = null; } }",
+            "for (using let of []) {}",
+            "for (using x of []) { var x; }",
+        ] {
+            assert!(parse_script(source).is_err(), "{source}");
+        }
+        assert!(parse_script("for (using of of [0]) {}").is_ok());
+    }
+
+    #[test]
+    fn phase_import_and_for_await_are_distinct_ast_nodes() {
+        let script = parse_script("import.source('./x.js');").unwrap();
+        assert!(matches!(&script.body[0].kind, StmtKind::Expression(Expr { kind: ExprKind::DynamicImportPhase { phase, .. }, .. }) if phase == "source"));
+        assert!(parse_script("new import.source('./x.js')").is_err());
+        let module = parse_module("for await (item of items) {}").unwrap();
+        assert!(module.has_top_level_await);
+        assert!(matches!(&module.items[0], ModuleItem::Statement(Stmt { kind: StmtKind::ForAwaitOf { .. }, .. })));
+    }
+
+    #[test]
+    fn numeric_separator_and_legacy_zero_early_errors() {
+        for source in ["0_0", "00_1", "10._1", "10._", "'use strict'; 08", "'use strict'; 012"] {
+            assert!(parse_script(source).is_err(), "{source}");
+        }
+        assert!(parse_script("10..toString(); 1.0_1; 012;").is_ok());
+    }
+
+    #[test]
+    fn assignment_pattern_rest_and_optional_chain_targets() {
+        assert!(parse_script("({a, ...rest} = source);").is_ok());
+        assert!(parse_script("([first, ...rest] = source);").is_ok());
+        for source in [
+            "({ ...rest, later } = source)",
+            "([ ...rest, later ] = source)",
+            "([ ...rest, ] = source)",
+            "([ ...rest = 1 ] = source)",
+            "obj?.property = 1",
+            "({key: obj?.property} = source)",
+            "'use strict'; ({eval} = source)",
+            "'use strict'; arguments += 1",
+            "[x] += value",
+            "++[x]",
+        ] {
+            assert!(parse_script(source).is_err(), "{source}");
+        }
+        assert!(parse_script("call() = 1; call()++; ").is_ok());
+        assert!(parse_script("'use strict'; call() = 1").is_err());
+    }
+
+    #[test]
+    fn class_element_early_errors_and_auto_accessors() {
+        for source in [
+            "class C { constructor() {} constructor() {} }",
+            "class C { 'constructor'; }",
+            "class C { static 'prototype'; }",
+            "class C { static prototype() {} }",
+            "class C { get constructor() {} }",
+            "class C { constructor() { super(); } }",
+            "class C extends () => {} {}",
+        ] {
+            assert!(parse_script(source).is_err(), "{source}");
+        }
+        assert!(parse_script("class C { accessor field; accessor \u{2118}; }").is_ok());
+        assert!(parse_script("class C extends Base { constructor() { super(); } }").is_ok());
+    }
+
+    #[test]
+    fn arrow_formals_are_unique_and_strict_rules_apply() {
+        assert!(parse_script("const f = yield => yield;").is_ok());
+        for source in [
+            "const f = (x, x) => x;",
+            "const f = ([x], x) => x;",
+            "const f = ({x}, x) => x;",
+            "'use strict'; const f = eval => eval;",
+            "const f = ({x}) => { 'use strict'; };",
+        ] {
+            assert!(parse_script(source).is_err(), "{source}");
+        }
+    }
+
+    #[test]
+    fn nested_var_conflicts_with_outer_block_lexical_name() {
+        assert!(parse_script("{ let x; { var x; } }").is_err());
+        assert!(parse_script("{ { var x; } const x = 1; }").is_err());
+        assert!(parse_script("{ let x; { let x; } }").is_ok());
+        assert!(parse_script("{ var x; { let x; } }").is_ok());
+    }
+
+    #[test]
+    fn function_own_strict_directive_validates_preparsed_body() {
+        assert!(parse_script("function f() { 'use strict'; var static; }").is_err());
+        assert!(parse_script("function f() { 'use strict'; eval = 1; }").is_err());
+        assert!(parse_script("function f() { 'use strict'; with (obj) {} }").is_err());
+        assert!(parse_script("function f() { var static; }").is_ok());
+    }
+
+    #[test]
+    fn lexical_declarations_require_statement_list_positions() {
+        for source in [
+            "if (true) let x = 1;",
+            "while (true) const x = 1;",
+            "label: let x;",
+            "for (;;) class C {}",
+            "while (true) function f() {}",
+            "do function f() {} while (false);",
+            "for (;;) function f() {}",
+            "if (false) label: function f() {}",
+            "for (;;) label: function f() {}",
+            "if (false) async function f() {}",
+            "if (false) function* f() {}",
+            "'use strict'; if (true) function f() {}",
+            "for (let let of []) {}",
+            "const let = 1;",
+            "function* f() { let\n yield 0; }",
+        ] {
+            assert!(parse_script(source).is_err(), "{source}");
+        }
+        assert!(parse_script("if (true) function f() {}").is_ok());
+        assert!(parse_script("{ let x = 1; }").is_ok());
+        for source in [
+            "if (false) let\n{}",
+            "if (false) let\nx = 1;",
+            "while (false) let\n{}",
+            "for (;;) let\nx = 1;",
+            "label: let\n{}",
+        ] {
+            assert!(parse_script(source).is_ok(), "{source}");
+        }
+    }
+
+    #[test]
+    fn assignment_cover_name_and_return_import() {
+        assert!(parse_script("'use strict'; var x; ({x = 1} = {});").is_ok());
+        assert!(parse_script("'use strict'; ({x = 1});").is_err());
+        assert!(parse_script("function f() { return import('./dep.js'); }").is_ok());
+    }
+
+    #[test]
+    fn annex_b_var_for_in_initializer_only_in_sloppy_code() {
+        assert!(parse_script("for (var a = 0 in {});").is_ok());
+        assert!(parse_script("'use strict'; for (var a = 0 in {});").is_err());
+        assert!(parse_script("for (a = 0 in {});").is_err());
+        assert!(parse_script("for (var a = 0 of []);").is_err());
+    }
+
+    #[test]
+    fn strict_string_legacy_escapes_are_early_errors() {
+        assert!(parse_script("'\\8';").is_ok());
+        assert!(parse_script("'use strict'; '\\8';").is_err());
+        assert!(parse_script("'use strict'; '\\1';").is_err());
+        assert!(parse_script("function f() { 'use strict'; '\\9'; }").is_err());
+        assert!(parse_module("'\\1';").is_err());
+    }
+
+    #[test]
+    fn assignment_target_rejects_parenthesized_patterns_and_nested_assignments() {
+        assert!(parse_script("(x = y) = 1;").is_err());
+        assert!(parse_script("({x}) = source;").is_err());
+        assert!(parse_script("([x]) = source;").is_err());
+        assert!(parse_script("(x) = 1;").is_ok());
+        assert!(parse_script("[x = 1] = source;").is_ok());
+    }
+
+    #[test]
+    fn nested_pattern_defaults_allow_in_inside_for_of_head() {
+        assert!(parse_script("for ([x = 'x' in {}] of [[]]) {}").is_ok());
+        assert!(parse_script("for ({x = 'x' in {}} of [{}]) {}").is_ok());
+        assert!(parse_script("for (x in object) {}").is_ok());
+    }
 }
 
 /// Which kind of binary operator the Pratt loop is currently holding.
@@ -98,13 +305,19 @@ struct Parser {
     /// Nesting counters (stacks flattened to depth because only depth
     /// matters for validity checks).
     in_function: usize,
+    /// Non-arrow function or method context; arrows inherit this lexically.
+    in_new_target: usize,
     in_generator: usize,
     in_async: usize,
     in_formal_params: usize,
     /// A script directive applies to methods parsed after it.
     strict_script: bool,
+    module_goal: bool,
+    has_top_level_await: bool,
     /// Class field initializers inherit this restriction through arrows.
     in_class_field_initializer: usize,
+    in_static_block: usize,
+    block_depth: usize,
     /// Only a class constructor may contain a direct `super()` call.
     super_call_allowed: bool,
     /// Depth of `${ … }` substitutions currently being parsed. A
@@ -113,6 +326,7 @@ struct Parser {
     /// start of a tagged template.
     template_depth: usize,
     private_scopes: Vec<PrivateScope>,
+    class_heritage: Vec<bool>,
 }
 
 impl Parser {
@@ -127,14 +341,20 @@ impl Parser {
             loop_depth: 0,
             switch_depth: 0,
             in_function: 0,
+            in_new_target: 0,
             in_generator: 0,
             in_async: 0,
             in_formal_params: 0,
             strict_script: false,
+            module_goal: false,
+            has_top_level_await: false,
             in_class_field_initializer: 0,
+            in_static_block: 0,
+            block_depth: 0,
             super_call_allowed: false,
             template_depth: 0,
             private_scopes: Vec::new(),
+            class_heritage: Vec::new(),
         }
     }
 
@@ -167,6 +387,14 @@ impl Parser {
 
     fn span_from(&self, start: SourceLocation) -> Span {
         Span::new(start, self.last_end)
+    }
+
+    fn parse_assignment_with_in(&mut self) -> Result<Expr, SyntaxError> {
+        let previous = self.no_in;
+        self.no_in = false;
+        let result = self.parse_assignment_expr();
+        self.no_in = previous;
+        result
     }
 
     fn err(&self, msg: impl Into<String>) -> SyntaxError {
@@ -210,7 +438,7 @@ impl Parser {
     }
 
     fn at_kw(&self, k: crate::tokens::Keyword) -> bool {
-        matches!(self.cur().kind, TokenKind::Keyword(q) if q == k)
+        !self.cur().escaped_identifier && matches!(self.cur().kind, TokenKind::Keyword(q) if q == k)
     }
 
     fn eat_kw(&mut self, k: crate::tokens::Keyword) -> bool {
@@ -225,7 +453,8 @@ impl Parser {
     /// True when the current token is an identifier with this exact spelling
     /// (contextual keywords are identifiers by design).
     fn word(&self, s: &str) -> bool {
-        matches!(&self.cur().kind, TokenKind::Ident(name) if name == s)
+        let token = self.cur();
+        !token.escaped_identifier && matches!(&token.kind, TokenKind::Ident(name) if name == s)
     }
 
     /// Consumes an identifier token (contextual words included, reserved
@@ -234,14 +463,32 @@ impl Parser {
         let t = self.cur().clone();
         match t.kind {
             TokenKind::Ident(name) => {
-                if name == "await" && self.in_async > 0 {
+                if name == "await" && (self.in_async > 0 || self.in_static_block > 0) {
                     return Err(self.err_at(t.span.start, "await is reserved in async functions"));
+                }
+                if self.forbidden_binding_name(&name) {
+                    return Err(self.err_at(t.span.start, "reserved binding name"));
                 }
                 self.bump();
                 Ok(Ident::new(name, t.span))
             }
+            TokenKind::Keyword(crate::tokens::Keyword::Yield)
+                if !self.strict_script && self.in_generator == 0 => {
+                    self.bump();
+                    Ok(Ident::new("yield", t.span))
+                }
             _ => Err(self.err(format!("expected identifier, found {}", t.kind.describe()))),
         }
+    }
+
+    fn forbidden_binding_name(&self, name: &str) -> bool {
+        name == "enum"
+            || name == "await" && self.in_static_block > 0
+            || self.strict_script && matches!(name,
+                "implements" | "interface" | "let" | "package" | "private" | "protected"
+                | "public" | "static" | "yield")
+            || crate::tokens::keyword_of(name).is_some()
+                && !(name == "yield" && !self.strict_script && self.in_generator == 0)
     }
 
     /// A property name position accepts reserved words too (`a.if`,
@@ -296,6 +543,7 @@ impl Parser {
 fn prop_key_name(key: &PropKey) -> Option<&str> {
     match key {
         PropKey::Ident(id) => Some(id.name.as_str()),
+        PropKey::Str(name) => Some(name.as_str()),
         _ => None,
     }
 }
@@ -350,7 +598,7 @@ fn is_private_reference(expr: &Expr) -> bool {
 
 /// Validates a for-in/of lexical head: exactly one declarator, no
 /// initializer (`for (const x of y)` ok, `for (let i = 0 of y)` rejected).
-fn validate_for_decl(decl: &VarDecl, at: SourceLocation) -> Result<VarDecl, SyntaxError> {
+fn validate_for_decl(decl: &VarDecl, at: SourceLocation, allow_annex_b_initializer: bool) -> Result<VarDecl, SyntaxError> {
     if decl.decls.len() != 1 {
         return Err(SyntaxError::new(
             "for-in/of head must declare exactly one binding",
@@ -358,7 +606,9 @@ fn validate_for_decl(decl: &VarDecl, at: SourceLocation) -> Result<VarDecl, Synt
             at.column,
         ));
     }
-    if decl.decls[0].init.is_some() {
+    if decl.decls[0].init.is_some()
+        && !(allow_annex_b_initializer && decl.kind == VarKind::Var
+            && matches!(decl.decls[0].binding, Binding::Ident(_))) {
         return Err(SyntaxError::new(
             "for-in/of loop variables must not have initializers",
             at.line,
@@ -372,7 +622,11 @@ fn validate_for_decl(decl: &VarDecl, at: SourceLocation) -> Result<VarDecl, Synt
 /// their elements must recursively be assignable references.
 fn ensure_assignable(e: &Expr) -> Result<(), SyntaxError> {
     match &e.kind {
-        ExprKind::Ident(_) | ExprKind::Member { .. } => Ok(()),
+        ExprKind::Ident(_) => Ok(()),
+        ExprKind::Member { .. } if !optional_chain_target(e) => Ok(()),
+        ExprKind::Paren(inner) if matches!(inner.kind, ExprKind::Object(_) | ExprKind::Array(_) | ExprKind::Assign { .. }) => {
+            Err(SyntaxError::new("parenthesized pattern is not an assignment target", e.span.start.line, e.span.start.column))
+        }
         ExprKind::Paren(inner) => ensure_assignable(inner),
         ExprKind::Assign {
             op: AssignOp::Assign,
@@ -380,8 +634,15 @@ fn ensure_assignable(e: &Expr) -> Result<(), SyntaxError> {
             ..
         } => ensure_assignable(target),
         ExprKind::Array(elements) => {
-            for element in elements.iter().flatten() {
+            if e.trailing_comma_after_spread {
+                return Err(SyntaxError::new("rest element cannot have trailing comma", e.span.start.line, e.span.start.column));
+            }
+            for (index, element) in elements.iter().enumerate() {
+                let Some(element) = element else { continue };
                 if let ExprKind::Spread(inner) = &element.kind {
+                    if index + 1 != elements.len() || matches!(inner.kind, ExprKind::Assign { .. }) {
+                        return Err(SyntaxError::new("rest element must be last without initializer", e.span.start.line, e.span.start.column));
+                    }
                     ensure_assignable(inner)?;
                 } else {
                     ensure_assignable(element)?;
@@ -390,11 +651,21 @@ fn ensure_assignable(e: &Expr) -> Result<(), SyntaxError> {
             Ok(())
         }
         ExprKind::Object(elements) => {
-            for element in elements {
+            if e.trailing_comma_after_spread {
+                return Err(SyntaxError::new("rest property cannot have trailing comma", e.span.start.line, e.span.start.column));
+            }
+            for (index, element) in elements.iter().enumerate() {
                 match element {
-                    ObjElem::Spread(inner) => ensure_assignable(inner)?,
+                    ObjElem::Spread(inner) => {
+                        if index + 1 != elements.len() {
+                            return Err(SyntaxError::new("rest property must be last", e.span.start.line, e.span.start.column));
+                        }
+                        if let ExprKind::Spread(target) = &inner.kind { ensure_assignable(target)?; }
+                        else { ensure_assignable(inner)?; }
+                    }
                     ObjElem::Prop(property) => match &property.value {
                         PropValue::Shorthand(_) => {}
+                        PropValue::CoverInitializedName { .. } => {}
                         PropValue::Init(value) => ensure_assignable(value)?,
                         PropValue::Method(_) => {
                             return Err(SyntaxError::new(
@@ -413,6 +684,44 @@ fn ensure_assignable(e: &Expr) -> Result<(), SyntaxError> {
             e.span.start.line,
             e.span.start.column,
         )),
+    }
+}
+
+fn optional_chain_target(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Member { obj, optional, .. } => *optional || optional_chain_target(obj),
+        ExprKind::Call { callee, optional, .. } => *optional || optional_chain_target(callee),
+        ExprKind::Paren(_) => false,
+        _ => false,
+    }
+}
+
+fn ensure_simple_assignable(expr: &Expr, sloppy: bool) -> Result<(), SyntaxError> {
+    match &expr.kind {
+        ExprKind::Ident(_) => Ok(()),
+        ExprKind::Member { .. } if !optional_chain_target(expr) => Ok(()),
+        ExprKind::Paren(inner) => ensure_simple_assignable(inner, sloppy),
+        ExprKind::Call { .. } if sloppy && !optional_chain_target(expr) => Ok(()),
+        _ => Err(SyntaxError::new("invalid simple assignment target", expr.span.start.line, expr.span.start.column)),
+    }
+}
+
+fn strict_assignment_name(expr: &Expr) -> Option<Span> {
+    match &expr.kind {
+        ExprKind::Ident(name) if matches!(name.name.as_str(), "eval" | "arguments") => Some(name.span),
+        ExprKind::Paren(inner) | ExprKind::Spread(inner) => strict_assignment_name(inner),
+        ExprKind::Assign { target, .. } => strict_assignment_name(target),
+        ExprKind::Array(items) => items.iter().flatten().find_map(strict_assignment_name),
+        ExprKind::Object(items) => items.iter().find_map(|item| match item {
+            ObjElem::Spread(inner) => strict_assignment_name(inner),
+            ObjElem::Prop(property) => match &property.value {
+                PropValue::Shorthand(name) if matches!(name.name.as_str(), "eval" | "arguments") => Some(name.span),
+                PropValue::CoverInitializedName { binding, .. } if matches!(binding.name.as_str(), "eval" | "arguments") => Some(binding.span),
+                PropValue::Init(value) => strict_assignment_name(value),
+                _ => None,
+            },
+        }),
+        _ => None,
     }
 }
 
@@ -474,6 +783,36 @@ mod tests {
             StmtKind::Expression(e) => e.kind,
             other => panic!("expected expression statement, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn bigint_literals_have_lossless_decimal_ast_digits() {
+        for (source, expected) in [
+            ("123n", "123"), ("0x1Fn", "31"), ("0o7n", "7"),
+            ("0b1n", "1"), ("0xFFFFFFFFFFFFFFFFFFFFFFFFn", "79228162514264337593543950335"),
+            ("1_000n", "1000"),
+        ] {
+            assert_eq!(expr_kind(source), ExprKind::BigInt(expected.into()), "{source}");
+        }
+    }
+
+    #[test]
+    fn front_end_forms_preserve_shape_and_early_errors() {
+        let p = program("class C { ; static { x(); } *m(a,) {} field = 1;; }");
+        let StmtKind::Class(class) = &p.body[0].kind else { panic!("class"); };
+        assert!(matches!(class.members[0], ClassMember::StaticBlock(_)));
+        assert!(matches!(class.members[1], ClassMember::Method(_)));
+        assert!(matches!(class.members[2], ClassMember::Field(_)));
+        assert!(matches!(stmt_kind("try {} catch ([x, ...rest]) {}"), StmtKind::Try(_)));
+        assert!(matches!(stmt_kind("with (obj) x;"), StmtKind::With { .. }));
+        assert!(matches!(expr_kind("tag`a${x}b`"), ExprKind::TaggedTemplate { .. }));
+        assert!(matches!(expr_kind("import('./dep.js')"), ExprKind::DynamicImport(args) if args.len() == 1));
+        assert!(err("import()").message.contains("dynamic import"));
+        assert!(parse_script("({x = 1, nested: {y = 2}} = source);").is_ok());
+        assert!(err("({x = 1});").message.contains("cover initialized"));
+        assert!(matches!(program("do {} while (false) x;").body[0].kind, StmtKind::DoWhile { .. }));
+        assert!(err("class C { constructor = 1; }").message.contains("constructor"));
+        assert!(err("\"use strict\"; with (obj) x;").message.contains("strict"));
     }
 
     fn err(src: &str) -> SyntaxError {
@@ -1103,9 +1442,8 @@ mod tests {
     }
 
     #[test]
-    fn tagged_templates_are_rejected_as_deferred() {
-        let e = err("tag`x${1}y`");
-        assert!(e.message.contains("tagged"));
+    fn tagged_templates_preserve_tag_and_template() {
+        assert!(matches!(expr_kind("tag`x${1}y`"), ExprKind::TaggedTemplate { .. }));
     }
 
     #[test]
@@ -1249,6 +1587,7 @@ mod construct_tests {
                         "`count` initialized, bare `static tag;` not"
                     );
                 }
+                ClassMember::StaticBlock(_) => panic!("unexpected static block"),
             }
         }
         assert_eq!(saw, (true, true, true, true, true, true));
@@ -1316,11 +1655,10 @@ mod construct_tests {
         assert!(err("class A { #p; m() { return #p; } }")
             .message
             .contains("only valid with `in`"));
-        // Static blocks are not a member shape this phase accepts.
-        assert!(
-            matches!(parse_script("class A { static {} }"), Err(_)),
-            "static blocks must be rejected"
-        );
+        assert!(matches!(
+            stmt_kind("class A { static {} }"),
+            StmtKind::Class(class) if matches!(class.members[0], ClassMember::StaticBlock(_))
+        ));
     }
 
     #[test]
@@ -1792,7 +2130,8 @@ mod construct_tests {
                 ..
             })
         ));
-        assert!(err("yield 1;").message.contains("generator"));
+        assert!(matches!(expr_kind("yield"), ExprKind::Ident(id) if id.name == "yield"));
+        assert!(err("yield 1;").message.contains("expected `;`"));
     }
 
     #[test]

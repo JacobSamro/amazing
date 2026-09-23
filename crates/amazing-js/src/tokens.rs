@@ -143,6 +143,11 @@ pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
     pub newline_before: bool,
+    /// Identifier spelling contained a Unicode escape; contextual keywords
+    /// require their literal source spelling.
+    pub escaped_identifier: bool,
+    /// Annex B decimal/octal-like escape in a string literal.
+    pub legacy_escape: bool,
     /// Lossless cooked code units for string literals and template chunks.
     pub cooked_utf16: Option<Vec<u16>>,
     /// Source spelling of a template chunk, excluding its delimiters.
@@ -155,6 +160,8 @@ impl Token {
             kind,
             span,
             newline_before,
+            escaped_identifier: false,
+            legacy_escape: false,
             cooked_utf16: None,
             raw_utf16: None,
         }

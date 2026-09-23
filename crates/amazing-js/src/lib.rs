@@ -47,10 +47,10 @@ mod token_stream;
 pub mod tokens;
 pub mod value;
 
-pub use ast::Program;
+pub use ast::{Module, Program};
 pub use errors::SyntaxError;
 pub use interp::{DomHost, HostResponse, Interpreter};
-pub use parser::parse_script;
+pub use parser::{parse_module, parse_script};
 
 #[cfg(test)]
 mod tests {
