@@ -263,6 +263,9 @@ LANE_GRANTS["integrator-assist"] = [
     # migration, not the shell at large.
     "crates/amazing-shell-gpui/src/engine_viewport.rs",
 ]
+# IA-ADOPT: the driver's direct amazing-regex dependency for DOM-15's form
+# pattern seam (JS-9 v-mode). One Cargo.toml line and the one lock edge. ADDITIONS ONLY.
+LANE_GRANTS["integrator-assist"] += ["crates/amazing/Cargo.toml", "Cargo.lock"]
 # CSS-3 rewires the driver's stylesheet collection to preserve per-sheet
 # provenance. Granted for the collection and compute call sites only.
 LANE_GRANTS["css"] = [
