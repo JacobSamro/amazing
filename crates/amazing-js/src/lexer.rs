@@ -37,7 +37,7 @@
 //!   strict-mode early errors around them are deferred with all strict
 //!   checks. Non-octal decimals like `089` behave correctly.
 //! - Tagged templates need raw (uncooked) chunk text, which is not kept.
-//! - Private names (`#x`) and decorators (`@`) are rejected.
+//! - Decorators (`@`) are rejected.
 
 use crate::errors::SyntaxError;
 use crate::tokens::{
@@ -122,6 +122,15 @@ impl Lexer {
                 tokens.push(self.number_token(start, newline_before)?)
             }
             c if is_ident_start(c) => tokens.push(self.ident_token(start, newline_before)),
+            '#' if self.peek(1).is_some_and(is_ident_start) => {
+                self.advance();
+                let mut name = String::from("#");
+                while self.cur().is_some_and(is_ident_part) {
+                    name.push(self.cur().expect("checked"));
+                    self.advance();
+                }
+                tokens.push(self.mk(TokenKind::PrivateIdent(name), start, newline_before));
+            }
             _ => tokens.push(self.punct_token(start, newline_before)?),
         }
         self.pending.extend(tokens);

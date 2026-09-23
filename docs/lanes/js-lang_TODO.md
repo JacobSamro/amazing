@@ -923,3 +923,75 @@ unchanged full pinned Test262 measurement at 60s/jobs=8 against the JS-3
 classification hash; finish with workspace nextest and separate JS/HTML
 doctests. Required Test262 files remain 10314/33292/16/9956 plus 294 fixtures,
 with 102918 variants. No VM/GC work or broad Promise fixes are part of JS-4.
+
+## JS-5 — Class private names (front half)
+
+JS-3's largest front-end-owned first diagnostic is `parse:SyntaxError |
+unexpected character #`: **4,523 failing variants**. The next ranked
+front-end candidates are the mixed negative-phase bucket (1,771 variants),
+unsupported Unicode RegExp properties/named references (886), and a broad
+backslash rejection bucket (828). JS-5 therefore targets class private-name
+syntax and early errors. The 4,523 count is an observed first blocker, not a
+promise that 4,523 variants will pass once parsing works.
+
+The lexer emits a distinct private identifier token. The AST keeps private
+class keys, private member accesses, and the left operand of private-brand
+`in` separate from public property strings. The parser checks lexical class
+scope, forward references, duplicate declarations (with one getter/setter
+pair allowed only when both have the same static placement), forbidden
+`#constructor`, private deletion and `super.#x`, bare `#x` misuse, and private access outside a class. A nested
+class can resolve an outer class's private name if it does not redeclare it.
+
+The integrator granted four additive interpreter match arms so this front-end
+change compiles without giving private names public-property behavior. Each
+arm explicitly rejects private runtime evaluation. Private brands, fields,
+methods, accessors and membership tests remain execution-owned work after
+JS-4 and BindingHost. Full-tree results must split parse/early-error cases
+from the runtime-semantic failures that remain.
+
+### JS-5 measured gate (fixed base `2021707`)
+
+On win-001, the final five changed source files matched the Mac hashes before
+and after the gate. `cargo nextest run -p amazing-js --locked` passed **158/158**;
+the separate JS doctest passed **1/1**. The slot-wrapped workspace nextest
+passed **1,319** tests with **3 skipped** and no failures. Separate workspace
+doctests passed **1 amazing-js** and **1 amazing-html**, with no failures.
+
+Pinned Test262 revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398` was run
+twice over **53,872 files / 102,918 variants**, with 8 workers and a 60-second
+per-variant deadline. Both runs returned the same per-file and per-variant
+classification hash:
+`257aba54cd36b8d40561b3bb98c7598b03c7d680dd2dac2786b2fbe56c202e13`.
+The exact input, frozen host and runner hashes matched across both runs.
+
+| Files | Pass | Fail | Timeout | Unsupported | Fixture skipped |
+|---|---:|---:|---:|---:|---:|
+| Pre-JS-5 baseline | 10,314 | 33,292 | 16 | 9,956 | 294 |
+| JS-5, each final run | 10,503 | 33,103 | 16 | 9,956 | 294 |
+
+At the variant level, **375 failed variants became passes and zero passing
+variants regressed**. The gains split into **337 parse-negative early-error
+variants** across 170 files and **38 syntax-valid variants** across 19 files.
+Among the baseline `unexpected character #` cluster, all **1,366** already
+passing parse-negative variants still pass. The other **4,573** variants split
+into 38 syntax-valid passes and 4,535 failures. **2,597** failures explicitly
+say private names are unsupported by the runtime; no private operation is
+aliased to a public `"#x"` property. Runtime brand, field, method and accessor
+semantics remain with js-runtime.
+
+The provisional sweeps exposed early-error and parser-context regressions;
+those are corrected in the final source. A focused Windows probe of the 84
+affected files / 168 variants passes, including the nested-function parse-error
+unwind that previously crashed. Final reports and complete records live in the
+central `.agents/js-lang/js5-before.json`, `js5-after1.json`,
+`js5-after2.json`, and `js5-analysis.json` scratch artifacts.
+
+## Queued after JS-5
+
+**JS-6** is the additive lossless UTF-16 string field in the lexer and AST.
+Decode string and template escapes into code units, preserving lone surrogates;
+keep the existing string field alongside the new field during the js-runtime
+`JsString` migration. Record the exact field names here when JS-6 merges.
+Test lone surrogates, paired escapes, code-point escapes, and cooked versus raw
+template text. **JS-7**, briefed in `.agents/js-lang/queued-js7.md`, follows
+only after JS-6 is reported.

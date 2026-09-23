@@ -19,7 +19,7 @@
 //!   spelling. Future-reserved words (`enum implements interface package
 //!   private protected public static`) are likewise left as identifiers —
 //!   strict-mode early errors are deferred wholesale.
-//! - Private names (`#x`) and decorators (`@`): rejected as unexpected
+//! - Decorators (`@`): rejected as unexpected
 //!   characters.
 //! - Token byte offsets; only line/column positions are kept.
 //! - Raw (uncooked) template text, needed later for tagged templates.
@@ -110,6 +110,8 @@ pub enum TokenKind {
     },
     /// Identifier (including every contextual keyword spelling).
     Ident(String),
+    /// A class private identifier, including its leading `#`.
+    PrivateIdent(String),
     Keyword(Keyword),
     Punct(Punct),
     Eof,
@@ -125,6 +127,7 @@ impl TokenKind {
             TokenKind::Str(_) => "string literal".into(),
             TokenKind::TemplatePart { .. } => "template literal".into(),
             TokenKind::Ident(name) => format!("identifier `{}`", name),
+            TokenKind::PrivateIdent(name) => format!("private identifier `{}`", name),
             TokenKind::Keyword(k) => format!("keyword `{}`", k.spelling()),
             TokenKind::Punct(p) => format!("`{}`", p.spelling()),
             TokenKind::Eof => "end of input".into(),

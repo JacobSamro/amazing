@@ -33,7 +33,7 @@
 //! - `for await (... of ...)` (async iteration).
 //! - Optional-chain short-circuit grouping: `optional` flags are recorded
 //!   per link but the runtime grouping semantics are the interpreter's job.
-//! - Tagged templates, private class members, decorators,
+//! - Tagged templates, decorators,
 //!   `new.target`/`import.meta` meta properties, `with` statements
 //!   (Annex B), getters/setters via `Object` literal `__proto__` special
 //!   case, default-export-only module items.
@@ -294,6 +294,8 @@ pub struct ClassField {
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropKey {
     Ident(Ident),
+    /// Lexically scoped class private name, including its `#`.
+    Private(Ident),
     Str(String),
     Num(Numeric),
     Computed(Box<Expr>),
@@ -317,6 +319,8 @@ impl Expr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
+    /// Only valid on the left of `in`; tests membership of a private brand.
+    PrivateName(Ident),
     /// A validated pattern; evaluation creates a fresh RegExp object.
     RegExp(std::rc::Rc<amazing_regex::Regex>),
     Num(Numeric),
@@ -411,6 +415,8 @@ pub struct TemplateLit {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MemberProp {
     Ident(Ident),
+    /// Class private lookup; distinct from a public property named `#x`.
+    Private(Ident),
     Computed(Box<Expr>),
 }
 
