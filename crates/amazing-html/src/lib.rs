@@ -58,6 +58,8 @@ mod fragment_tests;
 mod template_tests;
 #[cfg(test)]
 mod custom_element_tests;
+#[cfg(test)]
+mod declarative_shadow_tests;
 
 /// Decodes and parses a complete HTML byte stream. `transport_label` is the
 /// optional charset from out-of-band transport metadata.

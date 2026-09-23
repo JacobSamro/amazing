@@ -21,6 +21,7 @@
 //! appropriate end tag.
 
 use amazing_dom::{Dom, Namespace, NodeIdx, NodeKind};
+use amazing_dom::shadow::{ShadowMode, ShadowOptions, SlotAssignment};
 use amazing_dom::events::CallbackId;
 
 use crate::tokenizer::{Token, Tokenizer};
@@ -174,6 +175,8 @@ pub struct TreeBuilder {
     foster: bool,
     fmt: Vec<FmtEntry>,
     template_modes: Vec<Mode>,
+    shadow_templates: Vec<(NodeIdx, NodeIdx)>,
+    allow_declarative_shadow_roots: bool,
 }
 
 impl Default for TreeBuilder {
@@ -199,6 +202,8 @@ impl TreeBuilder {
             foster: false,
             fmt: Vec::new(),
             template_modes: Vec::new(),
+            shadow_templates: Vec::new(),
+            allow_declarative_shadow_roots: true,
         }
     }
 
@@ -751,20 +756,17 @@ impl TreeBuilder {
             return (NodeIdx(0), None);
         };
         let (parent, before) = self.adjusted_insertion_place_for(target);
-        (self.dom.template_contents(parent).unwrap_or(parent), before)
+        let parent = self.shadow_templates.iter().find(|(template, _)| *template == parent)
+            .map(|(_, root)| *root).or_else(|| self.dom.template_contents(parent)).unwrap_or(parent);
+        (parent, before)
     }
 
-    fn alloc_element(
-        &mut self,
-        name: &str,
-        attrs: Vec<(String, String)>,
-    ) -> NodeIdx {
-        self.dom
-            .alloc_unattached(NodeKind::Element {
+    fn alloc_element(&mut self, name: &str, attrs: Vec<(String, String)>, document: NodeIdx) -> NodeIdx {
+        self.dom.create_node_in(document, NodeKind::Element {
                 name: name.to_owned(),
                 attrs,
                 namespace: Namespace::Html,
-            })
+            }).expect("parser document")
     }
 
     /// Creates an element at the appropriate insertion place WITHOUT
@@ -774,12 +776,14 @@ impl TreeBuilder {
         name: &str,
         attrs: Vec<(String, String)>,
     ) -> NodeIdx {
-        let idx = self.alloc_element(name, attrs);
+        let (parent, before) = self.insertion_place();
+        let document = self.dom.owner_document(parent).unwrap_or(NodeIdx(0));
+        let is_name = attrs.iter().find(|(name, _)| name == "is").map(|(_, value)| value.clone());
+        let idx = self.alloc_element(name, Vec::new(), document);
         // The registry is owned by DOM. A missing host or definition keeps the
         // ordinary parser path, leaving an undefined element upgradeable later.
         let definition = if self.custom_element_host.is_some() {
-            let is_name = self.dom.get_attribute_ns(idx, None, "is").map(str::to_owned);
-            self.dom.custom_element_definitions(NodeIdx(0)).into_iter()
+            self.dom.custom_element_definitions(document).into_iter()
                 .find(|(_, definition)| definition.local_name == name
                     && (definition.name == name || is_name.as_deref() == Some(definition.name.as_str())))
                 .map(|(id, _)| id)
@@ -789,7 +793,7 @@ impl TreeBuilder {
         let construction = definition.and_then(|definition| {
             self.dom.begin_custom_element_upgrade(idx, definition).ok().map(|constructor| {
                 let request = ParserConstruction {
-                    document: NodeIdx(0), element: idx, namespace: Namespace::Html,
+                    document, element: idx, namespace: Namespace::Html,
                     local_name: name.to_owned(), definition, constructor,
                 };
                 let constructed = self.custom_element_host.as_mut().expect("host checked")
@@ -797,17 +801,18 @@ impl TreeBuilder {
                 (definition, constructed)
             })
         });
-        let (parent, before) = self.insertion_place();
-        self.dom.attach_before(parent, before, idx);
-        if let Some((definition, constructed)) = construction {
-            // Completion after attachment lets DOM-14 enqueue initial observed
-            // attributes and connectedCallback in their native order.
-            let _ = self.dom.finish_custom_element_upgrade(idx, definition, constructed);
-        } else {
-            // With no host, a preexisting definition remains eligible for a
-            // later DOM-14 upgrade. With no definition this is a no-op.
-            self.dom.queue_custom_element_upgrade(idx);
+        for (name, value) in attrs {
+            self.dom.set_attribute(idx, &name, &value).expect("parser attribute");
         }
+        if let Some((definition, constructed)) = construction {
+            // Initial attribute reactions precede connected reactions, and
+            // both precede insertion of the token's children.
+            let _ = self.dom.finish_custom_element_upgrade(idx, definition, constructed);
+        }
+        self.dom.attach_before(parent, before, idx);
+        // With no host, a preexisting definition remains eligible for a
+        // later DOM-14 upgrade. With no definition this is a no-op.
+        if construction.is_none() { self.dom.queue_custom_element_upgrade(idx); }
         idx
     }
 
@@ -1460,7 +1465,33 @@ impl TreeBuilder {
     }
 
     fn start_template(&mut self, attrs: Vec<(String, String)>) {
-        let template = self.insert_and_push("template", attrs);
+        let mode = attrs.iter().find(|(name, _)| name == "shadowrootmode")
+            .and_then(|(_, value)| match value.to_ascii_lowercase().as_str() {
+                "open" => Some(ShadowMode::Open), "closed" => Some(ShadowMode::Closed), _ => None,
+            });
+        let shadow = if self.allow_declarative_shadow_roots && self.open.len() > 1 {
+            mode.and_then(|mode| {
+                let host = self.current()?;
+                let has = |name| attrs.iter().any(|(attribute, _)| attribute == name);
+                let manual = attrs.iter().any(|(name, value)| name == "shadowrootslotassignment"
+                    && value.eq_ignore_ascii_case("manual"));
+                let options = ShadowOptions {
+                    mode, delegates_focus: has("shadowrootdelegatesfocus"),
+                    slot_assignment: if manual { SlotAssignment::Manual } else { SlotAssignment::Named },
+                    clonable: has("shadowrootclonable"), serializable: has("shadowrootserializable"),
+                };
+                self.dom.attach_shadow(host, options).ok()
+            })
+        } else { None };
+        let template = if let Some(root) = shadow {
+            let document = self.dom.owner_document(root).unwrap_or(NodeIdx(0));
+            let template = self.alloc_element("template", attrs, document);
+            self.open.push(template);
+            self.shadow_templates.push((template, root));
+            template
+        } else {
+            self.insert_and_push("template", attrs)
+        };
         self.dom.ensure_template_contents(template).expect("HTML template contents");
         self.fmt.push(FmtEntry::Marker);
         self.frameset_ok = false;
@@ -2605,6 +2636,16 @@ impl IncrementalParser {
         }
     }
 
+    /// Starts a streamed document parse with a synchronous custom-element host.
+    /// Fragment parsing remains inert and uses a separate entry point.
+    pub fn with_custom_element_host(dom: Dom, host: Box<dyn ParserCustomElementHost>) -> Self {
+        Self {
+            builder: TreeBuilder::with_custom_element_host(dom, host),
+            tokenizer: Tokenizer::streaming(),
+            pending_cr: false,
+        }
+    }
+
     /// Feeds one decoded chunk without treating its end as document EOF.
     pub fn push_chunk(&mut self, chunk: &str) {
         let mut normalized = Vec::with_capacity(chunk.chars().count() + usize::from(self.pending_cr));
@@ -2683,6 +2724,7 @@ pub fn build_with_custom_element_host(
 /// initial tokenizer/insertion mode directly and have no wrapper on the stack.
 pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
     let mut builder = TreeBuilder::new();
+    builder.allow_declarative_shadow_roots = false;
     builder.insert_and_push("html", Vec::new());
     let virtual_context = matches!(context, "textarea" | "title" | "style" | "script" | "noscript" | "plaintext" | "select" | "option" | "template");
     if !virtual_context {

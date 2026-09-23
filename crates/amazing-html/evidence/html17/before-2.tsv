@@ -1,0 +1,9 @@
+ce-empty	fail	4402bed3b9d58baf
+ce-owner	fail	6dbc1ad12a8eed18
+ce-failure	fail	73720f2dc969043f
+wpt-dsd-basic	fail	2082b84ce0df7f6d
+dsd-closed	fail	479f71d1fab8d598
+dsd-invalid	pass	f2e64fdda3bf658f
+dsd-repeated	fail	71a140c98073475e
+dsd-nested	fail	1ef204938e5c69d1
+dsd-fragment	pass	eff2376f774aa6e5

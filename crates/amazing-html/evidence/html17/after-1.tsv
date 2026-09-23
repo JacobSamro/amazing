@@ -1,0 +1,9 @@
+ce-empty	pass	13e2b82f43cfa0e2
+ce-owner	pass	093b5cc61a771114
+ce-failure	pass	b4ef8919c57da61d
+wpt-dsd-basic	pass	cc1c69f04e50e436
+dsd-closed	pass	e3f186476c566ea8
+dsd-invalid	pass	f2e64fdda3bf658f
+dsd-repeated	pass	432d1054cfd89b10
+dsd-nested	pass	13280232432e7497
+dsd-fragment	pass	eff2376f774aa6e5
