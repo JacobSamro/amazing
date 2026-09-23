@@ -1409,3 +1409,26 @@ had no MIME record, data URL processor, forgiving-base64 API, or runner, so the
 four corpus baselines are zero implemented cases (the security code only had
 an ad-hoc MIME essence check). These native results do not claim a broad
 Fetch or MIME WPT percentage.
+
+## NET-19 — cooperative WebSocket and CORS-preflight cache
+
+Fixed base: `e0adf152ddc775053e4e30c52cdd185311e5e0ce`.
+
+The dispatcher retains WebSocket DNS, bounded blocking connect, HTTP/1.1 TLS
+handshake, upgrade request, response parsing, frames, fragmented message state,
+and close state across `step_websockets` calls. All socket I/O uses the
+dispatcher's byte budget and nonblocking transports. Outbound client frames
+are masked, and queued bytes have a bounded buffer limit. The blocking NET-8
+client remains available. `NetworkService::open_websocket` applies mixed
+content, CSP `connect-src` on the original `ws`/`wss` URL, and cookies selected
+for the mapped HTTP(S) handshake URL. The service returns open, text/binary
+message, close, and error events. WebSocket redirect and extensions remain
+unsupported, as in NET-8.
+
+`NetworkService` now owns a Fetch §4.8 preflight cache. Entries use the
+initiating origin, URL without fragment, credentials mode, method, and sorted
+unsafe header names. Validated responses grant the request for the server's
+max-age (default five seconds, capped at two hours); zero is not stored. A
+credentialed grant can satisfy an uncredentialed request, while the reverse
+cannot. The cache holds at most 256 entries and discards expired entries on
+lookup and insert. Redirect hops consult it using the new URL and headers.

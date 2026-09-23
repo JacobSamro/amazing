@@ -7,6 +7,7 @@ use crate::{
     headers::Headers,
     http, http2, NetError, ParsedUrl,
 };
+mod websocket;
 use std::{
     cell::Cell,
     collections::{BTreeMap, HashMap},
@@ -15,6 +16,8 @@ use std::{
     rc::Rc,
     time::{Duration, Instant},
 };
+use websocket::WebSocketConnection;
+pub use websocket::{WebSocketEvent, WebSocketId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RequestId(pub u64);
@@ -287,6 +290,7 @@ pub struct Dispatcher<R = StdResolver, C = StdConnector> {
     idle: HashMap<String, Transport>,
     h2: HashMap<String, H2Connection>,
     cancelled: Vec<RequestId>,
+    websockets: BTreeMap<WebSocketId, WebSocketConnection>,
 }
 impl Dispatcher<StdResolver, StdConnector> {
     pub fn new(limits: DispatchLimits) -> Self {
@@ -304,10 +308,11 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             idle: HashMap::new(),
             h2: HashMap::new(),
             cancelled: Vec::new(),
+            websockets: BTreeMap::new(),
         }
     }
     pub fn in_flight(&self) -> usize {
-        self.active.len()
+        self.active.len() + self.websockets.len()
     }
     pub fn submit(
         &mut self,
@@ -315,7 +320,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         options: FetchOptions,
         now: Instant,
     ) -> Result<RequestId, DispatchError> {
-        if self.active.len() >= self.limits.max_in_flight {
+        if self.in_flight() >= self.limits.max_in_flight {
             return Err(DispatchError::TooManyInFlight);
         }
         if self.limits.bytes_per_step == 0
@@ -452,6 +457,11 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 .h2
                 .values()
                 .map(|h| h.inbound.len() + h.outbound.len())
+                .sum::<usize>()
+            + self
+                .websockets
+                .values()
+                .map(WebSocketConnection::held)
                 .sum::<usize>()
     }
     pub fn step(&mut self, budget: usize, now: Instant) -> Vec<NetEvent> {

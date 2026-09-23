@@ -2,7 +2,7 @@ use super::Error;
 /// Incremental scalar validation; a fragment may end inside a scalar. Rejects
 /// overlong encodings, surrogate scalars and values above U+10FFFF immediately.
 #[derive(Default)]
-pub(super) struct Validator {
+pub(crate) struct Validator {
     remaining: u8,
     low: u8,
     high: u8,

@@ -6,7 +6,7 @@ use crate::{
     filter_response, CredentialsMode, CspDestination, CspPolicyList, FetchError, HeaderList,
     HttpUrl, InternalResponse, Origin, SecurityContext,
 };
-use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent};
+use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent, WebSocketEvent, WebSocketId};
 use std::{collections::BTreeMap, time::Instant};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -20,6 +20,11 @@ pub struct ClientContext {
     pub csp_destination: CspDestination,
     /// UTC seconds supplied by the embedding for cookie and cache decisions.
     pub now_unix: i64,
+}
+#[derive(Clone)]
+pub struct WebSocketClient {
+    pub origin: Origin,
+    pub context: ClientContext,
 }
 impl Default for ClientContext {
     fn default() -> Self {
@@ -35,6 +40,10 @@ impl Default for ClientContext {
 
 #[derive(Debug)]
 pub enum ServiceEvent {
+    WebSocket {
+        id: ServiceId,
+        event: WebSocketEvent,
+    },
     Network {
         id: ServiceId,
         event: NetEvent,
@@ -64,8 +73,11 @@ pub struct NetworkService {
     pub dispatcher: Dispatcher,
     pub cookies: CookieStore,
     pub cache: CacheStore,
+    pub preflight_cache: crate::PreflightCache,
     next_id: u64,
     active: BTreeMap<ServiceId, Task>,
+    websockets: BTreeMap<ServiceId, WebSocketId>,
+    prefer_websocket: bool,
     ready: Vec<ServiceEvent>,
 }
 impl NetworkService {
@@ -75,10 +87,99 @@ impl NetworkService {
             cookies: CookieStore::default(),
             cache: CacheStore::new(CacheKind::Private, CacheLimits::default())
                 .expect("valid cache limits"),
+            preflight_cache: crate::PreflightCache::default(),
             next_id: 1,
             active: BTreeMap::new(),
+            websockets: BTreeMap::new(),
+            prefer_websocket: false,
             ready: Vec::new(),
         }
+    }
+    pub fn open_websocket(
+        &mut self,
+        url: &str,
+        protocols: Vec<String>,
+        client: WebSocketClient,
+    ) -> Result<ServiceId, FetchError> {
+        self.open_websocket_at(url, protocols, client, Instant::now())
+    }
+    pub fn open_websocket_at(
+        &mut self,
+        url: &str,
+        protocols: Vec<String>,
+        client: WebSocketClient,
+        now: Instant,
+    ) -> Result<ServiceId, FetchError> {
+        let parsed = amazing_net::ParsedUrl::parse(url).map_err(|_| FetchError::InvalidUrl)?;
+        let scheme = match parsed.scheme() {
+            "ws" => "http",
+            "wss" => "https",
+            _ => return Err(FetchError::InvalidUrl),
+        };
+        let mapped = format!("{scheme}{}", &parsed.serialize()[parsed.scheme().len()..]);
+        let http_url = HttpUrl::parse(&mapped)?;
+        let mut policy = crate::Request::new(http_url.clone(), client.origin.clone());
+        policy.credentials = CredentialsMode::Include;
+        policy.security = client.context.security;
+        policy.csp = client.context.csp.clone();
+        policy.csp_destination = CspDestination::Connect;
+        crate::check_request_security(&policy)?;
+        let csp = policy.csp.pre_websocket(&policy, &parsed);
+        if csp.blocked {
+            return Err(FetchError::Csp(csp.violations));
+        }
+        let access = CookieAccess {
+            url: &http_url,
+            site_for_cookies: client.context.cookie_site,
+            http_api: true,
+            top_level_navigation: false,
+            method: "GET",
+        };
+        let cookie = self
+            .cookies
+            .cookie_header(&access, client.context.now_unix)
+            .map_err(|_| FetchError::Transport)?;
+        let cookie = String::from_utf8(cookie).map_err(|_| FetchError::Transport)?;
+        let options = amazing_net::websocket::Options {
+            origin: Some(client.origin.serialize()),
+            protocols,
+            ..Default::default()
+        };
+        let wire_id = self
+            .dispatcher
+            .open_websocket(
+                url,
+                options,
+                (!cookie.is_empty()).then_some(cookie.as_str()),
+                now,
+            )
+            .map_err(|_| FetchError::Transport)?;
+        let id = ServiceId(self.next_id);
+        self.next_id = self.next_id.wrapping_add(1).max(1);
+        self.websockets.insert(id, wire_id);
+        Ok(id)
+    }
+    pub fn send_websocket(
+        &mut self,
+        id: ServiceId,
+        message: amazing_net::websocket::Event,
+    ) -> Result<(), amazing_net::websocket::Error> {
+        let wire = *self
+            .websockets
+            .get(&id)
+            .ok_or(amazing_net::websocket::Error::Closed)?;
+        self.dispatcher.send_websocket(wire, message)
+    }
+    pub fn close_websocket(
+        &mut self,
+        id: ServiceId,
+        close: Option<amazing_net::websocket::Close>,
+    ) -> Result<(), amazing_net::websocket::Error> {
+        let wire = *self
+            .websockets
+            .get(&id)
+            .ok_or(amazing_net::websocket::Error::Closed)?;
+        self.dispatcher.close_websocket(wire, close)
     }
     pub fn start(
         &mut self,
@@ -189,7 +290,7 @@ impl NetworkService {
                 CacheLookup::Miss => {}
             }
         }
-        let pending = PendingFetchApi::start_with_context(
+        let pending = PendingFetchApi::start_with_cache(
             &mut request,
             &mut self.dispatcher,
             now,
@@ -198,6 +299,7 @@ impl NetworkService {
             context.csp_destination,
             (!cookie.is_empty()).then(|| cookie.clone()),
             revalidating.then_some(conditional_headers),
+            Some(&mut self.preflight_cache),
         )?;
         self.active.insert(
             id,
@@ -220,7 +322,23 @@ impl NetworkService {
     }
     pub fn step(&mut self, budget: usize, now: Instant) -> Vec<ServiceEvent> {
         let mut result = std::mem::take(&mut self.ready);
-        for event in self.dispatcher.step(budget, now) {
+        // A close event can precede the nonblocking write of its reply. Keep
+        // stepping dispatcher-owned sockets after removing the service id.
+        let wire_websockets = self.dispatcher.websockets_in_flight() != 0;
+        let both = wire_websockets && !self.active.is_empty();
+        let http_budget = if !wire_websockets {
+            budget
+        } else if self.active.is_empty() {
+            0
+        } else if budget == 1 {
+            usize::from(!self.prefer_websocket)
+        } else {
+            budget / 2
+        };
+        if both {
+            self.prefer_websocket = !self.prefer_websocket;
+        }
+        for event in self.dispatcher.step(http_budget, now) {
             let wire_id = match &event {
                 NetEvent::Head { id, .. }
                 | NetEvent::Body { id, .. }
@@ -288,7 +406,7 @@ impl NetworkService {
                 let site = task.context.cookie_site.clone();
                 let top_level = task.context.security.top_level_navigation;
                 let wall_time = task.context.now_unix;
-                finished = task.pending.on_event_with_cookie(
+                finished = task.pending.on_event_with_cache(
                     &event,
                     &mut self.dispatcher,
                     now,
@@ -312,6 +430,7 @@ impl NetworkService {
                             .and_then(|bytes| String::from_utf8(bytes).ok())
                             .filter(|value| !value.is_empty())
                     },
+                    Some(&mut self.preflight_cache),
                 );
             }
             let wire_done = matches!(&event, NetEvent::Done { .. });
@@ -378,6 +497,27 @@ impl NetworkService {
                 });
             }
         }
+        for event in self.dispatcher.step_websockets(budget - http_budget, now) {
+            let wire_id = match &event {
+                WebSocketEvent::Open { id, .. }
+                | WebSocketEvent::Message { id, .. }
+                | WebSocketEvent::Close { id, .. }
+                | WebSocketEvent::Error { id, .. } => *id,
+            };
+            if let Some(id) = self
+                .websockets
+                .iter()
+                .find_map(|(id, wire)| (*wire == wire_id).then_some(*id))
+            {
+                if matches!(
+                    event,
+                    WebSocketEvent::Close { .. } | WebSocketEvent::Error { .. }
+                ) {
+                    self.websockets.remove(&id);
+                }
+                result.push(ServiceEvent::WebSocket { id, event });
+            }
+        }
         result
     }
     pub fn abort(&mut self, id: ServiceId) -> bool {
@@ -423,6 +563,252 @@ mod tests {
             url.origin().clone(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn websocket_checks_connect_src_and_mixed_content_before_dispatch() {
+        let origin = HttpUrl::parse("https://client.example/")
+            .unwrap()
+            .origin()
+            .clone();
+        let mut service = NetworkService::new(DispatchLimits::default());
+        let mut headers = HeaderList::default();
+        headers
+            .append("content-security-policy", "connect-src 'none'")
+            .unwrap();
+        let blocked = WebSocketClient {
+            origin: origin.clone(),
+            context: ClientContext {
+                csp: CspPolicyList::from_headers(&headers).unwrap(),
+                ..ClientContext::default()
+            },
+        };
+        assert!(matches!(
+            service.open_websocket("wss://example.com/", vec![], blocked),
+            Err(FetchError::Csp(_))
+        ));
+        let mixed = WebSocketClient {
+            origin: origin.clone(),
+            context: ClientContext {
+                security: SecurityContext {
+                    client_restricts_mixed_content: true,
+                    ..SecurityContext::default()
+                },
+                ..ClientContext::default()
+            },
+        };
+        assert!(matches!(
+            service.open_websocket("ws://example.com/", vec![], mixed),
+            Err(FetchError::MixedContent)
+        ));
+        headers = HeaderList::default();
+        headers
+            .append("content-security-policy", "connect-src wss:")
+            .unwrap();
+        let allowed = WebSocketClient {
+            origin,
+            context: ClientContext {
+                csp: CspPolicyList::from_headers(&headers).unwrap(),
+                ..ClientContext::default()
+            },
+        };
+        assert!(service
+            .open_websocket("wss://example.com/", vec![], allowed)
+            .is_ok());
+    }
+
+    #[test]
+    fn websocket_handshake_uses_cookie_jar() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = format!("127.0.0.1:{}", listener.local_addr().unwrap().port());
+        let server = thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut request = Vec::new();
+            while !request.ends_with(b"\r\n\r\n") {
+                let mut byte = [0];
+                socket.read_exact(&mut byte).unwrap();
+                request.push(byte[0]);
+            }
+            socket
+                .write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+                .unwrap();
+            String::from_utf8(request).unwrap()
+        });
+        let url = HttpUrl::parse(&format!("http://{address}/socket")).unwrap();
+        let mut service = NetworkService::new(DispatchLimits::default());
+        service
+            .cookies
+            .set_cookie(
+                b"sid=abc; Path=/",
+                &CookieAccess {
+                    url: &url,
+                    site_for_cookies: CookieSite::NoClient,
+                    http_api: true,
+                    top_level_navigation: false,
+                    method: "GET",
+                },
+                100,
+            )
+            .unwrap();
+        let client = WebSocketClient {
+            origin: url.origin().clone(),
+            context: ClientContext {
+                now_unix: 100,
+                ..ClientContext::default()
+            },
+        };
+        let now = Instant::now();
+        let id = service
+            .open_websocket_at(&format!("ws://{address}/socket"), vec![], client, now)
+            .unwrap();
+        let mut errored = false;
+        for tick in 0..1000 {
+            if service.step(4096, now + Duration::from_millis(tick)).iter().any(|event| matches!(event, ServiceEvent::WebSocket { id: found, event: WebSocketEvent::Error { .. } } if *found == id)) {
+                errored = true; break;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert!(errored);
+        let request = server.join().unwrap();
+        assert!(request.contains("Cookie: sid=abc\r\n"));
+    }
+
+    #[test]
+    fn service_drives_dispatcher_socket_after_service_id_is_gone() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+                .unwrap();
+        });
+        let mut service = NetworkService::new(DispatchLimits::default());
+        let now = Instant::now();
+        service
+            .dispatcher
+            .open_websocket(
+                &format!("ws://127.0.0.1:{port}/"),
+                amazing_net::websocket::Options::default(),
+                None,
+                now,
+            )
+            .unwrap();
+        for tick in 0..1000 {
+            service.step(1, now + Duration::from_millis(tick));
+            if service.dispatcher.websockets_in_flight() == 0 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(service.dispatcher.websockets_in_flight(), 0);
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn service_uses_preflight_grants_until_expiry_and_separates_credentials() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = HttpUrl::parse(&format!(
+            "http://127.0.0.1:{}/resource",
+            listener.local_addr().unwrap().port()
+        ))
+        .unwrap();
+        let origin = HttpUrl::parse("http://client.example/")
+            .unwrap()
+            .origin()
+            .clone();
+        let server = thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut methods = Vec::new();
+            while methods.len() < 7 && Instant::now() < deadline {
+                let (mut socket, _) = match listener.accept() {
+                    Ok(pair) => pair,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(1));
+                        continue;
+                    }
+                    Err(error) => panic!("accept: {error}"),
+                };
+                socket.set_nonblocking(false).unwrap();
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = Vec::new();
+                while !request.ends_with(b"\r\n\r\n") {
+                    let mut byte = [0];
+                    socket.read_exact(&mut byte).unwrap();
+                    request.push(byte[0]);
+                }
+                let text = String::from_utf8(request).unwrap();
+                let method = text.split_once(' ').unwrap().0.to_owned();
+                let response = if method == "OPTIONS" {
+                    "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: http://client.example\r\nAccess-Control-Allow-Credentials: true\r\nAccess-Control-Allow-Methods: PUT\r\nAccess-Control-Allow-Headers: x-test\r\nAccess-Control-Max-Age: 2\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                } else {
+                    "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: http://client.example\r\nAccess-Control-Allow-Credentials: true\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                };
+                socket.write_all(response.as_bytes()).unwrap();
+                methods.push(method);
+            }
+            methods
+        });
+        let mut service = NetworkService::new(DispatchLimits::default());
+        let initial = Instant::now();
+        for (index, (credentials, offset)) in [
+            (CredentialsMode::Omit, 0),
+            (CredentialsMode::Omit, 1),
+            (CredentialsMode::Include, 1),
+            (CredentialsMode::Include, 4),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let units: Vec<u16> = url.serialize().encode_utf16().collect();
+            let mut request = ApiRequest::new(
+                ApiRequestInput::Url(&units),
+                ApiRequestInit {
+                    method: Some("PUT".encode_utf16().collect()),
+                    ..ApiRequestInit::default()
+                },
+                &url,
+                origin.clone(),
+            )
+            .unwrap();
+            request.credentials = credentials;
+            request
+                .headers
+                .append(
+                    &"x-test".encode_utf16().collect::<Vec<_>>(),
+                    &"yes".encode_utf16().collect::<Vec<_>>(),
+                )
+                .unwrap();
+            let now = initial + Duration::from_secs(offset);
+            let id = service
+                .start_at(request, ClientContext::default(), now)
+                .unwrap();
+            let mut finished = false;
+            for tick in 0..2000 {
+                for event in service.step(8192, now + Duration::from_millis(tick)) {
+                    if let ServiceEvent::Finished { id: found, result } = event {
+                        assert_eq!(found, id, "request {index}");
+                        assert_eq!(result.unwrap().status, 200);
+                        finished = true;
+                    }
+                }
+                if finished {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(1));
+            }
+            assert!(finished, "request {index}");
+        }
+        assert_eq!(
+            server.join().unwrap(),
+            ["OPTIONS", "PUT", "PUT", "OPTIONS", "PUT", "OPTIONS", "PUT"]
+        );
     }
 
     #[test]

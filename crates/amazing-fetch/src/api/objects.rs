@@ -697,6 +697,32 @@ impl PendingFetchApi {
         cookie_header: Option<String>,
         conditional_headers: Option<crate::HeaderList>,
     ) -> Result<Self, ApiError> {
+        Self::start_with_cache(
+            request,
+            dispatcher,
+            now,
+            security,
+            csp,
+            csp_destination,
+            cookie_header,
+            conditional_headers,
+            None,
+        )
+    }
+    pub(crate) fn start_with_cache<
+        R: amazing_net::dispatch::Resolver,
+        C: amazing_net::dispatch::Connector,
+    >(
+        request: &mut ApiRequest,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now: std::time::Instant,
+        security: crate::SecurityContext,
+        csp: crate::CspPolicyList,
+        csp_destination: crate::CspDestination,
+        cookie_header: Option<String>,
+        conditional_headers: Option<crate::HeaderList>,
+        cache: Option<&mut crate::PreflightCache>,
+    ) -> Result<Self, ApiError> {
         if request.signal_aborted {
             return Err(ApiError::Aborted);
         }
@@ -719,6 +745,7 @@ impl PendingFetchApi {
             now,
             cookie_header.as_deref(),
             conditional_headers.as_ref(),
+            cache,
         )?;
         Ok(Self {
             policy,
@@ -737,9 +764,14 @@ impl PendingFetchApi {
         now: std::time::Instant,
         cookie_header: Option<&str>,
         conditional_headers: Option<&crate::HeaderList>,
+        mut cache: Option<&mut crate::PreflightCache>,
     ) -> Result<(amazing_net::dispatch::RequestId, DispatchStage), ApiError> {
         let plan = policy.prepare().map_err(ApiError::Network)?;
-        if plan.preflight {
+        if plan.preflight
+            && !cache
+                .as_mut()
+                .is_some_and(|cache| cache.contains(policy, now))
+        {
             if let Some(preflight) = preflight(policy).map_err(ApiError::Network)? {
                 let mut probe = Request::new(policy.url().clone(), policy.origin.clone());
                 probe.mode = RequestMode::Cors;
@@ -773,9 +805,9 @@ impl PendingFetchApi {
         dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
         now: std::time::Instant,
     ) -> Option<Result<ApiResponse, ApiError>> {
-        self.on_event_with_cookie(event, dispatcher, now, |_| None)
+        self.on_event_with_cache(event, dispatcher, now, |_| None, None)
     }
-    pub(crate) fn on_event_with_cookie<
+    pub(crate) fn on_event_with_cache<
         R: amazing_net::dispatch::Resolver,
         C: amazing_net::dispatch::Connector,
         F: FnMut(&Request) -> Option<String>,
@@ -785,6 +817,7 @@ impl PendingFetchApi {
         dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
         now: std::time::Instant,
         mut cookie_for: F,
+        mut cache: Option<&mut crate::PreflightCache>,
     ) -> Option<Result<ApiResponse, ApiError>> {
         use amazing_net::dispatch::NetEvent;
         let id = match event {
@@ -836,6 +869,9 @@ impl PendingFetchApi {
                         if let Err(e) = check_preflight(&self.policy, &response) {
                             return Some(Err(ApiError::Network(e)));
                         }
+                        if let Some(cache) = cache.as_mut() {
+                            cache.insert(&self.policy, &response, now);
+                        }
                         let plan = match self.policy.prepare() {
                             Ok(p) => p,
                             Err(e) => return Some(Err(ApiError::Network(e))),
@@ -882,6 +918,7 @@ impl PendingFetchApi {
                                     now,
                                     self.cookie_header.as_deref(),
                                     None,
+                                    cache,
                                 ) {
                                     Ok((id, stage)) => {
                                         self.wire_id = id;

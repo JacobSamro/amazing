@@ -1,6 +1,6 @@
 use super::{Error, Options};
 use std::io::{Read, Write};
-pub(super) const MAX_HANDSHAKE: usize = 16384;
+pub(crate) const MAX_HANDSHAKE: usize = 16384;
 fn token(s: &str) -> bool {
     !s.is_empty()
         && s.bytes()
@@ -9,7 +9,7 @@ fn token(s: &str) -> bool {
 fn value(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(|b| matches!(b, 0x21..=0x7e))
 }
-pub(super) fn validate_request(host: &str, target: &str, options: &Options) -> Result<(), Error> {
+pub(crate) fn validate_request(host: &str, target: &str, options: &Options) -> Result<(), Error> {
     if !value(host) || !target.starts_with('/') || !value(target) || target.contains('#') {
         return Err(Error::InvalidInput);
     }
@@ -84,7 +84,7 @@ pub(super) fn read_headers(io: &mut impl Read) -> Result<Vec<u8>, Error> {
     }
     Ok(bytes)
 }
-pub(super) fn validate_response(
+pub(crate) fn validate_response(
     bytes: &[u8],
     expected: &str,
     offered: &[String],
@@ -153,7 +153,7 @@ pub(super) fn validate_response(
     }
     Ok(selected)
 }
-pub(super) fn base64(bytes: &[u8]) -> String {
+pub(crate) fn base64(bytes: &[u8]) -> String {
     const DIGITS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for b in bytes.chunks(3) {
@@ -177,7 +177,7 @@ pub(super) fn base64(bytes: &[u8]) -> String {
 }
 /// SHA-1 only for RFC6455's fixed 24-byte key plus GUID challenge. This is not
 /// an authentication primitive, signature, password hash or general crypto API.
-pub(super) fn accept(key: &str) -> String {
+pub(crate) fn accept(key: &str) -> String {
     assert_eq!(key.len(), 24);
     let mut input = [0u8; 128];
     input[..24].copy_from_slice(key.as_bytes());
