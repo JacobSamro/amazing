@@ -477,3 +477,37 @@ requested that contract in `questions.md` and did not add a parallel CSS
 grammar. Paths, text, strokes, paint servers, filters and group opacity remain
 outside the static renderer. Stop at RC-5 for co-integrator review; no next
 ticket, push or PR.
+
+## RC-6 — CSS-7 computed static SVG paint style
+
+Fixed base `945ca38` (CSS-7 merge). The SVG image adapter replaces RC-5's
+literal declaration winner logic with
+`amazing_css::compute_element_paint_style(parent, hints, author, inline)`.
+It passes each parent's computed style and keeps SVG presentation attributes
+in the lower-priority hint slice. Inline declarations may include custom
+properties. The static image subset has no matched stylesheet declarations,
+so the author slice is empty. Typed color, fill, fill-opacity and opacity are
+consumed; explicit `Unsupported` values reject the whole resource. Existing
+geometry, reference, script, animation, unsupported paint and work limits
+remain strict. No CSS, DOM, paint, media, root graph or lockfile source changed.
+
+At pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, the four-case
+SVG resource control stays **4/4** on the CSS-7 fixed base and in both after
+runs, with identical classifications, pixel differences and
+actual/reference/diff hashes. Raw WPT gain is zero. Four owned 64×64 cases
+cover CSS-wide `inherit`/`initial`, inherited `var()`, and presentation versus
+inline ordering. They move from **0/4 inert reference matches** to **4/4
+non-inert matches**, twice; every after case differs from blank at 4,096
+pixels. Evidence and reproduction: `tests/wpt-replaced-content/rc6/`.
+
+The remaining boundary is full SVG stylesheet/selector integration and other
+SVG paint/shape surfaces, not a missing literal parser. No broad SVG
+conformance claim follows from four selected headless reftests. Stop at RC-6
+for co-integrator preflight; no push, PR, or next ticket.
+
+Final win-001 gate after lane-only refresh and re-sync: workspace nextest
+**1,441 passed, 0 failed, 3 skipped**; separate workspace doctests **2 passed**.
+Isolated image nextest **21 passed**, separate image doctests **0 present**.
+Twenty-two source/manifest/fixture hashes matched Mac and Windows both before
+and after, unchanged across the gate. The final gate is on fixed CSS-7 base
+`945ca38`; later dev merges were not chased.

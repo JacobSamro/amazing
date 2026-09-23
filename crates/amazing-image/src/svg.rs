@@ -1,9 +1,13 @@
 //! Explicit static SVG image subset, not a general SVG/DOM implementation.
 //! Strict XML subset; rectangles, circles and ellipses with presentation fills.
-//! Bounded inline color/fill declarations use the shared CSS declaration parser.
+//! Bounded inline color/fill declarations use the shared CSS computed-style seam.
 //! No scripts, stylesheets, references, paths, text, strokes or animation.
 //! Bounded attribute transforms on groups and shapes are supported.
 use crate::{DecodeError, DecodeLimits};
+use amazing_css::{
+    ComputedStyle, Declaration, ElementFill, ElementStyleValue, compute_element_paint_style,
+    parse_declarations,
+};
 use amazing_media::Image;
 use std::collections::BTreeMap;
 
@@ -14,22 +18,11 @@ use transform::Matrix;
 type Attrs = BTreeMap<String, String>;
 const MAX_SHAPES: usize = 1024;
 const MAX_WORK: usize = 64 * 1024 * 1024;
-#[derive(Clone, Copy)]
 struct Style {
+    computed: ComputedStyle,
     fill: [u8; 4],
-    fill_current: bool,
-    color: [u8; 4],
     fill_opacity: f64,
-}
-impl Default for Style {
-    fn default() -> Self {
-        Self {
-            fill: [0, 0, 0, 255],
-            fill_current: false,
-            color: [0, 0, 0, 255],
-            fill_opacity: 1.0,
-        }
-    }
+    opacity: f64,
 }
 #[derive(Clone, Copy)]
 enum Shape {
@@ -188,13 +181,12 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
         let self_closed = tag.ends_with('/');
         let tag = tag.strip_suffix('/').unwrap_or(tag).trim_end();
         let (name, attrs) = attributes(tag)?;
-        let attrs = presentation_attrs(attrs)?;
         elements += 1;
         if elements > MAX_SHAPES || stack.len() >= 32 {
             return Err(DecodeError::AllocationLimit);
         }
-        let inherited = stack.last().map(|(_, s, _)| *s).unwrap_or_default();
-        let style = style(&attrs, inherited)?;
+        let parent = stack.last().map(|(_, s, _)| s);
+        let style = style(&attrs, parent)?;
         let parent_matrix = stack.last().map(|(_, _, m)| *m).unwrap_or(Matrix::IDENTITY);
         let local_matrix = attrs
             .get("transform")
@@ -248,7 +240,7 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
                 .map(String::as_str)
                 .unwrap_or("xMidYMid meet");
             validate_aspect(aspect)?;
-            if scalar_value(&attrs, "opacity", 1.0)? != 1.0 {
+            if style.opacity != 1.0 {
                 return Err(DecodeError::UnsupportedSvg);
             }
             scene = Some(Scene {
@@ -268,7 +260,7 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
             let shape = match name.as_str() {
                 "g" => {
                     check_attrs(&attrs, &[])?;
-                    if scalar_value(&attrs, "opacity", 1.0)? != 1.0 {
+                    if style.opacity != 1.0 {
                         return Err(DecodeError::UnsupportedSvg);
                     }
                     None
@@ -311,13 +303,8 @@ fn parse(mut text: &str) -> Result<Scene, DecodeError> {
                 _ => return Err(DecodeError::UnsupportedSvg),
             };
             if let Some(shape) = shape {
-                let mut color = if style.fill_current {
-                    style.color
-                } else {
-                    style.fill
-                };
-                let opacity = scalar_value(&attrs, "opacity", 1.0)?.clamp(0.0, 1.0);
-                color[3] = (color[3] as f64 * style.fill_opacity * opacity).round() as u8;
+                let mut color = style.fill;
+                color[3] = (color[3] as f64 * style.fill_opacity * style.opacity).round() as u8;
                 scene.as_mut().unwrap().items.push(Item {
                     shape,
                     color,
@@ -362,67 +349,56 @@ fn scalar(s: &str) -> Result<f64, DecodeError> {
         Err(DecodeError::InvalidImage)
     }
 }
-fn scalar_value(a: &Attrs, key: &str, default: f64) -> Result<f64, DecodeError> {
-    a.get(key).map_or(Ok(default), |s| scalar(s))
-}
 fn required(a: &Attrs, key: &str) -> Result<f64, DecodeError> {
     number(a.get(key).ok_or(DecodeError::UnsupportedSvg)?)
 }
 fn value(a: &Attrs, key: &str, default: f64) -> Result<f64, DecodeError> {
     a.get(key).map_or(Ok(default), |s| number(s))
 }
-fn style(a: &Attrs, mut parent: Style) -> Result<Style, DecodeError> {
-    if let Some(color) = a.get("color") {
-        parent.color =
-            amazing_css::color::parse_css_color(color).ok_or(DecodeError::UnsupportedSvg)?;
+fn supported<T>(value: ElementStyleValue<T>) -> Result<T, DecodeError> {
+    match value {
+        ElementStyleValue::Supported { value, .. } => Ok(value),
+        ElementStyleValue::Unsupported { .. } => Err(DecodeError::UnsupportedSvg),
     }
-    if let Some(fill) = a.get("fill") {
-        parent.fill_current = fill.eq_ignore_ascii_case("currentcolor");
-        parent.fill = if fill.eq_ignore_ascii_case("none") {
-            [0; 4]
-        } else if parent.fill_current {
-            parent.color
-        } else {
-            amazing_css::color::parse_css_color(fill).ok_or(DecodeError::UnsupportedSvg)?
-        };
-    }
-    parent.fill_opacity = scalar_value(a, "fill-opacity", parent.fill_opacity)?.clamp(0.0, 1.0);
-    Ok(parent)
 }
 
-/// Presentation attributes are lower priority than declarations in `style`.
-/// The CSS crate owns declaration tokenization, comments, escapes and !important.
-/// Only values this static renderer can compute and paint are admitted here.
-fn presentation_attrs(mut attrs: Attrs) -> Result<Attrs, DecodeError> {
-    let Some(inline) = attrs.remove("style") else {
-        return Ok(attrs);
-    };
-    let declarations = amazing_css::parse_declarations(&inline);
-    if declarations.is_empty() && !inline.trim().is_empty() {
+fn style(a: &Attrs, parent: Option<&Style>) -> Result<Style, DecodeError> {
+    let hints: Vec<Declaration> = ["color", "fill", "fill-opacity", "opacity"]
+        .into_iter()
+        .filter_map(|property| {
+            a.get(property).map(|value| Declaration {
+                property: property.to_owned(),
+                value: value.clone(),
+                important: false,
+            })
+        })
+        .collect();
+    let inline = a.get("style").map_or(Vec::new(), |source| parse_declarations(source));
+    if a.get("style").is_some_and(|source| !source.trim().is_empty() && inline.is_empty())
+        || inline.iter().any(|decl| {
+            !decl.property.starts_with("--")
+                && !matches!(decl.property.as_str(), "color" | "fill" | "fill-opacity" | "opacity")
+        })
+    {
         return Err(DecodeError::UnsupportedSvg);
     }
-    let mut winners: BTreeMap<String, (String, bool)> = BTreeMap::new();
-    for declaration in declarations {
-        if !matches!(
-            declaration.property.as_str(),
-            "fill" | "color" | "fill-opacity" | "opacity"
-        ) {
-            return Err(DecodeError::UnsupportedSvg);
-        }
-        let previous_important = winners
-            .get(&declaration.property)
-            .is_some_and(|(_, important)| *important);
-        if !previous_important || declaration.important {
-            winners.insert(
-                declaration.property,
-                (declaration.value, declaration.important),
-            );
-        }
-    }
-    for (property, (value, _)) in winners {
-        attrs.insert(property, value);
-    }
-    Ok(attrs)
+    let paint = compute_element_paint_style(
+        parent.map(|style| &style.computed),
+        &hints,
+        &[],
+        &inline,
+    );
+    supported(paint.color)?;
+    let fill = match supported(paint.fill)? {
+        ElementFill::None => [0; 4],
+        ElementFill::Color(color) => color,
+    };
+    Ok(Style {
+        computed: paint.computed,
+        fill,
+        fill_opacity: f64::from(supported(paint.fill_opacity)?).clamp(0.0, 1.0),
+        opacity: f64::from(supported(paint.opacity)?).clamp(0.0, 1.0),
+    })
 }
 fn check_attrs(a: &Attrs, extra: &[&str]) -> Result<(), DecodeError> {
     for key in a.keys() {
@@ -432,6 +408,7 @@ fn check_attrs(a: &Attrs, extra: &[&str]) -> Result<(), DecodeError> {
             "color",
             "fill-opacity",
             "opacity",
+            "style",
             "transform",
         ]
         .contains(&key.as_str())

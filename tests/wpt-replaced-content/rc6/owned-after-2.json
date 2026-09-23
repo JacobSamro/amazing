@@ -1,0 +1,34 @@
+﻿[
+    {
+        "id":  "wide-inherit",
+        "reference_sha256":  "c0d256f46cfdcc559aff9cbc6797320e598bc7ff34558d840b8a38ccd4550a44",
+        "blank_sha256":  "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+        "actual_sha256":  "c0d256f46cfdcc559aff9cbc6797320e598bc7ff34558d840b8a38ccd4550a44",
+        "match":  true,
+        "inert":  false
+    },
+    {
+        "id":  "wide-initial",
+        "reference_sha256":  "3cf730e8f850835d0144959c030b85528727ce709853299de2252625c91c78ed",
+        "blank_sha256":  "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+        "actual_sha256":  "3cf730e8f850835d0144959c030b85528727ce709853299de2252625c91c78ed",
+        "match":  true,
+        "inert":  false
+    },
+    {
+        "id":  "inherited-variable",
+        "reference_sha256":  "e87bc5fc5f56f073ef852ce251041c4f186fd847c39789a72424920e1285c75e",
+        "blank_sha256":  "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+        "actual_sha256":  "e87bc5fc5f56f073ef852ce251041c4f186fd847c39789a72424920e1285c75e",
+        "match":  true,
+        "inert":  false
+    },
+    {
+        "id":  "hint-inline-order",
+        "reference_sha256":  "21cf9102987ef7027aee902ed66f957c43631acea3f8c1e506c9b0f80e8e9c79",
+        "blank_sha256":  "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+        "actual_sha256":  "21cf9102987ef7027aee902ed66f957c43631acea3f8c1e506c9b0f80e8e9c79",
+        "match":  true,
+        "inert":  false
+    }
+]

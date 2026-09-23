@@ -1,0 +1,74 @@
+[
+  {
+    "phase": "before",
+    "actual_reference_differing_pixels": 4096,
+    "actual_blank_differing_pixels": 0,
+    "id": "wide-inherit"
+  },
+  {
+    "phase": "before",
+    "actual_reference_differing_pixels": 4096,
+    "actual_blank_differing_pixels": 0,
+    "id": "wide-initial"
+  },
+  {
+    "phase": "before",
+    "actual_reference_differing_pixels": 4096,
+    "actual_blank_differing_pixels": 0,
+    "id": "inherited-variable"
+  },
+  {
+    "phase": "before",
+    "actual_reference_differing_pixels": 4096,
+    "actual_blank_differing_pixels": 0,
+    "id": "hint-inline-order"
+  },
+  {
+    "phase": "after-1",
+    "actual_reference_differing_pixels": 0,
+    "actual_blank_differing_pixels": 4096,
+    "id": "wide-inherit"
+  },
+  {
+    "phase": "after-1",
+    "actual_reference_differing_pixels": 0,
+    "actual_blank_differing_pixels": 4096,
+    "id": "wide-initial"
+  },
+  {
+    "phase": "after-1",
+    "actual_reference_differing_pixels": 0,
+    "actual_blank_differing_pixels": 4096,
+    "id": "inherited-variable"
+  },
+  {
+    "phase": "after-1",
+    "actual_reference_differing_pixels": 0,
+    "actual_blank_differing_pixels": 4096,
+    "id": "hint-inline-order"
+  },
+  {
+    "phase": "after-2",
+    "actual_reference_differing_pixels": 0,
+    "actual_blank_differing_pixels": 4096,
+    "id": "wide-inherit"
+  },
+  {
+    "phase": "after-2",
+    "actual_reference_differing_pixels": 0,
+    "actual_blank_differing_pixels": 4096,
+    "id": "wide-initial"
+  },
+  {
+    "phase": "after-2",
+    "actual_reference_differing_pixels": 0,
+    "actual_blank_differing_pixels": 4096,
+    "id": "inherited-variable"
+  },
+  {
+    "phase": "after-2",
+    "actual_reference_differing_pixels": 0,
+    "actual_blank_differing_pixels": 4096,
+    "id": "hint-inline-order"
+  }
+]

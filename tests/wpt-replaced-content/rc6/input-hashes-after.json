@@ -1,0 +1,30 @@
+{
+  "fixed_base": "945ca38",
+  "phase": "after-final-gate",
+  "files": {
+    "crates/amazing-image/src/svg.rs": "9327cd17d91f626810a1041e53de9c1f2258825698457a747bb6c02e07b19ad6",
+    "crates/amazing-image/tests/svg.rs": "cabbbb86cc827688d46789a593ba26d45a5f04a3ac9e677721a02e72846a9c6a",
+    "tests/wpt-replaced-content/rc6-svg-manifest.json": "d794102ba14ea1258c71d099f7beb012cffd05f9a7b4de168c003d8d5435f2a3",
+    "tests/wpt-replaced-content/rc6-fixtures/blank.html": "82871bb2a3b95eef4e72f5e1ad695ff84e4ab7dfeb453e486bbb2573dcce0f3b",
+    "tests/wpt-replaced-content/rc6-fixtures/blank.svg": "52c189a5ba935dabcaa697980968836e2ebbe2c19c67210c35d3dbcfd63dfdde",
+    "tests/wpt-replaced-content/rc6-fixtures/hint-inline-order-ref.html": "331ed484310e7bb1620a2fc7df22e874adfbb8b8a880e8eb70b843caffe35c61",
+    "tests/wpt-replaced-content/rc6-fixtures/hint-inline-order-ref.svg": "ae74942db33d04878d2ba65a963aab064c03ea33966d8765ebe2db2ef6f310d3",
+    "tests/wpt-replaced-content/rc6-fixtures/hint-inline-order.html": "0a3d18a0ec0345b09b3fb79c27bd1547e4c6ce1d841306f70adae09234413b1b",
+    "tests/wpt-replaced-content/rc6-fixtures/hint-inline-order.svg": "81f912858dc13f262170629161fcb420b33c36600cbc92f6562ead8604f43bbf",
+    "tests/wpt-replaced-content/rc6-fixtures/inherited-variable-ref.html": "071666f81cafe33159c058952fc07d0ec5a8213d515a71284c0d881bf316e282",
+    "tests/wpt-replaced-content/rc6-fixtures/inherited-variable-ref.svg": "18a21c78b7e69279101626813f4d24988e0929040dc7c2df5740e0d711d473f5",
+    "tests/wpt-replaced-content/rc6-fixtures/inherited-variable.html": "9f4a1a53c9444d091ac31f65dffb413f55862837b153e0464964fdc6e67f6fcd",
+    "tests/wpt-replaced-content/rc6-fixtures/inherited-variable.svg": "15434dc64216dffe40d4cbe4fe107f9ba7028f98ae23b2a9ec9c9c662984d258",
+    "tests/wpt-replaced-content/rc6-fixtures/manifest.json": "4b3d31a03f8df4e7a4017872130882f3b45499f5f5012963415ebdf6b6188e44",
+    "tests/wpt-replaced-content/rc6-fixtures/wide-inherit-ref.html": "a85b94be19a695841a32b4a8d816fc950cbc7d4d15e836d5f4105d41e3601ce6",
+    "tests/wpt-replaced-content/rc6-fixtures/wide-inherit-ref.svg": "8b6ecbcaa617fcb2c663f45fd63f1140cd3c5850d2baab893a784a6daeebfb4a",
+    "tests/wpt-replaced-content/rc6-fixtures/wide-inherit.html": "4b9c723dd2cbfc50eab6d762e1dfb8dad437a6b45c01e626043c1f4f8eb3b606",
+    "tests/wpt-replaced-content/rc6-fixtures/wide-inherit.svg": "d4a5e8df556479036c7cb640e301414a90313ba08b2f4f4edf554c7b7e72e455",
+    "tests/wpt-replaced-content/rc6-fixtures/wide-initial-ref.html": "f7d45722faba546f8fa3c6b551e6bbc65fb67a4eb6a0140b59f798290c8e5906",
+    "tests/wpt-replaced-content/rc6-fixtures/wide-initial-ref.svg": "adec8f93af52468c22a2952272b6afde618422678d592f105aea7e6dcfabf604",
+    "tests/wpt-replaced-content/rc6-fixtures/wide-initial.html": "c2bf3b6e6924b670c0540e2dee0e73da8933d7e1506b77bf5a6b02838580029d",
+    "tests/wpt-replaced-content/rc6-fixtures/wide-initial.svg": "b16d5f817613e6ab3dbbaa9ba1e8c33cb51905b2f63c822ccc1ec7991b7ec063"
+  },
+  "mac_windows_equal": true,
+  "unchanged_from_before": true
+}

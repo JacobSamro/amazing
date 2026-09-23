@@ -1,0 +1,43 @@
+{
+  "source": "rc5/wpt-final-1.json",
+  "source_base": "0964385d49bb1a0da1822446a4e1572d91d7c925",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "tests": [
+    {
+      "id": "object-fit-fill-svg-001i",
+      "classification": "pass",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "1091b39e8fc8263ac5dbec06cae6521e1ffbe20b70cd05f962e830f0f28a1c7a",
+      "reference_sha256": "1091b39e8fc8263ac5dbec06cae6521e1ffbe20b70cd05f962e830f0f28a1c7a",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "object-fit-fill-svg-002i",
+      "classification": "pass",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "1091b39e8fc8263ac5dbec06cae6521e1ffbe20b70cd05f962e830f0f28a1c7a",
+      "reference_sha256": "1091b39e8fc8263ac5dbec06cae6521e1ffbe20b70cd05f962e830f0f28a1c7a",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "object-fit-contain-svg-001i",
+      "classification": "pass",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "41fc1de6d4ef6f0be79a9382124f1b391164b40b620d27c3aa20c5729258915d",
+      "reference_sha256": "41fc1de6d4ef6f0be79a9382124f1b391164b40b620d27c3aa20c5729258915d",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    },
+    {
+      "id": "object-fit-contain-svg-002i",
+      "classification": "pass",
+      "differing_pixels": 0,
+      "max_difference": 0,
+      "actual_sha256": "789f24d452b8b43a9ab3f7db44183aedf1573a2247ef458d303230f68a5d2515",
+      "reference_sha256": "789f24d452b8b43a9ab3f7db44183aedf1573a2247ef458d303230f68a5d2515",
+      "diff_sha256": "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e"
+    }
+  ]
+}

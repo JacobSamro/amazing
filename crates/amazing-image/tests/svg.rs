@@ -218,9 +218,39 @@ fn inline_fill_opacity_and_unsupported_css_fail_closed() {
     for body in [
         r#"<rect width="8" height="8" style="stroke: red"/>"#,
         r#"<rect width="8" height="8" style="fill: url(#paint)"/>"#,
-        r#"<rect width="8" height="8" style="fill: var(--color)"/>"#,
-        r#"<rect width="8" height="8" style="fill: initial"/>"#,
+        r#"<rect width="8" height="8" style="fill: lab(50% 0 0)"/>"#,
         r#"<rect width="8" height="8" style="fill: red; filter: blur(1px)"/>"#,
+        r#"<g style="opacity: .5"><rect width="8" height="8"/></g>"#,
+    ] {
+        assert_eq!(decode(&svg("", body), Default::default()).unwrap_err(), DecodeError::UnsupportedSvg);
+    }
+    // A missing custom property invalidates the declaration; CSS then uses
+    // fill's inherited/initial value instead of reporting unsupported paint.
+    let missing = svg("", r#"<rect width="8" height="8" style="fill: var(--color)"/>"#);
+    assert_eq!(pixel(&missing, 0, 0), [0, 0, 0, 255]);
+}
+
+
+#[test]
+fn computed_svg_style_handles_wide_keywords_and_inherited_variables() {
+    let inherited = svg("", r#"<g fill="red"><rect width="2" height="2" style="fill: inherit"/><rect x="2" width="2" height="2" style="fill: initial"/><rect x="4" width="2" height="2" style="fill: unset"/></g>"#);
+    assert_eq!(pixel(&inherited, 0, 0), [255, 0, 0, 255]);
+    assert_eq!(pixel(&inherited, 2, 0), [0, 0, 0, 255]);
+    assert_eq!(pixel(&inherited, 4, 0), [255, 0, 0, 255]);
+
+    let variable = svg(r#"style="--ink: blue""#, r#"<g style="fill: var(--ink)"><rect width="4" height="4"/><rect x="4" width="4" height="4" fill="red" style="fill: var(--ink)"/></g>"#);
+    assert_eq!(pixel(&variable, 0, 0), [0, 0, 255, 255]);
+    assert_eq!(pixel(&variable, 4, 0), [0, 0, 255, 255]);
+}
+
+#[test]
+fn computed_svg_style_resolves_alpha_and_rejects_unsupported_paint() {
+    let bytes = svg(r#"style="--alpha: .5""#, r#"<rect width="8" height="8" fill="red" style="fill-opacity: var(--alpha); opacity: initial"/>"#);
+    assert_eq!(pixel(&bytes, 0, 0), [255, 0, 0, 128]);
+    for body in [
+        r#"<rect width="8" height="8" style="fill: url(#paint)"/>"#,
+        r#"<rect width="8" height="8" style="color: lab(50% 0 0); fill: currentColor"/>"#,
+        r#"<rect width="8" height="8" stroke="red"/>"#,
         r#"<g style="opacity: .5"><rect width="8" height="8"/></g>"#,
     ] {
         assert_eq!(decode(&svg("", body), Default::default()).unwrap_err(), DecodeError::UnsupportedSvg);
