@@ -473,3 +473,26 @@ Test262 BEFORE sweep on the same fixed base had 12,088 passing files; after
 win-002 routing replaced win-001's queued candidate job, the complete pinned
 Linux before/after corpus is the zero-loss evidence for this ticket. The
 integrator rechecks the merged head.
+
+### JSRT-8 priority built-in interrupt
+
+Fixed Test262 comparison base: `82d273a` (JSB-2). The full pinned `3655e746`
+corpus moved from 20,999 to 23,664 passing files and from 41,000 to 46,285
+passing variants: 2,665 fail-to-pass files and no lost file or variant passes.
+Before and after classification hashes are `d6dad40499b358008e52a69ae8d82e91441dcee111f1de3822ce320cb8ddc254`
+and `0001b78eb38467a21e4f87bbefee39eaf4a6f7ff730838f4e1b5f5057d01382a`.
+
+`for...in` now walks own string keys and prototypes with descriptor checks,
+shadowing, deletion awareness, and non-enumerable exclusion. Array methods and
+statics include stable `sort`/`toSorted` and the missing §23.1.3 surface;
+NativeError constructors inherit from `%Error%`. The Object, Function,
+Boolean, and Symbol surfaces were audited. Class prototype methods and
+`constructor` have non-enumerable descriptors. `Array.fromAsync` covers
+synchronous iterable inputs and settled values; true asynchronous iterators
+and pending input promises still take an explicit unsupported path.
+
+The pinned Test262 file `built-ins/Object/freeze/typedarray-backed-by-resizable-buffer.js`
+asserts TypeError even for zero-length resizable-backed TypedArrays despite
+comments saying they should freeze successfully. The runtime currently follows
+those assertions; revisit this when the corpus is updated or the integer-indexed
+integrity model is made complete.
