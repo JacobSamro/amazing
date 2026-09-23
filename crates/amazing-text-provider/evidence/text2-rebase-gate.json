@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-2",
+  "rebase_parent": "285c16ee01956b1a04d7f247eb977f43417badb0",
+  "branch_commits_ahead": 1,
+  "server_tree": "C:\\Users\\server\\src\\wt\\text",
+  "server_target": "C:\\Users\\server\\target\\text",
+  "lock_sha256": "30c1b66612223068a45b4f9429f7921b60ef45aae7ed4cdfa029d8610506d25a",
+  "provider_source_sha256": "10330f13c5ee5465df630a315046b103ca933da35afc8d5aeadce050c7d46574",
+  "provider_nextest": {
+    "passed": 35,
+    "failed": 0,
+    "skipped": 1
+  },
+  "pinned_wpt_decoder": {
+    "passed": 1,
+    "failed": 0
+  },
+  "workspace_nextest": {
+    "passed": 1753,
+    "failed": 0,
+    "skipped": 4
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0,
+    "suites": 21
+  }
+}
