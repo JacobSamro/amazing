@@ -1182,6 +1182,27 @@ fn document_surface_uses_tree_and_host_metadata() {
 }
 
 #[test]
+fn node_base_uri_uses_first_document_base_and_document_url_fallback() {
+    let mut h = Host::default();
+    let doc = NodeIdx(0);
+    let html = h.dom.create_element(doc, "html");
+    let head = h.dom.create_element(html, "head");
+    let body = h.dom.create_element(html, "body");
+    let node = h.dom.create_element(body, "p");
+    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(node), &[]), str_value("https://example.test/page"));
+    let first = h.dom.create_element(head, "base");
+    h.dom.set_attribute(first, "href", "https://cdn.test/assets/").unwrap();
+    let second = h.dom.create_element(body, "base");
+    h.dom.set_attribute(second, "href", "https://ignored.test/").unwrap();
+    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(node), &[]), str_value("https://cdn.test/assets/"));
+    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(doc), &[]), str_value("https://cdn.test/assets/"));
+    h.dom.remove_attribute(first, "href").unwrap();
+    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(node), &[]), str_value("https://ignored.test/"));
+    h.dom.detach(second);
+    assert_eq!(call(&mut h, O::NodeBaseURI, V::Node(node), &[]), str_value("https://example.test/page"));
+}
+
+#[test]
 fn element_specific_reflection_handles_urls_enums_numbers_and_rel_list() {
     let mut h = Host::default();
     let root = h.dom.create_element(NodeIdx(0), "div");

@@ -206,6 +206,7 @@ pub enum Operation {
     ElementInnerText,
     ElementSetInnerText,
     GetRootNode,
+    NodeBaseURI,
     ElementAttachShadow,
     ElementShadowRoot,
     ElementAssignedSlot,

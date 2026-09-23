@@ -49,6 +49,7 @@ const NODE: &[Member] = &[
     getter("nextSibling", O::NextSibling),
     getter("childNodes", O::ChildNodes),
     getter("isConnected", O::IsConnected),
+    getter("baseURI", O::NodeBaseURI),
     method("hasChildNodes", O::HasChildNodes, 0),
     method("contains", O::Contains, 1),
     method("appendChild", O::AppendChild, 1),
