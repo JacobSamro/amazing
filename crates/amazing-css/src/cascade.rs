@@ -28,7 +28,7 @@ use amazing_dom::{Dom, NodeIdx};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// Computed styles for a whole document, keyed by arena index.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct StyledDom {
     styles: HashMap<u32, ComputedStyle>,
     sources: HashMap<u32, BTreeMap<String, ElementStyleSource>>,
@@ -239,6 +239,10 @@ fn style_subtree(
 #[path = "cascade_context.rs"]
 mod context;
 use context::{CompiledRule, compile_sheets};
+
+#[path = "cascade_invalidation.rs"]
+mod invalidation;
+pub use invalidation::{recompute_roots, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch};
 
 #[path = "presentational_hints.rs"]
 mod hints;
