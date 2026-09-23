@@ -1452,3 +1452,34 @@ loads a cookie-bearing script, blocks an image before dispatch, follows a
 Set-Cookie redirect, validates an ETag-cached response with 304, and opens a
 cookie-bearing WebSocket. The browser driver still supplies the page's
 `ClientContext`, schedules `step`, and interprets service events.
+
+## NET-21 — URL setters, search parameters, and body data models
+
+Fixed base: `d8a228dc73eb5f83c9dd4bb95fd7c6b1b17cb79d` (2026-09-23).
+The setter state overrides mutate `ParsedUrl` without reparsing a whole URL for
+component assignments. The pinned WPT `setters_tests.json` 278-object runner
+reports each failing property/index/comment and compares all expected getters.
+`UrlWithSearchParams` owns a shared URL record; each attached
+`UrlSearchParams` handle reads the current query on access and writes a freshly
+serialized query after mutation. Standalone parameters preserve duplicate entry
+order; stable sort compares UTF-16 code units, matching ECMAScript string order.
+The form-urlencoded parser operates on body bytes after lossy UTF-8 decoding;
+only the URLSearchParams constructor removes one leading `?`.
+
+`amazing-fetch::api` now has owned `Blob`, `File`, `FormData`, and `FormValue`
+models. Blob parts combine bytes/text/other blobs, normalize printable ASCII
+MIME types to lowercase, and slice with relative indices. Multipart serialization
+uses a per-process unique boundary, CRLF line ending normalization for text
+fields, and `%0D`, `%0A`, `%22` filename/name escaping. FormData extraction
+sets the Content-Type including boundary. Body consumption decodes multipart or
+form-urlencoded by MIME type and retains the existing body-used limit and clone
+semantics. WebIDL constructors, default lastModified clock, and exposed JS
+promises are a dom-bindings adoption request in `.agents/net/questions.md`.
+
+Final Windows fixed-source gate, twice: workspace nextest 1,735 passed / 3 skipped;
+workspace doctests 2 passed; net lane nextest 384 passed and doctests 0.
+Pinned WPT results: URL 896, IDNA 87 + 2,671, MIME/data 1,107, cookies
+192, and setters 92/278 before versus 278/278 after. Both passes used the
+same 183-file source manifest SHA-256
+`f945d97546b56dee3dc85f5c1b5b16a477aa3bdd51efec9cada8fb242b64ea19`.
+Full evidence is in `.agents/net/report.md`.

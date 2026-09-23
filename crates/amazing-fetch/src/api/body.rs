@@ -1,4 +1,5 @@
-use super::{parse_json, usv_string, ApiError, JsonValue};
+use super::{parse_json, usv_string, ApiError, Blob, FormData, JsonValue};
+use amazing_net::url::{parse_form_urlencoded, serialize_form_urlencoded};
 use amazing_net::StreamingResponse;
 use std::{cell::RefCell, rc::Rc};
 
@@ -16,7 +17,8 @@ pub enum BodyInput {
     Bytes(Vec<u8>),
     String(Vec<u16>),
     UrlSearchParams(Vec<(Vec<u16>, Vec<u16>)>),
-    FormData,
+    FormData(FormData),
+    Blob(Blob),
     Stream(Box<dyn PullBody>),
 }
 impl BodyInput {
@@ -67,18 +69,13 @@ impl ApiBody {
                 Some("text/plain;charset=UTF-8".into()),
             ),
             BodyInput::UrlSearchParams(items) => {
-                let encoded = items
-                    .iter()
-                    .map(|(k, v)| {
-                        format!(
-                            "{}={}",
-                            form_encode(&usv_string(k)),
-                            form_encode(&usv_string(v))
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("&")
-                    .into_bytes();
+                let encoded = serialize_form_urlencoded(
+                    &items
+                        .iter()
+                        .map(|(k, v)| (usv_string(k), usv_string(v)))
+                        .collect::<Vec<_>>(),
+                )
+                .into_bytes();
                 (
                     encoded,
                     None,
@@ -86,7 +83,18 @@ impl ApiBody {
                     Some("application/x-www-form-urlencoded;charset=UTF-8".into()),
                 )
             }
-            BodyInput::FormData => return Err(ApiError::UnsupportedFormData),
+            BodyInput::FormData(form) => {
+                let (bytes, mime) = form.encode_multipart();
+                (bytes, None, true, Some(mime))
+            }
+            BodyInput::Blob(blob) => {
+                let mime = if blob.content_type.is_empty() {
+                    None
+                } else {
+                    Some(blob.content_type)
+                };
+                (blob.bytes, None, true, mime)
+            }
             BodyInput::Stream(stream) => (Vec::new(), Some(stream), false, None),
         };
         if bytes.len() > MAX_API_BODY_BYTES {
@@ -103,6 +111,9 @@ impl ApiBody {
             locked: false,
             mime,
         })
+    }
+    pub fn set_mime_type(&mut self, mime: Option<String>) {
+        self.mime = mime;
     }
     pub fn mime_type(&self) -> Option<&str> {
         self.mime.as_deref()
@@ -155,11 +166,31 @@ impl ApiBody {
     pub fn json(&mut self) -> Result<JsonValue, ApiError> {
         parse_json(&self.consume()?)
     }
-    pub fn blob(&mut self) -> Result<(), ApiError> {
-        Err(ApiError::UnsupportedBlob)
+    pub fn blob(&mut self) -> Result<Blob, ApiError> {
+        let mime = self.mime.clone().unwrap_or_default();
+        Ok(Blob::from_bytes(self.consume()?, &mime))
     }
-    pub fn form_data(&mut self) -> Result<(), ApiError> {
-        Err(ApiError::UnsupportedFormData)
+    pub fn form_data(&mut self) -> Result<FormData, ApiError> {
+        let mime = self.mime.clone().unwrap_or_default();
+        let bytes = self.consume()?;
+        let mut fields = mime.split(';');
+        let kind = fields.next().unwrap_or("").trim();
+        if kind.eq_ignore_ascii_case("application/x-www-form-urlencoded") {
+            let mut form = FormData::default();
+            for (name, value) in parse_form_urlencoded(&String::from_utf8_lossy(&bytes)) {
+                form.append_text(&name, &value);
+            }
+            return Ok(form);
+        }
+        if !kind.eq_ignore_ascii_case("multipart/form-data") {
+            return Err(ApiError::InvalidFormData);
+        }
+        let boundary = fields
+            .filter_map(|part| part.trim().split_once('='))
+            .find(|(name, _)| name.trim().eq_ignore_ascii_case("boundary"))
+            .map(|(_, value)| value.trim().trim_matches('"'))
+            .ok_or(ApiError::InvalidFormData)?;
+        FormData::decode_multipart(&bytes, boundary)
     }
     fn consume(&mut self) -> Result<Vec<u8>, ApiError> {
         let Some(shared) = &self.shared else {
@@ -197,17 +228,4 @@ impl ApiBody {
         }
         Ok(shared.bytes.clone())
     }
-}
-fn form_encode(s: &str) -> String {
-    let mut out = String::new();
-    for b in s.as_bytes() {
-        if b.is_ascii_alphanumeric() || b"*-._".contains(b) {
-            out.push(*b as char);
-        } else if *b == b' ' {
-            out.push('+');
-        } else {
-            out.push_str(&format!("%{b:02X}"));
-        }
-    }
-    out
 }

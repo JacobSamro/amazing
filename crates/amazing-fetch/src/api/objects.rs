@@ -447,7 +447,7 @@ impl ApiResponse {
                 headers.append_string(n, v)?;
             }
         }
-        let body = match input {
+        let mut body = match input {
             Some(body) => ApiBody::from_input(body)?,
             None => ApiBody::empty(),
         };
@@ -455,6 +455,9 @@ impl ApiResponse {
             if !headers.has_string("content-type")? {
                 headers.append_string("content-type", mime)?;
             }
+        }
+        if let Some(mime) = headers.get_string("content-type")? {
+            body.set_mime_type(Some(mime));
         }
         Ok(Self {
             response_type: ApiResponseType::Default,
@@ -505,6 +508,17 @@ impl ApiResponse {
     pub fn ok(&self) -> bool {
         (200..=299).contains(&self.status)
     }
+    /// Consume using the current response Content-Type, including header mutations.
+    pub fn form_data(&mut self) -> Result<super::FormData, ApiError> {
+        self.body
+            .set_mime_type(self.headers.get_string("content-type")?);
+        self.body.form_data()
+    }
+    pub fn blob(&mut self) -> Result<super::Blob, ApiError> {
+        self.body
+            .set_mime_type(self.headers.get_string("content-type")?);
+        self.body.blob()
+    }
     pub fn body_used(&self) -> bool {
         self.body.body_used()
     }
@@ -536,6 +550,12 @@ impl ApiResponse {
             ResponseType::OpaqueRedirect => ApiResponseType::OpaqueRedirect,
             ResponseType::Error => ApiResponseType::Error,
         };
+        let mime = response.headers.get("content-type");
+        let mut body = match response.body {
+            Some(bytes) => ApiBody::from_input(BodyInput::Bytes(bytes))?,
+            None => ApiBody::empty(),
+        };
+        body.set_mime_type(mime);
         Ok(Self {
             response_type,
             url,
@@ -543,10 +563,7 @@ impl ApiResponse {
             status: response.status,
             status_text: response.status_text,
             headers: ApiHeaders::from_header_list(HeaderGuard::Response, &response.headers),
-            body: match response.body {
-                Some(bytes) => ApiBody::from_input(BodyInput::Bytes(bytes))?,
-                None => ApiBody::empty(),
-            },
+            body,
         })
     }
 }

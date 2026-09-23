@@ -1,7 +1,7 @@
 //! Native assertion ports from WPT xhr/ at 2f7c70099b6ecc6a1f6a821217afd79b6ff81f28.
 //! JS property descriptors, event dispatch and server endpoints are outside this port.
 use amazing_fetch::{
-    api::{BodyInput, JsonValue},
+    api::{BodyInput, FormData, JsonValue},
     xhr::*,
     FetchError, FetchPlan, HeaderList, HttpUrl, InternalResponse, NetworkOrCache, Request, Site,
 };
@@ -572,7 +572,8 @@ fn response_types_and_decoder_bridge() {
 fn repeat_send_and_get_body_ignored() {
     let mut x = Xhr::default();
     open(&mut x, "GET", "a", true).unwrap();
-    x.send(Some(BodyInput::FormData), 0).unwrap();
+    x.send(Some(BodyInput::FormData(FormData::default())), 0)
+        .unwrap();
     assert_eq!(x.send(None, 0), Err(XhrError::InvalidStateSend));
     let mut stub = Stub::ok(b"");
     x.advance(&mut stub, &site(), 1).unwrap();

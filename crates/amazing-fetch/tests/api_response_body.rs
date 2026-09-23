@@ -108,10 +108,14 @@ fn body_types_and_explicit_content_type() {
         r.headers.get_string("content-type").unwrap().as_deref(),
         Some("custom/type")
     );
-    assert!(matches!(
-        ApiResponse::new(Some(BodyInput::FormData), ApiResponseInit::default()),
-        Err(ApiError::UnsupportedFormData)
-    ));
+    let mut form = FormData::default();
+    form.append_text("a", "b");
+    let mut response =
+        ApiResponse::new(Some(BodyInput::FormData(form)), ApiResponseInit::default()).unwrap();
+    assert_eq!(
+        response.body.form_data().unwrap().get("a"),
+        Some(&FormValue::Text("b".into()))
+    );
 }
 
 // response/response-static-error.any.js, response-static-redirect.any.js,
