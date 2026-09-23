@@ -1,6 +1,6 @@
 //! Style, layout, raster, and audio commands.
 use std::{cell::RefCell, rc::Rc, process::ExitCode};
-use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text}, gui};
+use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text, PagePaint}, gui};
 use super::{parse::{read_bytes, read_source}, js::execute_inline_scripts};
 use crate::document::{DocumentKind, PageError, parse_document_bytes};
 /// Phase 2 demo artifact: compute styles for an HTML page.
@@ -238,12 +238,14 @@ pub(crate) fn render_surface(
             .ceil()
             .clamp(1.0, 8192.0) as u32
     });
+    let styled = amazing_css::compute(&dom.dom, &sheets);
+    let paint = PagePaint { media: &media, dom: &dom.dom, styles: &styled };
     Ok(amazing_paint::paint_document_with_text_resources(
         &root,
         width.max(1.0) as u32,
         page_height,
         &page_text.provider,
-        &media,
+        &paint,
     ))
 }
 

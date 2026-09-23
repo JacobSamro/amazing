@@ -31,6 +31,7 @@ mod windows {
     use amazing_paint::Surface;
 
     use crate::{BrowserDomHost, PageMedia, load_page_media, load_page_text};
+    use crate::page::PagePaint;
 
     type Handle = *mut c_void;
     type Hwnd = Handle;
@@ -537,12 +538,14 @@ mod windows {
             let height = amazing_layout::layout_overflow_bottom(&layout)
                 .ceil()
                 .clamp(1.0, 8192.0) as u32;
+            let styled = amazing_css::compute(&host_ref.dom, &[amazing_css::parse_stylesheet(&css)]);
+            let paint = PagePaint { media: &media, dom: &host_ref.dom, styles: &styled };
             let surface = amazing_paint::paint_document_with_text_resources(
                 &layout,
                 width.max(1),
                 height,
                 &page_text.provider,
-                &media,
+                &paint,
             );
             runtime.layout = layout;
             runtime.media = media;
@@ -993,12 +996,14 @@ mod windows {
         let height = amazing_layout::layout_overflow_bottom(&root)
             .ceil()
             .clamp(1.0, 8192.0) as u32;
+        let styled = amazing_css::compute(&host_ref.dom, &[amazing_css::parse_stylesheet(&css)]);
+        let paint = PagePaint { media: &media, dom: &host_ref.dom, styles: &styled };
         let surface = amazing_paint::paint_document_with_text_resources(
             &root,
             width.max(1),
             height,
             &page_text.provider,
-            &media,
+            &paint,
         );
         drop(host_ref);
         Ok(RenderedPage {
