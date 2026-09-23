@@ -360,6 +360,7 @@ struct ShapedWord {
     range: Range<usize>,
     context: Rc<ShapedContext>,
     preserved_space_before: f32,
+    break_after: bool,
     hyphen_after: bool,
     hyphen_advance: f32,
     requires_reshape: bool,
@@ -425,6 +426,7 @@ enum ShapedUnit {
     Replaced {
         node: NodeIdx,
         source_order: Option<u64>,
+        break_after: bool,
         size: IntrinsicSize,
         range: Range<usize>,
         context: Rc<ShapedContext>,
@@ -432,6 +434,7 @@ enum ShapedUnit {
     Ruby(ShapedRuby),
     Combined {
         shaped: ShapedRuby,
+        break_after: bool,
         range: Range<usize>,
         context: Rc<ShapedContext>,
     },
@@ -687,12 +690,13 @@ pub(crate) fn layout_lines_shaped(
                     font_size: word.font_size,
                 });
                 cursor = x + word.width;
-                may_break_after = !word.hyphen_after
-                    || cursor + word.hyphen_advance <= inline_end.get() + FIT_TOLERANCE_PX;
+                may_break_after = word.break_after && (!word.hyphen_after
+                    || cursor + word.hyphen_advance <= inline_end.get() + FIT_TOLERANCE_PX);
             }
             ShapedUnit::Replaced {
                 node,
                 source_order,
+                break_after,
                 size,
                 range,
                 context,
@@ -736,7 +740,7 @@ pub(crate) fn layout_lines_shaped(
                     requires_reshape: false,
                 });
                 cursor += size.width;
-                may_break_after = true;
+                may_break_after = break_after;
             }
             ShapedUnit::Ruby(mut ruby) => {
                 if !has_content {
@@ -783,6 +787,7 @@ pub(crate) fn layout_lines_shaped(
             }
             ShapedUnit::Combined {
                 shaped: combined,
+                break_after,
                 range,
                 context,
             } => {
@@ -824,7 +829,7 @@ pub(crate) fn layout_lines_shaped(
                     font_size: combined.font_size,
                 });
                 cursor += combined.width;
-                may_break_after = true;
+                may_break_after = break_after;
             }
         }
     }
@@ -1899,18 +1904,20 @@ fn shape_chunk(
     for text_unit in text_units(&paragraph_text, &spans, &shaped.breaks, &atomics) {
         let (range, break_kind) = match text_unit {
             TextUnit::Word { range, break_kind } => (range, break_kind),
-            TextUnit::Atomic { offset, atomic } => {
+            TextUnit::Atomic { offset, atomic, break_after } => {
                 let end = offset + '\u{fffc}'.len_utf8();
                 match atomic {
                     AtomicInline::Replaced(node, size, source_order) => units.push(ShapedUnit::Replaced {
                         node,
                         size,
                         source_order,
+                        break_after,
                         range: offset..end,
                         context: Rc::clone(&context),
                     }),
                     AtomicInline::Combined(combined) => units.push(ShapedUnit::Combined {
                         shaped: combined,
+                        break_after,
                         range: offset..end,
                         context: Rc::clone(&context),
                     }),
@@ -2039,7 +2046,7 @@ fn shape_chunk(
             &paint_info,
             &mut decorations,
         );
-        let hyphen_after = break_kind == amazing_text::BreakKind::Hyphen;
+        let hyphen_after = break_kind == Some(amazing_text::BreakKind::Hyphen);
         let hyphen_advance = if hyphen_after {
             discretionary_hyphen_advance(&context, range.end, text_system)
         } else {
@@ -2056,6 +2063,7 @@ fn shape_chunk(
             range: preserved_start..range.end,
             context: Rc::clone(&context),
             preserved_space_before,
+            break_after: break_kind.is_some(),
             hyphen_after,
             hyphen_advance,
             requires_reshape: shaped.unsafe_breaks.binary_search(&range.end).is_ok(),
@@ -2104,11 +2112,12 @@ fn stronger_boundary(left: ShapingBoundary, right: ShapingBoundary) -> ShapingBo
 enum TextUnit {
     Word {
         range: Range<usize>,
-        break_kind: amazing_text::BreakKind,
+        break_kind: Option<amazing_text::BreakKind>,
     },
     Atomic {
         offset: usize,
         atomic: AtomicInline,
+        break_after: bool,
     },
     Break(usize),
 }
@@ -2129,7 +2138,7 @@ fn text_units(
         if let Some(range) = visible_segment(text, segment.clone(), spans) {
             units.push(TextUnit::Word {
                 range,
-                break_kind: opportunity.kind,
+                break_kind: Some(opportunity.kind),
             });
         }
         let forced = opportunity.kind == amazing_text::BreakKind::Mandatory
@@ -2143,7 +2152,7 @@ fn text_units(
     if let Some(range) = visible_segment(text, segment.clone(), spans) {
         units.push(TextUnit::Word {
             range,
-            break_kind: amazing_text::BreakKind::Mandatory,
+            break_kind: Some(amazing_text::BreakKind::Mandatory),
         });
     }
     split_atomic_units(units, atomics)
@@ -2177,14 +2186,16 @@ fn split_atomic_units(
             if cursor < offset {
                 expanded.push(TextUnit::Word {
                     range: cursor..offset,
-                    break_kind: amazing_text::BreakKind::Allowed,
+                    break_kind: None,
                 });
             }
+            let end = offset + '\u{fffc}'.len_utf8();
             expanded.push(TextUnit::Atomic {
                 offset,
                 atomic: atomics[&offset].clone(),
+                break_after: end == range.end,
             });
-            cursor = offset + '\u{fffc}'.len_utf8();
+            cursor = end;
             offset_index += 1;
         }
         if cursor < range.end {
@@ -2330,6 +2341,61 @@ fn source_mappings_for_cluster(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn splitting_an_atomic_preserves_only_provider_breaks() {
+        let atomic = AtomicInline::Replaced(
+            NodeIdx(1),
+            IntrinsicSize { width: 8.0, height: 8.0 },
+            None,
+        );
+        // The provider supplies only the final opportunity for 「 U+FFFC.
+        // Splitting its word must not add a break between the opening bracket
+        // and the atomic inline.
+        let units = split_atomic_units(
+            vec![TextUnit::Word {
+                range: 0..6,
+                break_kind: Some(amazing_text::BreakKind::Mandatory),
+            }],
+            &HashMap::from([(3, atomic.clone())]),
+        );
+        assert!(matches!(&units[0], TextUnit::Word { range, break_kind: None } if *range == (0..3)));
+        assert!(matches!(&units[1], TextUnit::Atomic { break_after: true, .. }));
+
+        let units = split_atomic_units(
+            vec![TextUnit::Word {
+                range: 0..5,
+                break_kind: Some(amazing_text::BreakKind::Mandatory),
+            }],
+            &HashMap::from([(1, atomic)]),
+        );
+        assert!(matches!(&units[0], TextUnit::Word { break_kind: None, .. }));
+        assert!(matches!(&units[1], TextUnit::Atomic { break_after: false, .. }));
+        assert!(matches!(&units[2], TextUnit::Word { break_kind: Some(amazing_text::BreakKind::Mandatory), .. }));
+
+        let units = split_atomic_units(
+            vec![
+                TextUnit::Word {
+                    range: 0..1,
+                    break_kind: Some(amazing_text::BreakKind::Allowed),
+                },
+                TextUnit::Word {
+                    range: 1..4,
+                    break_kind: Some(amazing_text::BreakKind::Mandatory),
+                },
+            ],
+            &HashMap::from([(
+                1,
+                AtomicInline::Replaced(
+                    NodeIdx(1),
+                    IntrinsicSize { width: 8.0, height: 8.0 },
+                    None,
+                ),
+            )]),
+        );
+        assert!(matches!(&units[0], TextUnit::Word { break_kind: Some(amazing_text::BreakKind::Allowed), .. }));
+        assert!(matches!(&units[1], TextUnit::Atomic { break_after: true, .. }));
+    }
     use crate::font::FontSource;
 
     fn text(t: &str) -> InlineNode {
