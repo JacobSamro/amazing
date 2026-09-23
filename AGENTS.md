@@ -21,6 +21,25 @@ Windows build server, and run every build/test there.
   PowerShell `-EncodedCommand` (UTF-16LE base64) for anything beyond a single
   simple command. Unix tools are absent: no `head`, no `rsync`.
 
+**All ssh/scp to win-001 multiplexes over one persistent connection.** The
+Mac's `~/.ssh/config` has a `Host win-001` block with `ControlMaster auto`,
+`ControlPersist 8h` and a shared `ControlPath`, so the first command opens an
+authenticated master and every later `ssh`/`scp` runs as a channel inside it.
+Existing command forms (`ssh -i ~/.ssh/win001-build-key server@win-001 …`, `scp …
+server@win-001:…`) pick it up automatically; `ssh win-001 '…'` is the short form.
+
+Why: on 2026-09-21 ten lanes opening hundreds of short-lived connections wedged
+the box's sshd -- new connections reset before auth while existing ones stayed
+healthy, and all lanes stalled. Measured after the change: **0.16s per command
+multiplexed vs 0.68s** with a fresh connection, and no per-command sshd child.
+
+Limit: the server's `MaxSessions` is the default **10 channels per
+connection**. Past that, OpenSSH falls back to a fresh connection for the
+overflow (`Session open refused by peer`, then `disabling multiplexing`), so it
+degrades rather than fails. Do not open ssh in tight retry loops; if a command
+is refused, back off. `ssh -O check win-001` shows the master; `ssh -O exit
+win-001` closes it.
+
 **Git lives on the Mac, not on the server.** win-001 has no GitHub credentials
 and the repo is private, so it can neither fetch nor push. It is a pure build
 box: source arrives by `scp`, results come back over ssh. Never run `git commit`
