@@ -136,6 +136,65 @@ fn range_contents_on_one_text_node_clone_extract_and_delete() {
 }
 
 #[test]
+fn range_set_boundary_collapses_on_cross_root_and_rejects_invalid_nodes() {
+    // dom/ranges/Range-set.html: setting a start after the end or in another
+    // root collapses end to the new start; doctype and bad offset throw.
+    let mut dom = Dom::new();
+    let p = dom.create_element(NodeIdx(0), "p");
+    let t = dom.create_text(p, "abc");
+    let range = dom.create_range(NodeIdx(0)).unwrap();
+    dom.range_set_end(range, B::new(t, 2)).unwrap();
+    dom.range_set_start(range, B::new(t, 3)).unwrap();
+    assert_eq!(dom.range(range).unwrap().start, B::new(t, 3));
+    assert_eq!(dom.range(range).unwrap().end, B::new(t, 3));
+    let foreign = dom.create_node_in(NodeIdx(0), NodeKind::Text { data: "xy".into() }).unwrap();
+    dom.range_set_start(range, B::new(foreign, 1)).unwrap();
+    assert_eq!(dom.range(range).unwrap().end, B::new(foreign, 1));
+    assert_eq!(dom.range_set_end(range, B::new(foreign, 3)), Err(DomError::IndexSizeError));
+    let doctype = dom.create_document_type_in(NodeIdx(0), "html", "", "").unwrap();
+    assert_eq!(dom.range_set_start(range, B::new(doctype, 0)), Err(DomError::InvalidNodeTypeError));
+}
+
+#[test]
+fn range_split_text_moves_live_boundaries_to_new_node() {
+    // dom/ranges/Range-mutations-splitText.html and Range-mutations.js:
+    // a split at offset 2 moves boundaries after the split point.
+    let mut dom = Dom::new();
+    let p = dom.create_element(NodeIdx(0), "p");
+    let t = dom.create_text(p, "abcd");
+    let range = dom.create_range(NodeIdx(0)).unwrap();
+    dom.range_set_start(range, B::new(t, 1)).unwrap();
+    dom.range_set_end(range, B::new(t, 3)).unwrap();
+    let new_text = dom.split_text(t, 2).unwrap();
+    assert_eq!(dom.range(range).unwrap().start, B::new(t, 1));
+    assert_eq!(dom.range(range).unwrap().end, B::new(new_text, 1));
+    assert_eq!(dom.character_data_utf16(t), Some("ab".encode_utf16().collect()));
+    assert_eq!(dom.character_data_utf16(new_text), Some("cd".encode_utf16().collect()));
+}
+
+#[test]
+fn range_surround_rejects_partial_nontext_before_mutation() {
+    // dom/ranges/Range-surroundContents.html: partial non-Text containment
+    // throws InvalidStateError before a candidate wrapper is changed.
+    let mut dom = Dom::new();
+    let root = dom.create_element(NodeIdx(0), "root");
+    let left = dom.create_element(root, "left");
+    let first = dom.create_text(left, "ab");
+    let right = dom.create_element(root, "right");
+    let last = dom.create_text(right, "cd");
+    let range = dom.create_range(NodeIdx(0)).unwrap();
+    dom.range_set_start(range, B::new(first, 1)).unwrap();
+    dom.range_set_end(range, B::new(last, 1)).unwrap();
+    let wrapper = dom.create_element(root, "wrapper");
+    let existing = dom.create_text(wrapper, "keep");
+    let before = dom.range(range).unwrap();
+    assert_eq!(dom.range_surround_contents(range, wrapper), Err(DomError::InvalidStateError));
+    assert_eq!(dom.range(range).unwrap(), before);
+    assert_eq!(dom.children(root).collect::<Vec<_>>(), vec![left, right, wrapper]);
+    assert_eq!(dom.children(wrapper).collect::<Vec<_>>(), vec![existing]);
+}
+
+#[test]
 fn clone_node_preserves_attributes_and_obeys_deep_flag() {
     // dom/nodes/Node-cloneNode.html: a clone has distinct identity, matching
     // attributes, no parent; descendants appear only for cloneNode(true).
