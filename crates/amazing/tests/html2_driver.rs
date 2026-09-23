@@ -112,6 +112,7 @@ fn fetch_parse(content_type: &str, body: &[u8]) -> Output {
                 Err(error) => panic!("{error}"),
             }
         };
+        stream.set_nonblocking(false).unwrap();
         let mut request = [0; 4096];
         let _ = stream.read(&mut request).unwrap();
         stream.write_all(&response).unwrap();

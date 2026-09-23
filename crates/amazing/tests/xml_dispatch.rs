@@ -173,6 +173,10 @@ fn fetch_parse(mime: &str, source: &str, request_path: &str) -> Output {
         loop {
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    // The listener is nonblocking for its bounded accept loop.
+                    // On Windows the accepted socket can inherit that mode, so
+                    // switch it back before waiting for the request bytes.
+                    stream.set_nonblocking(false).unwrap();
                     stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
                     let mut request = [0; 4096];
                     let _ = stream.read(&mut request).unwrap();
