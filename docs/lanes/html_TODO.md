@@ -479,3 +479,42 @@ mismatches. Package nextest passed **126/126 twice**, separate package doctest
 separate shared-slot workspace doctests **2/2**. Three new tests account for
 the package increase from HTML-12's 123. No push or PR; the lane stops for
 co-integrator preflight. DOM-14 remains a separate queued ticket.
+
+## HTML-14 — parser custom-element construction seam
+
+At fixed base `859bb53` (DOM-14 merged), the document parser accepts a DOM with
+preinstalled definitions and a `ParserCustomElementHost`. Its create-element
+path allocates the HTML element with start-tag attributes first, then checks
+DOM-14's document registry for an autonomous definition or a matching
+customized built-in `is` definition. The host receives the element, document,
+namespace, local name, definition and constructor root while the element is
+detached and `Precustomized`. The host is handed the mutable DOM directly, so
+the parser retains no borrow into the arena while it calls the constructor.
+It reports whether construction returned the same element; DOM-14's
+`custom_element_super` and `finish_custom_element_upgrade` own the construction
+stack and state transitions. The parser attaches the element before finish so
+DOM queues initial observed-attribute and connected reactions in that order.
+A reported failure marks the element `Failed` and parsing continues. A missing
+host or definition leaves an ordinary `Undefined` element eligible for later
+DOM upgrade. The parser neither stores another registry nor executes JS.
+
+Frozen before/expected trees and states are recorded in
+`.agents/html/html14-fixtures.md`. Mock-host tests check nested synchronous
+construction order, attributes at callback time, detached-to-connected
+transition, custom versus undefined versus failed states, customized `is`,
+initial attribute/connected reactions, descendant disconnection order,
+reentrant DOM mutation, and ordinary document/fragment tree stability.
+The embedding still must connect the parser host to real JS constructors,
+report constructor exceptions, and call `deliver_custom_element_reactions`
+after parser tasks. Mock tests grant no WPT credit. Declarative shadow DOM and
+template work remain separate.
+
+The fixed-base Windows tree was refreshed from `859bb53` and the owned source
+files re-synced before gating. The final 319-input Rust source, Cargo manifest
+and root lockfile SHA-256 manifest (`4581e733a8ae549854ea18355a47f0c2847b95fe0ba1da8bc5efa2f34b61be2f`)
+matched on Mac and Windows before and after the gates with zero mismatches.
+Package nextest passed **131/131 twice**, with a separate package doctest
+**1/1**. Shared-slot workspace nextest passed **1667/1667** with 3 skipped,
+and separate shared-slot workspace doctests passed **2/2**. Five new parser
+mock tests account for the package rise from HTML-13's 126. No push or PR;
+the lane stops for co-integrator preflight.

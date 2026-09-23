@@ -40,6 +40,7 @@ pub mod tokenizer;
 pub mod tree;
 pub mod xml;
 pub use tree::IncrementalParser;
+pub use tree::{ParserConstruction, ParserCustomElementHost};
 pub use byte_stream::IncrementalByteParser;
 pub use xml::{parse_xml, XmlError, XmlErrorKind};
 
@@ -53,6 +54,8 @@ mod byte_stream_tests;
 mod fuzz_tests;
 #[cfg(test)]
 mod fragment_tests;
+#[cfg(test)]
+mod custom_element_tests;
 
 /// Decodes and parses a complete HTML byte stream. `transport_label` is the
 /// optional charset from out-of-band transport metadata.
@@ -76,6 +79,24 @@ pub fn parse(src: &str) -> Dom {
         src
     };
     tree::build(src)
+}
+
+/// Parses into a DOM with custom-element definitions installed before the
+/// first token. A matching definition invokes `host` synchronously; the
+/// returned DOM holds its reactions for the embedding to deliver afterward.
+pub fn parse_with_custom_element_host(
+    src: &str,
+    dom: Dom,
+    host: Box<dyn ParserCustomElementHost>,
+) -> Dom {
+    let normalized;
+    let src = if src.contains('\r') {
+        normalized = src.replace("\r\n", "\n").replace('\r', "\n");
+        normalized.as_str()
+    } else {
+        src
+    };
+    tree::build_with_custom_element_host(src, dom, host)
 }
 
 /// Parses an HTML fragment in a supported HTML context and
