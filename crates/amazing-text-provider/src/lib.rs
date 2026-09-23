@@ -30,6 +30,9 @@ const MAX_COMPRESSED_FONT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_SFNT_FONT_BYTES: usize = 32 * 1024 * 1024;
 const MAX_FONT_SET_BYTES: usize = 64 * 1024 * 1024;
 const MAX_FONT_FACES: usize = 256;
+const MAX_FONT_FACE_RULES: usize = 256;
+const MAX_FONT_FACE_SOURCES: usize = 32;
+const MAX_UNICODE_RANGES: usize = 1024;
 const MAX_FONT_TABLES: usize = 256;
 const MAX_FONT_GLYPHS: usize = 60_000;
 const MAX_VARIATION_AXES: usize = 64;
@@ -60,6 +63,159 @@ pub struct WebFont {
     pub bytes: Vec<u8>,
 }
 
+/// Inclusive CSS descriptor range. Values are normalized by the CSS owner
+/// before crossing the provider boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontDescriptorRange {
+    pub min: u16,
+    pub max: u16,
+}
+
+impl FontDescriptorRange {
+    pub const fn single(value: u16) -> Self {
+        Self {
+            min: value,
+            max: value,
+        }
+    }
+
+    fn nearest(self, value: u16) -> u16 {
+        value.clamp(self.min, self.max)
+    }
+
+    fn valid(self) -> bool {
+        self.min >= 1 && self.min <= self.max && self.max <= 1000
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FontStyleDescriptor {
+    Normal,
+    Italic,
+    Oblique { min_degrees: f32, max_degrees: f32 },
+}
+
+impl FontStyleDescriptor {
+    fn valid(self) -> bool {
+        match self {
+            Self::Oblique {
+                min_degrees,
+                max_degrees,
+            } => {
+                min_degrees.is_finite()
+                    && max_degrees.is_finite()
+                    && (-90.0..=90.0).contains(&min_degrees)
+                    && min_degrees <= max_degrees
+                    && max_degrees <= 90.0
+            }
+            _ => true,
+        }
+    }
+
+    fn slant(self) -> FontSlant {
+        match self {
+            Self::Normal => FontSlant::Normal,
+            Self::Italic => FontSlant::Italic,
+            Self::Oblique { .. } => FontSlant::Oblique,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnicodeRange {
+    pub start: u32,
+    pub end: u32,
+}
+
+impl UnicodeRange {
+    fn valid(self) -> bool {
+        self.start <= self.end && self.end <= 0x10FFFF
+    }
+
+    fn contains(self, codepoint: u32) -> bool {
+        self.start <= codepoint && codepoint <= self.end
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FontDisplay {
+    #[default]
+    Auto,
+    Block,
+    Swap,
+    Fallback,
+    Optional,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FontFaceSource {
+    Local(String),
+    Url {
+        url: String,
+        /// CSS `format()` names, in declaration order. Empty means sniff the
+        /// bounded response bytes. Unsupported names make this source unusable.
+        formats: Vec<String>,
+        /// CSS `tech()` names. Unknown or unsupported technology is skipped.
+        technologies: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FontFaceDescriptor {
+    pub family: String,
+    pub sources: Vec<FontFaceSource>,
+    /// Empty means the full Unicode code space.
+    pub unicode_ranges: Vec<UnicodeRange>,
+    pub weight: FontDescriptorRange,
+    pub stretch: FontDescriptorRange,
+    pub style: FontStyleDescriptor,
+    pub display: FontDisplay,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FontFaceRegistration {
+    pub family: String,
+    pub display: FontDisplay,
+    pub key: Option<FontKey>,
+}
+
+impl Default for FontFaceDescriptor {
+    fn default() -> Self {
+        Self {
+            family: String::new(),
+            sources: Vec::new(),
+            unicode_ranges: Vec::new(),
+            weight: FontDescriptorRange::single(400),
+            stretch: FontDescriptorRange::single(100),
+            style: FontStyleDescriptor::Normal,
+            display: FontDisplay::Auto,
+        }
+    }
+}
+
+/// The network owner implements this boundary with a CORS-mode fetch. The
+/// provider supplies a byte cap, never performs URL resolution or network I/O.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontFetchRequest<'a> {
+    pub url: &'a str,
+    pub cors_mode: bool,
+    pub max_bytes: usize,
+}
+
+pub trait FontFaceLoader {
+    fn load_local(&mut self, name: &str, max_bytes: usize) -> Result<Option<Vec<u8>>, TextError>;
+    fn load_url(&mut self, request: FontFetchRequest<'_>) -> Result<Option<Vec<u8>>, TextError>;
+}
+
+#[derive(Debug, Clone)]
+struct FontFaceMetadata {
+    weight: FontDescriptorRange,
+    stretch: FontDescriptorRange,
+    style: FontStyleDescriptor,
+    unicode_ranges: Vec<UnicodeRange>,
+    display: FontDisplay,
+}
+
 #[derive(Debug)]
 struct FontRecord {
     key: FontKey,
@@ -68,6 +224,25 @@ struct FontRecord {
     stretch: u16,
     slant: FontSlant,
     sfnt: Vec<u8>,
+    author_face: Option<FontFaceMetadata>,
+}
+
+impl FontRecord {
+    fn attributes_for(&self, style: &TextStyle) -> FontAttributes {
+        if let Some(face) = &self.author_face {
+            FontAttributes {
+                weight: face.weight.nearest(style.weight),
+                stretch: face.stretch.nearest(style.stretch),
+                slant: face.style.slant(),
+            }
+        } else {
+            FontAttributes {
+                weight: self.weight,
+                stretch: self.stretch,
+                slant: self.slant,
+            }
+        }
+    }
 }
 
 struct FontItemization {
@@ -81,6 +256,8 @@ pub struct TextProvider {
     generation: u64,
     next_font_key: u64,
     fonts: Vec<FontRecord>,
+    author_families: BTreeSet<String>,
+    face_rules: Vec<FontFaceRegistration>,
     font_set_bytes: usize,
     raster_cache: RefCell<HashMap<GlyphCacheKey, Option<GlyphImage>>>,
     raster_cache_bytes: Cell<usize>,
@@ -93,6 +270,8 @@ impl Default for TextProvider {
             generation: 0,
             next_font_key: 1,
             fonts: Vec::new(),
+            author_families: BTreeSet::new(),
+            face_rules: Vec::new(),
             font_set_bytes: 0,
             raster_cache: RefCell::new(HashMap::new()),
             raster_cache_bytes: Cell::new(0),
@@ -107,6 +286,145 @@ impl TextProvider {
     }
 
     pub fn register_web_font(&mut self, font: WebFont) -> Result<FontKey, TextError> {
+        self.register_font_bytes(font, None)
+    }
+
+    /// Registers one CSS `@font-face` rule through a caller-owned loader.
+    /// Sources are attempted in declaration order. A missing or invalid source
+    /// advances to the next source; a successfully loaded face retains the
+    /// descriptor ranges and display policy for later matching and inspection.
+    pub fn register_font_face<L: FontFaceLoader>(
+        &mut self,
+        descriptor: FontFaceDescriptor,
+        loader: &mut L,
+    ) -> Result<Option<FontKey>, TextError> {
+        let family = descriptor.family.trim().to_ascii_lowercase();
+        if family.is_empty()
+            || family.len() > 256
+            || descriptor.sources.is_empty()
+            || descriptor.sources.len() > MAX_FONT_FACE_SOURCES
+            || descriptor.unicode_ranges.len() > MAX_UNICODE_RANGES
+            || !descriptor.unicode_ranges.iter().all(|range| range.valid())
+            || !descriptor.weight.valid()
+            || !descriptor.stretch.valid()
+            || !descriptor.style.valid()
+        {
+            return Err(TextError::InvalidStyle);
+        }
+        if self.fonts.len() >= MAX_FONT_FACES || self.face_rules.len() >= MAX_FONT_FACE_RULES {
+            return Err(TextError::ResourceLimit);
+        }
+        let metadata = FontFaceMetadata {
+            weight: descriptor.weight,
+            stretch: descriptor.stretch,
+            style: descriptor.style,
+            unicode_ranges: descriptor.unicode_ranges,
+            display: descriptor.display,
+        };
+        // A declared author family shadows an installed family with the same
+        // name even if none of its sources can be loaded.
+        if self.author_families.insert(family.clone()) {
+            self.generation = self
+                .generation
+                .checked_add(1)
+                .ok_or(TextError::ResourceLimit)?;
+        }
+        for source in descriptor.sources {
+            let (bytes, allowed_formats) = match source {
+                FontFaceSource::Local(name) => {
+                    if name.trim().is_empty() {
+                        continue;
+                    }
+                    (loader.load_local(&name, MAX_COMPRESSED_FONT_BYTES), None)
+                }
+                FontFaceSource::Url {
+                    url,
+                    formats,
+                    technologies,
+                } => {
+                    if url.trim().is_empty()
+                        || !technologies
+                            .iter()
+                            .all(|name| supported_font_technology(name))
+                    {
+                        continue;
+                    }
+                    let accepted = formats
+                        .iter()
+                        .filter_map(|name| parse_font_format_hint(name))
+                        .collect::<Vec<_>>();
+                    if !formats.is_empty() && accepted.is_empty() {
+                        continue;
+                    }
+                    (
+                        loader.load_url(FontFetchRequest {
+                            url: &url,
+                            cors_mode: true,
+                            max_bytes: MAX_COMPRESSED_FONT_BYTES,
+                        }),
+                        Some(accepted),
+                    )
+                }
+            };
+            let Ok(Some(bytes)) = bytes else {
+                continue;
+            };
+            if bytes.is_empty() || bytes.len() > MAX_COMPRESSED_FONT_BYTES {
+                continue;
+            }
+            let Some(format) = sniff_font_format(&bytes) else {
+                continue;
+            };
+            if allowed_formats
+                .is_some_and(|formats| !formats.is_empty() && !formats.contains(&format))
+            {
+                continue;
+            }
+            let font = WebFont {
+                family: family.clone(),
+                weight: metadata.weight.min,
+                stretch: metadata.stretch.min,
+                slant: metadata.style.slant(),
+                format,
+                bytes,
+            };
+            match self.register_font_bytes(font, Some(metadata.clone())) {
+                Ok(key) => {
+                    self.face_rules.push(FontFaceRegistration {
+                        family,
+                        display: metadata.display,
+                        key: Some(key),
+                    });
+                    return Ok(Some(key));
+                }
+                Err(TextError::MalformedFont | TextError::ResourceLimit) => continue,
+                Err(error) => return Err(error),
+            }
+        }
+        self.face_rules.push(FontFaceRegistration {
+            family,
+            display: metadata.display,
+            key: None,
+        });
+        Ok(None)
+    }
+
+    pub fn font_face_registrations(&self) -> &[FontFaceRegistration] {
+        &self.face_rules
+    }
+
+    pub fn font_display(&self, key: FontKey) -> Option<FontDisplay> {
+        self.fonts
+            .iter()
+            .find(|font| font.key == key)
+            .and_then(|font| font.author_face.as_ref().map(|face| face.display))
+    }
+
+    fn register_font_bytes(
+        &mut self,
+        font: WebFont,
+        author_face: Option<FontFaceMetadata>,
+    ) -> Result<FontKey, TextError> {
         let family = font.family.trim();
         if family.is_empty()
             || !(1..=1000).contains(&font.weight)
@@ -144,6 +462,7 @@ impl TextProvider {
             stretch: font.stretch,
             slant: font.slant,
             sfnt: decoded,
+            author_face,
         });
         self.generation = self
             .generation
@@ -161,28 +480,37 @@ impl TextProvider {
                 continue;
             }
             let family = unquote_family(family);
-            let mut best = None;
+            let author_only = self.author_families.contains(&family.to_ascii_lowercase());
+            let mut best_rank = None;
+            let mut candidates = Vec::new();
             for (index, font) in self.fonts.iter().enumerate() {
-                if !font.family.eq_ignore_ascii_case(family) {
+                if !font.family.eq_ignore_ascii_case(family)
+                    || (author_only && font.author_face.is_none())
+                {
                     continue;
                 }
                 let rank = font_match_rank(
-                        FontAttributes {
-                            weight: style.weight,
-                            stretch: style.stretch,
-                            slant: style.slant,
-                        },
-                        FontAttributes {
-                            weight: font.weight,
-                            stretch: font.stretch,
-                            slant: font.slant,
-                        },
-                    );
-                if best.is_none_or(|(_, current)| rank < current) {
-                    best = Some((index, rank));
+                    FontAttributes {
+                        weight: style.weight,
+                        stretch: style.stretch,
+                        slant: style.slant,
+                    },
+                    font.attributes_for(style),
+                );
+                if best_rank.is_none_or(|current| rank < current) {
+                    best_rank = Some(rank);
+                    candidates.clear();
+                    candidates.push(index);
+                } else if best_rank == Some(rank) {
+                    candidates.push(index);
                 }
             }
-            if let Some((index, _)) = best {
+            if author_only {
+                // Equal-descriptor faces form a composite face. Later rules
+                // win for overlapping unicode ranges.
+                candidates.reverse();
+            }
+            for index in candidates {
                 if text.is_none_or(|value| font_covers(&self.fonts[index], value)) {
                     return Some(index);
                 }
@@ -199,6 +527,7 @@ impl TextProvider {
             .find_map(|family| {
                 self.fonts.iter().position(|font| {
                     font.family == *family
+                        && font.author_face.is_none()
                         && text.is_none_or(|value| font_covers(font, value))
                 })
             })
@@ -306,12 +635,12 @@ impl TextSystem for TextProvider {
             return Ok(ShapedParagraph::default());
         }
         let runs = self.shape_runs(
-                paragraph.text,
-                paragraph.spans,
-                0..paragraph.text.len(),
-                paragraph.base_direction,
-                paragraph.bidi_scopes,
-            )?;
+            paragraph.text,
+            paragraph.spans,
+            0..paragraph.text.len(),
+            paragraph.base_direction,
+            paragraph.bidi_scopes,
+        )?;
         let mut breaks = line_breaks(paragraph.text, paragraph.spans);
         breaks.sort_by_key(|opportunity| opportunity.offset);
         let unsafe_breaks = unsafe_break_offsets(&runs, &breaks);
@@ -330,9 +659,9 @@ impl TextSystem for TextProvider {
             || request.range.end > text.len()
             || !text.is_char_boundary(request.range.start)
             || !text.is_char_boundary(request.range.end)
-            {
+        {
             return Err(TextError::InvalidParagraph);
-            }
+        }
         amazing_text::validate_paragraph(&Paragraph {
             text,
             spans: request.paragraph.spans,
@@ -346,7 +675,7 @@ impl TextSystem for TextProvider {
             request.range.clone(),
             request.paragraph.base_direction,
             request.paragraph.bidi_scopes,
-            )?;
+        )?;
         let visual_clusters = visual_clusters(
             text,
             request.paragraph.spans,
@@ -487,21 +816,15 @@ impl TextProvider {
                 continue;
             };
             let mut end = index + 1;
-            let orientation = cluster_orientation(
-                &itemized[index].style,
-                text,
-                itemized[index].range.clone(),
-            );
+            let orientation =
+                cluster_orientation(&itemized[index].style, text, itemized[index].range.clone());
             while end < itemized.len()
                 && selected[end] == Some(font_index)
                 && itemized[end].boundary_before == ShapingBoundary::Continue
                 && itemized[end].style == itemized[index].style
                 && directions[end] == directions[index]
-                && cluster_orientation(
-                    &itemized[end].style,
-                    text,
-                    itemized[end].range.clone(),
-                ) == orientation
+                && cluster_orientation(&itemized[end].style, text, itemized[end].range.clone())
+                    == orientation
             {
                 end += 1;
             }
@@ -564,6 +887,7 @@ fn decode_font(format: FontFormat, bytes: Vec<u8>) -> Result<Vec<u8>, TextError>
             )?;
             if status != flate2::Status::StreamEnd
                 || decompressor.total_out() as usize != expected_size
+                || decompressor.total_in() as usize != compressed.len()
             {
                 return Err(Box::new(std::io::Error::other("invalid WOFF stream")));
             }
@@ -580,8 +904,10 @@ fn decode_font(format: FontFormat, bytes: Vec<u8>) -> Result<Vec<u8>, TextError>
                 return Err(Box::new(std::io::Error::other("font output exceeds limit")));
             }
             let mut output = BoundedWriter::new(expected_size);
-            brotli_decompressor::BrotliDecompress(&mut Cursor::new(compressed), &mut output)?;
-            if output.bytes.len() != expected_size {
+            let mut input = Cursor::new(compressed);
+            brotli_decompressor::BrotliDecompress(&mut input, &mut output)?;
+            if output.bytes.len() != expected_size || input.position() as usize != compressed.len()
+            {
                 return Err(Box::new(std::io::Error::other("invalid WOFF2 stream")));
             }
             Ok(output.bytes)
@@ -590,14 +916,97 @@ fn decode_font(format: FontFormat, bytes: Vec<u8>) -> Result<Vec<u8>, TextError>
     }
 }
 
+fn sniff_font_format(bytes: &[u8]) -> Option<FontFormat> {
+    match bytes.get(..4)? {
+        b"wOFF" => Some(FontFormat::Woff),
+        b"wOF2" => Some(FontFormat::Woff2),
+        b"OTTO" | b"true" | [0, 1, 0, 0] => Some(FontFormat::OpenType),
+        _ => None,
+    }
+}
+
+fn parse_font_format_hint(hint: &str) -> Option<FontFormat> {
+    match hint.trim().to_ascii_lowercase().as_str() {
+        "woff" | "woff-variations" => Some(FontFormat::Woff),
+        "woff2" | "woff2-variations" => Some(FontFormat::Woff2),
+        "opentype" | "truetype" | "opentype-variations" | "truetype-variations" => {
+            Some(FontFormat::OpenType)
+        }
+        _ => None,
+    }
+}
+
+fn supported_font_technology(hint: &str) -> bool {
+    matches!(
+        hint.trim().to_ascii_lowercase().as_str(),
+        "features-opentype" | "variations"
+    )
+}
+
 fn validate_font_structure(bytes: &[u8]) -> Result<(), TextError> {
-    if bytes.len() < 12 || &bytes[..4] == b"ttcf" {
+    if bytes.len() < 12 || sniff_font_format(bytes) != Some(FontFormat::OpenType) {
         return Err(TextError::MalformedFont);
     }
     let table_count = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
     if table_count == 0 || table_count > MAX_FONT_TABLES {
         return Err(TextError::ResourceLimit);
     }
+    let directory_end = 12usize
+        .checked_add(
+            table_count
+                .checked_mul(16)
+                .ok_or(TextError::ResourceLimit)?,
+        )
+        .ok_or(TextError::ResourceLimit)?;
+    if directory_end > bytes.len() {
+        return Err(TextError::MalformedFont);
+    }
+    let mut previous_tag = None;
+    let mut ranges = Vec::with_capacity(table_count);
+    let mut head = None;
+    for index in 0..table_count {
+        let record = 12 + index * 16;
+        let tag = &bytes[record..record + 4];
+        if previous_tag.is_some_and(|previous: &[u8]| previous >= tag) {
+            return Err(TextError::MalformedFont);
+        }
+        previous_tag = Some(tag);
+        let expected_checksum =
+            u32::from_be_bytes(bytes[record + 4..record + 8].try_into().unwrap());
+        let offset =
+            u32::from_be_bytes(bytes[record + 8..record + 12].try_into().unwrap()) as usize;
+        let length =
+            u32::from_be_bytes(bytes[record + 12..record + 16].try_into().unwrap()) as usize;
+        let end = offset.checked_add(length).ok_or(TextError::MalformedFont)?;
+        let padded_end = end.checked_add(3).ok_or(TextError::MalformedFont)? & !3;
+        if offset < directory_end || offset % 4 != 0 || padded_end > bytes.len() {
+            return Err(TextError::MalformedFont);
+        }
+        let zero_adjustment = if tag == b"head" {
+            if length < 54 || bytes.get(offset + 12..offset + 16) != Some(&b"\x5F\x0F\x3C\xF5"[..])
+            {
+                return Err(TextError::MalformedFont);
+            }
+            head = Some(offset);
+            Some(8)
+        } else {
+            None
+        };
+        if sfnt_checksum(&bytes[offset..end], zero_adjustment) != expected_checksum {
+            return Err(TextError::MalformedFont);
+        }
+        if bytes[end..padded_end].iter().any(|byte| *byte != 0) {
+            return Err(TextError::MalformedFont);
+        }
+        ranges.push((offset, padded_end));
+    }
+    ranges.sort_unstable();
+    if ranges.windows(2).any(|pair| pair[0].1 > pair[1].0) || head.is_none() {
+        return Err(TextError::MalformedFont);
+    }
+    // Whole-file checksum adjustments are stale in many deployed fonts,
+    // including the pinned CSSTest faces. Each table checksum still guards
+    // its own contents, and directory bounds and overlaps are checked above.
     HarfFontRef::new(bytes).map_err(|_| TextError::MalformedFont)?;
     let face = SwashFontRef::from_index(bytes, 0).ok_or(TextError::MalformedFont)?;
     if face.metrics(&[]).glyph_count as usize > MAX_FONT_GLYPHS
@@ -606,6 +1015,19 @@ fn validate_font_structure(bytes: &[u8]) -> Result<(), TextError> {
         return Err(TextError::ResourceLimit);
     }
     Ok(())
+}
+
+fn sfnt_checksum(bytes: &[u8], zero_adjustment: Option<usize>) -> u32 {
+    let mut sum = 0u32;
+    for (index, chunk) in bytes.chunks(4).enumerate() {
+        let mut word = [0u8; 4];
+        word[..chunk.len()].copy_from_slice(chunk);
+        if zero_adjustment == Some(index * 4) {
+            word = [0; 4];
+        }
+        sum = sum.wrapping_add(u32::from_be_bytes(word));
+    }
+    sum
 }
 
 struct BoundedWriter {
@@ -651,9 +1073,19 @@ fn unquote_family(family: &str) -> &str {
 fn is_generic_family(family: &str) -> bool {
     let family = family.trim();
     [
-        "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui",
-        "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded", "emoji",
-        "math", "fangsong",
+        "serif",
+        "sans-serif",
+        "monospace",
+        "cursive",
+        "fantasy",
+        "system-ui",
+        "ui-serif",
+        "ui-sans-serif",
+        "ui-monospace",
+        "ui-rounded",
+        "emoji",
+        "math",
+        "fangsong",
     ]
     .iter()
     .any(|generic| family.eq_ignore_ascii_case(generic))
@@ -664,6 +1096,17 @@ fn is_private_use(ch: char) -> bool {
 }
 
 fn font_covers(font: &FontRecord, text: &str) -> bool {
+    if let Some(face) = &font.author_face {
+        if !face.unicode_ranges.is_empty()
+            && !text.chars().all(|ch| {
+                face.unicode_ranges
+                    .iter()
+                    .any(|range| range.contains(ch as u32))
+            })
+        {
+            return false;
+        }
+    }
     catch_unwind(AssertUnwindSafe(|| {
         SwashFontRef::from_index(&font.sfnt, 0).is_some_and(|face| {
             let charmap = face.charmap();
@@ -785,8 +1228,7 @@ fn line_breaks(text: &str, spans: &[amazing_text::TextSpan]) -> Vec<BreakOpportu
                         })
                 })
                 .filter_map(|offset| {
-                    break_kind(text, spans, offset)
-                        .map(|kind| BreakOpportunity { offset, kind })
+                    break_kind(text, spans, offset).map(|kind| BreakOpportunity { offset, kind })
                 }),
         );
     }
@@ -965,7 +1407,7 @@ fn bidi_directions(
                 .map(|level| {
                     if level.is_rtl() {
                         Direction::RightToLeft
-            } else {
+                    } else {
                         Direction::LeftToRight
                     }
                 })
@@ -988,13 +1430,13 @@ fn bidi_analysis(
     if bidi_scopes.is_empty() {
         synthesized.extend(
             spans
-            .iter()
-            .filter(|span| span.style.unicode_bidi != amazing_text::UnicodeBidi::Normal)
-            .map(|span| amazing_text::BidiScope {
-                range: span.range.clone(),
-                direction: span.style.direction,
-                unicode_bidi: span.style.unicode_bidi,
-            }),
+                .iter()
+                .filter(|span| span.style.unicode_bidi != amazing_text::UnicodeBidi::Normal)
+                .map(|span| amazing_text::BidiScope {
+                    range: span.range.clone(),
+                    direction: span.style.direction,
+                    unicode_bidi: span.style.unicode_bidi,
+                }),
         );
     }
     synthesized.extend(
@@ -1107,7 +1549,10 @@ fn bidi_analysis(
         }
     }
     original_to_analysis[text.len()] = analysis.len();
-    if spans.is_empty() || spans[0].range.start != 0 || spans.last().unwrap().range.end != text.len() {
+    if spans.is_empty()
+        || spans[0].range.start != 0
+        || spans.last().unwrap().range.end != text.len()
+    {
         return Err(TextError::InvalidParagraph);
     }
     Ok(BidiAnalysis {
@@ -1211,16 +1656,18 @@ fn shape_range(
         if target.end < context.end {
             buffer.set_post_context(&text[target.end..context.end]);
         }
-        buffer.set_direction(if style.writing_mode.uses_vertical_metrics()
-            && orientation == GlyphOrientation::Upright
-        {
-            harfrust::Direction::TopToBottom
-        } else {
-            match direction {
-                Direction::LeftToRight => harfrust::Direction::LeftToRight,
-                Direction::RightToLeft => harfrust::Direction::RightToLeft,
-            }
-        });
+        buffer.set_direction(
+            if style.writing_mode.uses_vertical_metrics()
+                && orientation == GlyphOrientation::Upright
+            {
+                harfrust::Direction::TopToBottom
+            } else {
+                match direction {
+                    Direction::LeftToRight => harfrust::Direction::LeftToRight,
+                    Direction::RightToLeft => harfrust::Direction::RightToLeft,
+                }
+            },
+        );
         if let Some(language) = style
             .language
             .as_deref()
@@ -1295,11 +1742,7 @@ fn shape_range(
                         stretch: style.stretch,
                         slant: style.slant,
                     },
-                    FontAttributes {
-                        weight: font.weight,
-                        stretch: font.stretch,
-                        slant: font.slant,
-                    },
+                    font.attributes_for(style),
                     style.synthesis,
                 ),
                 glyphs: vec![glyph],
@@ -1327,12 +1770,12 @@ fn cluster_orientation(
                 match unicode_vo::char_orientation(character) {
                     VerticalOrientation::Upright | VerticalOrientation::TransformedOrUpright => {
                         GlyphOrientation::Upright
-                    },
+                    }
                     VerticalOrientation::Rotated | VerticalOrientation::TransformedOrRotated => {
                         GlyphOrientation::SidewaysRight
-                    },
+                    }
                 }
-            },
+            }
         },
     }
 }
@@ -1487,7 +1930,31 @@ mod tests {
                 bytes.push(0);
             }
         }
+        write_sfnt_checksums(&mut bytes);
         bytes
+    }
+
+    fn write_sfnt_checksums(bytes: &mut [u8]) {
+        let table_count = u16::from_be_bytes(bytes[4..6].try_into().unwrap()) as usize;
+        let mut head_offset = None;
+        for index in 0..table_count {
+            let record = 12 + index * 16;
+            let offset =
+                u32::from_be_bytes(bytes[record + 8..record + 12].try_into().unwrap()) as usize;
+            let length =
+                u32::from_be_bytes(bytes[record + 12..record + 16].try_into().unwrap()) as usize;
+            let head = &bytes[record..record + 4] == b"head";
+            let checksum = sfnt_checksum(&bytes[offset..offset + length], head.then_some(8));
+            bytes[record + 4..record + 8].copy_from_slice(&checksum.to_be_bytes());
+            if head {
+                head_offset = Some(offset);
+            }
+        }
+        if let Some(offset) = head_offset {
+            bytes[offset + 8..offset + 12].fill(0);
+            let adjustment = 0xB1B0_AFBAu32.wrapping_sub(sfnt_checksum(&bytes, None));
+            bytes[offset + 8..offset + 12].copy_from_slice(&adjustment.to_be_bytes());
+        }
     }
 
     fn synthetic_font(mapped: char) -> Vec<u8> {
@@ -1542,6 +2009,223 @@ mod tests {
         ])
     }
 
+    #[derive(Default)]
+    struct FakeFontLoader {
+        locals: HashMap<String, Vec<u8>>,
+        urls: HashMap<String, Vec<u8>>,
+        calls: Vec<String>,
+        requests: Vec<(String, bool, usize)>,
+    }
+
+    impl FontFaceLoader for FakeFontLoader {
+        fn load_local(
+            &mut self,
+            name: &str,
+            max_bytes: usize,
+        ) -> Result<Option<Vec<u8>>, TextError> {
+            self.calls.push(format!("local:{name}"));
+            assert_eq!(max_bytes, MAX_COMPRESSED_FONT_BYTES);
+            Ok(self.locals.get(name).cloned())
+        }
+
+        fn load_url(
+            &mut self,
+            request: FontFetchRequest<'_>,
+        ) -> Result<Option<Vec<u8>>, TextError> {
+            self.calls.push(format!("url:{}", request.url));
+            self.requests
+                .push((request.url.to_owned(), request.cors_mode, request.max_bytes));
+            Ok(self.urls.get(request.url).cloned())
+        }
+    }
+
+    #[test]
+    fn font_face_tries_sources_in_order_and_records_display() {
+        let mut loader = FakeFontLoader::default();
+        loader.urls.insert("bad.woff2".into(), synthetic_font('A'));
+        loader.urls.insert("good.ttf".into(), synthetic_font('A'));
+        let descriptor = FontFaceDescriptor {
+            family: "Author Face".into(),
+            sources: vec![
+                FontFaceSource::Local("Absent".into()),
+                FontFaceSource::Url {
+                    url: "skip.ttf".into(),
+                    formats: vec!["truetype".into()],
+                    technologies: vec!["features-graphite".into()],
+                },
+                FontFaceSource::Url {
+                    url: "bad.woff2".into(),
+                    formats: vec!["woff2".into()],
+                    technologies: vec![],
+                },
+                FontFaceSource::Url {
+                    url: "good.ttf".into(),
+                    formats: vec!["truetype".into()],
+                    technologies: vec!["features-opentype".into()],
+                },
+            ],
+            display: FontDisplay::Swap,
+            ..FontFaceDescriptor::default()
+        };
+        let mut provider = TextProvider::new();
+        let key = provider
+            .register_font_face(descriptor, &mut loader)
+            .unwrap()
+            .unwrap();
+        assert_eq!(provider.font_display(key), Some(FontDisplay::Swap));
+        assert_eq!(provider.font_face_registrations()[0].key, Some(key));
+        assert_eq!(
+            provider.font_face_registrations()[0].display,
+            FontDisplay::Swap
+        );
+        assert_eq!(
+            loader.calls,
+            ["local:Absent", "url:bad.woff2", "url:good.ttf"]
+        );
+        assert!(
+            loader
+                .requests
+                .iter()
+                .all(|(_, cors, cap)| *cors && *cap == MAX_COMPRESSED_FONT_BYTES)
+        );
+    }
+
+    #[test]
+    fn font_face_unicode_ranges_form_reverse_order_composite_and_shadow_installed() {
+        let mut provider = TextProvider::new();
+        provider
+            .register_web_font(WebFont {
+                family: "Composite".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
+        let mut loader = FakeFontLoader::default();
+        loader.urls.insert("first.ttf".into(), synthetic_font('A'));
+        loader.urls.insert("second.ttf".into(), synthetic_font('B'));
+        for (url, ch) in [("first.ttf", 'A'), ("second.ttf", 'B')] {
+            provider
+                .register_font_face(
+                    FontFaceDescriptor {
+                        family: "Composite".into(),
+                        sources: vec![FontFaceSource::Url {
+                            url: url.into(),
+                            formats: vec![],
+                            technologies: vec![],
+                        }],
+                        unicode_ranges: vec![UnicodeRange {
+                            start: ch as u32,
+                            end: ch as u32,
+                        }],
+                        weight: FontDescriptorRange { min: 400, max: 800 },
+                        stretch: FontDescriptorRange { min: 75, max: 125 },
+                        ..FontFaceDescriptor::default()
+                    },
+                    &mut loader,
+                )
+                .unwrap();
+        }
+        let style = TextStyle {
+            families: vec!["Composite".into()],
+            weight: 700,
+            stretch: 120,
+            ..TextStyle::default()
+        };
+        assert_eq!(provider.matching_font(&style, Some("A")), Some(1));
+        assert_eq!(provider.matching_font(&style, Some("B")), Some(2));
+        assert_eq!(provider.matching_font(&style, Some("C")), None);
+        assert_eq!(provider.fonts[1].attributes_for(&style).weight, 700);
+        assert_eq!(provider.fonts[1].attributes_for(&style).stretch, 120);
+    }
+
+    #[test]
+    fn font_face_rejects_invalid_ranges_and_keeps_failed_author_family_missing() {
+        let mut provider = TextProvider::new();
+        provider
+            .register_web_font(WebFont {
+                family: "Declared".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
+        let mut loader = FakeFontLoader::default();
+        let invalid = FontFaceDescriptor {
+            family: "Declared".into(),
+            sources: vec![FontFaceSource::Local("missing".into())],
+            weight: FontDescriptorRange { min: 800, max: 400 },
+            ..FontFaceDescriptor::default()
+        };
+        assert_eq!(
+            provider.register_font_face(invalid, &mut loader),
+            Err(TextError::InvalidStyle)
+        );
+        let missing = FontFaceDescriptor {
+            family: "Declared".into(),
+            sources: vec![FontFaceSource::Local("missing".into())],
+            ..FontFaceDescriptor::default()
+        };
+        assert_eq!(provider.register_font_face(missing, &mut loader), Ok(None));
+        assert_eq!(provider.font_face_registrations()[0].key, None);
+        assert_eq!(
+            provider.font_face_registrations()[0].display,
+            FontDisplay::Auto
+        );
+        let style = TextStyle {
+            families: vec!["Declared".into()],
+            ..TextStyle::default()
+        };
+        assert_eq!(provider.matching_font(&style, Some("A")), None);
+    }
+
+    #[test]
+    #[ignore = "requires AMAZING_WPT_ROOT at the pinned WPT revision"]
+    fn pinned_wpt_sfnt_woff_and_woff2_decode_and_register() {
+        let root = std::env::var("AMAZING_WPT_ROOT").expect("set AMAZING_WPT_ROOT to pinned WPT");
+        for (relative, format) in [
+            ("fonts/Ahem.ttf", FontFormat::OpenType),
+            ("fonts/ahem-visible-zwnj.otf", FontFormat::OpenType),
+            ("fonts/AD.woff", FontFormat::Woff),
+            (
+                "fonts/hasubi-mono/HasubiMono-Regular.woff2",
+                FontFormat::Woff2,
+            ),
+            (
+                "fonts/noto/NotoNaskhArabic-regular.woff2",
+                FontFormat::Woff2,
+            ),
+            (
+                "fonts/noto/NotoSansMongolian-regular.woff2",
+                FontFormat::Woff2,
+            ),
+            (
+                "fonts/noto/NotoSansNko-regular-webfont.woff2",
+                FontFormat::Woff2,
+            ),
+        ] {
+            let bytes = std::fs::read(std::path::Path::new(&root).join(relative)).unwrap();
+            let decoded = decode_font(format, bytes.clone())
+                .unwrap_or_else(|error| panic!("decode {relative}: {error:?}"));
+            validate_font_structure(&decoded)
+                .unwrap_or_else(|error| panic!("sfnt {relative}: {error:?}"));
+            TextProvider::new()
+                .register_web_font(WebFont {
+                    family: relative.into(),
+                    weight: 400,
+                    stretch: 100,
+                    slant: FontSlant::Normal,
+                    format,
+                    bytes,
+                })
+                .unwrap_or_else(|error| panic!("{relative}: {error:?}"));
+        }
+    }
+
     #[test]
     fn malformed_woff2_fails_closed_without_changing_generation() {
         let mut provider = TextProvider::new();
@@ -1556,6 +2240,58 @@ mod tests {
 
         assert_eq!(result, Err(TextError::MalformedFont));
         assert_eq!(provider.generation(), 0);
+    }
+
+    #[test]
+    fn sfnt_directory_bounds_and_checksums_reject_corrupt_input() {
+        let original = synthetic_font('A');
+        let mut truncated_directory = original.clone();
+        truncated_directory[4..6].copy_from_slice(&200u16.to_be_bytes());
+        let mut bad_offset = original.clone();
+        bad_offset[20..24].copy_from_slice(&u32::MAX.to_be_bytes());
+        let mut bad_table_checksum = original.clone();
+        bad_table_checksum[16] ^= 1;
+        for bytes in [truncated_directory, bad_offset, bad_table_checksum] {
+            let result = TextProvider::new().register_web_font(WebFont {
+                family: "Malformed".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes,
+            });
+            assert!(matches!(
+                result,
+                Err(TextError::MalformedFont | TextError::ResourceLimit)
+            ));
+        }
+
+        // A stale checkSumAdjustment does not invalidate otherwise sound
+        // tables; the pinned CSSTest fonts rely on this compatibility.
+        let mut stale_global_checksum = original;
+        let head_record = (0..u16::from_be_bytes(stale_global_checksum[4..6].try_into().unwrap())
+            as usize)
+            .map(|index| 12 + index * 16)
+            .find(|record| &stale_global_checksum[*record..*record + 4] == b"head")
+            .unwrap();
+        let head_offset = u32::from_be_bytes(
+            stale_global_checksum[head_record + 8..head_record + 12]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        stale_global_checksum[head_offset + 8] ^= 1;
+        assert!(
+            TextProvider::new()
+                .register_web_font(WebFont {
+                    family: "Stale checksum".into(),
+                    weight: 400,
+                    stretch: 100,
+                    slant: FontSlant::Normal,
+                    format: FontFormat::OpenType,
+                    bytes: stale_global_checksum,
+                })
+                .is_ok()
+        );
     }
 
     #[test]
@@ -1621,6 +2357,7 @@ mod tests {
             .unwrap();
         too_many_glyphs[maxp_offset + 4..maxp_offset + 6]
             .copy_from_slice(&((MAX_FONT_GLYPHS + 1) as u16).to_be_bytes());
+        write_sfnt_checksums(&mut too_many_glyphs);
         assert_eq!(
             TextProvider::new().register_web_font(WebFont {
                 family: "Glyphs".into(),
@@ -1724,23 +2461,49 @@ mod tests {
     #[test]
     fn synthetic_oblique_changes_the_registered_face_outline() {
         let mut provider = TextProvider::new();
-        let font = provider.register_web_font(WebFont {
-            family: "Regular only".into(), weight: 400, stretch: 100,
-            slant: FontSlant::Normal, format: FontFormat::OpenType,
-            bytes: synthetic_font('A'),
-        }).unwrap();
+        let font = provider
+            .register_web_font(WebFont {
+                family: "Regular only".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
         let key = GlyphCacheKey::new(provider.generation(), font, GlyphId(1), 30.0, 0, 0).unwrap();
-        let normal = provider.rasterize(GlyphRasterRequest {
-            key, variations: &[],
-            synthesis: amazing_text::FontSynthesis { weight: false, style: false },
-        }).unwrap().unwrap();
-        let oblique = provider.rasterize(GlyphRasterRequest {
-            key: key.with_style(&[], amazing_text::FontSynthesis { weight: false, style: true }),
-            variations: &[],
-            synthesis: amazing_text::FontSynthesis { weight: false, style: true },
-        }).unwrap().unwrap();
-        assert_ne!((normal.width, normal.bearing_x, normal.data),
-                   (oblique.width, oblique.bearing_x, oblique.data));
+        let normal = provider
+            .rasterize(GlyphRasterRequest {
+                key,
+                variations: &[],
+                synthesis: amazing_text::FontSynthesis {
+                    weight: false,
+                    style: false,
+                },
+            })
+            .unwrap()
+            .unwrap();
+        let oblique = provider
+            .rasterize(GlyphRasterRequest {
+                key: key.with_style(
+                    &[],
+                    amazing_text::FontSynthesis {
+                        weight: false,
+                        style: true,
+                    },
+                ),
+                variations: &[],
+                synthesis: amazing_text::FontSynthesis {
+                    weight: false,
+                    style: true,
+                },
+            })
+            .unwrap()
+            .unwrap();
+        assert_ne!(
+            (normal.width, normal.bearing_x, normal.data),
+            (oblique.width, oblique.bearing_x, oblique.data)
+        );
     }
 
     #[test]
@@ -1798,27 +2561,34 @@ mod tests {
     #[test]
     fn earlier_named_family_beats_later_face_regardless_of_attribute_distance() {
         let mut provider = TextProvider::new();
-        let first = provider.register_web_font(WebFont {
-            family: "CSSTest Multi Word".into(),
-            weight: 1000,
-            stretch: 1000,
-            slant: FontSlant::Normal,
-            format: FontFormat::OpenType,
-            bytes: synthetic_font('A'),
-        }).unwrap();
-        provider.register_web_font(WebFont {
-            family: "second".into(),
-            weight: 400,
-            stretch: 100,
-            slant: FontSlant::Normal,
-            format: FontFormat::OpenType,
-            bytes: synthetic_font('A'),
-        }).unwrap();
+        let first = provider
+            .register_web_font(WebFont {
+                family: "CSSTest Multi Word".into(),
+                weight: 1000,
+                stretch: 1000,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
+        provider
+            .register_web_font(WebFont {
+                family: "second".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
         let style = TextStyle {
             families: vec!["'csstest multi word'".into(), "second".into()],
             ..TextStyle::default()
         };
-        assert_eq!(provider.fonts[provider.matching_font(&style, Some("A")).unwrap()].key, first);
+        assert_eq!(
+            provider.fonts[provider.matching_font(&style, Some("A")).unwrap()].key,
+            first
+        );
     }
 
     #[test]
@@ -1829,10 +2599,16 @@ mod tests {
             ("primary", FontSlant::Italic, 'B'),
             ("secondary", FontSlant::Normal, 'B'),
         ] {
-            provider.register_web_font(WebFont {
-                family: family.into(), weight: 400, stretch: 100, slant,
-                format: FontFormat::OpenType, bytes: synthetic_font(glyph),
-            }).unwrap();
+            provider
+                .register_web_font(WebFont {
+                    family: family.into(),
+                    weight: 400,
+                    stretch: 100,
+                    slant,
+                    format: FontFormat::OpenType,
+                    bytes: synthetic_font(glyph),
+                })
+                .unwrap();
         }
         let style = TextStyle {
             families: vec!["primary".into(), "secondary".into()],
@@ -1845,44 +2621,65 @@ mod tests {
     #[test]
     fn missing_author_family_uses_covering_installed_fallback() {
         let mut provider = TextProvider::new();
-        let serif = provider.register_web_font(WebFont {
-            family: "serif".into(), weight: 400, stretch: 100,
-            slant: FontSlant::Normal, format: FontFormat::OpenType,
-            bytes: synthetic_font('A'),
-        }).unwrap();
+        let serif = provider
+            .register_web_font(WebFont {
+                family: "serif".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('A'),
+            })
+            .unwrap();
         let style = TextStyle {
             families: vec!["'Uninstalled Family'".into()],
             ..TextStyle::default()
         };
-        assert_eq!(provider.fonts[provider.matching_font(&style, Some("A")).unwrap()].key, serif);
+        assert_eq!(
+            provider.fonts[provider.matching_font(&style, Some("A")).unwrap()].key,
+            serif
+        );
         assert_eq!(provider.matching_font(&style, Some("B")), None);
     }
 
     #[test]
     fn private_use_ignores_generic_faces_but_uses_named_faces() {
         let mut provider = TextProvider::new();
-        provider.register_web_font(WebFont {
-            family: "serif".into(),
-            weight: 400,
-            stretch: 100,
-            slant: FontSlant::Normal,
-            format: FontFormat::OpenType,
-            bytes: synthetic_font('\u{E000}'),
-        }).unwrap();
-        let style = TextStyle { families: vec!["serif".into()], ..TextStyle::default() };
+        provider
+            .register_web_font(WebFont {
+                family: "serif".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('\u{E000}'),
+            })
+            .unwrap();
+        let style = TextStyle {
+            families: vec!["serif".into()],
+            ..TextStyle::default()
+        };
         assert_eq!(provider.matching_font(&style, Some("\u{E000}")), None);
         assert!(provider.matching_font(&style, Some("A")).is_none());
-        let quoted = TextStyle { families: vec!["'serif'".into()], ..TextStyle::default() };
+        let quoted = TextStyle {
+            families: vec!["'serif'".into()],
+            ..TextStyle::default()
+        };
         assert!(provider.matching_font(&quoted, Some("\u{E000}")).is_some());
-        provider.register_web_font(WebFont {
-            family: "PUA fixture".into(),
-            weight: 400,
-            stretch: 100,
-            slant: FontSlant::Normal,
-            format: FontFormat::OpenType,
-            bytes: synthetic_font('\u{E000}'),
-        }).unwrap();
-        let style = TextStyle { families: vec!["serif".into(), "PUA fixture".into()], ..TextStyle::default() };
+        provider
+            .register_web_font(WebFont {
+                family: "PUA fixture".into(),
+                weight: 400,
+                stretch: 100,
+                slant: FontSlant::Normal,
+                format: FontFormat::OpenType,
+                bytes: synthetic_font('\u{E000}'),
+            })
+            .unwrap();
+        let style = TextStyle {
+            families: vec!["serif".into(), "PUA fixture".into()],
+            ..TextStyle::default()
+        };
         assert!(provider.matching_font(&style, Some("\u{E000}")).is_some());
     }
 
@@ -1999,7 +2796,7 @@ mod tests {
                     text,
                     spans: &spans,
                     sources: &[],
-                bidi_scopes: &[],
+                    bidi_scopes: &[],
                     base_direction: Direction::LeftToRight,
                 },
                 range: 0..text.len(),
@@ -2078,7 +2875,7 @@ mod tests {
                     text,
                     spans: &spans,
                     sources: &[],
-                bidi_scopes: &[],
+                    bidi_scopes: &[],
                     base_direction: Direction::LeftToRight,
                 },
                 range: 0..text.len(),
@@ -2272,7 +3069,7 @@ mod tests {
                     text,
                     spans: &spans,
                     sources: &[],
-                bidi_scopes: &[],
+                    bidi_scopes: &[],
                     base_direction: Direction::LeftToRight,
                 },
                 range: 0..8,
@@ -2314,7 +3111,7 @@ mod tests {
                     text,
                     spans: &spans,
                     sources: &[],
-                bidi_scopes: &[],
+                    bidi_scopes: &[],
                     base_direction: Direction::LeftToRight,
                 },
                 range: 0..text.len(),

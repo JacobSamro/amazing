@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-2",
+  "fixed_base": "582a6af0962dd3b7e6c94427c14746915aea14ab",
+  "branch_head_before_text2": "085d0df35f06059dc93abce907f2d25a5a69786f",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "server_lock_sha256": "30c1b66612223068a45b4f9429f7921b60ef45aae7ed4cdfa029d8610506d25a",
+  "baseline_executable_sha256": "b83c9bd08fb52b377cab2e8b2b9e04d008cca6f6bcd5e421572ec7dfa20a03be",
+  "candidate_executable_sha256": "508f6e5f4008ee98708bfb681059e72a727f6e51e24a4f062802f957a1a566f6",
+  "workspace_nextest": {
+    "passed": 1728,
+    "failed": 0,
+    "skipped": 4
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "provider_nextest": {
+    "passed": 35,
+    "failed": 0,
+    "skipped": 1
+  },
+  "pinned_wpt_decoder": {
+    "passed": 1,
+    "failed": 0
+  },
+  "selections": [
+    {
+      "name": "font-face",
+      "before": "text2-before.json",
+      "after": [
+        "font-face-1.json",
+        "font-face-2.json"
+      ],
+      "before_counts": {
+        "pass": 0,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 6
+      },
+      "after_counts": {
+        "pass": 0,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 6
+      },
+      "losses": 0,
+      "gains": 0,
+      "unstable_classifications_or_actual_hashes": 0,
+      "before_after_identical_actual_hashes": 2
+    },
+    {
+      "name": "text1",
+      "before": "final-1.json",
+      "after": [
+        "text1-1.json",
+        "text1-2.json"
+      ],
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": 0,
+      "gains": 0,
+      "unstable_classifications_or_actual_hashes": 0,
+      "before_after_identical_actual_hashes": 15
+    },
+    {
+      "name": "text-flow",
+      "before": "text-flow-final-1.json",
+      "after": [
+        "text-flow-1.json",
+        "text-flow-2.json"
+      ],
+      "before_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": 0,
+      "gains": 0,
+      "unstable_classifications_or_actual_hashes": 0,
+      "before_after_identical_actual_hashes": 16
+    },
+    {
+      "name": "text-shaping",
+      "before": "text-shaping-final-1.json",
+      "after": [
+        "text-shaping-1.json",
+        "text-shaping-2.json"
+      ],
+      "before_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": 0,
+      "gains": 0,
+      "unstable_classifications_or_actual_hashes": 0,
+      "before_after_identical_actual_hashes": 12
+    },
+    {
+      "name": "vertical-ruby",
+      "before": "vertical-ruby-final-1.json",
+      "after": [
+        "vertical-ruby-1.json",
+        "vertical-ruby-2.json"
+      ],
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "losses": 0,
+      "gains": 0,
+      "unstable_classifications_or_actual_hashes": 0,
+      "before_after_identical_actual_hashes": 20
+    }
+  ]
+}

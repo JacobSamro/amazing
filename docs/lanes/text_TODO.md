@@ -33,3 +33,51 @@ Follow-up: layout must pass parsed `font-feature-settings` and
 `font-variant-ligatures` into `TextStyle.features`. The provider already passes
 OpenType feature tags to HarfRust; the missing policy handoff is queued with
 the primary integrator.
+
+## TEXT-2: web-font decoding and face matching
+
+Fixed base: `582a6af0962dd3b7e6c94427c14746915aea14ab` (`origin/dev`),
+with the local TEXT-1 commit replayed as `085d0df35f06059dc93abce907f2d25a5a69786f`.
+
+Decision: keep font decoding and CSS face matching in `amazing-text-provider`.
+Use bounded wuff WOFF 1 and WOFF 2 decode through the existing DEFLATE and
+Brotli adapters, then validate sfnt table order, bounds, overlap, padding,
+individual table checksums, the `head` magic, and parser limits. Do not reject
+an otherwise valid font solely because `head.checkSumAdjustment` makes the
+whole-file checksum stale: most pinned CSSTest fonts have this property. A
+strict whole-file check caused four TEXT-1 losses before it was removed.
+
+The provider's `FontFaceDescriptor` and `FontFaceLoader` API takes ordered
+`local()` and URL sources, filters `format()` and `tech()`, applies Unicode and
+weight/stretch/style descriptor ranges, and records `font-display`. The
+network owner supplies CORS-mode URL bytes under the provider's 8 MiB cap.
+The CSS owner must parse descriptors; the driver must register faces and
+relayout on generation change. These cross-lane seams are queued in
+`.agents/text/questions.md`. Until they land, the page still uses its older
+partial `register_web_font` path, and WPT cannot exercise the new matching API.
+
+Evidence: `crates/amazing-text-provider/evidence/text2-gate-summary.json` and
+the linked per-selection reports pin WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. The eight-case
+`@font-face` selection was 0 pass, 2 mismatch, 6 page-script crashes before
+and after; only two cases reached a rendered comparison, and their actual
+image hashes were unchanged. The six crashes were `TypeError: value is not
+callable` in page script; all six fixtures use `document.fonts.ready.then(...)`
+and that DOM/driver seam is routed into DOM-17. The retained TEXT-1, text-flow,
+text-shaping, and vertical-ruby selections held at 11/15, 14/16, 12/12, and
+11/20 respectively,
+with zero classification or actual-image-hash losses. Two candidate runs had
+identical classifications and actual image hashes. Provider nextest passed
+35/35 plus the ignored pinned WPT decoder case 1/1; workspace nextest passed
+1728/1728 (4 skipped) and workspace doctests passed 2/2. All builds and tests
+ran on win-001 against the text lane target dir under the shared build slot
+for render and workspace gates.
+
+Next: CSS descriptor parsing, CORS font fetch, and driver registration/relayout
+must land before an end-to-end `@font-face` WPT movement can be expected.
+
+Rebase update: TEXT-2 alone was replayed onto `origin/dev`
+`285c16ee01956b1a04d7f247eb977f43417badb0`, whose tree already contains
+TEXT-1. The provider and workspace gates were repeated on that head in the
+text lane's refreshed Windows tree: provider nextest 35/35, pinned decoder
+1/1, workspace nextest 1753/1753 (4 skipped), and workspace doctests 2/2.

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "fixed-text2-font-face",
+    "case_count": 8,
+    "scope": "css/css-fonts @font-face matching reftests; native reach before cross-lane descriptor/loader integration"
+  },
+  "tests": [
+    {
+      "id": "css-fonts__matching__fixed-stretch-style-over-weight.html",
+      "test": "css/css-fonts/matching/fixed-stretch-style-over-weight.html"
+    },
+    {
+      "id": "css-fonts__matching__range-descriptor-reversed.html",
+      "test": "css/css-fonts/matching/range-descriptor-reversed.html"
+    },
+    {
+      "id": "css-fonts__matching__stretch-distance-over-weight-distance.html",
+      "test": "css/css-fonts/matching/stretch-distance-over-weight-distance.html"
+    },
+    {
+      "id": "css-fonts__matching__style-ranges-over-weight-direction.html",
+      "test": "css/css-fonts/matching/style-ranges-over-weight-direction.html"
+    },
+    {
+      "id": "css-fonts__variations__font-descriptor-range-reversed.html",
+      "test": "css/css-fonts/variations/font-descriptor-range-reversed.html"
+    },
+    {
+      "id": "css-fonts__variations__font-descriptor-range-reversed-002.html",
+      "test": "css/css-fonts/variations/font-descriptor-range-reversed-002.html"
+    },
+    {
+      "id": "css-fonts__variations__font-slant-2a.html",
+      "test": "css/css-fonts/variations/font-slant-2a.html"
+    },
+    {
+      "id": "css-fonts__variations__font-slant-2b.html",
+      "test": "css/css-fonts/variations/font-slant-2b.html"
+    }
+  ]
+}
