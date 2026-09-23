@@ -16,6 +16,8 @@
 pub mod events;
 pub mod attr;
 pub mod collection;
+pub mod markup;
+#[cfg(test)] mod markup_tests;
 pub mod event_loop;
 pub mod mutation;
 mod namespace;

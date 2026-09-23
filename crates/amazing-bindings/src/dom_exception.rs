@@ -14,6 +14,7 @@ pub fn from_dom_error(error: DomError) -> Option<(&'static str, u16)> {
         DomError::NamespaceError => ("NamespaceError", 14),
         DomError::InUseAttributeError => ("InUseAttributeError", 10),
         DomError::SyntaxError => ("SyntaxError", 12),
+        DomError::NoModificationAllowedError => ("NoModificationAllowedError", 7),
         DomError::InvalidNodeTypeError => ("InvalidNodeTypeError", 24),
         DomError::IndexSizeError => ("IndexSizeError", 1),
         DomError::TypeError | DomError::InvalidNode => return None,

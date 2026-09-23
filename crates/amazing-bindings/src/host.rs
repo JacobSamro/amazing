@@ -138,6 +138,18 @@ pub enum Interface {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    ElementInnerHTML,
+    ElementSetInnerHTML,
+    ElementOuterHTML,
+    ElementSetOuterHTML,
+    ElementInsertAdjacentHTML,
+    ElementInnerText,
+    ElementSetInnerText,
+    ParentQuerySelector,
+    ParentQuerySelectorAll,
+    ElementMatches,
+    ElementClosest,
+    ElementWebkitMatchesSelector,
     TextConstructor,
     CommentConstructor,
     FragmentConstructor,
@@ -361,6 +373,28 @@ pub enum Operation {
     DOMExceptionName,
     DOMExceptionMessage,
     DOMExceptionCode,
+}
+
+/// Context passed to the embedding's HTML fragment parser after the DOM borrow
+/// has ended. Parser results live in a separate arena and are imported by DOM.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FragmentContext {
+    pub local_name: String,
+    pub namespace_uri: Option<String>,
+}
+
+pub trait FragmentParser: BindingHost {
+    fn parse_fragment(&mut self, context: FragmentContext, markup: &[u16])
+        -> Result<Dom, DomError>;
+}
+
+/// The embedding parses and matches selectors using its CSS crate. A failed
+/// parse must surface as SyntaxError; handles are private to that embedding.
+pub trait SelectorEngine: BindingHost {
+    type SelectorHandle;
+    fn parse_selector(&mut self, selector: &[u16]) -> Result<Self::SelectorHandle, DomError>;
+    fn matches_selector(&mut self, element: NodeIdx, selector: &Self::SelectorHandle)
+        -> Result<bool, DomError>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -218,6 +218,11 @@ impl Dom {
     pub fn static_node_list(&self, slot: usize) -> Option<&[NodeIdx]> {
         self.static_node_lists.get(slot).map(Vec::as_slice)
     }
+    pub fn create_static_node_list(&mut self, nodes: Vec<NodeIdx>) -> usize {
+        let slot = self.static_node_lists.len();
+        self.static_node_lists.push(nodes);
+        slot
+    }
     pub fn create_mutation_observer(&mut self, callback: u64) -> ObserverId {
         let id = ObserverId(self.mutations.observers.len());
         self.mutations.observers.push(Observer {
