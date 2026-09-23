@@ -302,6 +302,74 @@ fn browser_navigation_uses_explicit_initiator_context() {
 }
 
 #[test]
+fn browser_loads_multi_resource_page_through_network_child_with_direct_parity() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let fixtures: [(&str, &str, &[u8]); 6] = [
+        ("/index.html", "text/html; charset=utf-8", b"<!doctype html><link rel=stylesheet href=/site.css><img src=/pixel.png><script src=/app.js></script><main>network child</main>"),
+        ("/site.css", "text/css", b"@font-face{font-family:Fixture;src:url(/fixture.woff)}main{font-family:Fixture}"),
+        ("/pixel.png", "image/png", b"\x89PNG\r\n\x1a\nfixture-pixels"),
+        ("/fixture.woff", "font/woff", b"wOFFfixture-font-bytes"),
+        ("/app.js", "text/javascript", b"fetch('/api.json').then(r=>r.json())"),
+        ("/api.json", "application/json", b"{\"loaded\":true}"),
+    ];
+    let server = std::thread::spawn(move || {
+        for _ in 0..fixtures.len() * 2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut header = Vec::new();
+            while !header.ends_with(b"\r\n\r\n") {
+                assert!(header.len() < 16 * 1024);
+                let mut byte = [0];
+                stream.read_exact(&mut byte).unwrap();
+                header.push(byte[0]);
+            }
+            let line = std::str::from_utf8(&header)
+                .unwrap()
+                .lines()
+                .next()
+                .unwrap();
+            let path = line.split_whitespace().nth(1).unwrap();
+            let (_, mime, body) = fixtures.iter().find(|(url, _, _)| *url == path).unwrap();
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nX-Fixture: ipc6\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
+            stream.write_all(body).unwrap();
+        }
+    });
+    let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
+    let session = NetworkSession::launch(exe, 19, Duration::from_secs(5)).unwrap();
+    for (path, destination) in [
+        ("/index.html", "document"),
+        ("/site.css", "style"),
+        ("/pixel.png", "image"),
+        ("/fixture.woff", "font"),
+        ("/app.js", "script"),
+        ("/api.json", "connect"),
+    ] {
+        let url = format!("{origin}{path}");
+        let direct = amazing_net::fetch(&url, &amazing_net::FetchOptions::default()).unwrap();
+        let mut start = request(&url, &origin);
+        start.destination = destination.into();
+        start.context.top_level_navigation = destination == "document";
+        let remote = session.fetch(start).unwrap();
+        assert_eq!(remote.head.status, direct.status, "{path}");
+        assert_eq!(remote.head.url, direct.url, "{path}");
+        assert_eq!(remote.body, direct.body, "{path}");
+        for name in ["content-type", "x-fixture"] {
+            assert_eq!(
+                remote
+                    .head
+                    .headers
+                    .iter()
+                    .find(|h| h.name == name)
+                    .map(|h| h.value.as_str()),
+                direct.headers.get(name).as_deref(),
+                "{path} {name}",
+            );
+        }
+    }
+    server.join().unwrap();
+}
+
+#[test]
 fn response_bytes_arrive_under_credit_before_network_completion() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());

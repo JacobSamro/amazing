@@ -187,9 +187,66 @@ pub enum RestartPolicy {
     Never,
     OnCrash { max_restarts: u32 },
 }
+enum HostedChild {
+    Standard(Child),
+    #[cfg(windows)]
+    Sandboxed(amazing_ipc_platform::WindowsSandboxChild),
+}
+impl HostedChild {
+    fn id(&self) -> u32 {
+        match self {
+            Self::Standard(child) => child.id(),
+            #[cfg(windows)]
+            Self::Sandboxed(child) => child.id(),
+        }
+    }
+    fn stdin(&mut self) -> Option<Box<dyn Write + Send>> {
+        match self {
+            Self::Standard(child) => child.stdin.take().map(|pipe| Box::new(pipe) as _),
+            #[cfg(windows)]
+            Self::Sandboxed(child) => child.take_stdin().map(|pipe| Box::new(pipe) as _),
+        }
+    }
+    fn stdout(&mut self) -> Option<Box<dyn Read + Send>> {
+        match self {
+            Self::Standard(child) => child.stdout.take().map(|pipe| Box::new(pipe) as _),
+            #[cfg(windows)]
+            Self::Sandboxed(child) => child.take_stdout().map(|pipe| Box::new(pipe) as _),
+        }
+    }
+    fn attach_frame_channel(&self, channel: &mut HandleChannel) -> Result<(), Error> {
+        match self {
+            Self::Standard(child) => channel.attach_child(child)?,
+            #[cfg(windows)]
+            Self::Sandboxed(child) => channel.attach_sandbox_child(child)?,
+        }
+        Ok(())
+    }
+    fn try_wait(&mut self) -> std::io::Result<bool> {
+        match self {
+            Self::Standard(child) => child.try_wait().map(|status| status.is_some()),
+            #[cfg(windows)]
+            Self::Sandboxed(child) => child.try_wait(),
+        }
+    }
+    fn kill(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Standard(child) => child.kill(),
+            #[cfg(windows)]
+            Self::Sandboxed(child) => child.kill(),
+        }
+    }
+    fn wait(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Standard(child) => child.wait().map(|_| ()),
+            #[cfg(windows)]
+            Self::Sandboxed(child) => child.wait(),
+        }
+    }
+}
 /// Owns the child and the IPC connection; polling records crash and heartbeat state.
 pub struct ProcessHost {
-    child: Child,
+    child: HostedChild,
     pub connection: Arc<Connection>,
     pub role: Role,
     pub capabilities: Capabilities,
@@ -266,13 +323,23 @@ impl ProcessHost {
                 .0
                 .insert(FRAME_NONCE_CAPABILITY.into(), channel.nonce_hex());
         }
-        let mut child = command.spawn()?;
+        #[cfg(windows)]
+        let mut child = if sandboxed_renderer {
+            let nonce = frame_channel.as_ref().ok_or(Error::Role)?.nonce_hex();
+            HostedChild::Sandboxed(amazing_ipc_platform::spawn_renderer_appcontainer(
+                exe, &nonce,
+            )?)
+        } else {
+            HostedChild::Standard(command.spawn()?)
+        };
+        #[cfg(not(windows))]
+        let mut child = HostedChild::Standard(command.spawn()?);
         let boot = (|| {
             if let Some(channel) = &mut frame_channel {
-                channel.attach_child(&child)?;
+                child.attach_frame_channel(channel)?;
             }
-            let mut stdin = child.stdin.take().ok_or(Error::Dead)?;
-            let mut stdout = child.stdout.take().ok_or(Error::Dead)?;
+            let mut stdin = child.stdin().ok_or(Error::Dead)?;
+            let mut stdout = child.stdout().ok_or(Error::Dead)?;
             send_boot(
                 &mut stdin,
                 &Handshake {
@@ -375,7 +442,7 @@ impl ProcessHost {
         })
     }
     pub fn crashed(&mut self) -> Result<bool, Error> {
-        Ok(self.child.try_wait()?.is_some() || self.connection.is_closed())
+        Ok(self.child.try_wait()? || self.connection.is_closed())
     }
     pub fn ping(&mut self, timeout: Duration) -> Result<(), Error> {
         let v = self.connection.call(0, 0, vec![], timeout)?;

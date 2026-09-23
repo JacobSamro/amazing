@@ -245,6 +245,36 @@ impl HandleChannel {
         self.child = Some(owned);
         Ok(())
     }
+    pub fn attach_sandbox_child(
+        &mut self,
+        child: &crate::WindowsSandboxChild,
+    ) -> Result<(), Error> {
+        let mut owned: HANDLE = std::ptr::null_mut();
+        // SAFETY: the platform child owns this live process handle. The duplicate
+        // is independent and remains browser-owned for IPC-3 frame acquisition.
+        if unsafe {
+            DuplicateHandle(
+                GetCurrentProcess(),
+                child.process_handle(),
+                GetCurrentProcess(),
+                &mut owned,
+                0,
+                0,
+                windows_sys::Win32::Foundation::DUPLICATE_SAME_ACCESS,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error().into());
+        }
+        let owned = OwnedHandle::new(owned)?;
+        // SAFETY: the duplicate is a process handle created by this launcher.
+        if unsafe { GetProcessId(owned.0) } != child.id() {
+            return Err(Error::Authentication);
+        }
+        self.child_pid = Some(child.id());
+        self.child = Some(owned);
+        Ok(())
+    }
     pub fn receive(&self, metadata: FrameMetadata, source_pid: u32) -> Result<FrameView, Error> {
         metadata.validate()?;
         if self.child_pid != Some(source_pid) {

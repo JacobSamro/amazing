@@ -32,7 +32,7 @@ fn sandboxed_renderer_preserves_shared_frame_parity() {
         RestartPolicy::Never,
     )
     .unwrap();
-    let (proxy, _) = connect(&renderer, &network);
+    let (proxy, notifications) = connect(&renderer, &network);
     let request = Navigate {
         url: "http://example.test/sandbox".into(),
         html_bytes: ByteBuf(b"<style>body{background:#123456}</style><p>sandbox</p>".to_vec()),
@@ -46,21 +46,58 @@ fn sandboxed_renderer_preserves_shared_frame_parity() {
     })
     .unwrap();
     let ready = proxy.navigate_shared(request).unwrap();
-    assert!(matches!(
-        proxy
-            .acquire_frame(AcquireFrame {
-                generation: ready.generation
-            })
-            .unwrap(),
-        AcquireResult::Transferred(())
-    ));
+    assert_eq!(
+        notifications
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .sequence,
+        ready.generation
+    );
     let actual = renderer.receive_frame(&ready).unwrap();
     assert_eq!(actual.bytes(), expected.rgba.0);
     assert!(proxy
-        .frame_received(AcquireFrame {
+        .release_frame(ReleaseFrame {
             generation: ready.generation
         })
         .unwrap());
+    drop(actual);
+    renderer.kill().unwrap();
+    network.kill().unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn appcontainer_renderer_preserves_shared_frame_parity() {
+    let mut network = spawn(Role::Network);
+    let mut renderer = ProcessHost::spawn_sandboxed_renderer(
+        exe(),
+        Capabilities(BTreeMap::new()),
+        RestartPolicy::Never,
+    )
+    .unwrap();
+    let (proxy, notifications) = connect(&renderer, &network);
+    let request = Navigate {
+        url: "http://example.test/windows-sandbox".into(),
+        html_bytes: ByteBuf(b"<style>body{background:#123456}</style><p>sandbox</p>".to_vec()),
+        viewport: Viewport {
+            width: 64,
+            height: 64,
+        },
+    };
+    let expected = render_document(&request, |_, _| {
+        Err(Error::Remote("unexpected resource".into()))
+    })
+    .unwrap();
+    let ready = proxy.navigate_shared(request).unwrap();
+    assert_eq!(
+        notifications
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .sequence,
+        ready.generation
+    );
+    let actual = renderer.receive_frame(&ready).unwrap();
+    assert_eq!(actual.bytes(), expected.rgba.0);
     assert!(proxy
         .release_frame(ReleaseFrame {
             generation: ready.generation
