@@ -221,6 +221,7 @@ fn heap_frame_suspends_and_resumes_at_instruction_boundaries() {
                 break;
             }
             FrameOutcome::Yielded(_) => panic!("ordinary frame yielded"),
+            FrameOutcome::Awaited(_) => panic!("ordinary frame awaited"),
         }
     }
     assert!(suspensions > 1);
@@ -283,6 +284,7 @@ fn heap_frame_resumes_through_catch_and_finally() {
                 break;
             }
             FrameOutcome::Yielded(_) => panic!("ordinary frame yielded"),
+            FrameOutcome::Awaited(_) => panic!("ordinary frame awaited"),
         }
     }
     assert!(suspended_in_handler);
@@ -333,6 +335,48 @@ fn generator_delegation_forwards_values_and_returns() {
     ";
     let result = Interpreter::new().run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
     assert_eq!(result, JsValue::str("1:false:42:true"));
+}
+
+#[test]
+fn async_frame_resumes_from_pending_promise() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var resolve;
+        var pending = new Promise(function(r) { resolve = r; });
+        var log = '';
+        async function work() { log += 'a'; var value = await pending; log += 'b'; return value + 1; }
+        var result = 0;
+        var promise = work();
+        var before = log;
+        promise.then(function(value) { result = value; });
+        resolve(41);
+        before;
+    ";
+    let before = interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(before, JsValue::str("a"));
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("ab")));
+    assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::num(42.0)));
+}
+
+#[test]
+fn async_await_rejection_runs_catch_and_finally() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var reject;
+        var pending = new Promise(function(resolve, fail) { reject = fail; });
+        var log = '';
+        async function work() {
+            try { await pending; return 0; }
+            catch (error) { log += error; return 7; }
+            finally { log += 'f'; }
+        }
+        var result = 0;
+        work().then(function(value) { result = value; });
+        reject('e');
+    ";
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    assert_eq!(interpreter.global_env.resolve("log"), Some(JsValue::str("ef")));
+    assert_eq!(interpreter.global_env.resolve("result"), Some(JsValue::num(7.0)));
 }
 
 #[test]

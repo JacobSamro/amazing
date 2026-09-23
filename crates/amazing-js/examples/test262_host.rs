@@ -9,6 +9,7 @@ use std::{
 thread_local! {
     static UNSUPPORTED: RefCell<Option<String>> = const { RefCell::new(None) };
     static STRING: RefCell<Option<JsValue>> = const { RefCell::new(None) };
+    static ASYNC_DONE: RefCell<Option<Result<(), String>>> = const { RefCell::new(None) };
 }
 
 fn quote(s: &str) -> String {
@@ -102,6 +103,14 @@ fn eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, 
 fn print(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     // Prefix and JSON-escape output so test text cannot impersonate a result frame.
     let text = coerce(i, args.first().cloned().unwrap_or(JsValue::Undefined))?;
+    ASYNC_DONE.with(|done| {
+        if text == "Test262:AsyncTestComplete" {
+            let mut done = done.borrow_mut();
+            *done = Some(if done.is_some() { Err("$DONE called more than once".into()) } else { Ok(()) });
+        } else if let Some(detail) = text.strip_prefix("Test262:AsyncTestFailure:") {
+            *done.borrow_mut() = Some(Err(detail.to_string()));
+        }
+    });
     println!("TEST262_PRINT {}", quote(&text));
     Ok(JsValue::Undefined)
 }
@@ -189,6 +198,8 @@ fn run() -> io::Result<()> {
     while !input.is_empty() {
         helpers.push((field(&mut input)?, field(&mut input)?));
     }
+    let async_test = helpers.iter().any(|(name, _)| name == "doneprintHandle.js");
+    ASYNC_DONE.with(|done| *done.borrow_mut() = None);
     let program = match parse_script(&source) {
         Ok(p) => p,
         Err(e) => {
@@ -220,7 +231,17 @@ fn run() -> io::Result<()> {
         }
     }
     match i.run_program(&program) {
-        Ok(_) => emit("complete", "", ""),
+        Ok(_) => {
+            if async_test {
+                match ASYNC_DONE.with(|done| done.borrow().clone()) {
+                    Some(Ok(())) => emit("complete", "", ""),
+                    Some(Err(detail)) => emit("runtime", "Test262Error", &detail),
+                    None => emit("runtime", "Test262Error", "$DONE was not called"),
+                }
+            } else {
+                emit("complete", "", "");
+            }
+        }
         Err(e) => {
             let kind = error_type(&mut i, &inspect, &e);
             emit("runtime", &kind, &describe(&e));
@@ -231,7 +252,7 @@ fn run() -> io::Result<()> {
 fn main() -> std::process::ExitCode {
     if std::env::args().any(|a| a == "--capabilities") {
         println!(
-            "{{\"protocol\":1,\"module\":false,\"async\":false,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":false}}"
+            "{{\"protocol\":1,\"module\":false,\"async\":true,\"can_block\":false,\"createRealm\":false,\"detachArrayBuffer\":true,\"gc\":false,\"agent\":false,\"IsHTMLDDA\":false,\"AbstractModuleSource\":false,\"evalScript\":true,\"global\":true,\"print\":true,\"intl402\":false}}"
         );
         return std::process::ExitCode::SUCCESS;
     }

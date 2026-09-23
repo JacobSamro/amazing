@@ -32,6 +32,7 @@ struct Compiler {
     program: Program,
     depth: usize,
     is_generator: bool,
+    is_async: bool,
 }
 
 impl Compiler {
@@ -47,6 +48,7 @@ impl Compiler {
             },
             depth: 0,
             is_generator: false,
+            is_async: false,
         }
     }
 
@@ -55,8 +57,8 @@ impl Compiler {
         function: &ast::FunctionItem,
         span: Span,
     ) -> Result<FunctionCode, CompileError> {
-        if function.is_async {
-            return Err(self.error(span, "async function"));
+        if function.is_async && function.is_generator {
+            return Err(self.error(span, "async generator function"));
         }
         let mut params = Vec::new();
         for param in &function.params {
@@ -70,6 +72,7 @@ impl Compiler {
         }
         let mut child = Self::new(true);
         child.is_generator = function.is_generator;
+        child.is_async = function.is_async;
         child.hoist_functions(&function.body.body)?;
         for statement in &function.body.body {
             child.statement(statement)?;
@@ -87,6 +90,7 @@ impl Compiler {
             program: child.program,
             is_arrow: false,
             is_generator: function.is_generator,
+            is_async: function.is_async,
         })))
     }
 
@@ -95,8 +99,8 @@ impl Compiler {
         arrow: &ast::ArrowFunc,
         span: Span,
     ) -> Result<FunctionCode, CompileError> {
-        if arrow.is_async || arrow.is_generator {
-            return Err(self.error(span, "async or generator function"));
+        if arrow.is_generator {
+            return Err(self.error(span, "generator arrow"));
         }
         let mut params = Vec::new();
         for param in &arrow.params {
@@ -109,6 +113,7 @@ impl Compiler {
             params.push(name.name.clone());
         }
         let mut child = Self::new(true);
+        child.is_async = arrow.is_async;
         match &arrow.body {
             ast::ArrowBody::Expr(expression) => {
                 let value = child.expression(expression)?;
@@ -127,6 +132,7 @@ impl Compiler {
             program: child.program,
             is_arrow: true,
             is_generator: false,
+            is_async: arrow.is_async,
         })))
     }
 
@@ -421,6 +427,10 @@ impl Compiler {
                 let value = self.expression(argument)?;
                 self.emit(Instruction::YieldDelegate(dst, value));
             }
+            ExprKind::Unary { op: UnOp::Await, operand } if self.is_async => {
+                let value = self.expression(operand)?;
+                self.emit(Instruction::Await(dst, value));
+            }
             ExprKind::Array(elements) => {
                 self.emit(Instruction::NewArray(dst));
                 for (index, element) in elements.iter().enumerate() {
@@ -628,16 +638,7 @@ impl Compiler {
             }
             ExprKind::Update { op, prefix, target } => {
                 let (slot, old) = self.reference(target)?;
-                let number = self.register(expression.span)?;
-                self.emit(Instruction::Unary(number, UnOp::Pos, old));
-                let delta = self.register(expression.span)?;
-                let delta_value = if *op == ast::UpdateOp::Inc { 1.0 } else { -1.0 };
-                self.emit(Instruction::Constant(delta, JsValue::num(delta_value)));
-                self.emit(Instruction::Binary(dst, ast::BinOp::Add, number, delta));
-                self.emit(Instruction::StoreReference(slot, dst));
-                if !prefix {
-                    return Ok(old);
-                }
+                self.emit(Instruction::Update(dst, slot, old, *op, *prefix));
             }
             _ => return Err(self.error(expression.span, unsupported_expression(&expression.kind))),
         }

@@ -140,6 +140,14 @@ def unavailable(path: str, meta: dict, caps: dict) -> str | None:
     return None
 
 
+def validate_async_host(caps: dict, parser: argparse.ArgumentParser) -> None:
+    """Async protocol-1 hosts report $DONE through the pinned print markers."""
+    if not isinstance(caps.get("async"), bool):
+        parser.error("host async capability must be a boolean")
+    if caps["async"] and not caps.get("print"):
+        parser.error("async Test262 host requires print for doneprintHandle.js")
+
+
 def framed(fields: list[str]) -> bytes:
     encoded = [field.encode("utf-8") for field in fields]
     return b"".join(struct.pack("<I", len(field)) + field for field in encoded)
@@ -338,7 +346,7 @@ def self_test(root: pathlib.Path, binary: pathlib.Path, caps: dict) -> None:
     assert classify(neg, observed("parse", "TypeError"))["status"] == "fail"
     assert classify(neg, observed("complete", ""))["status"] == "fail"
     assert classify(neg, observed("harness-parse", "SyntaxError"))["status"] == "fail"
-    assert unavailable("x", {"flags": ["async"]}, caps) == "host.async"
+    assert unavailable("x", {"flags": ["async"]}, caps) == (None if caps.get("async") else "host.async")
     assert unavailable("x", {"flags": ["module"]}, caps) == "host.module"
     assert unavailable("x", {"flags": ["CanBlockIsTrue"]}, caps) == "host.CanBlockIsTrue"
     assert unavailable("x", {"flags": ["CanBlockIsFalse"]}, caps) is None
@@ -414,8 +422,9 @@ def main() -> int:
     caps = json.loads(cap_result.stdout)
     if caps.get("protocol") != 1:
         parser.error("use amazing-js example test262_host, protocol 1")
-    if caps.get("module") or caps.get("async"):
-        parser.error("protocol 1 supports synchronous classic scripts only")
+    if caps.get("module"):
+        parser.error("protocol 1 supports classic scripts only")
+    validate_async_host(caps, parser)
     if args.self_test:
         self_test(root, binary, caps)
         return 0

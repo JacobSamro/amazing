@@ -6,11 +6,11 @@ mod compiler;
 #[cfg(test)]
 mod tests;
 
-use super::{reference_name, Interpreter, Reference};
+use super::{adopt_promise_result, callable_function, native_promise_reject, native_promise_resolve, new_promise, promise_callback, reference_name, settle_promise, Interpreter, Reference};
 use crate::ast::{BinOp, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
-use crate::value::{FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, Throw};
+use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Throw};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -100,6 +100,8 @@ enum Instruction {
     Throw(Register),
     Yield(Register, Register),
     YieldDelegate(Register, Register),
+    Await(Register, Register),
+    Update(Register, usize, Register, crate::ast::UpdateOp, bool),
 }
 
 #[derive(Debug, Clone)]
@@ -112,6 +114,7 @@ struct CompiledFunction {
     program: Program,
     is_arrow: bool,
     is_generator: bool,
+    is_async: bool,
 }
 
 #[derive(Debug)]
@@ -147,6 +150,7 @@ struct VmFrame {
     pending_resume: Option<Abrupt>,
     delegate: Option<DelegateState>,
     delegate_input: Option<(u8, JsValue)>,
+    await_dst: Option<Register>,
 }
 
 struct DelegateState {
@@ -157,6 +161,7 @@ struct DelegateState {
 enum FrameOutcome {
     Suspended,
     Yielded(JsValue),
+    Awaited(JsValue),
     Completed(JsValue),
 }
 
@@ -167,6 +172,7 @@ pub struct GeneratorState {
     started: bool,
     executing: bool,
     completion: JsValue,
+    async_promise: Option<Obj>,
 }
 
 impl std::fmt::Debug for GeneratorState {
@@ -225,6 +231,7 @@ impl Program {
             FrameOutcome::Completed(value) => Ok(value),
             FrameOutcome::Suspended => unreachable!("unbounded VM slice suspended"),
             FrameOutcome::Yielded(_) => unreachable!("non-generator program yielded"),
+            FrameOutcome::Awaited(_) => unreachable!("non-async program awaited"),
         }
     }
 
@@ -247,6 +254,7 @@ impl Program {
             pending_resume: None,
             delegate: None,
             delegate_input: None,
+            await_dst: None,
         });
         for name in &self.hoisted {
             consume(&mut frame.fuel)?;
@@ -291,6 +299,7 @@ impl Program {
             pending_resume: _,
             delegate,
             delegate_input,
+            await_dst,
         } = frame.as_mut();
         let mut steps = 0;
         while let Some(op) = self.code.get(*pc) {
@@ -361,6 +370,15 @@ impl Program {
                         }
                         i.put_reference(reference, value, &env)?;
                     }
+                    Instruction::Update(dst, slot, old, op, prefix) => {
+                        let reference = references[*slot]
+                            .take()
+                            .ok_or_else(|| Throw::type_error("invalid VM update reference"))?;
+                        let previous = registers[*old].clone();
+                        let next = i.update_value(*op, previous.clone())?;
+                        i.put_reference(reference, next.clone(), &env)?;
+                        registers[*dst] = if *prefix { next } else { previous };
+                    }
                     Instruction::NewObject(dst) => registers[*dst] = i.object_value(),
                     Instruction::SetObjectProperty(object, key, src) => {
                         let key = key.resolve(i, &registers)?;
@@ -396,19 +414,7 @@ impl Program {
                         }
                     },
                     Instruction::Unary(dst, op, src) => {
-                        let value = &registers[*src];
-                        registers[*dst] = match op {
-                            UnOp::Neg => JsValue::num(-i.to_number(value)?),
-                            UnOp::Pos => JsValue::num(i.to_number(value)?),
-                            UnOp::Not => JsValue::Bool(!value.to_boolean()),
-                            UnOp::BitNot => JsValue::num((!i.to_int32(value)?) as f64),
-                            UnOp::Typeof => JsValue::str(i.typeof_value(value)),
-                            UnOp::Void => JsValue::Undefined,
-                            // The private compiler never emits these.
-                            UnOp::Delete | UnOp::Await => {
-                                return Err(Throw::type_error("invalid VM unary instruction"));
-                            }
-                        };
+                        registers[*dst] = i.unary_value(*op, registers[*src].clone())?;
                     }
                     Instruction::Binary(dst, op, left, right) => {
                         registers[*dst] =
@@ -576,6 +582,10 @@ impl Program {
                             *pc -= 1;
                         }
                     }
+                    Instruction::Await(dst, _) => {
+                        *await_dst = Some(*dst);
+                        return Ok(None);
+                    }
                 }
                 Ok(None)
             })();
@@ -596,6 +606,10 @@ impl Program {
                     _ => unreachable!(),
                 };
                 return Ok(FrameOutcome::Yielded(value));
+            }
+            if await_dst.is_some() {
+                let Instruction::Await(_, src) = op else { unreachable!() };
+                return Ok(FrameOutcome::Awaited(registers[*src].clone()));
             }
         }
         let value = if self.is_function {
@@ -659,21 +673,21 @@ impl FunctionCode {
             params: vec![],
             body: FunctionBody::Bytecode(self.clone()),
             is_arrow: self.0.is_arrow,
-            is_async: false,
             is_generator: self.0.is_generator,
+            is_async: self.0.is_async,
             env: env.clone(),
             home: None,
             proto_for_new: None,
         });
         object.proto = Some(i.function_proto.clone());
         let handle = Obj(Rc::new(RefCell::new(object)));
-        if self.0.is_generator {
+        if self.0.is_generator || self.0.is_async {
             handle.borrow_mut().constructible = false;
         }
         handle
             .borrow_mut()
             .set_own("name", JsValue::str(name.as_str()));
-        if !self.0.is_arrow {
+        if !self.0.is_arrow && !self.0.is_async {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(i.object_proto.clone());
             if self.0.is_generator {
@@ -730,11 +744,162 @@ impl FunctionCode {
                 started: false,
                 executing: false,
                 completion: JsValue::Undefined,
+                async_promise: None,
             })));
             return Ok(JsValue::object(object));
         }
+        if self.0.is_async {
+            return self.call_async(i, env);
+        }
         self.0.program.execute(i, env, DEFAULT_INSTRUCTION_LIMIT)
     }
+
+    fn call_async(&self, i: &mut Interpreter, env: EnvHandle) -> Result<JsValue, Throw> {
+        let promise = new_promise(i, PromiseFate::Pending);
+        let JsValue::Object(target) = &promise else { unreachable!() };
+        let frame = match self.0.program.start_frame(i, env.clone(), DEFAULT_INSTRUCTION_LIMIT) {
+            Ok(frame) => Some(frame),
+            Err(Throw(error)) => {
+                settle_promise(target, PromiseFate::Rejected(error), i)?;
+                return Ok(promise);
+            }
+        };
+        let state = Rc::new(RefCell::new(GeneratorState {
+            code: self.clone(),
+            env,
+            frame,
+            started: true,
+            executing: false,
+            completion: JsValue::Undefined,
+            async_promise: Some(target.clone()),
+        }));
+        async_continue(i, state, 0, JsValue::Undefined)?;
+        Ok(promise)
+    }
+}
+
+fn async_handler(i: &Interpreter, state: Rc<RefCell<GeneratorState>>, reject: bool) -> JsValue {
+    let env = EnvHandle::new(EnvKind::Function, Some(i.global_env.clone()));
+    let mut holder = JsObject::ordinary();
+    holder.exotic = Exotic::Generator(state);
+    let _ = env.declare_var("[[VmAsyncState]]", JsValue::object(holder));
+    let mut function = JsObject::function(JsFunction {
+        name: if reject { "awaitRejected" } else { "awaitFulfilled" }.into(),
+        params: vec![],
+        body: FunctionBody::Native(if reject { async_rejected } else { async_fulfilled }),
+        is_arrow: false,
+        is_async: false,
+        is_generator: false,
+        env,
+        home: None,
+        proto_for_new: None,
+    });
+    function.proto = Some(i.function_proto.clone());
+    JsValue::object(function)
+}
+
+fn async_state(i: &Interpreter) -> Result<Rc<RefCell<GeneratorState>>, Throw> {
+    let native = i.native_stack.last().ok_or_else(|| Throw::type_error("missing async callback"))?;
+    let env = native.borrow().func.as_ref().unwrap().env.clone();
+    let JsValue::Object(holder) = env.resolve("[[VmAsyncState]]")
+        .ok_or_else(|| Throw::type_error("missing async frame"))? else {
+        return Err(Throw::type_error("invalid async frame"));
+    };
+    let state = match &holder.borrow().exotic {
+        Exotic::Generator(state) => state.clone(),
+        _ => return Err(Throw::type_error("invalid async frame")),
+    };
+    Ok(state)
+}
+
+fn async_fulfilled(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let state = async_state(i)?;
+    async_continue(i, state, 0, args.into_iter().next().unwrap_or(JsValue::Undefined))?;
+    Ok(JsValue::Undefined)
+}
+
+fn async_rejected(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let state = async_state(i)?;
+    async_continue(i, state, 2, args.into_iter().next().unwrap_or(JsValue::Undefined))?;
+    Ok(JsValue::Undefined)
+}
+
+fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind: u8, value: JsValue) -> Result<(), Throw> {
+    let (code, mut frame, target, completion) = {
+        let mut state = state.borrow_mut();
+        if state.executing {
+            return Err(Throw::type_error("async frame is already executing"));
+        }
+        let Some(frame) = state.frame.take() else { return Ok(()) };
+        state.executing = true;
+        (state.code.clone(), frame, state.async_promise.as_ref().unwrap().clone(), state.completion.clone())
+    };
+    if let Some(dst) = frame.await_dst.take() {
+        if kind == 0 {
+            frame.registers[dst] = value;
+        } else {
+            frame.pending_resume = Some(Abrupt::Throw(Throw(value)));
+        }
+    }
+    let previous_completion = std::mem::replace(&mut i.completion, completion);
+    let outcome = code.0.program.resume_frame(i, &mut frame, usize::MAX);
+    let completion = std::mem::replace(&mut i.completion, previous_completion);
+    {
+        let mut state = state.borrow_mut();
+        state.executing = false;
+        state.completion = completion;
+        if matches!(&outcome, Ok(FrameOutcome::Awaited(_))) {
+            state.frame = Some(frame);
+        }
+    }
+    match outcome {
+        Ok(FrameOutcome::Awaited(value)) => {
+            let awaited = async_resolve_value(i, value);
+            let fulfilled = async_handler(i, state.clone(), false);
+            let rejected = async_handler(i, state, true);
+            let then = i.get_prop(&awaited, "then")?;
+            i.call_value(&then, awaited, vec![fulfilled, rejected])?;
+        }
+        Ok(FrameOutcome::Completed(value)) => {
+            let resolved = async_resolve_value(i, value);
+            if !adopt_promise_result(&target, &resolved, i)? {
+                settle_promise(&target, PromiseFate::Fulfilled(resolved), i)?;
+            }
+        }
+        Ok(FrameOutcome::Yielded(_)) => unreachable!("async function yielded"),
+        Ok(FrameOutcome::Suspended) => unreachable!("unbounded async slice suspended"),
+        Err(Throw(error)) => settle_promise(&target, PromiseFate::Rejected(error), i)?,
+    }
+    Ok(())
+}
+
+fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
+    if matches!(&value, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Promise(_))) {
+        return value;
+    }
+    let promise = new_promise(i, PromiseFate::Pending);
+    let JsValue::Object(target) = &promise else { unreachable!() };
+    let then = if value.is_object() {
+        match i.get_prop(&value, "then") {
+            Ok(then) => then,
+            Err(Throw(error)) => {
+                let _ = settle_promise(target, PromiseFate::Rejected(error), i);
+                return promise;
+            }
+        }
+    } else {
+        JsValue::Undefined
+    };
+    if callable_function(&then).is_some() {
+        let resolve = promise_callback(i, "resolve", target, native_promise_resolve);
+        let reject = promise_callback(i, "reject", target, native_promise_reject);
+        if let Err(Throw(error)) = i.call_value(&then, value, vec![resolve, reject]) {
+            let _ = settle_promise(target, PromiseFate::Rejected(error), i);
+        }
+    } else {
+        let _ = settle_promise(target, PromiseFate::Fulfilled(value), i);
+    }
+    promise
 }
 
 fn generator_result(i: &Interpreter, value: JsValue, done: bool) -> JsValue {
@@ -822,6 +987,7 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
         }
         Ok(FrameOutcome::Completed(value)) => Ok(generator_result(i, value, true)),
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded generator slice suspended"),
+        Ok(FrameOutcome::Awaited(_)) => unreachable!("generator awaited"),
         Err(error) => Err(error),
     }
 }
