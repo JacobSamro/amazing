@@ -1000,7 +1000,7 @@ fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::C
         .iter()
         .map(|(n, v)| (n.to_owned(), v.to_owned()))
         .collect();
-    if plan.taint == ResponseType::Cors || request.method() == "OPTIONS" {
+    if plan.taint == ResponseType::Cors || !matches!(request.method(), "GET" | "HEAD") {
         options
             .request_headers
             .push(("origin".into(), request.origin.serialize()));
@@ -1024,6 +1024,17 @@ fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::C
     }
     if let Some(Body::Bytes(bytes)) = request.body() {
         options.body = bytes.clone();
+    }
+    if matches!(request.method(), "POST" | "PUT")
+        && options.body.is_empty()
+        && !options
+            .request_headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+    {
+        options
+            .request_headers
+            .push(("content-length".into(), "0".into()));
     }
     dispatcher
         .submit(&request.url().serialize(), options, now)

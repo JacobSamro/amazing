@@ -1504,3 +1504,17 @@ using `script.js` (SHA-256
 `06eebcd4a327435e5160716fb18756ba6c1e785030d212434c5b7db1e12b8210`).
 The strongest-mismatch assertion substitutes a valid wrong digest so the
 parser does not discard malformed Base64 before strongest selection.
+
+## NET-23 — native Fetch/XHR WPT network expectations
+
+Fixed base: `f8bdb330a5c16c48ebe17acd9d0d348461ddd2cb`. A std-only
+loopback server in `amazing-net/tests/support/wpt_server.rs` ports the selected
+`fetch/api/resources/` and `xhr/resources/` Python handlers. The
+`wpt_fetch_xhr` native test drives `NetworkService` and XHR's pending adapter
+through the service event loop, using two loopback ports for CORS. Exact WPT
+sources and SHA-256 values are under
+`amazing-fetch/tests/wpt/fetch_xhr/`. The 129 network expectations measured
+120 pass / 9 fail before and 129 pass / 0 fail after. Fetch now emits `Origin`
+on non-GET/HEAD requests and zero Content-Length for empty POST/PUT, and
+accepts same-origin no-cors manual redirects. JS-level WPT remains a driver
+and bindings adoption request in `.agents/net/questions.md`.

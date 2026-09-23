@@ -153,7 +153,7 @@ impl Request {
         match self.mode {
             RequestMode::SameOrigin if cross => return Err(FetchError::SameOrigin),
             RequestMode::NoCors => {
-                if self.redirect != RedirectMode::Follow
+                if (cross && self.redirect != RedirectMode::Follow)
                     || !safelisted_method(self.method())
                     || !unsafe_request_header_names(&self.headers).is_empty()
                 {
