@@ -224,6 +224,8 @@ LANE_GRANTS.setdefault("html", []).append("Cargo.lock")
 # install calls in interp_install.rs::install_builtins. ADDED LINES ONLY.
 # JS-10: the Test262 host's module capability. ADDED LINES ONLY.
 LANE_GRANTS.setdefault("js-lang", []).append("crates/amazing-js/examples/test262_host.rs")
+# JS-10: module variants in the Test262 runner; classic framing byte-identical.
+LANE_GRANTS["js-lang"].append("scripts/test262.py")
 LANE_GRANTS.setdefault("js-binary", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
 # JSB-1: integer-indexed exotic hooks. ADDED LINES ONLY: early-return calls into
 # builtins_binary's binary_get_index / binary_set_index / binary_own_keys /
