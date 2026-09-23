@@ -79,7 +79,14 @@ pub(crate) fn dispatch_invalid_event<H: BindingHost>(host: &mut H, node: amazing
     dispatch_native_event(host, EventTarget::Node(node), "invalid",
         EventInit { bubbles: false, cancelable: true, composed: false })
 }
+pub(crate) fn dispatch_reset_event<H: BindingHost>(host: &mut H, node: amazing_dom::NodeIdx) -> Result<bool, H::Error> {
+    dispatch_native_event_result(host, EventTarget::Node(node), "reset",
+        EventInit { bubbles: true, cancelable: true, composed: false })
+}
 fn dispatch_native_event<H: BindingHost>(host: &mut H, target: EventTarget, kind: &str, init: EventInit) -> Result<(), H::Error> {
+    dispatch_native_event_result(host, target, kind, init).map(|_| ())
+}
+fn dispatch_native_event_result<H: BindingHost>(host: &mut H, target: EventTarget, kind: &str, init: EventInit) -> Result<bool, H::Error> {
     let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(
         Event::new(kind, init, Duration::ZERO))))?;
     let mut dispatch = host.with_dom(|dom| dom.begin_event_dispatch(target, event, DispatchOrigin::UserAgent))?;
@@ -90,7 +97,7 @@ fn dispatch_native_event<H: BindingHost>(host: &mut H, target: EventTarget, kind
         if invocation.once { host.release_value(invocation.callback); }
         if result.is_err() { dispatch.report_exception("Native event listener threw".into()); }
     }
-    host.with_dom(|dom| dom.events().dispatch_result(event).map(|_| ()))
+    host.with_dom(|dom| dom.events().dispatch_result(event))
 }
 fn option<H: BindingHost>(host: &mut H, value: Option<&H::Value>, name: &str) -> Result<bool, H::Error> {
     let Some(value) = value else { return Ok(false) };

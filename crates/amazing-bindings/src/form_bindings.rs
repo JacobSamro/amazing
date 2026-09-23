@@ -24,7 +24,8 @@ pub(crate) fn handles(op: O) -> bool {
         O::ValidityStepMismatch | O::ValidityBadInput | O::ValidityCustomError | O::ValidityValid |
         O::FormCollectionLength | O::FormCollectionItem | O::FormCollectionNamedItem |
         O::FormCollectionIndexedGetter | O::FormCollectionNamedGetter |
-        O::OptionsLength | O::OptionsItem | O::OptionsNamedItem | O::OptionsIndexedGetter |
+        O::OptionsLength | O::OptionsSetLength | O::OptionsSelectedIndex | O::OptionsSetSelectedIndex |
+        O::OptionsItem | O::OptionsNamedItem | O::OptionsIndexedGetter | O::OptionsNamedGetter |
         O::OptionsIndexedSetter | O::RadioNodeListLength | O::RadioNodeListItem |
         O::RadioNodeListIndexedGetter | O::RadioNodeListValue | O::RadioNodeListSetValue)
 }
@@ -57,8 +58,7 @@ fn attr<H: BindingHost>(host: &mut H, node: NodeIdx, name: &str) -> Result<Vec<u
     host.with_dom(|dom| Ok(dom.attribute_utf16(node, name).unwrap_or_default()))
 }
 fn set_attr<H: BindingHost>(host: &mut H, node: NodeIdx, name: &str, value: &[u16]) -> Result<(), H::Error> {
-    let text = String::from_utf16_lossy(value);
-    host.with_dom(|dom| dom.set_attribute(node, name, &text))
+    host.with_dom(|dom| crate::html_reflection::set(dom, node, name, value.to_vec()))
 }
 fn bool_attr<H: BindingHost>(host: &mut H, node: NodeIdx, name: &str, value: bool) -> Result<(), H::Error> {
     host.with_dom(|dom| if value { dom.set_attribute(node, name, "") } else { dom.remove_attribute(node, name) })
@@ -100,7 +100,7 @@ fn collection_items<H: BindingHost>(host: &mut H, op: O, receiver: &H::Value) ->
             let owner = collection_owner(host, receiver, B::FORM_CONTROLS, "form")?;
             host.with_dom(|dom| dom.form_controls(owner))
         }
-        O::OptionsLength | O::OptionsItem | O::OptionsNamedItem | O::OptionsIndexedGetter |
+        O::OptionsLength | O::OptionsItem | O::OptionsNamedItem | O::OptionsIndexedGetter | O::OptionsNamedGetter |
         O::OptionsIndexedSetter | O::OptionsSupportedIndexCount | O::OptionsSupportedNames => {
             let owner = collection_owner(host, receiver, B::OPTIONS, "select")?;
             host.with_dom(|dom| dom.select_options(owner))
@@ -128,13 +128,16 @@ pub(crate) fn supported_names<H: BindingHost>(host: &mut H, op: O, receiver: &H:
 }
 fn validity<H: BindingHost>(host: &mut H, node: NodeIdx) -> Result<ValidityState, H::Error> {
     let (pattern, value) = host.with_dom(|dom| {
-        let pattern = dom.attribute_utf16(node, "pattern");
+        let pattern = if dom.html_tag(node, "input") && matches!(dom.input_type(node)?,
+            "text" | "search" | "tel" | "url" | "email" | "password") {
+            dom.attribute_utf16(node, "pattern")
+        } else { None };
         let value = if dom.html_tag(node, "input") { dom.input_value(node)? }
             else if dom.html_tag(node, "textarea") { dom.textarea_value(node)? } else { Vec::new() };
         Ok((pattern, value))
     })?;
     let match_result = match pattern.filter(|_| !value.is_empty()) {
-        Some(pattern) => Some(host.form_pattern_matches(&pattern, &value)?),
+        Some(pattern) => host.form_pattern_matches(&pattern, &value)?,
         None => None,
     };
     host.with_dom(|dom| dom.validity(node, |_, _| match_result))
@@ -155,19 +158,47 @@ fn validity_flag(v: &ValidityState, op: O) -> bool {
     }
 }
 pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, args: &[H::Value]) -> Result<H::Value, H::Error> {
+    if matches!(op, O::SelectAdd | O::SelectRemove) && host.platform_object(&receiver, B::OPTIONS).is_some() {
+        let select = collection_owner(host, &receiver, B::OPTIONS, "select")?;
+        let node = host.wrap_node(select)?;
+        return invoke(host, op, node, args);
+    }
+    if matches!(op, O::OptionsSetLength | O::OptionsSelectedIndex | O::OptionsSetSelectedIndex) {
+        let select = collection_owner(host, &receiver, B::OPTIONS, "select")?;
+        return match op {
+            O::OptionsSelectedIndex => { let value = host.with_dom(|dom| dom.selected_index(select))?; Ok(host.number(value as f64)) },
+            O::OptionsSetSelectedIndex => {
+                let value = number(host, args, 0)? as i32;
+                host.with_dom(|dom| dom.set_selected_index(select, value))?;
+                Ok(host.undefined())
+            }
+            _ => {
+                let desired = number(host, args, 0)? as u32;
+                host.with_dom(|dom| {
+                    let options = dom.select_options(select)?;
+                    if desired > 10_000 { return Err(DomError::IndexSizeError); }
+                    for old in options.iter().skip(desired as usize).rev() {
+                        if let Some(parent) = dom.get(*old).parent { dom.pre_remove(*old, parent)?; }
+                    }
+                    for _ in options.len()..desired as usize { dom.create_element(select, "option"); }
+                    Ok(())
+                })?;
+                Ok(host.undefined())
+            }
+        };
+    }
     if matches!(op, O::ValidityValueMissing | O::ValidityTypeMismatch | O::ValidityPatternMismatch |
         O::ValidityTooLong | O::ValidityTooShort | O::ValidityRangeUnderflow | O::ValidityRangeOverflow |
         O::ValidityStepMismatch | O::ValidityBadInput | O::ValidityCustomError | O::ValidityValid) {
-        let owner = collection_owner(host, &receiver, B::VALIDITY_STATE, "input")
-            .or_else(|_| collection_owner(host, &receiver, B::VALIDITY_STATE, "textarea"))
-            .or_else(|_| collection_owner(host, &receiver, B::VALIDITY_STATE, "select"))
-            .or_else(|_| collection_owner(host, &receiver, B::VALIDITY_STATE, "button"))?;
+        let key = host.platform_object(&receiver, B::VALIDITY_STATE)
+            .ok_or_else(|| host.type_error("Expected ValidityState"))?;
+        let owner = host.node_from_platform_key(key).ok_or_else(|| host.type_error("Invalid ValidityState"))?;
         let state = validity(host, owner)?;
         return Ok(host.boolean(validity_flag(&state, op)));
     }
     if matches!(op, O::FormCollectionLength | O::FormCollectionItem | O::FormCollectionNamedItem |
         O::FormCollectionIndexedGetter | O::FormCollectionNamedGetter | O::OptionsLength |
-        O::OptionsItem | O::OptionsNamedItem | O::OptionsIndexedGetter | O::RadioNodeListLength |
+        O::OptionsItem | O::OptionsNamedItem | O::OptionsIndexedGetter | O::OptionsNamedGetter | O::RadioNodeListLength |
         O::RadioNodeListItem | O::RadioNodeListIndexedGetter | O::RadioNodeListValue | O::RadioNodeListSetValue) {
         let items = collection_items(host, op, &receiver)?;
         if matches!(op, O::FormCollectionLength | O::OptionsLength | O::RadioNodeListLength) { return Ok(host.number(items.len() as f64)); }
@@ -190,7 +221,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             })?;
             return Ok(host.undefined());
         }
-        if matches!(op, O::FormCollectionNamedItem | O::FormCollectionNamedGetter | O::OptionsNamedItem) {
+        if matches!(op, O::FormCollectionNamedItem | O::FormCollectionNamedGetter | O::OptionsNamedItem | O::OptionsNamedGetter) {
             let name = string(host, args, 0)?;
             let found = host.with_dom(|dom| Ok(named(&items, dom, &name)))?;
             if found.len() > 1 && matches!(op, O::FormCollectionNamedItem | O::FormCollectionNamedGetter) {
@@ -212,9 +243,19 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         host.with_dom(|dom| {
             let options = dom.select_options(select)?;
             if let Some(option) = option {
-                if let Some(old) = options.get(position) { dom.replace(*old, option, select)?; }
-                else { dom.pre_insert(option, select, None)?; }
-            } else if let Some(old) = options.get(position) { dom.pre_remove(*old, select)?; }
+                if let Some(old) = options.get(position) {
+                    let parent = dom.get(*old).parent.ok_or(DomError::NotFoundError)?;
+                    dom.replace(*old, option, parent)?;
+                }
+                else {
+                    if position > 10_000 { return Err(DomError::IndexSizeError); }
+                    for _ in options.len()..position { dom.create_element(select, "option"); }
+                    dom.pre_insert(option, select, None)?;
+                }
+            } else if let Some(old) = options.get(position) {
+                let parent = dom.get(*old).parent.ok_or(DomError::NotFoundError)?;
+                dom.pre_remove(*old, parent)?;
+            }
             Ok(())
         })?;
         return Ok(host.undefined());
@@ -224,11 +265,19 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         return match op {
             O::FormElements => key_node(host, form, B::FORM_CONTROLS),
             O::FormLength => { let len = host.with_dom(|dom| Ok(dom.form_controls(form)?.len()))?; Ok(host.number(len as f64)) },
-            O::FormReset => { host.with_dom(|dom| dom.reset_form(form))?; Ok(host.undefined()) },
+            O::FormReset => {
+                if crate::event_bindings::dispatch_reset_event(host, form)? {
+                    host.with_dom(|dom| dom.reset_form(form))?;
+                }
+                Ok(host.undefined())
+            },
             _ => {
                 let controls = host.with_dom(|dom| dom.form_controls(form))?;
                 let mut valid = true;
-                for control in controls { if host.with_dom(|dom| dom.will_validate(control)).unwrap_or(false) && !validate(host, control)? { valid = false; } }
+                for control in controls {
+                    if host.with_dom(|dom| Ok(dom.html_tag(control, "object")))? { continue; }
+                    if host.with_dom(|dom| dom.will_validate(control))? && !validate(host, control)? { valid = false; }
+                }
                 Ok(host.boolean(valid))
             }
         };
@@ -247,11 +296,12 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         }
         O::InputSetValue | O::TextAreaSetValue | O::SelectSetValue | O::OptionSetValue => {
             let value = string(host, args, 0)?;
+            if op == O::OptionSetValue { set_attr(host, target, "value", &value)?; return Ok(host.undefined()); }
             host.with_dom(|dom| match op {
                 O::InputSetValue => dom.set_input_value(target, value),
                 O::TextAreaSetValue => dom.set_textarea_value(target, value),
                 O::SelectSetValue => dom.set_select_value(target, &value),
-                _ => dom.set_attribute(target, "value", &String::from_utf16_lossy(&value)),
+                _ => unreachable!(),
             })?;
             Ok(host.undefined())
         }
@@ -298,10 +348,16 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         }
         O::SelectRemove => {
             let index = if args.is_empty() { 0 } else { index(host, args, 0)? };
-            host.with_dom(|dom| { if let Some(option) = dom.select_options(target)?.get(index) { dom.pre_remove(*option, target)?; } Ok(()) })?;
+            host.with_dom(|dom| {
+                if let Some(option) = dom.select_options(target)?.get(index) {
+                    let parent = dom.get(*option).parent.ok_or(DomError::NotFoundError)?;
+                    dom.pre_remove(*option, parent)?;
+                }
+                Ok(())
+            })?;
             Ok(host.undefined())
         }
-        O::OptionText => { let value = host.with_dom(|dom| dom.option_value(target))?; host.string(&value) },
+        O::OptionText => { let value = host.with_dom(|dom| dom.option_text(target))?; host.string(&value) },
         O::OptionSetText => {
             let value = string(host, args, 0)?;
             host.with_dom(|dom| dom.replace_children(target, &[NodeOrString::Utf16(value)]))?;
@@ -309,10 +365,18 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         }
         O::ControlWillValidate => { let value = host.with_dom(|dom| dom.will_validate(target))?; Ok(host.boolean(value)) },
         O::ControlValidity => key_node(host, target, B::VALIDITY_STATE),
-        O::ControlValidationMessage => { let message = host.with_dom(|dom| dom.validation_message(target))?; host.string(&message) },
+        O::ControlValidationMessage => {
+            if !host.with_dom(|dom| dom.will_validate(target))? { return host.string(&[]); }
+            let custom = host.with_dom(|dom| dom.validation_message(target))?;
+            if !custom.is_empty() { return host.string(&custom); }
+            let message = if validity(host, target)?.valid() { Vec::new() }
+                else { "Value is invalid.".encode_utf16().collect() };
+            host.string(&message)
+        },
         O::ControlSetCustomValidity => { let value = string(host, args, 0)?; host.with_dom(|dom| dom.set_custom_validity(target, value))?; Ok(host.undefined()) },
         O::ControlCheckValidity | O::ControlReportValidity => { let value = validate(host, target)?; Ok(host.boolean(value)) },
         O::InputSelectionStart | O::InputSelectionEnd | O::InputSelectionDirection => {
+            if !host.with_dom(|dom| dom.selection_applicable(target))? { return Ok(host.null()); }
             let (start, end, direction) = host.with_dom(|dom| dom.selection(target))?;
             match op {
                 O::InputSelectionStart => Ok(host.number(start as f64)),
@@ -323,6 +387,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             }
         }
         O::InputSelect | O::InputSetSelectionRange | O::InputSetSelectionStart | O::InputSetSelectionEnd | O::InputSetSelectionDirection => {
+            if op == O::InputSelect && !host.with_dom(|dom| dom.selection_applicable(target))? { return Ok(host.undefined()); }
             let (mut start, mut end, mut direction) = host.with_dom(|dom| dom.selection(target))?;
             match op {
                 O::InputSelect => { start = 0; end = u32::MAX; },
@@ -339,17 +404,25 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             Ok(host.undefined())
         }
         O::InputValueAsNumber => {
-            let value = host.with_dom(|dom| dom.input_value(target))?;
-            let number = String::from_utf16_lossy(&value).parse::<f64>().unwrap_or(f64::NAN);
+            let number = host.with_dom(|dom| dom.input_value_as_number(target))?;
             Ok(host.number(number))
         }
         O::InputSetValueAsNumber => {
             let value = number(host, args, 0)?;
             if !value.is_finite() { return Err(host.type_error("Invalid valueAsNumber")); }
-            host.with_dom(|dom| dom.set_input_value(target, value.to_string().encode_utf16().collect()))?;
+            host.with_dom(|dom| dom.set_input_value_as_number(target, value))?;
             Ok(host.undefined())
         }
-        O::InputValueAsDate | O::InputSetValueAsDate => Err(host.type_error("valueAsDate requires the date host seam")),
+        O::InputValueAsDate => {
+            let value = host.with_dom(|dom| dom.input_value_as_date_ms(target))?;
+            match value { Some(ms) => host.form_date_from_epoch_ms(ms), None => Ok(host.null()) }
+        }
+        O::InputSetValueAsDate => {
+            let value = arg(host, args, 0)?;
+            let date = if host.is_nullish(value) { None } else { host.form_date_to_epoch_ms(value)? };
+            host.with_dom(|dom| dom.set_input_value_as_date_ms(target, date))?;
+            Ok(host.undefined())
+        }
         O::TextAreaDefaultValue => {
             let value = host.with_dom(|dom| {
                 let mut raw = Vec::new();

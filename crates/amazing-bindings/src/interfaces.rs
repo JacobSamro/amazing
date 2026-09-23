@@ -413,6 +413,14 @@ const FORM_CONTROL: &[Member] = &[
     method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
+const BUTTON: &[Member] = &[
+    getter("type", O::ButtonType), setter("type", O::ButtonSetType),
+    getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
+    getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
+    getter("validationMessage", O::ControlValidationMessage),
+    method("checkValidity", O::ControlCheckValidity, 0), method("reportValidity", O::ControlReportValidity, 0),
+    method("setCustomValidity", O::ControlSetCustomValidity, 1),
+];
 const TEXTAREA: &[Member] = &[
     getter("form", O::FormControlForm), getter("value", O::TextAreaValue), setter("value", O::TextAreaSetValue),
     getter("defaultValue", O::TextAreaDefaultValue), setter("defaultValue", O::TextAreaSetDefaultValue),
@@ -455,7 +463,9 @@ const FORM_COLLECTION: &[Member] = &[
     method("namedItem", O::FormCollectionNamedItem, 1),
 ];
 const OPTIONS_COLLECTION: &[Member] = &[
-    getter("length", O::OptionsLength), method("item", O::OptionsItem, 1),
+    getter("length", O::OptionsLength), setter("length", O::OptionsSetLength),
+    getter("selectedIndex", O::OptionsSelectedIndex), setter("selectedIndex", O::OptionsSetSelectedIndex),
+    method("item", O::OptionsItem, 1),
     method("namedItem", O::OptionsNamedItem, 1), method("add", O::SelectAdd, 1),
     method("remove", O::SelectRemove, 1),
 ];
@@ -575,16 +585,16 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLTableColElement, name: "HTMLTableColElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLFormElement, name: "HTMLFormElement", parent: Some(I::HTMLElement), constructor: None, members: FORM },
     D { interface: I::HTMLInputElement, name: "HTMLInputElement", parent: Some(I::HTMLElement), constructor: None, members: INPUT },
-    D { interface: I::HTMLButtonElement, name: "HTMLButtonElement", parent: Some(I::HTMLElement), constructor: None, members: FORM_CONTROL },
+    D { interface: I::HTMLButtonElement, name: "HTMLButtonElement", parent: Some(I::HTMLElement), constructor: None, members: BUTTON },
     D { interface: I::HTMLSelectElement, name: "HTMLSelectElement", parent: Some(I::HTMLElement), constructor: None, members: SELECT },
     D { interface: I::HTMLOptionElement, name: "HTMLOptionElement", parent: Some(I::HTMLElement), constructor: None, members: OPTION },
     D { interface: I::HTMLOptGroupElement, name: "HTMLOptGroupElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLTextAreaElement, name: "HTMLTextAreaElement", parent: Some(I::HTMLElement), constructor: None, members: TEXTAREA },
     D { interface: I::HTMLLabelElement, name: "HTMLLabelElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLFieldSetElement, name: "HTMLFieldSetElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLFieldSetElement, name: "HTMLFieldSetElement", parent: Some(I::HTMLElement), constructor: None, members: FORM_CONTROL },
     D { interface: I::HTMLLegendElement, name: "HTMLLegendElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLDataListElement, name: "HTMLDataListElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLOutputElement, name: "HTMLOutputElement", parent: Some(I::HTMLElement), constructor: None, members: FORM_CONTROL },
     D { interface: I::HTMLProgressElement, name: "HTMLProgressElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLMeterElement, name: "HTMLMeterElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLMediaElement, name: "HTMLMediaElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -879,7 +889,7 @@ pub fn install<H: BindingHost>(host: &mut H) -> Result<InstallReport, H::Error> 
         supported_index_count: O::OptionsSupportedIndexCount,
         supported_names: Some(O::OptionsSupportedNames),
         indexed_getter: O::OptionsIndexedGetter, indexed_setter: Some(O::OptionsIndexedSetter),
-        named_getter: None, named_setter: None, named_deleter: None,
+        named_getter: Some(O::OptionsNamedGetter), named_setter: None, named_deleter: None,
         override_builtins: false, unenumerable_names: true,
     })?;
     host.define_legacy_platform_object(InterfaceBrand::RADIO_NODE_LIST, LegacyPlatformHooks {

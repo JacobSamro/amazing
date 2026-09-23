@@ -183,7 +183,8 @@ pub enum Operation {
     FormCollectionLength, FormCollectionItem, FormCollectionNamedItem,
     FormCollectionIndexedGetter, FormCollectionNamedGetter,
     FormCollectionSupportedIndexCount, FormCollectionSupportedNames,
-    OptionsLength, OptionsItem, OptionsNamedItem, OptionsIndexedGetter,
+    OptionsLength, OptionsSetLength, OptionsSelectedIndex, OptionsSetSelectedIndex,
+    OptionsItem, OptionsNamedItem, OptionsIndexedGetter, OptionsNamedGetter,
     OptionsIndexedSetter, OptionsSupportedIndexCount, OptionsSupportedNames,
     RadioNodeListLength, RadioNodeListItem, RadioNodeListIndexedGetter,
     RadioNodeListSupportedIndexCount, RadioNodeListValue, RadioNodeListSetValue,
@@ -760,8 +761,16 @@ pub trait BindingHost: Sized {
         self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
     }
     /// Full-string `pattern` match using the runtime's JavaScript `v` regexp.
-    fn form_pattern_matches(&mut self, _pattern: &[u16], _value: &[u16]) -> Result<bool, Self::Error> {
-        self.with_dom::<bool>(|_| Err(DomError::NotSupportedError))
+    fn form_pattern_matches(&mut self, _pattern: &[u16], _value: &[u16]) -> Result<Option<bool>, Self::Error> {
+        self.with_dom::<Option<bool>>(|_| Err(DomError::NotSupportedError))
+    }
+    /// Runtime Date wrapper, preserving the Date value in milliseconds.
+    fn form_date_from_epoch_ms(&mut self, _milliseconds: f64) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    /// A Date value returns its time value; invalid Date returns None.
+    fn form_date_to_epoch_ms(&mut self, _value: &Self::Value) -> Result<Option<f64>, Self::Error> {
+        self.with_dom::<Option<f64>>(|_| Err(DomError::NotSupportedError))
     }
     /// Standard Node constants are exposed on Node and its prototype.
     fn install_node_constant(&mut self, name: &'static str, value: u16) -> Result<(), Self::Error>;
