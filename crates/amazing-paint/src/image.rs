@@ -215,6 +215,9 @@ impl crate::ImageProvider for StyledImages<'_> {
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
         self.images.image(node)
     }
+    fn image_by_url(&self, url: &str) -> Option<&amazing_media::Image> {
+        self.images.image_by_url(url)
+    }
     fn background_image(&self, node: amazing_dom::NodeIdx, url: &str) -> Option<&amazing_media::Image> {
         self.images.background_image(node, url)
     }
@@ -229,6 +232,22 @@ impl crate::ImageProvider for StyledImages<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn styled_images_forward_resolved_url_lookup() {
+        struct UrlImage(amazing_media::Image);
+        impl crate::ImageProvider for UrlImage {
+            fn image(&self, _: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> { None }
+            fn image_by_url(&self, url: &str) -> Option<&amazing_media::Image> {
+                (url == "https://example.test/generated.png").then_some(&self.0)
+            }
+        }
+        let source = UrlImage(amazing_media::Image { width: 1, height: 1, pixels: vec![255, 0, 0, 255] });
+        let dom = amazing_dom::Dom::new();
+        let styles = amazing_css::compute(&dom, &[]);
+        let wrapper = StyledImages { images: &source, styles: &styles };
+        assert_eq!(crate::ImageProvider::image_by_url(&wrapper, "https://example.test/generated.png").unwrap().pixels, source.0.pixels);
+        assert!(crate::ImageProvider::image_by_url(&wrapper, "https://example.test/missing.png").is_none());
+    }
     #[test]
     fn all_fit_modes_and_scale_down_have_distinct_geometry() {
         let c = Rect {
