@@ -112,6 +112,11 @@ dependencies = [
 [[package]]
 name = "amazing-canvas"
 version = "0.0.1"
+dependencies = [
+ "amazing-css",
+ "amazing-paint",
+ "amazing-text",
+]
 
 [[package]]
 name = "amazing-common"

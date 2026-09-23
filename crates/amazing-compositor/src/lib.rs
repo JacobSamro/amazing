@@ -58,6 +58,31 @@ pub trait PaintSource {
     fn item_count(&self) -> usize;
     fn rasterize(&self, items: Range<usize>, tile: Rect, out: &mut Surface);
 }
+/// A canvas or other RGBA surface is one paint item in local coordinates.
+/// The caller keeps the surface alive for frame building and invalidates item
+/// zero when its pixels change.
+impl PaintSource for Surface {
+    fn item_count(&self) -> usize {
+        1
+    }
+    fn rasterize(&self, items: Range<usize>, tile: Rect, out: &mut Surface) {
+        if !items.contains(&0) {
+            return;
+        }
+        for y in 0..out.height {
+            for x in 0..out.width {
+                let sx = tile.x as i64 + x as i64;
+                let sy = tile.y as i64 + y as i64;
+                if sx >= 0 && sy >= 0 && sx < self.width as i64 && sy < self.height as i64 {
+                    let source = ((sy as usize * self.width as usize + sx as usize) * 4) as usize;
+                    let target = ((y * out.width + x) * 4) as usize;
+                    out.pixels[target..target + 4]
+                        .copy_from_slice(&self.pixels[source..source + 4]);
+                }
+            }
+        }
+    }
+}
 #[derive(Debug, Clone)]
 pub struct Layer {
     pub chunks: Vec<usize>,
@@ -158,6 +183,18 @@ pub struct Compositor {
     previous_quad_size: Option<(u32, u32)>,
 }
 impl Compositor {
+    pub fn for_surface(surface: &Surface) -> Result<Self, SceneError> {
+        Self::new(
+            PropertyTrees::new(),
+            vec![PaintChunk {
+                items: 0..1,
+                state: PropertyTreeState::default(),
+                bounds: Rect::new(0., 0., surface.width as f32, surface.height as f32),
+                reasons: CompositingReasons::WILL_CHANGE,
+            }],
+            1,
+        )
+    }
     pub fn new(
         trees: PropertyTrees,
         chunks: Vec<PaintChunk>,
@@ -415,6 +452,25 @@ mod tests {
         assert_eq!(c.dirty_tiles(), 1);
         c.render(&s, 128, 128).unwrap();
         assert_eq!(c.stats().rasterized_tiles, 1)
+    }
+    #[test]
+    fn rgba_surface_enters_compositor_as_one_retained_layer() {
+        let mut source = Surface::new(2, 2);
+        source.set_pixel(0, 0, [255, 0, 0, 255]);
+        source.set_pixel(1, 0, [0, 0, 255, 128]);
+        let mut compositor = Compositor::for_surface(&source).unwrap();
+        let frame = compositor.build_frame(&source, 2, 2).unwrap();
+        assert_eq!(frame.resources.uploads.len(), 1);
+        let mut presenter = ReferenceCpuPresenter::default();
+        let output = presenter.present(&frame).unwrap();
+        assert_eq!(output.get_pixel(0, 0), source.get_pixel(0, 0));
+        assert_eq!(output.get_pixel(1, 0), source.get_pixel(1, 0));
+        source.set_pixel(0, 0, [0, 255, 0, 255]);
+        compositor.invalidate_item(0);
+        let frame = compositor.build_frame(&source, 2, 2).unwrap();
+        assert_eq!(frame.resources.uploads.len(), 1);
+        let output = presenter.present(&frame).unwrap();
+        assert_eq!(output.get_pixel(0, 0), Some([0, 255, 0, 255]));
     }
     #[test]
     fn parent_cache_and_rounded_clip() {
