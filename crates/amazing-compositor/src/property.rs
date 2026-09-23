@@ -158,12 +158,33 @@ pub struct ClipId(pub usize);
 pub struct EffectId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct ScrollId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StickyId(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Positioning {
+    #[default]
+    Flow,
+    Fixed,
+    Sticky(StickyId),
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct PropertyTreeState {
     pub transform: TransformId,
     pub clip: ClipId,
     pub effect: EffectId,
     pub scroll: ScrollId,
+    pub positioning: Positioning,
+}
+/// Geometry supplied by layout from computed `position: sticky` insets.
+/// `normal` is the unshifted border box in document coordinates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StickyConstraint {
+    pub scroll: ScrollId,
+    pub normal: Rect,
+    pub top: Option<f32>,
+    pub right: Option<f32>,
+    pub bottom: Option<f32>,
+    pub left: Option<f32>,
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TransformNode {
@@ -264,6 +285,8 @@ pub struct PropertyTrees {
     pub(crate) clips: Vec<ClipNode>,
     pub(crate) effects: Vec<EffectNode>,
     pub(crate) scrolls: Vec<ScrollNode>,
+    pub(crate) sticky: Vec<StickyConstraint>,
+    snap_points: Vec<(Vec<f32>, Vec<f32>)>,
 }
 impl Default for PropertyTrees {
     fn default() -> Self {
@@ -311,6 +334,8 @@ impl PropertyTrees {
                 contents: Rect::new(-1e9, -1e9, 2e9, 2e9),
                 accumulated: (0., 0.),
             }],
+            sticky: Vec::new(),
+            snap_points: vec![(Vec::new(), Vec::new())],
         }
     }
     pub fn add_transform(
@@ -446,6 +471,61 @@ impl PropertyTrees {
             contents,
             accumulated: (p.0 + offset.0, p.1 + offset.1),
         });
+        self.snap_points.push((Vec::new(), Vec::new()));
+        Ok(id)
+    }
+    /// Snap offsets are resolved by layout from computed scroll-snap styles.
+    /// They are supplied as scroll offsets in CSS pixels and clamped to range.
+    pub fn set_snap_points(
+        &mut self,
+        id: ScrollId,
+        x: Vec<f32>,
+        y: Vec<f32>,
+    ) -> Result<(), TreeError> {
+        let Some(node) = self.scrolls.get(id.0) else {
+            return Err(TreeError::InvalidNode);
+        };
+        if x.iter().chain(y.iter()).any(|v| !v.is_finite()) {
+            return Err(TreeError::NonFinite);
+        }
+        let max_x = (node.contents.w - node.container.w).max(0.);
+        let max_y = (node.contents.h - node.container.h).max(0.);
+        self.snap_points[id.0] = (
+            x.into_iter().map(|v| v.clamp(0., max_x)).collect(),
+            y.into_iter().map(|v| v.clamp(0., max_y)).collect(),
+        );
+        Ok(())
+    }
+    pub fn snap_offset(&self, id: ScrollId, offset: (f32, f32)) -> Option<(f32, f32)> {
+        let (x, y) = self.snap_points.get(id.0)?;
+        let nearest = |points: &[f32], value: f32| {
+            points
+                .iter()
+                .copied()
+                .min_by(|a, b| (a - value).abs().total_cmp(&(b - value).abs()))
+                .unwrap_or(value)
+        };
+        Some((nearest(x, offset.0), nearest(y, offset.1)))
+    }
+    pub fn add_sticky(&mut self, constraint: StickyConstraint) -> Result<StickyId, TreeError> {
+        if constraint.scroll.0 >= self.scrolls.len() {
+            return Err(TreeError::InvalidParent);
+        }
+        if constraint.normal.empty()
+            || [
+                constraint.top,
+                constraint.right,
+                constraint.bottom,
+                constraint.left,
+            ]
+            .into_iter()
+            .flatten()
+            .any(|v| !v.is_finite())
+        {
+            return Err(TreeError::NonFinite);
+        }
+        let id = StickyId(self.sticky.len());
+        self.sticky.push(constraint);
         Ok(id)
     }
     pub fn set_scroll(&mut self, id: ScrollId, offset: (f32, f32)) -> Result<(), TreeError> {
@@ -463,10 +543,80 @@ impl PropertyTrees {
         }
         Ok(())
     }
+    /// Update the scrollable extent supplied by layout after the view's
+    /// overflow node has been created. The paint view currently exposes the
+    /// clip bounds but not the full content extent.
+    pub fn set_scroll_contents(&mut self, id: ScrollId, contents: Rect) -> Result<(), TreeError> {
+        let Some(node) = self.scrolls.get_mut(id.0) else {
+            return Err(TreeError::InvalidNode);
+        };
+        if contents.empty() {
+            return Err(TreeError::NonFinite);
+        }
+        node.contents = contents;
+        Ok(())
+    }
     pub fn matrix(&self, s: PropertyTreeState) -> Option<Matrix4> {
         let t = self.transforms.get(s.transform.0)?.accumulated;
-        let o = self.scrolls.get(s.scroll.0)?.accumulated;
-        Some(t.mul(Matrix4::translation(-o.0, -o.1, 0.)))
+        let o = match s.positioning {
+            Positioning::Fixed => (0., 0.),
+            _ => self.scrolls.get(s.scroll.0)?.accumulated,
+        };
+        let base = t.mul(Matrix4::translation(-o.0, -o.1, 0.));
+        if let Positioning::Sticky(id) = s.positioning {
+            let sticky = self.sticky.get(id.0)?;
+            let scroll = self.scrolls.get(sticky.scroll.0)?;
+            let normal = base.map_bounds(sticky.normal)?;
+            let viewport = self.scroll_container_world(sticky.scroll, s.transform)?;
+            let mut dx = 0.;
+            let mut dy = 0.;
+            if let Some(left) = sticky.left {
+                dx = (viewport.x + left - normal.x).max(dx)
+            }
+            if let Some(right) = sticky.right {
+                dx = dx.min(viewport.x + viewport.w - right - normal.x - normal.w)
+            }
+            if let Some(top) = sticky.top {
+                dy = (viewport.y + top - normal.y).max(dy)
+            }
+            if let Some(bottom) = sticky.bottom {
+                dy = dy.min(viewport.y + viewport.h - bottom - normal.y - normal.h)
+            }
+            // Sticky movement cannot leave its containing scroll content.
+            let x_range = (
+                scroll.contents.x - sticky.normal.x,
+                scroll.contents.x + scroll.contents.w - sticky.normal.x - sticky.normal.w,
+            );
+            let y_range = (
+                scroll.contents.y - sticky.normal.y,
+                scroll.contents.y + scroll.contents.h - sticky.normal.y - sticky.normal.h,
+            );
+            dx = if x_range.0 <= x_range.1 {
+                dx.clamp(x_range.0, x_range.1)
+            } else {
+                0.
+            };
+            dy = if y_range.0 <= y_range.1 {
+                dy.clamp(y_range.0, y_range.1)
+            } else {
+                0.
+            };
+            return Some(Matrix4::translation(dx, dy, 0.).mul(base));
+        }
+        Some(base)
+    }
+    pub(crate) fn scroll_container_world(
+        &self,
+        id: ScrollId,
+        transform: TransformId,
+    ) -> Option<Rect> {
+        let node = self.scrolls.get(id.0)?;
+        let parent_offset = self.scrolls.get(node.parent.0)?.accumulated;
+        self.transforms
+            .get(transform.0)?
+            .accumulated
+            .mul(Matrix4::translation(-parent_offset.0, -parent_offset.1, 0.))
+            .map_bounds(node.container)
     }
     pub fn visible(&self, s: PropertyTreeState, x: f32, y: f32) -> bool {
         let mut id = s.clip;
@@ -482,12 +632,19 @@ impl PropertyTrees {
             }
             id = n.parent
         }
-        let mut sid = s.scroll;
+        let mut sid = if s.positioning == Positioning::Fixed {
+            ScrollId(0)
+        } else {
+            s.scroll
+        };
         while sid.0 != 0 {
             let Some(n) = self.scrolls.get(sid.0) else {
                 return false;
             };
-            if !n.container.contains(x, y) {
+            if !self
+                .scroll_container_world(sid, s.transform)
+                .is_some_and(|r| r.contains(x, y))
+            {
                 return false;
             }
             sid = n.parent
@@ -498,5 +655,68 @@ impl PropertyTrees {
         self.effects
             .get(s.effect.0)
             .map_or(0., |e| e.accumulated_opacity)
+    }
+}
+#[cfg(test)]
+mod scrolling_tests {
+    use super::*;
+
+    #[test]
+    fn fixed_ignores_scroll_and_sticky_respects_inset() {
+        let mut trees = PropertyTrees::new();
+        let scroll = trees
+            .add_scroll(
+                ScrollId(0),
+                (0., 50.),
+                Rect::new(0., 0., 100., 100.),
+                Rect::new(0., 0., 100., 300.),
+            )
+            .unwrap();
+        let sticky = trees
+            .add_sticky(StickyConstraint {
+                scroll,
+                normal: Rect::new(0., 40., 40., 20.),
+                top: Some(5.),
+                right: None,
+                bottom: None,
+                left: None,
+            })
+            .unwrap();
+        let state = PropertyTreeState {
+            scroll,
+            ..Default::default()
+        };
+        assert_eq!(trees.matrix(state).unwrap().map(0., 40.), Some((0., -10.)));
+        assert_eq!(
+            trees
+                .matrix(PropertyTreeState {
+                    positioning: Positioning::Sticky(sticky),
+                    ..state
+                })
+                .unwrap()
+                .map(0., 40.),
+            Some((0., 5.))
+        );
+        assert_eq!(
+            trees
+                .matrix(PropertyTreeState {
+                    positioning: Positioning::Fixed,
+                    ..state
+                })
+                .unwrap()
+                .map(0., 40.),
+            Some((0., 40.))
+        );
+        trees.set_scroll(scroll, (0., 65.)).unwrap();
+        assert_eq!(
+            trees
+                .matrix(PropertyTreeState {
+                    positioning: Positioning::Sticky(sticky),
+                    ..state
+                })
+                .unwrap()
+                .map(0., 40.),
+            Some((0., 5.))
+        );
     }
 }

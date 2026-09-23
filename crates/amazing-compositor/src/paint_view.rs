@@ -1,13 +1,104 @@
 //! Bridge from the painter's read-only display-list view.
 //!
-//! RC-16's range raster already applies its group transforms, clips and
-//! opacity. `baked_paint_view_compositor` therefore uses a neutral property
-//! state for presentation. `paint_view_metadata` preserves the source property
-//! IDs and compositing hints for inspection and hit-test integration. Moving
-//! those properties onto compositor quads requires RC-17's raw local raster.
+//! RC-17's raw local raster leaves transforms, clips and opacity to the
+//! property trees. Unsupported paint commands use RC-16's baked range raster
+//! with a neutral property state.
 
 use super::*;
-use amazing_paint::display_list_view::{DisplayListView, PaintBounds};
+use amazing_paint::display_list_view::{DisplayListView, PaintBounds, RawRasterError};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaintViewRasterMode {
+    RawLocal,
+    BakedFallback,
+}
+
+/// The raw mode rasterizes document-space item pixels once. Unsupported
+/// commands use the existing baked full-paint path for pixel correctness.
+pub struct PaintViewSource<'view, 'paint> {
+    view: &'view DisplayListView<'paint>,
+    mode: PaintViewRasterMode,
+}
+
+impl<'view, 'paint> PaintViewSource<'view, 'paint> {
+    pub fn new(view: &'view DisplayListView<'paint>) -> Self {
+        let mut probe = Surface::new(1, 1);
+        let mode = match view.raster_raw_local(0..view.items().len(), &mut probe, (0, 0)) {
+            Ok(()) => PaintViewRasterMode::RawLocal,
+            Err(RawRasterError::UnseparableItem(_)) => PaintViewRasterMode::BakedFallback,
+            Err(error) => panic!("raw paint-view probe failed: {error:?}"),
+        };
+        Self { view, mode }
+    }
+
+    pub fn mode(&self) -> PaintViewRasterMode {
+        self.mode
+    }
+
+    pub fn compositor(&self, width: u32, height: u32) -> Result<Compositor, SceneError> {
+        match self.mode {
+            PaintViewRasterMode::RawLocal => {
+                let (trees, chunks) = paint_view_metadata(self.view)?;
+                let mut grouped: Vec<PaintChunk> = Vec::new();
+                for chunk in chunks {
+                    if let Some(last) = grouped.last_mut() {
+                        if last.state == chunk.state && last.items.end == chunk.items.start {
+                            last.items.end = chunk.items.end;
+                            last.bounds = last.bounds.union(chunk.bounds);
+                            last.reasons = last.reasons.union(chunk.reasons);
+                            continue;
+                        }
+                    }
+                    grouped.push(chunk);
+                }
+                Compositor::new(trees, grouped, self.view.items().len())
+            }
+            PaintViewRasterMode::BakedFallback => {
+                baked_paint_view_compositor(self.view, width, height)
+            }
+        }
+    }
+    /// Add the painter's default opaque canvas behind retained local tiles.
+    pub fn build_frame(
+        &self,
+        compositor: &mut Compositor,
+        width: u32,
+        height: u32,
+    ) -> Result<CompositorFrame, SceneError> {
+        let mut frame = compositor.build_frame(self, width, height)?;
+        if self.mode == PaintViewRasterMode::RawLocal {
+            let viewport = Rect::new(0., 0., width as f32, height as f32);
+            frame.passes[0].quads.insert(
+                0,
+                DrawQuad::SolidColor(SolidColorQuad {
+                    rect: viewport,
+                    color: [255, 255, 255, 255],
+                    clip_rect: viewport,
+                    opacity: 1.,
+                    blend: BlendMode::Normal,
+                }),
+            );
+        }
+        Ok(frame)
+    }
+}
+
+impl PaintSource for PaintViewSource<'_, '_> {
+    fn item_count(&self) -> usize {
+        self.view.items().len()
+    }
+
+    fn rasterize(&self, items: Range<usize>, tile: Rect, out: &mut Surface) {
+        match self.mode {
+            PaintViewRasterMode::RawLocal => {
+                self.view
+                    .raster_raw_local(items, out, (tile.x as i32, tile.y as i32))
+                    .expect("raw paint-view item changed support after scene construction");
+            }
+            PaintViewRasterMode::BakedFallback => self.view.rasterize(items, tile, out),
+        }
+    }
+}
 
 fn rect(bounds: PaintBounds) -> Rect {
     Rect::new(bounds.x, bounds.y, bounds.width, bounds.height)
@@ -41,8 +132,7 @@ impl PaintSource for DisplayListView<'_> {
     }
 }
 
-/// Converts the view's stable per-build property IDs and direct hints. The
-/// returned scene is metadata until raw uncomposited item pixels are exposed.
+/// Converts the view's stable per-build property IDs and direct hints.
 pub fn paint_view_metadata(
     view: &DisplayListView<'_>,
 ) -> Result<(PropertyTrees, Vec<PaintChunk>), SceneError> {
@@ -106,9 +196,18 @@ pub fn paint_view_metadata(
                 items: item.index..item.index + 1,
                 state: PropertyTreeState {
                     transform: TransformId(p.transform as usize),
-                    clip: ClipId(p.clip as usize),
+                    clip: if h.fixed {
+                        ClipId(0)
+                    } else {
+                        ClipId(p.clip as usize)
+                    },
                     effect: EffectId(p.effect as usize),
                     scroll: ScrollId(p.scroll as usize),
+                    positioning: if h.fixed {
+                        Positioning::Fixed
+                    } else {
+                        Positioning::Flow
+                    },
                 },
                 bounds: rect(item.local_bounds),
                 reasons,
@@ -118,10 +217,9 @@ pub fn paint_view_metadata(
     Ok((trees, chunks))
 }
 
-/// Builds the pixel-exact RC-16 path. Its one paint range preserves the
-/// painter's group semantics, while its compositor state remains neutral to
-/// avoid applying those groups twice. Use `paint_view_metadata` separately for
-/// source item inspection. RC-17 will allow property-driven retained tiles.
+/// Builds the pixel-exact fallback for paint commands RC-17 cannot separate.
+/// Its one paint range preserves the painter's group semantics and neutral
+/// property state avoids applying those groups twice.
 pub fn baked_paint_view_compositor(
     view: &DisplayListView<'_>,
     width: u32,

@@ -174,12 +174,18 @@ fn clip_rect(trees: &PropertyTrees, state: PropertyTreeState, viewport: Rect) ->
         }
         id = node.parent
     }
-    let mut sid = state.scroll;
+    let mut sid = if state.positioning == Positioning::Fixed {
+        ScrollId(0)
+    } else {
+        state.scroll
+    };
     while sid.0 != 0 {
         let Some(node) = trees.scrolls.get(sid.0) else {
             break;
         };
-        result = intersect(result, node.container);
+        if let Some(world) = trees.scroll_container_world(sid, state.transform) {
+            result = intersect(result, world);
+        }
         sid = node.parent
     }
     result
@@ -478,6 +484,22 @@ fn sample(
     ]
 }
 fn blend(dst: [u8; 4], src: [u8; 4], opacity: f32, mode: BlendMode) -> [u8; 4] {
+    if mode == BlendMode::Normal {
+        let sa = src[3] as f32 / 255. * opacity.clamp(0., 1.);
+        let da = dst[3] as f32 / 255.;
+        let oa = sa + da * (1. - sa);
+        if oa <= 0. {
+            return [0; 4];
+        }
+        let mut out = [0; 4];
+        for channel in 0..3 {
+            out[channel] = ((src[channel] as f32 * sa + dst[channel] as f32 * da * (1. - sa)) / oa)
+                .round()
+                .clamp(0., 255.) as u8;
+        }
+        out[3] = (oa * 255.).round().clamp(0., 255.) as u8;
+        return out;
+    }
     let opacity = (opacity.clamp(0., 1.) * 255.).round() as u8;
     let sa = (src[3] as u32 * opacity as u32 + 127) / 255;
     if sa == 0 {

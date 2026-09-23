@@ -54,6 +54,7 @@ fn fixture() -> (Compositor, Synthetic, TransformId, ScrollId, EffectId) {
         scroll,
         effect,
         clip: ClipId(0),
+        positioning: Positioning::Flow,
     };
     let mut source = Synthetic { rects: Vec::new() };
     let mut chunks = Vec::new();

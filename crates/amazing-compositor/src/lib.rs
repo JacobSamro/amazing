@@ -232,6 +232,17 @@ impl Compositor {
             }
         }
     }
+    /// Marks the retained tile containing a source display item for raster.
+    /// Paint-view items may be grouped into a single effect layer.
+    pub fn invalidate_item(&mut self, item: usize) {
+        if let Some(index) = self
+            .chunks
+            .iter()
+            .position(|chunk| chunk.items.contains(&item))
+        {
+            self.invalidate_chunk(index);
+        }
+    }
     pub fn repaint_all(&mut self) {
         for tile in self.tiles.values_mut() {
             tile.dirty = true
@@ -242,6 +253,17 @@ impl Compositor {
     }
     pub fn set_scroll(&mut self, id: ScrollId, offset: (f32, f32)) -> Result<(), TreeError> {
         self.trees.set_scroll(id, offset)
+    }
+    pub fn set_scroll_contents(&mut self, id: ScrollId, contents: Rect) -> Result<(), TreeError> {
+        self.trees.set_scroll_contents(id, contents)
+    }
+    pub fn set_snap_points(
+        &mut self,
+        id: ScrollId,
+        x: Vec<f32>,
+        y: Vec<f32>,
+    ) -> Result<(), TreeError> {
+        self.trees.set_snap_points(id, x, y)
     }
     pub fn set_opacity(&mut self, id: EffectId, opacity: f32) -> Result<(), TreeError> {
         self.trees.set_opacity(id, opacity)
@@ -330,6 +352,7 @@ mod tests {
             scroll: sc,
             effect: ef,
             clip: ClipId(0),
+            positioning: Positioning::Flow,
         };
         let chunks = vec![
             PaintChunk {

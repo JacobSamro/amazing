@@ -1,0 +1,51 @@
+{
+  "ticket": "COMP-5",
+  "fixed_base": "7b26163",
+  "head": "8e108ed",
+  "host": "win-002",
+  "compositor_nextest": {
+    "passed": 20,
+    "skipped": 0
+  },
+  "workspace_nextest": {
+    "passed": 1934,
+    "skipped": 5
+  },
+  "workspace_doctests": {
+    "passed": 2
+  },
+  "raw_pixel_parity_fixtures": [
+    "z-equivalence",
+    "inherited-variable",
+    "long-article",
+    "effects-scroller"
+  ],
+  "baked_fallback_fixture": "checkbox control",
+  "trace": [
+    {
+      "scenario": "scroll",
+      "frames": 20,
+      "full_paint_us": 2580684,
+      "retained_build_us": 23660,
+      "retained_percent": 0.917,
+      "tile_uploads": 0
+    },
+    {
+      "scenario": "transform",
+      "frames": 20,
+      "full_paint_us": 2800922,
+      "retained_build_us": 20892,
+      "retained_percent": 0.746,
+      "tile_uploads": 0
+    },
+    {
+      "scenario": "opacity",
+      "frames": 20,
+      "full_paint_us": 2450164,
+      "retained_build_us": 16370,
+      "retained_percent": 0.668,
+      "tile_uploads": 0
+    }
+  ],
+  "capture_proof": "pending active win-001 RDP session"
+}
