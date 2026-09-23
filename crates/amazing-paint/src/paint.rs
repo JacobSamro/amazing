@@ -278,6 +278,20 @@ fn source_over(source: [u8; 4], destination: [u8; 4], opacity: f32) -> [u8; 4] {
 /// Seam through which the painter obtains decoded pixels for replaced nodes.
 pub trait ImageProvider {
     fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image>;
+    /// Rasterize an inline SVG root for this content viewport. The embedding
+    /// adapter owns DOM/style access; paint only receives bounded RGBA pixels.
+    fn svg(
+        &self,
+        _node: amazing_dom::NodeIdx,
+        _width: u32,
+        _height: u32,
+        _dpr: f32,
+    ) -> Option<amazing_media::Image> {
+        None
+    }
+    fn device_scale(&self) -> f32 {
+        1.0
+    }
     /// Decoded background resource resolved by the embedding loader. No I/O during paint.
     fn background_image(
         &self,
@@ -488,7 +502,17 @@ fn paint_decorations(
     }
     paint_inset_box_shadow(surface, box_, text_color, clip);
     paint_borders(surface, box_, text_color, clip);
-    if box_.replaced_size.is_some() {
+    if let Some(node) = box_.svg_root {
+        if let Some(svg) = svg_for_rect(images, node, &box_.content_box) {
+            paint_image(
+                surface,
+                &box_.content_box,
+                &svg,
+                ImagePresentation::default(),
+                clip,
+            );
+        }
+    } else if box_.replaced_size.is_some() {
         if let Some(image) = box_.node.and_then(|node| images.image(node)) {
             paint_image(
                 surface,
@@ -881,7 +905,29 @@ fn paint_shaped_lines(
 ) {
     for line in &box_.lines {
         for replaced in &line.replaced {
-            if let Some(image) = images.image(replaced.node) {
+            if let Some(svg) = svg_for_rect(
+                images,
+                replaced.node,
+                &amazing_layout::Rect {
+                    x: replaced.x,
+                    y: replaced.y,
+                    w: replaced.width,
+                    h: replaced.height,
+                },
+            ) {
+                paint_image(
+                    surface,
+                    &amazing_layout::Rect {
+                        x: replaced.x,
+                        y: replaced.y,
+                        w: replaced.width,
+                        h: replaced.height,
+                    },
+                    &svg,
+                    ImagePresentation::default(),
+                    clip,
+                );
+            } else if let Some(image) = images.image(replaced.node) {
                 paint_image(
                     surface,
                     &amazing_layout::Rect {
@@ -1470,7 +1516,29 @@ fn paint_lines(
 ) {
     for line in &b.lines {
         for replaced in &line.replaced {
-            if let Some(image) = images.image(replaced.node) {
+            if let Some(svg) = svg_for_rect(
+                images,
+                replaced.node,
+                &amazing_layout::Rect {
+                    x: replaced.x,
+                    y: replaced.y,
+                    w: replaced.width,
+                    h: replaced.height,
+                },
+            ) {
+                paint_image(
+                    surface,
+                    &amazing_layout::Rect {
+                        x: replaced.x,
+                        y: replaced.y,
+                        w: replaced.width,
+                        h: replaced.height,
+                    },
+                    &svg,
+                    ImagePresentation::default(),
+                    clip,
+                );
+            } else if let Some(image) = images.image(replaced.node) {
                 paint_image(
                     surface,
                     &amazing_layout::Rect {
@@ -1499,6 +1567,22 @@ fn paint_lines(
             );
         }
     }
+}
+
+fn svg_for_rect(
+    images: &dyn ImageProvider,
+    node: amazing_dom::NodeIdx,
+    rect: &amazing_layout::Rect,
+) -> Option<amazing_media::Image> {
+    if !rect.w.is_finite() || !rect.h.is_finite() || rect.w <= 0.0 || rect.h <= 0.0 {
+        return None;
+    }
+    let width = rect.w.ceil();
+    let height = rect.h.ceil();
+    if width > u32::MAX as f32 || height > u32::MAX as f32 {
+        return None;
+    }
+    images.svg(node, width as u32, height as u32, images.device_scale())
 }
 
 /// Nearest-neighbor image scaling with clipped, source-over RGBA pixels.
@@ -1786,6 +1870,78 @@ mod tests {
         fn image(&self, node: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
             (node == self.node).then_some(&self.image)
         }
+    }
+
+    struct OneSvg(amazing_dom::NodeIdx);
+    impl ImageProvider for OneSvg {
+        fn image(&self, _: amazing_dom::NodeIdx) -> Option<&amazing_media::Image> {
+            None
+        }
+        fn svg(
+            &self,
+            node: amazing_dom::NodeIdx,
+            width: u32,
+            height: u32,
+            dpr: f32,
+        ) -> Option<amazing_media::Image> {
+            assert_eq!((width, height, dpr), (2, 1, 1.0));
+            (node == self.0).then_some(amazing_media::Image {
+                width: 2,
+                height: 1,
+                pixels: vec![255, 0, 0, 255, 0, 255, 0, 255],
+            })
+        }
+    }
+
+    #[test]
+    fn svg_provider_paints_inline_content_rect() {
+        let node = amazing_dom::NodeIdx(7);
+        let mut root = block(&[], 0.0, 0.0, 4.0, 2.0);
+        root.lines.push(amazing_layout::LineBox {
+            y_top: 0.0,
+            height: 1.0,
+            baseline: 1.0,
+            words: Vec::new(),
+            glyphs: Vec::new(),
+            decorations: Vec::new(),
+            replaced: vec![amazing_layout::ReplacedFrag {
+                node,
+                x: 1.0,
+                y: 0.0,
+                width: 2.0,
+                height: 1.0,
+            }],
+        });
+        let surface = paint_document_with_resources(
+            &root,
+            4,
+            2,
+            &FontSource::fallback(),
+            &RectInkProvider,
+            &OneSvg(node),
+        );
+        assert_eq!(surface.get_pixel(0, 0), Some(WHITE));
+        assert_eq!(surface.get_pixel(1, 0), Some([255, 0, 0, 255]));
+        assert_eq!(surface.get_pixel(2, 0), Some([0, 255, 0, 255]));
+        assert_eq!(surface.get_pixel(3, 0), Some(WHITE));
+    }
+
+    #[test]
+    fn svg_root_paints_block_content_rect() {
+        let node = amazing_dom::NodeIdx(9);
+        let mut root = block(&[], 0.0, 0.0, 2.0, 1.0);
+        root.svg_root = Some(node);
+        let surface = paint_document_with_resources(
+            &root,
+            3,
+            1,
+            &FontSource::fallback(),
+            &RectInkProvider,
+            &OneSvg(node),
+        );
+        assert_eq!(surface.get_pixel(0, 0), Some([255, 0, 0, 255]));
+        assert_eq!(surface.get_pixel(1, 0), Some([0, 255, 0, 255]));
+        assert_eq!(surface.get_pixel(2, 0), Some(WHITE));
     }
 
     #[test]

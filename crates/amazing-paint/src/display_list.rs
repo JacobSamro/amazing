@@ -594,7 +594,7 @@ fn control_commands(box_: &LayoutBox) -> Option<Vec<PaintCommand<'_>>> {
     use amazing_layout::{replaced::ReplacedKind, Display};
     let mut commands = Vec::new();
     for fragment in box_.styled_replaced_fragments() {
-        if fragment.kind == ReplacedKind::Image
+        if matches!(fragment.kind, ReplacedKind::Image | ReplacedKind::Svg)
             || fragment
                 .style
                 .get("visibility")
