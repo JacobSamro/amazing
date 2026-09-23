@@ -898,3 +898,66 @@ and workspace doctests **2/2**. The 293-file source manifest, immutable
 renderer/image adapter hashes, raw paired reports, oracle queries, comparison,
 and workspace logs are in `crates/amazing-layout/evidence/layout8/`. No Mac
 build or test was run.
+
+## LAYOUT-9 — outer HTML inline SVG as replaced-like content (2026-09-23)
+
+Fixed base `0f1afbd` (local merged `dev` when work began; remote `origin/dev`
+then pointed to `7801627` pending the integrator push). Pinned WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+
+An SVG-namespace `<svg>` with a non-SVG parent now creates one atomic CSS
+box. Its descendants remain in the DOM for SVG rendering, but create no CSS
+boxes or line fragments. `display:none` and `display:contents` suppress the
+entire SVG subtree; block, float, positioned, flex/grid item and inline flows
+share the replaced sizing path. HTML controls are now recognized only in the
+HTML namespace, so SVG descendants cannot accidentally become form controls.
+
+`svg.rs` resolves positive width/height SVG presentation attributes,
+percentages against a definite containing block, `viewBox` aspect ratio, CSS
+author width/height overrides, and the 300×150 fallback object size. Zero and
+negative SVG dimensions are unsized. The public paint seam is
+`StyledReplacedFrag { kind: ReplacedKind::Svg, node, content_box }` for atomic
+inline SVGs and `LayoutBox { svg_root, content_box }` for block/flex/grid
+items. Both rectangles are CSS pixels; paint passes the root, the content
+viewport and its DPR to the DOM-fed SVG renderer. The exact paint adoption
+request for `display_list.rs::control_commands` is in
+`.agents/layout/questions.md` and belongs to replaced-content/integrator-assist.
+
+A frozen 12-state geometry selection derived from
+`svg/coordinate-systems/outer-svg-intrinsic-size-001.html` and
+`css/css-sizing/svg-intrinsic-size-002.html` moved **0/12 → 12/12**; final
+runs repeat with identical per-case geometry, selection SHA256
+`1cd090b30156ca3029f553e464bd80886d68ed27e159d1f53aeb831046109ba8`
+and executable SHA256
+`823aedf95016aac3ee98fc5ffaedcc0e245385070d96e1f8388180bab9e8e57f`.
+The gate uses `amazing layout` fragment geometry, not rendered pixels.
+Windows layout nextest passed **233/233** and layout doctests **0/0**.
+The 46-file source manifest matched the Windows tree exactly before and after
+the workspace gate and after the retained sweep.
+
+All retained pinned WPT selections ran twice before and after from immutable
+executables with stable per-case classifications and actual/reference/diff
+hashes. Every selection has raw **+0/−0** and zero changed image hashes:
+
+| Selection | Before → after |
+| --- | --- |
+| Broad flex/grid | 83/200 → 83/200 |
+| Focused flex/grid | 24/24 → 24/24 |
+| Geometry | 42/61 → 42/61 |
+| Tables | 10/12 → 10/12 |
+| Floats | 6/8 → 6/8 |
+| Block collapse | 9/9 → 9/9 |
+| Position | 12/12 → 12/12 |
+| Text flow | 14/16 → 14/16 |
+| Contents | 6/6 → 6/6 |
+| Paint compositing | 24/24 → 24/24 |
+| Images | 12/12 → 12/12 |
+
+The source-verified Windows workspace gate passed **1632/1632** nextest tests
+with 3 skipped and workspace doctests **2/2**. The 44 raw retained reports,
+comparison, geometry runs and workspace logs are under
+`crates/amazing-layout/evidence/layout9/`. No Mac build or test was run.
+
+CSS-9 merged on `dev` as `e0adf15` after this fixed-base LAYOUT-9 gate.
+LAYOUT-10 will re-measure the four named calc cases and two LAYOUT-6 logical
+size exceptions on current `dev`; this ticket did not start that work.

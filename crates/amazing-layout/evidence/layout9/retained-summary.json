@@ -1,0 +1,255 @@
+{
+  "flex-grid-broad": {
+    "before_counts": {
+      "pass": 83,
+      "mismatch": 117,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 83,
+      "mismatch": 117,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-flex-grid-broad-1\\run-20260923T121935213Z-409276",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-flex-grid-broad-1\\run-20260923T123938578Z-371296"
+  },
+  "flex-grid": {
+    "before_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-flex-grid-1\\run-20260923T123102085Z-419084",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-flex-grid-1\\run-20260923T124900531Z-458868"
+  },
+  "geometry": {
+    "before_counts": {
+      "pass": 42,
+      "mismatch": 19,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 42,
+      "mismatch": 19,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-geometry-1\\run-20260923T123211140Z-365068",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-geometry-1\\run-20260923T124958778Z-436996"
+  },
+  "tables": {
+    "before_counts": {
+      "pass": 10,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 10,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-tables-1\\run-20260923T123456777Z-452748",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-tables-1\\run-20260923T125139484Z-398920"
+  },
+  "floats": {
+    "before_counts": {
+      "pass": 6,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 6,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-floats-1\\run-20260923T123530347Z-353616",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-floats-1\\run-20260923T125159152Z-383440"
+  },
+  "block-collapse": {
+    "before_counts": {
+      "pass": 9,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 9,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-block-collapse-1\\run-20260923T123555243Z-388244",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-block-collapse-1\\run-20260923T125216201Z-429476"
+  },
+  "position": {
+    "before_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-position-1\\run-20260923T123619262Z-444860",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-position-1\\run-20260923T125231572Z-353572"
+  },
+  "text-flow": {
+    "before_counts": {
+      "pass": 14,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 14,
+      "mismatch": 2,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-text-flow-1\\run-20260923T123647150Z-488480",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-text-flow-1\\run-20260923T125250709Z-490284"
+  },
+  "contents": {
+    "before_counts": {
+      "pass": 6,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 6,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-contents-1\\run-20260923T123736647Z-399132",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-contents-1\\run-20260923T125322663Z-427700"
+  },
+  "paint-compositing": {
+    "before_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 24,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-paint-compositing-1\\run-20260923T123755480Z-376300",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-paint-compositing-1\\run-20260923T125334676Z-436004"
+  },
+  "images": {
+    "before_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "after_counts": {
+      "pass": 12,
+      "mismatch": 0,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 0,
+      "crash": 0
+    },
+    "gains": [],
+    "losses": [],
+    "changed_images_or_classification": [],
+    "baseline_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-baseline\\final-images-1\\run-20260923T123902372Z-493364",
+    "final_run_directory": "C:\\Users\\server\\target\\layout\\layout9-retained-final\\final-images-1\\run-20260923T125415357Z-462900"
+  }
+}

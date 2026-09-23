@@ -79,6 +79,8 @@ mod flex_algorithm;
 mod float_tests;
 #[cfg(test)]
 mod inline_replaced_tests;
+#[cfg(test)]
+mod svg_tests;
 
 mod floats;
 pub mod font;
@@ -87,6 +89,7 @@ mod grid_algorithm;
 pub mod inline;
 pub mod position;
 pub mod replaced;
+mod svg;
 pub mod values;
 
 use amazing_css::ComputedStyle;
@@ -160,6 +163,10 @@ pub struct LayoutBox {
     pub(crate) inline_atomic: bool,
     /// Intrinsic dimensions when this box itself is replaced content.
     pub replaced_size: Option<IntrinsicSize>,
+    /// Outer SVG root for a block/flex/grid item. Its resolved viewport is
+    /// `content_box`; inline SVGs are exposed by `styled_replaced_fragments`.
+    pub svg_root: Option<NodeIdx>,
+    pub(crate) svg_sizing: Option<svg::SvgSizing>,
     pub(crate) table_decoration: table_decoration::TableDecoration,
     pub(crate) table_wrapper: bool,
     pub(crate) table_colspan: usize,
@@ -202,6 +209,8 @@ impl LayoutBox {
             positioned: Vec::new(),
             inline_atomic: false,
             replaced_size: None,
+            svg_root: None,
+            svg_sizing: None,
             table_decoration: Default::default(),
             table_wrapper: false,
             table_colspan: 1,
