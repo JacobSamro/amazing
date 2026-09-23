@@ -18,6 +18,8 @@ amazing-media = { path = "../amazing-media" }
 amazing-image = { path = "../amazing-image" }
 amazing-net = { path = "../amazing-net" }
 amazing-paint = { path = "../amazing-paint" }
+amazing-text = { path = "../amazing-text" }
+amazing-text-provider = { path = "../amazing-text-provider" }
 amazing-webrtc-codecs = { path = "../amazing-webrtc-codecs" }
 gpui = { git = "https://github.com/zed-industries/zed", rev = "d9ad6aff67e47de43abb270d22de75dd950f1b48" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "d9ad6aff67e47de43abb270d22de75dd950f1b48" }
