@@ -1721,7 +1721,88 @@ fn valid_grid_track_list(value: &str) -> bool {
     if matches!(tokens, [Token::Ident(value)] if value.eq_ignore_ascii_case("none")) {
         return true;
     }
+    if matches!(tokens.first(), Some(Token::Ident(name)) if name.eq_ignore_ascii_case("subgrid")) {
+        return parse_subgrid(value).is_some();
+    }
     valid_grid_track_tokens(tokens, true)
+}
+
+/// Grid Level 2 §7.2: `subgrid <line-name-list>?`. Track sizes cannot
+/// participate in this branch of the grid-template grammar.
+pub(crate) fn parse_subgrid(value: &str) -> Option<values::Subgrid> {
+    use values::{Subgrid, SubgridLineNames, SubgridRepeatCount};
+    let tokens = tokenize(value);
+    let mut position = 0;
+    skip_css_whitespace(&tokens, &mut position);
+    match tokens.get(position)? {
+        Token::Ident(name) if name.eq_ignore_ascii_case("subgrid") => position += 1,
+        _ => return None,
+    }
+    let mut line_names = Vec::new();
+    let mut auto_fill_seen = false;
+    loop {
+        skip_css_whitespace(&tokens, &mut position);
+        let Some(token) = tokens.get(position) else { break };
+        if matches!(token, Token::OpenSquare) {
+            let (names, end) = parse_subgrid_names(&tokens, position)?;
+            line_names.push(SubgridLineNames::Names(names));
+            position = end;
+            continue;
+        }
+        if matches!(token, Token::Function(name) if name.eq_ignore_ascii_case("repeat")) {
+            let start = position;
+            let mut depth = 0usize;
+            loop {
+                match tokens.get(position)? {
+                    Token::OpenParen => depth += 1,
+                    Token::CloseParen => {
+                        depth = depth.checked_sub(1)?;
+                        if depth == 0 { position += 1; break; }
+                    }
+                    _ => {}
+                }
+                position += 1;
+            }
+            let inner = function_inner(&tokens[start..position], "repeat")?;
+            let (count, names) = split_top_level_comma(inner)?;
+            let count = match trim_tokens(count) {
+                [Token::Number(n)] if n.is_finite() && *n >= 1.0 && n.fract() == 0.0 && *n <= u32::MAX as f64 => SubgridRepeatCount::Integer(*n as u32),
+                [Token::Ident(name)] if name.eq_ignore_ascii_case("auto-fill") && !auto_fill_seen => {
+                    auto_fill_seen = true;
+                    SubgridRepeatCount::AutoFill
+                }
+                _ => return None,
+            };
+            let mut names_position = 0;
+            let mut groups = Vec::new();
+            while names_position < names.len() {
+                skip_css_whitespace(names, &mut names_position);
+                if names_position == names.len() { break; }
+                let (group, end) = parse_subgrid_names(names, names_position)?;
+                groups.push(group);
+                names_position = end;
+            }
+            if groups.is_empty() { return None; }
+            line_names.push(SubgridLineNames::Repeat { count, names: groups });
+            continue;
+        }
+        return None;
+    }
+    Some(Subgrid { line_names })
+}
+
+fn parse_subgrid_names(tokens: &[Token], start: usize) -> Option<(Vec<String>, usize)> {
+    if !matches!(tokens.get(start), Some(Token::OpenSquare)) { return None; }
+    let end = tokens[start + 1..].iter().position(|token| matches!(token, Token::CloseSquare))? + start + 1;
+    let mut names = Vec::new();
+    for token in &tokens[start + 1..end] {
+        match token {
+            Token::Whitespace => {}
+            Token::Ident(name) if valid_grid_line_name(name) => names.push(name.clone()),
+            _ => return None,
+        }
+    }
+    Some((names, end + 1))
 }
 
 fn valid_grid_track_tokens(tokens: &[Token], allow_repeat: bool) -> bool {
