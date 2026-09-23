@@ -1,0 +1,116 @@
+{
+  "revision": "53bc812da2ed81179ebd1ba76b2d197cc4747d12",
+  "rationale": "Frameset insertion-mode cluster: replacement of implied body after structural/foreign/whitespace tokens, controls that must retain the body, after-frameset whitespace, and a hidden-input control. A broad pinned scan found these parser-owned failures; prior exploratory 20-case table and adoption selections each passed 20/20 and were retired before parser edits.",
+  "sources": [
+    {
+      "path": "html/syntax/parsing/resources/tests19.dat",
+      "sha256": "a9316b1eb4d2821a18e2c840394c6218bfcdb598857b92631490d9c3c1840ce4"
+    },
+    {
+      "path": "html/syntax/parsing/resources/webkit01.dat",
+      "sha256": "063ca232535a792fa238ae769eeb0ddcc9bd2ee961d3da327ca134612d35d93c"
+    }
+  ],
+  "cases": [
+    {
+      "id": "tests19-039",
+      "input_sha256": "11ba06327d2dafc33c707833a839074bbdc0760ab057885c374bf633f0d71b58",
+      "expected_sha256": "977818231a79d58e7fcc56afaefef245adc166688946f5234c9bb989591bc2df"
+    },
+    {
+      "id": "tests19-040",
+      "input_sha256": "c2e5420da48b9d8171d2c0c019d6440cfd03a5819229cfdddec0e0f834d8e819",
+      "expected_sha256": "24d5b069344f93a9a7a513c699e2917076b7ba1ba0175c68587abcc971d204b0"
+    },
+    {
+      "id": "tests19-045",
+      "input_sha256": "afb181a347f6cad9ec0e3ba730062cac7df9558810e636003b16be02e05a18c4",
+      "expected_sha256": "1f9ce989a8691bdec6c26fa2ce8ee9600ad21e9484ed0389a779290e031d7101"
+    },
+    {
+      "id": "tests19-046",
+      "input_sha256": "7a2463d29aeff4f286b3e27bc6a10a20855cec811f2d9606bf31e2401c23f84b",
+      "expected_sha256": "dfb1ae48ccb610360bc6b771c80423f8fcb3ef91a7124679b667f074e2183c93"
+    },
+    {
+      "id": "tests19-047",
+      "input_sha256": "0034a2eceef5f54636886bb794db2964009b667abd7856ab4de3df66183f9886",
+      "expected_sha256": "13ea261ceeb2238cfb72a0b8ff1824b9afc146fc6f34bb74cc947cc44aa8cd6f"
+    },
+    {
+      "id": "tests19-048",
+      "input_sha256": "231b084cc82a26deb67caaa4f00dd6bd033529d406c1237c0d97ff74873a1a25",
+      "expected_sha256": "dfb1ae48ccb610360bc6b771c80423f8fcb3ef91a7124679b667f074e2183c93"
+    },
+    {
+      "id": "tests19-049",
+      "input_sha256": "b11733b81227542c9866ef09ec851680c75e75609126c8152201247698514378",
+      "expected_sha256": "a27f2bbb99feb25dd9a6eb4ed036e6ede2738867d6151e8f493b1d6eb0574c4e"
+    },
+    {
+      "id": "tests19-068",
+      "input_sha256": "cf997b55c9c58111becff7ee7312721218ab97173c9586508a770090c955d125",
+      "expected_sha256": "a925d1e06f1b0954e7b49ff9fcab733c4e405222d936749809de1127aaf232ba"
+    },
+    {
+      "id": "tests19-069",
+      "input_sha256": "8e4058e516d95b34ebc5823c402da247ef512892fd4079df60fd908f6066e039",
+      "expected_sha256": "62bdb4e4af4e8a4cbe120ac6520e651226829794d4299c0701acdde2f8ed68d4"
+    },
+    {
+      "id": "tests19-070",
+      "input_sha256": "55b0139c206b006c307cb8b593c2667eef6f0002c3d9f22754540356bd4da4c4",
+      "expected_sha256": "e8b698a9e5316bb8712b9e5dd603d42de1353b2b953b082ecbc22bec9ce45f66"
+    },
+    {
+      "id": "tests19-071",
+      "input_sha256": "d5d38dfd3f644ae467077f6dee44c05a3794d98e30add1d80280b3ce2f7521dc",
+      "expected_sha256": "93fca7548a63a62f2409d95588823bb14749052c8a9e6a86de90f9aad6516dfc"
+    },
+    {
+      "id": "tests19-072",
+      "input_sha256": "29f0159ed137970d24dc7e4c766df039ddbb9f1dfab160ce3d4493a714898c57",
+      "expected_sha256": "ed969cf38e4578a92c5e98ab1b4a0c46e675637231c95a31f677f6a5c522aa6e"
+    },
+    {
+      "id": "tests19-073",
+      "input_sha256": "f3de7b5cc48aa87a9b573d83e07f2736a657b0aada834f2753df082c8e8805ec",
+      "expected_sha256": "dfb1ae48ccb610360bc6b771c80423f8fcb3ef91a7124679b667f074e2183c93"
+    },
+    {
+      "id": "tests19-074",
+      "input_sha256": "460eb185dd5aaacdd1c142d36c25ce741c0d911a8bcc997c818efc0609d6e858",
+      "expected_sha256": "dfb1ae48ccb610360bc6b771c80423f8fcb3ef91a7124679b667f074e2183c93"
+    },
+    {
+      "id": "tests19-075",
+      "input_sha256": "e57aa80935878b4e48683fd662e2a7efecee205a3402877534f60d1764557aa9",
+      "expected_sha256": "dfb1ae48ccb610360bc6b771c80423f8fcb3ef91a7124679b667f074e2183c93"
+    },
+    {
+      "id": "tests19-076",
+      "input_sha256": "02043a7a5227a6a5579c355ddd4d0c39cb451834c81322cec9bf748361daf0bb",
+      "expected_sha256": "2bc0c913a14d13d68cfc6099cfaa1ae8f1e4e35150e0a12322e79ce016b36f31"
+    },
+    {
+      "id": "tests19-077",
+      "input_sha256": "cd7ae29081ea2761b3047d95eb131182bdbb840dcf66d57fefe27bf3e496d1c5",
+      "expected_sha256": "dfb1ae48ccb610360bc6b771c80423f8fcb3ef91a7124679b667f074e2183c93"
+    },
+    {
+      "id": "tests19-079",
+      "input_sha256": "c914a9bc67793d83dcd7f116bcb3282d09feb3cda27fd3cf5a5e35f12ee0517e",
+      "expected_sha256": "aba051227019d8b21895951a95c455dc186704f24810bd21633f54e5193930f4"
+    },
+    {
+      "id": "tests19-080",
+      "input_sha256": "6ff6a673d4ba295039c4ce1c162bf3ba32972023c83138a4a489035e3bdc5a44",
+      "expected_sha256": "c504750b210a04176011711ff5a8ae80eab76a5dfec74777f6600cb2362d046a"
+    },
+    {
+      "id": "webkit01-051",
+      "input_sha256": "13df817554b0f2bc504edfae48f0d62e9701acdb43ae17ea6777d0ca33551868",
+      "expected_sha256": "c504750b210a04176011711ff5a8ae80eab76a5dfec74777f6600cb2362d046a"
+    }
+  ]
+}

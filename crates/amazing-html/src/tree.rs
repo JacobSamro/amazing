@@ -603,7 +603,12 @@ impl TreeBuilder {
 
     fn in_foreign_content(&mut self, tok: Token) {
         match tok {
-            Token::Characters(data) => self.insert_text(&data.replace('\0', "\u{FFFD}")),
+            Token::Characters(data) => {
+                if data.chars().any(|c| !is_ws_char(c)) {
+                    self.frameset_ok = false;
+                }
+                self.insert_text(&data.replace('\0', "\u{FFFD}"));
+            },
             Token::Comment(data) => self.insert_comment_here(&data),
             Token::Doctype { .. } => {},
             Token::StartTag { name, attrs, self_closing } => {
@@ -1428,9 +1433,12 @@ impl TreeBuilder {
     fn before_head(&mut self, tok: Token) {
         match tok {
             Token::Characters(data) => {
-                if !data.chars().all(is_ws_char) {
+                let first_non_whitespace = data
+                    .char_indices()
+                    .find_map(|(index, c)| (!is_ws_char(c)).then_some(index));
+                if let Some(index) = first_non_whitespace {
                     self.implied_head();
-                    self.in_head(Token::Characters(data));
+                    self.in_head(Token::Characters(data[index..].to_owned()));
                 }
             },
             Token::Comment(data) => self.insert_comment_here(&data),
@@ -1601,7 +1609,7 @@ impl TreeBuilder {
                 match name.as_str() {
                     "body" => {
                         self.insert_and_push(name, attrs);
-                        self.frameset_ok = true;
+                        self.frameset_ok = false;
                         self.mode = Mode::InBody;
                     },
                     "frameset" => {
@@ -1667,7 +1675,9 @@ impl TreeBuilder {
             return;
         }
         self.reconstruct();
-        self.frameset_ok = false;
+        if data.chars().any(|c| !is_ws_char(c)) {
+            self.frameset_ok = false;
+        }
         self.insert_text(data);
     }
 
@@ -1697,7 +1707,18 @@ impl TreeBuilder {
                 }
                 self.frameset_ok = false;
             },
-            "frameset" => {}, // deviation: ignored
+            "frameset" => {
+                if self.open.len() < 2
+                    || self.dom.name(self.open[1]) != Some("body")
+                    || !self.frameset_ok
+                {
+                    return;
+                }
+                self.dom.detach(self.open[1]);
+                self.open.truncate(1);
+                self.insert_and_push("frameset", attrs);
+                self.mode = Mode::InFrameset;
+            },
             "address" | "article" | "aside" | "blockquote" | "center"
             | "details" | "dialog" | "dir" | "div" | "dl" | "fieldset"
             | "figcaption" | "figure" | "footer" | "header" | "hgroup"
@@ -1745,6 +1766,7 @@ impl TreeBuilder {
             "plaintext" => {
                 self.close_p_element();
                 self.insert_and_push(name, attrs);
+                self.frameset_ok = false;
             },
             "button" => {
                 if self.has_in_scope("button") {
@@ -1805,9 +1827,7 @@ impl TreeBuilder {
             "area" | "br" | "embed" | "img" | "keygen" | "wbr" => {
                 self.reconstruct();
                 self.insert_void(name, attrs);
-                if name == "br" {
-                    self.frameset_ok = false;
-                }
+                self.frameset_ok = false;
             },
             "input" => {
                 if self.has_in_scope("select") {
@@ -1842,6 +1862,7 @@ impl TreeBuilder {
                 self.close_p_element();
                 self.insert_and_push("textarea", attrs);
                 self.skip_next_lf = true;
+                self.frameset_ok = false;
                 self.orig_mode = Mode::InBody;
                 self.mode = Mode::Text;
             },
@@ -1849,10 +1870,14 @@ impl TreeBuilder {
                 self.close_p_element();
                 self.insert_and_push("xmp", attrs);
                 self.skip_next_lf = true;
+                self.frameset_ok = false;
                 self.orig_mode = Mode::InBody;
                 self.mode = Mode::Text;
             },
-            "iframe" => self.start_generic_text_element("iframe", attrs),
+            "iframe" => {
+                self.frameset_ok = false;
+                self.start_generic_text_element("iframe", attrs);
+            },
             "noembed" => self.start_generic_text_element("noembed", attrs),
             "noscript" => self.start_generic_text_element("noscript", attrs),
             "select" => {
@@ -2540,6 +2565,9 @@ impl TreeBuilder {
 
     fn after_after_frameset(&mut self, tok: Token) {
         match tok {
+            Token::Characters(data) if data.chars().all(is_ws_char) => {
+                self.in_body(Token::Characters(data));
+            },
             Token::Comment(data) => self.comment_into(NodeIdx(0), &data),
             Token::Doctype { .. } => {},
             Token::StartTag { name, attrs, self_closing: _ }
