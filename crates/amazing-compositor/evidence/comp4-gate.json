@@ -1,0 +1,58 @@
+{
+  "ticket": "COMP-4",
+  "host": "win-002",
+  "base": "0034b44",
+  "compositor_nextest": {
+    "passed": 14,
+    "failed": 0
+  },
+  "compositor_doctests": {
+    "passed": 0,
+    "failed": 0
+  },
+  "workspace_nextest": {
+    "passed": 1891,
+    "skipped": 5,
+    "failed": 0
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "gpui_presenter_tests": {
+    "passed": 3,
+    "failed": 0
+  },
+  "real_page_trace": {
+    "pixel_exact_frames": 36,
+    "scenarios": {
+      "scroll_layout_shift": {
+        "frames": 12,
+        "full_p50_us": 2713,
+        "full_p95_us": 3114,
+        "baked_quad_build_p50_us": 5981,
+        "baked_quad_build_p95_us": 6274,
+        "gpui_path": "direct tile sprites; painter properties baked during raster"
+      },
+      "transform": {
+        "frames": 12,
+        "full_p50_us": 2849,
+        "full_p95_us": 2904,
+        "baked_quad_build_p50_us": 6092,
+        "baked_quad_build_p95_us": 6420,
+        "gpui_path": "direct tile sprites; painter properties baked during raster"
+      },
+      "opacity": {
+        "frames": 12,
+        "full_p50_us": 2896,
+        "full_p95_us": 4000,
+        "baked_quad_build_p50_us": 6218,
+        "baked_quad_build_p95_us": 7589,
+        "gpui_path": "direct tile sprites; painter properties baked during raster"
+      }
+    },
+    "layout_and_view_construction_excluded": true,
+    "presentation_excluded": true
+  },
+  "gpui_capture": "pending active win-001 RDP session"
+}

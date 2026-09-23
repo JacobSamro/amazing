@@ -248,7 +248,21 @@ impl Compositor {
                 clip,
             });
             let scissor = clip_rect(&self.trees, layer.state, viewport);
-            let needs_pass = opacity < 1. || blend != BlendMode::Normal || clip.0 != 0;
+            let keys = tile_keys(li, layer.bounds);
+            if keys.len() > 1_000_000 {
+                return Err(SceneError::TooManyTiles);
+            }
+            let mut clip_id = clip;
+            let mut rounded_clip = false;
+            while clip_id.0 != 0 {
+                let node = &self.trees.clips[clip_id.0];
+                rounded_clip |= matches!(node.shape, ClipShape::RoundedRect { .. });
+                clip_id = node.parent;
+            }
+            // A single tile can carry opacity and rectangular clip directly;
+            // multiple tiles need an isolated pass to apply opacity once.
+            let needs_pass =
+                blend != BlendMode::Normal || rounded_clip || (opacity < 1. && keys.len() > 1);
             let pass_id = if needs_pass {
                 let id = passes.len();
                 passes.push(RenderPass {
@@ -269,10 +283,6 @@ impl Compositor {
             } else {
                 0
             };
-            let keys = tile_keys(li, layer.bounds);
-            if keys.len() > 1_000_000 {
-                return Err(SceneError::TooManyTiles);
-            }
             for key in keys {
                 let local = tile_rect(key);
                 if !matrix
