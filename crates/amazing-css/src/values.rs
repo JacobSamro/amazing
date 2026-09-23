@@ -293,6 +293,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         return crate::svg_presentation::parse_property(property, css);
     }
     match property {
+        p if p.starts_with("animation-") || p.starts_with("transition-") => {
+            return crate::animation::canonical(p, css).map(|_| V::Unparsed);
+        }
         "content" | "counter-reset" | "counter-increment" | "counter-set" | "quotes" => {
             return crate::generated::valid_property(property, css).then_some(V::Unparsed);
         }

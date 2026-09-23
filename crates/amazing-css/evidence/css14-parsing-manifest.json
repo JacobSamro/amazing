@@ -1,0 +1,219 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "css14-css-animations-transitions-parsing",
+    "count": 51,
+    "note": "Frozen upstream parsing paths; local Rust parser regressions exercise the CSS-14 API until CSSOM animation support lands."
+  },
+  "sparse_paths": [
+    "css/css-animations/parsing",
+    "css/css-transitions/parsing"
+  ],
+  "tests": [
+    {
+      "id": "css__css-animations__parsing__animation-composition-computed.tentative.html",
+      "test": "css/css-animations/parsing/animation-composition-computed.tentative.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-composition-invalid.tentative.html",
+      "test": "css/css-animations/parsing/animation-composition-invalid.tentative.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-composition-valid.tentative.html",
+      "test": "css/css-animations/parsing/animation-composition-valid.tentative.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-computed.html",
+      "test": "css/css-animations/parsing/animation-computed.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-delay-computed.html",
+      "test": "css/css-animations/parsing/animation-delay-computed.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-delay-invalid.html",
+      "test": "css/css-animations/parsing/animation-delay-invalid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-delay-valid.html",
+      "test": "css/css-animations/parsing/animation-delay-valid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-direction-computed.html",
+      "test": "css/css-animations/parsing/animation-direction-computed.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-direction-invalid.html",
+      "test": "css/css-animations/parsing/animation-direction-invalid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-direction-valid.html",
+      "test": "css/css-animations/parsing/animation-direction-valid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-duration-computed.html",
+      "test": "css/css-animations/parsing/animation-duration-computed.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-duration-invalid.html",
+      "test": "css/css-animations/parsing/animation-duration-invalid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-duration-valid.html",
+      "test": "css/css-animations/parsing/animation-duration-valid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-fill-mode-computed.html",
+      "test": "css/css-animations/parsing/animation-fill-mode-computed.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-fill-mode-invalid.html",
+      "test": "css/css-animations/parsing/animation-fill-mode-invalid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-fill-mode-valid.html",
+      "test": "css/css-animations/parsing/animation-fill-mode-valid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-invalid.html",
+      "test": "css/css-animations/parsing/animation-invalid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-iteration-count-computed.html",
+      "test": "css/css-animations/parsing/animation-iteration-count-computed.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-iteration-count-invalid.html",
+      "test": "css/css-animations/parsing/animation-iteration-count-invalid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-iteration-count-valid.html",
+      "test": "css/css-animations/parsing/animation-iteration-count-valid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-name-computed.html",
+      "test": "css/css-animations/parsing/animation-name-computed.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-name-edge-cases.html",
+      "test": "css/css-animations/parsing/animation-name-edge-cases.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-name-invalid.html",
+      "test": "css/css-animations/parsing/animation-name-invalid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-name-valid.html",
+      "test": "css/css-animations/parsing/animation-name-valid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-play-state-computed.html",
+      "test": "css/css-animations/parsing/animation-play-state-computed.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-play-state-invalid.html",
+      "test": "css/css-animations/parsing/animation-play-state-invalid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-play-state-valid.html",
+      "test": "css/css-animations/parsing/animation-play-state-valid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-shorthand.html",
+      "test": "css/css-animations/parsing/animation-shorthand.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-timing-function-invalid.html",
+      "test": "css/css-animations/parsing/animation-timing-function-invalid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__animation-valid.html",
+      "test": "css/css-animations/parsing/animation-valid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__keyframe-selectors.html",
+      "test": "css/css-animations/parsing/keyframe-selectors.html"
+    },
+    {
+      "id": "css__css-animations__parsing__keyframes-allowed-properties.html",
+      "test": "css/css-animations/parsing/keyframes-allowed-properties.html"
+    },
+    {
+      "id": "css__css-animations__parsing__keyframes-name-invalid.html",
+      "test": "css/css-animations/parsing/keyframes-name-invalid.html"
+    },
+    {
+      "id": "css__css-animations__parsing__keyframes-name-valid.html",
+      "test": "css/css-animations/parsing/keyframes-name-valid.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-behavior.html",
+      "test": "css/css-transitions/parsing/transition-behavior.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-computed.html",
+      "test": "css/css-transitions/parsing/transition-computed.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-delay-computed.html",
+      "test": "css/css-transitions/parsing/transition-delay-computed.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-delay-invalid.html",
+      "test": "css/css-transitions/parsing/transition-delay-invalid.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-delay-valid.html",
+      "test": "css/css-transitions/parsing/transition-delay-valid.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-duration-computed.html",
+      "test": "css/css-transitions/parsing/transition-duration-computed.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-duration-invalid.html",
+      "test": "css/css-transitions/parsing/transition-duration-invalid.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-duration-valid.html",
+      "test": "css/css-transitions/parsing/transition-duration-valid.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-invalid.html",
+      "test": "css/css-transitions/parsing/transition-invalid.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-property-computed.html",
+      "test": "css/css-transitions/parsing/transition-property-computed.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-property-invalid.html",
+      "test": "css/css-transitions/parsing/transition-property-invalid.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-property-valid.html",
+      "test": "css/css-transitions/parsing/transition-property-valid.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-shorthand.html",
+      "test": "css/css-transitions/parsing/transition-shorthand.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-timing-function-computed.html",
+      "test": "css/css-transitions/parsing/transition-timing-function-computed.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-timing-function-invalid.html",
+      "test": "css/css-transitions/parsing/transition-timing-function-invalid.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-timing-function-valid.html",
+      "test": "css/css-transitions/parsing/transition-timing-function-valid.html"
+    },
+    {
+      "id": "css__css-transitions__parsing__transition-valid.html",
+      "test": "css/css-transitions/parsing/transition-valid.html"
+    }
+  ]
+}
