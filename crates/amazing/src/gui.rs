@@ -898,17 +898,13 @@ mod windows {
     }
 
     fn render_page(input: &str, width: u32) -> Result<RenderedPage, String> {
-        let response = amazing_net::fetch(input, &amazing_net::FetchOptions::default())
+        let response = amazing_net::fetch_stream(input, &amazing_net::FetchOptions::default(), amazing_net::StreamOptions::default())
             .map_err(|error| error.to_string())?;
-        // File responses synthesize a UTF-8 Content-Type. It is not transport
-        // metadata and must not override a local document's BOM or meta tag.
-        let transport = if response.url.starts_with("http://") || response.url.starts_with("https://") {
-            crate::document::transport_label(response.headers.get("content-type"))
-        } else {
-            None
-        };
+        let (document, _) = crate::document::parse_streaming_document(response)
+            .map_err(|error| error.to_string())?;
+        document.require_static_xml().map_err(|error| error.to_string())?;
         let host = Rc::new(RefCell::new(BrowserDomHost {
-            dom: amazing_html::parse_bytes(&response.body, transport),
+            dom: document.dom,
             native_forwarded: false,
         }));
         let scripts = {
