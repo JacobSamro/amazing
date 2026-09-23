@@ -41,6 +41,22 @@ pub enum JsValue {
 #[derive(Clone)]
 pub struct Obj(pub Rc<RefCell<JsObject>>);
 
+/// Opaque identity supplied by an embedding for a live host object. The
+/// runtime adds its own realm identity before storing this in an internal slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct HostHandle {
+    pub arena: u64,
+    pub slot: u32,
+    pub generation: u32,
+    pub brand: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct HostIdentity {
+    pub realm: u64,
+    pub handle: HostHandle,
+}
+
 impl Obj {
     /// Borrow the object (never held across user-code calls).
     pub fn borrow(&self) -> std::cell::Ref<'_, JsObject> {
@@ -400,6 +416,19 @@ pub enum FunctionBody {
     Expr(ast::Expr),
     /// Rust-implemented built-in (`Math.abs`, `Array.prototype.push`, ...).
     Native(NativeFn),
+    /// Per-interpreter host operation, independent of AST and VM frame layout.
+    HostNative(HostFunctionId, HostCallPolicy, u64),
+}
+
+/// An interpreter-local key for an embedding's native dispatcher.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct HostFunctionId(pub u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostCallPolicy {
+    CallOnly,
+    ConstructOnly,
+    CallAndConstruct,
 }
 
 /// Signature of built-in implementations: receiver (`this`), arguments.
@@ -523,6 +552,8 @@ pub struct JsObject {
     /// True once this object has been invoked via `new` as a constructor
     /// (cheap stand-in for the internal Slots checks the spec performs).
     pub constructed: bool,
+    /// Engine-private brand and identity; never reflected as a JS property.
+    pub(crate) host_identity: Option<HostIdentity>,
 }
 
 impl Default for JsObject {
@@ -540,6 +571,7 @@ impl JsObject {
             extensible: true,
             func: None,
             constructed: false,
+            host_identity: None,
         }
     }
 
