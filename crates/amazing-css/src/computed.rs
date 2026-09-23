@@ -67,6 +67,21 @@ impl ComputedStyle {
     pub(crate) fn mark_author_specified(&mut self, property: &str) {
         self.author_specified.insert(property.to_owned());
     }
+    /// A logical and physical longhand name the same computed value after
+    /// writing-mode and direction have been resolved by the cascade.
+    pub(crate) fn mirror_logical(&mut self, logical: &str, physical: &str) {
+        if let Some(value) = self.props.get(physical).cloned() {
+            self.props.insert(logical.to_owned(), value);
+        }
+        if let Some(value) = self.typed.get(physical).cloned() {
+            self.typed.insert(logical.to_owned(), value);
+        }
+        if self.author_specified.contains(physical) {
+            self.author_specified.insert(logical.to_owned());
+        } else {
+            self.author_specified.remove(logical);
+        }
+    }
 
     fn rebuild_typed(&mut self) {
         self.typed = self
@@ -732,6 +747,20 @@ const PROPERTIES: &[PropertyMetadata] = &[
         initial: "horizontal-tb",
         inherited: true,
     },
+    PropertyMetadata { name: "inline-size", initial: "auto", inherited: false },
+    PropertyMetadata { name: "block-size", initial: "auto", inherited: false },
+    PropertyMetadata { name: "min-inline-size", initial: "auto", inherited: false },
+    PropertyMetadata { name: "min-block-size", initial: "auto", inherited: false },
+    PropertyMetadata { name: "max-inline-size", initial: "none", inherited: false },
+    PropertyMetadata { name: "max-block-size", initial: "none", inherited: false },
+    PropertyMetadata { name: "padding-inline-start", initial: "0", inherited: false },
+    PropertyMetadata { name: "padding-inline-end", initial: "0", inherited: false },
+    PropertyMetadata { name: "padding-block-start", initial: "0", inherited: false },
+    PropertyMetadata { name: "padding-block-end", initial: "0", inherited: false },
+    PropertyMetadata { name: "inset-inline-start", initial: "auto", inherited: false },
+    PropertyMetadata { name: "inset-inline-end", initial: "auto", inherited: false },
+    PropertyMetadata { name: "inset-block-start", initial: "auto", inherited: false },
+    PropertyMetadata { name: "inset-block-end", initial: "auto", inherited: false },
     PropertyMetadata {
         name: "z-index",
         initial: "auto",
@@ -768,6 +797,14 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
         return Vec::new();
     }
     let parts: Vec<&str> = value.split_ascii_whitespace().collect();
+    let logical_parts = if matches!(property.as_str(),
+        "margin-inline" | "margin-block" | "padding-inline" | "padding-block"
+        | "inset-inline" | "inset-block") {
+        top_level_components(&tokenize(value))
+            .map(|parts| parts.into_iter().map(serialize).collect::<Vec<_>>())
+    } else {
+        None
+    };
     match property.as_str() {
         "all" if contains_var_function(value) => PROPERTIES
             .iter()
@@ -792,10 +829,15 @@ pub(crate) fn expand_declaration(property: &str, value: &str) -> Vec<(String, St
                 })
                 .collect()
         }
-        "margin-inline" if (1..=2).contains(&parts.len()) => vec![
-            ("margin-inline-start".to_owned(), parts[0].to_owned()),
-            ("margin-inline-end".to_owned(), parts[parts.len() - 1].to_owned()),
-        ],
+        "margin-inline" | "margin-block" | "padding-inline" | "padding-block"
+        | "inset-inline" | "inset-block"
+            if logical_parts.as_ref().is_some_and(|parts| (1..=2).contains(&parts.len())) => {
+            let parts = logical_parts.as_ref().unwrap();
+            vec![
+                (format!("{property}-start"), parts[0].clone()),
+                (format!("{property}-end"), parts[parts.len() - 1].clone()),
+            ]
+        },
         "inset" if !parts.is_empty() => SIDES
             .iter()
             .enumerate()
@@ -1317,9 +1359,15 @@ fn radius_component(tokens: &[Token]) -> Option<String> {
         }
         _ => {
             let text = serialize(tokens);
-            let inside = text.trim().strip_prefix("calc(")?.strip_suffix(')')?;
-            let pixels = inside.strip_suffix("px")?.trim().parse::<f32>().ok()?;
-            pixels.is_finite().then(|| format!("{}px", pixels.max(0.0)))
+            if crate::math::length_percentage(&text, true) {
+                if let Some(inside) = text.trim().strip_prefix("calc(").and_then(|s| s.strip_suffix(')')) {
+                    if let Some(pixels) = inside.strip_suffix("px").and_then(|s| s.trim().parse::<f32>().ok()) {
+                        if pixels.is_finite() { return Some(format!("{}px", pixels.max(0.0))); }
+                    }
+                }
+                return Some(text);
+            }
+            None
         },
     }
 }

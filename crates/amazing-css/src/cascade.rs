@@ -389,6 +389,35 @@ fn compute_one(
             candidates.entry(physical).or_default().extend(values);
         }
     }
+    // Logical sizing shares a cascade slot with its physical counterpart.
+    // Both candidates keep their original specificity, layer, and source order.
+    let vertical = !writing_mode.eq_ignore_ascii_case("horizontal-tb");
+    for (logical, horizontal, vertical_name) in [
+        ("inline-size", "width", "height"), ("block-size", "height", "width"),
+        ("min-inline-size", "min-width", "min-height"),
+        ("min-block-size", "min-height", "min-width"),
+        ("max-inline-size", "max-width", "max-height"),
+        ("max-block-size", "max-height", "max-width"),
+    ] {
+        if let Some(values) = candidates.get(logical).cloned() {
+            candidates.entry(if vertical { vertical_name } else { horizontal }).or_default().extend(values);
+        }
+    }
+    for (family, physicals) in [
+        ("padding", ["padding-top", "padding-right", "padding-bottom", "padding-left"]),
+        ("inset", ["top", "right", "bottom", "left"]),
+    ] {
+        for (axis, edge) in [("inline", "start"), ("inline", "end"), ("block", "start"), ("block", "end")] {
+            let logical = format!("{family}-{axis}-{edge}");
+            if let Some(values) = candidates.get(logical.as_str()).cloned() {
+                let margin = format!("margin-{axis}-{edge}");
+                let index = match physical_margin_for(&margin, rtl, writing_mode) {
+                    "margin-top" => 0, "margin-right" => 1, "margin-bottom" => 2, _ => 3,
+                };
+                candidates.entry(physicals[index]).or_default().extend(values);
+            }
+        }
+    }
     // Resolve logical border candidates against the same computed axes as margins.
     for (logical, margin, physicals) in [
         ("border-inline-start-width", "margin-inline-start", ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"]),
@@ -424,6 +453,27 @@ fn compute_one(
     let mut style = computed::resolve_with_root(parent_style, cascaded, root_font_px);
     for property in author_properties {
         style.mark_author_specified(property);
+    }
+    for (logical, horizontal, vertical_name) in [
+        ("inline-size", "width", "height"), ("block-size", "height", "width"),
+        ("min-inline-size", "min-width", "min-height"), ("min-block-size", "min-height", "min-width"),
+        ("max-inline-size", "max-width", "max-height"), ("max-block-size", "max-height", "max-width"),
+    ] {
+        style.mirror_logical(logical, if vertical { vertical_name } else { horizontal });
+    }
+    for (family, physicals) in [
+        ("margin", ["margin-top", "margin-right", "margin-bottom", "margin-left"]),
+        ("padding", ["padding-top", "padding-right", "padding-bottom", "padding-left"]),
+        ("inset", ["top", "right", "bottom", "left"]),
+    ] {
+        for (axis, edge) in [("inline", "start"), ("inline", "end"), ("block", "start"), ("block", "end")] {
+            let logical = format!("{family}-{axis}-{edge}");
+            let margin = format!("margin-{axis}-{edge}");
+            let index = match physical_margin_for(&margin, rtl, writing_mode) {
+                "margin-top" => 0, "margin-right" => 1, "margin-bottom" => 2, _ => 3,
+            };
+            style.mirror_logical(&logical, physicals[index]);
+        }
     }
     style
 }
