@@ -462,6 +462,9 @@ impl Compiler {
                             value
                         }
                         ast::PropValue::Init(value) => self.expression(value)?,
+                        ast::PropValue::CoverInitializedName { .. } => {
+                            return Err(self.error(property.span, "cover initialized name"));
+                        }
                         ast::PropValue::Method(_) => {
                             return Err(self.error(property.span, "object method"));
                         }

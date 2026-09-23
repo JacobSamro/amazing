@@ -1184,8 +1184,11 @@ fn native_date_to_string(
 
 fn native_eval(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
-    let program =
-        crate::parse_script(&source).map_err(|error| Throw::syntax_error(error.to_string()))?;
+    let program = if i.strict_eval_context && i.direct_eval_call {
+        crate::parser::parse_script_strict(&source)
+    } else {
+        crate::parse_script(&source)
+    }.map_err(|error| Throw::syntax_error(error.to_string()))?;
     i.run_program(&program)
 }
 
@@ -2451,6 +2454,26 @@ fn native_json_parse(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let source = i.to_string(args.first().unwrap_or(&JsValue::Undefined))?;
+    // JSONWhiteSpace is narrower than ECMAScript WhiteSpace. The script
+    // parser below accepts additional Unicode separators, so reject them
+    // outside quoted JSON strings before handing the text to it.
+    let mut in_string = false;
+    let mut escaped = false;
+    for ch in source.chars() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+        } else if ch == '"' {
+            in_string = true;
+        } else if ch.is_whitespace() && !matches!(ch, ' ' | '\t' | '\n' | '\r') {
+            return Err(Throw::syntax_error("invalid JSON whitespace"));
+        }
+    }
     let program = crate::parse_script(&format!("({source})"))
         .map_err(|error| Throw::syntax_error(error.to_string()))?;
     i.run_program(&program)

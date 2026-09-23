@@ -47,6 +47,61 @@ pub struct Program {
     pub span: Span,
 }
 
+/// A module keeps declarations in source order for linking and evaluation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Module {
+    pub items: Vec<ModuleItem>,
+    pub span: Span,
+    pub has_top_level_await: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ModuleItem {
+    Statement(Stmt),
+    Import(ImportDeclaration),
+    ExportNamed {
+        declaration: Option<Stmt>,
+        names: Vec<ExportName>,
+        from: Option<String>,
+        attributes: Vec<ImportAttribute>,
+    },
+    ExportAll {
+        as_name: Option<String>,
+        from: String,
+        attributes: Vec<ImportAttribute>,
+    },
+    ExportDefaultExpression(Expr),
+    ExportDefaultDeclaration(Stmt),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportDeclaration {
+    pub from: String,
+    /// Optional source/defer import phase.
+    pub phase: Option<String>,
+    /// `None` for a side-effect import; `"*"` for a namespace import.
+    pub bindings: Vec<ImportBinding>,
+    pub attributes: Vec<ImportAttribute>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportBinding {
+    pub imported: String,
+    pub local: Ident,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExportName {
+    pub local: String,
+    pub exported: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportAttribute {
+    pub key: String,
+    pub value: String,
+}
+
 /// An identifier reference or binding name.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ident {
@@ -104,6 +159,10 @@ pub enum StmtKind {
         test: Expr,
         body: Box<Stmt>,
     },
+    With {
+        object: Expr,
+        body: Box<Stmt>,
+    },
     For {
         init: Option<ForInit>,
         test: Option<Expr>,
@@ -116,6 +175,11 @@ pub enum StmtKind {
         body: Box<Stmt>,
     },
     ForOf {
+        left: ForLeft,
+        right: Expr,
+        body: Box<Stmt>,
+    },
+    ForAwaitOf {
         left: ForLeft,
         right: Expr,
         body: Box<Stmt>,
@@ -151,7 +215,12 @@ pub enum VarKind {
 pub struct VarDecl {
     pub kind: VarKind,
     pub decls: Vec<Declarator>,
+    /// Resource declaration syntax; disposal remains a runtime milestone.
+    pub resource_kind: Option<ResourceKind>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceKind { Using, AwaitUsing }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Declarator {
@@ -217,6 +286,8 @@ pub struct TryStmt {
 pub struct CatchClause {
     /// `None` for optional catch binding (`try {} catch {}`).
     pub param: Option<Ident>,
+    /// Full catch binding, including array and object patterns.
+    pub binding: Option<Binding>,
     pub body: Block,
 }
 
@@ -255,6 +326,7 @@ pub struct ClassItem {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClassMember {
     Method(ClassMethod),
+    StaticBlock(Block),
     /// Field definition — **storage only** in this phase (initializers are
     /// captured but not scheduled/evaluated semantics-wise yet).
     Field(ClassField),
@@ -290,6 +362,7 @@ pub struct ClassField {
     /// Lossless code units when `key` is a quoted string literal.
     pub key_utf16: Option<Vec<u16>>,
     pub is_static: bool,
+    pub is_accessor: bool,
     pub init: Option<Expr>,
     pub span: Span,
 }
@@ -315,6 +388,8 @@ pub struct Expr {
     pub span: Span,
     /// Lossless code units when `kind` is [`ExprKind::Str`].
     pub string_utf16: Option<Vec<u16>>,
+    /// Preserves a cover-grammar distinction in array/object assignment patterns.
+    pub trailing_comma_after_spread: bool,
 }
 
 impl Expr {
@@ -323,6 +398,7 @@ impl Expr {
             kind,
             span,
             string_utf16: None,
+            trailing_comma_after_spread: false,
         }
     }
 }
@@ -334,15 +410,25 @@ pub enum ExprKind {
     /// A validated pattern; evaluation creates a fresh RegExp object.
     RegExp(std::rc::Rc<amazing_regex::Regex>),
     Num(Numeric),
+    /// Arbitrary-precision integer literal, normalized to unsigned decimal digits.
+    BigInt(String),
     Str(String),
     Bool(bool),
     Null,
     Ident(Ident),
     This,
+    NewTarget,
+    DynamicImport(Vec<Expr>),
+    DynamicImportPhase { phase: String, args: Vec<Expr> },
+    ImportMeta,
     /// Bare `super`; legal only as the object of member/call chains, which
     /// the interpreter validates.
     Super,
     Template(TemplateLit),
+    TaggedTemplate {
+        tag: Box<Expr>,
+        template: TemplateLit,
+    },
     /// Elements are `None` for holes; spread elements appear as
     /// [`ExprKind::Spread`] wrapped in `Some`.
     Array(Vec<Option<Expr>>),
@@ -469,6 +555,8 @@ pub enum ObjElem {
 pub enum PropValue {
     /// `{ a }` — key doubles as the value binding.
     Shorthand(Ident),
+    /// Cover grammar `{name = initializer}`, valid only in an assignment pattern.
+    CoverInitializedName { binding: Ident, default: Expr },
     Init(Expr),
     /// Method/getter/setter in an object literal.
     Method(ClassMethod),

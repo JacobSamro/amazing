@@ -19,6 +19,14 @@ impl Parser {
             }
             body.push(stmt);
         }
+        self.validate_scope_names(&body, false)?;
+        if self.strict_script {
+            self.validate_strict_statements(&body)?;
+            if let Some(at) = self.tokens.borrow().legacy_escape_in(self.span_from(start)) {
+                return Err(self.err_at(at, "legacy string escape is forbidden in strict mode"));
+            }
+        }
+        cover::validate_program(&body)?;
         Ok(Program {
             span: self.span_from(start),
             body,
@@ -27,6 +35,14 @@ impl Parser {
 
     pub(super) fn parse_stmt(&mut self) -> Result<Stmt, SyntaxError> {
         let start = self.cur_loc();
+        if self.word("let") && self.nth_punct(1, Punct::LBracket)
+            && self.nth(1).newline_before {
+            return Err(self.err("expression statements cannot begin with `let [`"));
+        }
+        if self.cur().escaped_identifier && matches!(self.cur().kind, TokenKind::Keyword(_))
+            && !(self.at_kw(crate::tokens::Keyword::Yield) && !self.strict_script && self.in_generator == 0) {
+            return Err(self.err("escaped reserved word"));
+        }
         let kind = match &self.cur().kind {
             TokenKind::Punct(Punct::Lbrace) => return self.parse_block_stmt(),
             TokenKind::Punct(Punct::Semi) => {
@@ -43,12 +59,26 @@ impl Parser {
                 self.semicolon()?;
                 StmtKind::Var(decl)
             }
-            TokenKind::Ident(name) if name == "let" && self.let_starts_decl() => {
+            TokenKind::Ident(name) if name == "using" && self.word("using")
+                && matches!(self.nth(1).kind, TokenKind::Ident(_))
+                && !self.nth(1).newline_before => {
+                let decl = self.parse_using_decl(false, false)?;
+                self.semicolon()?;
+                StmtKind::Var(decl)
+            }
+            TokenKind::Ident(name) if name == "await" && self.word("await")
+                && matches!(self.nth(1).kind, TokenKind::Ident(ref next) if next == "using")
+                && !self.nth(1).newline_before => {
+                let decl = self.parse_using_decl(true, false)?;
+                self.semicolon()?;
+                StmtKind::Var(decl)
+            }
+            TokenKind::Ident(name) if name == "let" && self.word("let") && self.let_starts_decl() => {
                 let decl = self.parse_var_decl(VarKind::Let, false)?;
                 self.semicolon()?;
                 StmtKind::Var(decl)
             }
-            TokenKind::Ident(name) if name == "async" && self.nth_is_function(1) => {
+            TokenKind::Ident(name) if name == "async" && self.word("async") && self.nth_is_function(1) => {
                 self.bump(); // `async`
                 let mut f = self.parse_function_rest(true)?;
                 f.is_async = true;
@@ -78,6 +108,22 @@ impl Parser {
             TokenKind::Keyword(crate::tokens::Keyword::If) => self.parse_if_stmt()?,
             TokenKind::Keyword(crate::tokens::Keyword::For) => self.parse_for_stmt()?,
             TokenKind::Keyword(crate::tokens::Keyword::While) => self.parse_while_stmt()?,
+            TokenKind::Keyword(crate::tokens::Keyword::With) => {
+                if self.strict_script {
+                    return Err(self.err("with statement is forbidden in strict mode"));
+                }
+                self.bump();
+                self.expect_punct(Punct::LParen)?;
+                let object = self.parse_expression()?;
+                self.expect_punct(Punct::RParen)?;
+                let body = self.parse_statement_position()?;
+                if matches!(body.kind, StmtKind::Var(_) | StmtKind::Function(_) | StmtKind::Class(_))
+                    || is_labeled_function(&body) {
+                    return Err(self.err_at(body.span.start, "with body cannot be a declaration"));
+                }
+                let body = Box::new(body);
+                StmtKind::With { object, body }
+            }
             TokenKind::Keyword(crate::tokens::Keyword::Do) => self.parse_do_while_stmt()?,
             TokenKind::Keyword(crate::tokens::Keyword::Switch) => self.parse_switch_stmt()?,
             TokenKind::Keyword(crate::tokens::Keyword::Try) => self.parse_try_stmt()?,
@@ -91,6 +137,12 @@ impl Parser {
                 StmtKind::Debugger
             }
             TokenKind::Keyword(crate::tokens::Keyword::Import)
+                if self.nth_punct(1, Punct::LParen) || self.nth_punct(1, Punct::Dot) => {
+                let expr = self.parse_expression_no_in(false)?;
+                self.semicolon()?;
+                StmtKind::Expression(expr)
+            }
+            TokenKind::Keyword(crate::tokens::Keyword::Import)
             | TokenKind::Keyword(crate::tokens::Keyword::Export) => {
                 return Err(self.err("modules (import/export) are deferred"));
             }
@@ -100,7 +152,9 @@ impl Parser {
             _ => {
                 // Labeled statement: `name :` (colon on any line? Spec
                 // requires the colon to follow; keep it simple and accept).
-                if matches!(self.cur().kind, TokenKind::Ident(_)) && self.nth_punct(1, Punct::Colon)
+                if (matches!(self.cur().kind, TokenKind::Ident(_))
+                    || self.at_kw(crate::tokens::Keyword::Yield) && !self.strict_script && self.in_generator == 0)
+                    && self.nth_punct(1, Punct::Colon)
                 {
                     if self.word("await") && self.in_async > 0 {
                         return Err(self.err("await cannot be a label in an async function"));
@@ -115,13 +169,32 @@ impl Parser {
         Ok(Stmt::new(kind, self.span_from(start)))
     }
 
+    /// A single-statement body uses Statement grammar. In sloppy code, `let`
+    /// followed by a line break can be an identifier expression before the
+    /// next statement, even when that statement begins with a binding token.
+    fn parse_statement_position(&mut self) -> Result<Stmt, SyntaxError> {
+        if !self.strict_script && !self.module_goal && self.word("let")
+            && self.nth(1).newline_before
+            && (matches!(self.nth(1).kind, TokenKind::Ident(_))
+                || self.nth_punct(1, Punct::Lbrace))
+        {
+            let start = self.cur_loc();
+            let expression = self.parse_expression_no_in(false)?;
+            self.semicolon()?;
+            return Ok(Stmt::new(StmtKind::Expression(expression), self.span_from(start)));
+        }
+        self.parse_stmt()
+    }
+
     /// `let` begins a declaration only when followed by a binding start.
     /// `let[0]` and `let.x` stay expressions (destructuring deferred → the
     /// bracket/brace forms get a dedicated diagnostic).
     pub(super) fn let_starts_decl(&self) -> bool {
         matches!(self.nth(1).kind, TokenKind::Ident(_))
+            || self.in_generator > 0 && matches!(self.nth(1).kind, TokenKind::Keyword(crate::tokens::Keyword::Yield))
             || matches!(self.nth(1).kind, TokenKind::Punct(Punct::Lbrace))
             || matches!(self.nth(1).kind, TokenKind::Punct(Punct::LBracket))
+                && !self.nth(1).newline_before
     }
 
     pub(super) fn nth_is_function(&self, n: usize) -> bool {
@@ -145,6 +218,9 @@ impl Parser {
         loop {
             let dstart = self.cur_loc();
             let binding = self.parse_binding()?;
+            if kind != VarKind::Var && binding_names(&binding).iter().any(|name| name.name == "let") {
+                return Err(self.err_at(dstart, "let cannot be a lexical binding name"));
+            }
             let init = if self.eat_punct(Punct::Eq) {
                 Some(self.parse_assignment_expr()?)
             } else {
@@ -162,7 +238,37 @@ impl Parser {
                 break;
             }
         }
-        Ok(VarDecl { kind, decls })
+        Ok(VarDecl { kind, decls, resource_kind: None })
+    }
+
+    fn parse_using_decl(&mut self, await_using: bool, for_head: bool) -> Result<VarDecl, SyntaxError> {
+        if !for_head && !self.module_goal && self.block_depth == 0 {
+            return Err(self.err("using declarations require a block"));
+        }
+        if await_using {
+            if self.in_async == 0 { return Err(self.err("await using requires async context")); }
+            self.bump(); // await
+            if self.module_goal && self.in_function == 0 { self.has_top_level_await = true; }
+        }
+        self.bump(); // using
+        let mut decls = Vec::new();
+        loop {
+            let start = self.cur_loc();
+            if self.cur().newline_before { return Err(self.err("line break after using")); }
+            let binding = Binding::Ident(self.expect_ident()?);
+            if matches!(&binding, Binding::Ident(name) if name.name == "let") {
+                return Err(self.err_at(start, "let cannot be a using binding"));
+            }
+            let init = if self.eat_punct(Punct::Eq) { Some(self.parse_assignment_expr()?) } else { None };
+            if init.is_none() && !for_head { return Err(self.err_at(start, "using requires an initializer")); }
+            decls.push(Declarator { binding, init, span: self.span_from(start) });
+            if !self.eat_punct(Punct::Comma) { break; }
+        }
+        Ok(VarDecl {
+            kind: VarKind::Const,
+            decls,
+            resource_kind: Some(if await_using { ResourceKind::AwaitUsing } else { ResourceKind::Using }),
+        })
     }
 
     pub(super) fn parse_binding(&mut self) -> Result<Binding, SyntaxError> {
@@ -212,9 +318,19 @@ impl Parser {
                         break;
                     }
                     let (key, shorthand_ident) = if self.eat_punct(Punct::LBracket) {
-                        let expression = self.parse_assignment_expr()?;
+                        let saved_no_in = self.no_in;
+                        self.no_in = false;
+                        let expression = self.parse_assignment_expr();
+                        self.no_in = saved_no_in;
+                        let expression = expression?;
                         self.expect_punct(Punct::RBracket)?;
                         (BindingKey::Computed(Box::new(expression)), None)
+                    } else if let TokenKind::Str(value) = self.cur().kind.clone() {
+                        self.bump();
+                        (BindingKey::Static(value), None)
+                    } else if let TokenKind::Numeric(value) = self.cur().kind.clone() {
+                        self.bump();
+                        (BindingKey::Static(value.raw), None)
                     } else {
                         let identifier = self.prop_name()?;
                         (
@@ -225,6 +341,9 @@ impl Parser {
                     let value = if self.eat_punct(Punct::Colon) {
                         self.parse_binding_inner(true)?
                     } else if let Some(identifier) = shorthand_ident {
+                        if self.forbidden_binding_name(&identifier.name) {
+                            return Err(self.err_at(identifier.span.start, "reserved shorthand binding name"));
+                        }
                         let mut shorthand = Binding::Ident(identifier);
                         if self.eat_punct(Punct::Eq) {
                             let saved = self.no_in;
@@ -259,12 +378,14 @@ impl Parser {
 
     pub(super) fn parse_block_stmt(&mut self) -> Result<Stmt, SyntaxError> {
         let block = self.parse_block()?;
+        self.validate_scope_names(&block.body, true)?;
         let span = block.span;
         Ok(Stmt::new(StmtKind::Block(block), span))
     }
 
     pub(super) fn parse_block(&mut self) -> Result<Block, SyntaxError> {
         let start = self.expect_punct(Punct::Lbrace)?;
+        self.block_depth += 1;
         let mut body = Vec::new();
         while !self.at_punct(Punct::Rbrace) {
             if self.at_eof() {
@@ -273,6 +394,7 @@ impl Parser {
             body.push(self.parse_stmt()?);
         }
         self.bump(); // }
+        self.block_depth -= 1;
         Ok(Block {
             body,
             span: self.span_from(start.start),
@@ -284,9 +406,12 @@ impl Parser {
         self.expect_punct(Punct::LParen)?;
         let cond = self.parse_expression_no_in(false)?;
         self.expect_punct(Punct::RParen)?;
-        let then = Box::new(self.parse_stmt()?);
+        let then = Box::new(self.parse_statement_position()?);
+        reject_statement_position_declaration(&then, self.strict_script, true)?;
         let els = if self.eat_kw(crate::tokens::Keyword::Else) {
-            Some(Box::new(self.parse_stmt()?))
+            let statement = Box::new(self.parse_statement_position()?);
+            reject_statement_position_declaration(&statement, self.strict_script, true)?;
+            Some(statement)
         } else {
             None
         };
@@ -299,7 +424,8 @@ impl Parser {
         let test = self.parse_expression_no_in(false)?;
         self.expect_punct(Punct::RParen)?;
         self.loop_depth += 1;
-        let body = Box::new(self.parse_stmt()?);
+        let body = Box::new(self.parse_statement_position()?);
+        reject_statement_position_declaration(&body, true, true)?;
         self.loop_depth -= 1;
         Ok(StmtKind::While { test, body })
     }
@@ -307,7 +433,8 @@ impl Parser {
     pub(super) fn parse_do_while_stmt(&mut self) -> Result<StmtKind, SyntaxError> {
         self.bump(); // do
         self.loop_depth += 1;
-        let body = Box::new(self.parse_stmt()?);
+        let body = Box::new(self.parse_statement_position()?);
+        reject_statement_position_declaration(&body, true, true)?;
         self.loop_depth -= 1;
         if !self.eat_kw(crate::tokens::Keyword::While) {
             return Err(self.err("expected `while` after do-while body"));
@@ -315,16 +442,42 @@ impl Parser {
         self.expect_punct(Punct::LParen)?;
         let test = self.parse_expression_no_in(false)?;
         self.expect_punct(Punct::RParen)?;
-        // `do … while (…) ` is followed by optional `;` (ASI rule 1).
-        self.semicolon()?;
+        // The do-while closing semicolon is optional even when the next
+        // statement starts on the same line (ASI rule 1 special case).
+        self.eat_punct(Punct::Semi);
         Ok(StmtKind::DoWhile { body, test })
     }
 
     pub(super) fn parse_for_stmt(&mut self) -> Result<StmtKind, SyntaxError> {
         self.bump(); // for
+        let for_await = self.word("await");
+        if for_await {
+            if self.in_async == 0 { return Err(self.err("for await requires async context")); }
+            self.bump();
+            if self.module_goal && self.in_function == 0 { self.has_top_level_await = true; }
+        }
         self.expect_punct(Punct::LParen)?;
+        let await_using = self.word("await")
+            && matches!(self.nth(1).kind, TokenKind::Ident(ref word) if word == "using")
+            && !self.nth(1).newline_before;
+        if self.word("using") && !matches!(self.nth(1).kind, TokenKind::Ident(ref name) if name == "of") || await_using {
+            let decl = self.parse_using_decl(await_using, true)?;
+            if !self.word("of") { return Err(self.err("for using requires an of clause")); }
+            let decl = validate_for_decl(&decl, self.cur_loc(), false)?;
+            self.bump();
+            let right = self.parse_assignment_expr()?;
+            self.expect_punct(Punct::RParen)?;
+            self.loop_depth += 1;
+            let body = Box::new(self.parse_statement_position()?);
+            reject_statement_position_declaration(&body, true, true)?;
+            self.loop_depth -= 1;
+            validate_for_head_body(&decl, &body, self.cur_loc())?;
+            return Ok(if for_await { StmtKind::ForAwaitOf { left: ForLeft::Decl(Box::new(decl)), right, body } }
+                else { StmtKind::ForOf { left: ForLeft::Decl(Box::new(decl)), right, body } });
+        }
         // Empty init: C-style only.
         if self.at_punct(Punct::Semi) {
+            if for_await { return Err(self.err("for await requires an of clause")); }
             self.bump(); // the `;` terminating the (absent) init clause
             return self.parse_for_c_style(None);
         }
@@ -332,7 +485,7 @@ impl Parser {
         let decl_head = match &self.cur().kind {
             TokenKind::Keyword(crate::tokens::Keyword::Var) => Some(VarKind::Var),
             TokenKind::Keyword(crate::tokens::Keyword::Const) => Some(VarKind::Const),
-            TokenKind::Ident(name) if name == "let" && self.let_starts_decl() => Some(VarKind::Let),
+            TokenKind::Ident(name) if name == "let" && self.word("let") && self.let_starts_decl() => Some(VarKind::Let),
             _ => None,
         };
         if let Some(kind) = decl_head {
@@ -342,26 +495,34 @@ impl Parser {
             let decl = self.parse_var_decl_no_in(kind)?;
             // for-in / for-of?
             if self.at_kw(crate::tokens::Keyword::In) || self.word("of") {
-                let decl = validate_for_decl(&decl, kw_start)?;
+                let annex_b_for_in = self.at_kw(crate::tokens::Keyword::In) && !self.strict_script;
+                let decl = validate_for_decl(&decl, kw_start, annex_b_for_in)?;
                 let stmt = if self.word("of") {
                     self.bump();
                     let right = self.parse_assignment_expr()?;
                     self.expect_punct(Punct::RParen)?;
                     self.loop_depth += 1;
-                    let body = Box::new(self.parse_stmt()?);
+                    let body = Box::new(self.parse_statement_position()?);
+                    reject_statement_position_declaration(&body, true, true)?;
                     self.loop_depth -= 1;
-                    StmtKind::ForOf {
+                    validate_for_head_body(&decl, &body, kw_start)?;
+                    if for_await { StmtKind::ForAwaitOf {
+                        left: ForLeft::Decl(Box::new(decl)), right, body,
+                    } } else { StmtKind::ForOf {
                         left: ForLeft::Decl(Box::new(decl)),
                         right,
                         body,
-                    }
+                    } }
                 } else {
+                    if for_await { return Err(self.err("for await requires an of clause")); }
                     self.bump(); // in
                     let right = self.parse_expression_no_in(true)?;
                     self.expect_punct(Punct::RParen)?;
                     self.loop_depth += 1;
-                    let body = Box::new(self.parse_stmt()?);
+                    let body = Box::new(self.parse_statement_position()?);
+                    reject_statement_position_declaration(&body, true, true)?;
                     self.loop_depth -= 1;
+                    validate_for_head_body(&decl, &body, kw_start)?;
                     StmtKind::ForIn {
                         left: ForLeft::Decl(Box::new(decl)),
                         right,
@@ -371,6 +532,7 @@ impl Parser {
                 return Ok(stmt);
             }
             self.expect_punct(Punct::Semi)?;
+            if for_await { return Err(self.err("for await requires an of clause")); }
             if kind == VarKind::Const && decl.decls.iter().any(|d| d.init.is_none()) {
                 return Err(self.err_at(kw_start, "const declarations require an initializer"));
             }
@@ -379,25 +541,40 @@ impl Parser {
         // Expression head: `for (x in y)` / `for (x of y)` / C-style.
         let expr = self.parse_expression_no_in(true)?;
         if self.at_kw(crate::tokens::Keyword::In) || self.word("of") {
-            ensure_assignable(&expr).map_err(|e| self.err_at(self.cur_loc(), e.message))?;
+            if matches!(expr.kind, ExprKind::Assign { .. }) {
+                return Err(self.err_at(expr.span.start, "for-in/of assignment head needs a target"));
+            }
+            if self.strict_script && strict_assignment_name(&expr).is_some() {
+                return Err(self.err_at(expr.span.start, "assignment to eval or arguments in strict mode"));
+            }
+            let sloppy_annex_b_call = !self.strict_script
+                && matches!(expr.kind, ExprKind::Call { .. });
+            if !sloppy_annex_b_call {
+                ensure_assignable(&expr).map_err(|e| self.err_at(self.cur_loc(), e.message))?;
+            }
             let stmt = if self.word("of") {
                 self.bump();
                 let right = self.parse_assignment_expr()?;
                 self.expect_punct(Punct::RParen)?;
                 self.loop_depth += 1;
-                let body = Box::new(self.parse_stmt()?);
+                let body = Box::new(self.parse_statement_position()?);
+                reject_statement_position_declaration(&body, true, true)?;
                 self.loop_depth -= 1;
-                StmtKind::ForOf {
+                if for_await { StmtKind::ForAwaitOf {
+                    left: ForLeft::Target(expr), right, body,
+                } } else { StmtKind::ForOf {
                     left: ForLeft::Target(expr),
                     right,
                     body,
-                }
+                } }
             } else {
+                if for_await { return Err(self.err("for await requires an of clause")); }
                 self.bump(); // in
                 let right = self.parse_expression_no_in(true)?;
                 self.expect_punct(Punct::RParen)?;
                 self.loop_depth += 1;
-                let body = Box::new(self.parse_stmt()?);
+                let body = Box::new(self.parse_statement_position()?);
+                reject_statement_position_declaration(&body, true, true)?;
                 self.loop_depth -= 1;
                 StmtKind::ForIn {
                     left: ForLeft::Target(expr),
@@ -408,6 +585,7 @@ impl Parser {
             return Ok(stmt);
         }
         self.expect_punct(Punct::Semi)?;
+        if for_await { return Err(self.err("for await requires an of clause")); }
         self.parse_for_c_style(Some(ForInit::Expr(expr)))
     }
 
@@ -427,7 +605,8 @@ impl Parser {
         };
         self.expect_punct(Punct::RParen)?;
         self.loop_depth += 1;
-        let body = Box::new(self.parse_stmt()?);
+        let body = Box::new(self.parse_statement_position()?);
+        reject_statement_position_declaration(&body, true, true)?;
         self.loop_depth -= 1;
         Ok(StmtKind::For {
             init,
@@ -481,6 +660,9 @@ impl Parser {
                 && !self.at_kw(crate::tokens::Keyword::Default)
             {
                 body.push(self.parse_stmt()?);
+                if body.last().is_some_and(is_resource_statement) {
+                    return Err(self.err("using declaration is not allowed in switch case"));
+                }
             }
             cases.push(SwitchCase {
                 test,
@@ -489,8 +671,167 @@ impl Parser {
             });
         }
         self.switch_depth -= 1;
+        let switch_body: Vec<Stmt> = cases.iter().flat_map(|case| case.body.iter().cloned()).collect();
+        self.validate_scope_names(&switch_body, true)?;
         self.bump(); // }
         Ok(StmtKind::Switch { disc, cases })
+    }
+
+    pub(super) fn validate_scope_names(&self, body: &[Stmt], block_functions: bool) -> Result<(), SyntaxError> {
+        let mut lexical = HashSet::new();
+        let mut var: HashSet<String> = body.iter()
+            .filter(|statement| !matches!(statement.kind, StmtKind::Var(_)))
+            .flat_map(var_declared_names)
+            .collect();
+        let mut annex_b_functions = HashSet::new();
+        for statement in body {
+            let mut names = Vec::new();
+            let is_lexical = match &statement.kind {
+                StmtKind::Var(decl) => {
+                    for declarator in &decl.decls {
+                        names.extend(binding_names(&declarator.binding));
+                    }
+                    decl.kind != VarKind::Var
+                }
+                StmtKind::Class(class) => {
+                    names.extend(class.name.iter());
+                    true
+                }
+                StmtKind::Function(function) if block_functions => {
+                    names.extend(function.name.iter());
+                    true
+                }
+                StmtKind::Function(function) => {
+                    names.extend(function.name.iter());
+                    false
+                }
+                _ => continue,
+            };
+            let annex_b_function = block_functions && !self.strict_script
+                && matches!(&statement.kind, StmtKind::Function(function)
+                    if !function.is_async && !function.is_generator);
+            for name in names {
+                if is_lexical {
+                    let previous = !lexical.insert(name.name.clone());
+                    if (previous && !(annex_b_function && annex_b_functions.contains(&name.name)))
+                        || var.contains(&name.name) {
+                        return Err(self.err_at(name.span.start, "duplicate lexical binding"));
+                    }
+                    if annex_b_function {
+                        annex_b_functions.insert(name.name.clone());
+                    }
+                } else {
+                    if lexical.contains(&name.name) {
+                        return Err(self.err_at(name.span.start, "var conflicts with lexical binding"));
+                    }
+                    var.insert(name.name.clone());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_strict_statements(&self, body: &[Stmt]) -> Result<(), SyntaxError> {
+        for statement in body {
+            match &statement.kind {
+                StmtKind::With { .. } => {
+                    return Err(self.err_at(statement.span.start, "with statement is forbidden in strict mode"));
+                }
+                StmtKind::Var(decl) => {
+                    for item in &decl.decls {
+                        for name in binding_names(&item.binding) {
+                            if strict_binding_name(&name.name) {
+                                return Err(self.err_at(name.span.start, "invalid strict binding name"));
+                            }
+                        }
+                        if let Some(init) = &item.init { self.validate_strict_expression(init)?; }
+                    }
+                }
+                StmtKind::Expression(expr) => self.validate_strict_expression(expr)?,
+                StmtKind::Block(block) => self.validate_strict_statements(&block.body)?,
+                StmtKind::Function(function) => {
+                    if let Some(name) = &function.name {
+                        if strict_binding_name(&name.name) {
+                            return Err(self.err_at(name.span.start, "invalid strict function name"));
+                        }
+                    }
+                    self.validate_strict_statements(&function.body.body)?;
+                }
+                StmtKind::If { then, els, .. } => {
+                    self.validate_strict_statements(std::slice::from_ref(then.as_ref()))?;
+                    if let Some(els) = els {
+                        self.validate_strict_statements(std::slice::from_ref(els.as_ref()))?;
+                    }
+                }
+                StmtKind::While { body, .. } | StmtKind::DoWhile { body, .. }
+                | StmtKind::For { body, .. } | StmtKind::ForIn { body, .. }
+                | StmtKind::ForOf { body, .. } | StmtKind::ForAwaitOf { body, .. }
+                | StmtKind::Labeled { body, .. } => {
+                    self.validate_strict_statements(std::slice::from_ref(body.as_ref()))?;
+                }
+                StmtKind::Try(try_stmt) => {
+                    self.validate_strict_statements(&try_stmt.block.body)?;
+                    if let Some(catch) = &try_stmt.catch {
+                        self.validate_strict_statements(&catch.body.body)?;
+                    }
+                    if let Some(finally) = &try_stmt.finally {
+                        self.validate_strict_statements(&finally.body)?;
+                    }
+                }
+                StmtKind::Switch { cases, .. } => {
+                    for case in cases {
+                        self.validate_strict_statements(&case.body)?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_strict_expression(&self, expr: &Expr) -> Result<(), SyntaxError> {
+        match &expr.kind {
+            ExprKind::Assign { target, .. } | ExprKind::Update { target, .. }
+                if strict_assignment_name(target).is_some() => {
+                return Err(self.err_at(expr.span.start, "assignment to eval or arguments in strict mode"));
+            }
+            ExprKind::Object(elements) => {
+                for element in elements {
+                    match element {
+                        ObjElem::Spread(value) => self.validate_strict_expression(value)?,
+                        ObjElem::Prop(property) => match &property.value {
+                            PropValue::Shorthand(id) if matches!(id.name.as_str(),
+                                "implements" | "interface" | "let" | "package" | "private"
+                                | "protected" | "public" | "static" | "yield") => {
+                                return Err(self.err_at(id.span.start, "strict reserved shorthand"));
+                            }
+                            PropValue::Init(value) => self.validate_strict_expression(value)?,
+                            _ => {}
+                        },
+                    }
+                }
+            }
+            ExprKind::Paren(inner) | ExprKind::Spread(inner) => self.validate_strict_expression(inner)?,
+            ExprKind::Sequence(items) => {
+                for item in items { self.validate_strict_expression(item)?; }
+            }
+            ExprKind::Assign { target, value, .. } | ExprKind::Binary { left: target, right: value, .. }
+            | ExprKind::Logical { left: target, right: value, .. } => {
+                self.validate_strict_expression(target)?;
+                self.validate_strict_expression(value)?;
+            }
+            ExprKind::Call { callee, args, .. } | ExprKind::New { callee, args } => {
+                self.validate_strict_expression(callee)?;
+                for arg in args { self.validate_strict_expression(arg)?; }
+            }
+            ExprKind::Function(function) => self.validate_strict_statements(&function.body.body)?,
+            ExprKind::Arrow(arrow) => match &arrow.body {
+                ArrowBody::Expr(expr) => self.validate_strict_expression(expr)?,
+                ArrowBody::Block(block) => self.validate_strict_statements(&block.body)?,
+            },
+            _ => {}
+        }
+        Ok(())
     }
 
     pub(super) fn parse_try_stmt(&mut self) -> Result<StmtKind, SyntaxError> {
@@ -499,15 +840,25 @@ impl Parser {
         let mut catch = None;
         let mut finally = None;
         if self.eat_kw(crate::tokens::Keyword::Catch) {
-            let param = if self.eat_punct(Punct::LParen) {
-                let p = self.expect_ident()?;
+            let binding = if self.eat_punct(Punct::LParen) {
+                let p = self.parse_binding()?;
                 self.expect_punct(Punct::RParen)?;
+                let mut names = HashSet::new();
+                for name in binding_names(&p) {
+                    if !names.insert(name.name.clone()) {
+                        return Err(self.err_at(name.span.start, "duplicate catch binding"));
+                    }
+                }
                 Some(p)
             } else {
                 None
             };
+            let param = match &binding {
+                Some(Binding::Ident(id)) => Some(id.clone()),
+                _ => None,
+            };
             let body = self.parse_block()?;
-            catch = Some(CatchClause { param, body });
+            catch = Some(CatchClause { param, binding, body });
         }
         if self.eat_kw(crate::tokens::Keyword::Finally) {
             finally = Some(self.parse_block()?);
@@ -601,6 +952,9 @@ impl Parser {
 
     pub(super) fn parse_labeled_stmt(&mut self) -> Result<Stmt, SyntaxError> {
         let label = self.expect_ident()?;
+        if self.labels.iter().any(|active| active.name == label.name) {
+            return Err(self.err_at(label.span.start, "duplicate label"));
+        }
         self.expect_punct(Punct::Colon)?;
         // Loop-ness must be known *before* the body parses (so an innermost
         // `continue outer:` resolves), and it holds through chains of labels
@@ -627,7 +981,8 @@ impl Parser {
             name: label.name.clone(),
             is_loop,
         });
-        let body = self.parse_stmt()?;
+        let body = self.parse_statement_position()?;
+        reject_statement_position_declaration(&body, self.strict_script, false)?;
         let stmt = Stmt::new(
             StmtKind::Labeled {
                 label: label.clone(),
@@ -675,9 +1030,70 @@ impl Parser {
                     | crate::tokens::Keyword::Void
                     | crate::tokens::Keyword::Delete
                     | crate::tokens::Keyword::Yield
+                    | crate::tokens::Keyword::Import
             ),
             _ => false,
         }
     }
 
+}
+
+fn is_labeled_function(statement: &Stmt) -> bool {
+    match &statement.kind {
+        StmtKind::Function(_) => true,
+        StmtKind::Labeled { body, .. } => is_labeled_function(body),
+        _ => false,
+    }
+}
+
+fn is_resource_statement(statement: &Stmt) -> bool {
+    matches!(&statement.kind, StmtKind::Var(decl) if decl.resource_kind.is_some())
+}
+
+fn strict_binding_name(name: &str) -> bool {
+    matches!(name, "eval" | "arguments" | "implements" | "interface" | "let" | "package"
+        | "private" | "protected" | "public" | "static" | "yield")
+}
+
+fn reject_statement_position_declaration(statement: &Stmt, strict: bool, reject_labeled_function: bool) -> Result<(), SyntaxError> {
+    let forbidden = match &statement.kind {
+        StmtKind::Var(decl) => decl.kind != VarKind::Var,
+        StmtKind::Class(_) => true,
+        StmtKind::Function(function) => strict || function.is_async || function.is_generator,
+        StmtKind::Labeled { .. } => reject_labeled_function && is_labeled_function(statement),
+        _ => false,
+    };
+    if forbidden {
+        Err(SyntaxError::new("declaration is not allowed in statement position", statement.span.start.line, statement.span.start.column))
+    } else { Ok(()) }
+}
+
+fn validate_for_head_body(decl: &VarDecl, body: &Stmt, at: SourceLocation) -> Result<(), SyntaxError> {
+    if decl.kind == VarKind::Var { return Ok(()); }
+    let head: HashSet<String> = decl.decls.iter()
+        .flat_map(|item| binding_names(&item.binding).into_iter().map(|name| name.name.clone()))
+        .collect();
+    if var_declared_names(body).iter().any(|name| head.contains(name)) {
+        return Err(SyntaxError::new("for declaration conflicts with var in body", at.line, at.column));
+    }
+    Ok(())
+}
+
+fn var_declared_names(statement: &Stmt) -> Vec<String> {
+    match &statement.kind {
+        StmtKind::Var(decl) if decl.kind == VarKind::Var => decl.decls.iter()
+            .flat_map(|item| binding_names(&item.binding).into_iter().map(|name| name.name.clone())).collect(),
+        StmtKind::Block(block) => block.body.iter().flat_map(var_declared_names).collect(),
+        StmtKind::If { then, els, .. } => var_declared_names(then).into_iter()
+            .chain(els.iter().flat_map(|statement| var_declared_names(statement))).collect(),
+        StmtKind::While { body, .. } | StmtKind::DoWhile { body, .. }
+        | StmtKind::For { body, .. } | StmtKind::ForIn { body, .. }
+        | StmtKind::ForOf { body, .. } | StmtKind::ForAwaitOf { body, .. }
+        | StmtKind::Labeled { body, .. } | StmtKind::With { body, .. } => var_declared_names(body),
+        StmtKind::Switch { cases, .. } => cases.iter().flat_map(|case| case.body.iter().flat_map(var_declared_names)).collect(),
+        StmtKind::Try(try_stmt) => try_stmt.block.body.iter().flat_map(var_declared_names)
+            .chain(try_stmt.catch.iter().flat_map(|catch| catch.body.body.iter().flat_map(var_declared_names)))
+            .chain(try_stmt.finally.iter().flat_map(|block| block.body.iter().flat_map(var_declared_names))).collect(),
+        _ => Vec::new(),
+    }
 }

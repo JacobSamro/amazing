@@ -1252,3 +1252,36 @@ The final drift check found no changes under `crates/amazing-js` or
 `crates/amazing-regex` between fixed base `2c1a3e8` and `origin/dev` at
 `b42383a`, so the fixed-base gate stands. The integrator's merged-head gate
 will prove the combination.
+## JS-10 part 1 — front end and BigInt split
+
+Part 1 is the front-end-only series on fixed base
+`c5192e6364a96439df52d843c749536ebb8c6e04`. It adds normalized
+`ExprKind::BigInt(String)` literals, script and module grammar/early errors,
+cover grammar handling, and the additive module AST. The module runtime,
+host capability, and Test262 module runner are in the follow-on series.
+The bytecode compiler's sole new fallback is
+`PropValue::CoverInitializedName { .. }` (atomic interpreter fallback).
+
+Full pinned Test262 (`3655e7464de3d52643ecddd4b5f9f4f3e7f62398`),
+53,872 sources, identical runner and input hashes before/after:
+
+| | Before | After |
+| --- | ---: | ---: |
+| Passing files | 21,249 | 22,729 |
+| Passing variants | 41,438 | 44,030 |
+| Classification SHA-256 | `a6e46a79f7743553dcc1c7b301f2617643fa405257bdc38738d6f0688a27dbef` | `7c5e39249ce68b6bac6b3356cd857d43cf726e1a04d6df9e9264df34169fda8c` |
+
+There are 1,480 fail-to-pass file and 2,592 variant transitions and **zero
+pass-to-nonpass transitions**. The before and after records are
+`/tmp/js10-part1-base-c5192e6.json` and
+`/tmp/js10-part1-after-82be02e.json`. Windows win-002: amazing-js nextest
+256/256 (1 skipped); workspace nextest 2,057/2,057 (5 skipped); separate
+crate and workspace doctest commands passed.
+
+The module syntax contract exposed to the follow-on linker is
+`ast::Module { items, span, has_top_level_await }`, with
+`ModuleItem::{Statement, Import, ExportNamed, ExportAll,
+ExportDefaultExpression, ExportDefaultDeclaration}`;
+`ImportDeclaration { from, phase, bindings, attributes }`,
+`ImportBinding { imported, local }`, `ExportName { local, exported }`,
+and `ImportAttribute { key, value }`. `parse_module` is publicly exported.

@@ -17,6 +17,14 @@ impl TokenStream {
             before: Vec::new(),
         }
     }
+    pub(crate) fn set_module_goal(&mut self) {
+        self.lexer.set_module_goal();
+    }
+    pub(crate) fn legacy_escape_in(&self, span: Span) -> Option<SourceLocation> {
+        self.tokens.iter().find(|token| token.legacy_escape
+            && token.span.start >= span.start && token.span.end <= span.end)
+            .map(|token| token.span.start)
+    }
     pub(crate) fn get(&mut self, index: usize) -> Token {
         while self.tokens.len() <= index {
             if let Some(t) = self.tokens.last() {
