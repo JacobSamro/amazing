@@ -613,3 +613,39 @@ pinned CSS Images SVG resource controls use SVG files without an applicable
 open `<path>` outline and remain **4/4 raw before and twice after** with
 identical hashes. They carry **zero new path WPT credit**. Exact repeated
 render and Windows gate evidence is under `tests/wpt-replaced-content/rc10/`.
+
+## RC-11 — external SVG shape/painting conformance screen
+
+Fixed dev base `592e542` (RC-10 merge), WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. A deterministic selection
+froze all 35 script-free HTML `rel=match` reftests under `svg/shapes` and
+`svg/painting` before any source edit (manifest SHA-256
+`2fdbe12184173e8808ad2c09a6dc2ed41254affaa4bd1d84054e1880e110cfb0`).
+The inventory retains 45 candidate HTML reftests and their dependency
+blockers, including nine scripted matches and one mismatch relation excluded
+by the selection rule. Exact-revision wpt.fyi Chrome 154 run
+`5182906107691008` and Safari 26.6 run `5141363439173632` give 20
+both-pass cases, 10 Chrome-only passes and five both-fail cases.
+
+The fixed-base predecessor renderer produced **22 pass, 13 mismatch** in both
+Windows sweeps, with no errors, timeouts, unsupported cases or crashes.
+Classifications, differing pixel counts and actual/reference/diff hashes are
+stable per case. The 20-case both-browser-pass subset has **11 raw passes and
+nine mismatches**. Sixteen raw passes (nine consensus passes) are all-white
+actual/reference matches and do not prove SVG painting. Forty-five source,
+runner, manifest, lockfile and selected WPT page hashes matched Mac and Windows
+and were unchanged across the paired baseline.
+
+The nine consensus mismatches are blocked upstream of an image/paint-only fix:
+seven use inline SVG that the HTML reftest artifact does not paint, and two use
+SVG data URIs that its resource resolver treats as filesystem paths. The
+`<img>` data URI case also requires CSS zoom, line stroke and vector-effect.
+Another selected case uses an SVG `<iframe>` and has an embedded-document
+lifecycle dependency. These are source-based dependency inferences recorded
+beside the measured first mismatch metrics in the RC-11 evidence packet.
+
+There is **no actionable both-browser-pass case within replaced-content owned
+paths** in the frozen selection. RC-11 stops with a ranked evidence report and
+cross-lane requests in `questions.md`. No image/paint source was changed; no
+after sweep or conformance gain/loss is claimed. Evidence and reproduction:
+`tests/wpt-replaced-content/rc11/` and `rc11-inventory.json`.

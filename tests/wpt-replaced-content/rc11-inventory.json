@@ -1,0 +1,850 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "oracle_runs": [
+    {
+      "id": 5182906107691008,
+      "browser_name": "chrome",
+      "browser_version": "154.0.8016.0",
+      "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+    },
+    {
+      "id": 5141363439173632,
+      "browser_name": "safari",
+      "browser_version": "26.6 (21624.4.5.11.5)",
+      "full_revision_hash": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293"
+    }
+  ],
+  "selection_rule": "All non-reference HTML files under the two pinned directories with rel=match and no script tag, sorted by WPT path; dependency-blocked cases remain included.",
+  "selected_count": 35,
+  "selected_oracle_statuses": {
+    "both_pass": 20,
+    "chrome_only_pass": 10,
+    "both_fail": 5
+  },
+  "rows": [
+    {
+      "test": "/svg/shapes/reftests/ellipse-auto-rx-clip-path.html",
+      "relation": "match",
+      "reference": "ellipse-auto-rx-clip-path-ref.html",
+      "source_sha256": "e8ca109ecd74637f0876a0e80c08b7a4b6cc7be751bb1e2b47a9aadb0987dd9c",
+      "chrome_status": "F",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/shapes/reftests/ellipse-auto-rx-css-clip-path.html",
+      "relation": "match",
+      "reference": "ellipse-auto-rx-css-clip-path-ref.html",
+      "source_sha256": "74a08821cd298eef3234b1fda6efe3a2e723994cffab28a0f6f98a00cd88ec45",
+      "chrome_status": "F",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/shapes/reftests/ellipse-auto-rx-percent-clip-path.html",
+      "relation": "match",
+      "reference": "ellipse-auto-rx-percent-clip-path-ref.html",
+      "source_sha256": "0bfa02027cd8d8fef72bb9789fd6cb0e84a15e6ee3eb0b0466ff886b4a7eadb5",
+      "chrome_status": "F",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/shapes/reftests/ellipse-auto-rx-textpath.html",
+      "relation": "match",
+      "reference": "ellipse-auto-rx-textpath-ref.html",
+      "source_sha256": "834146a42dc0a544cf14eb1a41ec3d0145c96f749780d3bf339356251620bd34",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/shapes/reftests/pathlength-005.html",
+      "relation": "match",
+      "reference": "pathlength-005-ref.html",
+      "source_sha256": "3b71c31c7168a8d27a9e24f222df9ae158ed65aca219aca14a74362c9541110f",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/shapes/reftests/polygon-with-filtered-marker.html",
+      "relation": "match",
+      "reference": "../../struct/reftests/reference/green-100x100.html",
+      "source_sha256": "18043a2b0c2c56576db5b20bdd22a1f3a7d8f51df45f33b2d951b631202fcf7c",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/animated-dashoffset-odd-dasharray.html",
+      "relation": "match",
+      "reference": "animated-dashoffset-odd-dasharray-ref.html",
+      "source_sha256": "c9352d11cffc4890574a0e52a26934fbcd32a21fde924e6296715f0ae8e45228",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": true,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "script-driven mutation or harness prerequisite"
+      ],
+      "selected": false,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/color-mix-currentcolor-fill-stroke-repaint.html",
+      "relation": "match",
+      "reference": "../../css/reference/ref-filled-green-100px-square.xht",
+      "source_sha256": "233d2d9b808b0e677b026a1581ef097f50b2995232470557fed2a743a8b6dbe9",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": true,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "script-driven mutation or harness prerequisite"
+      ],
+      "selected": false,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/currentcolor-fill-stroke-repaint.html",
+      "relation": "match",
+      "reference": "../../css/reference/ref-filled-green-100px-square.xht",
+      "source_sha256": "934f824a475d7c4a00ab4e885b4906ee62719cd2ae4e3175a70fb637470be1e8",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": true,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "script-driven mutation or harness prerequisite"
+      ],
+      "selected": false,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/foreignObject-overflow.html",
+      "relation": "match",
+      "reference": "foreignObject-overflow-ref.html",
+      "source_sha256": "ae8247b101d732b74b174969514b6d4798e6a61cee1d84b20da88fc34c0d258c",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/inline-svg-resize-viewport-dependent-mask.html",
+      "relation": "match",
+      "reference": "inline-svg-resize-viewport-dependent-mask-ref.html",
+      "source_sha256": "ca21eceb3b85f5111570d1927464e82fcb6cad0bcae61775f444369fe71793e0",
+      "chrome_status": "F",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": true,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "script-driven mutation or harness prerequisite"
+      ],
+      "selected": false,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/inner-outer-svg-overflow-auto.html",
+      "relation": "match",
+      "reference": "inner-outer-svg-overflow-auto-ref.html",
+      "source_sha256": "94f5527dc0b9a12ec437804929b8a50434ebe9b0177fc23aa618ecefab754bd1",
+      "chrome_status": "F",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/negative-dashoffset-odd-dasharray.html",
+      "relation": "match",
+      "reference": "negative-dashoffset-odd-dasharray-ref.html",
+      "source_sha256": "091ecdfa25180dfe0ba13dc8d0530c685ccb9dd918836748b4cb7587ef7100d7",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/display-none-mask.html",
+      "relation": "match",
+      "reference": "display-none-mask-ref.html",
+      "source_sha256": "ea36b7fbce41449410d56527ccfa73c90303df48fc33e0c871880f564cc3cd67",
+      "chrome_status": "F",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/large-transform-001.html",
+      "relation": "match",
+      "reference": "large-transform-ref.html",
+      "source_sha256": "ac9ccaf0d151a7c53d6a6d471297ba334c4e9d5821558c6ddb3d802230775da7",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/marker-context-fill-transform.html",
+      "relation": "match",
+      "reference": "marker-context-fill-transform-ref.html",
+      "source_sha256": "61e4bf9c9115693a8f3791a532124a5acbdf75e10ce9d9e741c290e5e1536200",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": false,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "embedded document lifecycle outside lane"
+      ],
+      "selected": true,
+      "iframe": true
+    },
+    {
+      "test": "/svg/painting/reftests/marker-implicit-subpaths.html",
+      "relation": "match",
+      "reference": "../../struct/reftests/reference/green-100x100.html",
+      "source_sha256": "91bafff236b9d4a0646b43a5a92a5edd189675875ffe1cb04f7be9358290647b",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/mask-percentage.html",
+      "relation": "match",
+      "reference": "mask-percentage-ref.html",
+      "source_sha256": "f535b05b7028108464133234416a90a384f890951734d3b02da92b8628a14039",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-001.html",
+      "relation": "match",
+      "reference": "green-100x100.svg",
+      "source_sha256": "0a54f1ba1fddb0275bb15fc56b7fd04edeed0848c7c32947eb230688fb2bb209",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-002.html",
+      "relation": "match",
+      "reference": "green-100x100.svg",
+      "source_sha256": "106ecd7b0c7fdb301f5626152fae1faeacb881d52b6cbec93be29ad8576a87e1",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": true,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "script-driven mutation or harness prerequisite"
+      ],
+      "selected": false,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-003.html",
+      "relation": "match",
+      "reference": "green-100x100.svg",
+      "source_sha256": "74796f6d365ba82df52d578d392bd7d6ee821826ce88f732fb2829942f5dadda",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-004.html",
+      "relation": "match",
+      "reference": "green-100x100.svg",
+      "source_sha256": "027fcd534558c64d518f3264cd4fbd85afd90f4134b3835fd42b148f5e584fb9",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-005.html",
+      "relation": "match",
+      "reference": "non-scaling-stroke-005-ref.html",
+      "source_sha256": "69224aa104b381052b059e2d6c0486030b8fe216aaa36ecd3279e00730f37c1b",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-006.html",
+      "relation": "match",
+      "reference": "non-scaling-stroke-006-ref.html",
+      "source_sha256": "606174d8cf5537ba32c9bfd886fab2193c2770d824af6328163f869c6818c563",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-007.html",
+      "relation": "match",
+      "reference": "non-scaling-stroke-007-ref.html",
+      "source_sha256": "b809d013c7086fe718e5f2e9e19bf28db399865a7fa44f7ba404fd505c0ac7f2",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-008.html",
+      "relation": "match",
+      "reference": "../../struct/reftests/reference/green-100x100.html",
+      "source_sha256": "dd8a0a5fbd0c614072cddc9717e73cc5324114b66541b36563586f2014f85e06",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-009.html",
+      "relation": "match",
+      "reference": "../../struct/reftests/reference/green-100x100.html",
+      "source_sha256": "48f0f95422b330bd6bfce7664067c9c11d887bebcfbe20bddfea86099fe0fca7",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": false,
+      "img": false,
+      "data_svg_uri": true,
+      "script": false,
+      "blockers": [
+        "data URI is not resolved by the current image reftest adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-010.html",
+      "relation": "match",
+      "reference": "../../struct/reftests/reference/green-100x100.html",
+      "source_sha256": "cb5d795bbf2b8f6769875b3cf6aac3f3e25872be94afbed21017b6926b131241",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": false,
+      "img": true,
+      "data_svg_uri": true,
+      "script": false,
+      "blockers": [
+        "data URI is not resolved by the current image reftest adapter",
+        "line stroke and vector-effect are unsupported by bounded SVG decoder",
+        "CSS zoom dependency"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-non-uniform-scale.html",
+      "relation": "match",
+      "reference": "non-scaling-stroke-non-uniform-scale-ref.html",
+      "source_sha256": "17eb7f13c7e2b9ca2c81c9d42a3526250e3e45603441998262db30a5a76444a7",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": true,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "data URI is not resolved by the current image reftest adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-precision-loss.html",
+      "relation": "mismatch",
+      "reference": "about:blank",
+      "source_sha256": "b7a655a022c7b681ad79a61a861ab6e01d8da6cb8e44ef0372b6b50c3e65997e",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "mismatch relation excluded from match-only gate"
+      ],
+      "selected": false,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/non-scaling-stroke-with-none-preserve-aspect-ratio.html",
+      "relation": "match",
+      "reference": "non-scaling-stroke-with-none-preserve-aspect-ratio-ref.html",
+      "source_sha256": "979051c22b768c30baaf5b6be2212be614d888b7989bcc1be6731c773ceea7ed",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": true,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "data URI is not resolved by the current image reftest adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/small-nested-viewbox.html",
+      "relation": "match",
+      "reference": "small-nested-viewbox-ref.html",
+      "source_sha256": "f93f7a088ef8f221499bdae7cfef57c671c6e30f98dbbe1759acc5a36e282d66",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/symbol-in-mask.html",
+      "relation": "match",
+      "reference": "green-100x100.svg",
+      "source_sha256": "cef8c2b71aebbfeed98465c628e37c2d532d8d947bcd2b2cf9737db24b23f5e5",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/text-shadow-01.html",
+      "relation": "match",
+      "reference": "text-shadow-ref.html",
+      "source_sha256": "ab05d62ab715dfbd909933777d38fcf2571c7aca3d79cb5b751b4211c8343e75",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/text-shadow-02.html",
+      "relation": "match",
+      "reference": "text-shadow-ref.html",
+      "source_sha256": "61e3725af8d968a175dfaff530f52de4cb71eb74673e7b977fa0702c781b2839",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/text-shadow-03.html",
+      "relation": "match",
+      "reference": "text-shadow-02.html",
+      "source_sha256": "726ed5dc057c5ad92575cd45f06d70f299c2547d0c3cbd755b8292d078069810",
+      "chrome_status": "P",
+      "safari_status": "F",
+      "both_pass": false,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/reftests/zero-scale-svg-transform-inside-g-tag.html",
+      "relation": "match",
+      "reference": "../../struct/reftests/reference/green-100x100.html",
+      "source_sha256": "41543b8d40300f86e076f74afbaa84fbfde87cc86c0a14f3e482626d3d744147",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": true,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "script-driven mutation or harness prerequisite"
+      ],
+      "selected": false,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/scripted/marker-element-added.html",
+      "relation": "match",
+      "reference": "../../struct/reftests/reference/green-100x100.html",
+      "source_sha256": "b9360bcc31f17ea3bf55318df5761370769b0aa76bed3e5537c0eb598cd46113",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": true,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "script-driven mutation or harness prerequisite"
+      ],
+      "selected": false,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/subpixel-clip-path-transform.html",
+      "relation": "match",
+      "reference": "subpixel-clip-path-transform-ref.html",
+      "source_sha256": "ae11885fb29b299d0f0a286622d245455f0a3ac5babde8169e1bb391ac7514e5",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/svg-child-will-change-transform-invalidation.html",
+      "relation": "match",
+      "reference": "svg-child-will-change-transform-invalidation-ref.html",
+      "source_sha256": "f8ddf0e41441be49d024d326399cfab031fe0940497bd304edc54bc40813895c",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": true,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "script-driven mutation or harness prerequisite"
+      ],
+      "selected": false,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/svg-percent-stroke-width-viewbox-update.html",
+      "relation": "match",
+      "reference": "svg-percent-stroke-width-viewbox-update-ref.html",
+      "source_sha256": "e44309116bd8f07fa2297163ba64c643be7d346d6f125aac0a43957513961b5d",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": true,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter",
+        "script-driven mutation or harness prerequisite"
+      ],
+      "selected": false,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/svg-with-outline.html",
+      "relation": "match",
+      "reference": "svg-with-outline-ref.html",
+      "source_sha256": "47ee65b63ca3e8087272c55dbe2fa40c49054e8eb834f4827c204b191f730afd",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/text-clip-path-transform.html",
+      "relation": "match",
+      "reference": "text-clip-path-transform-ref.html",
+      "source_sha256": "5ea7764b8f470b0016674fb76410d3e63ee2034443f689b36f3c6bd502536923",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/text-mask-transform.html",
+      "relation": "match",
+      "reference": "text-clip-path-transform-ref.html",
+      "source_sha256": "02961eb1eb9ae5e9cc68f1fd401346f3dae03a2636258a0de8595cd860723c8b",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    },
+    {
+      "test": "/svg/painting/will-change-under-mask.html",
+      "relation": "match",
+      "reference": "../struct/reftests/reference/green-100x100.html",
+      "source_sha256": "8c9fa53917dc0894f41c4d48178f36b00bad8d4dc9f5e501db32258ba4c69fab",
+      "chrome_status": "P",
+      "safari_status": "P",
+      "both_pass": true,
+      "inline_svg": true,
+      "img": false,
+      "data_svg_uri": false,
+      "script": false,
+      "blockers": [
+        "inline SVG painting requires DOM/layout/driver presentation outside image adapter"
+      ],
+      "selected": true,
+      "iframe": false
+    }
+  ]
+}

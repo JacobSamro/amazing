@@ -1,0 +1,156 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "RC-11 full script-free HTML SVG match reftests in svg/shapes and svg/painting",
+    "rule": "All non-reference HTML files under the two pinned directories with rel=match and no script tag, sorted by WPT path; dependency-blocked cases remain included."
+  },
+  "sparse_paths": [
+    "svg/shapes",
+    "svg/painting",
+    "svg/struct",
+    "css/reference"
+  ],
+  "tests": [
+    {
+      "id": "svg--shapes--reftests--ellipse-auto-rx-clip-path",
+      "test": "svg/shapes/reftests/ellipse-auto-rx-clip-path.html"
+    },
+    {
+      "id": "svg--shapes--reftests--ellipse-auto-rx-css-clip-path",
+      "test": "svg/shapes/reftests/ellipse-auto-rx-css-clip-path.html"
+    },
+    {
+      "id": "svg--shapes--reftests--ellipse-auto-rx-percent-clip-path",
+      "test": "svg/shapes/reftests/ellipse-auto-rx-percent-clip-path.html"
+    },
+    {
+      "id": "svg--shapes--reftests--ellipse-auto-rx-textpath",
+      "test": "svg/shapes/reftests/ellipse-auto-rx-textpath.html"
+    },
+    {
+      "id": "svg--shapes--reftests--pathlength-005",
+      "test": "svg/shapes/reftests/pathlength-005.html"
+    },
+    {
+      "id": "svg--shapes--reftests--polygon-with-filtered-marker",
+      "test": "svg/shapes/reftests/polygon-with-filtered-marker.html"
+    },
+    {
+      "id": "svg--painting--foreignObject-overflow",
+      "test": "svg/painting/foreignObject-overflow.html"
+    },
+    {
+      "id": "svg--painting--inner-outer-svg-overflow-auto",
+      "test": "svg/painting/inner-outer-svg-overflow-auto.html"
+    },
+    {
+      "id": "svg--painting--negative-dashoffset-odd-dasharray",
+      "test": "svg/painting/negative-dashoffset-odd-dasharray.html"
+    },
+    {
+      "id": "svg--painting--reftests--display-none-mask",
+      "test": "svg/painting/reftests/display-none-mask.html"
+    },
+    {
+      "id": "svg--painting--reftests--large-transform-001",
+      "test": "svg/painting/reftests/large-transform-001.html"
+    },
+    {
+      "id": "svg--painting--reftests--marker-context-fill-transform",
+      "test": "svg/painting/reftests/marker-context-fill-transform.html"
+    },
+    {
+      "id": "svg--painting--reftests--marker-implicit-subpaths",
+      "test": "svg/painting/reftests/marker-implicit-subpaths.html"
+    },
+    {
+      "id": "svg--painting--reftests--mask-percentage",
+      "test": "svg/painting/reftests/mask-percentage.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-001",
+      "test": "svg/painting/reftests/non-scaling-stroke-001.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-003",
+      "test": "svg/painting/reftests/non-scaling-stroke-003.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-004",
+      "test": "svg/painting/reftests/non-scaling-stroke-004.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-005",
+      "test": "svg/painting/reftests/non-scaling-stroke-005.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-006",
+      "test": "svg/painting/reftests/non-scaling-stroke-006.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-007",
+      "test": "svg/painting/reftests/non-scaling-stroke-007.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-008",
+      "test": "svg/painting/reftests/non-scaling-stroke-008.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-009",
+      "test": "svg/painting/reftests/non-scaling-stroke-009.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-010",
+      "test": "svg/painting/reftests/non-scaling-stroke-010.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-non-uniform-scale",
+      "test": "svg/painting/reftests/non-scaling-stroke-non-uniform-scale.html"
+    },
+    {
+      "id": "svg--painting--reftests--non-scaling-stroke-with-none-preserve-aspect-ratio",
+      "test": "svg/painting/reftests/non-scaling-stroke-with-none-preserve-aspect-ratio.html"
+    },
+    {
+      "id": "svg--painting--reftests--small-nested-viewbox",
+      "test": "svg/painting/reftests/small-nested-viewbox.html"
+    },
+    {
+      "id": "svg--painting--reftests--symbol-in-mask",
+      "test": "svg/painting/reftests/symbol-in-mask.html"
+    },
+    {
+      "id": "svg--painting--reftests--text-shadow-01",
+      "test": "svg/painting/reftests/text-shadow-01.html"
+    },
+    {
+      "id": "svg--painting--reftests--text-shadow-02",
+      "test": "svg/painting/reftests/text-shadow-02.html"
+    },
+    {
+      "id": "svg--painting--reftests--text-shadow-03",
+      "test": "svg/painting/reftests/text-shadow-03.html"
+    },
+    {
+      "id": "svg--painting--subpixel-clip-path-transform",
+      "test": "svg/painting/subpixel-clip-path-transform.html"
+    },
+    {
+      "id": "svg--painting--svg-with-outline",
+      "test": "svg/painting/svg-with-outline.html"
+    },
+    {
+      "id": "svg--painting--text-clip-path-transform",
+      "test": "svg/painting/text-clip-path-transform.html"
+    },
+    {
+      "id": "svg--painting--text-mask-transform",
+      "test": "svg/painting/text-mask-transform.html"
+    },
+    {
+      "id": "svg--painting--will-change-under-mask",
+      "test": "svg/painting/will-change-under-mask.html"
+    }
+  ]
+}

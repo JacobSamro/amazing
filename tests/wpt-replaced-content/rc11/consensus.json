@@ -1,0 +1,27 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "chrome_run_id": 5182906107691008,
+  "safari_run_id": 5141363439173632,
+  "both_pass_tests": [
+    "/svg/shapes/reftests/pathlength-005.html",
+    "/svg/shapes/reftests/polygon-with-filtered-marker.html",
+    "/svg/painting/foreignObject-overflow.html",
+    "/svg/painting/reftests/large-transform-001.html",
+    "/svg/painting/reftests/mask-percentage.html",
+    "/svg/painting/reftests/non-scaling-stroke-001.html",
+    "/svg/painting/reftests/non-scaling-stroke-004.html",
+    "/svg/painting/reftests/non-scaling-stroke-005.html",
+    "/svg/painting/reftests/non-scaling-stroke-006.html",
+    "/svg/painting/reftests/non-scaling-stroke-007.html",
+    "/svg/painting/reftests/non-scaling-stroke-008.html",
+    "/svg/painting/reftests/non-scaling-stroke-009.html",
+    "/svg/painting/reftests/non-scaling-stroke-010.html",
+    "/svg/painting/reftests/small-nested-viewbox.html",
+    "/svg/painting/reftests/symbol-in-mask.html",
+    "/svg/painting/subpixel-clip-path-transform.html",
+    "/svg/painting/svg-with-outline.html",
+    "/svg/painting/text-clip-path-transform.html",
+    "/svg/painting/text-mask-transform.html",
+    "/svg/painting/will-change-under-mask.html"
+  ]
+}
