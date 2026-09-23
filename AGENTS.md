@@ -131,6 +131,17 @@ matching target dir. On 2026-09-23 the two shared one tree: the co-integrator's
 measured a different commit and reported the previous head's count as a pass.
 A merged-head gate that did not print a fresh lock line is not evidence.
 
+**Integrators gate a merge before pushing it, with
+`scripts/primary-gate.sh HEAD`** (serialized, and it can gate an unpushed
+local commit). This stopped the IA-BINDINGS-2 install from reaching `dev`
+when it broke four tests on the combined head. If `origin/dev` moves during
+the gate *only in crates the merge does not touch*, rebase, push, and gate
+the pushed head straight away. Re-gating on every move would never finish
+while two integrators are merging. **Merge ownership is split, with no
+exceptions:** the primary merges js-lang, js-runtime, dom-bindings, layout,
+css and net; the co-integrator merges replaced-content, html and
+integrator-assist.
+
 **A refresh overwrites lane-owned files in the server tree with the `dev`
 versions**, including work the lane had already synced up. The Mac worktree is
 the source of truth so nothing is lost, but the lane must re-`scp` its own
