@@ -435,3 +435,41 @@ The `amazing-js` scoped gate passed 216/216 on this integration base. The
 intervening `origin/dev` advance to `7c6824b8a12a50ea6ba99688678b98617bd27f26`
 did not touch this ticket's owned or granted files, so the final gate remains
 on this recorded fixed base; the integrator gates the merged head.
+
+### JSRT-7 derived construction and binding facades
+
+Fixed integration base: `f8bdb330a5c16c48ebe17acd9d0d348461ddd2cb`.
+Derived constructors now leave `this` uninitialized until `super()` constructs
+the parent with the original `newTarget`. They reject early `this`, repeated
+`super()`, and invalid primitive returns; default derived constructors forward
+arguments. Native parents honor `newTarget.prototype`, while ConstructOnly host
+parents can return their canonical wrapper. Arrow closures retain lexical
+`super()` and `new.target`. `Reflect.construct` and the native callback
+`current_new_target()` facade expose the same construction path.
+
+RegExp construction accepts UTF-16 patterns through `Regex::new_utf16`; the
+binding facade has a full-match operation that distinguishes invalid patterns.
+The `unicodeSets` getter and `v` flag are exposed. A WebIDL pair-iterable
+facade provides live entries, keys, values, and forEach over host count/pair
+hooks, including the iterator symbol.
+
+On Linux, pinned Test262 revision `3655e746` over 53,872 files and 102,918
+variants moved from 12,088 to 12,127 passing files, with 39 fail-to-pass
+transitions and **zero lost file or variant passes**. One existing timeout in
+`staging/sm/String/string-upper-lower-mapping.js` became a normal failure.
+`language/statements/class/subclass` rose from 33 to 42 passes; the expression
+subclass and statement super selections stayed at 16 and 5 passes;
+`built-ins/RegExp/prototype/unicodeSets` rose from 29 to 31. The before and
+after classification SHA-256 values are
+`1cb29841f3337109ecd73bb1dfb1931590622ffcc1a6abacbf5cbd47e95c0cf2`
+and `95745cec8a4f22a67ef0396724642fd0f25173ef8d7dd7a31485461903b3b524`.
+The corrected Linux workspace gate passed 1,788 tests with two skipped and
+both doctests; `amazing-js` passed 221 tests and its doctest.
+
+The final Windows crate/workspace gate ran on `win-002` from the fresh JSRT-7
+worktree: `amazing-js` nextest passed 221/221; workspace nextest passed
+1,791/1,791 with four skipped; both workspace doctests passed. The Windows
+Test262 BEFORE sweep on the same fixed base had 12,088 passing files; after
+win-002 routing replaced win-001's queued candidate job, the complete pinned
+Linux before/after corpus is the zero-loss evidence for this ticket. The
+integrator rechecks the merged head.
