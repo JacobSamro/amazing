@@ -170,5 +170,10 @@ pub fn deliver_mutation_checkpoint<H: BindingHost>(host: &mut H) -> Result<(), H
             if first_error.is_none() { first_error = Some(error); }
         }
     }
+    while let Some(slot) = host.with_dom(|dom| Ok(dom.next_slotchange(&mut checkpoint)))? {
+        if let Err(error) = crate::event_bindings::dispatch_slotchange_event(host, slot) {
+            if first_error.is_none() { first_error = Some(error); }
+        }
+    }
     match first_error { Some(error) => Err(error), None => Ok(()) }
 }

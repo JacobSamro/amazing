@@ -291,7 +291,7 @@ impl Dom {
 fn forbidden(c: char) -> bool {
     matches!(c, '\0' | '\t' | '\n' | '\x0c' | '\r' | ' ' | '/' | '>')
 }
-fn valid_element_local_name(name: &str) -> bool {
+pub(crate) fn valid_element_local_name(name: &str) -> bool {
     let mut chars = name.chars();
     let Some(first) = chars.next() else {
         return false;

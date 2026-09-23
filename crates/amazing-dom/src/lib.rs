@@ -22,6 +22,7 @@ pub mod markup;
 #[cfg(test)] mod markup_tests;
 pub mod event_loop;
 pub mod mutation;
+pub mod shadow;
 mod namespace;
 mod node_mixins;
 pub use node_mixins::NodeOrString;
@@ -126,6 +127,8 @@ pub struct Dom {
     mutation_generation: u64,
     dom_exceptions: Vec<DomExceptionData>,
     traversals: traversal::Traversals,
+    shadow_roots: Vec<shadow::ShadowRootData>,
+    slot_states: Vec<shadow::SlotState>,
     /// Doctype name captured by the tree builder (Phase 1). Quirks-mode bits
     /// land here when the layout engine needs them.
     pub doctype: Option<String>,
@@ -168,6 +171,8 @@ impl Dom {
             mutation_generation: 0,
             dom_exceptions: Vec::new(),
             traversals: traversal::Traversals::default(),
+            shadow_roots: Vec::new(),
+            slot_states: Vec::new(),
             doctype: None,
         };
         dom.nodes.push(Node {

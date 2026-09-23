@@ -1498,3 +1498,28 @@ Pinned WebIDL source: [whatwg/webidl `6a53497380036fc4a25b82be889a88e0de7cf448`]
 | `"setup" in window`, `setup(setupRangeTests)` | WPT harness/runtime operations; not DOM bindings. |
 
 The setup does not call `Node.compareDocumentPosition` or `isEqualNode`; helpers below it call those only when the registered tests run. The production runtime currently lacks real Symbol-keyed properties and platform-object ToPrimitive dispatch, so the WPT blocker cannot be declared fixed by the mock-host gate. IA-BINDINGS-2 must install these hooks and rerun the pinned selection.
+
+## DOM-13 native Shadow DOM and slot bindings (2026-09-23)
+
+Fixed base `6481c90`. Source pins: [DOM Standard `a2331a45360129e8645ef7e0a04740241b6e3726`](https://github.com/whatwg/dom/blob/a2331a45360129e8645ef7e0a04740241b6e3726/dom.bs), §4.2.2 shadow trees/slots, §4.8 Element/ShadowRoot, and [HTML Standard `cd8ac6f1bbf86dd0bd09ef75d27dacaebe7b4c1d`](https://github.com/whatwg/html/blob/cd8ac6f1bbf86dd0bd09ef75d27dacaebe7b4c1d/source), valid custom element names and HTMLSlotElement. Pinned WPT checkout on win-001: `53bc812da2ed81179ebd1ba76b2d197cc4747d12`.
+
+A ShadowRoot is a DocumentFragment arena node with private host/options data, so light-tree parent/child operations remain separate. `attach_shadow` validates the HTML namespace, built-in safelist or valid custom name, and duplicate attachment. Open roots are exposed by `Element.shadowRoot`; closed roots remain available to native algorithms. `getRootNode({composed})`, shadow-including ancestry/order, connectedness, host adoption, and clonable root copying are native. The binding surfaces `ShadowRoot` (including `innerHTML` through DOM-9's fragment parser), Element/Text slot members, and HTMLSlotElement methods.
+
+Slot assignment supports first matching named slot, manual ordered assignment, re-assignment on tree/attribute changes, flat and flattened assigned nodes/elements, fallback content, and closed-root hiding for `assignedSlot`. Changes queue a deduplicated `slotchange` signal through the existing MutationObserver native-microtask flag; the checkpoint dispatches slotchange after observer callbacks. Native event parentage follows assigned slots and composed shadow boundaries; per-listener target/relatedTarget retargeting and frozen closed-tree membership govern event paths and `composedPath()`.
+
+Pinned WPT source assertions ported into native/mock tests (these are **not** unmodified WPT passes):
+
+| Source | Ported expected result |
+|---|---|
+| `shadow-dom/Element-interface-attachShadow.html` | Safelist, duplicate attachment, open/closed return and hiding |
+| `shadow-dom/ShadowRoot-interface.html` | Host/mode and root identity; DOM-9 serialization seam |
+| `dom/nodes/rootNode.html` | Composed root crosses to document, ordinary root stays ShadowRoot |
+| `shadow-dom/slotchange.html` | Assignment changes and fallback changes signal once per checkpoint |
+| `shadow-dom/manual-slot-assignment-no-wrong-unassign.html` | Manual order and de-duplication |
+| `shadow-dom/event-composed-path.html` and `event-inside-shadow-tree.html` | Retargeted path, closed-tree hiding, non-composed boundary |
+| `shadow-dom/event-inside-slotted-node.html` and `event-composed-path-after-dom-mutation.html` | Slotted path crosses shadow; path membership remains frozen during callbacks |
+| `shadow-dom/event-with-related-target.html` | Retargeted equal target/relatedTarget suppresses outside listener |
+| `shadow-dom/shadow-root-clonable.html` | Clonable shadow subtree copies even when host clone is shallow |
+| `shadow-dom/Node-prototype-cloneNode.html` | Cloning a ShadowRoot itself throws NotSupportedError |
+
+The existing `isConnected` and event-parent algorithms were light-tree-only; both were defects for shadow descendants and are corrected. The HTML parser owns declarative shadow DOM, including template attributes and tree-builder attachment; this ticket does not implement it. Custom-element-definition `disable shadow`, scoped registries, CSS layout/rendering of slots, ShadowRoot.activeElement/styleSheets, and MouseEvent's JS-facing relatedTarget remain outside the currently available lower-crate model. Driver wrapper selection must distinguish ShadowRoot from ordinary DocumentFragment via `Dom::is_shadow_root`; the cross-lane request is in `.agents/dom-bindings/questions.md`.

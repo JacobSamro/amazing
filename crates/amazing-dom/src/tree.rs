@@ -79,7 +79,7 @@ impl Dom {
         node
     }
     pub fn is_connected(&self, node: NodeIdx) -> bool {
-        matches!(self.get(self.root(node)).kind, NodeKind::Document)
+        matches!(self.get(self.shadow_including_root(node)).kind, NodeKind::Document)
     }
     pub fn contains(&self, ancestor: NodeIdx, other: Option<NodeIdx>) -> bool {
         let mut cursor = other;
@@ -163,6 +163,7 @@ impl Dom {
     ) -> Result<(), DomError> {
         self.check_node(parent)?;
         self.check_node(node)?;
+        if self.is_shadow_root(node) { return Err(DomError::HierarchyRequestError); }
         if !matches!(
             self.get(parent).kind,
             NodeKind::Document | NodeKind::DocumentFragment | NodeKind::Element { .. }
@@ -319,7 +320,7 @@ impl Dom {
         self.check_node(node)?;
         self.check_node(document)?;
         if !matches!(self.get(document).kind, NodeKind::Document)
-            || matches!(self.get(node).kind, NodeKind::Document)
+            || matches!(self.get(node).kind, NodeKind::Document) || self.is_shadow_root(node)
         {
             return Err(DomError::NotSupportedError);
         }
@@ -336,7 +337,7 @@ impl Dom {
         if self.get(node).owner_document == document {
             return;
         }
-        for id in self.tree_order(node) {
+        for id in self.shadow_including_tree_order(node) {
             self.nodes[id.0 as usize].owner_document = document;
         }
     }
@@ -379,6 +380,8 @@ impl Dom {
         }
     }
     pub(crate) fn link_before(&mut self, parent: NodeIdx, before: Option<NodeIdx>, node: NodeIdx) {
+        let signal_fallback = self.is_html_slot(parent)
+            && self.assigned_nodes(parent, false, false).is_ok_and(|nodes| nodes.is_empty());
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
         let prev = if let Some(before) = before {
             self.get(before).prev_sibling
@@ -399,11 +402,15 @@ impl Dom {
         } else {
             self.nodes[parent.0 as usize].last_child = Some(node);
         }
+        self.reassign_all_slots();
+        if signal_fallback { self.queue_slotchange(parent); }
     }
     pub(crate) fn remove_internal(&mut self, node: NodeIdx, suppress: bool) {
         self.mutation_generation = self.mutation_generation.wrapping_add(1);
         let n = self.get(node);
         let parent = n.parent.expect("remove requires parent");
+        let signal_fallback = self.is_html_slot(parent)
+            && self.assigned_nodes(parent, false, false).is_ok_and(|nodes| nodes.is_empty());
         let prev = n.prev_sibling;
         let next = n.next_sibling;
         self.ranges_remove(node, parent);
@@ -424,6 +431,8 @@ impl Dom {
         n.parent = None;
         n.prev_sibling = None;
         n.next_sibling = None;
+        self.reassign_all_slots();
+        if signal_fallback { self.queue_slotchange(parent); }
         if !suppress {
             self.queue_tree_record(parent, vec![], vec![node], prev, next);
         }

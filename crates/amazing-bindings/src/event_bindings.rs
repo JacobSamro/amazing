@@ -69,15 +69,22 @@ fn wrap_target<H: BindingHost>(host: &mut H, target: Option<EventTarget>) -> Res
 }
 pub(crate) fn dispatch_abort_event<H: BindingHost>(host: &mut H, signal: AbortSignalId) -> Result<(), H::Error> {
     let target = host.with_dom(|dom| dom.abort_signal_target(signal).map(EventTarget::External))?;
+    dispatch_native_event(host, target, "abort", EventInit::default())
+}
+pub(crate) fn dispatch_slotchange_event<H: BindingHost>(host: &mut H, slot: amazing_dom::NodeIdx) -> Result<(), H::Error> {
+    dispatch_native_event(host, EventTarget::Node(slot), "slotchange",
+        EventInit { bubbles: true, cancelable: false, composed: false })
+}
+fn dispatch_native_event<H: BindingHost>(host: &mut H, target: EventTarget, kind: &str, init: EventInit) -> Result<(), H::Error> {
     let event = host.with_dom(|dom| Ok(dom.events_mut().create_event(
-        Event::new("abort", EventInit::default(), Duration::ZERO))))?;
+        Event::new(kind, init, Duration::ZERO))))?;
     let mut dispatch = host.with_dom(|dom| dom.begin_event_dispatch(target, event, DispatchOrigin::UserAgent))?;
     loop {
         let invocation = host.with_dom(|dom| Ok(dom.events_mut().next_listener(&mut dispatch)))?;
         let Some(invocation) = invocation else { break };
         let result = callback_call(host, invocation.callback, invocation.current_target, event);
         if invocation.once { host.release_value(invocation.callback); }
-        if result.is_err() { dispatch.report_exception("AbortSignal listener threw".into()); }
+        if result.is_err() { dispatch.report_exception("Native event listener threw".into()); }
     }
     host.with_dom(|dom| dom.events().dispatch_result(event).map(|_| ()))
 }

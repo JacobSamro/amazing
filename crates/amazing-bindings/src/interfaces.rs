@@ -45,6 +45,7 @@ const NODE: &[Member] = &[
     method("removeChild", O::RemoveChild, 1),
     method("replaceChild", O::ReplaceChild, 2),
     method("cloneNode", O::CloneNode, 0),
+    method("getRootNode", O::GetRootNode, 0),
 ];
 const EVENT_TARGET: &[Member] = &[
     method("addEventListener", O::AddEventListener, 2),
@@ -276,6 +277,10 @@ const RANGE: &[Member] = &[
     method("toString", O::RangeStringifier, 0),
 ];
 const ELEMENT: &[Member] = &[
+    method("attachShadow", O::ElementAttachShadow, 1),
+    getter("shadowRoot", O::ElementShadowRoot),
+    getter("assignedSlot", O::ElementAssignedSlot),
+    getter("slot", O::ElementSlot), setter("slot", O::ElementSetSlot),
     getter("innerHTML", O::ElementInnerHTML), setter("innerHTML", O::ElementSetInnerHTML),
     getter("outerHTML", O::ElementOuterHTML), setter("outerHTML", O::ElementSetOuterHTML),
     method("insertAdjacentHTML", O::ElementInsertAdjacentHTML, 2),
@@ -313,6 +318,22 @@ const ELEMENT: &[Member] = &[
     method("replaceWith", O::ReplaceWith, 0),
     method("remove", O::Remove, 0),
 ];
+const SHADOW_ROOT: &[Member] = &[
+    getter("mode", O::ShadowMode),
+    getter("host", O::ShadowHost),
+    getter("delegatesFocus", O::ShadowDelegatesFocus),
+    getter("slotAssignment", O::ShadowSlotAssignment),
+    getter("clonable", O::ShadowClonable),
+    getter("serializable", O::ShadowSerializable),
+    getter("innerHTML", O::ElementInnerHTML), setter("innerHTML", O::ElementSetInnerHTML),
+];
+const SLOT: &[Member] = &[
+    getter("name", O::SlotName), setter("name", O::SlotSetName),
+    method("assign", O::SlotAssign, 0),
+    method("assignedNodes", O::SlotAssignedNodes, 0),
+    method("assignedElements", O::SlotAssignedElements, 0),
+];
+const TEXT: &[Member] = &[getter("assignedSlot", O::TextAssignedSlot)];
 const HTML_ELEMENT: &[Member] = &[
     getter("innerText", O::ElementInnerText), setter("innerText", O::ElementSetInnerText),
     getter("title", O::HTMLTitle), setter("title", O::HTMLSetTitle),
@@ -406,6 +427,8 @@ pub static INTERFACES: &[D] = &[
         constructor: Some(O::FragmentConstructor),
         members: PARENT,
     },
+    D { interface: I::ShadowRoot, name: "ShadowRoot", parent: Some(I::DocumentFragment),
+        constructor: None, members: SHADOW_ROOT },
     D {
         interface: I::DocumentType,
         name: "DocumentType",
@@ -474,7 +497,7 @@ pub static INTERFACES: &[D] = &[
     D { interface: I::HTMLCanvasElement, name: "HTMLCanvasElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLScriptElement, name: "HTMLScriptElement", parent: Some(I::HTMLElement), constructor: None, members: SCRIPT },
     D { interface: I::HTMLTemplateElement, name: "HTMLTemplateElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
-    D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
+    D { interface: I::HTMLSlotElement, name: "HTMLSlotElement", parent: Some(I::HTMLElement), constructor: None, members: SLOT },
     D { interface: I::HTMLIFrameElement, name: "HTMLIFrameElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLEmbedElement, name: "HTMLEmbedElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLObjectElement, name: "HTMLObjectElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
@@ -497,7 +520,7 @@ pub static INTERFACES: &[D] = &[
         name: "Text",
         parent: Some(I::CharacterData),
         constructor: Some(O::TextConstructor),
-        members: &[],
+        members: TEXT,
     },
     D {
         interface: I::CDATASection,

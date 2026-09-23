@@ -131,6 +131,9 @@ pub fn invoke<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + Doc
     receiver: H::Value,
     args: &[H::Value],
 ) -> Result<H::Value, H::Error> {
+    if crate::shadow_bindings::handles(operation) {
+        return crate::shadow_bindings::invoke(host, operation, receiver, args);
+    }
     if crate::abort_bindings::handles(operation) {
         return crate::abort_bindings::invoke(host, operation, receiver, args);
     }

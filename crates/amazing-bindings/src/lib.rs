@@ -33,6 +33,7 @@ mod document_bindings;
 mod element_reflection;
 pub use abort_bindings::fire_abort_timeout;
 mod mutation_bindings;
+mod shadow_bindings;
 mod attr_bindings;
 mod tokenlist;
 mod html_reflection;
