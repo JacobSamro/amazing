@@ -272,8 +272,11 @@ impl Throw {
     pub fn describe(&self) -> String {
         match &self.0 {
             JsValue::Object(o) => {
+                // `name` (and a default `message`) live on Error.prototype, so
+                // look them up through the chain, as Error.prototype.toString does.
                 let b = o.borrow();
-                match (b.get_own("name"), b.get_own("message")) {
+                match (b.lookup("name"), b.lookup("message")) {
+                    (Some(JsValue::Str(n)), Some(JsValue::Str(m))) if m.is_empty() => n.to_string(),
                     (Some(JsValue::Str(n)), Some(JsValue::Str(m))) => format!("{n}: {m}"),
                     (Some(JsValue::Str(n)), _) => n.to_string(),
                     _ => "[object]".into(),
