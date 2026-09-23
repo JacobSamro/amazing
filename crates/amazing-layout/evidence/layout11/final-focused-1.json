@@ -1,0 +1,98 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "manifest":  "C:\\Users\\server\\src\\wt\\layout\\crates\\amazing-layout\\evidence\\layout11\\focused-manifest.json",
+    "viewport":  {
+                     "width":  800,
+                     "height":  600,
+                     "device_scale":  1
+                 },
+    "font_set":  "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+    "run_directory":  "C:\\Users\\server\\target\\layout\\layout11-zoom-final\\focused-1\\run-20260923T175657950Z-501124",
+    "counts":  {
+                   "pass":  2,
+                   "mismatch":  3,
+                   "error":  0,
+                   "timeout":  0,
+                   "unsupported":  0,
+                   "crash":  0
+               },
+    "unexpected":  0,
+    "tests":  [
+                  {
+                      "id":  "css-viewport__zoom__basic.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "basic-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "112d21ac94f7e2b50d4d58d194c4ecd104b91e6164659958480f6ddb57346333",
+                      "reference_sha256":  "112d21ac94f7e2b50d4d58d194c4ecd104b91e6164659958480f6ddb57346333",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css-viewport__zoom__inherited.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "basic-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "112d21ac94f7e2b50d4d58d194c4ecd104b91e6164659958480f6ddb57346333",
+                      "reference_sha256":  "112d21ac94f7e2b50d4d58d194c4ecd104b91e6164659958480f6ddb57346333",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css-cascade__all-prop-002.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "reference/ref-filled-green-100px-square.xht",
+                      "differing_pixels":  10000,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "4b5d9cf3887407d78e377ed49581761b0669a51d7a3b022c89b8c2ef2472a09d",
+                      "reference_sha256":  "e743f333d898dca93a71600ff14d9a6a959acb7c2e5c388c9564964e08d5f883",
+                      "diff_sha256":  "5efc15a8d3142eb61a7485715c40cc087a6c0c35f80b4fef153c4665ce0bc448",
+                      "detail":  "maxDifference=255/0; totalPixels=10000/0"
+                  },
+                  {
+                      "id":  "css-values__calc-border-radius-1.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "calc-border-radius-1-ref.html",
+                      "differing_pixels":  84,
+                      "max_difference":  255,
+                      "allowed_max_difference":  5,
+                      "allowed_differing_pixels":  5,
+                      "actual_sha256":  "c222c008b7f5391ae8d183258fa8e66ba84e609c0fc19dc77a1e55582daf5c21",
+                      "reference_sha256":  "c873a9d0c1581def83edf268ed38183c12b4e6a849eb29c1a9e662bbf3dab40f",
+                      "diff_sha256":  "8401c55a7ffd442a247319f9bbdb21306301f7e2f554cfc617b4df8cd024a819",
+                      "detail":  "maxDifference=255/5; totalPixels=84/5"
+                  },
+                  {
+                      "id":  "css-fonts__font-variant-ligatures-11.optional.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "font-variant-ligatures-11-ref.html",
+                      "differing_pixels":  424,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "5855392dde42092924c565f07d7498154af1e11c5319bbc0abb2640d9a3c29b8",
+                      "reference_sha256":  "fdbb5cddb39813b748314b22c1c6a3e37fba2689c0fe6f91a3ae292a466c418c",
+                      "diff_sha256":  "4b494fe0b2d650c6af8ab7dc1827fa3fd9a2aa8ef0fb0ce07a0d0780c2d7edd6",
+                      "detail":  "maxDifference=255/0; totalPixels=424/0"
+                  }
+              ]
+}
