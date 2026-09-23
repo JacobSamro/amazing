@@ -229,6 +229,30 @@ fn integer(css: &str) -> Option<i32> {
     css.parse().ok()
 }
 
+/// Canonical single-keyword serialization for supported CSS Display 3 pairs.
+pub(crate) fn display_canonical(css: &str) -> Option<&'static str> {
+    let tokens = tokenize(css);
+    let words = significant(&tokens);
+    let [Token::Ident(outer), Token::Ident(inner)] = words.as_slice() else { return None };
+    let outer = outer.to_ascii_lowercase();
+    let inner = inner.to_ascii_lowercase();
+    match (outer.as_str(), inner.as_str()) {
+        ("inline", "flow") => Some("inline"),
+        ("block", "flow") => Some("block"),
+        ("inline", "flow-root") => Some("inline-block"),
+        ("block", "flow-root") => Some("flow-root"),
+        ("inline", "flex") => Some("inline-flex"),
+        ("block", "flex") => Some("flex"),
+        ("inline", "grid") => Some("inline-grid"),
+        ("block", "grid") => Some("grid"),
+        ("inline", "table") => Some("inline-table"),
+        ("block", "table") => Some("table"),
+        ("inline", "grid-lanes") => Some("inline-grid-lanes"),
+        ("block", "grid-lanes") => Some("grid-lanes"),
+        _ => None,
+    }
+}
+
 /// None means invalid in a grammar owned here; Unparsed means outside our scope.
 pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
     use ComputedValue as V;
@@ -241,10 +265,7 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
     }
     match property {
         "display" => {
-            if matches!(significant(&tokenize(css)).as_slice(), [Token::Ident(first), Token::Ident(second)] if first.eq_ignore_ascii_case("inline") && second.eq_ignore_ascii_case("grid-lanes")) {
-                return Some(V::Display(Display::InlineGridLanes));
-            }
-            keyword!(Display)
+            return Display::parse(display_canonical(css).unwrap_or(css)).map(V::Display);
         }
         "grid-template-columns" | "grid-template-rows" => {
             return Some(crate::computed::parse_subgrid(css).map(V::Subgrid).unwrap_or(V::Unparsed));

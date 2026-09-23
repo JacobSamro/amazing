@@ -428,6 +428,118 @@ fn compute_one(
     style
 }
 
+/// Origin of the declaration that supplied a standalone paint property.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ElementStyleSource {
+    Initial,
+    Inherited,
+    PresentationHint,
+    Author,
+    Inline,
+}
+
+/// A computed value within the SVG paint subset. Unsupported values retain
+/// their computed CSS text so consumers can decline rendering explicitly.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ElementStyleValue<T> {
+    Supported { value: T, source: ElementStyleSource },
+    Unsupported { css: String, source: ElementStyleSource },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ElementFill {
+    None,
+    Color([u8; 4]),
+}
+
+/// Closed paint subset for an element parsed without a document DOM.
+/// `computed` can be passed as the parent when computing a descendant.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ElementPaintStyle {
+    pub computed: ComputedStyle,
+    pub color: ElementStyleValue<[u8; 4]>,
+    pub fill: ElementStyleValue<ElementFill>,
+    pub fill_opacity: ElementStyleValue<f32>,
+    pub opacity: ElementStyleValue<f32>,
+}
+
+/// Compute paint values for a standalone element using the document cascade's
+/// hint, author and inline priority and the same variable/keyword resolver.
+/// Hints are always normal declarations. Only the four typed paint properties
+/// are exposed; custom properties remain internal substitution state.
+pub fn compute_element_paint_style(
+    parent: Option<&ComputedStyle>,
+    presentation_hints: &[Declaration],
+    author: &[Declaration],
+    inline: &[Declaration],
+) -> ElementPaintStyle {
+    let mut pool = Vec::new();
+    for (declarations, origin, is_inline) in [
+        (presentation_hints, Origin::Hint, false),
+        (author, Origin::Author, false),
+        (inline, Origin::Author, true),
+    ] {
+        for declaration in declarations {
+            for (property, value) in computed::expand_declaration(&declaration.property, &declaration.value) {
+                pool.push((property, value, origin, is_inline, declaration.important && origin != Origin::Hint));
+            }
+        }
+    }
+    let mut candidates: BTreeMap<&str, Vec<Candidate<'_>>> = BTreeMap::new();
+    for (order, (property, value, origin, is_inline, important)) in pool.iter().enumerate() {
+        candidates.entry(property).or_default().push(Candidate {
+            value,
+            important: *important,
+            inline: *is_inline,
+            origin: *origin,
+            author_declaration: *origin == Origin::Author,
+            spec: Specificity::default(),
+            order: order as u64 + 1,
+            layer: usize::MAX,
+            proximity: usize::MAX,
+        });
+    }
+    let selected = winners(&candidates, None);
+    let provisional = computed::resolve_with_root(parent, selected.iter().map(|(name, candidate)| ((*name).to_owned(), candidate.value.to_owned())).collect(), 16.0);
+    let selected = winners(&candidates, Some(&provisional));
+    let mut computed = computed::resolve_with_root(parent, selected.iter().map(|(name, candidate)| ((*name).to_owned(), candidate.value.to_owned())).collect(), 16.0);
+    for (property, candidate) in &selected {
+        if candidate.author_declaration { computed.mark_author_specified(property); }
+    }
+    let source = |property: &str, inherited: bool| match selected.get(property) {
+        Some(candidate) if candidate.inline => ElementStyleSource::Inline,
+        Some(candidate) if candidate.origin == Origin::Author => ElementStyleSource::Author,
+        Some(_) => ElementStyleSource::PresentationHint,
+        None if inherited && parent.is_some() => ElementStyleSource::Inherited,
+        None => ElementStyleSource::Initial,
+    };
+    let color_css = computed.get("color").unwrap_or("black");
+    let color = match crate::color::parse_css_color(color_css) {
+        Some(value) => ElementStyleValue::Supported { value, source: source("color", true) },
+        None => ElementStyleValue::Unsupported { css: color_css.to_owned(), source: source("color", true) },
+    };
+    let fill_css = computed.get("fill").unwrap_or("black");
+    let fill_value = if fill_css.eq_ignore_ascii_case("none") {
+        Some(ElementFill::None)
+    } else if fill_css.eq_ignore_ascii_case("currentcolor") {
+        crate::color::parse_css_color(color_css).map(ElementFill::Color)
+    } else {
+        crate::color::parse_css_color(fill_css).map(ElementFill::Color)
+    };
+    let fill = match fill_value {
+        Some(value) => ElementStyleValue::Supported { value, source: source("fill", true) },
+        None => ElementStyleValue::Unsupported { css: fill_css.to_owned(), source: source("fill", true) },
+    };
+    let alpha = |property: &str, inherited: bool| {
+        let css = computed.get(property).unwrap_or("1");
+        match css.parse::<f32>() {
+            Ok(value) if value.is_finite() => ElementStyleValue::Supported { value, source: source(property, inherited) },
+            _ => ElementStyleValue::Unsupported { css: css.to_owned(), source: source(property, inherited) },
+        }
+    };
+    ElementPaintStyle { color, fill, fill_opacity: alpha("fill-opacity", true), opacity: alpha("opacity", false), computed }
+}
+
 fn physical_margin_for(logical: &str, rtl: bool, writing_mode: &str) -> &'static str {
     if writing_mode.eq_ignore_ascii_case("horizontal-tb") {
         match (logical, rtl) {

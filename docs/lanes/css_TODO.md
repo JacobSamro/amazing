@@ -1,5 +1,26 @@
 # CSS lane decision map
 
+## CSS-7 — consumer adoption
+
+Replaced-content's SVG adapter can call `compute_element_paint_style(parent,
+presentation_hints, author, inline)` for each SVG element, passing the returned
+`computed` style to descendants. Convert supported `color` and `fill` RGBA8,
+`fill-opacity`, and `opacity` to the adapter's paint values; preserve `None`
+fill. Handle `ElementStyleValue::Unsupported` explicitly (for example SVG paint
+servers and CSS color functions outside the current parser), rather than
+reparsing the CSS text or guessing a fallback. Presentation attributes must be
+passed as `Declaration`s in `presentation_hints`, not mixed with inline style;
+the API keeps their lower cascade origin. The optional `author` slice carries
+matched stylesheet declarations when the consumer has them. CSS-wide keywords,
+variables, important declarations, and origin rollback stay inside CSS.
+
+The same ticket canonicalises supported CSS Display 3 two-keyword forms to
+existing computed `Display` variants, including `inline flow-root` to
+`inline-block`, for LAYOUT-6 consumption. The `grid` shorthand now carries
+explicit subgrid track lists into both template longhands and resets its
+implicit track longhands. The pinned reach probe reports 19/19 subgrid cases
+twice; this is CSS typed reach, not a layout render pass.
+
 ## CSS-1 — typed computed values (prototype)
 
 Typed values precede `@layer` (integrator decision, 2026-09-20). Locked decision
