@@ -7,7 +7,7 @@ $wptRevision=(& git -C "$target\wpt" rev-parse HEAD).Trim()
 if($LASTEXITCODE -or $wptRevision -ne 'c2a2fce69e5c2509d9dc28440ec8b42532e5c293'){throw 'Wrong WPT source revision'}
 $dirty=@(& git -C "$target\wpt" status --porcelain --untracked-files=no)
 if($LASTEXITCODE -or $dirty.Count){throw 'WPT tracked files modified'}
-$expected=Get-Content "$target\layout4-final-sources.json" -Raw|ConvertFrom-Json
+$expected=Get-Content "$target\final-sources.json" -Raw|ConvertFrom-Json
 foreach($entry in $expected.PSObject.Properties){
     if((Get-FileHash (Join-Path $repo $entry.Name)).Hash.ToLowerInvariant() -ne $entry.Value){throw "Source drift: $($entry.Name)"}
 }

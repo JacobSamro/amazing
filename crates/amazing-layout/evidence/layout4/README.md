@@ -1,53 +1,70 @@
-# LAYOUT-4 partial evidence — checkpointed, not certified
+# LAYOUT-4 current gate — contents unboxing
 
-`ranking.json` and `ranking-geometry-{1,2}.json` retain the pre-implementation
-measurement at `bb79669`. The interrupted certification attempt used a freshly rebuilt baseline
-at `b5d1b99` and implementation `15f9572`. Do not attribute the earlier dev gains
-(geometry 34 → 35, tables 8 → 9) to LAYOUT-4.
+The certified gate uses baseline `ffb143b` and the unchanged layout implementation
+at `1419e48` on `lane/layout`. The earlier `b5d1b99` / `15f9572` runs in
+`checkpoint.json` are historical and are not credited. The 2026-09-23 gate ran
+only on win-001. The pinned WPT revision is
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, viewport 800 × 600.
 
-All engine builds and tests ran on win-001. The source manifests record every
-Rust source and Cargo manifest/lockfile, including the new contents tests.
-Build metadata records fresh first-party compilation, executable hashes, and
-log hashes. Nextest and doctests have separate counts. `summary.json` is produced
-only after both runs of every selection match per-case classifications and
-actual/reference/diff hashes, and every baseline pass is retained.
+`dev-baseline-sources.json` and `final-sources.json` pin every Rust/Cargo input
+(219 and 220 files). `dev-baseline-build.json` and `final-build.json` pin freshly
+compiled renderer and image-adapter executables and all build/test logs. The
+Windows collector verified the final exact source set, clean WPT checkout,
+artifacts, logs, and successful exits after rendering. The first collector
+attempt used a stale prefixed source-manifest filename; `collect-layout4.ps1`
+was corrected to read the same `final-sources.json` as the build. It then passed.
 
-To reproduce, sync the complete baseline commit from the Mac into the layout
-Windows tree, then run `../build-layout4.ps1 -Phase dev-baseline
--SourceManifestPath C:\Users\server\target\layout\layout4-dev-sources.json
--BuildImages`. Restore and sync the implementation's full source manifest, then
-run the same helper with `-Phase final -FullWorkspace -BuildImages` and its
-`layout4-final-sources.json`. The JSON files here provide those exact manifests.
-The helper refuses source drift and clears first-party artifact caches.
+`summary.json` verifies both before and both after reports for every selection:
+identical per-case classifications and actual/reference/diff hashes within each
+pair, the same case IDs, no baseline pass losses, and zero timeout, unsupported,
+or crash results. The 40 normalized reports, collection, test summaries and
+build records are retained here. `review/review.json` checks fresh PPM hashes
+against the geometry reports and lossless PNG hashes against inspected images
+for text inheritance, sharing, out-of-flow positioning, anonymous table repair
+and first-letter background removal. The raw PPMs remain in the ignored
+`.agents/layout/layout4-review-current/` scratch area.
 
-Run `../parallel-layout4.ps1` in Windows against the pinned WPT checkout
-`C:\Users\server\target\layout\wpt`; it runs ten selections twice for each
-artifact. It resumes completed reports and launches at most four rendering
-jobs, without building. Repeat `cargo nextest run --workspace --locked` and
-`cargo test --workspace --locked --doc` separately, retaining the repeat logs
-and exit files expected by `../collect-layout4.ps1`. Run that collector after
-all gates. Copy its `layout4-collected.json` back and analyze it with
-`python ../summarize-layout4.py <collected.json> .` from this directory.
+| Selection | Baseline | Implementation |
+| --- | ---: | ---: |
+| Broad geometry | 35/61 | 39/61 |
+| Tables | 9/12 | 9/12 |
+| Contents | 2/6 | 6/6 |
+| Floats | 6/8 | 6/8 |
+| Block collapse | 9/9 | 9/9 |
+| Position | 12/12 | 12/12 |
+| Text flow | 14/16 | 14/16 |
+| Flex/grid | 24/24 | 24/24 |
+| Paint compositing | 24/24 | 24/24 |
+| CSS Images | 12/12 | 12/12 |
 
-Fresh-epoch `review/review.json` and `summary.json` are deliberately absent:
-report collection, hash stability, final source/artifact audit and fresh pixel
-review could not be completed during the SSH outage. The older pixel review was
-moved to ignored orchestration scratch so it cannot be mistaken for fresh proof.
-The summary script requires new review metadata and verifies it against reports.
+Layout nextest: 189 → 201 passed, with zero skipped. Separate layout doctests:
+zero tests in each phase, zero failures. Final workspace nextest: 1,274 passed,
+three skipped, repeated twice; separate workspace doctests: two passed, zero
+failed, repeated twice. Every full workspace run and the full render sweep
+acquired a shared build slot through the primary checkout's coordination script.
+An older `474251e` repeat used the worktree-private slot script before the
+integrator fix and is excluded from this gate.
 
-An intermediate epoch at `11dd8a8` was superseded after an external refresh at
-2026-09-20 20:15:43 UTC changed workspace, HTML, and layout files. The pinned
-executables remained unchanged, but the final source audit failed. Its builds,
-logs and 40 reports are archived on win-001 under
-`C:\Users\server\target\layout\layout4-11dd8a8-builds`; none are credited by the
-final summary. The final epoch uses `layout4-recovery-evidence` after rebasing,
-self-refreshing, restoring the exact baseline, and repeating builds and gates.
+The four broad geometry gains are `display-contents-text-inherit`,
+`display-contents-sharing-001`, `display-contents-oof-002`, and
+`display-contents-first-letter-002`. The focused contents shard gains flex,
+float, inline and unusual-HTML-element cases. `td-001` now produces contiguous
+PASS but remains a mismatch because HTML `cellspacing="0"` is not mapped to
+computed border spacing. Two before/after cases need generated pseudo-content.
+The first-letter fixture only proves removal of a red contents background,
+not general first-letter support.
 
-The existing rendering session completed all 40 runs during the outage; see
-`checkpoint.json` for observed counts and explicit unproven items. No gates were
-run on the post-run rebase `985e5ef` / `9bf1224`. `post-gate-rebase.json` verifies
-unchanged layout source. `implementation.patch` reconstructs the measured layout
-changes on `b5d1b99` without requiring the old unpublished commit to remain in
-Git. The summarizer checks tracked gate inputs against that measured base, not
-the newer working tree. Do not refresh before preserving retained results, and
-do not open SSH/SCP until the integrator broadcasts the all-clear.
+The 22 remaining broad geometry mismatches are eleven margin-trim, five
+intrinsic sizing, two float/quirks, two generated pseudo-content, one
+flow-root/list-item, and one `td-001` presentational-mapping case. Atomic
+inline subtree layout, aspect ratio and sticky positioning were not implemented
+in this bounded ticket. `ranking.json` records the pre-implementation ranking
+and fixture audit.
+
+To reproduce on win-001, use the source manifests with
+`../build-layout4.ps1` for `dev-baseline` and `final`, run
+`../parallel-layout4.ps1`, repeat workspace nextest and doctests separately,
+then run `../collect-layout4.ps1`. Analyze the copied collection with
+`python ../summarize-layout4.py collected.json .` from this directory. The
+old `post-gate-rebase.json` and `implementation.patch` are retained only to
+explain the historical checkpoint.

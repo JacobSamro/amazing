@@ -35,7 +35,7 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 summary = {"schema": 1, "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
-           "baseline_engine_commit": "b5d1b99", "implementation_commit": "15f9572", "implementation_source_manifest": "final-sources.json",
+           "baseline_engine_commit": "ffb143b", "implementation_commit": "1419e48", "implementation_source_manifest": "final-sources.json",
            "viewport": [800, 600], "selections": {}}
 for suite in suites:
     entry = {}
@@ -111,7 +111,6 @@ for path, expected_hash in source["gate_files"].items():
         data = subprocess.check_output(["git", "show", f"{summary['baseline_engine_commit']}:{path}"], cwd=repository)
     assert hashlib.sha256(data).hexdigest() == expected_hash
 summary["gate_files"] = source["gate_files"]
-summary["post_gate_rebase"] = json.loads((out / "post-gate-rebase.json").read_text())
 for phase, build in source["builds"].items():
     manifest_bytes = (out / f"{phase}-sources.json").read_bytes()
     assert hashlib.sha256(manifest_bytes).hexdigest() == build["source_manifest_sha256"]

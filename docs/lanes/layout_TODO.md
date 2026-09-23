@@ -563,3 +563,38 @@ available. Any new gate must name its actual measured revision.
 See [checkpoint observations](../../crates/amazing-layout/evidence/layout4/checkpoint.json),
 [rebase/source equality](../../crates/amazing-layout/evidence/layout4/post-gate-rebase.json)
 and [reproduction notes](../../crates/amazing-layout/evidence/layout4/README.md).
+
+### LAYOUT-4 final gate — 2026-09-23
+
+The ticket is complete at a review boundary on `lane/layout`. The current gate
+uses dev `ffb143b` and layout implementation `1419e48`, after the integrator's
+shared coordination-script fix. The two earlier render epochs described above
+remain historical. The implementation source is unchanged by the final gate.
+
+Windows layout nextest: **189 → 201 passed**; separate layout doctests **0/0**.
+Final workspace nextest: **1,274 passed, 3 skipped**, twice; separate workspace
+doctests: **2 passed, 0 failed**, twice. The full workspace runs and all 40
+render runs acquired shared primary-checkout build slots. The earlier
+`474251e` repeat used a private worktree slot and is excluded. The first
+collector attempt failed because it read the stale prefixed source manifest;
+the corrected collector verified all 220 final source files, exact source set,
+clean pinned WPT checkout, executable/log hashes and successful gate exits.
+
+At pinned WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` and 800 × 600,
+broad geometry improves **35/61 → 39/61** and focused contents **2/6 → 6/6**.
+Tables remain 9/12, floats 6/8, block collapse 9/9, position 12/12, text
+14/16, flex/grid 24/24, paint 24/24 and CSS Images 12/12. Both baseline and
+final run each selection twice with matching per-case classifications and
+actual/reference/diff hashes, zero timeout/unsupported/crash, and no pass loss.
+The four geometry gains are text-inherit, sharing-001, oof-002 and
+first-letter-002. Fresh pixel review confirms the visible changes; it does not
+claim first-letter pseudo support. The remaining `td-001` 2px offset is the
+routed `cellspacing="0"` presentational-mapping dependency.
+
+The 22 remaining geometry mismatches group as eleven margin-trim, five
+intrinsic sizing, two float/quirks, two generated pseudo-content, one
+flow-root/list-item and the one `td-001` mapping case. Atomic inline subtree,
+aspect-ratio and sticky work remains outside LAYOUT-4. The measured source
+manifests, 40 normalized reports, hash audit, `summary.json`, and reviewed
+pixels are in [LAYOUT-4 evidence](../../crates/amazing-layout/evidence/layout4/README.md).
+No next ticket starts at this boundary.
