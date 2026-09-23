@@ -1405,6 +1405,10 @@ fn custom_element_creation_handles_is_and_disable_shadow() {
     let customized = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)),
         &[str_value("button"), V::Dictionary(vec![("is", str_value("x-button"))])]));
     assert_eq!(h.dom.custom_element_state(customized), amazing_dom::custom_elements::CustomElementState::Custom);
+    let customized_ns = node(call(&mut h, O::CreateElementNS, V::Node(NodeIdx(0)),
+        &[str_value("http://www.w3.org/1999/xhtml"), str_value("button"),
+            V::Dictionary(vec![("is", str_value("x-button"))])]));
+    assert_eq!(h.dom.custom_element_state(customized_ns), amazing_dom::custom_elements::CustomElementState::Custom);
     let shadow_disabled = V::Dictionary(vec![("__constructor", V::Bool(true)),
         ("__id", V::Number(3.)), ("prototype", V::Dictionary(vec![])),
         ("disabledFeatures", V::Array(vec![str_value("shadow")]))]);
