@@ -2,8 +2,11 @@
 //! The producer implements [`PaintSource`]; `amazing-paint` can attach its display-list
 //! view without this crate depending on layout or changing the full-paint path.
 #![forbid(unsafe_code)]
+mod animation;
+mod frame;
 mod property;
 use amazing_paint::Surface;
+pub use animation::*;
 pub use property::*;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
@@ -122,6 +125,8 @@ pub struct FrameStats {
     pub raster_calls: u64,
     pub rasterized_tiles: u64,
     pub composited_pixels: u64,
+    pub blitted_pixels: u64,
+    pub damaged_pixels: u64,
 }
 /// Retains raster tiles while property nodes change. `render` never asks the
 /// source to rebuild display items for scroll, transform or opacity changes.
@@ -131,6 +136,9 @@ pub struct Compositor {
     layers: Vec<Layer>,
     tiles: HashMap<TileKey, Tile>,
     last_frame: FrameStats,
+    previous_frame: Option<Surface>,
+    previous_layers: Vec<frame::LayerSnapshot>,
+    animations: Vec<CompositorAnimation>,
 }
 impl Compositor {
     pub fn new(
@@ -177,6 +185,9 @@ impl Compositor {
             layers,
             tiles: HashMap::new(),
             last_frame: FrameStats::default(),
+            previous_frame: None,
+            previous_layers: Vec::new(),
+            animations: Vec::new(),
         })
     }
     pub fn trees(&self) -> &PropertyTrees {
@@ -219,119 +230,6 @@ impl Compositor {
     pub fn set_opacity(&mut self, id: EffectId, opacity: f32) -> Result<(), TreeError> {
         self.trees.set_opacity(id, opacity)
     }
-    pub fn render(
-        &mut self,
-        source: &impl PaintSource,
-        width: u32,
-        height: u32,
-    ) -> Result<Surface, SceneError> {
-        let mut stats = FrameStats::default();
-        let mut frame = Surface::new(width, height);
-        if self
-            .chunks
-            .last()
-            .is_some_and(|c| c.items.end > source.item_count())
-        {
-            return Err(SceneError::InvalidRange);
-        }
-        let viewport = Rect::new(0., 0., width as f32, height as f32);
-        let mut visible_tiles = HashSet::new();
-        for (li, layer) in self.layers.iter().enumerate() {
-            let keys = tile_keys(li, layer.bounds);
-            if keys.len() > 1_000_000 {
-                return Err(SceneError::TooManyTiles);
-            }
-            let Some(matrix) = self.trees.matrix(layer.state) else {
-                continue;
-            };
-            for key in keys {
-                if !matrix
-                    .map_bounds(tile_rect(key))
-                    .is_some_and(|r| r.intersects(viewport))
-                {
-                    continue;
-                }
-                visible_tiles.insert(key);
-                if visible_tiles.len() > MAX_VISIBLE_TILES {
-                    return Err(SceneError::TooManyTiles);
-                }
-                let needs = self.tiles.get(&key).is_none_or(|t| t.dirty);
-                if needs {
-                    let rect = tile_rect(key);
-                    let mut surface = Surface::new(TILE_SIZE as u32, TILE_SIZE as u32);
-                    for &ci in &layer.chunks {
-                        let c = &self.chunks[ci];
-                        if c.bounds.intersects(rect) {
-                            source.rasterize(c.items.clone(), rect, &mut surface);
-                            stats.raster_calls += 1;
-                        }
-                    }
-                    self.tiles.insert(
-                        key,
-                        Tile {
-                            surface,
-                            dirty: false,
-                        },
-                    );
-                    stats.rasterized_tiles += 1;
-                }
-            }
-        }
-        self.tiles.retain(|key, _| visible_tiles.contains(key));
-        for (li, layer) in self.layers.iter().enumerate() {
-            let Some(matrix) = self.trees.matrix(layer.state) else {
-                continue;
-            };
-            let Some(outer) = matrix.map_bounds(layer.bounds) else {
-                continue;
-            };
-            let x0 = (outer.x.floor() as i64).clamp(0, width as i64) as u32;
-            let y0 = (outer.y.floor() as i64).clamp(0, height as i64) as u32;
-            let x1 = ((outer.x + outer.w).ceil() as i64).clamp(0, width as i64) as u32;
-            let y1 = ((outer.y + outer.h).ceil() as i64).clamp(0, height as i64) as u32;
-            let opacity = self.trees.opacity(layer.state);
-            if opacity <= 0. {
-                continue;
-            }
-            let blend = self.trees.effects[layer.state.effect.0].blend;
-            for y in y0..y1 {
-                for x in x0..x1 {
-                    let dx = x as f32 + 0.5;
-                    let dy = y as f32 + 0.5;
-                    if !self.trees.visible(layer.state, dx, dy) {
-                        continue;
-                    }
-                    let Some((sx, sy)) = matrix.unmap(dx, dy) else {
-                        continue;
-                    };
-                    if !layer.bounds.contains(sx, sy) {
-                        continue;
-                    }
-                    let px = sx.floor() as i32;
-                    let py = sy.floor() as i32;
-                    let key = TileKey {
-                        layer: li,
-                        x: px.div_euclid(TILE_SIZE),
-                        y: py.div_euclid(TILE_SIZE),
-                    };
-                    let Some(tile) = self.tiles.get(&key) else {
-                        continue;
-                    };
-                    let tx = px.rem_euclid(TILE_SIZE) as u32;
-                    let ty = py.rem_euclid(TILE_SIZE) as u32;
-                    let src = tile.surface.get_pixel(tx, ty).unwrap_or([0; 4]);
-                    if src[3] == 0 {
-                        continue;
-                    }
-                    let dst = frame.get_pixel(x, y).unwrap_or([0; 4]);
-                    frame.set_pixel(x, y, blend_pixel(dst, src, opacity, blend));
-                    stats.composited_pixels += 1;
-                }
-            }
-        }
-        self.last_frame = stats;
-        Ok(frame)
-    }
     pub fn cached_tiles(&self) -> usize {
         self.tiles.len()
     }
@@ -372,32 +270,6 @@ fn tile_rect(k: TileKey) -> Rect {
         TILE_SIZE as f32,
         TILE_SIZE as f32,
     )
-}
-fn blend_pixel(dst: [u8; 4], src: [u8; 4], opacity: f32, mode: BlendMode) -> [u8; 4] {
-    let sa = (src[3] as f32 / 255.) * opacity;
-    let da = dst[3] as f32 / 255.;
-    let oa = sa + da * (1. - sa);
-    if oa <= 0. {
-        return [0; 4];
-    }
-    let mut out = [0; 4];
-    for i in 0..3 {
-        let s = src[i] as f32 / 255.;
-        let d = dst[i] as f32 / 255.;
-        let b = match mode {
-            BlendMode::Normal => s,
-            BlendMode::Multiply => s * d,
-            BlendMode::Screen => s + d - s * d,
-        };
-        let c = (b * sa + d * da * (1. - sa)) / oa;
-        out[i] = (c.clamp(0., 1.) * 255.).round() as u8
-    }
-    out[3] = (oa.clamp(0., 1.) * 255.).round() as u8;
-    out
-}
-/// Validate that the producer's chunk ranges are disjoint and ordered.
-pub fn covered_items(chunks: &[PaintChunk]) -> HashSet<usize> {
-    chunks.iter().flat_map(|c| c.items.clone()).collect()
 }
 
 #[cfg(test)]
@@ -557,5 +429,111 @@ mod tests {
         let layers = layerize(&trees, &chunks);
         assert_eq!(layers.len(), 2);
         assert!(layers[1].reasons.contains(CompositingReasons::OVERLAP));
+    }
+    #[test]
+    fn scroll_blits_even_when_new_tile_enters_viewport() {
+        let mut trees = PropertyTrees::new();
+        let scroll = trees
+            .add_scroll(
+                ScrollId(0),
+                (192., 0.),
+                Rect::new(0., 0., 64., 64.),
+                Rect::new(0., 0., 320., 64.),
+            )
+            .unwrap();
+        let bounds = Rect::new(250., 0., 20., 64.);
+        let state = PropertyTreeState {
+            scroll,
+            ..Default::default()
+        };
+        let chunks = vec![PaintChunk {
+            items: 0..1,
+            state,
+            bounds,
+            reasons: CompositingReasons::SCROLLER,
+        }];
+        let source = Source {
+            colors: vec![[42, 80, 120, 255]],
+            rects: vec![bounds],
+            calls: Cell::new(0),
+        };
+        let mut retained = Compositor::new(trees, chunks, source.item_count()).unwrap();
+        retained.render(&source, 64, 64).unwrap();
+        retained.set_scroll(scroll, (193., 0.)).unwrap();
+        let fast = retained.render(&source, 64, 64).unwrap();
+        let mut full = Compositor::new(
+            retained.trees().clone(),
+            retained.chunks().to_vec(),
+            source.item_count(),
+        )
+        .unwrap();
+        assert_eq!(fast, full.render(&source, 64, 64).unwrap());
+        assert_eq!(retained.stats().damaged_pixels, 64);
+        assert_eq!(retained.stats().blitted_pixels, 64 * 63);
+        assert!(retained.stats().raster_calls > 0);
+    }
+    #[test]
+    fn ticking_animation_changes_properties_without_raster() {
+        let (mut compositor, source, transform, _, opacity) = fixture();
+        compositor.render(&source, 128, 128).unwrap();
+        let timing = Timing {
+            delay_ms: 100.,
+            duration_ms: 1000.,
+            iterations: 1.,
+            direction: Direction::Normal,
+            fill: Fill::Both,
+            easing: Easing::Linear,
+        };
+        compositor
+            .add_animation(
+                0.,
+                timing.clone(),
+                AnimationTarget::Transform(transform),
+                vec![
+                    Keyframe {
+                        offset: 0.,
+                        value: AnimatedValue::Transform(Matrix4::IDENTITY),
+                        easing: Easing::Linear,
+                    },
+                    Keyframe {
+                        offset: 1.,
+                        value: AnimatedValue::Transform(Matrix4::translation(10., 0., 0.)),
+                        easing: Easing::Linear,
+                    },
+                ],
+            )
+            .unwrap();
+        compositor
+            .add_animation(
+                0.,
+                timing,
+                AnimationTarget::Opacity(opacity),
+                vec![
+                    Keyframe {
+                        offset: 0.,
+                        value: AnimatedValue::Opacity(1.),
+                        easing: Easing::Linear,
+                    },
+                    Keyframe {
+                        offset: 1.,
+                        value: AnimatedValue::Opacity(0.),
+                        easing: Easing::Linear,
+                    },
+                ],
+            )
+            .unwrap();
+        compositor.tick(600.).unwrap();
+        assert_eq!(
+            compositor
+                .trees()
+                .transform(transform)
+                .unwrap()
+                .matrix
+                .map(0., 0.),
+            Some((5., 0.))
+        );
+        assert_eq!(compositor.trees().effect(opacity).unwrap().opacity, 0.5);
+        compositor.render(&source, 128, 128).unwrap();
+        assert_eq!(compositor.stats().raster_calls, 0);
     }
 }
