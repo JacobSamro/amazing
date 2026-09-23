@@ -290,6 +290,37 @@ fn source(root: &Path, path: &Path, scaffold: bool) -> Result<String, String> {
     }
     String::from_utf8(bytes).map_err(|e| e.to_string())
 }
+/// Window variant of WPT AnyHtmlHandler at revision c2a2fce69e5c2509d9dc28440ec8b42532e5c293.
+/// Template and metadata rules: tools/serve/serve.py AnyHtmlHandler and
+/// tools/manifest/sourcefile.py read_script_metadata/parse_variants.
+fn any_window_wrapper(js: &str, test: &str) -> Result<String, String> {
+    let mut metadata = Vec::new();
+    for line in js.lines() {
+        let Some(rest) = line.strip_prefix("//").and_then(|s| s.trim_start().strip_prefix("META:")) else { break };
+        let Some((key, value)) = rest.trim_start().split_once('=') else { break };
+        if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') { break }
+        metadata.push((key, value));
+    }
+    if let Some((_, globals)) = metadata.iter().find(|(key, _)| *key == "global") {
+        if !globals.split(',').any(|part| part.trim() == "window") {
+            return Err("unsupported: .any.js source excludes window global".into());
+        }
+    }
+    let text_escape = |value: &str| value.replace('&', "&amp;").replace('<', "&lt;");
+    let attr_escape = |value: &str| value.replace('&', "&amp;").replace('"', "&quot;");
+    let mut meta = String::new();
+    let mut scripts = String::new();
+    for (key, value) in metadata {
+        match key {
+            "timeout" if value == "long" => meta.push_str("<meta name=\"timeout\" content=\"long\">\n"),
+            "title" => meta.push_str(&format!("<title>{}</title>\n", text_escape(value))),
+            "script" => scripts.push_str(&format!("<script src=\"{}\"></script>\n", attr_escape(value))),
+            _ => {}
+        }
+    }
+    let path = format!("/{}", test.trim_start_matches('/'));
+    Ok(format!("<!doctype html>\n<meta charset=utf-8>\n{meta}<script>\nself.GLOBAL = {{\n  isWindow: function() {{ return true; }},\n  isWorker: function() {{ return false; }},\n  isShadowRealm: function() {{ return false; }},\n}};\n</script>\n<script src=\"/resources/testharness.js\"></script>\n<script src=\"/resources/testharnessreport.js\"></script>\n{scripts}<div id=log></div>\n<script src=\"{}\"></script>\n", attr_escape(&path)))
+}
 fn collect_scripts(
     dom: &amazing_dom::Dom,
     node: amazing_dom::NodeIdx,
@@ -323,10 +354,14 @@ fn execute(options: &Options) -> Result<(), String> {
     COMPLETE.set(false);
     let root = options.root.canonicalize().map_err(|e| e.to_string())?;
     let file = local_file(&root, &root, &options.test)?;
-    if file.extension().and_then(|s| s.to_str()) != Some("html") {
-        return Err("unsupported: classic-script .html tests only".into());
-    }
-    let html = source(&root, &file, options.scaffold)?;
+    let html = match file.extension().and_then(|s| s.to_str()) {
+        Some("html") => source(&root, &file, options.scaffold)?,
+        Some("js") if !options.scaffold && options.test.ends_with(".any.js") => {
+            let js = source(&root, &file, false)?;
+            any_window_wrapper(&js, &options.test)?
+        }
+        _ => return Err("unsupported: classic-script .html or window .any.js tests only".into()),
+    };
     let host = Rc::new(RefCell::new(crate::BrowserDomHost {
         dom: amazing_html::parse(&html),
         native_forwarded: false,
@@ -531,5 +566,31 @@ pub fn run(args: &[String]) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+#[cfg(test)]
+mod any_window_tests {
+    use super::any_window_wrapper;
+
+    #[test]
+    fn any_window_wrapper_orders_upstream_metadata_before_source() {
+        let source = "// META: global=window,worker\n// META: timeout=long\n// META: title=a < b & c\n// META: script=/common/helper.js\ntest(() => {}, 'case');\n";
+        let html = any_window_wrapper(source, "url/example.any.js").unwrap();
+        assert!(html.starts_with("<!doctype html>\n<meta charset=utf-8>\n"));
+        assert!(html.contains("<meta name=\"timeout\" content=\"long\">"));
+        assert!(html.contains("<title>a &lt; b &amp; c</title>"));
+        assert!(html.contains("self.GLOBAL = {"));
+        let harness = html.find("/resources/testharness.js").unwrap();
+        let reporter = html.find("/resources/testharnessreport.js").unwrap();
+        let include = html.find("/common/helper.js").unwrap();
+        let test = html.find("/url/example.any.js").unwrap();
+        assert!(harness < reporter && reporter < include && include < test);
+    }
+
+    #[test]
+    fn any_window_wrapper_obeys_upstream_global_selection() {
+        assert!(any_window_wrapper("// META: global=worker\n", "url/worker.any.js")
+            .unwrap_err().contains("excludes window"));
     }
 }

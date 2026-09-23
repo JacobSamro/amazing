@@ -1,6 +1,6 @@
 //! DOM Standard §4.2.2 and §4.8: shadow trees and slot assignment.
 //! A ShadowRoot is an arena DocumentFragment with separate, private host data.
-use crate::{Dom, DomError, Namespace, NodeIdx, NodeKind};
+use crate::{custom_elements::CustomElementState, Dom, DomError, Namespace, NodeIdx, NodeKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShadowMode {
@@ -25,6 +25,9 @@ pub struct ShadowRootData {
     pub root: NodeIdx,
     pub host: NodeIdx,
     pub options: ShadowOptions,
+    pub declarative: bool,
+    pub available_to_element_internals: bool,
+    pub keep_custom_element_registry_null: bool,
 }
 #[derive(Clone, Debug)]
 pub struct SlotState {
@@ -105,7 +108,6 @@ impl Dom {
                     | "section"
                     | "span"
             ) || custom_element_name(name))
-            || self.shadow_root_of_host(host).is_some()
         {
             return Err(DomError::NotSupportedError);
         }
@@ -120,13 +122,43 @@ impl Dom {
             .is_some_and(|definition| definition.disable_shadow)) {
             return Err(DomError::NotSupportedError);
         }
+        if let Some(root) = self.shadow_root_of_host(host) {
+            let data = self.shadow_data(root).expect("attached shadow root");
+            if !data.declarative || data.options.mode != options.mode {
+                return Err(DomError::NotSupportedError);
+            }
+            self.replace_all(root, None)?;
+            self.shadow_roots.iter_mut().find(|data| data.root == root)
+                .expect("attached shadow root").declarative = false;
+            return Ok(root);
+        }
         let root = self.create_document_fragment(self.get(host).owner_document)?;
+        let available_to_element_internals = matches!(self.custom_element_state(host),
+            CustomElementState::Precustomized | CustomElementState::Custom);
         self.shadow_roots.push(ShadowRootData {
             root,
             host,
             options,
+            declarative: false,
+            available_to_element_internals,
+            keep_custom_element_registry_null: false,
         });
         self.reassign_all_slots();
+        Ok(root)
+    }
+    /// Parser-owned declarative path. The parser moves its template contents
+    /// into the returned root after this operation succeeds.
+    pub fn attach_declarative_shadow(&mut self, host: NodeIdx, options: ShadowOptions,
+        keep_custom_element_registry_null: bool) -> Result<NodeIdx, DomError> {
+        if self.shadow_root_of_host(host).is_some() {
+            return Err(DomError::NotSupportedError);
+        }
+        let root = self.attach_shadow(host, options)?;
+        let data = self.shadow_roots.iter_mut().find(|data| data.root == root)
+            .expect("attached shadow root");
+        data.declarative = true;
+        data.available_to_element_internals = true;
+        data.keep_custom_element_registry_null = keep_custom_element_registry_null;
         Ok(root)
     }
     /// Ordinary tree root unless composed is requested; shadow roots cross to

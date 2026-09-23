@@ -1,6 +1,14 @@
 use super::*;
-use crate::host::{AbortHost, BindingHost, CallbackId, DocumentField, DocumentHost, FragmentContext, FragmentParser, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, OptionalHookInstall, PlatformKey, SelectorEngine, UrlReflection};
+use crate::host::{AbortHost, BindingHost, CallbackId, DocumentField, DocumentHost, FormAttribute as F, FragmentContext, FragmentParser, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, OptionalHookInstall, PlatformKey, SelectorEngine, UrlReflection};
 use amazing_dom::NodeKind;
+use amazing_fetch::api::{Blob, BlobPart, File, FormData};
+use amazing_net::url::{UrlSearchParams, UrlWithSearchParams};
+
+#[derive(Clone)]
+enum WebMock {
+    Url(UrlWithSearchParams, Option<usize>), Params(UrlSearchParams),
+    Blob(Blob), File(File), FormData(FormData), FontFaceSet,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 enum V {
@@ -46,6 +54,20 @@ struct Host {
     abort_trace: Vec<u64>,
     active: Option<NodeIdx>,
     focused: bool,
+    web: Vec<WebMock>,
+    fonts: Option<V>,
+    font_ready: Option<V>,
+}
+impl Host {
+    fn web_push(&mut self, object: WebMock, brand: InterfaceBrand) -> V {
+        let slot = self.web.len() as u64;
+        self.web.push(object);
+        V::Platform(PlatformKey { arena: 1, slot, generation: 1 }, brand)
+    }
+    fn web_index(&self, value: &V, brand: InterfaceBrand) -> Result<usize, String> {
+        self.platform_object(value, brand).map(|key| key.slot as usize)
+            .ok_or_else(|| "incompatible web receiver".into())
+    }
 }
 impl BindingHost for Host {
     type Value = V;
@@ -92,6 +114,9 @@ impl BindingHost for Host {
     }
     fn define_iterable(&mut self, interface: Interface, kind: IterableKind) -> Result<(), String> {
         self.iterables.push((interface, kind)); Ok(())
+    }
+    fn define_pair_iterable(&mut self, _interface: Interface) -> Result<OptionalHookInstall, String> {
+        Ok(if self.skip_optional_hooks { OptionalHookInstall::NotSupported } else { OptionalHookInstall::Installed })
     }
     fn get_property(&mut self, object: &V, name: &str) -> Result<V, String> {
         assert!(!self.arena_borrowed);
@@ -191,6 +216,13 @@ impl BindingHost for Host {
         let V::Array(values) = value else { return Err("TypeError: Expected a sequence".into()) };
         values.iter().map(|value| self.to_dom_string(value)).collect()
     }
+    fn sequence_shadow_roots(&mut self, value: &V) -> Result<Vec<NodeIdx>, String> {
+        let V::Array(values) = value else { return Err("TypeError: Expected a sequence".into()) };
+        values.iter().map(|value| match value {
+            V::Node(node) if self.dom.is_shadow_root(*node) => Ok(*node),
+            _ => Err("TypeError: Expected a ShadowRoot".into()),
+        }).collect()
+    }
     fn construct_custom_element(&mut self, _constructor: &V, definition: usize, element: NodeIdx)
         -> Result<V, String> {
         if self.fail_custom_element_constructor { return Err("constructor failed".into()); }
@@ -233,6 +265,101 @@ impl BindingHost for Host {
     fn form_date_to_epoch_ms(&mut self, value: &V) -> Result<Option<f64>, String> {
         assert!(!self.arena_borrowed);
         match value { V::Number(n) => Ok(Some(*n)), _ => Err("TypeError: Expected Date".into()) }
+    }
+    fn url_new(&mut self, url: UrlWithSearchParams) -> Result<V, String> {
+        Ok(self.web_push(WebMock::Url(url, None), InterfaceBrand::URL))
+    }
+    fn url_record(&mut self, receiver: &V) -> Result<UrlWithSearchParams, String> {
+        let index = self.web_index(receiver, InterfaceBrand::URL)?;
+        match &self.web[index] { WebMock::Url(url, _) => Ok(url.clone()), _ => Err("not URL".into()) }
+    }
+    fn url_search_params(&mut self, receiver: &V) -> Result<V, String> {
+        let index = self.web_index(receiver, InterfaceBrand::URL)?;
+        let params = match &self.web[index] {
+            WebMock::Url(_, Some(params)) => *params,
+            WebMock::Url(url, None) => {
+                let value = url.search_params();
+                let next = self.web.len();
+                self.web.push(WebMock::Params(value));
+                if let WebMock::Url(_, cache) = &mut self.web[index] { *cache = Some(next); }
+                next
+            }
+            _ => return Err("not URL".into()),
+        };
+        Ok(V::Platform(PlatformKey { arena: 1, slot: params as u64, generation: 1 }, InterfaceBrand::URL_SEARCH_PARAMS))
+    }
+    fn url_params_new(&mut self, params: UrlSearchParams) -> Result<V, String> {
+        Ok(self.web_push(WebMock::Params(params), InterfaceBrand::URL_SEARCH_PARAMS))
+    }
+    fn url_params_record(&mut self, receiver: &V) -> Result<UrlSearchParams, String> {
+        let index = self.web_index(receiver, InterfaceBrand::URL_SEARCH_PARAMS)?;
+        match &self.web[index] { WebMock::Params(params) => Ok(params.clone()), _ => Err("not params".into()) }
+    }
+    fn url_params_store(&mut self, receiver: &V, params: UrlSearchParams) -> Result<(), String> {
+        let index = self.web_index(receiver, InterfaceBrand::URL_SEARCH_PARAMS)?;
+        self.web[index] = WebMock::Params(params);
+        Ok(())
+    }
+    fn url_params_pairs(&mut self, value: &V) -> Result<Option<Vec<(String, String)>>, String> {
+        match value {
+            V::Array(rows) => rows.iter().map(|row| match row {
+                V::Array(pair) if pair.len() == 2 => Ok((String::from_utf16_lossy(&self.to_dom_string(&pair[0])?), String::from_utf16_lossy(&self.to_dom_string(&pair[1])?))),
+                _ => Err("invalid pair".into()),
+            }).collect::<Result<Vec<_>,_>>().map(Some),
+            V::Dictionary(entries) => entries.iter().map(|(key, value)| Ok(((*key).into(), String::from_utf16_lossy(&self.to_dom_string(value)?)))).collect::<Result<Vec<_>,_>>().map(Some),
+            _ => Ok(None),
+        }
+    }
+    fn blob_parts(&mut self, value: &V) -> Result<Vec<BlobPart>, String> {
+        let V::Array(parts) = value else { return Err("Blob parts must be array".into()) };
+        parts.iter().map(|part| match part {
+            V::Platform(_, InterfaceBrand::BLOB) => self.blob_record(part).map(BlobPart::Blob),
+            V::Platform(_, InterfaceBrand::FILE) => self.file_record(part).map(|file| BlobPart::Blob(file.blob)),
+            _ => Ok(BlobPart::Text(String::from_utf16_lossy(&self.to_dom_string(part)?))),
+        }).collect()
+    }
+    fn blob_new(&mut self, blob: Blob) -> Result<V, String> { Ok(self.web_push(WebMock::Blob(blob), InterfaceBrand::BLOB)) }
+    fn blob_record(&mut self, receiver: &V) -> Result<Blob, String> {
+        let index = self.web_index(receiver, InterfaceBrand::BLOB)?;
+        match &self.web[index] { WebMock::Blob(blob) => Ok(blob.clone()), _ => Err("not blob".into()) }
+    }
+    fn file_new(&mut self, file: File) -> Result<V, String> { Ok(self.web_push(WebMock::File(file), InterfaceBrand::FILE)) }
+    fn file_record(&mut self, receiver: &V) -> Result<File, String> {
+        let index = self.web_index(receiver, InterfaceBrand::FILE)?;
+        match &self.web[index] { WebMock::File(file) => Ok(file.clone()), _ => Err("not file".into()) }
+    }
+    fn form_data_new(&mut self, data: FormData) -> Result<V, String> { Ok(self.web_push(WebMock::FormData(data), InterfaceBrand::FORM_DATA)) }
+    fn form_data_record(&mut self, receiver: &V) -> Result<FormData, String> {
+        let index = self.web_index(receiver, InterfaceBrand::FORM_DATA)?;
+        match &self.web[index] { WebMock::FormData(data) => Ok(data.clone()), _ => Err("not form data".into()) }
+    }
+    fn form_data_store(&mut self, receiver: &V, data: FormData) -> Result<(), String> {
+        let index = self.web_index(receiver, InterfaceBrand::FORM_DATA)?;
+        self.web[index] = WebMock::FormData(data);
+        Ok(())
+    }
+    fn blob_promise_bytes(&mut self, bytes: Vec<u8>, as_text: bool, as_array_buffer: bool) -> Result<V, String> {
+        let value = if as_text { str_value(&String::from_utf8_lossy(&bytes)) }
+            else if as_array_buffer { V::Array(bytes.iter().map(|b| V::Number(f64::from(*b))).collect()) }
+            else { V::Array(bytes.iter().map(|b| V::Number(f64::from(*b))).collect()) };
+        let id = self.promises.len() as u64;
+        self.promises.push((id, Some(value), None));
+        Ok(V::Promise(id))
+    }
+    fn font_face_set(&mut self, _document: NodeIdx) -> Result<V, String> {
+        if let Some(value) = &self.fonts { return Ok(value.clone()) }
+        let value = self.web_push(WebMock::FontFaceSet, InterfaceBrand::FONT_FACE_SET);
+        self.fonts = Some(value.clone());
+        Ok(value)
+    }
+    fn font_face_set_ready(&mut self, receiver: &V) -> Result<V, String> {
+        self.web_index(receiver, InterfaceBrand::FONT_FACE_SET)?;
+        if let Some(value) = &self.font_ready { return Ok(value.clone()) }
+        let id = self.promises.len() as u64;
+        self.promises.push((id, Some(receiver.clone()), None));
+        let value = V::Promise(id);
+        self.font_ready = Some(value.clone());
+        Ok(value)
     }
     fn install_node_constant(&mut self, n: &'static str, v: u16) -> Result<(), String> {
         self.constants.push((n, v));
@@ -722,10 +849,12 @@ fn unsupported_optional_hooks_are_recorded_without_aborting_installation() {
     assert_eq!(h.installed.len(), INTERFACES.len());
     assert!(h.class_strings.is_empty());
     assert!(!h.dom_exception_error_prototype);
-    assert_eq!(report.not_installed.len(), INTERFACES.len() + 2);
+    assert_eq!(report.not_installed.len(), INTERFACES.len() + 4);
     assert_eq!(report.not_installed[0], crate::OptionalCapability::InterfaceClassString(INTERFACES[0].interface));
     assert_eq!(report.not_installed[INTERFACES.len()], crate::OptionalCapability::DomExceptionErrorPrototype);
-    assert_eq!(report.not_installed.last(), Some(&crate::OptionalCapability::CustomElementsGlobal));
+    assert_eq!(report.not_installed[INTERFACES.len() + 1], crate::OptionalCapability::CustomElementsGlobal);
+    assert_eq!(report.not_installed[INTERFACES.len() + 2], crate::OptionalCapability::PairIterable(Interface::URLSearchParams));
+    assert_eq!(report.not_installed.last(), Some(&crate::OptionalCapability::PairIterable(Interface::FormData)));
     assert!(h.constants.contains(&("DOCUMENT_FRAGMENT_NODE", 11)));
 }
 
@@ -1673,6 +1802,51 @@ fn select_and_validity_bindings_follow_live_dom() {
     assert_eq!(call(&mut h, O::ControlCheckValidity, V::Node(input), &[]), V::Bool(true));
 }
 
+#[test]
+fn reflected_form_attributes_feed_validation_and_preserve_webidl_rules() {
+    let mut h = Host::default();
+    let form = h.dom.create_element(NodeIdx(0), "form");
+    let input = h.dom.create_element(form, "input");
+    call(&mut h, O::FormAttributeSet(F::Required), V::Node(input), &[V::Bool(true)]);
+    assert_eq!(call(&mut h, O::ControlCheckValidity, V::Node(input), &[]), V::Bool(false));
+    call(&mut h, O::FormAttributeSet(F::Required), V::Node(input), &[V::Bool(false)]);
+    assert_eq!(call(&mut h, O::ControlCheckValidity, V::Node(input), &[]), V::Bool(true));
+    call(&mut h, O::FormAttributeSet(F::Pattern), V::Node(input), &[str_value("[A-Z]+")]);
+    assert_eq!(h.dom.get_attribute_ns(input, None, "pattern"), Some("[A-Z]+"));
+    assert_eq!(call(&mut h, O::FormAttributeGet(F::MaxLength), V::Node(input), &[]), V::Number(-1.));
+    assert!(crate::invoke(&mut h, O::FormAttributeSet(F::MaxLength), V::Node(input), &[V::Number(-1.)]).is_err());
+    call(&mut h, O::FormAttributeSet(F::MaxLength), V::Node(input), &[V::Number(7.)]);
+    assert_eq!(call(&mut h, O::FormAttributeGet(F::MaxLength), V::Node(input), &[]), V::Number(7.));
+    call(&mut h, O::FormAttributeSet(F::Method), V::Node(form), &[str_value("POST")]);
+    assert_eq!(call(&mut h, O::FormAttributeGet(F::Method), V::Node(form), &[]), str_value("post"));
+    let option = h.dom.create_element(form, "option");
+    let text = h.dom.create_text(option, "  Example  label ");
+    assert_ne!(option, text);
+    assert_eq!(call(&mut h, O::FormAttributeGet(F::Label), V::Node(option), &[]), str_value("Example label"));
+}
+
+#[test]
+fn get_html_options_include_serializable_and_explicit_shadow_roots() {
+    use amazing_dom::shadow::{ShadowMode, ShadowOptions, SlotAssignment};
+    let mut h = Host::default();
+    let container = h.dom.create_element(NodeIdx(0), "main");
+    let host = h.dom.create_element(container, "div");
+    let options = ShadowOptions { mode: ShadowMode::Closed, delegates_focus: false,
+        slot_assignment: SlotAssignment::Named, clonable: false, serializable: false };
+    let root = h.dom.attach_declarative_shadow(host, options, false).unwrap();
+    h.dom.create_text(root, "hidden");
+    let empty = call(&mut h, O::ElementGetHTML, V::Node(container), &[]);
+    assert_eq!(empty, str_value("<div></div>"));
+    let explicit = V::Dictionary(vec![("shadowRoots", V::Array(vec![V::Node(root)]))]);
+    assert_eq!(call(&mut h, O::ElementGetHTML, V::Node(container), &[explicit]),
+        str_value("<div><template shadowrootmode=\"closed\">hidden</template></div>"));
+    let own_root = V::Dictionary(vec![("shadowRoots", V::Array(vec![V::Node(root)]))]);
+    assert_eq!(call(&mut h, O::ElementGetHTML, V::Node(host), &[own_root]),
+        str_value("<template shadowrootmode=\"closed\">hidden</template>"));
+    let serializable = V::Dictionary(vec![("serializableShadowRoots", V::Bool(true))]);
+    assert_eq!(call(&mut h, O::ElementGetHTML, V::Node(container), &[serializable]), empty);
+}
+
 // WPT pin 53bc812da2ed81179ebd1ba76b2d197cc4747d12:
 // html/semantics/forms/constraints/form-validation-validity-patternMismatch.html and
 // html/semantics/forms/the-input-element/input-valueasdate.html.
@@ -1692,4 +1866,71 @@ fn pattern_host_seam_and_date_wrapping_run_outside_dom_borrow() {
     assert_eq!(call(&mut h, O::InputValueAsDate, V::Node(input), &[]), V::Number(86_400_000.));
     call(&mut h, O::InputSetValueAsDate, V::Node(input), &[V::Number(0.)]);
     assert_eq!(call(&mut h, O::InputValue, V::Node(input), &[]), str_value("1970-01-01"));
+}
+
+#[test]
+fn url_bindings_keep_search_params_live_and_same_object() {
+    let mut h = Host::default();
+    assert_eq!(call(&mut h, O::URLCanParse, V::Undefined, &[str_value("/a"), str_value("https://example.test/")]), V::Bool(true));
+    assert_eq!(call(&mut h, O::URLCanParse, V::Undefined, &[str_value("bad"), str_value("invalid base")]), V::Bool(false));
+    assert_eq!(call(&mut h, O::URLParse, V::Undefined, &[str_value("bad")]), V::Null);
+    let url = call(&mut h, O::URLConstructor, V::Undefined, &[str_value("/a?x=1"), str_value("https://example.test/base")]);
+    assert_eq!(call(&mut h, O::URLHref, url.clone(), &[]), str_value("https://example.test/a?x=1"));
+    assert_eq!(call(&mut h, O::URLOrigin, url.clone(), &[]), str_value("https://example.test"));
+    let params = call(&mut h, O::URLSearchParams, url.clone(), &[]);
+    assert_eq!(call(&mut h, O::URLSearchParams, url.clone(), &[]), params);
+    call(&mut h, O::URLSearchParamsAppend, params.clone(), &[str_value("y"), str_value("a b")]);
+    assert_eq!(call(&mut h, O::URLSearch, url.clone(), &[]), str_value("?x=1&y=a+b"));
+    call(&mut h, O::URLSetSearch, url.clone(), &[str_value("?z=3")]);
+    assert_eq!(call(&mut h, O::URLSearchParamsGet, params.clone(), &[str_value("z")]), str_value("3"));
+    call(&mut h, O::URLSetHostname, url.clone(), &[str_value("other.test")]);
+    assert_eq!(call(&mut h, O::URLHostname, url, &[]), str_value("other.test"));
+}
+
+#[test]
+fn url_search_params_constructor_overloads_and_mutation_preserve_order() {
+    let mut h = Host::default();
+    let sequence = V::Array(vec![V::Array(vec![str_value("a"), str_value("1")]), V::Array(vec![str_value("a"), str_value("2")])]);
+    let params = call(&mut h, O::URLSearchParamsConstructor, V::Undefined, &[sequence]);
+    assert_eq!(call(&mut h, O::URLSearchParamsGetAll, params.clone(), &[str_value("a")]), V::Array(vec![str_value("1"), str_value("2")]));
+    call(&mut h, O::URLSearchParamsDelete, params.clone(), &[str_value("a"), str_value("1")]);
+    assert_eq!(call(&mut h, O::URLSearchParamsToString, params, &[]), str_value("a=2"));
+    let record = V::Dictionary(vec![("b", str_value("x y")), ("a", str_value("z"))]);
+    let params = call(&mut h, O::URLSearchParamsConstructor, V::Undefined, &[record]);
+    call(&mut h, O::URLSearchParamsSort, params.clone(), &[]);
+    assert_eq!(call(&mut h, O::URLSearchParamsToString, params, &[]), str_value("a=z&b=x+y"));
+}
+
+#[test]
+fn blob_file_form_data_and_font_set_bindings_use_native_models() {
+    let mut h = Host::default();
+    let blob = call(&mut h, O::BlobConstructor, V::Undefined, &[
+        V::Array(vec![str_value("abc"), str_value("def")]),
+        V::Dictionary(vec![("type", str_value("TEXT/PLAIN"))]),
+    ]);
+    assert_eq!(call(&mut h, O::BlobSize, blob.clone(), &[]), V::Number(6.));
+    assert_eq!(call(&mut h, O::BlobType, blob.clone(), &[]), str_value("text/plain"));
+    let slice = call(&mut h, O::BlobSlice, blob.clone(), &[V::Number(1.), V::Number(4.)]);
+    assert_eq!(call(&mut h, O::BlobSize, slice.clone(), &[]), V::Number(3.));
+    let text = call(&mut h, O::BlobText, slice, &[]);
+    assert!(matches!(text, V::Promise(_)));
+    let file = call(&mut h, O::FileConstructor, V::Undefined, &[
+        V::Array(vec![blob]), str_value("a/b.txt"),
+        V::Dictionary(vec![("type", str_value("Text/Plain")), ("lastModified", V::Number(42.))]),
+    ]);
+    assert_eq!(call(&mut h, O::FileName, file.clone(), &[]), str_value("a:b.txt"));
+    assert_eq!(call(&mut h, O::FileLastModified, file.clone(), &[]), V::Number(42.));
+    let form_data = call(&mut h, O::FormDataConstructor, V::Undefined, &[]);
+    call(&mut h, O::FormDataAppend, form_data.clone(), &[str_value("name"), str_value("one")]);
+    call(&mut h, O::FormDataAppend, form_data.clone(), &[str_value("name"), str_value("two")]);
+    assert_eq!(call(&mut h, O::FormDataGetAll, form_data.clone(), &[str_value("name")]), V::Array(vec![str_value("one"), str_value("two")]));
+    call(&mut h, O::FormDataSet, form_data.clone(), &[str_value("name"), str_value("last")]);
+    assert_eq!(call(&mut h, O::FormDataGet, form_data.clone(), &[str_value("name")]), str_value("last"));
+    call(&mut h, O::FormDataAppend, form_data.clone(), &[str_value("upload"), file]);
+    assert_eq!(call(&mut h, O::FormDataHas, form_data, &[str_value("upload")]), V::Bool(true));
+    let fonts = call(&mut h, O::DocumentFonts, V::Node(NodeIdx(0)), &[]);
+    assert_eq!(call(&mut h, O::DocumentFonts, V::Node(NodeIdx(0)), &[]), fonts);
+    assert_eq!(call(&mut h, O::FontFaceSetStatus, fonts.clone(), &[]), str_value("loaded"));
+    let ready = call(&mut h, O::FontFaceSetReady, fonts.clone(), &[]);
+    assert_eq!(call(&mut h, O::FontFaceSetReady, fonts, &[]), ready);
 }

@@ -6,7 +6,7 @@
 //! that seam: `amazing-dom` owns the algorithms, `amazing-js` owns execution,
 //! and the binding layer installs one onto the other.
 //!
-//! Deliberately depends on `amazing-dom` only. The install direction is
+//! Depends on the native DOM, URL, and Fetch body models. The install direction is
 //! inverted through the host trait declared in this crate and implemented by
 //! the driver using runtime capabilities, so this crate never imports the
 //! interpreter and the dependency graph keeps pointing downward
@@ -36,6 +36,8 @@ mod mutation_bindings;
 mod shadow_bindings;
 mod custom_element_bindings;
 mod form_bindings;
+mod form_reflection;
+mod web_bindings;
 mod attr_bindings;
 mod character_data_bindings;
 mod tokenlist;
@@ -43,6 +45,7 @@ mod html_reflection;
 mod markup_bindings;
 pub use mutation_bindings::deliver_mutation_checkpoint;
 pub use amazing_dom::{Dom, DomError, NodeIdx};
+pub use amazing_fetch::api::{Blob, BlobPart, File, FormData};
 pub use interfaces::{html_element_interface, install, InstallReport, OptionalCapability, INTERFACES};
 pub use invoke::{invoke, supported_index_count, supported_names};
 pub use custom_element_bindings::{deliver_custom_element_reactions, registry_for_document};

@@ -105,6 +105,8 @@ name = "amazing-bindings"
 version = "0.0.1"
 dependencies = [
  "amazing-dom",
+ "amazing-fetch",
+ "amazing-net",
 ]
 
 [[package]]

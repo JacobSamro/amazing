@@ -53,6 +53,12 @@ impl InterfaceBrand {
     pub const OPTIONS: Self = Self(24);
     pub const RADIO_NODE_LIST: Self = Self(25);
     pub const VALIDITY_STATE: Self = Self(26);
+    pub const URL: Self = Self(27);
+    pub const URL_SEARCH_PARAMS: Self = Self(28);
+    pub const BLOB: Self = Self(29);
+    pub const FILE: Self = Self(30);
+    pub const FORM_DATA: Self = Self(31);
+    pub const FONT_FACE_SET: Self = Self(32);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -158,10 +164,43 @@ pub enum Interface {
     HTMLOptionsCollection,
     RadioNodeList,
     ValidityState,
+    URL,
+    URLSearchParams,
+    Blob,
+    File,
+    FormData,
+    FontFaceSet,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FormAttribute {
+    Accept, Alpha, Alt, Autocomplete, DirName, Disabled, FormAction,
+    FormEnctype, FormMethod, FormNoValidate, FormTarget, Height, Max,
+    MaxLength, Min, MinLength, Multiple, Name, Pattern, Placeholder,
+    ReadOnly, Required, Size, Src, Step, Width, Action, AcceptCharset,
+    Enctype, Encoding, Method, NoValidate, Target, Rel, RelList,
+    Cols, Rows, Wrap, Label, Value, Command, HtmlFor,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    FormAttributeGet(FormAttribute), FormAttributeSet(FormAttribute),
+    URLConstructor, URLCanParse, URLParse, URLHref, URLSetHref,
+    URLOrigin, URLProtocol, URLSetProtocol, URLUsername, URLSetUsername,
+    URLPassword, URLSetPassword, URLHost, URLSetHost, URLHostname,
+    URLSetHostname, URLPort, URLSetPort, URLPathname, URLSetPathname,
+    URLSearch, URLSetSearch, URLSearchParams, URLHash, URLSetHash,
+    URLToString, URLToJSON,
+    URLSearchParamsConstructor, URLSearchParamsAppend, URLSearchParamsDelete,
+    URLSearchParamsGet, URLSearchParamsGetAll, URLSearchParamsHas,
+    URLSearchParamsSet, URLSearchParamsSort, URLSearchParamsSize,
+    URLSearchParamsToString, URLSearchParamsForEach,
+    BlobConstructor, BlobSize, BlobType, BlobSlice, BlobText,
+    BlobArrayBuffer, BlobBytes, BlobStream,
+    FileConstructor, FileName, FileLastModified,
+    FormDataConstructor, FormDataAppend, FormDataDelete, FormDataGet,
+    FormDataGetAll, FormDataHas, FormDataSet, FormDataForEach,
+    DocumentFonts, FontFaceSetStatus, FontFaceSetReady,
     FormElements, FormLength, FormReset, FormCheckValidity, FormReportValidity,
     FormControlForm, FormControlName, FormControlSetName,
     InputValue, InputSetValue, InputDefaultValue, InputSetDefaultValue,
@@ -188,7 +227,7 @@ pub enum Operation {
     OptionsIndexedSetter, OptionsSupportedIndexCount, OptionsSupportedNames,
     RadioNodeListLength, RadioNodeListItem, RadioNodeListIndexedGetter,
     RadioNodeListSupportedIndexCount, RadioNodeListValue, RadioNodeListSetValue,
-    ElementHref, ElementSetHref, ElementTarget, ElementSetTarget,
+    ElementGetHTML, ElementHref, ElementSetHref, ElementTarget, ElementSetTarget,
     ElementRel, ElementSetRel, ElementRelList, OutputHtmlFor, IFrameSandbox,
     LinkSizes, ElementDownload, ElementSetDownload,
     ElementSrc, ElementSetSrc, ImageAlt, ImageSetAlt, ImageWidth, ImageSetWidth,
@@ -684,6 +723,11 @@ pub trait BindingHost: Sized {
     /// Installs @@iterator, keys, values, entries and forEach on the interface
     /// prototype with runtime-owned iterator state and live indexed reads.
     fn define_iterable(&mut self, interface: Interface, kind: IterableKind) -> Result<(), Self::Error>;
+    /// Pair iterables need a runtime iterator whose values are live [key, value]
+    /// arrays. Older runtimes report this optional capability as unsupported.
+    fn define_pair_iterable(&mut self, _interface: Interface) -> Result<OptionalHookInstall, Self::Error> {
+        Ok(OptionalHookInstall::NotSupported)
+    }
     fn get_property(
         &mut self,
         object: &Self::Value,
@@ -760,6 +804,10 @@ pub trait BindingHost: Sized {
     fn sequence_dom_strings(&mut self, _value: &Self::Value) -> Result<Vec<Vec<u16>>, Self::Error> {
         self.with_dom::<Vec<Vec<u16>>>(|_| Err(DomError::NotSupportedError))
     }
+    /// WebIDL sequence<ShadowRoot> for getHTML({shadowRoots}).
+    fn sequence_shadow_roots(&mut self, _value: &Self::Value) -> Result<Vec<NodeIdx>, Self::Error> {
+        self.with_dom::<Vec<NodeIdx>>(|_| Err(DomError::NotSupportedError))
+    }
     fn construct_custom_element(&mut self, _constructor: &Self::Value,
         _definition: usize, _element: NodeIdx) -> Result<Self::Value, Self::Error> {
         self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
@@ -790,6 +838,71 @@ pub trait BindingHost: Sized {
     /// A Date value returns its time value; invalid Date returns None.
     fn form_date_to_epoch_ms(&mut self, _value: &Self::Value) -> Result<Option<f64>, Self::Error> {
         self.with_dom::<Option<f64>>(|_| Err(DomError::NotSupportedError))
+    }
+    /// Driver-owned storage for URL and body objects. Defaults are explicitly
+    /// unsupported until the runtime adapter can allocate their private slots.
+    fn url_new(&mut self, _url: amazing_net::url::UrlWithSearchParams) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn url_record(&mut self, _receiver: &Self::Value) -> Result<amazing_net::url::UrlWithSearchParams, Self::Error> {
+        self.with_dom::<amazing_net::url::UrlWithSearchParams>(|_| Err(DomError::NotSupportedError))
+    }
+    fn url_search_params(&mut self, _receiver: &Self::Value) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn url_params_new(&mut self, _params: amazing_net::url::UrlSearchParams) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn url_params_record(&mut self, _receiver: &Self::Value) -> Result<amazing_net::url::UrlSearchParams, Self::Error> {
+        self.with_dom::<amazing_net::url::UrlSearchParams>(|_| Err(DomError::NotSupportedError))
+    }
+    fn url_params_store(&mut self, _receiver: &Self::Value, _params: amazing_net::url::UrlSearchParams) -> Result<(), Self::Error> {
+        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
+    /// WebIDL sequence<sequence<USVString>> or record<USVString, USVString>.
+    /// The adapter performs iterator/property access outside a DOM borrow.
+    fn url_params_pairs(&mut self, _value: &Self::Value) -> Result<Option<Vec<(String, String)>>, Self::Error> {
+        self.with_dom::<Option<Vec<(String, String)>>>(|_| Err(DomError::NotSupportedError))
+    }
+    fn blob_parts(&mut self, _value: &Self::Value) -> Result<Vec<amazing_fetch::api::BlobPart>, Self::Error> {
+        self.with_dom::<Vec<amazing_fetch::api::BlobPart>>(|_| Err(DomError::NotSupportedError))
+    }
+    fn blob_new(&mut self, _blob: amazing_fetch::api::Blob) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn blob_record(&mut self, _receiver: &Self::Value) -> Result<amazing_fetch::api::Blob, Self::Error> {
+        self.with_dom::<amazing_fetch::api::Blob>(|_| Err(DomError::NotSupportedError))
+    }
+    fn file_new(&mut self, _file: amazing_fetch::api::File) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn file_record(&mut self, _receiver: &Self::Value) -> Result<amazing_fetch::api::File, Self::Error> {
+        self.with_dom::<amazing_fetch::api::File>(|_| Err(DomError::NotSupportedError))
+    }
+    fn form_data_new(&mut self, _data: amazing_fetch::api::FormData) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn form_data_record(&mut self, _receiver: &Self::Value) -> Result<amazing_fetch::api::FormData, Self::Error> {
+        self.with_dom::<amazing_fetch::api::FormData>(|_| Err(DomError::NotSupportedError))
+    }
+    fn form_data_store(&mut self, _receiver: &Self::Value, _data: amazing_fetch::api::FormData) -> Result<(), Self::Error> {
+        self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
+    fn blob_promise_bytes(&mut self, _bytes: Vec<u8>, _as_text: bool, _as_array_buffer: bool) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn blob_stream(&mut self, _bytes: Vec<u8>) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    fn font_face_set(&mut self, _document: NodeIdx) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    /// Absence of the provider hook means no pending loads.
+    fn font_face_set_pending(&mut self, _receiver: &Self::Value) -> Result<bool, Self::Error> {
+        Ok(false)
+    }
+    fn font_face_set_ready(&mut self, _receiver: &Self::Value) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
     }
     /// Standard Node constants are exposed on Node and its prototype.
     fn install_node_constant(&mut self, name: &'static str, value: u16) -> Result<(), Self::Error>;
