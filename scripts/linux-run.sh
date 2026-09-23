@@ -73,7 +73,13 @@ fi
 
 # Bulk transfers get their own connection; a stalled one on the shared master
 # blocks every other lane's ssh.
-rsync -a --delete --exclude .git --exclude /target --exclude /.agents --exclude .DS_Store \
+#
+# No -t: modification times are NOT preserved. `git archive` stamps every file
+# with the commit time, which is older than a previous build's artifacts, so
+# cargo reused a stale binary after a --ref switch (JSRT-6's Test262 check ran
+# the 7c6824b host). --checksum rewrites only files whose content changed, and
+# a rewritten file gets the current time, so cargo always sees real changes.
+rsync -rlpD --checksum --delete --exclude .git --exclude /target --exclude /.agents --exclude .DS_Store \
   -e "ssh -o ControlPath=none" "$SRC/" "$HOST:amazing/wt/$LANE/" || {
   echo "linux-run: rsync to $HOST failed" >&2; exit 3; }
 
