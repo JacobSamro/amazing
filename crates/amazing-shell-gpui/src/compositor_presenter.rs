@@ -11,14 +11,21 @@ use std::sync::Arc;
 
 use amazing_compositor::{
     CompositorFrame, DrawQuad, Presenter, PresenterError, Rect, ReferenceCpuPresenter, ResourceId,
-    TileQuad,
+    SolidColorQuad, TileQuad,
 };
-use gpui::{AnyElement, IntoElement, ParentElement, RenderImage, Styled, div, img, px};
+use gpui::{div, img, px, rgba, AnyElement, IntoElement, ParentElement, RenderImage, Styled};
 use image::{Frame, RgbaImage};
 
+#[derive(Clone)]
 pub struct GpuiTile {
     pub quad: TileQuad,
     pub image: Arc<RenderImage>,
+}
+
+#[derive(Clone)]
+enum GpuiDraw {
+    Tile(GpuiTile),
+    Solid(SolidColorQuad),
 }
 
 pub struct GpuiFrame {
@@ -26,6 +33,7 @@ pub struct GpuiFrame {
     pub composed: Option<Arc<RenderImage>>,
     /// Uploaded tile images in back-to-front draw order.
     pub tiles: Vec<GpuiTile>,
+    draws: Vec<GpuiDraw>,
     pub damage: Vec<Rect>,
     pub width: u32,
     pub height: u32,
@@ -49,7 +57,32 @@ impl GpuiFrame {
             .w(px(self.width as f32))
             .h(px(self.height as f32))
             .overflow_hidden();
-        for tile in &self.tiles {
+        for draw in &self.draws {
+            if let GpuiDraw::Solid(quad) = draw {
+                let x = quad.rect.x.max(quad.clip_rect.x);
+                let y = quad.rect.y.max(quad.clip_rect.y);
+                let right = (quad.rect.x + quad.rect.w).min(quad.clip_rect.x + quad.clip_rect.w);
+                let bottom = (quad.rect.y + quad.rect.h).min(quad.clip_rect.y + quad.clip_rect.h);
+                if right > x && bottom > y {
+                    let [r, g, b, a] = quad.color;
+                    let color =
+                        ((r as u32) << 24) | ((g as u32) << 16) | ((b as u32) << 8) | a as u32;
+                    root = root.child(
+                        div()
+                            .absolute()
+                            .left(px(x))
+                            .top(px(y))
+                            .w(px(right - x))
+                            .h(px(bottom - y))
+                            .bg(rgba(color))
+                            .opacity(quad.opacity),
+                    );
+                }
+                continue;
+            }
+            let GpuiDraw::Tile(tile) = draw else {
+                unreachable!()
+            };
             let Some(world) = tile.quad.transform.map_bounds(tile.quad.rect) else {
                 continue;
             };
@@ -135,22 +168,30 @@ impl Presenter for GpuiPresenter {
             );
         }
         let mut tiles = Vec::new();
+        let mut draws = Vec::new();
         let mut direct_tiles = frame.passes.len() == 1;
         for quad in &frame.root().quads {
-            if let DrawQuad::Tile(tile) = quad {
-                let image = self
-                    .tiles
-                    .get(&tile.resource_id)
-                    .ok_or(PresenterError::MissingResource(tile.resource_id))?
-                    .clone();
-                direct_tiles &= axis_aligned_unit_transform(tile)
-                    && tile.blend == amazing_compositor::BlendMode::Normal;
-                tiles.push(GpuiTile {
-                    quad: tile.clone(),
-                    image,
-                });
-            } else {
-                direct_tiles = false;
+            match quad {
+                DrawQuad::Tile(tile) => {
+                    let image = self
+                        .tiles
+                        .get(&tile.resource_id)
+                        .ok_or(PresenterError::MissingResource(tile.resource_id))?
+                        .clone();
+                    direct_tiles &= axis_aligned_unit_transform(tile)
+                        && tile.blend == amazing_compositor::BlendMode::Normal;
+                    let draw = GpuiTile {
+                        quad: tile.clone(),
+                        image,
+                    };
+                    draws.push(GpuiDraw::Tile(draw.clone()));
+                    tiles.push(draw);
+                }
+                DrawQuad::SolidColor(solid) => {
+                    direct_tiles &= solid.blend == amazing_compositor::BlendMode::Normal;
+                    draws.push(GpuiDraw::Solid(solid.clone()));
+                }
+                DrawQuad::Pass(_) => direct_tiles = false,
             }
         }
         let composed = if direct_tiles {
@@ -169,6 +210,7 @@ impl Presenter for GpuiPresenter {
         Ok(GpuiFrame {
             composed,
             tiles,
+            draws,
             damage: frame.damage.clone(),
             width: frame.width,
             height: frame.height,
@@ -225,7 +267,7 @@ pub fn main() {
     use amazing_compositor::{
         CompositingReasons, Compositor, PaintChunk, PropertyTreeState, PropertyTrees,
     };
-    use gpui::{App, AppContext, Bounds, WindowBounds, WindowOptions, size};
+    use gpui::{size, App, AppContext, Bounds, WindowBounds, WindowOptions};
     use gpui_platform::application;
 
     let mut compositor = Compositor::new(
@@ -327,6 +369,39 @@ mod tests {
         let again = gpui.present(&next).unwrap();
         assert!(again.composed.is_none());
         assert!(Arc::ptr_eq(&actual.tiles[0].image, &again.tiles[0].image));
+    }
+
+    #[test]
+    fn raw_page_canvas_solid_stays_on_ordered_direct_path() {
+        let mut compositor = Compositor::new(
+            PropertyTrees::new(),
+            vec![PaintChunk {
+                items: 0..1,
+                state: PropertyTreeState::default(),
+                bounds: Rect::new(2., 3., 8., 7.),
+                reasons: CompositingReasons::default(),
+            }],
+            1,
+        )
+        .unwrap();
+        let mut frame = compositor.build_frame(&Paint, 16, 16).unwrap();
+        let solid = SolidColorQuad {
+            rect: Rect::new(0., 0., 16., 16.),
+            color: [255, 255, 255, 255],
+            clip_rect: Rect::new(0., 0., 12., 12.),
+            opacity: 0.75,
+            blend: amazing_compositor::BlendMode::Normal,
+        };
+        frame.passes[0]
+            .quads
+            .insert(0, DrawQuad::SolidColor(solid.clone()));
+        let result = GpuiPresenter::default().present(&frame).unwrap();
+        assert!(result.direct_tiles);
+        assert!(result.composed.is_none());
+        assert_eq!(result.tiles.len(), 1);
+        assert!(matches!(&result.draws[0], GpuiDraw::Solid(value) if value == &solid));
+        assert!(matches!(&result.draws[1], GpuiDraw::Tile(_)));
+        let _ = result.element();
     }
 
     #[test]
