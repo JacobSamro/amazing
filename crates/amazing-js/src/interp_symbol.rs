@@ -92,12 +92,8 @@ impl Interpreter {
 
     fn sequence_iterator(&self, target: JsValue, kind: SequenceIteratorKind) -> JsValue {
         let mut object = JsObject::ordinary();
-        object.proto = Some(self.object_proto.clone());
+        object.proto = self.std_sequence_iterator_proto(kind).or_else(|| Some(self.object_proto.clone()));
         object.exotic = Exotic::SequenceIterator(SequenceIteratorState { target, next_index: 0, kind });
-        object.define("next", symbol_data(symbol_method(self, "next", native_sequence_iterator_next), true, true)).unwrap();
-        object.define(WellKnownSymbol::Iterator.symbol(), symbol_data(symbol_method(self, "[Symbol.iterator]", native_iterator_self), true, true)).unwrap();
-        let tag = if kind == SequenceIteratorKind::String { "String Iterator" } else { "Array Iterator" };
-        object.define(WellKnownSymbol::ToStringTag.symbol(), symbol_data(JsValue::str(tag), false, true)).unwrap();
         JsValue::object(object)
     }
 

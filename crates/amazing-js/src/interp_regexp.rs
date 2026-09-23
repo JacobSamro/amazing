@@ -90,6 +90,7 @@ impl Interpreter {
         ] {
             let method = Self::native(name, fun, &self.function_proto);
             if let JsValue::Object(o) = &method {
+                o.borrow_mut().constructible = false;
                 let _ = o.borrow_mut().define(
                     "length",
                     regexp_property(JsValue::num(length as f64), false),

@@ -1661,6 +1661,38 @@ impl Interpreter {
                                 ast::PropValue::Init(x) => self.eval_expr(x, env)?,
                                 ast::PropValue::Method(m) => self.method_value(m, env),
                             };
+                            if let ast::PropValue::Method(method) = &p.value {
+                                if matches!(method.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
+                                    let JsValue::Object(object) = &o else { unreachable!() };
+                                    let JsValue::Object(function) = v else { unreachable!() };
+                                    let function = function.borrow().func.clone().unwrap();
+                                    let mut property = object.borrow().own_prop(&k).cloned().unwrap_or(Property {
+                                        value: JsValue::Undefined,
+                                        writable: false,
+                                        enumerable: true,
+                                        configurable: true,
+                                        getter: None,
+                                        setter: None,
+                                    });
+                                    if method.kind == ast::MethodKind::Get {
+                                        property.getter = Some(Box::new(function));
+                                    } else {
+                                        property.setter = Some(Box::new(function));
+                                    }
+                                    object.borrow_mut().define(&k, property).unwrap();
+                                    continue;
+                                }
+                            }
+                            // A later data definition replaces an earlier accessor
+                            // in the same literal; assignment would invoke its setter.
+                            if let JsValue::Object(object) = &o {
+                                if object.borrow().own_prop(&k).is_some_and(|property| {
+                                    property.getter.is_some() || property.setter.is_some()
+                                }) {
+                                    object.borrow_mut().define(&k, Property::data(v)).unwrap();
+                                    continue;
+                                }
+                            }
                             self.set_prop(&o, &k, v)?;
                         }
                     }
@@ -3607,5 +3639,10 @@ fn for_iteration_env(left: &ForLeft, env: &EnvHandle) -> EnvHandle {
 include!("interp_install.rs");
 include!("interp_symbol.rs");
 include!("interp_builtins.rs");
+include!("builtins_std_object_model.rs");
+include!("builtins_std_reflect.rs");
+include!("builtins_std_collections.rs");
+include!("builtins_std_collection_iter.rs");
+include!("builtins_std_iterator.rs");
 include!("interp_regexp.rs");
 include!("interp_tests.rs");
