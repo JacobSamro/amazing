@@ -107,8 +107,12 @@ impl Resolver for StdResolver {
         // routing only the WPT fixture domains to that server when requested.
         if host == "web-platform.test" || host.ends_with(".web-platform.test") {
             if let Ok(endpoint) = std::env::var("AMAZING_WPT_SHIM_ADDR") {
-                return endpoint.parse::<SocketAddr>().map(|address| vec![address])
-                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid WPT shim address"));
+                return endpoint
+                    .parse::<SocketAddr>()
+                    .map(|address| vec![address])
+                    .map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "invalid WPT shim address")
+                    });
             }
         }
         (host, port).to_socket_addrs().map(Iterator::collect)
@@ -333,7 +337,8 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         if self.in_flight() >= self.limits.max_in_flight {
             return Err(DispatchError::TooManyInFlight);
         }
-        if self.limits.bytes_per_step == 0
+        if self.limits.max_per_origin == 0
+            || self.limits.bytes_per_step == 0
             || self.limits.max_buffered_bytes == 0
             || self.limits.connect_timeout.is_zero()
         {
@@ -349,10 +354,12 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             url.hostname(),
             url.effective_port().unwrap_or(0)
         );
-        if self.active.values().filter(|e| e.origin == origin).count() >= self.limits.max_per_origin
-        {
-            return Err(DispatchError::TooManyForOrigin);
-        }
+        let origin_full = self
+            .active
+            .values()
+            .filter(|e| e.origin == origin && !matches!(e.state, State::WaitForOrigin))
+            .count()
+            >= self.limits.max_per_origin;
         let method = options.method.to_ascii_uppercase();
         if method.is_empty()
             || !method
@@ -397,7 +404,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 .active
                 .values()
                 .any(|e| e.origin == origin && !matches!(e.state, State::WaitForOrigin));
-        let transport = if h2_ready {
+        let transport = if h2_ready || h2_wait || origin_full {
             None
         } else {
             self.idle.remove(&origin)
@@ -406,7 +413,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             State::H2Start
         } else if transport.is_some() {
             State::Write
-        } else if h2_wait {
+        } else if h2_wait || origin_full {
             State::WaitForOrigin
         } else {
             State::Resolve
@@ -455,7 +462,9 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
     }
     /// Pause socket reads for a consumer that has exhausted body credit.
     pub fn set_paused(&mut self, id: RequestId, paused: bool) -> bool {
-        let Some(entry) = self.active.get_mut(&id) else { return false; };
+        let Some(entry) = self.active.get_mut(&id) else {
+            return false;
+        };
         entry.paused = paused;
         true
     }
@@ -534,9 +543,19 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             State::WaitForOrigin => {
                 if self.h2.contains_key(&e.origin) {
                     e.state = State::H2Start;
-                } else if !self.active.values().any(|other| {
-                    other.origin == e.origin && !matches!(other.state, State::WaitForOrigin)
-                }) {
+                } else if self
+                    .active
+                    .values()
+                    .filter(|other| {
+                        other.origin == e.origin && !matches!(other.state, State::WaitForOrigin)
+                    })
+                    .count()
+                    < self.limits.max_per_origin
+                    && (e.url.scheme() != "https"
+                        || !self.active.values().any(|other| {
+                            other.origin == e.origin && !matches!(other.state, State::WaitForOrigin)
+                        }))
+                {
                     e.state = State::Resolve;
                 }
                 Ok(false)
@@ -1450,16 +1469,25 @@ mod tests {
             d.submit(&server.url("/b"), FetchOptions::default(), now),
             Err(DispatchError::TooManyInFlight)
         ));
+        let mut server = Server::new();
         let mut d = Dispatcher::new(DispatchLimits {
             max_per_origin: 1,
             ..DispatchLimits::default()
         });
-        d.submit(&server.url("/a"), FetchOptions::default(), now)
+        let first = d
+            .submit(&server.url("/a"), FetchOptions::default(), now)
             .unwrap();
-        assert!(matches!(
-            d.submit(&server.url("/b"), FetchOptions::default(), now),
-            Err(DispatchError::TooManyForOrigin)
-        ));
+        let second = d
+            .submit(&server.url("/b"), FetchOptions::default(), now)
+            .unwrap();
+        assert_eq!(d.in_flight(), 2);
+        let events = spin(&mut server, &mut d, now, 40);
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, NetEvent::Done { id } if *id == first)));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, NetEvent::Done { id } if *id == second)));
         let mut d = Dispatcher::new(DispatchLimits {
             bytes_per_step: 0,
             ..DispatchLimits::default()
