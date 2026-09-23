@@ -1012,6 +1012,19 @@ fn wpt_create_element_uses_local_name_validation() {
 }
 
 #[test]
+fn wpt_empty_attribute_namespace_matches_null_namespace() {
+    let mut h = Host::default();
+    let element = node(call(&mut h, O::CreateElement, V::Node(NodeIdx(0)),
+        &[str_value("p")]));
+    call(&mut h, O::ElementSetAttribute, V::Node(element),
+        &[str_value("FOO"), str_value("bar")]);
+    assert_eq!(call(&mut h, O::ElementGetAttributeNS, V::Node(element),
+        &[str_value(""), str_value("foo")]), str_value("bar"));
+    assert_eq!(call(&mut h, O::ElementGetAttributeNS, V::Node(element),
+        &[str_value(""), str_value("FOO")]), V::Null);
+}
+
+#[test]
 fn wpt_character_data_methods_use_utf16_offsets_and_validate_bounds() {
     let mut h = Host::default();
     let parent = h.dom.create_element(NodeIdx(0), "div");
