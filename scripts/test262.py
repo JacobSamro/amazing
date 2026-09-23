@@ -375,6 +375,20 @@ def self_test(root: pathlib.Path, binary: pathlib.Path, caps: dict) -> None:
     print("Runner metadata, variants, byte preservation, includes, negative phase/type, host capability, real assertions, isolation/deadline contracts passed.", flush=True)
 
 
+def checkout_revision(root: pathlib.Path) -> str:
+    """The checkout's commit, from git, or from .git/HEAD where no git binary
+    exists (a Linux build host without sudo). A pinned checkout is detached, so
+    HEAD holds the full sha; a symbolic HEAD is resolved through its ref file."""
+    try:
+        return subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                              capture_output=True, check=True).stdout.decode().strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        head = (root / ".git" / "HEAD").read_text().strip()
+        if head.startswith("ref: "):
+            return (root / ".git" / head[5:]).read_text().strip()
+        return head
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("test262_root", type=pathlib.Path)
@@ -422,7 +436,7 @@ def main() -> int:
     manifest = hashlib.sha256()
     for path in inputs:
         manifest.update(path.relative_to(root).as_posix().encode() + b"\0" + hashlib.sha256(sources[path]).digest())
-    revision = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, check=True).stdout.decode().strip()
+    revision = checkout_revision(root)
     started = time.monotonic()
     records = []
     args.output.parent.mkdir(parents=True, exist_ok=True)

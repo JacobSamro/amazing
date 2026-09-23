@@ -19,7 +19,7 @@
 #   --no-slot   skip the slot queue; for crate-scoped iterations only
 #
 # Environment on the host: CARGO_TARGET_DIR, JOBS (per-slot parallelism),
-# TEST262_ROOT (pinned 3655e746 checkout, venus-003), toolchain 1.97.1.
+# TEST262_ROOT (pinned 3655e746 checkout), toolchain 1.97.1.
 # Results stay on the host; copy what you need back with
 #   scp -o ControlPath=none <host>:<path> <local>
 
@@ -43,11 +43,12 @@ done
 [ $# -gt 0 ] || { echo "linux-run: no command given" >&2; exit 2; }
 CMD="$*"
 
-# Lane homes. Test262 lives on venus-003 (venus-001 has no git, which the
-# runner needs for the revision check), so the JavaScript lanes run there.
+# Lane homes. Both hosts carry the pinned Test262 checkout; the five
+# JavaScript lanes are split so full runs do not queue behind each other.
 if [ -z "$HOST" ]; then
   case "$LANE" in
-    js-lang|js-runtime|js-vm|integrator-primary) HOST=venus-003 ;;
+    js-lang|js-vm|js-binary) HOST=venus-001 ;;
+    js-runtime|js-stdlib|integrator-primary) HOST=venus-003 ;;
     *) HOST=venus-001 ;;
   esac
 fi

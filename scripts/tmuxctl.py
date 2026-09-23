@@ -108,6 +108,15 @@ LANE_PATHS = {
         "crates/amazing-js/src/vm.rs",
         "crates/amazing-js/src/gc/",
     ],
+    # Bulk built-ins (2026-09-24), split from js-runtime by file prefix so the
+    # three lanes never edit the same file. Each module is include!d from
+    # interp.rs and installed from interp_install.rs under the grants below.
+    # ArrayBuffer, SharedArrayBuffer, DataView, %TypedArray% and the eleven
+    # constructors, Atomics.
+    "js-binary": ["crates/amazing-js/src/builtins_binary"],
+    # Reflect, Map/Set/WeakMap/WeakSet/WeakRef/FinalizationRegistry, Set
+    # methods, Iterator helpers, then Temporal.
+    "js-stdlib": ["crates/amazing-js/src/builtins_std", "crates/amazing-js/src/builtins_temporal"],
     "dom-bindings": ["crates/amazing-dom/", "crates/amazing-bindings/"],
     "layout": ["crates/amazing-layout/"],
     "css": ["crates/amazing-css/"],
@@ -211,6 +220,10 @@ LANE_GRANTS.setdefault("text", []).append("crates/amazing/src/page.rs")
 # land in the same commit as the manifest change, or --locked breaks.
 # ADDITIONS ONLY: the one dependency line.
 LANE_GRANTS.setdefault("html", []).append("Cargo.lock")
+# js-binary / js-stdlib: one include! line per module in interp.rs and the
+# install calls in interp_install.rs::install_builtins. ADDED LINES ONLY.
+LANE_GRANTS.setdefault("js-binary", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
+LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
 # global/script/timeout/title honoured). ADDITIVE; read the diff at merge.

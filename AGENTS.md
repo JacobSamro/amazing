@@ -113,7 +113,7 @@ scripts/linux-run.sh <lane> -- 'cargo nextest run --workspace --locked && cargo 
 
 It rsyncs your worktree (uncommitted edits included) to `~/amazing/wt/<lane>`
 on the lane's host, sets your own `CARGO_TARGET_DIR`, `JOBS` and
-`TEST262_ROOT` (the pinned `3655e746` checkout, on venus-003), and queues in
+`TEST262_ROOT` (the pinned `3655e746` checkout), and queues in
 that host's own slot pool. `--ref <sha>` runs an exact commit; `--no-slot` skips
 the queue for small `-p` runs. Results stay on the host under `~/amazing/out`.
 
@@ -122,6 +122,23 @@ sweeps and reftests, anything font, GPU, GPUI shell or media-pipeline specific,
 and any Windows-only code path. Linux numbers are for iteration and are never
 reported as the gate. If a result differs between Linux and Windows, that is a
 bug to report, not a reason to pick one.
+
+**Work in bulk (2026-09-24).** Tickets are whole areas, not slices. Write the
+whole area first, against the spec, then test it all at once. Do not gate
+after each function.
+- Iterate on Linux, where a full Test262 run takes minutes and the workspace
+  about 20 seconds.
+- Run the **final gate once** on win-001: your crate plus the workspace, with
+  nextest and doctests, and the lane's corpus before and after. Repeat a run
+  only for render/reftest sweeps, or when a classification changed that you
+  did not expect.
+- The integrator re-checks zero losses at merge on the merged head, so no
+  ceremony beyond that is needed.
+- Keep `report.md` short: what landed, the measured before/after numbers, and
+  cross-lane requests. Evidence goes in files, not prose.
+- When a ticket is done early, take the next item from your lane's TODO or
+  its failure clusters without waiting. Report at the end, with one ticket
+  per commit series.
 
 **nextest does not run doctests.** This workspace has them (`amazing-js`,
 `amazing-html`), and nextest silently reports success without them, so a lane
@@ -296,7 +313,8 @@ holds. The integrator owns everything no lane lists.
 
 ### How a lane works
 
-One ticket, one PR, then stop — the same rule as the per-phase gates.
+One ticket per commit series. After the report, a lane continues into the next
+item its brief lists (see "Work in bulk"); the integrator merges each series.
 
 1. The orchestrator writes a brief and delivers it with `tmuxctl.py brief`.
 2. The agent works **only** inside its worktree and its owned paths.
@@ -392,8 +410,9 @@ widen the pane if the context budget matters for it.
 - **win-001 is a single 16-core box.** It sustains ~3 concurrent builds, so it
   is kept for final gates and Windows-only work. Agents iterate on the venus
   hosts through `scripts/linux-run.sh` and send only final gates to win-001.
-- **One ticket, one PR, then stop.** This mirrors the existing per-phase rule:
-  report measured results and wait, never auto-proceed.
+- **One ticket per commit series, then continue.** Report measured results,
+  set status done so the integrator can merge, and carry on with the brief's
+  next item on a new commit series. Stop only when the brief's list is empty.
 
 ## Project notes
 
