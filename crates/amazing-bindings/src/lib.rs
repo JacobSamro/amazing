@@ -19,6 +19,7 @@
 #![forbid(unsafe_code)]
 
 pub mod host;
+pub mod storage_interfaces;
 pub mod dom_exception;
 
 mod interfaces;

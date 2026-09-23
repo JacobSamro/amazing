@@ -61,6 +61,7 @@ fn decode_key(r: &mut Reader<'_>, depth: u8) -> Result<Key> {
 }
 fn encode_value(out: &mut Vec<u8>, value: &StructuredValue) {
     match value {
+        StructuredValue::Undefined => out.push(8),
         StructuredValue::Null => out.push(0),
         StructuredValue::Bool(v) => {
             out.push(1);
@@ -104,6 +105,7 @@ fn decode_value(r: &mut Reader<'_>, depth: u8) -> Result<StructuredValue> {
         return Err(Error::Data);
     }
     Ok(match read_byte(r)? {
+        8 => StructuredValue::Undefined,
         0 => StructuredValue::Null,
         1 => StructuredValue::Bool(read_byte(r)? != 0),
         2 => StructuredValue::Number(f64::from_bits(read_u64(r)?)),
