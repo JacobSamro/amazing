@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "RC-17b frozen generated-content static match reftests",
+    "rule": "Seven pinned, reviewed generated pseudo order, marker, and content:url cases; selected before RC-17b paint behavior edits. Script-free test files with rel=match; unsupported paths remain included."
+  },
+  "sparse_paths": [
+    "css/css-content",
+    "css/css-pseudo",
+    "css/css-lists",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "css-content__pseudo-element-inline-box",
+      "test": "css/css-content/pseudo-element-inline-box.html"
+    },
+    {
+      "id": "css-pseudo__relative-box-order-of-pseudo-elements",
+      "test": "css/css-pseudo/relative-box-order-of-pseudo-elements.html"
+    },
+    {
+      "id": "css-pseudo__outside-marker-paint-order",
+      "test": "css/css-pseudo/outside-marker-paint-order.html"
+    },
+    {
+      "id": "css-pseudo__marker-content-008",
+      "test": "css/css-pseudo/marker-content-008.tentative.html"
+    },
+    {
+      "id": "css-pseudo__marker-and-other-pseudo-elements",
+      "test": "css/css-pseudo/marker-and-other-pseudo-elements.html"
+    },
+    {
+      "id": "css-content__element-replacement",
+      "test": "css/css-content/element-replacement.html"
+    },
+    {
+      "id": "css-content__element-replacement-image-alt",
+      "test": "css/css-content/element-replacement-image-alt.html"
+    }
+  ]
+}
