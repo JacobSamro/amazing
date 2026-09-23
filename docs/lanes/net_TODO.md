@@ -1111,3 +1111,40 @@ recipe and input hashes are in the integrator checkout's
 `.agents/net/net10-final-evidence/`, `net10_gate.py`, and `net10-inputs.json`.
 This ticket stops at the cache policy and storage seam; shell adoption remains
 with the integrator.
+
+## NET-11 — Fetch main-fetch blocking checks
+
+Fixed base: `f830379` (NET-10 merge). Pinned normative snapshots used for
+implementation: [Fetch Living Standard](https://github.com/whatwg/fetch/tree/357bd98924d94b81fbe8608192a2ee1f123b82f4)
+at `357bd98924d94b81fbe8608192a2ee1f123b82f4` (21 September 2026;
+§2.9 bad ports, §2.10 MIME blocking, §3.6 nosniff, §3.7 CORP, §4.1 main fetch),
+and [Mixed Content Level 2](https://github.com/w3c/webappsec-mixed-content/tree/a4eacecdbaab867f6de126c4048662bac2ad4b4)
+at `a4eacecdbaab867f6de126c4048662bac2ad4b4` (§2 authenticated URLs,
+§4.1 upgrade, §4.4 request blocking, §4.5 response blocking). The current
+Fetch snapshot does not contain the ORB algorithm under §3.7; that section is
+CORP. ORB follows the [separate processing-model draft](https://github.com/annevk/orb/tree/61c1be761fca35288b6c90249da66ab563f1074c)
+at `61c1be761fca35288b6c90249da66ab563f1074c`, read 23 September 2026.
+
+`Request::prepare` upgrades eligible no-cors image/audio/video URLs before
+checking the exact Fetch bad-port table and Mixed Content blocking. The
+embedding supplies secure-context state, destination, image-set initiator,
+top-level navigation state, and COEP `require-corp`; this crate cannot infer
+those from a DOM. `redirect` checks a no-cors hop's CORP header before adopting
+its target. `filter_response` applies internal-response checks before exposing
+even an opaque result: Mixed Content, CORP using the pinned PSL, MIME type,
+nosniff, and ORB. Each block has a distinct `FetchError` variant.
+
+ORB reads at most a borrowed 1024-byte body prefix. Its full-body
+JavaScript-versus-JSON parse step has no implementation here: when earlier
+MIME and signature steps have not allowed a response, policy blocks it. A
+streaming transport waits for 1024 bytes or EOF before calling the prefix
+check. This conservative boundary requires neither whole-body buffering nor
+`amazing-js`. No shell or driver adoption is claimed.
+
+Once `fetch()` and element fetching are bound, WPT `fetch/security/` and
+`fetch/api/` can measure bad ports, `fetch/cross-origin-resource-policy/`
+can measure CORP/COEP, `fetch/nosniff/` can measure MIME blocking,
+`fetch/orb/` and `fetch/corb/` can measure opaque blocking, and
+`mixed-content/generic/` and `mixed-content/tentative/` can measure upgrades
+and blocking. Those suites are not counted as passing by the crate tests in
+this ticket; only the existing pinned URL WPT corpus runs as a regression gate.

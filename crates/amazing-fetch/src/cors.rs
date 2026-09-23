@@ -185,6 +185,7 @@ pub fn filter_response(
 ) -> Result<Response, FetchError> {
     let mut copy = request.clone();
     let plan = copy.prepare()?;
+    check_response_security(&copy, response, &crate::psl::PublicSuffixList)?;
     if plan.taint == ResponseType::Opaque {
         return Ok(Response::hidden(ResponseType::Opaque));
     }
