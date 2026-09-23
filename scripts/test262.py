@@ -361,7 +361,10 @@ def self_test(root: pathlib.Path, binary: pathlib.Path, caps: dict) -> None:
     assert probe("throw new RangeError('wrong');", runtime)["status"] == "fail"
     assert probe("TypeError.prototype.constructor=TypeError; throw new TypeError('right');", runtime)["status"] == "pass"
     assert probe("try {$262.createRealm();} catch(e) {};")["reason"] == "host.createRealm"
-    assert probe("try {$262.detachArrayBuffer({});} catch(e) {};")["reason"] == "host.detachArrayBuffer"
+    if caps.get("detachArrayBuffer"):
+        assert probe("var b=new ArrayBuffer(8); $262.detachArrayBuffer(b); if(b.byteLength!==0) throw 1;")["status"] == "pass"
+    else:
+        assert probe("try {$262.detachArrayBuffer({});} catch(e) {};")["reason"] == "host.detachArrayBuffer"
     assert probe("if($262.evalScript('1+2')!==3) throw 1;")["status"] == "pass"
     assert probe("if($262.global !== globalThis) throw 1;")["status"] == "pass"
     base = helper_sources(root, {}, {})
