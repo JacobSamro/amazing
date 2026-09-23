@@ -140,6 +140,61 @@ fn utf16_and_unicode_modes() {
         .is_some());
 }
 #[test]
+fn utf16_pattern_preserves_lone_surrogates() {
+    let high = Regex::new_utf16(&[0xD800], "").unwrap();
+    let low = Regex::new_utf16(&[0xDC00], "").unwrap();
+    assert_eq!(high.pattern_utf16(), &[0xD800]);
+    assert_eq!(low.pattern_utf16(), &[0xDC00]);
+    assert_ne!(high, Regex::new("\u{FFFD}", "").unwrap());
+    assert_eq!(high.exec_utf16(&[0xD800], 0).unwrap().unwrap().range, 0..1);
+    assert_eq!(low.exec_utf16(&[0xDC00], 0).unwrap().unwrap().range, 0..1);
+    assert!(high.exec_utf16(&[0xDC00], 0).unwrap().is_none());
+    assert_eq!(
+        high.exec_utf16(&[0xD800, 0xDC00], 0)
+            .unwrap()
+            .unwrap()
+            .range,
+        0..1
+    );
+}
+#[test]
+fn utf16_pattern_unicode_modes_combine_pairs_but_preserve_lone_units() {
+    for flags in ["u", "v"] {
+        let pair = Regex::new_utf16(&[0xD83D, 0xDE00], flags).unwrap();
+        assert_eq!(pair.pattern_utf16(), &[0xD83D, 0xDE00]);
+        assert_eq!(
+            pair.exec_utf16(&[0xD83D, 0xDE00], 0)
+                .unwrap()
+                .unwrap()
+                .range,
+            0..2
+        );
+        let lone = Regex::new_utf16(&[0xD800], flags).unwrap();
+        assert_eq!(lone.exec_utf16(&[0xD800], 0).unwrap().unwrap().range, 0..1);
+        assert!(lone.exec_utf16(&[0xD800, 0xDC00], 0).unwrap().is_none());
+        let escaped = Regex::new_utf16(
+            r"\uD800".encode_utf16().collect::<Vec<_>>().as_slice(),
+            flags,
+        )
+        .unwrap();
+        assert_eq!(
+            escaped.exec_utf16(&[0xD800], 0).unwrap().unwrap().range,
+            0..1
+        );
+    }
+    let legacy = Regex::new_utf16(&[0xD83D, 0xDE00], "").unwrap();
+    assert_eq!(
+        legacy
+            .exec_utf16(&[0xD83D, 0xDE00], 0)
+            .unwrap()
+            .unwrap()
+            .range,
+        0..2
+    );
+    assert!(Regex::new_utf16(&[0xD800], "uv").is_err());
+    assert!(Regex::new_utf16(&[0xD800], "vv").is_err());
+}
+#[test]
 fn unicode_casefold_and_legacy_restrictions() {
     for (pattern, input) in [
         ("k", "K"),
