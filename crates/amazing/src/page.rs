@@ -251,9 +251,9 @@ impl amazing_paint::ImageProvider for PagePaint<'_> {
         {
             return None;
         }
-        let limits = amazing_image::DecodeLimits::default();
-        let document = amazing_image::svg::from_dom(self.dom, self.styles, node, width, height, limits).ok()?;
-        amazing_image::svg::render_svg(&document, width, height, dpr, limits).ok()
+        let limits = amazing_svg::DecodeLimits::default();
+        let document = amazing_svg::from_dom(self.dom, self.styles, node, width, height, limits).ok()?;
+        amazing_svg::render_svg(&document, width, height, dpr, limits).ok()
     }
 
     fn device_scale(&self) -> f32 {
