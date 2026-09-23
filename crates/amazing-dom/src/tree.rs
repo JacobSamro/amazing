@@ -5,6 +5,7 @@ use crate::{Dom, NodeIdx, NodeKind};
 pub enum DomError {
     HierarchyRequestError,
     NotFoundError,
+    NoModificationAllowedError,
     NotSupportedError,
     InvalidStateError,
     TypeError,

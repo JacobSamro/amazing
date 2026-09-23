@@ -99,6 +99,8 @@ const DOM_EXCEPTION: &[Member] = &[
     getter("code", O::DOMExceptionCode),
 ];
 const PARENT: &[Member] = &[
+    method("querySelector", O::ParentQuerySelector, 1),
+    method("querySelectorAll", O::ParentQuerySelectorAll, 1),
     getter("children", O::FragmentChildren),
     method("append", O::Append, 0),
     method("prepend", O::Prepend, 0),
@@ -120,6 +122,8 @@ const CHARACTER_DATA: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const DOCUMENT: &[Member] = &[
+    method("querySelector", O::ParentQuerySelector, 1),
+    method("querySelectorAll", O::ParentQuerySelectorAll, 1),
     getter("children", O::DocumentChildren),
     method("getElementsByTagName", O::DocumentGetElementsByTagName, 1),
     method("getElementsByTagNameNS", O::DocumentGetElementsByTagNameNS, 2),
@@ -246,6 +250,14 @@ const RANGE: &[Member] = &[
     method("toString", O::RangeStringifier, 0),
 ];
 const ELEMENT: &[Member] = &[
+    getter("innerHTML", O::ElementInnerHTML), setter("innerHTML", O::ElementSetInnerHTML),
+    getter("outerHTML", O::ElementOuterHTML), setter("outerHTML", O::ElementSetOuterHTML),
+    method("insertAdjacentHTML", O::ElementInsertAdjacentHTML, 2),
+    method("querySelector", O::ParentQuerySelector, 1),
+    method("querySelectorAll", O::ParentQuerySelectorAll, 1),
+    method("matches", O::ElementMatches, 1),
+    method("closest", O::ElementClosest, 1),
+    method("webkitMatchesSelector", O::ElementWebkitMatchesSelector, 1),
     getter("id", O::ElementId),
     setter("id", O::ElementSetId),
     getter("children", O::ElementChildren),
@@ -276,6 +288,7 @@ const ELEMENT: &[Member] = &[
     method("remove", O::Remove, 0),
 ];
 const HTML_ELEMENT: &[Member] = &[
+    getter("innerText", O::ElementInnerText), setter("innerText", O::ElementSetInnerText),
     getter("title", O::HTMLTitle), setter("title", O::HTMLSetTitle),
     getter("lang", O::HTMLLang), setter("lang", O::HTMLSetLang),
     getter("dir", O::HTMLDir), setter("dir", O::HTMLSetDir),

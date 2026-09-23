@@ -32,6 +32,7 @@ mod mutation_bindings;
 mod attr_bindings;
 mod tokenlist;
 mod html_reflection;
+mod markup_bindings;
 pub use mutation_bindings::deliver_mutation_checkpoint;
 pub use amazing_dom::{Dom, DomError, NodeIdx};
 pub use interfaces::{html_element_interface, install, INTERFACES};

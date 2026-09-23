@@ -1,5 +1,5 @@
 use super::*;
-use crate::host::{BindingHost, CallbackId, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, PlatformKey};
+use crate::host::{BindingHost, CallbackId, FragmentContext, FragmentParser, HostCallPolicy, Interface, InterfaceBrand, InterfaceDefinition, IterableKind, LegacyPlatformHooks, Operation as O, PlatformKey, SelectorEngine};
 use amazing_dom::NodeKind;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -220,6 +220,35 @@ impl BindingHost for Host {
     }
     fn type_error(&mut self, message: &'static str) -> String {
         format!("TypeError: {message}")
+    }
+}
+impl FragmentParser for Host {
+    fn parse_fragment(&mut self, context: FragmentContext, markup: &[u16]) -> Result<Dom, DomError> {
+        assert!(!self.arena_borrowed);
+        assert!(!context.local_name.is_empty());
+        let source = String::from_utf16(markup).map_err(|_| DomError::SyntaxError)?;
+        let mut parsed = Dom::new();
+        if source == "<b>new</b>" || source == "<em>x</em>" {
+            let name = if source.starts_with("<b>") { "b" } else { "em" };
+            let element = parsed.create_element(NodeIdx(0), name);
+            parsed.append_child(element, NodeKind::Text { data: if name == "b" { "new" } else { "x" }.into() });
+        } else if !source.is_empty() {
+            parsed.append_child(NodeIdx(0), NodeKind::Text { data: source });
+        }
+        Ok(parsed)
+    }
+}
+impl SelectorEngine for Host {
+    type SelectorHandle = String;
+    fn parse_selector(&mut self, selector: &[u16]) -> Result<String, DomError> {
+        assert!(!self.arena_borrowed);
+        let text = String::from_utf16(selector).map_err(|_| DomError::SyntaxError)?;
+        if text.is_empty() || text == "?" { return Err(DomError::SyntaxError); }
+        Ok(text)
+    }
+    fn matches_selector(&mut self, element: NodeIdx, selector: &String) -> Result<bool, DomError> {
+        assert!(!self.arena_borrowed);
+        Ok(self.dom.name(element) == Some(selector.as_str()))
     }
 }
 fn str_value(s: &str) -> V {
@@ -829,4 +858,51 @@ fn shared_html_integer_reflection_parses_leading_digits_and_range() {
     assert_eq!(crate::html_reflection::signed_long(&units("2147483648")), None);
     assert_eq!(crate::html_reflection::unsigned_long(&units("4294967295rest")), Some(u32::MAX));
     assert_eq!(crate::html_reflection::unsigned_long(&units("-1")), None);
+}
+
+#[test]
+fn markup_and_selector_seams_are_live_and_run_after_dom_borrow() {
+    let mut h = Host::default();
+    install(&mut h).unwrap();
+    let root = h.dom.create_element(NodeIdx(0), "div");
+    let old = h.dom.create_element(root, "span");
+    assert_eq!(call(&mut h, O::ElementInnerHTML, V::Node(root), &[]), str_value("<span></span>"));
+    call(&mut h, O::ElementSetInnerHTML, V::Node(root), &[str_value("<b>new</b>")]);
+    assert_eq!(call(&mut h, O::ElementInnerHTML, V::Node(root), &[]), str_value("<b>new</b>"));
+    assert_eq!(h.dom.get(old).parent, None);
+    let b = h.dom.get(root).first_child.unwrap();
+    assert_eq!(call(&mut h, O::ParentQuerySelector, V::Node(root), &[str_value("b")]), V::Node(b));
+    let list = call(&mut h, O::ParentQuerySelectorAll, V::Node(root), &[str_value("b")]);
+    assert_eq!(call(&mut h, O::NodeListLength, list.clone(), &[]), V::Number(1.));
+    assert_eq!(call(&mut h, O::NodeListItem, list.clone(), &[V::Number(0.)]), V::Node(b));
+    assert_eq!(call(&mut h, O::ElementMatches, V::Node(b), &[str_value("b")]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ElementWebkitMatchesSelector, V::Node(b), &[str_value("div")]), V::Bool(false));
+    assert_eq!(call(&mut h, O::ElementClosest, V::Node(b), &[str_value("div")]), V::Node(root));
+    assert_eq!(invoke(&mut h, O::ParentQuerySelector, V::Node(root), &[str_value("?")]), Err("SyntaxError".into()));
+    assert_eq!(invoke(&mut h, O::ParentQuerySelector, V::Node(root), &[V::String(vec![0xD800])]), Err("SyntaxError".into()));
+    call(&mut h, O::ElementInsertAdjacentHTML, V::Node(b), &[str_value("afterend"), str_value("<em>x</em>")]);
+    assert_eq!(call(&mut h, O::ElementInnerHTML, V::Node(root), &[]), str_value("<b>new</b><em>x</em>"));
+    assert_eq!(call(&mut h, O::ElementInnerText, V::Node(root), &[]), str_value("newx"));
+    call(&mut h, O::ElementSetOuterHTML, V::Node(b), &[str_value("<em>x</em>")]);
+    assert_eq!(call(&mut h, O::ElementInnerHTML, V::Node(root), &[]), str_value("<em>x</em><em>x</em>"));
+    assert_eq!(call(&mut h, O::NodeListLength, list, &[]), V::Number(1.));
+    assert_eq!(invoke(&mut h, O::ElementInsertAdjacentHTML, V::Node(b), &[str_value("beside"), str_value("x")]), Err("SyntaxError".into()));
+    assert_eq!(invoke(&mut h, O::ElementSetOuterHTML, V::Node(old), &[str_value("x")]), Err("NoModificationAllowedError".into()));
+    assert_eq!(invoke(&mut h, O::ElementInsertAdjacentHTML, V::Node(old), &[str_value("beforebegin"), str_value("x")]), Err("NoModificationAllowedError".into()));
+}
+
+#[test]
+fn adjacent_html_positions_and_inner_text_approximation() {
+    let mut h = Host::default();
+    let root = h.dom.create_element(NodeIdx(0), "div");
+    let target = h.dom.create_element(root, "p");
+    for position in ["beforebegin", "afterbegin", "beforeend", "afterend"] {
+        call(&mut h, O::ElementInsertAdjacentHTML, V::Node(target),
+            &[str_value(position), str_value("<em>x</em>")]);
+    }
+    assert_eq!(call(&mut h, O::ElementInnerHTML, V::Node(root), &[]),
+        str_value("<em>x</em><p><em>x</em><em>x</em></p><em>x</em>"));
+    call(&mut h, O::ElementSetInnerText, V::Node(target), &[str_value("a\nb")]);
+    assert_eq!(call(&mut h, O::ElementInnerText, V::Node(target), &[]), str_value("a\nb"));
+    assert_eq!(call(&mut h, O::ElementInnerHTML, V::Node(target), &[]), str_value("a\nb"));
 }

@@ -38,6 +38,18 @@ impl AttributeRef<'_> {
 }
 
 impl Dom {
+    /// Attributes in storage order, including foreign namespaced attributes.
+    pub fn attributes_expanded(&self, node: NodeIdx) -> Option<Vec<AttributeRef<'_>>> {
+        let plain = self.attrs_of(node)?;
+        let mut result: Vec<_> = plain.iter().map(|(name, value)| AttributeRef {
+            namespace_uri: None, prefix: None, local_name: name, value,
+        }).collect();
+        result.extend(self.get(node).namespaced_attributes.iter().map(|attr| AttributeRef {
+            namespace_uri: Some(&attr.namespace), prefix: attr.prefix.as_deref(),
+            local_name: &attr.local_name, value: &attr.value,
+        }));
+        Some(result)
+    }
     pub fn create_processing_instruction_in(
         &mut self, document: NodeIdx, target: &str, data: &[u16],
     ) -> Result<NodeIdx, DomError> {
