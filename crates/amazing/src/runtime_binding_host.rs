@@ -3004,7 +3004,13 @@ impl RuntimeBindingHost<'_> {
                 Ok(JsValue::Undefined)
             }
             CanvasMemberKind::Method(_) if name == "getContext" => {
-                if args.is_empty() { return Err(Throw::type_error("getContext requires a context id")); }
+                if args.is_empty() {
+                    let global = self.js.binding_global_object();
+                    let constructor = self.js.binding_get_property(&global, "TypeError")?;
+                    let error = self.js.binding_construct(&constructor,
+                        vec![JsValue::str("getContext requires a context id")])?;
+                    return Err(self.js.binding_throw(error));
+                }
                 let id = self.canvas_string(args.first())?;
                 if id != "2d" { return Ok(JsValue::Null); }
                 if let Some((object, _)) = self.state.borrow().canvas_objects.iter().find(|(_, payload)|
