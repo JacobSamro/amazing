@@ -4,9 +4,44 @@ use super::{
     semantics, Error, Field, Limits, Reply, MAX_FRAME, PREFACE,
 };
 use std::{
-    collections::BTreeMap,
-    io::{Read, Write},
+    collections::{BTreeMap, VecDeque},
+    io::{self, Read, Write},
 };
+/// Complete frames are fed into this adapter by the cooperative dispatcher.
+/// It prevents a partial socket read from consuming any protocol parser state.
+#[derive(Default)]
+pub struct FrameIo {
+    input: VecDeque<u8>,
+    output: Vec<u8>,
+}
+impl FrameIo {
+    pub fn feed(&mut self, frame: &[u8]) {
+        self.input.extend(frame);
+    }
+    pub fn take_output(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.output)
+    }
+}
+impl Read for FrameIo {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        if out.len() > self.input.len() {
+            return Err(io::ErrorKind::WouldBlock.into());
+        }
+        for byte in out.iter_mut() {
+            *byte = self.input.pop_front().unwrap();
+        }
+        Ok(out.len())
+    }
+}
+impl Write for FrameIo {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.output.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 #[derive(Clone, Copy)]
 enum Failure {
     Reset(u32),
@@ -66,7 +101,13 @@ pub enum StreamEvent {
     End { trailers: Vec<Field> },
 }
 impl<S: Read + Write> Client<S> {
-    pub fn new(mut io: S, limits: Limits) -> Result<Self, Error> {
+    pub fn new(io: S, limits: Limits) -> Result<Self, Error> {
+        let mut client = Self::new_pending(io, limits)?;
+        client.poll()?;
+        Ok(client)
+    }
+    /// Send the client preface but leave server SETTINGS to a later complete frame.
+    pub fn new_pending(mut io: S, limits: Limits) -> Result<Self, Error> {
         let limits = limits.validate()?;
         io.write_all(PREFACE).map_err(Error::Io)?;
         let mut settings = Vec::new();
@@ -81,7 +122,7 @@ impl<S: Read + Write> Client<S> {
         }
         frame::write(&mut io, 4, 0, 0, &settings)?;
         io.flush().map_err(Error::Io)?;
-        let mut client = Self {
+        let client = Self {
             io: Some(io),
             limits,
             decoder: Decoder::new(limits.dynamic_table_bytes),
@@ -101,8 +142,10 @@ impl<S: Read + Write> Client<S> {
             failed: false,
             frames: limits.frames,
         };
-        client.poll()?;
         Ok(client)
+    }
+    pub fn io_mut(&mut self) -> Option<&mut S> {
+        self.io.as_mut()
     }
     pub fn start(&mut self, headers: &[Field], body: &[u8]) -> Result<u32, Error> {
         if self.failed {
@@ -207,39 +250,46 @@ impl<S: Read + Write> Client<S> {
     /// Drive one stream until its next head, DATA chunk, or end event.
     pub fn next_event(&mut self, id: u32) -> Result<StreamEvent, Error> {
         loop {
-            let s = self.streams.get_mut(&id).ok_or(Error::Closed)?;
-            if !s.streaming {
-                return Err(Error::Protocol);
-            }
-            if let Some(error) = s.error {
-                self.remove(id);
-                return Err(match error {
-                    Failure::Reset(code) => Error::StreamReset { stream: id, code },
-                    Failure::Unprocessed => Error::Unprocessed(id),
-                });
-            }
-            if !s.head_emitted {
-                if let Some((status, headers)) = &s.headers {
-                    s.head_emitted = true;
-                    return Ok(StreamEvent::Head {
-                        status: *status,
-                        headers: headers.clone(),
-                    });
-                }
-            }
-            if !s.body.is_empty() {
-                let data = std::mem::take(&mut s.body);
-                self.buffered -= data.len();
-                return Ok(StreamEvent::Data(data));
-            }
-            if s.recv_done {
-                let s = self.remove(id);
-                return Ok(StreamEvent::End {
-                    trailers: s.trailers,
-                });
+            if let Some(event) = self.next_event_ready(id)? {
+                return Ok(event);
             }
             self.poll()?;
         }
+    }
+    /// Return a queued event without reading the transport.
+    pub fn next_event_ready(&mut self, id: u32) -> Result<Option<StreamEvent>, Error> {
+        let s = self.streams.get_mut(&id).ok_or(Error::Closed)?;
+        if !s.streaming {
+            return Err(Error::Protocol);
+        }
+        if let Some(error) = s.error {
+            self.remove(id);
+            return Err(match error {
+                Failure::Reset(code) => Error::StreamReset { stream: id, code },
+                Failure::Unprocessed => Error::Unprocessed(id),
+            });
+        }
+        if !s.head_emitted {
+            if let Some((status, headers)) = &s.headers {
+                s.head_emitted = true;
+                return Ok(Some(StreamEvent::Head {
+                    status: *status,
+                    headers: headers.clone(),
+                }));
+            }
+        }
+        if !s.body.is_empty() {
+            let data = std::mem::take(&mut s.body);
+            self.buffered -= data.len();
+            return Ok(Some(StreamEvent::Data(data)));
+        }
+        if s.recv_done {
+            let s = self.remove(id);
+            return Ok(Some(StreamEvent::End {
+                trailers: s.trailers,
+            }));
+        }
+        Ok(None)
     }
     pub fn take_reply(&mut self, id: u32) -> Result<Option<Reply>, Error> {
         let stream = self.streams.get(&id).ok_or(Error::Closed)?;

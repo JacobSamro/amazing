@@ -297,6 +297,9 @@ impl ApiRequest {
     pub fn method(&self) -> &str {
         &self.method
     }
+    pub(crate) fn origin(&self) -> &Origin {
+        &self.origin
+    }
     pub fn body_used(&self) -> bool {
         self.body.body_used()
     }
@@ -329,7 +332,7 @@ impl ApiRequest {
             origin: self.origin.clone(),
         })
     }
-    fn policy_request(&self) -> Result<Request, ApiError> {
+    pub(crate) fn policy_request(&self) -> Result<Request, ApiError> {
         let mut out = Request::new(self.url.clone(), self.origin.clone());
         out.mode = self.mode;
         out.credentials = self.credentials;
@@ -519,7 +522,7 @@ impl ApiResponse {
             body: self.body.clone_body()?,
         })
     }
-    fn from_policy(response: crate::Response) -> Result<Self, ApiError> {
+    pub(crate) fn from_policy(response: crate::Response) -> Result<Self, ApiError> {
         let url = response
             .url_list
             .last()
@@ -640,6 +643,7 @@ pub struct PendingFetchApi {
     current: Option<crate::InternalResponse>,
     redirects: usize,
     stream_body: bool,
+    cookie_header: Option<String>,
 }
 #[derive(Clone, Copy)]
 enum DispatchStage {
@@ -650,10 +654,35 @@ impl PendingFetchApi {
     pub fn id(&self) -> amazing_net::dispatch::RequestId {
         self.wire_id
     }
+    pub(crate) fn is_main(&self) -> bool {
+        matches!(self.stage, DispatchStage::Main)
+    }
     pub fn start<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::Connector>(
         request: &mut ApiRequest,
         dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
         now: std::time::Instant,
+    ) -> Result<Self, ApiError> {
+        Self::start_with_context(
+            request,
+            dispatcher,
+            now,
+            crate::SecurityContext::default(),
+            crate::CspPolicyList::default(),
+            crate::CspDestination::None,
+            None,
+        )
+    }
+    pub(crate) fn start_with_context<
+        R: amazing_net::dispatch::Resolver,
+        C: amazing_net::dispatch::Connector,
+    >(
+        request: &mut ApiRequest,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now: std::time::Instant,
+        security: crate::SecurityContext,
+        csp: crate::CspPolicyList,
+        csp_destination: crate::CspDestination,
+        cookie_header: Option<String>,
     ) -> Result<Self, ApiError> {
         if request.signal_aborted {
             return Err(ApiError::Aborted);
@@ -662,13 +691,17 @@ impl PendingFetchApi {
             return Err(ApiError::BodyUsed);
         }
         let mut policy = request.policy_request()?;
+        policy.security = security;
+        policy.csp = csp;
+        policy.csp_destination = csp_destination;
         if request.body.shared_present() && !request.body.body_used() {
             let bytes = request.body.bytes()?;
             policy
                 .set_method_body(request.method(), Some(Body::Bytes(bytes)))
                 .map_err(ApiError::Network)?;
         }
-        let (wire_id, stage) = Self::start_hop(&mut policy, dispatcher, now)?;
+        let (wire_id, stage) =
+            Self::start_hop(&mut policy, dispatcher, now, cookie_header.as_deref())?;
         Ok(Self {
             policy,
             wire_id,
@@ -676,12 +709,14 @@ impl PendingFetchApi {
             current: None,
             redirects: 0,
             stream_body: request.stream_body,
+            cookie_header,
         })
     }
     fn start_hop<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::Connector>(
         policy: &mut Request,
         dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
         now: std::time::Instant,
+        cookie_header: Option<&str>,
     ) -> Result<(amazing_net::dispatch::RequestId, DispatchStage), ApiError> {
         let plan = policy.prepare().map_err(ApiError::Network)?;
         if plan.preflight {
@@ -694,12 +729,12 @@ impl PendingFetchApi {
                     .set_method_body("OPTIONS", None)
                     .map_err(ApiError::Network)?;
                 let probe_plan = probe.prepare().map_err(ApiError::Network)?;
-                let id = submit_policy(&probe, &probe_plan, dispatcher, now)?;
+                let id = submit_policy(&probe, &probe_plan, dispatcher, now, None)?;
                 return Ok((id, DispatchStage::Preflight));
             }
         }
         Ok((
-            submit_policy(policy, &plan, dispatcher, now)?,
+            submit_policy(policy, &plan, dispatcher, now, cookie_header)?,
             DispatchStage::Main,
         ))
     }
@@ -710,6 +745,19 @@ impl PendingFetchApi {
         event: &amazing_net::dispatch::NetEvent,
         dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
         now: std::time::Instant,
+    ) -> Option<Result<ApiResponse, ApiError>> {
+        self.on_event_with_cookie(event, dispatcher, now, |_| None)
+    }
+    pub(crate) fn on_event_with_cookie<
+        R: amazing_net::dispatch::Resolver,
+        C: amazing_net::dispatch::Connector,
+        F: FnMut(&Request) -> Option<String>,
+    >(
+        &mut self,
+        event: &amazing_net::dispatch::NetEvent,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now: std::time::Instant,
+        mut cookie_for: F,
     ) -> Option<Result<ApiResponse, ApiError>> {
         use amazing_net::dispatch::NetEvent;
         let id = match event {
@@ -765,7 +813,13 @@ impl PendingFetchApi {
                             Ok(p) => p,
                             Err(e) => return Some(Err(ApiError::Network(e))),
                         };
-                        match submit_policy(&self.policy, &plan, dispatcher, now) {
+                        match submit_policy(
+                            &self.policy,
+                            &plan,
+                            dispatcher,
+                            now,
+                            self.cookie_header.as_deref(),
+                        ) {
                             Ok(id) => {
                                 self.wire_id = id;
                                 self.stage = DispatchStage::Main;
@@ -787,11 +841,18 @@ impl PendingFetchApi {
                         let location = response.headers.get("location");
                         match redirect_location(&mut self.policy, &response, location.as_deref()) {
                             Ok(RedirectAction::Follow) => {
+                                // A new hop gets credentials for its own URL only.
+                                self.cookie_header = cookie_for(&self.policy);
                                 self.redirects += 1;
                                 if self.redirects > 20 {
                                     return Some(Err(ApiError::Network(FetchError::RedirectLimit)));
                                 }
-                                match Self::start_hop(&mut self.policy, dispatcher, now) {
+                                match Self::start_hop(
+                                    &mut self.policy,
+                                    dispatcher,
+                                    now,
+                                    self.cookie_header.as_deref(),
+                                ) {
                                     Ok((id, stage)) => {
                                         self.wire_id = id;
                                         self.stage = stage;
@@ -828,6 +889,7 @@ fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::C
     plan: &crate::FetchPlan,
     dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
     now: std::time::Instant,
+    cookie_header: Option<&str>,
 ) -> Result<amazing_net::dispatch::RequestId, ApiError> {
     let mut options = amazing_net::FetchOptions::default();
     options.method = request.method().to_owned();
@@ -840,6 +902,11 @@ fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::C
         options
             .request_headers
             .push(("referer".into(), referrer.clone()));
+    }
+    if let Some(cookie) = cookie_header {
+        options
+            .request_headers
+            .push(("cookie".into(), cookie.into()));
     }
     if let Some(Body::Bytes(bytes)) = request.body() {
         options.body = bytes.clone();

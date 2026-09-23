@@ -6,7 +6,7 @@ mod frame;
 mod hpack;
 mod semantics;
 mod tables;
-pub use connection::{Client, StreamEvent};
+pub use connection::{Client, FrameIo, StreamEvent};
 pub type Field = (Vec<u8>, Vec<u8>);
 pub const PREFACE: &[u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 pub const MAX_FRAME: usize = 16384;

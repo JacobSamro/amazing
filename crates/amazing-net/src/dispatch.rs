@@ -5,7 +5,7 @@ use crate::{
     coding::stream::{decode_layer, CapSource, CountSource, IoSource, Source},
     fetch::FetchOptions,
     headers::Headers,
-    http, NetError, ParsedUrl,
+    http, http2, NetError, ParsedUrl,
 };
 use std::{
     cell::Cell,
@@ -134,11 +134,115 @@ impl Transport {
 
 enum State {
     Resolve,
+    WaitForOrigin,
     Connect(Vec<SocketAddr>),
     Handshake(amazing_net_tls::PendingTls),
     Write,
     Read,
     Emit,
+    H2Start,
+    H2Read,
+}
+struct H2Connection {
+    transport: amazing_net_tls::TlsStream,
+    client: http2::Client<http2::FrameIo>,
+    inbound: Vec<u8>,
+    outbound: Vec<u8>,
+    written: usize,
+}
+impl H2Connection {
+    fn new(
+        transport: amazing_net_tls::TlsStream,
+        buffer_limit: usize,
+    ) -> Result<Self, DispatchError> {
+        let h2_limit = buffer_limit.min(32 * 1024 * 1024);
+        let limits = http2::Limits {
+            body_bytes: h2_limit,
+            buffered_body_bytes: h2_limit,
+            ..http2::Limits::default()
+        };
+        let client = http2::Client::new_pending(http2::FrameIo::default(), limits)
+            .map_err(|e| NetError::MalformedResponse(e.to_string()))?;
+        let mut conn = Self {
+            transport,
+            client,
+            inbound: Vec::new(),
+            outbound: Vec::new(),
+            written: 0,
+        };
+        conn.collect_output();
+        Ok(conn)
+    }
+    fn collect_output(&mut self) {
+        if let Some(io) = self.client.io_mut() {
+            self.outbound.extend(io.take_output());
+        }
+    }
+    fn step(&mut self, remaining: &mut usize, limit: usize) -> Result<(), DispatchError> {
+        if *remaining == 0 {
+            return Ok(());
+        }
+        self.collect_output();
+        if self.outbound.len().saturating_add(self.inbound.len()) > limit {
+            return Err(DispatchError::BufferLimit);
+        }
+        if self.written < self.outbound.len() {
+            let end = self
+                .outbound
+                .len()
+                .min(self.written.saturating_add(*remaining));
+            match self
+                .transport
+                .write_step(&self.outbound[self.written..end], *remaining)
+            {
+                Ok(n) => {
+                    self.written += n;
+                    *remaining -= n;
+                }
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                Err(e) => return Err(e.into()),
+            }
+            if self.written == self.outbound.len() {
+                self.outbound.clear();
+                self.written = 0;
+            }
+            return Ok(());
+        }
+        let cap = (*remaining)
+            .min(8192)
+            .min(limit.saturating_sub(self.inbound.len()));
+        if cap == 0 {
+            return Err(DispatchError::BufferLimit);
+        }
+        let mut bytes = vec![0; cap];
+        match self.transport.read_step(&mut bytes, *remaining) {
+            Ok(0) => return Err(NetError::IncompleteBody.into()),
+            Ok(n) => {
+                self.inbound.extend_from_slice(&bytes[..n]);
+                *remaining -= n;
+            }
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(()),
+            Err(e) => return Err(e.into()),
+        }
+        while self.inbound.len() >= 9 {
+            let len = ((self.inbound[0] as usize) << 16)
+                | ((self.inbound[1] as usize) << 8)
+                | self.inbound[2] as usize;
+            if len > http2::MAX_FRAME {
+                return Err(NetError::MalformedResponse("HTTP/2 frame size".into()).into());
+            }
+            if self.inbound.len() < 9 + len {
+                break;
+            }
+            let frame: Vec<u8> = self.inbound.drain(..9 + len).collect();
+            self.client.io_mut().expect("h2 transport").feed(&frame);
+            self.client
+                .poll()
+                .map_err(|e| NetError::MalformedResponse(e.to_string()))?;
+            self.collect_output();
+        }
+        Ok(())
+    }
 }
 struct Head {
     headers: Headers,
@@ -166,6 +270,11 @@ struct Entry {
     encoded: Vec<u8>,
     decoder: Option<Box<dyn Source>>,
     decoder_input_len: usize,
+    decoded_emitted: usize,
+    replay_skip: usize,
+    wire_done: bool,
+    h2_stream: Option<u32>,
+    h2_pending: Vec<u8>,
     body_total: usize,
 }
 
@@ -176,6 +285,7 @@ pub struct Dispatcher<R = StdResolver, C = StdConnector> {
     next_id: u64,
     active: BTreeMap<RequestId, Entry>,
     idle: HashMap<String, Transport>,
+    h2: HashMap<String, H2Connection>,
     cancelled: Vec<RequestId>,
 }
 impl Dispatcher<StdResolver, StdConnector> {
@@ -192,6 +302,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             next_id: 1,
             active: BTreeMap::new(),
             idle: HashMap::new(),
+            h2: HashMap::new(),
             cancelled: Vec::new(),
         }
     }
@@ -265,9 +376,23 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         }
         let id = RequestId(self.next_id);
         self.next_id = self.next_id.wrapping_add(1).max(1);
-        let transport = self.idle.remove(&origin);
-        let state = if transport.is_some() {
+        let h2_ready = self.h2.contains_key(&origin);
+        let h2_wait = url.scheme() == "https"
+            && self
+                .active
+                .values()
+                .any(|e| e.origin == origin && !matches!(e.state, State::WaitForOrigin));
+        let transport = if h2_ready {
+            None
+        } else {
+            self.idle.remove(&origin)
+        };
+        let state = if h2_ready {
+            State::H2Start
+        } else if transport.is_some() {
             State::Write
+        } else if h2_wait {
+            State::WaitForOrigin
         } else {
             State::Resolve
         };
@@ -287,13 +412,25 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 encoded: Vec::new(),
                 decoder: None,
                 decoder_input_len: 0,
+                decoded_emitted: 0,
+                replay_skip: 0,
+                wire_done: false,
+                h2_stream: None,
+                h2_pending: Vec::new(),
                 body_total: 0,
             },
         );
         Ok(id)
     }
     pub fn cancel(&mut self, id: RequestId) -> bool {
-        if self.active.remove(&id).is_some() {
+        if let Some(entry) = self.active.remove(&id) {
+            if let Some(stream) = entry.h2_stream {
+                if let Some(conn) = self.h2.get_mut(&entry.origin) {
+                    let _ = conn.client.cancel(stream);
+                    let _ = conn.client.next_event_ready(stream);
+                    conn.collect_output();
+                }
+            }
             self.cancelled.push(id);
             true
         } else {
@@ -303,8 +440,19 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
     pub fn buffered_bytes(&self) -> usize {
         self.active
             .values()
-            .map(|e| e.request.len() + e.buffer.len() + e.encoded.len() + e.decoder_input_len)
-            .sum()
+            .map(|e| {
+                e.request.len()
+                    + e.buffer.len()
+                    + e.encoded.len()
+                    + e.decoder_input_len
+                    + e.h2_pending.len()
+            })
+            .sum::<usize>()
+            + self
+                .h2
+                .values()
+                .map(|h| h.inbound.len() + h.outbound.len())
+                .sum::<usize>()
     }
     pub fn step(&mut self, budget: usize, now: Instant) -> Vec<NetEvent> {
         let mut events: Vec<NetEvent> = self
@@ -352,6 +500,16 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
             return Ok(false);
         }
         match &mut e.state {
+            State::WaitForOrigin => {
+                if self.h2.contains_key(&e.origin) {
+                    e.state = State::H2Start;
+                } else if !self.active.values().any(|other| {
+                    other.origin == e.origin && !matches!(other.state, State::WaitForOrigin)
+                }) {
+                    e.state = State::Resolve;
+                }
+                Ok(false)
+            }
             State::Resolve => {
                 let hostname = e.url.hostname();
                 let host = hostname.trim_start_matches('[').trim_end_matches(']');
@@ -376,7 +534,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                         if e.url.scheme() == "https" {
                             let hostname = e.url.hostname();
                             let host = hostname.trim_start_matches('[').trim_end_matches(']');
-                            let tls = amazing_net_tls::PendingTls::new_http1(host, socket)
+                            let tls = amazing_net_tls::PendingTls::new(host, socket)
                                 .map_err(|x| NetError::Tls(x.to_string()))?;
                             e.state = State::Handshake(tls);
                         } else {
@@ -400,8 +558,30 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 match tls.step(cap).map_err(|x| NetError::Tls(x.to_string()))? {
                     Some(stream) => {
                         *remaining = 0;
-                        e.transport = Some(Transport::Tls(stream));
-                        e.state = State::Write;
+                        if stream.protocol() == amazing_net_tls::Protocol::H2 {
+                            if self.h2.len() >= self.limits.max_in_flight {
+                                let idle = self
+                                    .h2
+                                    .keys()
+                                    .find(|origin| {
+                                        !self.active.values().any(|other| other.origin == **origin)
+                                    })
+                                    .cloned();
+                                if let Some(origin) = idle {
+                                    self.h2.remove(&origin);
+                                } else {
+                                    return Err(DispatchError::TooManyInFlight);
+                                }
+                            }
+                            self.h2.insert(
+                                e.origin.clone(),
+                                H2Connection::new(stream, self.limits.max_buffered_bytes)?,
+                            );
+                            e.state = State::H2Start;
+                        } else {
+                            e.transport = Some(Transport::Tls(stream));
+                            e.state = State::Write;
+                        }
                     }
                     None => {
                         *remaining = 0;
@@ -481,19 +661,183 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 if *remaining == 0 {
                     return Ok(false);
                 }
+                if e.decoder.is_none() {
+                    match self.prepare_decoder(e) {
+                        Err(DispatchError::Network(NetError::IncompleteBody)) if !e.wire_done => {
+                            e.decoder_input_len = 0;
+                            e.state = if e.h2_stream.is_some() {
+                                State::H2Read
+                            } else {
+                                State::Read
+                            };
+                            return Ok(false);
+                        }
+                        result => result?,
+                    }
+                }
                 let mut output = vec![0; (*remaining).min(8192)];
-                let n = e.decoder.as_mut().expect("decoder").read(&mut output)?;
+                if e.replay_skip > 0 {
+                    output.truncate(output.len().min(e.replay_skip));
+                    let n = match e.decoder.as_mut().expect("decoder").read(&mut output) {
+                        Ok(n) => n,
+                        Err(NetError::IncompleteBody) if !e.wire_done => {
+                            e.decoder = None;
+                            e.decoder_input_len = 0;
+                            e.state = if e.h2_stream.is_some() {
+                                State::H2Read
+                            } else {
+                                State::Read
+                            };
+                            return Ok(false);
+                        }
+                        Err(error) => return Err(error.into()),
+                    };
+                    if n == 0 {
+                        return Err(NetError::IncompleteBody.into());
+                    }
+                    e.replay_skip -= n;
+                    *remaining -= n;
+                    return Ok(false);
+                }
+                let n = match e.decoder.as_mut().expect("decoder").read(&mut output) {
+                    Ok(n) => n,
+                    Err(NetError::IncompleteBody) if !e.wire_done => {
+                        e.decoder = None;
+                        e.decoder_input_len = 0;
+                        e.state = if e.h2_stream.is_some() {
+                            State::H2Read
+                        } else {
+                            State::Read
+                        };
+                        return Ok(false);
+                    }
+                    Err(error) => return Err(error.into()),
+                };
                 if n == 0 {
                     e.decoder = None;
                     e.decoder_input_len = 0;
-                    events.push(NetEvent::Done { id });
-                    Ok(true)
+                    if e.wire_done {
+                        events.push(NetEvent::Done { id });
+                        Ok(true)
+                    } else {
+                        e.state = if e.h2_stream.is_some() {
+                            State::H2Read
+                        } else {
+                            State::Read
+                        };
+                        Ok(false)
+                    }
                 } else {
                     output.truncate(n);
+                    e.decoded_emitted += n;
                     *remaining -= n;
                     events.push(NetEvent::Body { id, bytes: output });
                     Ok(false)
                 }
+            }
+            State::H2Start => {
+                let conn = self
+                    .h2
+                    .get_mut(&e.origin)
+                    .ok_or(DispatchError::UnsupportedProtocol)?;
+                let fields = http2::request_fields(&e.url, &e.options)?;
+                let stream = conn
+                    .client
+                    .start_streaming(&fields, &e.options.body)
+                    .map_err(|x| NetError::MalformedResponse(x.to_string()))?;
+                conn.collect_output();
+                e.h2_stream = Some(stream);
+                e.request.clear();
+                e.state = State::H2Read;
+                Ok(false)
+            }
+            State::H2Read => {
+                if !e.h2_pending.is_empty() {
+                    let n = e.h2_pending.len().min(*remaining);
+                    let bytes: Vec<_> = e.h2_pending.drain(..n).collect();
+                    *remaining -= n;
+                    events.push(NetEvent::Body { id, bytes });
+                    return Ok(false);
+                }
+                let conn = self
+                    .h2
+                    .get_mut(&e.origin)
+                    .ok_or(DispatchError::UnsupportedProtocol)?;
+                if let Err(error) = conn.step(remaining, self.limits.max_buffered_bytes) {
+                    self.h2.remove(&e.origin);
+                    return Err(error);
+                }
+                let stream = e.h2_stream.expect("started h2 stream");
+                let Some(event) = conn
+                    .client
+                    .next_event_ready(stream)
+                    .map_err(|x| NetError::MalformedResponse(x.to_string()))?
+                else {
+                    return Ok(false);
+                };
+                match event {
+                    http2::StreamEvent::Head { status, headers } => {
+                        let mut fields = Headers::new();
+                        for (name, value) in headers {
+                            let name = std::str::from_utf8(&name).map_err(|_| {
+                                NetError::MalformedResponse("h2 header name".into())
+                            })?;
+                            let value = String::from_utf8(value).map_err(|_| {
+                                NetError::MalformedResponse("h2 header value".into())
+                            })?;
+                            fields
+                                .append(name, value)
+                                .map_err(|_| NetError::MalformedResponse("h2 header".into()))?;
+                        }
+                        let compressed = !e.options.method.eq_ignore_ascii_case("HEAD")
+                            && !matches!(status, 204 | 304)
+                            && http::codings(&fields, "content-encoding")?
+                                .iter()
+                                .any(|c| c != "identity");
+                        e.head = Some(Head {
+                            headers: fields.clone(),
+                            framing: Framing::Empty,
+                            reusable: false,
+                            compressed,
+                        });
+                        events.push(NetEvent::Head {
+                            id,
+                            url: e.url.to_string(),
+                            status,
+                            reason: String::new(),
+                            headers: fields,
+                        });
+                    }
+                    http2::StreamEvent::Data(bytes) => {
+                        e.body_total = e.body_total.saturating_add(bytes.len());
+                        if e.body_total > e.options.max_response_bytes.min(http::MAX_BODY_BYTES) {
+                            return Err(NetError::ResponseTooLarge.into());
+                        }
+                        if e.head.as_ref().is_some_and(|h| h.compressed) {
+                            if e.encoded.len().saturating_add(bytes.len())
+                                > self.limits.max_buffered_bytes
+                            {
+                                return Err(DispatchError::BufferLimit);
+                            }
+                            e.encoded.extend_from_slice(&bytes);
+                            e.decoder = None;
+                            e.decoder_input_len = 0;
+                            e.state = State::Emit;
+                        } else {
+                            e.h2_pending = bytes;
+                        }
+                    }
+                    http2::StreamEvent::End { .. } => {
+                        if e.head.as_ref().is_some_and(|h| h.compressed) {
+                            e.wire_done = true;
+                            e.state = State::Emit;
+                        } else {
+                            events.push(NetEvent::Done { id });
+                            return Ok(true);
+                        }
+                    }
+                }
+                Ok(false)
             }
         }
     }
@@ -663,9 +1007,38 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
                 return Err(DispatchError::BufferLimit);
             }
             e.encoded.extend_from_slice(&data);
+            e.decoder = None;
+            e.decoder_input_len = 0;
+            e.state = State::Emit;
         } else {
             events.push(NetEvent::Body { id, bytes: data });
         }
+        Ok(())
+    }
+    fn prepare_decoder(&self, e: &mut Entry) -> Result<(), DispatchError> {
+        let head = e.head.as_ref().expect("parsed head");
+        let transfer = http::codings(&head.headers, "transfer-encoding")?;
+        let content = http::codings(&head.headers, "content-encoding")?;
+        let limit = e.options.max_response_bytes.min(http::MAX_BODY_BYTES);
+        let input = e.encoded.clone();
+        e.decoder_input_len = input.len();
+        let counted = Rc::new(Cell::new(0));
+        let mut source: Box<dyn Source> = Box::new(CountSource {
+            inner: Box::new(IoSource(Cursor::new(input))),
+            count: counted.clone(),
+        });
+        for coding in transfer.iter().rev().chain(content.iter().rev()) {
+            if coding != "chunked" {
+                source = decode_layer(source, coding, limit)?;
+            }
+        }
+        e.decoder = Some(Box::new(CapSource {
+            inner: source,
+            total: 0,
+            limit,
+            ratio: Some((counted, 1024)),
+        }));
+        e.replay_skip = e.decoded_emitted;
         Ok(())
     }
     fn finish(
@@ -681,27 +1054,7 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
         }
         if let Some(head) = &e.head {
             if head.compressed {
-                let transfer = http::codings(&head.headers, "transfer-encoding")?;
-                let content = http::codings(&head.headers, "content-encoding")?;
-                let limit = e.options.max_response_bytes.min(http::MAX_BODY_BYTES);
-                let input = std::mem::take(&mut e.encoded);
-                e.decoder_input_len = input.len();
-                let counted = Rc::new(Cell::new(0));
-                let mut source: Box<dyn Source> = Box::new(CountSource {
-                    inner: Box::new(IoSource(Cursor::new(input))),
-                    count: counted.clone(),
-                });
-                for coding in transfer.iter().rev().chain(content.iter().rev()) {
-                    if coding != "chunked" {
-                        source = decode_layer(source, coding, limit)?;
-                    }
-                }
-                e.decoder = Some(Box::new(CapSource {
-                    inner: source,
-                    total: 0,
-                    limit,
-                    ratio: Some((counted, 1024)),
-                }));
+                e.wire_done = true;
                 e.state = State::Emit;
                 return Ok(false);
             }
@@ -715,6 +1068,173 @@ impl<R: Resolver, C: Connector> Dispatcher<R, C> {
 mod tests {
     use super::*;
     use std::net::TcpListener;
+
+    fn h2_frame(kind: u8, flags: u8, stream: u32, payload: &[u8]) -> Vec<u8> {
+        let mut head = [0; 9];
+        head[..3].copy_from_slice(&(payload.len() as u32).to_be_bytes()[1..]);
+        head[3] = kind;
+        head[4] = flags;
+        head[5..].copy_from_slice(&stream.to_be_bytes());
+        [head.as_slice(), payload].concat()
+    }
+    fn h2_read(io: &mut impl Read) -> (u8, u32, Vec<u8>) {
+        let mut head = [0; 9];
+        io.read_exact(&mut head).unwrap();
+        let len = ((head[0] as usize) << 16) | ((head[1] as usize) << 8) | head[2] as usize;
+        let mut body = vec![0; len];
+        io.read_exact(&mut body).unwrap();
+        (
+            head[3],
+            u32::from_be_bytes(head[5..].try_into().unwrap()) & 0x7fff_ffff,
+            body,
+        )
+    }
+
+    #[test]
+    fn tls_h2_dispatch_multiplexes_and_aborts_one_stream() {
+        use amazing_net_tls::test_support;
+        let (release, hold) = std::sync::mpsc::channel();
+        let (port, thread) = test_support::serve(vec![b"h2".to_vec()], move |io| {
+            assert_eq!(io.protocol(), Some(b"h2".as_slice()));
+            let mut preface = [0; 24];
+            io.read_exact(&mut preface).unwrap();
+            assert_eq!(&preface, http2::PREFACE);
+            assert_eq!(h2_read(io).0, 4);
+            io.write_all(&h2_frame(4, 0, 0, &[])).unwrap();
+            io.flush().unwrap();
+            let mut streams = Vec::new();
+            while streams.len() < 2 {
+                let (kind, stream, _) = h2_read(io);
+                if kind == 1 {
+                    streams.push(stream);
+                }
+            }
+            assert_eq!(streams, vec![1, 3]);
+            for stream in &streams {
+                io.write_all(&h2_frame(1, 4, *stream, &[0x88])).unwrap();
+            }
+            io.write_all(&h2_frame(0, 0, 1, b"a")).unwrap();
+            io.write_all(&h2_frame(0, 0, 3, b"b")).unwrap();
+            io.flush().unwrap();
+            loop {
+                let (kind, stream, payload) = h2_read(io);
+                if kind == 3 && stream == 1 {
+                    assert_eq!(payload, 8u32.to_be_bytes());
+                    break;
+                }
+            }
+            io.write_all(&h2_frame(0, 1, 3, b"c")).unwrap();
+            io.flush().unwrap();
+            hold.recv_timeout(Duration::from_secs(5)).unwrap();
+        });
+        let tls = test_support::connect_nonblocking(port).unwrap();
+        assert_eq!(tls.protocol(), amazing_net_tls::Protocol::H2);
+        let now = Instant::now();
+        let mut dispatcher = Dispatcher::new(DispatchLimits::default());
+        let origin = format!("https://localhost:{port}");
+        dispatcher.h2.insert(
+            origin,
+            H2Connection::new(tls, dispatcher.limits.max_buffered_bytes).unwrap(),
+        );
+        let first = dispatcher
+            .submit(
+                &format!("https://localhost:{port}/one"),
+                FetchOptions::default(),
+                now,
+            )
+            .unwrap();
+        let second = dispatcher
+            .submit(
+                &format!("https://localhost:{port}/two"),
+                FetchOptions::default(),
+                now,
+            )
+            .unwrap();
+        let mut one = Vec::new();
+        let mut two = Vec::new();
+        let mut aborted = false;
+        let mut done = false;
+        for _ in 0..100_000 {
+            for event in dispatcher.step(4096, Instant::now()) {
+                match event {
+                    NetEvent::Body { id, bytes } if id == first => one.extend(bytes),
+                    NetEvent::Body { id, bytes } if id == second => two.extend(bytes),
+                    NetEvent::Aborted { id } if id == first => aborted = true,
+                    NetEvent::Done { id } if id == second => done = true,
+                    NetEvent::Error { error, .. } => panic!("{error:?}"),
+                    _ => {}
+                }
+            }
+            if one == b"a" && two == b"b" && !aborted {
+                assert!(dispatcher.cancel(first));
+            }
+            if done && aborted {
+                break;
+            }
+            std::thread::yield_now();
+        }
+        assert_eq!(one, b"a");
+        assert_eq!(two, b"bc");
+        assert!(aborted && done);
+        release.send(()).unwrap();
+        thread.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn tls_h2_head_does_not_decode_advertised_encoding() {
+        use amazing_net_tls::test_support;
+        let (release, hold) = std::sync::mpsc::channel();
+        let (port, thread) = test_support::serve(vec![b"h2".to_vec()], move |io| {
+            let mut preface = [0; 24];
+            io.read_exact(&mut preface).unwrap();
+            assert_eq!(h2_read(io).0, 4);
+            io.write_all(&h2_frame(4, 0, 0, &[])).unwrap();
+            io.flush().unwrap();
+            loop {
+                let (kind, stream, _) = h2_read(io);
+                if kind == 1 {
+                    assert_eq!(stream, 1);
+                    break;
+                }
+            }
+            // Indexed :status 200, literal content-encoding: gzip.
+            let block = [0x88, 0x0f, 0x0b, 0x04, b'g', b'z', b'i', b'p'];
+            io.write_all(&h2_frame(1, 5, 1, &block)).unwrap();
+            io.flush().unwrap();
+            hold.recv_timeout(Duration::from_secs(5)).unwrap();
+        });
+        let tls = test_support::connect_nonblocking(port).unwrap();
+        let now = Instant::now();
+        let mut dispatcher = Dispatcher::new(DispatchLimits::default());
+        let origin = format!("https://localhost:{port}");
+        let max_buffered = dispatcher.limits.max_buffered_bytes;
+        dispatcher
+            .h2
+            .insert(origin, H2Connection::new(tls, max_buffered).unwrap());
+        let mut options = FetchOptions::default();
+        options.method = "HEAD".into();
+        let id = dispatcher
+            .submit(&format!("https://localhost:{port}/"), options, now)
+            .unwrap();
+        let mut done = false;
+        for _ in 0..100_000 {
+            for event in dispatcher.step(4096, Instant::now()) {
+                match event {
+                    NetEvent::Done { id: found } if found == id => done = true,
+                    NetEvent::Body { id: found, .. } if found == id => panic!("HEAD body"),
+                    NetEvent::Error { id: found, error } if found == id => panic!("{error:?}"),
+                    _ => {}
+                }
+            }
+            if done {
+                break;
+            }
+            std::thread::yield_now();
+        }
+        assert!(done);
+        release.send(()).unwrap();
+        thread.join().unwrap().unwrap();
+    }
 
     struct Peer {
         socket: TcpStream,
@@ -786,14 +1306,20 @@ mod tests {
                         "/chunk" => {
                             peer.socket.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1\r\no\r\n1\r\nk\r\n0\r\nX-End: yes\r\n\r\n").unwrap();
                         }
-                        "/gzip" => {
+                        "/gzip" | "/gzip-slow" => {
                             const BODY: [u8; 25] = [
                                 31, 139, 8, 0, 0, 0, 0, 0, 2, 19, 203, 72, 205, 201, 201, 7, 0,
                                 134, 166, 16, 54, 5, 0, 0, 0,
                             ];
                             let mut reply = b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: 25\r\n\r\n".to_vec();
                             reply.extend_from_slice(&BODY);
-                            peer.socket.write_all(&reply).unwrap();
+                            if path == "/gzip-slow" {
+                                peer.socket.write_all(&reply[..reply.len() - 8]).unwrap();
+                                peer.late =
+                                    Some((self.ticks + 20, reply[reply.len() - 8..].to_vec()));
+                            } else {
+                                peer.socket.write_all(&reply).unwrap();
+                            }
                         }
                         "/slow" | "/abort" => {
                             peer.socket
@@ -958,6 +1484,24 @@ mod tests {
         }
         assert!(done);
         assert_eq!(body, b"hello");
+    }
+    #[test]
+    fn gzip_emits_decoded_bytes_before_wire_body_completes() {
+        let mut server = Server::new();
+        let now = Instant::now();
+        let mut dispatcher = Dispatcher::new(DispatchLimits::default());
+        let id = dispatcher
+            .submit(&server.url("/gzip-slow"), FetchOptions::default(), now)
+            .unwrap();
+        let early = spin(&mut server, &mut dispatcher, now, 15);
+        assert!(early.iter().any(|e| matches!(e, NetEvent::Body { id: found, bytes } if *found == id && bytes == b"hello")));
+        assert!(!early
+            .iter()
+            .any(|e| matches!(e, NetEvent::Done { id: found } if *found == id)));
+        let late = spin(&mut server, &mut dispatcher, now, 50);
+        assert!(late
+            .iter()
+            .any(|e| matches!(e, NetEvent::Done { id: found } if *found == id)));
     }
     #[test]
     fn chunked_trailer_completes_and_connection_is_reused() {

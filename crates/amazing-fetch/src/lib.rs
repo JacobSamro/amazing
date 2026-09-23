@@ -14,6 +14,7 @@ pub mod psl;
 mod redirect;
 mod referrer;
 mod security;
+pub mod service;
 pub mod xhr;
 pub use cors::*;
 pub use csp::*;
@@ -23,6 +24,7 @@ pub use origin::*;
 pub use redirect::*;
 pub use referrer::*;
 pub use security::*;
+pub use service::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FetchError {

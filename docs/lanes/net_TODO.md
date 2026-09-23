@@ -1343,3 +1343,38 @@ body chunk, timeout, HTTP/1.1 keep-alive reuse, and typed bounds. TLS has an
 isolated verified localhost fixture to exercise retained handshake state
 across `WouldBlock`. The measured two-pass gate and source manifest are in
 `.agents/net/report.md`.
+
+## NET-16 — incremental decode, dispatcher HTTP/2, NetworkService
+
+Fixed base: `9952e73d2b9241ffaab7254e195e0aaa76c43f18`. Encoded HTTP/1.1
+and HTTP/2 body chunks enter the NET-9 pull decoder before the wire response
+ends. The decoder emits through the caller's step budget. NET-9's gzip,
+deflate and Brotli readers treat an input EOF as final and several parsing
+states cannot resume after `WouldBlock`, so the dispatcher retains a bounded
+encoded prefix and replays the decoder when a later chunk arrives, skipping
+already emitted output. Replay work consumes the step budget. This preserves
+the existing size and expansion-ratio caps and delivers early bytes, but costs
+more CPU for highly fragmented compressed bodies. A genuinely resumable NET-9
+decoder is a later performance improvement.
+
+The dispatcher now offers both `h2` and HTTP/1.1 in TLS ALPN. One retained
+HTTP/2 connection per origin owns an RFC 9113 client with stream-local state,
+flow-control windows and reset handling. A complete-frame adapter buffers
+partial TLS reads before the protocol parser sees them; queued protocol output
+drains through bounded TLS writes. Requests to an origin while its first TLS
+handshake is pending wait for the negotiated protocol; after `h2` selection
+they start streams on the same connection. Cancel sends `RST_STREAM(CANCEL)`
+and releases its local stream. The existing HTTP/1.1 keep-alive path remains.
+The authenticated loopback test drives two dispatcher streams on one TLS
+connection, interleaves DATA, aborts the first and completes the second.
+
+`amazing_fetch::NetworkService` owns the dispatcher, cookie jar, private
+`CacheStore`, pending Fetch policy state and client-supplied CSP/security
+context. Its driver API is `start`, `step` and `abort`, with stable service ids.
+It emits wire progress and policy-filtered completion events. Cookies are
+chosen per hop after Fetch policy, never sent on preflight, and recomputed on
+redirect. Fresh cache entries are filtered through the current client policy
+before delivery; completed GET responses enter the cache. Cache validation
+responses currently go to the network as an unconditional request; conditional
+304 replay remains a follow-up. The existing `PendingFetchApi`, `fetch_api`
+and XHR APIs continue to work.
