@@ -854,8 +854,8 @@ fn native_object_create(
     };
     let result = JsValue::object(object);
     if let Some(properties) = args.get(1) {
-        if !properties.is_null() && !properties.is_undefined() {
-            let _ = native_object_assign(
+        if !properties.is_undefined() {
+            native_object_define_properties(
                 i,
                 JsValue::Undefined,
                 vec![result.clone(), properties.clone()],
@@ -2044,157 +2044,6 @@ fn array_values(i: &mut Interpreter, values: Vec<JsValue>) -> Result<JsValue, Th
     Ok(out)
 }
 
-fn map_set_raw(map: &Obj, key: MapKey, value: JsValue) {
-    let mut object = map.borrow_mut();
-    if let Exotic::Map(state) = &mut object.exotic {
-        if let Some((_, slot)) = state.entries.iter_mut().find(|(k, _)| k.same(&key)) {
-            *slot = value;
-        } else {
-            state.entries.push((key, value));
-        }
-    }
-}
-
-fn native_map(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let map = Obj(Rc::new(RefCell::new({
-        let mut o = JsObject::ordinary();
-        o.exotic = Exotic::Map(MapState::default());
-        o.proto = Some(i.map_proto.clone());
-        o
-    })));
-    if let Some(source) = args.first() {
-        if !source.is_null() && !source.is_undefined() {
-            for entry in i.iterate(source)? {
-                let key = i.get_prop(&entry, "0")?;
-                let value = i.get_prop(&entry, "1")?;
-                map_set_raw(&map, map_key(&key), value);
-            }
-        }
-    }
-    Ok(JsValue::Object(map))
-}
-
-fn native_map_get(
-    _: &mut Interpreter,
-    this: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let map = require_map(&this)?;
-    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
-    let object = map.borrow();
-    if let Exotic::Map(state) = &object.exotic {
-        if let Some((_, value)) = state.entries.iter().find(|(k, _)| k.same(&key)) {
-            return Ok(value.clone());
-        }
-    }
-    Ok(JsValue::Undefined)
-}
-
-fn native_map_set(
-    _: &mut Interpreter,
-    this: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let map = require_map(&this)?;
-    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
-    let value = args.get(1).cloned().unwrap_or(JsValue::Undefined);
-    map_set_raw(&map, key, value);
-    Ok(this)
-}
-
-fn native_map_has(
-    _: &mut Interpreter,
-    this: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let map = require_map(&this)?;
-    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
-    let object = map.borrow();
-    let found = matches!(&object.exotic, Exotic::Map(state) if state.entries.iter().any(|(k, _)| k.same(&key)));
-    Ok(JsValue::Bool(found))
-}
-
-fn native_map_delete(
-    _: &mut Interpreter,
-    this: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let map = require_map(&this)?;
-    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
-    let mut object = map.borrow_mut();
-    let deleted = if let Exotic::Map(state) = &mut object.exotic {
-        if let Some(pos) = state.entries.iter().position(|(k, _)| k.same(&key)) {
-            state.entries.remove(pos);
-            true
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-    Ok(JsValue::Bool(deleted))
-}
-
-fn native_map_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let map = require_map(&this)?;
-    if let Exotic::Map(state) = &mut map.borrow_mut().exotic {
-        state.entries.clear();
-    }
-    Ok(JsValue::Undefined)
-}
-
-fn native_map_keys(i: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let map = require_map(&this)?;
-    let values = if let Exotic::Map(state) = &map.borrow().exotic {
-        state
-            .entries
-            .iter()
-            .map(|(key, _)| key_value(key))
-            .collect()
-    } else {
-        Vec::new()
-    };
-    array_values(i, values)
-}
-
-fn native_map_values(
-    i: &mut Interpreter,
-    this: JsValue,
-    _: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let map = require_map(&this)?;
-    let values = if let Exotic::Map(state) = &map.borrow().exotic {
-        state
-            .entries
-            .iter()
-            .map(|(_, value)| value.clone())
-            .collect()
-    } else {
-        Vec::new()
-    };
-    array_values(i, values)
-}
-
-fn native_map_entries(
-    i: &mut Interpreter,
-    this: JsValue,
-    _: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let map = require_map(&this)?;
-    let entries = if let Exotic::Map(state) = &map.borrow().exotic {
-        state
-            .entries
-            .iter()
-            .map(|(key, value)| {
-                array_values(i, vec![key_value(key), value.clone()]).unwrap_or(JsValue::Undefined)
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-    array_values(i, entries)
-}
-
 fn key_value(key: &MapKey) -> JsValue {
     match key {
         MapKey::Undefined => JsValue::Undefined,
@@ -2208,120 +2057,6 @@ fn key_value(key: &MapKey) -> JsValue {
     }
 }
 
-fn native_set(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let set = Obj(Rc::new(RefCell::new({
-        let mut o = JsObject::ordinary();
-        o.exotic = Exotic::Set(SetState::default());
-        o.proto = Some(i.set_proto.clone());
-        o
-    })));
-    if let Some(source) = args.first() {
-        if !source.is_null() && !source.is_undefined() {
-            for value in i.iterate(source)? {
-                let key = map_key(&value);
-                if let Exotic::Set(state) = &mut set.borrow_mut().exotic {
-                    if !state.entries.iter().any(|existing| existing.same(&key)) {
-                        state.entries.push(key);
-                    }
-                }
-            }
-        }
-    }
-    Ok(JsValue::Object(set))
-}
-
-fn native_set_add(
-    _: &mut Interpreter,
-    this: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let set = require_set(&this)?;
-    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
-    if let Exotic::Set(state) = &mut set.borrow_mut().exotic {
-        if !state.entries.iter().any(|existing| existing.same(&key)) {
-            state.entries.push(key);
-        }
-    }
-    Ok(this)
-}
-
-fn native_set_has(
-    _: &mut Interpreter,
-    this: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let set = require_set(&this)?;
-    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
-    let found = matches!(&set.borrow().exotic, Exotic::Set(state) if state.entries.iter().any(|existing| existing.same(&key)));
-    Ok(JsValue::Bool(found))
-}
-
-fn native_set_delete(
-    _: &mut Interpreter,
-    this: JsValue,
-    args: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let set = require_set(&this)?;
-    let key = map_key(args.first().unwrap_or(&JsValue::Undefined));
-    let mut object = set.borrow_mut();
-    let deleted = if let Exotic::Set(state) = &mut object.exotic {
-        if let Some(pos) = state
-            .entries
-            .iter()
-            .position(|existing| existing.same(&key))
-        {
-            state.entries.remove(pos);
-            true
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-    Ok(JsValue::Bool(deleted))
-}
-
-fn native_set_clear(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let set = require_set(&this)?;
-    if let Exotic::Set(state) = &mut set.borrow_mut().exotic {
-        state.entries.clear();
-    }
-    Ok(JsValue::Undefined)
-}
-
-fn native_set_values(
-    i: &mut Interpreter,
-    this: JsValue,
-    _: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let set = require_set(&this)?;
-    let values = if let Exotic::Set(state) = &set.borrow().exotic {
-        state.entries.iter().map(key_value).collect()
-    } else {
-        Vec::new()
-    };
-    array_values(i, values)
-}
-
-fn native_set_entries(
-    i: &mut Interpreter,
-    this: JsValue,
-    _: Vec<JsValue>,
-) -> Result<JsValue, Throw> {
-    let set = require_set(&this)?;
-    let entries = if let Exotic::Set(state) = &set.borrow().exotic {
-        state
-            .entries
-            .iter()
-            .map(|key| {
-                array_values(i, vec![key_value(key), key_value(key)]).unwrap_or(JsValue::Undefined)
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-    array_values(i, entries)
-}
 fn native_object_keys(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let src = a.first().cloned().unwrap_or(JsValue::Undefined);
     let keys = i
@@ -2442,8 +2177,8 @@ fn native_reflect_set(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
     }
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
     let value = args.get(2).cloned().unwrap_or(JsValue::Undefined);
-    i.set_prop(&JsValue::Object(target), key, value)?;
-    Ok(JsValue::Bool(true))
+    let receiver = args.get(3).cloned().unwrap_or_else(|| JsValue::Object(target.clone()));
+    Ok(JsValue::Bool(i.set_with_receiver(&target, &key, value, receiver)?))
 }
 
 fn native_reflect_has(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -2474,15 +2209,14 @@ fn native_reflect_delete_property(i: &mut Interpreter, _: JsValue, args: Vec<JsV
 
 fn native_reflect_define_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = reflect_target(&args)?;
-    if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
-        let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
-        let Some(JsValue::Object(descriptor)) = args.get(2) else {
-            return Err(Throw::type_error("property descriptor is not an object"));
-        };
-        return Ok(JsValue::Bool(namespace_define_allowed(i, &target, &key, descriptor)?));
+    let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    let descriptor = args.get(2).cloned().unwrap_or(JsValue::Undefined);
+    if let JsValue::Object(object) = &descriptor {
+        if let Some(result) = binary_define_index_object(i, &target, &key, object) {
+            return Ok(JsValue::Bool(result?));
+        }
     }
-    native_define_property(i, JsValue::Undefined, args)?;
-    Ok(JsValue::Bool(true))
+    Ok(JsValue::Bool(i.define_own_property(&target, &key, &descriptor)?))
 }
 
 fn native_reflect_construct(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -2498,19 +2232,7 @@ fn native_reflect_construct(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>)
         }
     }
     let arguments = args.get(1).cloned().unwrap_or(JsValue::Undefined);
-    if !arguments.is_object() {
-        return Err(Throw::type_error("Reflect.construct argumentsList must be an object"));
-    }
-    let length = i.get_prop(&arguments, "length")?;
-    let length = i.to_number(&length)?;
-    if length > 1_048_576.0 {
-        return Err(Throw::range_error("Reflect.construct argumentsList is too large"));
-    }
-    let count = if length.is_nan() || length <= 0.0 { 0 } else { length.floor() as usize };
-    let mut values = Vec::with_capacity(count);
-    for index in 0..count {
-        values.push(i.get_prop(&arguments, &index.to_string())?);
-    }
+    let values = i.create_list_from_array_like(&arguments)?;
     i.construct_with_new_target(&target, values, new_target)
 }
 
@@ -2533,14 +2255,18 @@ fn native_object_assign(
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    let target = match args.first() {
-        Some(JsValue::Object(_)) => args[0].clone(),
-        _ => return Err(Throw::type_error("Object.assign target is not an object")),
-    };
+    let input = args.first().cloned().unwrap_or(JsValue::Undefined);
+    if input.is_null() || input.is_undefined() {
+        return Err(Throw::type_error("Object.assign target is nullish"));
+    }
+    let target = native_object(i, JsValue::Undefined, vec![input])?;
+    let JsValue::Object(object) = &target else { unreachable!() };
     for source in args.iter().skip(1) {
         for key in i.enumerable_property_keys(source)? {
             let value = i.get_prop(source, &key)?;
-            i.set_prop(&target, &key, value)?;
+            if !i.set_with_receiver(object, &key, value, target.clone())? {
+                return Err(Throw::type_error("Object.assign could not set property"));
+            }
         }
     }
     Ok(target)

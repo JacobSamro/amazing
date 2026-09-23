@@ -60,13 +60,7 @@ fn std_reflect_construct(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) ->
         }
     }
     let list = i.create_list_from_array_like(&std_reflect_arg(&args, 1))?;
-    let prototype = i.get_prop(&new_target, "prototype")?;
-    let mut instance = JsObject::ordinary();
-    instance.proto = match prototype { JsValue::Object(object) => Some(object), _ => Some(i.object_proto.clone()) };
-    instance.constructed = true;
-    let instance = JsValue::object(instance);
-    let result = i.call_value_with_new_target(&target, instance.clone(), list, Some(new_target))?;
-    Ok(if result.is_object() { result } else { instance })
+    i.construct_with_new_target(&target, list, new_target)
 }
 
 fn std_reflect_define_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -75,12 +69,18 @@ fn std_reflect_define_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValu
     if !matches!(args.get(2), Some(JsValue::Object(_))) {
         return Err(Throw::type_error("property descriptor must be an object"));
     }
+    if let Some(JsValue::Object(descriptor)) = args.get(2) {
+        if let Some(result) = binary_define_index_object(i, &target, &key, descriptor) {
+            return Ok(JsValue::Bool(result?));
+        }
+    }
     Ok(JsValue::Bool(i.define_own_property(&target, &key, &std_reflect_arg(&args, 2))?))
 }
 
 fn std_reflect_delete_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = std_reflect_target(&args)?;
     let key = i.to_property_key(&std_reflect_arg(&args, 1))?;
+    if let Some(deleted) = binary_delete_index(&target, &key) { return Ok(JsValue::Bool(deleted)); }
     let deleted = if let Some(name) = key.as_string() {
         i.legacy_delete(&target, name)?.unwrap_or_else(|| target.borrow_mut().delete_own(&key))
     } else { target.borrow_mut().delete_own(&key) };
@@ -100,7 +100,9 @@ fn std_reflect_get_own_property_descriptor(i: &mut Interpreter, _: JsValue, args
     if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
         return native_object_get_own_property_descriptor(i, JsValue::Undefined, args);
     }
-    let property = if let Some(name) = key.as_string() {
+    let property = if let Some(property) = binary_index_descriptor(&target, &key) {
+        property
+    } else if let Some(name) = key.as_string() {
         i.legacy_own_property(&target, name, false)?
     } else { target.borrow().own_prop(&key).cloned() };
     let Some(property) = property else { return Ok(JsValue::Undefined) };
@@ -132,6 +134,7 @@ fn std_reflect_get_prototype_of(_: &mut Interpreter, _: JsValue, args: Vec<JsVal
 fn std_reflect_has(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = std_reflect_target(&args)?;
     let key = i.to_property_key(&std_reflect_arg(&args, 1))?;
+    if let Some(property) = binary_index_descriptor(&target, &key) { return Ok(JsValue::Bool(property.is_some())); }
     let has = if let Some(name) = key.as_string() {
         i.legacy_has_property(&target, name)?
     } else { target.borrow().has_property(&key) };

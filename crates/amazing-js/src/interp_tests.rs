@@ -828,4 +828,28 @@ mod tests {
             assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
         }
     }
+
+    #[test]
+    fn object_model_operations_preserve_descriptors_and_receivers() {
+        let mut i = Interpreter::new();
+        for source in [
+            "var x={}; Object.defineProperty(x,'a',{value:1,writable:true,configurable:true}); Object.defineProperty(x,'a',{value:2}); var d=Object.getOwnPropertyDescriptor(x,'a'); d.value===2 && d.writable===true && d.enumerable===false && d.configurable===true",
+            "var p={x:{value:3,enumerable:false},y:{value:4,enumerable:true}}; var x=Object.create(null,p); Object.keys(x).join(',')==='y' && x.x===3 && Object.getPrototypeOf(x)===null",
+            "var x=Object.preventExtensions({}); Reflect.defineProperty(x,'a',{value:1})===false && !(('a') in x)",
+            "var x=Object.preventExtensions({}); try {Object.defineProperty(x,'a',{value:1}); false} catch(e) {e instanceof TypeError}",
+            "var p={x:1}, r={}; Reflect.set(p,'x',2,r)===true && p.x===1 && r.x===2",
+            "var p={x:1}, q={}; Object.defineProperty(q,'x',{value:9,writable:false}); var r=Object.create(q); Reflect.set(p,'x',3,r)===true && r.x===3 && q.x===9",
+            "var p={set x(v){this.y=v}}, r={}; Reflect.set(p,'x',7,r)===true && r.y===7 && !('y' in p)",
+            "var p={}; Object.defineProperty(p,'x',{value:1,writable:false}); var x=Object.create(p); try {x.x=2; false} catch(e) {x.x===1 && e instanceof TypeError}",
+            "var p={set x(v){this.y=v}}, r=Object.create(p); r.x=5; r.y===5 && !Object.hasOwn(r,'x')",
+            "var p={set x(v){this.y=v}}, r=Object.create(p); Object.assign(r,{x:6}); r.y===6 && !Object.hasOwn(r,'x')",
+            "Object.assign(5,{x:1}).x===1",
+            "try {Object.create(null,null); false} catch(e) {e instanceof TypeError}",
+            "function F(a,b){this.sum=a+b}; Reflect.construct(F,{0:2,1:3,length:2}).sum===5",
+            "var ta=new Uint8Array(2); Reflect.defineProperty(ta,'0',{value:3})===true && ta[0]===3 && Reflect.deleteProperty(ta,'0')===false",
+            "new Map([[1,2]]).get(1)===2 && new Set([1,2]).has(2)",
+        ] {
+            assert_eq!(i.run_script(source).unwrap_or_else(|error| panic!("{source}: {error:?}")), JsValue::Bool(true), "{source}");
+        }
+    }
 }

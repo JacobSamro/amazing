@@ -2309,7 +2309,16 @@ impl Interpreter {
                 }
                 Ok(())
             }
-            Reference::Property(base, key) => self.set_prop(&base, &key, value),
+            Reference::Property(base, key) => {
+                let JsValue::Object(object) = &base else {
+                    return self.set_prop(&base, &key, value);
+                };
+                if self.set_with_receiver(object, &key, value, base.clone())? {
+                    Ok(())
+                } else {
+                    Err(Throw::type_error("cannot assign to property"))
+                }
+            }
         }
     }
     fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {

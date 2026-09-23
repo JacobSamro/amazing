@@ -197,11 +197,30 @@ impl Interpreter {
             cursor = object.borrow().proto.clone();
         }
         let JsValue::Object(receiver_object) = receiver else { return Ok(false); };
-        if let Some(property) = receiver_object.borrow().own_prop(key).cloned() {
+        let existing = receiver_object.borrow().own_prop(key).cloned();
+        if let Some(property) = &existing {
             if property.getter.is_some() || property.setter.is_some() || !property.writable { return Ok(false); }
         } else if !receiver_object.borrow().extensible { return Ok(false); }
-        self.set_prop(&JsValue::Object(receiver_object), key, value)?;
-        Ok(true)
+        if let Some(result) = binary_set_index(self, &receiver_object, key, value.clone()) {
+            result?;
+            return Ok(true);
+        }
+        if self.legacy_for(&receiver_object).is_some()
+            || Self::dom_style_id(&receiver_object).is_some()
+            || Self::dom_dataset_id(&receiver_object).is_some()
+            || dom_node_id(&receiver_object).is_some()
+        {
+            self.set_prop(&JsValue::Object(receiver_object), key, value)?;
+            return Ok(true);
+        }
+        let mut descriptor = JsObject::ordinary();
+        descriptor.set_own("value", value);
+        if existing.is_none() {
+            for name in ["writable", "enumerable", "configurable"] {
+                descriptor.set_own(name, JsValue::Bool(true));
+            }
+        }
+        self.define_own_property(&receiver_object, key, &JsValue::object(descriptor))
     }
 
     fn create_list_from_array_like(&mut self, value: &JsValue) -> Result<Vec<JsValue>, Throw> {
