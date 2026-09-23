@@ -868,7 +868,7 @@ fn native_object_set_prototype_of(
 }
 
 fn native_object_has_own(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
@@ -883,7 +883,7 @@ fn native_object_has_own(
         Some(JsValue::Null) => "null".into(),
         _ => "undefined".into(),
     };
-    Ok(JsValue::Bool(object.borrow().own_prop(&key).is_some()))
+    Ok(JsValue::Bool(i.legacy_own_property(object, &key, false)?.is_some()))
 }
 
 fn native_array_is_array(
@@ -1089,31 +1089,31 @@ fn native_define_property(
     } else {
         None
     };
+    let property = Property {
+        value,
+        writable: if accessor { false } else { writable },
+        enumerable,
+        configurable,
+        getter,
+        setter,
+    };
+    if i.legacy_define(&target, &key, &property)? { return Ok(JsValue::Object(target)); }
     target
         .borrow_mut()
-        .define(
-            &key,
-            Property {
-                value,
-                writable: if accessor { false } else { writable },
-                enumerable,
-                configurable,
-                getter,
-                setter,
-            },
-        )
+        .define(&key, property)
         .map_err(|_| Throw::type_error("could not define property"))?;
     Ok(JsValue::Object(target))
 }
 
 fn native_prevent_extensions(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let target = args.first().cloned().unwrap_or(this);
     match target {
         JsValue::Object(object) => {
+            if i.legacy_for(&object).is_some() { return Err(Throw::type_error("cannot prevent extensions on a legacy platform object")); }
             object.borrow_mut().extensible = false;
             Ok(JsValue::Object(object))
         }
@@ -1124,12 +1124,12 @@ fn native_prevent_extensions(
 }
 
 fn native_is_extensible(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     _: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     match args.first() {
-        Some(JsValue::Object(object)) => Ok(JsValue::Bool(object.borrow().extensible)),
+        Some(JsValue::Object(object)) => Ok(JsValue::Bool(i.legacy_for(object).is_some() || object.borrow().extensible)),
         _ => Err(Throw::type_error("isExtensible target is not an object")),
     }
 }
@@ -2224,7 +2224,7 @@ fn native_set_entries(
 fn native_object_keys(i: &mut Interpreter, _: JsValue, a: Vec<JsValue>) -> Result<JsValue, Throw> {
     let src = a.first().cloned().unwrap_or(JsValue::Undefined);
     let keys = i
-        .enumerable_keys(&src)
+        .enumerable_keys(&src)?
         .into_iter()
         .map(JsValue::str)
         .collect();
@@ -2238,7 +2238,7 @@ fn native_object_values(
 ) -> Result<JsValue, Throw> {
     let source = a.first().cloned().unwrap_or(JsValue::Undefined);
     let values = i
-        .enumerable_keys(&source)
+        .enumerable_keys(&source)?
         .into_iter()
         .map(|key| i.get_prop(&source, &key))
         .collect::<Result<Vec<_>, _>>()?;
@@ -2255,7 +2255,7 @@ fn native_object_assign(
         _ => return Err(Throw::type_error("Object.assign target is not an object")),
     };
     for source in args.iter().skip(1) {
-        for key in i.enumerable_keys(source) {
+        for key in i.enumerable_keys(source)? {
             let value = i.get_prop(source, &key)?;
             i.set_prop(&target, &key, value)?;
         }
@@ -2308,9 +2308,9 @@ fn json_stringify_value(i: &mut Interpreter, value: &JsValue) -> Result<Option<S
             }
             Some(format!("[{}]", parts.join(",")))
         }
-        JsValue::Object(object) => {
+        JsValue::Object(_) => {
             let mut parts = Vec::new();
-            for key in object.borrow().own_keys_enumerable() {
+            for key in i.enumerable_keys(value)? {
                 let property = i.get_prop(value, &key)?;
                 if let Some(value) = json_stringify_value(i, &property)? {
                     parts.push(format!("{}:{}", json_escape(&key), value));
@@ -2754,8 +2754,19 @@ fn array_callback(
     if callable_function(callback).is_none() {
         return Err(Throw::type_error("array callback is not a function"));
     }
-    let length = i.array_length(&this);
+    let legacy = match &this {
+        JsValue::Object(object) => i.legacy_for(object),
+        _ => None,
+    };
+    let length = match &legacy {
+        Some((handle, hooks)) => (hooks.supported_index_count)(*handle)? as usize,
+        None => i.array_length(&this),
+    };
     for index in 0..length {
+        if legacy.is_some() {
+            let JsValue::Object(object) = &this else { unreachable!() };
+            if !i.legacy_has_property(object, &index.to_string())? { continue; }
+        }
         let value = i.get_prop(&this, &index.to_string())?;
         let result = i.call_value(
             callback,
@@ -3079,7 +3090,7 @@ fn native_array_some(
     for index in 0..length as usize {
         let key = index.to_string();
         let present = match &this {
-            JsValue::Object(o) => o.borrow().has_property(&key),
+            JsValue::Object(o) => i.legacy_has_property(o, &key)?,
             JsValue::Str(s) => index < s.encode_utf16().count(),
             _ => false,
         };

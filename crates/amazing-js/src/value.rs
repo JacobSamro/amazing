@@ -80,6 +80,7 @@ impl fmt::Debug for Obj {
             (Exotic::Set(_), _) => write!(f, "[set]"),
             (Exotic::RegExp(_), _) => write!(f, "[regexp]"),
             (Exotic::Promise(_), _) => write!(f, "[promise]"),
+            (Exotic::LegacyIterator(_), _) => write!(f, "[array iterator]"),
             (Exotic::Ordinary, _) => write!(f, "[object; {} props]", b.props.len()),
         }
     }
@@ -449,6 +450,17 @@ pub enum Exotic {
     Set(SetState),
     Promise(PromiseState),
     RegExp(Rc<amazing_regex::Regex>),
+    LegacyIterator(LegacyIteratorState),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LegacyIteratorKind { Keys, Values, Entries }
+
+#[derive(Debug, Clone)]
+pub struct LegacyIteratorState {
+    pub target: Obj,
+    pub next_index: u32,
+    pub kind: LegacyIteratorKind,
 }
 
 /// Map internals: insertion-order key/value store keyed by display string

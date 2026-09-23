@@ -291,3 +291,48 @@ releases those registry roots. Windows amazing-js nextest passed 182/182 with
 one doctest. The full Test262 classification remained byte-identical to the
 10,575-pass combined baseline, with zero file or variant transitions. The
 workspace gate passed 1,438/1,438 nextest tests (3 skipped) and 2/2 doctests.
+
+### JSRT-4 legacy platform object and iterable decision
+
+Fixed base: `0244456` (includes JS-6 additive UTF-16 lexer/AST fields).
+The DOM-8 draft adds `BindingHost::define_legacy_platform_object` and
+`define_iterable`. Runtime accepts these entry points. The integrator accepted
+four extra declarations: `override_builtins`, optional indexed and named
+setters, and an optional named deleter. The host reports a native `u32`
+supported index count and `Vec<Vec<u16>>` supported names. The embedding
+converts DOM `Operation` tokens into the runtime's per-interpreter callbacks;
+amazing-js does not depend on amazing-bindings or borrow the DOM. Callbacks run
+without an active JavaScript object borrow, allowing a short DOM borrow and
+reentrant value wrapping.
+
+Runtime matches hooks using private realm and interface brand. Indexed and
+named properties remain virtual: getters and own-key enumeration query the
+current host state rather than materializing own properties. The named
+visibility check respects ordinary own/prototype properties unless
+`LegacyOverrideBuiltIns` applies; `LegacyUnenumerableNamedProperties` filters
+enumerable key consumers. Indexed value iterators keep a live target and index
+and read current values at each `next`. Their prototype has `next` and
+`@@iterator`; the interface prototype receives `@@iterator`, `keys`, `values`,
+`entries`, and `forEach`. `forEach` is the same function object as
+`Array.prototype.forEach`; its generic callback path uses the live host count
+and indexed presence checks only for legacy wrappers.
+
+Runtime values still store Unicode scalar strings as `Rc<str>`. A supported
+name with an unpaired surrogate cannot become a JavaScript property key until
+the next JsString ticket; the bridge returns an explicit TypeError rather than
+silently replacing code units. This limits DOM-8 coverage until that migration.
+
+JSRT-4 fixed-base Test262 before/after both pass 10,594 of 53,872 files
+(33,011 fail, 17 timeout, 9,956 unsupported, 294 skipped). There are zero
+lost passing files or variants. Classification SHA-256 changes from
+`d80b8fd8eb5e086aa4a95b7c2619d0ab04e636ee372ff2c2a0f5967c3479c8ea`
+to `7554e7619859569ae012ef12c3cdb5f23744b85ce58548aa9934ca5d40af0365`
+for exactly one fail-to-fail diagnostic in both variants of
+`built-ins/JSON/stringify/property-order.js`. Frozen-host probes reproduce a
+base `RefCell already borrowed` panic at `value.rs:67`; the candidate reaches
+the test's existing JSON key-order assertion and fails normally. The
+integrator accepted this explained hash difference on 2026-09-23. Windows
+amazing-js nextest passes 190/190 with one doctest; fixed-base workspace
+nextest passes 1,503/1,503 with three skipped and doctests pass 2/2. No
+`crates/amazing-js` drift from fixed `0244456` to current `origin/dev` at final
+review.

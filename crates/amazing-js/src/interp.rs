@@ -15,13 +15,16 @@ use crate::ast::{self, Binding, ExprKind, ForInit, ForLeft, MemberProp, PropKey,
 use crate::env::{EnvHandle, EnvKind};
 use crate::value::{
     number_to_string, Exotic, FunctionBody, HostCallPolicy, HostFunctionId, HostHandle,
-    JsFunction, JsObject, JsValue, MapKey, MapState, Obj, PendingReaction, PromiseFate,
+    JsFunction, JsObject, JsValue, LegacyIteratorKind, LegacyIteratorState, MapKey, MapState, Obj, PendingReaction, PromiseFate,
     PromiseState, Property, SetState, Throw,
 };
 
 #[path = "interp_bindings.rs"]
 mod bindings;
 pub use bindings::BindingPropertyFlags;
+#[path = "interp_legacy.rs"]
+mod legacy;
+pub use legacy::LegacyPlatformHooks;
 
 /// The embedding's per-interpreter native entry point. `new_target` is present
 /// only for construction. The callable is cloned before invocation, so a nested
@@ -203,6 +206,8 @@ pub struct Interpreter {
     host_native_dispatch: Option<Rc<HostNativeDispatch>>,
     host_realm: u64,
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
+    legacy_hooks: HashMap<u64, LegacyPlatformHooks>,
+    legacy_iterator_proto: Obj,
     random_state: u64,
     jobs: VecDeque<Job>,
     external_scheduling: Option<ExternalScheduling>,
@@ -264,6 +269,11 @@ impl Interpreter {
             o
         })));
         let global_env = EnvHandle::new(EnvKind::Global, None);
+        let legacy_iterator_proto = Obj(Rc::new(RefCell::new({
+            let mut o = JsObject::ordinary();
+            o.proto = Some(object_proto.clone());
+            o
+        })));
         let host_realm = NEXT_HOST_REALM.fetch_add(1, Ordering::Relaxed);
         let mut i = Self {
             global_env,
@@ -282,6 +292,8 @@ impl Interpreter {
             host_native_dispatch: None,
             host_realm,
             host_cache: HashMap::new(),
+            legacy_hooks: HashMap::new(),
+            legacy_iterator_proto,
             random_state: host_realm ^ 0xA076_1D64_78BD_642F,
             jobs: VecDeque::new(),
             external_scheduling: None,
@@ -1127,7 +1139,7 @@ impl Interpreter {
 
     fn object_rest(&mut self, source: &JsValue, used: &[String]) -> Result<JsValue, Throw> {
         let rest = self.object_value();
-        for key in self.enumerable_keys(source) {
+        for key in self.enumerable_keys(source)? {
             if !used.iter().any(|used_key| used_key == &key) {
                 let value = self.get_prop(source, &key)?;
                 self.set_prop(&rest, &key, value)?;
@@ -1208,7 +1220,7 @@ impl Interpreter {
             StmtKind::ForIn { left, right, body } => {
                 self.completion = JsValue::Undefined;
                 let v = self.eval_expr(right, env)?;
-                for k in self.enumerable_keys(&v) {
+                for k in self.enumerable_keys(&v)? {
                     let iteration_env = for_iteration_env(left, env);
                     self.bind_for(left, JsValue::str(k), &iteration_env)?;
                     match self.exec_stmt(body, &iteration_env)? {
@@ -1571,7 +1583,7 @@ impl Interpreter {
                     match x {
                         ast::ObjElem::Spread(y) => {
                             let src = self.eval_expr(y, env)?;
-                            for k in self.enumerable_keys(&src) {
+                            for k in self.enumerable_keys(&src)? {
                                 let v = self.get_prop(&src, &k)?;
                                 self.set_prop(&o, &k, v)?;
                             }
@@ -1710,7 +1722,11 @@ impl Interpreter {
                     let o = self.eval_expr(obj, env)?;
                     let k = self.member_key(prop, env)?;
                     if let JsValue::Object(o) = o {
-                        Ok(JsValue::Bool(o.borrow_mut().delete_own(&k)))
+                        if let Some(deleted) = self.legacy_delete(&o, &k)? {
+                            Ok(JsValue::Bool(deleted))
+                        } else {
+                            Ok(JsValue::Bool(o.borrow_mut().delete_own(&k)))
+                        }
                     } else {
                         Ok(JsValue::Bool(true))
                     }
@@ -1822,7 +1838,7 @@ impl Interpreter {
             In => {
                 let k = self.to_property_key(&a)?;
                 match b {
-                    JsValue::Object(o) => Ok(JsValue::Bool(o.borrow().has_property(&k))),
+                    JsValue::Object(o) => Ok(JsValue::Bool(self.legacy_has_property(&o, &k)?)),
                     _ => Err(Throw::type_error("right operand of in is not an object")),
                 }
             }
@@ -2930,7 +2946,7 @@ impl Interpreter {
                         return Ok(JsValue::num(size as f64));
                     }
                 }
-                let property = o.borrow().own_prop(k).cloned();
+                let property = self.legacy_own_property(o, k, false)?;
                 let prototype = o.borrow().proto.clone();
                 if let Some(property) = property {
                     if let Some(getter) = property.getter {
@@ -3046,6 +3062,25 @@ impl Interpreter {
                 return Ok(());
             }
         }
+        if self.legacy_set(&o, k, x.clone())? { return Ok(()); }
+        if self.legacy_for(&o).is_some() && o.borrow().own_prop(k).is_none() {
+            let mut cursor = o.borrow().proto.clone();
+            while let Some(prototype) = cursor {
+                let descriptor = prototype.borrow().own_prop(k).cloned();
+                if let Some(descriptor) = descriptor {
+                    if let Some(setter) = descriptor.setter {
+                        let callable = JsValue::object(JsObject::function(*setter));
+                        self.call_value(&callable, JsValue::Object(o.clone()), vec![x])?;
+                        return Ok(());
+                    }
+                    if descriptor.getter.is_some() || !descriptor.writable {
+                        return Err(Throw::type_error("property has no writable setter"));
+                    }
+                    break;
+                }
+                cursor = prototype.borrow().proto.clone();
+            }
+        }
         if let Some(property) = o.borrow().own_prop(k).cloned() {
             if let Some(setter) = property.setter {
                 let function =
@@ -3083,11 +3118,11 @@ impl Interpreter {
         }
         Ok(())
     }
-    fn enumerable_keys(&self, v: &JsValue) -> Vec<String> {
+    fn enumerable_keys(&mut self, v: &JsValue) -> Result<Vec<String>, Throw> {
         match v {
-            JsValue::Object(o) => o.borrow().own_keys_enumerable(),
-            JsValue::Str(s) => (0..s.chars().count()).map(|i| i.to_string()).collect(),
-            _ => Vec::new(),
+            JsValue::Object(o) => self.legacy_own_keys(o, true),
+            JsValue::Str(s) => Ok((0..s.chars().count()).map(|i| i.to_string()).collect()),
+            _ => Ok(Vec::new()),
         }
     }
     fn array_length(&self, v: &JsValue) -> usize {
