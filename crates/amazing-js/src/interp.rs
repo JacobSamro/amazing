@@ -1185,6 +1185,9 @@ impl Interpreter {
 
     pub fn eval_expr(&mut self, e: &ast::Expr, env: &EnvHandle) -> Result<JsValue, Throw> {
         match &e.kind {
+            ExprKind::PrivateName(_) => Err(Throw::type_error(
+                "private names are not yet supported by the runtime",
+            )),
             ExprKind::RegExp(regex) => self.make_regexp(regex.clone()),
             ExprKind::Num(n) => self.numeric(n),
             ExprKind::Str(s) => Ok(JsValue::str(s.as_str())),
@@ -1641,6 +1644,11 @@ impl Interpreter {
                 let base = self.eval_expr(obj, env)?;
                 let key = match prop {
                     MemberProp::Ident(identifier) => identifier.name.clone(),
+                    MemberProp::Private(_) => {
+                        return Err(Throw::type_error(
+                            "private names are not yet supported by the runtime",
+                        ))
+                    }
                     MemberProp::Computed(expression) => {
                         let property_value = self.eval_expr(expression, env)?;
                         if base.is_null() || base.is_undefined() {
@@ -1830,6 +1838,9 @@ impl Interpreter {
     fn member_key(&mut self, p: &MemberProp, e: &EnvHandle) -> Result<String, Throw> {
         match p {
             MemberProp::Ident(i) => Ok(i.name.clone()),
+            MemberProp::Private(_) => Err(Throw::type_error(
+                "private names are not yet supported by the runtime",
+            )),
             MemberProp::Computed(x) => {
                 let v = self.eval_expr(x, e)?;
                 self.to_property_key(&v)
@@ -1839,6 +1850,9 @@ impl Interpreter {
     fn prop_key(&mut self, p: &PropKey, e: &EnvHandle) -> Result<String, Throw> {
         match p {
             PropKey::Ident(i) => Ok(i.name.clone()),
+            PropKey::Private(_) => Err(Throw::type_error(
+                "private names are not yet supported by the runtime",
+            )),
             PropKey::Str(s) => Ok(s.clone()),
             PropKey::Num(n) => Ok(number_to_string(self.numeric(n)?.to_number()?)),
             PropKey::Computed(x) => {

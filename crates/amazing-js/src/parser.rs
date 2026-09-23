@@ -50,6 +50,7 @@
 use crate::ast::*;
 use crate::errors::SyntaxError;
 use crate::tokens::{Punct, SourceLocation, Span, Token, TokenKind};
+use std::collections::HashMap;
 
 /// Parses a full script (modules are deferred; see module docs).
 pub fn parse_script(src: &str) -> Result<Program, SyntaxError> {
@@ -68,6 +69,13 @@ struct LabelCtx {
     name: String,
     /// `true` when the label directly wraps a loop (allows `continue`).
     is_loop: bool,
+}
+
+#[derive(Default)]
+struct PrivateScope {
+    // Getter and setter may share one name; all other duplicates are errors.
+    declared: HashMap<String, u8>,
+    uses: Vec<Ident>,
 }
 
 struct Parser {
@@ -90,6 +98,7 @@ struct Parser {
     /// continuation (the lexer absorbed the closing `}` into it), not the
     /// start of a tagged template.
     template_depth: usize,
+    private_scopes: Vec<PrivateScope>,
 }
 
 impl Parser {
@@ -107,6 +116,7 @@ impl Parser {
             in_generator: 0,
             in_async: 0,
             template_depth: 0,
+            private_scopes: Vec::new(),
         }
     }
 
@@ -232,6 +242,17 @@ impl Parser {
                 "expected property name, found {}",
                 t.kind.describe()
             ))),
+        }
+    }
+
+    fn member_name(&mut self) -> Result<MemberProp, SyntaxError> {
+        if let TokenKind::PrivateIdent(name) = self.cur().kind.clone() {
+            let t = self.bump();
+            let id = Ident::new(name, t.span);
+            self.use_private(id.clone())?;
+            Ok(MemberProp::Private(id))
+        } else {
+            Ok(MemberProp::Ident(self.prop_name()?))
         }
     }
 
@@ -883,6 +904,7 @@ impl Parser {
             | TokenKind::Str(_)
             | TokenKind::TemplatePart { .. }
             | TokenKind::Ident(_)
+            | TokenKind::PrivateIdent(_)
             | TokenKind::Punct(
                 Punct::LParen
                 | Punct::LBracket
@@ -1008,6 +1030,7 @@ impl Parser {
             None
         };
         self.expect_punct(Punct::Lbrace)?;
+        self.private_scopes.push(PrivateScope::default());
         let mut members = Vec::new();
         while !self.at_punct(Punct::Rbrace) {
             if self.at_eof() {
@@ -1016,6 +1039,19 @@ impl Parser {
             members.push(self.parse_class_member()?);
         }
         self.bump(); // }
+        let scope = self.private_scopes.pop().expect("class scope");
+        for use_name in scope.uses {
+            if !scope.declared.contains_key(&use_name.name) {
+                if let Some(outer) = self.private_scopes.last_mut() {
+                    outer.uses.push(use_name);
+                } else {
+                    return Err(self.err_at(
+                        use_name.span.start,
+                        format!("private name {} is not declared", use_name.name),
+                    ));
+                }
+            }
+        }
         Ok(ClassItem {
             name,
             super_class,
@@ -1032,6 +1068,7 @@ impl Parser {
             | TokenKind::Keyword(_)
             | TokenKind::Str(_)
             | TokenKind::Numeric(_) => true,
+            TokenKind::PrivateIdent(_) => true,
             TokenKind::Punct(Punct::LBracket) | TokenKind::Punct(Punct::Star) => true,
             _ => false,
         }
@@ -1061,7 +1098,12 @@ impl Parser {
                 kind = MethodKind::Set;
             }
         }
-        let key = self.parse_prop_key()?;
+        let key = if let TokenKind::PrivateIdent(name) = self.cur().kind.clone() {
+            let t = self.bump();
+            PropKey::Private(Ident::new(name, t.span))
+        } else {
+            self.parse_prop_key()?
+        };
         if self.at_punct(Punct::LParen) {
             let params = self.parse_params()?;
             let actual_kind = if kind == MethodKind::Method
@@ -1072,6 +1114,7 @@ impl Parser {
             } else {
                 kind
             };
+            self.declare_private(&key, actual_kind)?;
             let body = self.with_fn_context(is_async, is_generator, |p| p.parse_block())?;
             return Ok(ClassMember::Method(ClassMethod {
                 key,
@@ -1090,12 +1133,9 @@ impl Parser {
                 "only methods may use `*`, `async`, `get`, or `set` without a parameter list",
             ));
         }
+        self.declare_private(&key, MethodKind::Method)?;
         let init = if self.eat_punct(Punct::Eq) {
-            let saved = self.no_in;
-            self.no_in = true;
-            let e = self.parse_assignment_expr();
-            self.no_in = saved;
-            Some(e?)
+            Some(self.parse_assignment_expr()?)
         } else {
             None
         };
@@ -1112,6 +1152,32 @@ impl Parser {
             init,
             span: self.span_from(start),
         }))
+    }
+
+    fn declare_private(&mut self, key: &PropKey, kind: MethodKind) -> Result<(), SyntaxError> {
+        let PropKey::Private(id) = key else {
+            return Ok(());
+        };
+        let bit = match kind {
+            MethodKind::Get => 1,
+            MethodKind::Set => 2,
+            _ => 4,
+        };
+        let scope = self.private_scopes.last_mut().expect("class scope");
+        let previous = scope.declared.entry(id.name.clone()).or_default();
+        if *previous & bit != 0 || (*previous | bit) & 4 != 0 && *previous != 0 {
+            return Err(self.err_at(id.span.start, format!("duplicate private name {}", id.name)));
+        }
+        *previous |= bit;
+        Ok(())
+    }
+
+    fn use_private(&mut self, id: Ident) -> Result<(), SyntaxError> {
+        let Some(scope) = self.private_scopes.last_mut() else {
+            return Err(self.err_at(id.span.start, "private name outside class"));
+        };
+        scope.uses.push(id);
+        Ok(())
     }
 
     /// Property key: identifier (reserved words included), string, numeric
@@ -1328,6 +1394,11 @@ impl Parser {
             if kind == BinKind::Arithmetic(BinOp::In) && self.no_in {
                 break;
             }
+            if matches!(left.kind, ExprKind::PrivateName(_))
+                && kind != BinKind::Arithmetic(BinOp::In)
+            {
+                return Err(self.err("private name is only valid with `in`"));
+            }
             // Unary operators cannot directly feed `**` (the grammar gives
             // ExponentiationExpression no unary left operand), so
             // `-2 ** 2` is a SyntaxError while `(-2) ** 2` parses.
@@ -1399,6 +1470,9 @@ impl Parser {
                     span,
                 ),
             };
+        }
+        if matches!(left.kind, ExprKind::PrivateName(_)) {
+            return Err(self.err("private name is only valid with `in`"));
         }
         Ok(left)
     }
@@ -1559,12 +1633,12 @@ impl Parser {
         loop {
             if self.at_punct(Punct::Dot) {
                 self.bump();
-                let prop = self.prop_name()?;
+                let prop = self.member_name()?;
                 let span = Span::new(e.span.start, self.last_end);
                 e = Expr::new(
                     ExprKind::Member {
                         obj: Box::new(e),
-                        prop: MemberProp::Ident(prop),
+                        prop,
                         optional: false,
                     },
                     span,
@@ -1612,12 +1686,12 @@ impl Parser {
                         span,
                     );
                 } else {
-                    let prop = self.prop_name()?;
+                    let prop = self.member_name()?;
                     let span = Span::new(e.span.start, self.last_end);
                     e = Expr::new(
                         ExprKind::Member {
                             obj: Box::new(e),
-                            prop: MemberProp::Ident(prop),
+                            prop,
                             optional: true,
                         },
                         span,
@@ -1697,6 +1771,12 @@ impl Parser {
             TokenKind::Str(s) => {
                 self.bump();
                 Ok(Expr::new(ExprKind::Str(s), self.span_from(start)))
+            }
+            TokenKind::PrivateIdent(name) => {
+                let t = self.bump();
+                let id = Ident::new(name, t.span);
+                self.use_private(id.clone())?;
+                Ok(Expr::new(ExprKind::PrivateName(id), self.span_from(start)))
             }
             TokenKind::TemplatePart { .. } => {
                 let lit = self.parse_template_lit()?;
@@ -2780,13 +2860,73 @@ mod construct_tests {
     }
 
     #[test]
-    fn class_decl_requires_a_name_and_private_names_are_deferred() {
+    fn class_decl_requires_a_name_and_private_names_are_scoped() {
         assert!(err("class {}").message.contains("name"));
-        assert!(err("class A { #p = 1; }").message.contains("#"));
+        assert!(parse_script(
+            "class A { #p = 1; get #q() { return this.#p; } set #q(v) { this.#p = v; } }"
+        )
+        .is_ok());
+        assert!(parse_script("class A { method() { return this.#later; } #later; }").is_ok());
+        assert!(parse_script(
+            "class A { method() { return class B { method() { return this.#outer; } }; } #outer; }"
+        )
+        .is_ok());
+        assert!(
+            parse_script("class A { #p; has(o) { return #p in o; } check = #p in this; }").is_ok()
+        );
+        assert!(err("class A { #p; #p; }")
+            .message
+            .contains("duplicate private"));
+        assert!(err("class A { get #p() {} get #p() {} }")
+            .message
+            .contains("duplicate private"));
+        assert!(err("class A { m() { return this.#missing; } }")
+            .message
+            .contains("not declared"));
+        assert!(err("this.#p").message.contains("outside class"));
+        assert!(err("class A { #p; m() { return #p; } }")
+            .message
+            .contains("only valid with `in`"));
         // Static blocks are not a member shape this phase accepts.
         assert!(
             matches!(parse_script("class A { static {} }"), Err(_)),
             "static blocks must be rejected"
+        );
+    }
+
+    #[test]
+    fn private_names_have_distinct_ast_variants() {
+        let program =
+            parse_script("class A { #x; m(o) { return o.#x; } has(o) { return #x in o; } }")
+                .unwrap();
+        let StmtKind::Class(class) = &program.body[0].kind else {
+            panic!("class")
+        };
+        let ClassMember::Field(field) = &class.members[0] else {
+            panic!("field")
+        };
+        assert!(matches!(field.key, PropKey::Private(_)));
+        let ClassMember::Method(method) = &class.members[1] else {
+            panic!("method")
+        };
+        let StmtKind::Return(Some(expr)) = &method.body.body[0].kind else {
+            panic!("return")
+        };
+        assert!(matches!(
+            expr.kind,
+            ExprKind::Member {
+                prop: MemberProp::Private(_),
+                ..
+            }
+        ));
+        let ClassMember::Method(method) = &class.members[2] else {
+            panic!("method")
+        };
+        let StmtKind::Return(Some(expr)) = &method.body.body[0].kind else {
+            panic!("return")
+        };
+        assert!(
+            matches!(expr.kind, ExprKind::Binary { op: BinOp::In, ref left, .. } if matches!(left.kind, ExprKind::PrivateName(_)))
         );
     }
 
