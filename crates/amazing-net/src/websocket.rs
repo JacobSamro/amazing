@@ -2,9 +2,9 @@
 //! Browser embeddings must supply the initiating Origin and enforce their own
 //! CSP/mixed-content/credential policy. This module is transport, not a JS API.
 mod client;
-mod frame;
-mod handshake;
-mod utf8;
+pub(crate) mod frame;
+pub(crate) mod handshake;
+pub(crate) mod utf8;
 pub use client::Client;
 use std::{
     io::{Read, Write},
@@ -37,7 +37,7 @@ impl From<std::io::Error> for Error {
     }
 }
 impl Error {
-    fn close_code(&self) -> u16 {
+    pub(crate) fn close_code(&self) -> u16 {
         match self {
             Self::Utf8 => 1007,
             Self::Limit => 1009,
@@ -65,7 +65,7 @@ impl Default for Limits {
     }
 }
 impl Limits {
-    fn validate(self) -> Result<Self, Error> {
+    pub(crate) fn validate(self) -> Result<Self, Error> {
         if self.frame_bytes == 0
             || self.frame_bytes > 16 * 1024 * 1024
             || self.message_bytes > 32 * 1024 * 1024
@@ -147,7 +147,7 @@ impl Write for Transport {
         }
     }
 }
-fn random(bytes: &mut [u8]) -> Result<(), Error> {
+pub(crate) fn random(bytes: &mut [u8]) -> Result<(), Error> {
     amazing_net_tls::fill_random(bytes).map_err(|_| Error::Entropy)
 }
 /// Connect ws/wss without redirects, cookies, proxying or extension negotiation.

@@ -91,6 +91,6 @@ pub(super) fn write(
     Ok(())
 }
 // RFC6455 defined codes plus registered 1012-1014; no extension-defined codes.
-pub(super) fn valid_code(code: u16, from_server: bool) -> bool {
+pub(crate) fn valid_code(code: u16, from_server: bool) -> bool {
     matches!(code,1000..=1003|1007..=1014|3000..=4999) && !(from_server && code == 1010)
 }

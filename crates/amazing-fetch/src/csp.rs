@@ -118,6 +118,13 @@ impl CspPolicyList {
         self.check(request, response_url)
     }
     fn check(&self, request: &Request, url: &HttpUrl) -> CspCheck {
+        self.check_parsed(request, url.as_parsed())
+    }
+    /// Apply connect-src to the original ws/wss URL, preserving scheme sources.
+    pub fn pre_websocket(&self, request: &Request, url: &ParsedUrl) -> CspCheck {
+        self.check_parsed(request, url)
+    }
+    fn check_parsed(&self, request: &Request, url: &ParsedUrl) -> CspCheck {
         let mut result = CspCheck {
             blocked: false,
             violations: Vec::new(),
@@ -155,7 +162,7 @@ impl CspPolicyList {
             result.violations.push(CspViolation {
                 directive: directive.name.clone(),
                 disposition: policy.disposition,
-                blocked_url: url.without_fragment(),
+                blocked_url: url.serialize_without_fragment(),
             });
         }
         result
@@ -232,7 +239,7 @@ fn source_list_matches(
     sources: &[String],
     request: &Request,
     destination: CspDestination,
-    url: &HttpUrl,
+    url: &ParsedUrl,
     redirected: bool,
 ) -> bool {
     let script = matches!(
@@ -266,13 +273,16 @@ fn source_list_matches(
     }
     sources
         .iter()
-        .any(|s| expression_matches(s, url.as_parsed(), &request.csp_self_origin, redirected))
+        .any(|s| expression_matches(s, url, &request.csp_self_origin, redirected))
 }
 fn scheme_matches(a: &str, b: &str) -> bool {
     a.eq_ignore_ascii_case(b)
         || matches!(
             (a, b),
-            ("http", "https") | ("ws", "wss" | "http" | "https") | ("wss", "https")
+            ("http", "https" | "ws" | "wss")
+                | ("https", "wss")
+                | ("ws", "wss" | "http" | "https")
+                | ("wss", "https")
         )
 }
 /// Match a fetch source against any parsed URL, including ws/wss URLs used by
@@ -287,7 +297,7 @@ pub fn csp_source_matches(
 }
 fn expression_matches(source: &str, parsed: &ParsedUrl, origin: &Origin, redirected: bool) -> bool {
     if source == "*" {
-        return matches!(parsed.scheme(), "http" | "https");
+        return matches!(parsed.scheme(), "http" | "https" | "ws" | "wss");
     }
     if source.eq_ignore_ascii_case("'self'") {
         let Ok(self_url) = HttpUrl::parse(&origin.serialize()) else {

@@ -1,5 +1,78 @@
 use crate::*;
 use std::collections::BTreeSet;
+use std::time::{Duration, Instant};
+
+/// Bounded Fetch §4.8 preflight grants. A grant covers exactly the method and
+/// unsafe header-name set that was checked against the preflight response.
+pub struct PreflightCache {
+    entries: Vec<PreflightGrant>,
+}
+struct PreflightGrant {
+    origin: Origin,
+    url: String,
+    credentials: bool,
+    method: String,
+    names: Vec<String>,
+    expires: Instant,
+}
+impl Default for PreflightCache {
+    fn default() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+}
+impl PreflightCache {
+    pub fn contains(&mut self, request: &Request, now: Instant) -> bool {
+        self.entries.retain(|entry| entry.expires > now);
+        let names = unsafe_request_header_names(&request.headers);
+        self.entries.iter().any(|entry| {
+            entry.origin == request.origin
+                && entry.url == request.url().without_fragment()
+                && (entry.credentials || request.credentials != CredentialsMode::Include)
+                && entry.method == request.method()
+                && entry.names == names
+        })
+    }
+    /// Call only after `check_preflight` succeeds. Invalid max-age falls back
+    /// to Fetch's five-second default; a server cannot retain a grant forever.
+    pub fn insert(&mut self, request: &Request, response: &InternalResponse, now: Instant) {
+        let seconds = response
+            .headers
+            .get("access-control-max-age")
+            .and_then(|s| {
+                (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
+                    .then(|| s.parse::<u64>().ok())
+                    .flatten()
+            })
+            .unwrap_or(5)
+            .min(7200);
+        if seconds == 0 {
+            return;
+        }
+        self.entries.retain(|entry| entry.expires > now);
+        let names = unsafe_request_header_names(&request.headers);
+        let url = request.url().without_fragment();
+        self.entries.retain(|entry| {
+            !(entry.origin == request.origin
+                && entry.url == url
+                && entry.credentials == (request.credentials == CredentialsMode::Include)
+                && entry.method == request.method()
+                && entry.names == names)
+        });
+        if self.entries.len() == 256 {
+            self.entries.remove(0);
+        }
+        self.entries.push(PreflightGrant {
+            origin: request.origin.clone(),
+            url,
+            credentials: request.credentials == CredentialsMode::Include,
+            method: request.method().to_owned(),
+            names,
+            expires: now + Duration::from_secs(seconds),
+        });
+    }
+}
 pub fn safelisted_method(method: &str) -> bool {
     matches!(method, "GET" | "HEAD" | "POST")
 }
@@ -209,4 +282,57 @@ pub fn filter_response(
         body: response.body.clone(),
         url_list: request.url_list().to_vec(),
     })
+}
+
+#[cfg(test)]
+mod preflight_cache_tests {
+    use super::*;
+
+    #[test]
+    fn hit_expiry_credentials_and_header_separation() {
+        let origin = HttpUrl::parse("https://client.example/")
+            .unwrap()
+            .origin()
+            .clone();
+        let url = HttpUrl::parse("https://api.example/resource").unwrap();
+        let mut request = Request::new(url, origin);
+        request.set_method_body("PUT", None).unwrap();
+        request.headers.append("x-token", "one").unwrap();
+        request.credentials = CredentialsMode::Include;
+        let mut headers = HeaderList::default();
+        headers
+            .append("access-control-allow-origin", "https://client.example")
+            .unwrap();
+        headers
+            .append("access-control-allow-credentials", "true")
+            .unwrap();
+        headers
+            .append("access-control-allow-methods", "PUT")
+            .unwrap();
+        headers
+            .append("access-control-allow-headers", "x-token")
+            .unwrap();
+        headers.append("access-control-max-age", "2").unwrap();
+        let response = InternalResponse {
+            status: 204,
+            status_text: String::new(),
+            headers,
+            body: None,
+        };
+        check_preflight(&request, &response).unwrap();
+        let now = Instant::now();
+        let mut cache = PreflightCache::default();
+        assert!(!cache.contains(&request, now));
+        cache.insert(&request, &response, now);
+        assert!(cache.contains(&request, now + Duration::from_secs(1)));
+        let mut changed = request.clone();
+        changed.headers.append("x-extra", "two").unwrap();
+        assert!(!cache.contains(&changed, now + Duration::from_secs(1)));
+        assert!(!cache.contains(&request, now + Duration::from_secs(2)));
+        let mut uncredentialed = request.clone();
+        uncredentialed.credentials = CredentialsMode::Omit;
+        cache.insert(&uncredentialed, &response, now);
+        assert!(!cache.contains(&request, now));
+        assert!(cache.contains(&uncredentialed, now));
+    }
 }
