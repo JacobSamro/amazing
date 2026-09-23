@@ -1,0 +1,20 @@
+{
+  "ticket": "COMP-1",
+  "base": "ceecdaffb40e87a2dc1324e8ef3a835224151258",
+  "host": "win-001",
+  "source_tree": "C:\\Users\\server\\src\\wt\\compositor",
+  "target_dir": "C:\\Users\\server\\target\\compositor",
+  "crate_nextest": { "passed": 4, "skipped": 0 },
+  "crate_doctests": { "passed": 0, "failed": 0 },
+  "workspace_nextest": { "started": 1790, "skipped_reported": 4, "exit_code": 0 },
+  "workspace_doctests": { "passed": 2, "failed": 0 },
+  "frame_trace": {
+    "source": "comp1-frame-trace-win001.csv",
+    "frames": 30,
+    "full_repaint_mean_us": 25459,
+    "compositor_mean_us": 18260,
+    "full_raster_calls": 5270,
+    "compositor_raster_calls": 32,
+    "pixel_comparison": "exact for every frame"
+  }
+}
