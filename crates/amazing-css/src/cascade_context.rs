@@ -6,7 +6,7 @@ use crate::selectors::{
 };
 
 pub(super) struct CompiledRule {
-    selectors: Vec<(Selector, Specificity)>,
+    pub(super) selectors: Vec<(Selector, Specificity)>,
     pub(super) decls: Vec<Declaration>,
     pub(super) ua: bool,
     pub(super) layer: usize,

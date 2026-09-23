@@ -1258,3 +1258,30 @@ math forms. Linux: CSS 241/241, workspace 2000/2000 (+5 skipped), doctests
 case failed once with `Remote("UnknownInterface")`, then passed in isolation;
 the full rerun passed 2002/2002 (+5 skipped) and 2/2 doctests. The LAYOUT-14
 used-value and WPT gates remain with layout.
+
+## CSS Fonts 4 longhand handoff (TEXT-12 and LAYOUT-14)
+
+Commit `f558b9e` registers inherited `font-kerning`, the requested
+`font-variant-*`, `font-synthesis-*`, optical sizing, palette, size adjustment,
+language override and variation settings longhands. It validates their grammars
+before cascade, exposes canonical computed values, expands `font-synthesis`,
+recognizes them in `@supports`, and applies CSS Fonts 4 `font` resets while
+preserving `font-palette` and `font-synthesis-*`. Linux CSS 244/244; Windows CSS
+244/244, workspace 2005/2005 (+5 skipped), doctests passed. The Values 4
+font-relative units in `50d7b41` remain available to layout.
+
+## CSS-15 style invalidation (ADR 0010 step 2)
+
+Commit `be7c0dd` adds `StyleInvalidator`, `RenderMutation`, `RecalcRoots`,
+`recompute_roots` and `StyleDelta`. Its stylesheet-bound feature index tracks
+class, id, attribute and dynamic state dependencies for element, descendant
+and following sibling invalidation. Attribute old/new values seed the same
+coalesced work; tree, shadow-slot, text, relational selector, recycled node and
+stylesheet epoch changes take a full-recompute fallback. Incremental work
+reuses retained styles outside affected roots, resolves generated content,
+and offers `compare_to_full` with the first differing node/property. The
+synthetic mutation tests include inheritance, siblings, old/new tokens,
+pseudo content, root font sizing and conservative fallbacks. DOM-21 will
+supply the journal and generation mapping; the driver has not adopted this
+opt-in seam yet. Linux CSS 250/250; Windows CSS and workspace nextest plus
+doctests passed on the exact source commit.

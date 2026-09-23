@@ -53,6 +53,7 @@ pub mod values;
 pub use cascade::{
     ElementFill, ElementPaintStyle, ElementStyleSource, ElementStyleValue, StyledDom, compute,
     compute_element_paint_style,
+    recompute_roots, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch,
 };
 pub use computed::ComputedStyle;
 pub use animation::{Keyframe, KeyframesRule, keyframes_rules};
