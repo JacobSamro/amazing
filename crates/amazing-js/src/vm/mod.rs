@@ -861,10 +861,7 @@ fn async_continue(i: &mut Interpreter, state: Rc<RefCell<GeneratorState>>, kind:
             i.call_value(&then, awaited, vec![fulfilled, rejected])?;
         }
         Ok(FrameOutcome::Completed(value)) => {
-            let resolved = async_resolve_value(i, value);
-            if !adopt_promise_result(&target, &resolved, i)? {
-                settle_promise(&target, PromiseFate::Fulfilled(resolved), i)?;
-            }
+            async_complete(i, &target, value)?;
         }
         Ok(FrameOutcome::Yielded(_)) => unreachable!("async function yielded"),
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded async slice suspended"),
@@ -891,15 +888,62 @@ fn async_resolve_value(i: &mut Interpreter, value: JsValue) -> JsValue {
         JsValue::Undefined
     };
     if callable_function(&then).is_some() {
-        let resolve = promise_callback(i, "resolve", target, native_promise_resolve);
-        let reject = promise_callback(i, "reject", target, native_promise_reject);
-        if let Err(Throw(error)) = i.call_value(&then, value, vec![resolve, reject]) {
-            let _ = settle_promise(target, PromiseFate::Rejected(error), i);
-        }
+        async_enqueue_thenable(i, target, value, then);
     } else {
         let _ = settle_promise(target, PromiseFate::Fulfilled(value), i);
     }
     promise
+}
+
+fn async_complete(i: &mut Interpreter, target: &Obj, value: JsValue) -> Result<(), Throw> {
+    if matches!(&value, JsValue::Object(object) if matches!(object.borrow().exotic, Exotic::Promise(_))) {
+        if adopt_promise_result(target, &value, i)? {
+            return Ok(());
+        }
+    }
+    if value.is_object() {
+        let then = match i.get_prop(&value, "then") {
+            Ok(then) => then,
+            Err(Throw(error)) => return settle_promise(target, PromiseFate::Rejected(error), i),
+        };
+        if callable_function(&then).is_some() {
+            async_enqueue_thenable(i, target, value, then);
+            return Ok(());
+        }
+    }
+    settle_promise(target, PromiseFate::Fulfilled(value), i)
+}
+
+fn async_enqueue_thenable(i: &mut Interpreter, target: &Obj, value: JsValue, then: JsValue) {
+    let job = Interpreter::native("PromiseResolveThenableJob", async_thenable_job, &i.function_proto);
+    if let JsValue::Object(object) = &job {
+        let mut object = object.borrow_mut();
+        object.set_own("[[Then]]", then);
+        object.set_own("[[Thenable]]", value);
+        object.set_own("[[Target]]", JsValue::Object(target.clone()));
+    }
+    if let Err(Throw(error)) = i.queue_microtask(job) {
+        let _ = settle_promise(target, PromiseFate::Rejected(error), i);
+    }
+}
+
+fn async_thenable_job(i: &mut Interpreter, _: JsValue, _: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let native = i.native_stack.last().cloned().ok_or_else(|| Throw::type_error("missing thenable job"))?;
+    let (then, thenable, target) = {
+        let object = native.borrow();
+        let then = object.get_own("[[Then]]").ok_or_else(|| Throw::type_error("missing thenable method"))?;
+        let thenable = object.get_own("[[Thenable]]").ok_or_else(|| Throw::type_error("missing thenable receiver"))?;
+        let Some(JsValue::Object(target)) = object.get_own("[[Target]]") else {
+            return Err(Throw::type_error("missing thenable promise"));
+        };
+        (then, thenable, target)
+    };
+    let resolve = promise_callback(i, "resolve", &target, native_promise_resolve);
+    let reject = promise_callback(i, "reject", &target, native_promise_reject);
+    if let Err(Throw(error)) = i.call_value(&then, thenable, vec![resolve, reject]) {
+        settle_promise(&target, PromiseFate::Rejected(error), i)?;
+    }
+    Ok(JsValue::Undefined)
 }
 
 fn generator_result(i: &Interpreter, value: JsValue, done: bool) -> JsValue {

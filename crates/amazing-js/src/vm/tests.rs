@@ -380,6 +380,35 @@ fn async_await_rejection_runs_catch_and_finally() {
 }
 
 #[test]
+fn async_jobs_interleave_with_promise_reactions() {
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var log = [];
+        async function first(value) { log.push('await:' + value); }
+        async function both() { await first(1); await first(2); }
+        both();
+        new Promise(function(resolve) { log.push('promise:1'); resolve(); })
+          .then(function() { log.push('promise:2'); });
+    ";
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    let result = interpreter.run_script("log.join(',')").unwrap();
+    assert_eq!(result, JsValue::str("await:1,promise:1,await:2,promise:2"));
+
+    let mut interpreter = Interpreter::new();
+    let source = "
+        var log = [];
+        var thenable = { then: function(resolve) { resolve(1); } };
+        async function work() { log.push('await:' + await thenable); }
+        work();
+        new Promise(function(resolve) { log.push('promise:1'); resolve(); })
+          .then(function() { log.push('promise:2'); });
+    ";
+    interpreter.run_script_with_backend(source, ExecutionBackend::Bytecode).unwrap();
+    let result = interpreter.run_script("log.join(',')").unwrap();
+    assert_eq!(result, JsValue::str("promise:1,promise:2,await:1"));
+}
+
+#[test]
 fn fuel_stops_backedges_and_vm_state_is_clean_after_error() {
     let mut interpreter = Interpreter::new();
     interpreter.completion = JsValue::str("saved");
