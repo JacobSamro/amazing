@@ -1,0 +1,180 @@
+{
+  "schema": 1,
+  "kind": "html1-final-render-cascade",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": "tests/wpt-render/cascade-manifest.json",
+  "manifest_sha256": "bf3d76b0f4b07e1189fdbb9e3dac8a7897328be394c2fcefcf4503cf240b5343",
+  "cases": 72,
+  "category_count": {
+    "css-cascade": 12,
+    "selectors": 12,
+    "css-values": 12,
+    "css-color": 12,
+    "css-fonts": 12,
+    "css-variables": 12
+  },
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "device_scale": 1
+  },
+  "prior": {
+    "revision": "aa9cb9be3ca79425bb979519c75b442646b37028",
+    "tree": "3274eef522a17bb0c82e5d2a61afb27c5a352314",
+    "runner_sha256": "79067a91741ff9821c1a526d61808bca0db0986300e29b27d526fd0d4cc32182",
+    "executable_sha256": "10eac183bb83c91b8c6360554dbef939a927ff997fddbbab91d2f7ed668a4355",
+    "counts": {
+      "pass": 35,
+      "mismatch": 24,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 13,
+      "crash": 0
+    },
+    "projection": "html1-cascade-before-projection.json",
+    "projection_sha256": "33165bc36299847812c95d2f46a75ce5968da1316ab4213b20f3c76c0c57b8b7",
+    "repeats": 2
+  },
+  "current": {
+    "revision": "a292537252b34b74aee4c4772e732cf7c384f888",
+    "tree": "6034af0c5389bbe96d441ff6cc789f4ae33eaf4b",
+    "runner_sha256": "7cdecfacc4c7bdb1170de6a8780bfe1d754835826c79082833ecbd92e04bc2ef",
+    "executable_sha256": "600f30c52b8f76e97420cc4949ce1915d238a240c3c62492b92010a5a39a32b1",
+    "counts": {
+      "pass": 38,
+      "mismatch": 32,
+      "error": 0,
+      "timeout": 0,
+      "unsupported": 2,
+      "crash": 0
+    },
+    "projection": "html1-cascade-after-projection.json",
+    "projection_sha256": "fea336c5e6e0f00bd3f08809cb9a982c0913652a40187133776c96dc2fc9f318",
+    "repeats": 2
+  },
+  "transitions": [
+    {
+      "id": "css-cascade__revert-layer-002.html",
+      "before": "unsupported",
+      "after": "pass"
+    },
+    {
+      "id": "css-cascade__revert-layer-011.html",
+      "before": "unsupported",
+      "after": "mismatch"
+    },
+    {
+      "id": "css-cascade__all-prop-002.html",
+      "before": "unsupported",
+      "after": "mismatch"
+    },
+    {
+      "id": "css-cascade__revert-layer-005.html",
+      "before": "unsupported",
+      "after": "mismatch"
+    },
+    {
+      "id": "css-fonts__font-family-name-014.xht",
+      "before": "unsupported",
+      "after": "pass"
+    },
+    {
+      "id": "css-fonts__font-family-name-000.xht",
+      "before": "unsupported",
+      "after": "mismatch"
+    },
+    {
+      "id": "css-fonts__font-family-name-022.xht",
+      "before": "unsupported",
+      "after": "mismatch"
+    },
+    {
+      "id": "css-fonts__font-family-name-018.xht",
+      "before": "unsupported",
+      "after": "mismatch"
+    },
+    {
+      "id": "css-fonts__font-family-name-024.xht",
+      "before": "unsupported",
+      "after": "mismatch"
+    },
+    {
+      "id": "css-fonts__font-family-name-001.xht",
+      "before": "unsupported",
+      "after": "pass"
+    },
+    {
+      "id": "css-fonts__font-family-name-019.xht",
+      "before": "unsupported",
+      "after": "mismatch"
+    }
+  ],
+  "prior_exclusions": [
+    {
+      "id": "css-cascade__revert-layer-002.html",
+      "reason": "XHTML/XML reference parser mode is not implemented"
+    },
+    {
+      "id": "css-cascade__revert-layer-011.html",
+      "reason": "XHTML/XML reference parser mode is not implemented"
+    },
+    {
+      "id": "css-cascade__all-prop-002.html",
+      "reason": "XHTML/XML reference parser mode is not implemented"
+    },
+    {
+      "id": "css-cascade__revert-layer-005.html",
+      "reason": "XHTML/XML reference parser mode is not implemented"
+    },
+    {
+      "id": "css-color__t425-hsla-values-b.xht",
+      "reason": "XHTML/XML parser mode is not implemented"
+    },
+    {
+      "id": "css-color__t421-rgb-clip-outside-gamut-b.xht",
+      "reason": "XHTML/XML parser mode is not implemented"
+    },
+    {
+      "id": "css-fonts__font-family-name-014.xht",
+      "reason": "XHTML/XML parser mode is not implemented"
+    },
+    {
+      "id": "css-fonts__font-family-name-000.xht",
+      "reason": "XHTML/XML parser mode is not implemented"
+    },
+    {
+      "id": "css-fonts__font-family-name-022.xht",
+      "reason": "XHTML/XML parser mode is not implemented"
+    },
+    {
+      "id": "css-fonts__font-family-name-018.xht",
+      "reason": "XHTML/XML parser mode is not implemented"
+    },
+    {
+      "id": "css-fonts__font-family-name-024.xht",
+      "reason": "XHTML/XML parser mode is not implemented"
+    },
+    {
+      "id": "css-fonts__font-family-name-001.xht",
+      "reason": "XHTML/XML parser mode is not implemented"
+    },
+    {
+      "id": "css-fonts__font-family-name-019.xht",
+      "reason": "XHTML/XML parser mode is not implemented"
+    }
+  ],
+  "current_unsupported": [
+    {
+      "id": "css-color__t425-hsla-values-b.xht",
+      "reason": "amazing render-wpt: XML Unsupported at byte 1083: entity may require an external DTD; external entities are not loaded"
+    },
+    {
+      "id": "css-color__t421-rgb-clip-outside-gamut-b.xht",
+      "reason": "amazing render-wpt: XML Unsupported at byte 1177: entity may require an external DTD; external entities are not loaded"
+    }
+  ],
+  "font_set": "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+  "fixed_base_source_hashes": "html1-fixed-base-source-hashes.json",
+  "fixed_base_source_hashes_sha256": "b2bc5f20a2b6d2d2d3785736ce77b61964caa51a2f4cc815519f1ca72c591228",
+  "fixed_base_source_file_count": 231
+}
