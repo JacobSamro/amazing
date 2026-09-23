@@ -150,6 +150,17 @@ LANE_GRANTS["js-lang"] = [
     # unsupported error; runtime brand semantics stay with js-runtime.
     "crates/amazing-js/src/interp.rs",
 ]
+# DOM-7 adds NodeKind::CDATASection, NodeKind::Attr and DomError::SyntaxError,
+# which break exhaustive matches outside amazing-dom. Granted for ADDED MATCH ARMS
+# ONLY in exactly these files (the merge preflight rejects any deletion there).
+LANE_GRANTS.setdefault("dom-bindings", []).extend([
+    "crates/amazing-html/src/xml.rs",
+    "crates/amazing-html/src/xml_tests.rs",
+    "crates/amazing-html/src/tree.rs",
+    "crates/amazing-layout/src/box_tree.rs",
+    "crates/amazing/src/dom_host.rs",
+    "crates/amazing-css/src/selectors.rs",
+])
 LANE_GRANTS["integrator-assist"] = [
     "crates/amazing-shell-gpui/src/session_state.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
