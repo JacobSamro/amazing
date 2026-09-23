@@ -4,9 +4,10 @@
 //! after layout or style changes; no layout ownership escapes through items.
 
 use std::ops::Range;
+use std::collections::HashMap;
 
 use amazing_dom::NodeIdx;
-use amazing_layout::LayoutBox;
+use amazing_layout::{Flow, LayoutBox};
 use amazing_text::TextSystem;
 
 use crate::controls::ControlProvider;
@@ -55,6 +56,17 @@ impl PaintBounds {
             height: height as f32,
         }
     }
+
+    fn union(self, other: Self) -> Self {
+        let x = self.x.min(other.x);
+        let y = self.y.min(other.y);
+        Self {
+            x,
+            y,
+            width: (self.x + self.width).max(other.x + other.width) - x,
+            height: (self.y + self.height).max(other.y + other.height) - y,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,6 +104,19 @@ pub struct PaintItem {
     pub local_bounds: PaintBounds,
     pub properties: PropertyState,
     pub hints: CompositingHints,
+    /// Sticky position limits in untransformed document coordinates.
+    pub sticky: Option<StickyMetadata>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StickyMetadata {
+    pub normal: PaintBounds,
+    pub containing_block: PaintBounds,
+    pub scroll: u32,
+    pub top: Option<f32>,
+    pub right: Option<f32>,
+    pub bottom: Option<f32>,
+    pub left: Option<f32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -117,6 +142,10 @@ pub struct EffectNode {
 pub struct ScrollNode {
     pub parent: u32,
     pub bounds: PaintBounds,
+    /// Untransformed scrollable overflow, including the scrollport itself.
+    pub contents: PaintBounds,
+    /// Layout does not yet supply a live scroll offset; newly built views start at zero.
+    pub initial_offset: (f32, f32),
 }
 
 /// A borrowed view of the painter's ordered commands. All layout references
@@ -158,7 +187,24 @@ impl<'a> DisplayListView<'a> {
         controls: &'a dyn ControlProvider,
         is_video: &dyn Fn(NodeIdx) -> bool,
     ) -> Self {
+        Self::with_scroll_offsets(root, width, height, text, images, controls, is_video, &|_| None)
+    }
+
+    /// The embedding adapter can supply live scroll positions without adding
+    /// mutable DOM state to the borrowed layout tree.
+    pub fn with_scroll_offsets(
+        root: &'a LayoutBox,
+        width: u32,
+        height: u32,
+        text: &'a dyn TextSystem,
+        images: &'a dyn ImageProvider,
+        controls: &'a dyn ControlProvider,
+        is_video: &dyn Fn(NodeIdx) -> bool,
+        scroll_offset: &dyn Fn(NodeIdx) -> Option<(f32, f32)>,
+    ) -> Self {
         let commands = build_display_list(root);
+        let mut containing_blocks = HashMap::new();
+        collect_containing_blocks(root, PaintBounds::viewport(width, height), &mut containing_blocks);
         let mut view = Self {
             commands,
             item_commands: Vec::new(),
@@ -178,6 +224,8 @@ impl<'a> DisplayListView<'a> {
             scrolls: vec![ScrollNode {
                 parent: 0,
                 bounds: PaintBounds::viewport(width, height),
+                contents: scrollable_extent(root, PaintBounds::viewport(width, height)),
+                initial_offset: offset_for(root, scroll_offset),
             }],
             width,
             height,
@@ -229,6 +277,8 @@ impl<'a> DisplayListView<'a> {
                         view.scrolls.push(ScrollNode {
                             parent: state.scroll,
                             bounds,
+                            contents: scrollable_extent(box_, bounds),
+                            initial_offset: offset_for(box_, scroll_offset),
                         });
                         state.scroll = next;
                     }
@@ -250,15 +300,17 @@ impl<'a> DisplayListView<'a> {
                         },
                         state,
                         hints(box_, is_video),
+                        sticky_metadata(box_, state.scroll, &view.scrolls, &containing_blocks),
                     ))
                 }
                 PaintCommand::PaintContent(box_) => {
                     item = Some((
                         command_index,
                         PaintItemKind::Content,
-                        PaintBounds::viewport(width, height),
+                        content_ink_bounds(box_, width, height),
                         state,
                         hints(box_, is_video),
+                        sticky_metadata(box_, state.scroll, &view.scrolls, &containing_blocks),
                     ))
                 }
                 PaintCommand::PaintControl(control) => {
@@ -268,11 +320,12 @@ impl<'a> DisplayListView<'a> {
                         PaintBounds::from_layout(control.geometry.border_box),
                         state,
                         hints(&control.geometry, is_video),
+                        None,
                     ))
                 }
             }
-            if let Some((command_index, kind, bounds, properties, hints)) = item {
-                view.push_item(command_index, kind, bounds, properties, hints);
+            if let Some((command_index, kind, bounds, properties, hints, sticky)) = item {
+                view.push_item(command_index, kind, bounds, properties, hints, sticky);
             }
         }
         view
@@ -285,6 +338,7 @@ impl<'a> DisplayListView<'a> {
         local_bounds: PaintBounds,
         properties: PropertyState,
         hints: CompositingHints,
+        sticky: Option<StickyMetadata>,
     ) {
         self.item_commands.push(command_index);
         self.items.push(PaintItem {
@@ -293,6 +347,7 @@ impl<'a> DisplayListView<'a> {
             local_bounds,
             properties,
             hints,
+            sticky,
         });
     }
 
@@ -387,6 +442,134 @@ impl<'a> DisplayListView<'a> {
         *target = result;
         Ok(())
     }
+}
+
+fn finite_bounds(bounds: PaintBounds, fallback: PaintBounds) -> PaintBounds {
+    if [bounds.x, bounds.y, bounds.width, bounds.height]
+        .into_iter()
+        .all(f32::is_finite)
+        && bounds.width >= 0.0 && bounds.height >= 0.0
+    { bounds } else { fallback }
+}
+
+fn offset_for(box_: &LayoutBox, get: &dyn Fn(NodeIdx) -> Option<(f32, f32)>) -> (f32, f32) {
+    box_.node.and_then(get)
+        .filter(|(x, y)| x.is_finite() && y.is_finite())
+        .unwrap_or((0.0, 0.0))
+}
+
+fn content_ink_bounds(box_: &LayoutBox, width: u32, height: u32) -> PaintBounds {
+    let viewport = PaintBounds::viewport(width, height);
+    let mut result: Option<PaintBounds> = None;
+    let mut include = |bounds: PaintBounds| {
+        result = Some(result.map_or(bounds, |old| old.union(bounds)));
+    };
+    for line in &box_.lines {
+        for fragment in &line.replaced {
+            include(PaintBounds { x: fragment.x, y: fragment.y, width: fragment.width, height: fragment.height });
+        }
+        for decoration in &line.decorations {
+            include(PaintBounds { x: decoration.x, y: decoration.y, width: decoration.width, height: decoration.height });
+        }
+        for glyph in &line.glyphs {
+            // Text raster metrics are provider-owned. Four em around the pen
+            // includes normal ascenders, side bearings, synthetic slant and
+            // the glyph's explicit scale; unknown nonfinite metrics fall back.
+            let radius = glyph.font_size * glyph.scale_x.abs().max(glyph.scale_y.abs()).max(1.0) * 4.0;
+            let baseline = if glyph.writing_mode.is_vertical_flow() { glyph.y } else { line.baseline + glyph.y - glyph.offset_y };
+            include(PaintBounds {
+                x: glyph.x.min(glyph.x + glyph.advance_x) - radius,
+                y: baseline.min(baseline + glyph.advance_y) - radius,
+                width: glyph.advance_x.abs() + radius * 2.0,
+                height: glyph.advance_y.abs() + radius * 2.0,
+            });
+        }
+        for word in &line.words {
+            let radius = word.font_size * 2.0;
+            include(PaintBounds { x: word.x - radius, y: line.baseline - radius, width: word.width + radius * 2.0, height: radius * 2.0 });
+        }
+    }
+    finite_bounds(result.unwrap_or(PaintBounds { x: box_.content_box.x, y: box_.content_box.y, width: 0.0, height: 0.0 }), viewport)
+}
+
+fn collect_containing_blocks(
+    box_: &LayoutBox,
+    parent: PaintBounds,
+    out: &mut HashMap<usize, PaintBounds>,
+) {
+    out.insert(box_ as *const LayoutBox as usize, parent);
+    let content = box_.content_box;
+    let own = PaintBounds {
+        x: content.x - box_.padding.left,
+        y: content.y - box_.padding.top,
+        width: content.w + box_.padding.left + box_.padding.right,
+        height: content.h + box_.padding.top + box_.padding.bottom,
+    };
+    if let Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) = &box_.flow {
+        for child in children {
+            collect_containing_blocks(child, own, out);
+        }
+    }
+    for child in &box_.positioned {
+        collect_containing_blocks(child, own, out);
+    }
+}
+
+fn scrollable_extent(box_: &LayoutBox, port: PaintBounds) -> PaintBounds {
+    fn include(box_: &LayoutBox, bounds: &mut PaintBounds, depth: usize) {
+        if depth > 256 { return; }
+        let own = PaintBounds::from_layout(box_.border_box);
+        if [own.x, own.y, own.width, own.height].into_iter().all(f32::is_finite)
+            && own.width >= 0.0 && own.height >= 0.0 {
+            *bounds = bounds.union(own);
+        }
+        for line in &box_.lines {
+            let own = PaintBounds { x: box_.content_box.x, y: line.y_top, width: box_.content_box.w, height: line.height };
+            if [own.x, own.y, own.width, own.height].into_iter().all(f32::is_finite) {
+                *bounds = bounds.union(own);
+            }
+            for fragment in &line.replaced {
+                let own = PaintBounds { x: fragment.x, y: fragment.y, width: fragment.width, height: fragment.height };
+                if [own.x, own.y, own.width, own.height].into_iter().all(f32::is_finite) {
+                    *bounds = bounds.union(own);
+                }
+            }
+        }
+        if let Flow::Blocks(children) | Flow::Flex(children) | Flow::Grid(children) = &box_.flow {
+            for child in children { if child.style.get("position") != Some("fixed") { include(child, bounds, depth + 1); } }
+        }
+        for child in &box_.positioned {
+            if child.style.get("position") != Some("fixed") { include(child, bounds, depth + 1); }
+        }
+    }
+    let mut result = port;
+    include(box_, &mut result, 0);
+    result
+}
+
+fn sticky_metadata(
+    box_: &LayoutBox,
+    scroll: u32,
+    scrolls: &[ScrollNode],
+    containing_blocks: &HashMap<usize, PaintBounds>,
+) -> Option<StickyMetadata> {
+    if box_.style.get("position") != Some("sticky") { return None; }
+    let cb = *containing_blocks.get(&(box_ as *const LayoutBox as usize))?;
+    let port = scrolls.get(scroll as usize)?.bounds;
+    let side = |name: &str, basis: f32| -> Option<f32> {
+        amazing_layout::values::parse_length_percentage(box_.style.get(name)?, box_.font_size, box_.font_size * 0.5)?
+            .resolve(Some(basis))
+            .filter(|value| value.is_finite())
+    };
+    Some(StickyMetadata {
+        normal: PaintBounds::from_layout(box_.border_box),
+        containing_block: cb,
+        scroll,
+        top: side("top", port.height),
+        right: side("right", port.width),
+        bottom: side("bottom", port.height),
+        left: side("left", port.width),
+    })
 }
 
 fn is_scroller(box_: &LayoutBox) -> bool {

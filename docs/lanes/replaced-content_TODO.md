@@ -863,3 +863,34 @@ image hashes were identical, with zero pass losses. These are raw counts; the
 missing production URL lookup means the WPT selection shows no URL rendering
 gain yet. Reports, fixture hashes and comparison are in
 `tests/wpt-replaced-content/rc17b/`.
+
+## RC-18 — generated gradient raster and compositor geometry metadata
+
+Paint display-list items now expose bounded untransformed content ink estimates,
+scrollable extents with an optional adapter-supplied initial offset, and sticky
+insets plus containing-block bounds. Decorations with uncertain shadow overflow
+retain the viewport fallback. The raw local tile path and full painter remain
+unchanged. Generated-image keys that contain CSS linear, radial or conic
+functions, including repeating variants, raster through the same replaced
+fragment path as URL images. Paint uses the CSS tokenizer and color parser;
+fragment geometry and font size determine sampling. Unsupported gradient
+syntax returns no image rather than painting a guessed value.
+
+At fixed base `e762837`, win-002 locked gates passed paint **107/107**,
+standalone image **47/47**, workspace **2,081 passed / 5 skipped**, and
+workspace doctests **2/2**; paint and image doctest sets have zero cases.
+The pinned four-case generated-gradient/scroll selection moved **3 pass /
+1 mismatch** to **2 pass / 2 mismatch**. The raw pass loss is
+`css/css-lists/list-style-image-gradients.html`: before, both the gradient
+marker and its data-SVG reference marker were absent; after, paint draws the
+gradient but the driver still leaves the data-SVG reference absent. Do not
+count this as a conformance gain. The retained focused 12 stayed **10/2** and
+SVG 35 stayed **25/9/1 reference script crash**, with identical per-case
+classifications and actual/reference/diff hashes in all four runs and zero
+losses. Evidence and source/hash audit are in `tests/wpt-replaced-content/rc18/`.
+
+CSS currently rejects gradient image functions in `content`, so generated
+pseudo content needs the routed CSS parser seam before it reaches paint.
+Layout's no-intrinsic-size fallback makes gradient markers 300×150 until its
+marker sizing rule is supplied; the driver also needs its data-SVG reference
+resource. These cross-lane follow-ups are in the replaced-content questions.

@@ -130,6 +130,34 @@ fn property_ids_and_direct_hints_follow_nested_state() {
         assert!((item.properties.scroll as usize) < view.scrolls().len());
     }
 }
+
+#[test]
+fn content_bounds_scroll_extent_and_sticky_constraints_are_local() {
+    let root = amazing_layout::layout_document_with_text(
+        "<body><div class='scroller'><div class='sticky'>S</div><div class='overflow'></div></div></body>",
+        "body{margin:0}.scroller{width:40px;height:30px;overflow:scroll}.sticky{position:sticky;top:5px;width:20px;height:10px;font-size:4px}.overflow{width:90px;height:70px;background:blue}",
+        120.0,
+        &FallbackTextSystem::new(),
+    );
+    let text = FallbackTextSystem::new();
+    let view = DisplayListView::new(&root, 120, 120, &text, &crate::paint::NoImages, &crate::controls::NoControls);
+    let scroll = view.scrolls().iter().skip(1).next().expect("scroller");
+    assert_eq!(scroll.initial_offset, (0.0, 0.0));
+    assert!(scroll.contents.width > scroll.bounds.width);
+    assert!(scroll.contents.height > scroll.bounds.height);
+    let sticky = view.items().iter().find_map(|item| item.sticky).expect("sticky metadata");
+    assert_eq!(sticky.top, Some(5.0));
+    assert!(sticky.scroll > 0 && (sticky.scroll as usize) < view.scrolls().len());
+    assert!(sticky.containing_block.width >= sticky.normal.width);
+    let content = view.items().iter().find(|item| item.kind == PaintItemKind::Content && item.local_bounds.width > 0.0).unwrap();
+    assert!(content.local_bounds.width < 120.0);
+
+    let offsets = DisplayListView::with_scroll_offsets(
+        &root, 120, 120, &text, &crate::paint::NoImages, &crate::controls::NoControls,
+        &|_| false, &|_| Some((3.0, 7.0)),
+    );
+    assert!(offsets.scrolls().iter().skip(1).all(|node| node.initial_offset == (3.0, 7.0)));
+}
 #[test]
 fn raw_tile_raster_skips_group_effects_and_uses_tile_origin() {
     let root = amazing_layout::layout_document_with_text(
