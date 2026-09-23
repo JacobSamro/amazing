@@ -1010,3 +1010,27 @@ hashes, and the workspace gate are in `crates/amazing-layout/evidence/layout10/`
 The layout crate nextest passed **234/234** and doctests **0/0** on win-001.
 The source-verified workspace gate passed **1660/1660** nextest tests with 3
 skipped and **2/2** workspace doctests. No Mac builds or tests were run.
+
+## LAYOUT-11 — zoom used values and font features (in progress, 2026-09-23)
+
+The pre-CSS-11 five-case baseline on lane commit `82d5574` is **0/5** twice,
+with stable case classifications and image hashes. It includes the two WPT
+`css/css-viewport/zoom/` reftests, `all-prop-002`, `calc-border-radius-1`,
+and `font-variant-ligatures-11.optional`. The 292-file source check matched
+win-001, and the frozen manifest, reports and executable hash are in
+`crates/amazing-layout/evidence/layout11/`.
+
+The two routed cascade cases have no remaining layout change. In
+`all-prop-002`, the two red inline containers correctly occupy one horizontal
+100×100 area, while an earlier absolute green box is painted underneath them.
+`amazing-paint/src/display_list.rs::walk_middle` propagates its ancestor's
+positioned phase into in-flow descendants, putting those red boxes after the
+absolute child in the same phase. Paint owns that ordering fix. For
+`calc-border-radius-1`, layout's `values::resolve_corner_radii` already yields
+the exact `(21,5), (6,16), (12,10), (29,3)` corner pairs. Paint's separate
+`resolve_corner_radii` parser leaves 84 mismatched pixels; paint must use the
+layout result. Exact requests are in `.agents/layout/questions.md`.
+
+CSS-11 must deliver `effective_zoom()` and `scale_used_length` before zoom
+layout work starts. CSS-12 must compute the two inherited font feature
+properties before the ligature reftest can measure the layout-to-text route.
