@@ -1,0 +1,83 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "manifest":  "C:\\Users\\server\\rc18-manifest.json",
+    "viewport":  {
+                     "width":  800,
+                     "height":  600,
+                     "device_scale":  1
+                 },
+    "font_set":  "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+    "run_directory":  "C:\\Users\\server\\target\\replaced-content\\rc18-before-1-rc18\\run-20260923T232137057Z-104540",
+    "counts":  {
+                   "pass":  3,
+                   "mismatch":  1,
+                   "error":  0,
+                   "timeout":  0,
+                   "unsupported":  0,
+                   "crash":  0
+               },
+    "unexpected":  0,
+    "tests":  [
+                  {
+                      "id":  "css__css-content__element-replacement-gradient",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "element-replacement-gradient-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "reference_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css__css-lists__list-style-image-gradients",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "list-style-image-gradients-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "d99d4d9c2eea3c70a68763444fe4491bcc34aa5a9aea23d8613a219f79d54282",
+                      "reference_sha256":  "d99d4d9c2eea3c70a68763444fe4491bcc34aa5a9aea23d8613a219f79d54282",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css__css-overflow__inline-block-with-scrollable-descendant",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "inline-block-with-scrollable-descendant-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "2e6390c87a157acc03bed86ad46e93a243d629475ab4e4fe70e5de6e7dd7fbd5",
+                      "reference_sha256":  "2e6390c87a157acc03bed86ad46e93a243d629475ab4e4fe70e5de6e7dd7fbd5",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css__css-overflow__overflow-img-scroll-non-replaced",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "overflow-img-scroll-non-replaced-ref.html",
+                      "differing_pixels":  1335,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "24df746fdd707aeeb2c5dff52a3f0b32bac7d757d0580c7e15b17b9f227c1933",
+                      "reference_sha256":  "b7786f849fb812a2d4754c6a010183c53a1ce224e29face8d19e48f99ffeda13",
+                      "diff_sha256":  "12b746af4454da025910a7e122468f25bcbfbc5b83fae3857f0b231af212e89f",
+                      "detail":  "maxDifference=255/0; totalPixels=1335/0"
+                  }
+              ]
+}
