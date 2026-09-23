@@ -67,9 +67,27 @@ is `6aad91c7`. Windows amazing-js nextest passed 214 tests (one ignored) and
 its doctest passed 1/1. Under a Windows build slot, workspace nextest passed
 1,768 tests (five ignored) and the workspace doctests passed 2/2.
 
+## JSVM-3-TRY: exception handlers on resumable frames
+
+The VM now compiles `try`/`catch`/`finally` as control flow in the existing
+heap frame. Throwing operations, explicit throws, and returns unwind lexical
+scopes through the handler stack. A normal `finally` preserves the pending
+completion; an abrupt `finally` replaces it. Catch bindings have their own
+lexical environment. The handler stack survives instruction-boundary
+suspension and is tested with nested handlers, optional catch binding,
+runtime exceptions, return overrides, and loop re-entry. The compiler also
+checks unresolved compound-assignment bindings before evaluating the right
+side; full Test262 found the missing check when `try` became compilable.
+
+On the pinned Linux checkout, same-host tree-walker versus VM comparison found
+zero lost passing files or variants, 23 gained files and 28 gained variants.
+Compiled coverage rose from 18,501/34,493 eligible files (53.6370%) on
+JSVM-2 to 19,494/34,493 (56.5158%). The final Windows crate/workspace
+nextest and doctest gate is pending on win-002.
+
 ## Following tickets
 
-- JSVM-3: generator objects and async functions built on resumable frames.
-- Expand classes, complex bindings, exception handlers, and other remaining
-  compiler fallbacks with differential and Test262 evidence.
+- JSVM-3 generators: generator objects built on resumable frames, with the
+  primary's grant for additive `value.rs` and `interp.rs` hooks.
+- JSVM-4 async/await and async iteration, then classes and complex bindings.
 - Add tracing GC roots after VM frames become resumable (ADR 0003).

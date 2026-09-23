@@ -130,11 +130,9 @@ fn bindings_branches_loops_and_completion_match() {
 #[test]
 fn unsupported_program_is_rejected_before_hoisting_or_side_effects() {
     for source in [
-        "var changed = 1; function f() { try {} catch (e) {} }",
         "changed = 1; class A {}",
         "changed = 1; for (;;) { break; }",
         "changed = 1; while (true) { break; }",
-        "changed = 1; try {} catch (e) {}",
         "changed = 1; let [a] = [2];",
         "changed = 1; delete changed;",
         "changed = 1; 2n;",
@@ -236,6 +234,59 @@ fn heap_frame_suspends_and_resumes_at_instruction_boundaries() {
         code.resume_frame(&mut interpreter, &mut frame, 1).unwrap(),
         FrameOutcome::Completed(JsValue::Num(_))
     ));
+}
+
+#[test]
+fn try_catch_finally_matches_tree_walker() {
+    for source in [
+        "var x = 0; try { x = 1; } catch (e) { x = 7; } x",
+        "var x = 0; try { throw 3; } catch (e) { x = e + 4; } x",
+        "var x = 0; try { throw 3; } catch { x = 4; } x",
+        "var x = 0; try { x = 1; } finally { x += 2; } x",
+        "var x = 0; try { throw 3; } catch (e) { x = e; } finally { x += 2; } x",
+        "try { throw 'a'; } catch (e) { throw e + 'b'; }",
+        "try { missing; } catch (e) { 42; }",
+        "try { missing *= 1; } catch (e) { e instanceof ReferenceError; }",
+        "var side = 0; try { missing *= (side = 1); } catch (e) {} side",
+        "try { throw 1; } catch (e) {} typeof e",
+        "function f() { try { return 1; } finally { var x = 2; } } f()",
+        "function f() { try { return 1; } finally { return 2; } } f()",
+        "function f() { try { throw 1; } finally { return 2; } } f()",
+        "function f() { try { return 1; } catch (e) { return 2; } } f()",
+        "function f() { try { throw 1; } catch (e) { return e + 1; } finally { 3; } } f()",
+        "try { try { throw 1; } finally { 2; } } catch (e) { e; }",
+        "var x = 0; while (x < 3) { try { x++; if (x === 2) throw 5; } catch (e) { x += e; } finally { x++; } } x",
+    ] {
+        differential(source, &["x"]);
+    }
+}
+
+#[test]
+fn heap_frame_resumes_through_catch_and_finally() {
+    let code = compile(
+        &parse_script(
+            "var x = 0; try { x = 1; throw 7; } catch (e) { x += e; } finally { x++; } x",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut interpreter = Interpreter::new();
+    let env = interpreter.global_env.clone();
+    let mut frame = code.start_frame(&mut interpreter, env, 1000).unwrap();
+    let mut suspended_in_handler = false;
+    loop {
+        match code.resume_frame(&mut interpreter, &mut frame, 1).unwrap() {
+            FrameOutcome::Suspended => suspended_in_handler |= !frame.try_stack.is_empty(),
+            FrameOutcome::Completed(value) => {
+                assert_eq!(value, JsValue::num(9.0));
+                break;
+            }
+        }
+    }
+    assert!(suspended_in_handler);
+    assert!(frame.try_stack.is_empty());
+    assert!(frame.scopes.is_empty());
+    assert!(interpreter.global_env.resolve("e").is_none());
 }
 
 #[test]

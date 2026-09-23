@@ -150,6 +150,15 @@ impl Compiler {
                 | StmtKind::For { body, .. } => {
                     self.hoist_functions(std::slice::from_ref(body.as_ref()))?;
                 }
+                StmtKind::Try(statement) => {
+                    self.hoist_functions(&statement.block.body)?;
+                    if let Some(catch) = &statement.catch {
+                        self.hoist_functions(&catch.body.body)?;
+                    }
+                    if let Some(finally) = &statement.finally {
+                        self.hoist_functions(&finally.body)?;
+                    }
+                }
                 _ => {}
             }
         }
@@ -307,6 +316,54 @@ impl Compiler {
             StmtKind::Throw(expression) => {
                 let value = self.expression(expression)?;
                 self.emit(Instruction::Throw(value));
+            }
+            StmtKind::Try(statement) => {
+                self.emit(Instruction::Complete(0));
+                let handler = self.emit(Instruction::PushTry {
+                    catch: None,
+                    finally: None,
+                    end: 0,
+                });
+                self.emit(Instruction::EnterScope);
+                for child in &statement.block.body {
+                    self.statement(child)?;
+                }
+                self.emit(Instruction::LeaveScope);
+                self.emit(Instruction::TryNormal);
+
+                let catch = if let Some(catch) = &statement.catch {
+                    let start = self.program.code.len();
+                    self.emit(Instruction::EnterCatch(
+                        catch.param.as_ref().map(|param| param.name.clone()),
+                    ));
+                    for child in &catch.body.body {
+                        self.statement(child)?;
+                    }
+                    self.emit(Instruction::LeaveScope);
+                    self.emit(Instruction::TryNormal);
+                    Some(start)
+                } else {
+                    None
+                };
+
+                let finally = if let Some(finally) = &statement.finally {
+                    let start = self.program.code.len();
+                    self.emit(Instruction::EnterScope);
+                    for child in &finally.body {
+                        self.statement(child)?;
+                    }
+                    self.emit(Instruction::LeaveScope);
+                    self.emit(Instruction::EndFinally);
+                    Some(start)
+                } else {
+                    None
+                };
+                let end = self.program.code.len();
+                self.program.code[handler] = Instruction::PushTry {
+                    catch,
+                    finally,
+                    end,
+                };
             }
             StmtKind::Return(expression) if self.program.is_function => {
                 let value = if let Some(expression) = expression {
@@ -516,6 +573,7 @@ impl Compiler {
             }
             ExprKind::Assign { op, target, value } => {
                 let (slot, old) = self.reference(target)?;
+                self.emit(Instruction::RequireResolved(slot));
                 let binary = match op {
                     AssignOp::Add => Some(ast::BinOp::Add),
                     AssignOp::Sub => Some(ast::BinOp::Sub),
