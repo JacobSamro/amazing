@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "ticket": "RC-17a",
+  "fixed_base": "9571c046b7f1fef17e28d618c17dba7270837332",
+  "source_commit": "ca868ad1d62cb51d22a38498d20bfd854c32920d",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "source_sha256": {
+    "crates/amazing-paint/src/display_list_view.rs": {
+      "before": "3cdcdd118080c84cf924704db2ee32725a918c88bf5b9008cf8c1e415dcef418",
+      "after": "6d7c9dd94165da95cb2e9112b30cb9b2fc245ac1f5b564ab104a28a3903eb5de"
+    },
+    "crates/amazing-paint/src/display_list_view_tests.rs": {
+      "before": "edeb1e8fa5d1221c0b1aeb9ef7d69b0314df2ca8629640d5eaa15bd3899286dd",
+      "after": "b12dbabedf7bea2cd8945a04c350bcf50dd89ddbe650a73d581ccacddc4c6d24"
+    },
+    "crates/amazing-paint/src/paint.rs": {
+      "before": "fe5d2c1e7ecc87797c019bb01811c910905450e67da9ae77fc32be9c08593aaf",
+      "after": "96f3746a2c9b27ed03162c5d0d5adf283744bf509080c39b6bebc1f50286d3a4"
+    }
+  },
+  "input_sha256": {
+    "Cargo.lock": "504fb15698e1cd8faa0c7461a155cc45904be8d34a32c4f3b95928a2f01407bd",
+    "scripts/run-render-wpt.ps1": "7cdecfacc4c7bdb1170de6a8780bfe1d754835826c79082833ecbd92e04bc2ef",
+    "tests/wpt-replaced-content/rc14/focused-manifest.json": "65bde0813fbb520f60ca4f8e6465f9c6dc33b82f35f052d9b8652e654a0aa1e4",
+    "tests/wpt-replaced-content/rc11-svg-manifest.json": "2fdbe12184173e8808ad2c09a6dc2ed41254affaa4bd1d84054e1880e110cfb0"
+  },
+  "windows_gate": {
+    "paint_nextest": "98 passed, 0 skipped",
+    "workspace_nextest": "1918 passed, 5 skipped",
+    "paint_doctests": "0 passed, 0 failed",
+    "workspace_doctests": "2 passed, 0 failed"
+  },
+  "paired_wpt": {
+    "focused": {
+      "cases": 12,
+      "before": {
+        "pass": 10,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after": {
+        "pass": 10,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "changed_test_records": [],
+      "pass_losses": [],
+      "report_sha256": {
+        "before": "970fd6bde4e7f44071b3db7fdfe0388f7e76008995c6bf281c6a0306031e394e",
+        "after": "0149260d924eeca9c2f7dc6474bad16b06713300fc2f5e02949f6246b9b75cfc"
+      }
+    },
+    "svg": {
+      "cases": 35,
+      "before": {
+        "pass": 25,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 1
+      },
+      "after": {
+        "pass": 25,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 1
+      },
+      "changed_test_records": [],
+      "pass_losses": [],
+      "report_sha256": {
+        "before": "60c32f9a6c0b0d479728ec2609a074cfc888b2ee9a6490e6ab003a8d75c56d62",
+        "after": "a0347990f24b212601ee461852e9ea801f8be1cf11095e80be41faa389439a12"
+      }
+    }
+  },
+  "known_baseline_crash": {
+    "id": "svg--painting--svg-with-outline",
+    "detail": "reference renderer exits 1: page script ReferenceError: text is not defined",
+    "retained_after": true
+  }
+}
