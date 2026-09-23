@@ -283,3 +283,27 @@ tests account for the package increase from HTML-5's 100 tests. The earlier
 baseline error selection is retained in `.agents/html/html6-baseline.log`;
 its independent expected trees were fixed in `html6-fixtures.md` before
 implementation. No WPT conformance claim is made for other contexts.
+
+## HTML-7 — script-data fragment parsing
+
+The tokenizer now uses the WHATWG script-data states for ordinary HTML script
+start tags and for a `script` fragment context. This includes escaped and
+double-escaped transitions, case-insensitive `script` delimiters, appropriate
+end-tag matching, source-spelling recovery for mismatched candidates, including null
+reconsumption and replacement, and EOF recovery. A fragment's script context is virtual: its
+start tag was never tokenized, so even a matching `</script>` is literal text.
+The script fragment children are extracted from the synthetic `html` root.
+`template`, `noscript` and `plaintext` fragment contexts remain unsupported.
+No Encoding or driver behavior changes.
+
+The fixed fixture oracles were recorded before implementation in
+`.agents/html/html7-fixtures.md`; the initial Windows baseline selected the
+unsupported-context test (1 passed, 104 skipped). The implementation adds four
+unit tests, including document token regressions and every-scalar-boundary
+streaming comparisons. At fixed base `262f211`, a 256-input Rust/Cargo/lockfile manifest
+(SHA-256 `8fcafa12a0a2c865fdd32ae552a4b866bbfb574ad1d66da06c14fdb9bb9541a7`)
+matched the HTML Windows tree before and after the gates. Package nextest
+passed **109/109 twice**, package doctests **1/1**, shared-slot workspace
+nextest **1455/1455** with 3 skipped, and separate shared-slot workspace
+doctests **2/2**. Four new unit tests account for the package increase from
+HTML-6's 105. No push or PR; the lane stops for co-integrator preflight.

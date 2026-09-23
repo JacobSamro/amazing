@@ -52,6 +52,18 @@ fn chunks_are_invariant_across_html_lexical_boundaries() {
 }
 
 #[test]
+fn script_data_is_invariant_across_every_scalar_boundary() {
+    for src in [
+        "<script><!-- x --> y </script><p>z",
+        "<script><!-- <script>inner</script> --> tail </ScRiPt><p>z",
+        "<script><!-- <ScRiPt/inner</SCRIPT/ --> tail </script>",
+        "<script>a</ScR",
+        "<script><!-- <scr",
+        "<script>a\0b</script>",
+    ] { assert_all_splits(src); }
+}
+
+#[test]
 fn temporary_exhaustion_does_not_resolve_ambiguous_tokens() {
     let mut tok = Tokenizer::streaming();
     tok.push_chars("<meta char".chars());
