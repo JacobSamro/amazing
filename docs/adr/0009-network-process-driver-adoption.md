@@ -1,6 +1,6 @@
 # ADR 0009 — Driver adoption of the network process
 
-Status: proposed handoff plan (IPC-4, 2026-09-24)
+Status: accepted (2026-09-24); each step lands behind its own parity gate
 Owner: IPC lane for the IPC contract; integrator-assist for driver edits. Depends on ADR 0005, ADR 0008, and the IPC-2 network demo.
 
 ## Current seam
@@ -35,4 +35,4 @@ Do not silently substitute `ClientContext::default()` or use the URL's own origi
 
 ## Cross-lane handoff
 
-Integrator-assist owns driver call-site changes and gate evidence. IPC owns the message/version changes, bounds, cancellation and process-host lifecycle API. Fetch/net owners review semantic mapping of request context, redirects, streaming, cache/cookies and file behavior. The integrator owns root manifest changes and the eventual default-mode switch. No driver implementation is authorized by this ADR draft.
+Integrator-assist owns driver call-site changes and gate evidence. IPC owns the message/version changes, bounds, cancellation and process-host lifecycle API. Fetch/net owners review semantic mapping of request context, redirects, streaming, cache/cookies and file behavior. The integrator owns root manifest changes and the eventual default-mode switch. Driver steps are executed by integrator-assist in the order above, each after the IPC contract extensions they need have landed.

@@ -1,6 +1,6 @@
 # ADR 0008 — Process sandbox policy enforcement
 
-Status: proposed for security review (IPC-4, 2026-09-24)
+Status: accepted as the design (2026-09-24); enforcement ships only after the review and adoption gates below pass
 Owner: IPC lane. Depends on ADR 0005 and the demand-driven transfer amendment to ADR 0007.
 
 ## Context and boundary
