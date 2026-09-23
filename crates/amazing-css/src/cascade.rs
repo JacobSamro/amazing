@@ -18,14 +18,88 @@
 //! Deferred/deviations:
 //! - `<style media>` conditions are ignored
 //! - HTML hints needing browsing/document state are tracked in css_TODO.md
-//! - unknown properties get no initial metadata; user-origin sheets, animations
-//!   and transitions have no input seam yet
+//! - unknown properties get no initial metadata; user-origin sheets have no
+//!   input seam yet
 
 use crate::computed::{self, ComputedStyle, Rollback};
 use crate::parser::{Declaration, Stylesheet, parse_declarations, parse_stylesheet};
 use crate::selectors::{PseudoElement, Selector, Specificity, parse_selector};
+use crate::values::ComputedValue;
 use amazing_dom::{Dom, NodeIdx};
 use std::collections::{BTreeMap, HashMap, HashSet};
+
+/// A compositor-sampled computed value entering the animation or transition
+/// cascade origin. The CSS text is retained for `ComputedStyle::get()` while
+/// `typed` is checked by the CSS value parser at insertion.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnimatedStyleValue {
+    pub css: String,
+    pub typed: ComputedValue,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AnimatedOrigin {
+    Animation,
+    Transition,
+}
+
+/// Per-element, per-longhand samples supplied at a rendering-update boundary.
+#[derive(Debug, Clone, Default)]
+pub struct AnimatedValues {
+    values: BTreeMap<(NodeIdx, String, AnimatedOrigin), AnimatedStyleValue>,
+}
+
+impl AnimatedValues {
+    /// Reject shorthands, unresolved variables and values invalid for a known
+    /// CSS longhand. The compositor may use this for each sampled property.
+    pub fn insert(&mut self, node: NodeIdx, property: &str, css: &str) -> bool {
+        self.insert_with_origin(node, property, css, AnimatedOrigin::Animation)
+    }
+
+    pub fn insert_transition(&mut self, node: NodeIdx, property: &str, css: &str) -> bool {
+        self.insert_with_origin(node, property, css, AnimatedOrigin::Transition)
+    }
+
+    pub fn insert_with_origin(
+        &mut self,
+        node: NodeIdx,
+        property: &str,
+        css: &str,
+        origin: AnimatedOrigin,
+    ) -> bool {
+        let property = property.to_ascii_lowercase();
+        if !computed::is_supported_property(&property)
+            || crate::syntax::tokenize(css).iter().any(|token| {
+                matches!(token, crate::syntax::Token::Function(name) if name.eq_ignore_ascii_case("var"))
+            })
+            || matches!(
+                css.trim().to_ascii_lowercase().as_str(),
+                "inherit" | "initial" | "unset" | "revert" | "revert-layer"
+            )
+        {
+            return false;
+        }
+        let Some(typed) = crate::values::parse(&property, css) else {
+            return false;
+        };
+        self.values.insert(
+            (node, property, origin),
+            AnimatedStyleValue { css: css.to_owned(), typed },
+        );
+        true
+    }
+
+    pub fn get(&self, node: NodeIdx, property: &str) -> Option<&AnimatedStyleValue> {
+        let property = property.to_ascii_lowercase();
+        self.values
+            .get(&(node, property.clone(), AnimatedOrigin::Transition))
+            .or_else(|| self.values.get(&(node, property, AnimatedOrigin::Animation)))
+    }
+
+    pub fn remove(&mut self, node: NodeIdx, property: &str, origin: AnimatedOrigin) {
+        self.values.remove(&(node, property.to_ascii_lowercase(), origin));
+    }
+}
 
 /// Computed styles for a whole document, keyed by arena index.
 #[derive(Debug, Default, Clone)]
@@ -99,6 +173,24 @@ impl StyledDom {
 /// Computes styles for every element of `dom`, combining the built-in UA
 /// sheet with the given author sheets (in order).
 pub fn compute(dom: &Dom, author_sheets: &[Stylesheet]) -> StyledDom {
+    compute_with_optional_animations(dom, author_sheets, None)
+}
+
+/// Computes the document with compositor samples in the animation and
+/// transition origins; ordinary `compute` has identical behavior without them.
+pub fn compute_with_animations(
+    dom: &Dom,
+    author_sheets: &[Stylesheet],
+    animated: &AnimatedValues,
+) -> StyledDom {
+    compute_with_optional_animations(dom, author_sheets, Some(animated))
+}
+
+fn compute_with_optional_animations(
+    dom: &Dom,
+    author_sheets: &[Stylesheet],
+    animated: Option<&AnimatedValues>,
+) -> StyledDom {
     // Compile UA + author rules up front; invalid selectors drop their rule.
     let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true);
     let author_rules = compile_sheets(author_sheets, false);
@@ -120,6 +212,7 @@ pub fn compute(dom: &Dom, author_sheets: &[Stylesheet]) -> StyledDom {
         &author_rules,
         body_link.as_deref(),
         &pseudo_targets,
+        animated,
         &mut out,
     );
     crate::generated::resolve_document(dom, &mut out);
@@ -135,6 +228,7 @@ fn style_subtree(
     author_rules: &[CompiledRule],
     body_link: Option<&str>,
     pseudo_targets: &[bool; 5],
+    animated: Option<&AnimatedValues>,
     out: &mut StyledDom,
 ) {
     if dom.name(node).is_some() {
@@ -147,6 +241,7 @@ fn style_subtree(
             author_rules,
             body_link,
             None,
+            animated,
         );
         let descendant_root_font_px = if dom.name(node) == Some("html") {
             style
@@ -181,6 +276,7 @@ fn style_subtree(
                 author_rules,
                 body_link,
                 Some(pseudo),
+                None,
             );
             let has_content =
                 !matches!(pseudo_style.get("content"), None | Some("normal" | "none"));
@@ -208,6 +304,7 @@ fn style_subtree(
                 author_rules,
                 body_link,
                 pseudo_targets,
+                animated,
                 out,
             );
         }
@@ -226,6 +323,7 @@ fn style_subtree(
                 author_rules,
                 body_link,
                 pseudo_targets,
+                animated,
                 out,
             );
         }
@@ -252,6 +350,8 @@ enum Origin {
     Ua,
     Hint,
     Author,
+    Animation,
+    Transition,
 }
 
 /// One declaration competing for a property during the cascade.
@@ -269,10 +369,15 @@ struct Candidate<'a> {
     proximity: usize,
 }
 
-/// Full cascade key (css-cascade-4 §6): importance first; origin next, which
-/// flips for important declarations; then inline > sheet; layer (also reversed
-/// for important), specificity, scope proximity, and finally source order.
+/// CSS Cascade 5 §6.1 order: transitions, important declarations, animations,
+/// normal declarations; then layers, specificity and source order.
 fn beats(new: &Candidate<'_>, cur: &Candidate<'_>) -> bool {
+    if new.origin == Origin::Transition && cur.origin != Origin::Transition {
+        return true;
+    }
+    if cur.origin == Origin::Transition && new.origin != Origin::Transition {
+        return false;
+    }
     match (new.important, cur.important) {
         (true, false) => return true,
         (false, true) => return false,
@@ -329,7 +434,9 @@ fn winners<'a>(
                     if winner.origin == Origin::Ua {
                         return None;
                     }
-                    values.retain(|c| c.origin == Origin::Ua);
+                    // The animation origin is separate from author origin for
+                    // `revert`; an author rollback can expose its value.
+                    values.retain(|c| matches!(c.origin, Origin::Ua | Origin::Animation | Origin::Transition));
                 } else if winner.value.trim().eq_ignore_ascii_case("revert-layer")
                     || substituted == Some(Rollback::Layer)
                 {
@@ -369,6 +476,7 @@ fn compute_one(
     author_rules: &[CompiledRule],
     body_link: Option<&str>,
     pseudo: Option<PseudoElement>,
+    animated: Option<&AnimatedValues>,
 ) -> (ComputedStyle, BTreeMap<String, ElementStyleSource>) {
     /// One declaration after shorthand expansion, flattened with the
     /// cascade metadata inherited from its source.
@@ -464,6 +572,31 @@ fn compute_one(
             });
         }
     }
+    if let Some(animated) = animated {
+        for ((_, property, origin), sample) in animated
+            .values
+            .range((el, String::new(), AnimatedOrigin::Animation)..)
+            .take_while(|((node, _, _), _)| *node == el)
+        {
+            source_order += 1;
+            pool.push(FlatDecl {
+                prop: property.clone(),
+                value: sample.css.clone(),
+                base_url: None,
+                important: false,
+                inline: false,
+                origin: match origin {
+                    AnimatedOrigin::Animation => Origin::Animation,
+                    AnimatedOrigin::Transition => Origin::Transition,
+                },
+                author_declaration: false,
+                spec: Specificity::default(),
+                order: source_order,
+                layer: usize::MAX,
+                proximity: usize::MAX,
+            });
+        }
+    }
 
     // Collect champions per property. Keys/values borrow from `pool`,
     // which is frozen from here on and outlives the loop below.
@@ -505,6 +638,10 @@ fn source_map(
                 ElementStyleSource::Inline
             } else if candidate.origin == Origin::Author {
                 ElementStyleSource::Author
+            } else if candidate.origin == Origin::Animation {
+                ElementStyleSource::Animation
+            } else if candidate.origin == Origin::Transition {
+                ElementStyleSource::Transition
             } else if candidate.origin == Origin::Hint {
                 ElementStyleSource::PresentationHint
             } else {
@@ -870,6 +1007,8 @@ pub enum ElementStyleSource {
     PresentationHint,
     Author,
     Inline,
+    Animation,
+    Transition,
 }
 
 /// A computed value within the SVG paint subset. Unsupported values retain
@@ -1157,7 +1296,7 @@ mod tests {
             ),
         ] {
             let ua = compile_sheets(&[parse_stylesheet(ua_css)], true);
-            let (style, _) = compute_one(&dom, elements[5], None, 16.0, &ua, &author, None, None);
+            let (style, _) = compute_one(&dom, elements[5], None, 16.0, &ua, &author, None, None, None);
             assert_eq!(style.get("color"), Some(expected));
         }
     }

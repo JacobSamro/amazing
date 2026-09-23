@@ -443,6 +443,7 @@ pub fn recompute_roots(dom: &Dom, old_styles: &StyledDom, roots: RecalcRoots) ->
                 &roots.context.author_rules,
                 body_link.as_deref(),
                 &pseudo_targets,
+                None,
                 &mut out,
             );
         }
