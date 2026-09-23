@@ -1,0 +1,30 @@
+{
+  "kind": "owned RC-7 path proof, not WPT",
+  "viewport": [
+    64,
+    64
+  ],
+  "blank": "blank.html",
+  "tests": [
+    {
+      "id": "absolute-square",
+      "test": "absolute-square.html",
+      "reference": "absolute-square-ref.html"
+    },
+    {
+      "id": "relative-square",
+      "test": "relative-square.html",
+      "reference": "relative-square-ref.html"
+    },
+    {
+      "id": "concave-l",
+      "test": "concave-l.html",
+      "reference": "concave-l-ref.html"
+    },
+    {
+      "id": "transformed",
+      "test": "transformed.html",
+      "reference": "transformed-ref.html"
+    }
+  ]
+}

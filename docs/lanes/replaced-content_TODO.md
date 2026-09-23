@@ -511,3 +511,23 @@ Isolated image nextest **21 passed**, separate image doctests **0 present**.
 Twenty-two source/manifest/fixture hashes matched Mac and Windows both before
 and after, unchanged across the gate. The final gate is on fixed CSS-7 base
 `945ca38`; later dev merges were not chased.
+
+## RC-7 — bounded straight-line SVG path fill
+
+Fixed base `1a8c222` (RC-6 merge). The image adapter accepts one explicitly
+closed outline using `M/m`, `L/l`, `H/h`, `V/v`, `Z/z`, including implicit
+lineto coordinate pairs after moveto. It samples the outline through the
+existing viewport and inverse transform path and applies RC-6 computed fill,
+color and opacity. Path token and point counts, finite coordinates, and a
+vertex-weighted raster work budget bound parsing and rendering. Multiple
+subpaths, open outlines, curves, arcs, fill rules, strokes, paint servers,
+references, scripts and animation reject the whole image.
+
+The pinned WPT CSS Images SVG resource control has four previously non-inert
+cases. Its sparse checkout contains no `<path>` SVG resource. These controls
+therefore carry **zero new WPT credit** for RC-7. The owned 64×64 HTML image
+corpus has absolute, relative, concave and transformed/alpha path cases with
+shape-based references and a blank control. The fixed-base before executable
+was **0/4**, each actual identical to blank. The first after render was
+**4/4 non-inert**, with all actuals equal to references and 576–1,024 pixels
+different from blank. Final repeat and gate evidence: `tests/wpt-replaced-content/rc7/`.

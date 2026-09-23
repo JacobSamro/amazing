@@ -1,0 +1,29 @@
+{
+  "fixed_base": "1a8c222",
+  "build_host": "win-001",
+  "image_nextest": {
+    "passed": 23,
+    "failed": 0,
+    "skipped": 0
+  },
+  "image_doctests": {
+    "passed": 0,
+    "failed": 0
+  },
+  "workspace_nextest": {
+    "passed": 1464,
+    "failed": 0,
+    "skipped": 3
+  },
+  "workspace_doctests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "input_hashes": {
+    "count": 24,
+    "mac_windows_equal_before": true,
+    "mac_windows_equal_after": true,
+    "unchanged_across_gate": true
+  },
+  "workspace_build_slot": true
+}
