@@ -1,0 +1,181 @@
+{
+  "fields": [
+    "id",
+    "classification",
+    "differing_pixels",
+    "max_difference",
+    "actual_sha256",
+    "reference_sha256",
+    "diff_sha256"
+  ],
+  "base": "253d9ec56a3612df8e495ea0cac49813fffbe2ee",
+  "pairs": [
+    {
+      "kind": "scope",
+      "phase": "before",
+      "stable": true,
+      "counts": {
+        "pass": 26,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 18
+      },
+      "projection_sha256": "c5dd3c4bc04f4b1152f4d54670e060afb179ea4ec5f76a7215ecb394a94566f5"
+    },
+    {
+      "kind": "scope",
+      "phase": "after",
+      "stable": true,
+      "counts": {
+        "pass": 26,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 18
+      },
+      "projection_sha256": "c5dd3c4bc04f4b1152f4d54670e060afb179ea4ec5f76a7215ecb394a94566f5"
+    },
+    {
+      "kind": "controls",
+      "phase": "before",
+      "stable": true,
+      "counts": {
+        "pass": 22,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "projection_sha256": "fe36809a849f105829f3b555c3b771492cbceeed0297b82eb5f617c681bd2612"
+    },
+    {
+      "kind": "controls",
+      "phase": "after",
+      "stable": true,
+      "counts": {
+        "pass": 22,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "projection_sha256": "fe36809a849f105829f3b555c3b771492cbceeed0297b82eb5f617c681bd2612"
+    },
+    {
+      "kind": "images",
+      "phase": "before",
+      "stable": true,
+      "counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "projection_sha256": "c700e2d5e6432127acc7222cbe33658ca29f2e60c671710d5c0dfb5eee30990f"
+    },
+    {
+      "kind": "images",
+      "phase": "after",
+      "stable": true,
+      "counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "projection_sha256": "c700e2d5e6432127acc7222cbe33658ca29f2e60c671710d5c0dfb5eee30990f"
+    },
+    {
+      "kind": "svg",
+      "phase": "before",
+      "stable": true,
+      "counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "projection_sha256": "21310a30039fd932d0886b9d349656e70aee98175be92673e4afe0388c8ec3ec"
+    },
+    {
+      "kind": "svg",
+      "phase": "after",
+      "stable": true,
+      "counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "projection_sha256": "21310a30039fd932d0886b9d349656e70aee98175be92673e4afe0388c8ec3ec"
+    },
+    {
+      "kind": "focused",
+      "phase": "before",
+      "stable": true,
+      "counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "projection_sha256": "68e51665fb0ba96e3e3c5392a4686a5a30228fd758cafcf38ad702d560e540fd"
+    },
+    {
+      "kind": "focused",
+      "phase": "after",
+      "stable": true,
+      "counts": {
+        "pass": 24,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "projection_sha256": "68e51665fb0ba96e3e3c5392a4686a5a30228fd758cafcf38ad702d560e540fd"
+    }
+  ],
+  "phase_changes": [
+    {
+      "kind": "scope",
+      "count": 0,
+      "cases": []
+    },
+    {
+      "kind": "controls",
+      "count": 0,
+      "cases": []
+    },
+    {
+      "kind": "images",
+      "count": 0,
+      "cases": []
+    },
+    {
+      "kind": "svg",
+      "count": 0,
+      "cases": []
+    },
+    {
+      "kind": "focused",
+      "count": 0,
+      "cases": []
+    }
+  ]
+}

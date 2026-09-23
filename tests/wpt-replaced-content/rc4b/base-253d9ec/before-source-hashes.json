@@ -1,0 +1,18 @@
+﻿[
+    {
+        "sha256":  "79c77cb46486c6f0c280344f84c5bafb44c32bbf144ee80169aa8e79891a5d40",
+        "path":  "crates/amazing-image/src/svg.rs"
+    },
+    {
+        "sha256":  "27f896d31630c7bef29b56acab78c3fed59a28d1bc90608996004bb91a2b1749",
+        "path":  "crates/amazing-image/tests/svg.rs"
+    },
+    {
+        "sha256":  "3cc3ab018fba241da4b13b60e18b0f1fd9040be3fbcd6f4023e8c2f9db447c3b",
+        "path":  "crates/amazing-paint/src/control_raster.rs"
+    },
+    {
+        "sha256":  "dfd5e094f48eb16b551b2d0fb75632726ae6117a1e678bc97620177c46234903",
+        "path":  "crates/amazing-paint/src/control_tests.rs"
+    }
+]
