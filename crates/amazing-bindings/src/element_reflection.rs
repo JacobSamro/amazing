@@ -14,10 +14,10 @@ fn spec(op: O) -> Option<Spec> {
         O::ElementHref | O::ElementSetHref => ("href", REL, K::Url),
         O::ElementTarget | O::ElementSetTarget => ("target", HYPERLINK, K::String),
         O::ElementRel | O::ElementSetRel => ("rel", REL, K::String),
-        O::ElementRelList => ("rel", REL, K::TokenList),
-        O::OutputHtmlFor => ("for", &["output"], K::TokenList),
-        O::IFrameSandbox => ("sandbox", &["iframe"], K::TokenList),
-        O::LinkSizes => ("sizes", &["link"], K::TokenList),
+        O::ElementRelList | O::ElementSetRelList => ("rel", REL, K::TokenList),
+        O::OutputHtmlFor | O::OutputSetHtmlFor => ("for", &["output"], K::TokenList),
+        O::IFrameSandbox | O::IFrameSetSandbox => ("sandbox", &["iframe"], K::TokenList),
+        O::LinkSizes | O::LinkSetSizes => ("sizes", &["link"], K::TokenList),
         O::ElementDownload | O::ElementSetDownload => ("download", HYPERLINK, K::String),
         O::ElementSrc | O::ElementSetSrc => ("src", &["img", "script"], K::Url),
         O::ImageAlt | O::ImageSetAlt => ("alt", &["img"], K::String),
@@ -48,7 +48,8 @@ fn spec(op: O) -> Option<Spec> {
         | O::ElementSetDisabled | O::InputSetPlaceholder | O::ResourceSetType
         | O::ScriptSetAsync | O::ScriptSetDefer | O::LinkSetMedia | O::MetaSetContent
         | O::MetaSetHttpEquiv | O::MetaSetCharset | O::CellSetColSpan
-        | O::CellSetRowSpan | O::OListSetStart | O::OListSetReversed | O::LISetValue);
+        | O::CellSetRowSpan | O::OListSetStart | O::OListSetReversed | O::LISetValue
+        | O::ElementSetRelList | O::OutputSetHtmlFor | O::IFrameSetSandbox | O::LinkSetSizes);
     Some(Spec { attribute, tags, kind, setter })
 }
 pub(crate) fn handles(op: O) -> bool { spec(op).is_some() }
@@ -74,7 +75,10 @@ pub(crate) fn invoke<H: UrlReflection>(host: &mut H, op: O, receiver: H::Value,
         let slot = host.with_dom(|dom| dom.token_list(node, spec.attribute))?;
         let mut key = host.node_platform_key(node);
         key.slot = slot as u64;
-        return host.wrap_platform_object(key, InterfaceBrand::DOM_TOKEN_LIST);
+        let list = host.wrap_platform_object(key, InterfaceBrand::DOM_TOKEN_LIST)?;
+        return if spec.setter {
+            crate::tokenlist::invoke(host, O::TokenListSetValue, list, args)
+        } else { Ok(list) };
     }
     if spec.setter {
         let value = args.first().ok_or_else(|| host.type_error("Not enough arguments"))?;

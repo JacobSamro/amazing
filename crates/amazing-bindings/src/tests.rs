@@ -1673,6 +1673,31 @@ fn wpt_html_token_list_attributes_are_live_and_canonical() {
     }
 }
 
+#[test]
+fn put_forwards_token_list_assignments_update_the_live_value() {
+    let mut h = Host::default();
+    for (tag, interface, getter, setter, attribute) in [
+        ("a", Interface::HTMLAnchorElement, O::ElementRelList, O::ElementSetRelList, "rel"),
+        ("link", Interface::HTMLLinkElement, O::ElementRelList, O::ElementSetRelList, "rel"),
+        ("link", Interface::HTMLLinkElement, O::LinkSizes, O::LinkSetSizes, "sizes"),
+        ("form", Interface::HTMLFormElement, O::FormAttributeGet(crate::host::FormAttribute::RelList),
+            O::FormAttributeSet(crate::host::FormAttribute::RelList), "rel"),
+        ("output", Interface::HTMLOutputElement, O::OutputHtmlFor, O::OutputSetHtmlFor, "for"),
+        ("iframe", Interface::HTMLIFrameElement, O::IFrameSandbox, O::IFrameSetSandbox, "sandbox"),
+    ] {
+        let member = INTERFACES.iter().find(|definition| definition.interface == interface).unwrap()
+            .members.iter().find(|member| member.operation == setter).unwrap();
+        assert_eq!(member.kind, crate::host::MemberKind::Setter);
+        let element = h.dom.create_element(NodeIdx(0), tag);
+        let receiver = V::Node(element);
+        let list = call(&mut h, getter, receiver.clone(), &[]);
+        call(&mut h, setter, receiver.clone(), &[str_value("alpha  beta")]);
+        assert_eq!(call(&mut h, O::TokenListValue, list.clone(), &[]), str_value("alpha  beta"));
+        assert_eq!(h.dom.attribute_utf16(element, attribute), Some("alpha  beta".encode_utf16().collect()));
+        assert_eq!(call(&mut h, getter, receiver, &[]), list);
+    }
+}
+
 // Pinned WPT custom-elements/CustomElementRegistry.html,
 // CustomElementRegistry-getName.html, attribute-changed-callback.html,
 // connected-callbacks.html, and custom-element-reaction-queue.html ports.

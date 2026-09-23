@@ -520,6 +520,11 @@ impl amazing_js::DomHost for BrowserDomHost {
         {
             return None;
         }
+        if property.eq_ignore_ascii_case("cssText") {
+            return Some(self.dom.attrs_of(amazing_dom::NodeIdx(node))
+                .and_then(|attrs| attrs.iter().find(|(name, _)| name == "style"))
+                .map_or(String::new(), |(_, value)| value.clone()));
+        }
         let property = BrowserDomHost::css_property_name(property).to_ascii_lowercase();
         if property == "csstext" {
             return self

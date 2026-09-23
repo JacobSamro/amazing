@@ -398,6 +398,11 @@ pub(crate) fn install(
         state: state.clone(),
     };
     install_interfaces(&mut adapter)?;
+    if let Some(element_prototype) = adapter.prototype(Interface::Element) {
+        adapter.js.binding_install_put_forwards(&element_prototype, "style", "cssText")?;
+    }
+    let window = adapter.js.binding_global_object();
+    adapter.js.binding_install_put_forwards(&window, "location", "href")?;
     let document = adapter.wrap_node(NodeIdx(0))?;
     // set_dom_host installs an immutable lexical legacy document. Shadow it in
     // a new global environment so every new page script sees the canonical

@@ -188,6 +188,20 @@ impl EnvHandle {
         self.resolve(name).is_some()
     }
 
+    pub fn shares_binding_frame(&self, other: &EnvHandle, name: &str) -> bool {
+        fn owner(env: &EnvHandle, name: &str) -> Option<EnvHandle> {
+            let frame = env.0.borrow();
+            if frame.vars.contains_key(name) { return Some(env.clone()); }
+            let parent = frame.parent.clone();
+            drop(frame);
+            parent.as_ref().and_then(|parent| owner(parent, name))
+        }
+        match (owner(self, name), owner(other, name)) {
+            (Some(left), Some(right)) => Rc::ptr_eq(&left.0, &right.0),
+            _ => false,
+        }
+    }
+
     pub fn assign(&self, name: &str, value: JsValue) -> Result<bool, Throw> {
         self.0.borrow().assign_raw(name, value)
     }

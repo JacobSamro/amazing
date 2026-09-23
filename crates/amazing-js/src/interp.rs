@@ -222,6 +222,7 @@ pub struct Interpreter {
     host_native_dispatch: Option<Rc<HostNativeDispatch>>,
     host_realm: u64,
     host_cache: HashMap<HostHandle, Weak<RefCell<JsObject>>>,
+    put_forwards: Vec<(Weak<RefCell<JsObject>>, String, String)>,
     legacy_hooks: HashMap<u64, LegacyPlatformHooks>,
     legacy_iterator_proto: Obj,
     pair_hooks: HashMap<u64, PairIterableHooks>,
@@ -331,6 +332,7 @@ impl Interpreter {
             host_native_dispatch: None,
             host_realm,
             host_cache: HashMap::new(),
+            put_forwards: Vec::new(),
             legacy_hooks: HashMap::new(),
             legacy_iterator_proto,
             pair_hooks: HashMap::new(),
@@ -2224,6 +2226,10 @@ impl Interpreter {
     ) -> Result<(), Throw> {
         match reference {
             Reference::Binding(name) => {
+                if name == "location" && env.shares_binding_frame(&self.global_env, &name) {
+                    let window = JsValue::Object(self.global_obj.clone());
+                    return self.set_prop(&window, "location", value);
+                }
                 if !env.assign(&name, value.clone())? {
                     self.global_env.declare_var(&name, value)?;
                 }
@@ -3314,6 +3320,11 @@ impl Interpreter {
             _ => return Err(Throw::type_error("cannot set property on primitive")),
         };
         if let Some(result) = binary_set_index(self, &o, &key, x.clone()) { return result; }
+        if let Some(forward_to) = self.binding_put_forwards_target(&o, k) {
+            let target = self.get_prop(v, k)?;
+            self.set_prop(&target, forward_to, x)?;
+            return Ok(());
+        }
         if let Some(name) = key.as_string() {
         if let Some(node) = Self::dom_style_id(&o) {
             let value = self.to_string(&x)?;

@@ -452,7 +452,7 @@ const HYPERLINK: &[Member] = &[
     method("toString", O::ElementHref, 0),
     getter("target", O::ElementTarget), setter("target", O::ElementSetTarget),
     getter("rel", O::ElementRel), setter("rel", O::ElementSetRel),
-    getter("relList", O::ElementRelList),
+    getter("relList", O::ElementRelList), setter("relList", O::ElementSetRelList),
     getter("download", O::ElementDownload), setter("download", O::ElementSetDownload),
 ];
 const IMAGE: &[Member] = &[
@@ -517,7 +517,7 @@ const FORM: &[Member] = &[
     form_get("noValidate", F::NoValidate), form_set("noValidate", F::NoValidate),
     form_get("target", F::Target), form_set("target", F::Target),
     form_get("rel", F::Rel), form_set("rel", F::Rel),
-    form_get("relList", F::RelList),
+    form_get("relList", F::RelList), form_set("relList", F::RelList),
     getter("elements", O::FormElements), getter("length", O::FormLength),
     method("reset", O::FormReset, 0), method("checkValidity", O::FormCheckValidity, 0),
     method("reportValidity", O::FormReportValidity, 0),
@@ -531,7 +531,7 @@ const FORM_CONTROL: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const OUTPUT: &[Member] = &[
-    getter("htmlFor", O::OutputHtmlFor),
+    getter("htmlFor", O::OutputHtmlFor), setter("htmlFor", O::OutputSetHtmlFor),
     getter("form", O::FormControlForm), getter("name", O::FormControlName), setter("name", O::FormControlSetName),
     getter("willValidate", O::ControlWillValidate), getter("validity", O::ControlValidity),
     getter("validationMessage", O::ControlValidationMessage),
@@ -539,7 +539,7 @@ const OUTPUT: &[Member] = &[
     method("setCustomValidity", O::ControlSetCustomValidity, 1),
 ];
 const IFRAME: &[Member] = &[
-    getter("sandbox", O::IFrameSandbox),
+    getter("sandbox", O::IFrameSandbox), setter("sandbox", O::IFrameSetSandbox),
 ];
 const BUTTON: &[Member] = &[
     form_get("command", F::Command), form_set("command", F::Command),
@@ -644,8 +644,8 @@ const SCRIPT: &[Member] = &[
 const LINK: &[Member] = &[
     getter("href", O::ElementHref), setter("href", O::ElementSetHref),
     getter("rel", O::ElementRel), setter("rel", O::ElementSetRel),
-    getter("relList", O::ElementRelList),
-    getter("sizes", O::LinkSizes),
+    getter("relList", O::ElementRelList), setter("relList", O::ElementSetRelList),
+    getter("sizes", O::LinkSizes), setter("sizes", O::LinkSetSizes),
     getter("media", O::LinkMedia), setter("media", O::LinkSetMedia),
     getter("type", O::ResourceType), setter("type", O::ResourceSetType),
     getter("disabled", O::ElementDisabled), setter("disabled", O::ElementSetDisabled),

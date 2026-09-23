@@ -37,6 +37,38 @@ impl Interpreter {
         JsValue::Object(self.global_obj.clone())
     }
 
+    /// Register WebIDL [PutForwards] on an interface prototype or global
+    /// object. The mapping is private runtime state and applies to inherited
+    /// receivers even when a legacy wrapper has an own read-only data property.
+    pub fn binding_install_put_forwards(
+        &mut self, prototype: &JsValue, attribute: &str, forward_to: &str,
+    ) -> Result<(), Throw> {
+        let JsValue::Object(owner) = prototype else {
+            return Err(Throw::type_error("PutForwards owner must be an object"));
+        };
+        if attribute == forward_to {
+            return Err(Throw::type_error("PutForwards cannot target itself"));
+        }
+        self.put_forwards.retain(|(weak, name, _)|
+            weak.upgrade().is_some() && !(weak.upgrade().is_some_and(|live|
+                Rc::ptr_eq(&live, &owner.0)) && name == attribute));
+        self.put_forwards.push((Rc::downgrade(&owner.0), attribute.into(), forward_to.into()));
+        Ok(())
+    }
+
+    pub(super) fn binding_put_forwards_target(&self, receiver: &Obj, attribute: &str) -> Option<String> {
+        let mut current = Some(receiver.clone());
+        while let Some(object) = current {
+            for (weak, name, target) in self.put_forwards.iter().rev() {
+                if name == attribute && weak.upgrade().is_some_and(|live| Rc::ptr_eq(&live, &object.0)) {
+                    return Some(target.clone());
+                }
+            }
+            current = object.borrow().proto.clone();
+        }
+        None
+    }
+
     /// `None` selects a null prototype; pass `binding_global_object`'s
     /// prototype or another object when inheritance is required.
     pub fn binding_create_object(&self, prototype: Option<&JsValue>) -> Result<JsValue, Throw> {

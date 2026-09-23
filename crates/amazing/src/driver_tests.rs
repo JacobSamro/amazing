@@ -5,6 +5,50 @@ use amazing_text::TextSystem;
 use std::{cell::RefCell, rc::Rc};
 
 #[test]
+fn put_forwards_assignments_keep_live_token_lists_and_location() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body><a id='a'></a><form id='f'></form><output id='o'></output><iframe id='i'></iframe><link id='l'></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    scheduler.js.set_location_url("https://example.test/start");
+    assert_eq!(scheduler.run_script(
+        "let a = document.getElementById('a'), f = document.getElementById('f'), o = document.getElementById('o'), i = document.getElementById('i'), l = document.getElementById('l'); \
+         let r = a.relList, s = i.sandbox, h = o.htmlFor, z = l.sizes; \
+         a.relList = 'noopener noreferrer'; f.relList = 'external'; o.htmlFor = 'one two'; i.sandbox = 'allow-scripts'; l.sizes = '16x16'; \
+         let live = a.relList === r && r.value === 'noopener noreferrer' && f.relList.value === 'external' && \
+             o.htmlFor === h && h.value === 'one two' && i.sandbox === s && s.value === 'allow-scripts' && \
+             l.sizes === z && z.value === '16x16'; \
+         let style = a.style; a.style = 'color: red;'; \
+         location = 'https://example.test/next'; let bareLocation = location.href; \
+         window.location = 'https://example.test/final'; \
+         function shadowLocation() { let location = 'local'; location = 'still local'; return location; } \
+         [live, a.relList === r, f.relList.value, o.htmlFor === h, i.sandbox === s, l.sizes === z, a.style === style, style.cssText, bareLocation, window.location.href, shadowLocation()].join('|')"
+    ).unwrap(), amazing_js::value::JsValue::str("true|true|external|true|true|true|true|color: red;|https://example.test/next|https://example.test/final|still local"));
+}
+
+#[test]
+fn bare_window_event_target_calls_coerce_nullish_this() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    assert_eq!(scheduler.run_script(
+        "let hit = 0; function one() { hit += 1; } function two() { hit += 10; } \
+         addEventListener('load', one); addEventListener.call(undefined, 'load', two); \
+         addEventListener.call(null, 'load', one); \
+         removeEventListener.call(null, 'load', one); \
+         typeof hit"
+    ).unwrap(), amazing_js::value::JsValue::str("number"));
+    scheduler.js.dispatch_dom_event(0, "load").unwrap();
+    assert_eq!(scheduler.run_script("hit").unwrap(), amazing_js::value::JsValue::num(10.0));
+    assert_eq!(scheduler.run_script(
+        "let rejected = false; try { addEventListener.call({}, 'load', one); } catch (error) { rejected = true; } rejected"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
+}
+
+#[test]
 fn form_collections_and_validity_use_native_brands_and_live_hooks() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse("<form id='f'><input id='a' name='choice' type='radio' value='one' checked><input id='b' name='choice' type='radio' value='two'><input id='required' required></form><select id='s'><option value='old'>old</option></select>"),
