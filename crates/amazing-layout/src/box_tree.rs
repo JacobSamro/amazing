@@ -112,6 +112,11 @@ fn build_element(
     );
     let display = parse_display(&style);
     let mut box_ = LayoutBox::new(Some(idx), display, style, font_size, line_height);
+    if crate::svg::is_outer(dom, idx) {
+        box_.svg_root = Some(idx);
+        box_.svg_sizing = Some(crate::svg::SvgSizing::from_dom(dom, idx));
+        return box_;
+    }
     box_.replaced_size = replaced.intrinsic_size(idx);
     if matches!(dom.name(idx), Some("td" | "th")) {
         box_.table_colspan = table_span(attribute(dom, idx, "colspan"), 1000, false);
@@ -187,6 +192,9 @@ fn is_contents(style: &ComputedStyle) -> bool {
 }
 
 fn contents_suppresses_subtree(dom: &Dom, node: NodeIdx) -> bool {
+    if crate::svg::is_outer(dom, node) {
+        return true;
+    }
     matches!(
         dom.name(node),
         Some(

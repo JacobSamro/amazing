@@ -158,6 +158,14 @@ fn layout_block_in_context(
         return crate::table::layout(b, x, y, cbw, fonts, text, 0.0);
     }
     let font_px = b.font_size;
+    if let Some(svg) = &b.svg_sizing {
+        b.replaced_size = Some(svg.used_size(
+            &b.style,
+            font_px,
+            Some(cbw),
+            b.containing_block_height,
+        ));
+    }
     b.margin = values::resolve_margins(&b.style, font_px, cbw);
     b.padding = values::resolve_padding(&b.style, font_px, cbw);
     b.border = values::resolve_borders(&b.style, font_px);

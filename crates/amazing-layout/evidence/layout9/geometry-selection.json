@@ -1,0 +1,18 @@
+{
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "basis": "The static cases reproduce SVG dimensions and container widths from the named WPT subtests. Each case contains one outer inline SVG; geometry is read from amazing layout's replaced fragment, never from paint.",
+  "cases": [
+    {"id":"svg001-default","source":"svg/coordinate-systems/outer-svg-intrinsic-size-001.html","subtest":"no sizing attributes set","container_width":500,"svg":"<svg></svg>","expected":[300,150]},
+    {"id":"svg001-width","source":"svg/coordinate-systems/outer-svg-intrinsic-size-001.html","subtest":"specified width","container_width":500,"svg":"<svg width='100'></svg>","expected":[100,150]},
+    {"id":"svg001-both","source":"svg/coordinate-systems/outer-svg-intrinsic-size-001.html","subtest":"specified width and height","container_width":500,"svg":"<svg width='400' height='100'></svg>","expected":[400,100]},
+    {"id":"svg001-height","source":"svg/coordinate-systems/outer-svg-intrinsic-size-001.html","subtest":"specified height","container_width":500,"svg":"<svg height='200'></svg>","expected":[300,200]},
+    {"id":"svg001-viewbox","source":"svg/coordinate-systems/outer-svg-intrinsic-size-001.html","subtest":"set a 10x8 viewBox","container_width":500,"svg":"<svg viewBox='0 0 10 8'></svg>","expected":[500,400]},
+    {"id":"svg001-viewbox-width","source":"svg/coordinate-systems/outer-svg-intrinsic-size-001.html","subtest":"adding specified width, in presence of specified viewBox","container_width":500,"svg":"<svg width='100' viewBox='0 0 50 10'></svg>","expected":[100,20]},
+    {"id":"svg001-viewbox-height","source":"svg/coordinate-systems/outer-svg-intrinsic-size-001.html","subtest":"adding specified height, in presence of specified viewBox","container_width":500,"svg":"<svg height='60' viewBox='0 0 40 30'></svg>","expected":[80,60]},
+    {"id":"sizing002-default","source":"css/css-sizing/svg-intrinsic-size-002.html","subtest":"No intrinsic attributes","container_width":600,"svg":"<svg></svg>","expected":[300,150]},
+    {"id":"sizing002-height","source":"css/css-sizing/svg-intrinsic-size-002.html","subtest":"viewBox and height","container_width":600,"svg":"<svg height='40' viewBox='0 0 4 1'></svg>","expected":[160,40]},
+    {"id":"sizing002-width","source":"css/css-sizing/svg-intrinsic-size-002.html","subtest":"viewBox and width","container_width":600,"svg":"<svg width='40' viewBox='0 0 4 1'></svg>","expected":[40,10]},
+    {"id":"sizing002-both","source":"css/css-sizing/svg-intrinsic-size-002.html","subtest":"viewBox, width, height","container_width":600,"svg":"<svg width='40' height='40' viewBox='0 0 4 1'></svg>","expected":[40,40]},
+    {"id":"sizing002-viewbox","source":"css/css-sizing/svg-intrinsic-size-002.html","subtest":"Just viewBox","container_width":600,"svg":"<svg viewBox='0 0 4 1'></svg>","expected":[600,150]}
+  ]
+}

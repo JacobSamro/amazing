@@ -1,0 +1,189 @@
+{
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection_sha256": "1cd090b30156ca3029f553e464bd80886d68ed27e159d1f53aeb831046109ba8",
+  "binary_sha256": "823aedf95016aac3ee98fc5ffaedcc0e245385070d96e1f8388180bab9e8e57f",
+  "passed": 12,
+  "total": 12,
+  "results": [
+    {
+      "id": "svg001-default",
+      "source": "svg/coordinate-systems/outer-svg-intrinsic-size-001.html",
+      "expected": [
+        300,
+        150
+      ],
+      "actual": [
+        300.0,
+        150.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "svg001-width",
+      "source": "svg/coordinate-systems/outer-svg-intrinsic-size-001.html",
+      "expected": [
+        100,
+        150
+      ],
+      "actual": [
+        100.0,
+        150.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "svg001-both",
+      "source": "svg/coordinate-systems/outer-svg-intrinsic-size-001.html",
+      "expected": [
+        400,
+        100
+      ],
+      "actual": [
+        400.0,
+        100.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "svg001-height",
+      "source": "svg/coordinate-systems/outer-svg-intrinsic-size-001.html",
+      "expected": [
+        300,
+        200
+      ],
+      "actual": [
+        300.0,
+        200.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "svg001-viewbox",
+      "source": "svg/coordinate-systems/outer-svg-intrinsic-size-001.html",
+      "expected": [
+        500,
+        400
+      ],
+      "actual": [
+        500.0,
+        400.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "svg001-viewbox-width",
+      "source": "svg/coordinate-systems/outer-svg-intrinsic-size-001.html",
+      "expected": [
+        100,
+        20
+      ],
+      "actual": [
+        100.0,
+        20.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "svg001-viewbox-height",
+      "source": "svg/coordinate-systems/outer-svg-intrinsic-size-001.html",
+      "expected": [
+        80,
+        60
+      ],
+      "actual": [
+        80.0,
+        60.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "sizing002-default",
+      "source": "css/css-sizing/svg-intrinsic-size-002.html",
+      "expected": [
+        300,
+        150
+      ],
+      "actual": [
+        300.0,
+        150.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "sizing002-height",
+      "source": "css/css-sizing/svg-intrinsic-size-002.html",
+      "expected": [
+        160,
+        40
+      ],
+      "actual": [
+        160.0,
+        40.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "sizing002-width",
+      "source": "css/css-sizing/svg-intrinsic-size-002.html",
+      "expected": [
+        40,
+        10
+      ],
+      "actual": [
+        40.0,
+        10.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "sizing002-both",
+      "source": "css/css-sizing/svg-intrinsic-size-002.html",
+      "expected": [
+        40,
+        40
+      ],
+      "actual": [
+        40.0,
+        40.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    },
+    {
+      "id": "sizing002-viewbox",
+      "source": "css/css-sizing/svg-intrinsic-size-002.html",
+      "expected": [
+        600,
+        150
+      ],
+      "actual": [
+        600.0,
+        150.0
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "fragments": 1
+    }
+  ]
+}

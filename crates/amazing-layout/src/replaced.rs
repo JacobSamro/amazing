@@ -12,6 +12,7 @@ use amazing_dom::{Dom, NodeIdx};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReplacedKind {
     Image,
+    Svg,
     TextInput,
     Checkbox,
     Radio,
@@ -27,6 +28,7 @@ pub struct InlineReplaced {
     pub style: ComputedStyle,
     pub font_size: f32,
     pub natural: IntrinsicSize,
+    pub(crate) svg_sizing: Option<crate::svg::SvgSizing>,
     pub(crate) geometry: Geometry,
 }
 
@@ -115,6 +117,12 @@ fn attr<'a>(dom: &'a Dom, node: NodeIdx, name: &str) -> Option<&'a str> {
 }
 
 pub(crate) fn kind(dom: &Dom, node: NodeIdx) -> Option<ReplacedKind> {
+    if crate::svg::is_outer(dom, node) {
+        return Some(ReplacedKind::Svg);
+    }
+    if dom.namespace(node) != Some(amazing_dom::Namespace::Html) {
+        return None;
+    }
     Some(match dom.name(node)? {
         "img" => ReplacedKind::Image,
         "input" => match attr(dom, node, "type")
@@ -178,6 +186,7 @@ pub(crate) fn construct(
             Some(match kind {
                 // Undecoded images retain the existing no-fragment behavior.
                 ReplacedKind::Image => return None,
+                ReplacedKind::Svg => IntrinsicSize { width: 300.0, height: 150.0 },
                 ReplacedKind::Checkbox | ReplacedKind::Radio => IntrinsicSize {
                     width: 13.0,
                     height: 13.0,
@@ -201,6 +210,7 @@ pub(crate) fn construct(
         style: style.clone(),
         font_size,
         natural,
+        svg_sizing: (kind == ReplacedKind::Svg).then(|| crate::svg::SvgSizing::from_dom(dom, node)),
         geometry: Geometry::default(),
     });
     // Useful for intrinsic-width consumers before block placement; percentages
@@ -248,13 +258,16 @@ impl InlineReplaced {
             .unwrap_or(f32::INFINITY)
             .max(min_h);
         // Controls have natural preferred dimensions, not an image aspect ratio.
-        let ratio = (self.kind == ReplacedKind::Image
-            && self.natural.width > 0.0
-            && self.natural.height > 0.0)
-            .then_some(self.natural.width / self.natural.height);
+        let natural = self.svg_sizing.as_ref().map_or(self.natural, |svg| {
+            svg.used_size(style, self.font_size, width, height)
+        });
+        let ratio = (matches!(self.kind, ReplacedKind::Image | ReplacedKind::Svg)
+            && natural.width > 0.0
+            && natural.height > 0.0)
+            .then_some(natural.width / natural.height);
         let mut used_w =
-            w.unwrap_or_else(|| h.zip(ratio).map_or(self.natural.width, |(h, r)| h * r));
-        let mut used_h = h.unwrap_or_else(|| ratio.map_or(self.natural.height, |r| used_w / r));
+            w.unwrap_or_else(|| h.zip(ratio).map_or(natural.width, |(h, r)| h * r));
+        let mut used_h = h.unwrap_or_else(|| ratio.map_or(natural.height, |r| used_w / r));
         if w.is_none() && h.is_none() && ratio.is_some() {
             // CSS2.2 10.4: preserve ratio unless opposing constraints require
             // distortion. The feasible scale interval handles all table rows.

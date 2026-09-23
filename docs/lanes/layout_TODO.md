@@ -898,3 +898,39 @@ and workspace doctests **2/2**. The 293-file source manifest, immutable
 renderer/image adapter hashes, raw paired reports, oracle queries, comparison,
 and workspace logs are in `crates/amazing-layout/evidence/layout8/`. No Mac
 build or test was run.
+
+## LAYOUT-9 — outer HTML inline SVG as replaced-like content (2026-09-23)
+
+Fixed base `0f1afbd` (local merged `dev` when work began; remote `origin/dev`
+then pointed to `7801627` pending the integrator push). Pinned WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+
+An SVG-namespace `<svg>` with a non-SVG parent now creates one atomic CSS
+box. Its descendants remain in the DOM for SVG rendering, but create no CSS
+boxes or line fragments. `display:none` and `display:contents` suppress the
+entire SVG subtree; block, float, positioned, flex/grid item and inline flows
+share the replaced sizing path. HTML controls are now recognized only in the
+HTML namespace, so SVG descendants cannot accidentally become form controls.
+
+`svg.rs` resolves positive width/height SVG presentation attributes,
+percentages against a definite containing block, `viewBox` aspect ratio, CSS
+author width/height overrides, and the 300×150 fallback object size. Zero and
+negative SVG dimensions are unsized. The public paint seam is
+`StyledReplacedFrag { kind: ReplacedKind::Svg, node, content_box }` for atomic
+inline SVGs and `LayoutBox { svg_root, content_box }` for block/flex/grid
+items. Both rectangles are CSS pixels; paint passes the root, the content
+viewport and its DPR to the DOM-fed SVG renderer. The exact paint adoption
+request for `display_list.rs::control_commands` is in
+`.agents/layout/questions.md` and belongs to replaced-content/integrator-assist.
+
+A frozen 12-state geometry selection derived from
+`svg/coordinate-systems/outer-svg-intrinsic-size-001.html` and
+`css/css-sizing/svg-intrinsic-size-002.html` moved **0/12 → 12/12**; final
+runs repeat with identical per-case geometry, selection SHA256
+`1cd090b30156ca3029f553e464bd80886d68ed27e159d1f53aeb831046109ba8`
+and executable SHA256
+`823aedf95016aac3ee98fc5ffaedcc0e245385070d96e1f8388180bab9e8e57f`.
+The gate uses `amazing layout` fragment geometry, not rendered pixels.
+Windows layout nextest passed **233/233** and layout doctests **0/0**.
+The 46-file source manifest matched the Windows tree exactly. Retained render
+and workspace gates are recorded in the ticket report and evidence directory.
