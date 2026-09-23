@@ -210,8 +210,17 @@ LANE_GRANTS_REWRITE = {
         "scripts/run-render-wpt.ps1",
         # Natural-intrinsic-dimensions migration only; read the diff at merge.
         "crates/amazing-shell-gpui/src/engine_viewport.rs",
+        # IA-CACHE: replace the shell's own HTTP cache with the NET-10
+        # amazing-fetch::cache policy. session_state.rs is already granted;
+        # this makes it a read-the-diff rewrite. The shell's isolated lockfile
+        # is machine-generated, and the manifest gains one path dependency.
+        "crates/amazing-shell-gpui/src/session_state.rs",
+        "crates/amazing-shell-gpui/Cargo.lock",
     ],
 }
+# IA-CACHE adds exactly one line, `amazing-fetch = { path = "../amazing-fetch" }`,
+# to the shell manifest. Additive, verified at merge.
+LANE_GRANTS["integrator-assist"].append("crates/amazing-shell-gpui/Cargo.toml")
 
 
 def grant_is_rewrite(lane: str, path: str) -> bool:
