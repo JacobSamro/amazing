@@ -1,0 +1,5 @@
+COMP-7 win-001 release mutation trace, 512x512, 20 frames per fixture
+Source archive SHA-256: 73de3b76055b9e8efb12fd8fd0736e27fcfb47a07267114fc757d40ae68d4137
+Each frame matched full-painter RGBA pixels. CSV values are microseconds.
+article-class: mutation_to_frame p50=37546 p95=40501; style_layout p50=7103; view p50=518; frame p50=29826; items=16; uploads/frame=4
+effects-class: mutation_to_frame p50=61819 p95=63946; style_layout p50=6481; view p50=417; frame p50=54894; items=14; uploads/frame=12

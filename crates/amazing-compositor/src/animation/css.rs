@@ -20,6 +20,10 @@ pub struct CssAnimationLonghands {
     pub fills: Vec<Fill>,
     pub easings: Vec<Easing>,
     pub paused: Vec<bool>,
+    pub compositions: Vec<CompositeMode>,
+    /// CSS-14 canonical `animation-timeline` items; source resolution belongs
+    /// to the driver because it needs the element and containing scrollers.
+    pub timelines: Vec<String>,
 }
 impl Default for CssAnimationLonghands {
     fn default() -> Self {
@@ -32,6 +36,8 @@ impl Default for CssAnimationLonghands {
             fills: vec![Fill::None],
             easings: vec![Easing::Linear],
             paused: vec![false],
+            compositions: vec![CompositeMode::Replace],
+            timelines: vec!["auto".into()],
         }
     }
 }
@@ -41,7 +47,7 @@ pub struct CssTransitionLonghands {
     pub durations_ms: Vec<f64>,
     pub delays_ms: Vec<f64>,
     pub easings: Vec<Easing>,
-    pub allow_discrete: bool,
+    pub allow_discrete: Vec<bool>,
 }
 impl Default for CssTransitionLonghands {
     fn default() -> Self {
@@ -50,7 +56,7 @@ impl Default for CssTransitionLonghands {
             durations_ms: vec![0.],
             delays_ms: vec![0.],
             easings: vec![Easing::Linear],
-            allow_discrete: false,
+            allow_discrete: vec![false],
         }
     }
 }
@@ -191,6 +197,16 @@ impl CssAnimationLonghands {
             .iter()
             .map(|s| s == "paused")
             .collect();
+        let compositions = get("animation-composition")
+            .map(comma_list)
+            .unwrap_or_default()
+            .iter()
+            .map(|s| match s.as_str() {
+                "add" => CompositeMode::Add,
+                "accumulate" => CompositeMode::Accumulate,
+                _ => CompositeMode::Replace,
+            })
+            .collect();
         Self {
             names,
             durations_ms,
@@ -200,6 +216,10 @@ impl CssAnimationLonghands {
             fills,
             easings: easings(get("animation-timing-function")),
             paused,
+            compositions,
+            timelines: get("animation-timeline")
+                .map(comma_list)
+                .unwrap_or_else(|| vec!["auto".into()]),
         }
     }
 }
@@ -212,7 +232,12 @@ impl CssTransitionLonghands {
             durations_ms: times(get("transition-duration"), 0.),
             delays_ms: times(get("transition-delay"), 0.),
             easings: easings(get("transition-timing-function")),
-            allow_discrete: get("transition-behavior") == Some("allow-discrete"),
+            allow_discrete: get("transition-behavior")
+                .map(comma_list)
+                .unwrap_or_default()
+                .iter()
+                .map(|value| value == "allow-discrete")
+                .collect(),
         }
     }
 }
@@ -468,6 +493,8 @@ impl CssAnimationEngine {
                 if let Some(rule) = rules.iter().rev().find(|rule| rule.name == *name) {
                     active.animation.effect.keyframes = rule.frames.clone();
                 }
+                active.animation.effect.composite =
+                    list(&style.compositions, index, CompositeMode::Replace);
                 let should_pause = list(&style.paused, index, false);
                 if should_pause {
                     active.animation.pause(Some(now_ms))
@@ -494,7 +521,7 @@ impl CssAnimationEngine {
                     iteration_start: 0.,
                 },
                 keyframes: rule.frames.clone(),
-                composite: CompositeMode::Replace,
+                composite: list(&style.compositions, index, CompositeMode::Replace),
                 iteration_composite: IterationComposite::Replace,
             };
             let Some(mut animation) = WebAnimation::new(self.next_id, effect) else {
@@ -565,7 +592,7 @@ impl CssAnimationEngine {
             }
             let discrete = matches!(old_value, AnimationValue::Discrete(_))
                 || matches!(new_value, AnimationValue::Discrete(_));
-            if discrete && !style.allow_discrete {
+            if discrete && !list(&style.allow_discrete, index, false) {
                 continue;
             }
             let key = (element, property.clone());
@@ -1074,7 +1101,7 @@ mod tests {
             durations_ms: vec![100.],
             delays_ms: vec![50.],
             easings: vec![Easing::Linear],
-            allow_discrete: false,
+            allow_discrete: vec![false],
         };
         engine.update_transitions(4, &before, &after, &style, 0.);
         let run = engine.tick(0., &mut compositor).unwrap();
