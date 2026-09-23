@@ -1,6 +1,95 @@
 //! Driver adapter regression tests.
 use crate::{dom_host::BrowserDomHost, page::load_page_text};
+use amazing_js::DomHost;
 use amazing_text::TextSystem;
+use std::{cell::RefCell, rc::Rc};
+
+#[test]
+fn shadow_root_uses_its_interface_and_slotchange_reaches_the_event_loop() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body><div id='host'></div></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(
+        host,
+        crate::js_scheduler::JS_CAPACITY,
+    ).unwrap_or_else(|error| panic!("binding installation: {}", error.describe()));
+    assert_eq!(scheduler.run_script(
+        "let parent = document.getElementById('host'); \
+         let shadow = parent.attachShadow({mode: 'open'}); \
+         let slot = document.createElement('slot'); \
+         let changes = 0; \
+         slot.addEventListener('slotchange', () => { changes += 1; }); \
+         shadow.appendChild(slot); \
+         let child = document.createElement('span'); \
+         parent.appendChild(child); \
+         shadow instanceof ShadowRoot && parent.shadowRoot === shadow \
+         && slot.assignedNodes()[0] === child"
+    ).unwrap(), amazing_js::value::JsValue::Bool(true));
+    scheduler.pump_at(std::time::Duration::ZERO, false).unwrap();
+    assert_eq!(scheduler.run_script("changes").unwrap(), amazing_js::value::JsValue::num(1.0));
+}
+
+#[test]
+fn binding_install_mutates_the_parsed_dom_and_keeps_child_nodes_live() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler =
+        crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
+            .unwrap();
+    let result = scheduler
+        .run_script(
+            "let list = document.body.childNodes; let same = document.body.childNodes; \
+         let text = new Text('hello'); document.body.appendChild(text); \
+         list === same && list.length === 1 && text === list.item(0) && text === list[0]",
+        )
+        .unwrap();
+    assert_eq!(result, amazing_js::value::JsValue::Bool(true));
+    let body = host.borrow_mut().query_selector("body").unwrap();
+    assert_eq!(
+        host.borrow()
+            .dom
+            .children(amazing_dom::NodeIdx(body))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn binding_string_boundary_rejects_lone_surrogate_without_replacement() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler =
+        crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
+            .unwrap();
+    assert_eq!(
+        scheduler
+            .run_script("let text = new Text('ok'); document.body.appendChild(text); text.data",)
+            .unwrap(),
+        amazing_js::value::JsValue::str("ok")
+    );
+    let body = host.borrow_mut().query_selector("body").unwrap();
+    let text = host
+        .borrow()
+        .dom
+        .children(amazing_dom::NodeIdx(body))
+        .next()
+        .unwrap();
+    host.borrow_mut()
+        .dom
+        .replace_character_data(text, 0, 2, &[0xd800])
+        .unwrap();
+    let error = scheduler.run_script("text.data").unwrap_err();
+    assert!(
+        error
+            .describe()
+            .contains("lone surrogate not yet representable")
+    );
+}
 
 #[test]
 fn document_title_ignores_svg_title_elements() {
@@ -22,10 +111,8 @@ fn document_title_ignores_svg_title_elements() {
 
 #[test]
 fn malformed_page_font_warns_without_advancing_font_generation() {
-    let directory = std::env::temp_dir().join(format!(
-        "amazing-text-provider-test-{}",
-        std::process::id()
-    ));
+    let directory =
+        std::env::temp_dir().join(format!("amazing-text-provider-test-{}", std::process::id()));
     std::fs::create_dir_all(&directory).unwrap();
     let font_path = directory.join("broken.woff2");
     std::fs::write(&font_path, [0u8; 64]).unwrap();

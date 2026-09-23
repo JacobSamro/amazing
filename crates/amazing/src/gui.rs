@@ -702,7 +702,7 @@ mod windows {
                 }
                 let history_length = tab.history.len();
                 if let Some(runtime) = tab.runtime.as_mut() {
-                    runtime.js.js.set_location_url(&url);
+                    runtime.js.set_location_url(&url);
                     runtime.js.js.set_history_length(history_length);
                     runtime.js.js.set_history_state(state);
                 }
@@ -900,6 +900,8 @@ mod windows {
     fn render_page(input: &str, width: u32) -> Result<RenderedPage, String> {
         let response = amazing_net::fetch_stream(input, &amazing_net::FetchOptions::default(), amazing_net::StreamOptions::default())
             .map_err(|error| error.to_string())?;
+        let content_type = response.headers.get("content-type")
+            .map(|value| value.split(';').next().unwrap_or("").trim().to_ascii_lowercase());
         let (document, _) = crate::document::parse_streaming_document(response)
             .map_err(|error| error.to_string())?;
         document.require_static_xml().map_err(|error| error.to_string())?;
@@ -915,7 +917,10 @@ mod windows {
         };
         let mut js = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
             .map_err(|error| error.describe())?;
-        js.js.set_location_url(input);
+        js.set_location_url(input);
+        if let Some(content_type) = content_type.as_deref() {
+            js.set_document_content_type(content_type);
+        }
         js.js.set_viewport_size(width, 700);
         let handlers = {
             let host_ref = host.borrow();
@@ -941,7 +946,11 @@ mod windows {
                 None => script.body,
             };
             js.run_script(&source)
-                .map_err(|error| format!("page script failed: {}", error.describe()))?;
+                .map_err(|error| {
+                    let name = js.js.binding_get_property(&error.0, "name").ok();
+                    let message = js.js.binding_get_property(&error.0, "message").ok();
+                    format!("page script failed: {} ({name:?}, {message:?})", error.describe())
+                })?;
         }
         js.dispatch_dom_event(0, "DOMContentLoaded")
             .map_err(|error| format!("DOMContentLoaded listener failed: {}", error.describe()))?;

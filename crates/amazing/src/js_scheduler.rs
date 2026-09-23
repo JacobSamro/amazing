@@ -3,7 +3,8 @@
 use std::{cell::RefCell, collections::{BTreeMap, VecDeque}, rc::Rc, time::{Duration, Instant}};
 
 use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, TimerId};
-use amazing_js::{interp::{Interpreter, NativeMicrotaskKind, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
+use amazing_dom::abort::AbortSignalId;
+use amazing_js::{DomHost, interp::{Interpreter, NativeMicrotaskKind, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
 
 use crate::dom_host::BrowserDomHost;
 
@@ -15,6 +16,7 @@ enum Payload {
     Job(SchedulingToken),
     Callback(SchedulingToken),
     Mutation,
+    AbortTimeout(AbortSignalId, u64),
 }
 struct TimerRegistration {
     core: TimerId,
@@ -25,6 +27,7 @@ struct TimerRegistration {
 pub(crate) struct DriverScheduler {
     pub(crate) js: Interpreter,
     host: Rc<RefCell<BrowserDomHost>>,
+    bindings: crate::runtime_binding_host::RuntimeBindings,
     loop_: EventLoop,
     pending: VecDeque<SchedulingRequest>,
     payloads: BTreeMap<u64, Payload>,
@@ -40,10 +43,11 @@ impl DriverScheduler {
     pub(crate) fn new(host: Rc<RefCell<BrowserDomHost>>, js_capacity: usize) -> Result<Self, Throw> {
         let mut js = Interpreter::new_with_external_scheduler(js_capacity)?;
         js.set_dom_host(host.clone());
+        let bindings = crate::runtime_binding_host::install(&mut js, host.clone())?;
         let mut loop_ = EventLoop::new();
         loop_.register_global(GLOBAL).map_err(loop_error)?;
         Ok(Self {
-            js, host, loop_, pending: VecDeque::new(), payloads: BTreeMap::new(),
+            js, host, bindings, loop_, pending: VecDeque::new(), payloads: BTreeMap::new(),
             timers: BTreeMap::new(), frames: BTreeMap::new(), next_callback: 1,
             started: Instant::now(), now: Duration::ZERO, trace: Vec::new(),
         })
@@ -52,8 +56,23 @@ impl DriverScheduler {
     pub(crate) fn run_script(&mut self, source: &str) -> Result<JsValue, Throw> {
         self.enter(|js| js.run_script(source))
     }
+    pub(crate) fn set_location_url(&mut self, url: impl Into<String>) {
+        let url = url.into();
+        self.js.set_location_url(&url);
+        self.bindings.set_document_url(&url);
+    }
+    pub(crate) fn set_document_metadata(&mut self, character_set: &str, content_type: &str, referrer: &str) {
+        self.bindings.set_document_metadata(character_set, content_type, referrer);
+    }
+    pub(crate) fn set_document_content_type(&mut self, content_type: &str) {
+        self.bindings.set_document_content_type(content_type);
+    }
     pub(crate) fn dispatch_dom_event(&mut self, node: u32, event: &str) -> Result<(), Throw> {
-        self.enter(|js| js.dispatch_dom_event(node, event))
+        let bindings = self.bindings.clone();
+        self.enter(|js| {
+            js.dispatch_dom_event(node, event)?;
+            bindings.dispatch_event(js, node, event)
+        })
     }
     pub(crate) fn install_inline_handler(&mut self, node: u32, event: &str, body: &str) -> Result<(), Throw> {
         self.enter(|js| js.install_inline_handler(node, event, body))
@@ -66,9 +85,20 @@ impl DriverScheduler {
         let before = self.js.output.borrow().len();
         let result = f(&mut self.js);
         self.trace.extend(self.js.output.borrow()[before..].iter().cloned());
+        let collected = self.collect_native_mutations();
         let drained = self.drain_outbox();
+        collected?;
         drained?;
         result
+    }
+
+    fn collect_native_mutations(&mut self) -> Result<(), Throw> {
+        let pending = self.host.borrow().pending_native_microtasks();
+        for request in pending {
+            self.js.enqueue_native_microtask(request.global, request.kind)?;
+            self.host.borrow_mut().acknowledge_native_microtask(request);
+        }
+        Ok(())
     }
 
     fn own(&mut self, payload: Payload) -> Result<CallbackId, Throw> {
@@ -84,6 +114,19 @@ impl DriverScheduler {
         while let Some(request) = self.pending.front().copied() {
             self.admit(request)?;
             self.pending.pop_front();
+        }
+        for (signal, delay_ms) in self.bindings.take_abort_timeouts() {
+            self.register_abort_timeout(signal, delay_ms)?;
+        }
+        Ok(())
+    }
+
+    fn register_abort_timeout(&mut self, signal: AbortSignalId, delay_ms: u64) -> Result<(), Throw> {
+        let chunk = delay_ms.min(i32::MAX as u64);
+        let callback = self.own(Payload::AbortTimeout(signal, delay_ms - chunk))?;
+        if let Err(error) = self.loop_.set_timer(GLOBAL, callback, chunk as i32, false) {
+            self.payloads.remove(&callback.0);
+            return Err(loop_error(error));
         }
         Ok(())
     }
@@ -162,13 +205,17 @@ impl DriverScheduler {
             }
             Payload::Mutation => {
                 self.payloads.remove(&callback.0);
-                let mut host = self.host.borrow_mut();
-                let mut checkpoint = host.dom.begin_mutation_checkpoint();
-                host.native_forwarded = false;
-                while host.dom.next_mutation_delivery(&mut checkpoint).is_some() {
-                    self.trace.push("M".into());
-                }
-                Ok(())
+                let bindings = self.bindings.clone();
+                let result = self.enter(|js| bindings.deliver_mutations(js));
+                self.host.borrow_mut().native_forwarded = false;
+                self.trace.push("M".into());
+                result
+            }
+            Payload::AbortTimeout(signal, remaining) => {
+                self.payloads.remove(&callback.0);
+                if remaining > 0 { return self.register_abort_timeout(signal, remaining); }
+                let bindings = self.bindings.clone();
+                self.enter(|js| bindings.fire_abort_timeout(js, signal))
             }
         }
     }
@@ -232,8 +279,21 @@ mod tests {
             }).unwrap();
         }
         let host = Rc::new(RefCell::new(BrowserDomHost { dom, native_forwarded: false }));
-        let scheduler = DriverScheduler::new(host.clone(), capacity).unwrap();
+        let mut scheduler = DriverScheduler::new(host.clone(), capacity).unwrap();
+        if observe {
+            let callback = scheduler.run_script("(()=>{})").unwrap();
+            scheduler.bindings.seed_test_root(amazing_dom::events::CallbackId(1), callback);
+        }
         (scheduler, host)
+    }
+
+    #[test]
+    fn abort_signal_timeout_fires_from_driver_timer_queue() {
+        let (mut driver, _) = adapter(16, false);
+        driver.run_script("globalThis.signal = AbortSignal.timeout(0)").unwrap();
+        assert!(matches!(driver.run_script("signal.aborted").unwrap(), JsValue::Bool(false)));
+        driver.pump_at(Duration::ZERO, false).unwrap();
+        assert!(matches!(driver.run_script("signal.aborted").unwrap(), JsValue::Bool(true)));
     }
 
     #[test]

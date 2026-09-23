@@ -63,7 +63,7 @@ pub(crate) fn execute_inline_scripts(host: &Rc<RefCell<BrowserDomHost>>, page: &
     }
     let mut scheduler = crate::js_scheduler::DriverScheduler::new(host.clone(), crate::js_scheduler::JS_CAPACITY)
         .map_err(|error| error.describe())?;
-    scheduler.js.set_location_url(page);
+    scheduler.set_location_url(page);
     let handlers = {
         let host_ref = host.borrow();
         let mut handlers = Vec::new();
