@@ -92,10 +92,14 @@ pub(super) fn parse(input: &[u8], now: i64, default_path: &[u8]) -> Result<Parse
             }
         } else if name.eq_ignore_ascii_case(b"domain") {
             cookie.domain = Some(
-                value
-                    .strip_prefix(b".")
-                    .unwrap_or(value)
-                    .to_ascii_lowercase(),
+                // A bare Domain= is ignored, but Domain=. remains invalid.
+                // Stripping its only dot would turn it into a host-only cookie.
+                if value == b"." {
+                    value
+                } else {
+                    value.strip_prefix(b".").unwrap_or(value)
+                }
+                .to_ascii_lowercase(),
             );
         } else if name.eq_ignore_ascii_case(b"path") {
             cookie.path = Some(
