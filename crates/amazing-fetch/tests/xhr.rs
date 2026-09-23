@@ -119,7 +119,7 @@ fn open_and_initial_state_matrix() {
     assert_eq!(open(&mut x, "GET", "a", true).unwrap().len(), 1);
     assert_eq!(x.state(), XhrState::Opened);
     assert_eq!(x.abort(), Vec::<XhrEvent>::new());
-    assert_eq!(x.state(), XhrState::Opened);
+    assert_eq!(x.state(), XhrState::Unsent);
     assert!(open(&mut x, "BAD METHOD", "a", true).is_err());
     assert_eq!(
         open(&mut x, "TRACE", "a", true),
@@ -129,7 +129,7 @@ fn open_and_initial_state_matrix() {
         open(&mut x, "GET", "http://:bad", true),
         Err(XhrError::SyntaxUrl)
     );
-    assert_eq!(open(&mut x, "GET", "b", true).unwrap().len(), 0);
+    assert_eq!(open(&mut x, "GET", "b", true).unwrap().len(), 1);
 }
 // open-method-case-insensitive.htm and open-method-case-sensitive.htm.
 #[test]
@@ -354,7 +354,7 @@ fn abort_during_loading_and_reopen_generation() {
             XhrEventKind::LoadEnd
         ]
     );
-    assert_eq!(x.state(), XhrState::Done);
+    assert_eq!(x.state(), XhrState::Unsent);
     assert_eq!(x.status(), 0);
     assert_eq!(x.response_url(), "");
     assert_eq!(x.last_error(), Some(&XhrError::Abort));

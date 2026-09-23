@@ -3,7 +3,7 @@
 //! No JS objects, DOM events, or scheduler are created in this crate.
 use crate::api::{
     byte_string, fetch_api, parse_json, usv_string, ApiError, ApiHeaders, ApiRequest,
-    ApiRequestInit, ApiRequestInput, ApiResponse, BodyInput, HeaderGuard, JsonValue,
+    ApiRequestInit, ApiRequestInput, ApiResponse, Blob, BodyInput, HeaderGuard, JsonValue,
     PendingFetchApi,
 };
 use crate::{FetchError, HttpUrl, NetworkOrCache, Origin, Site};
@@ -31,6 +31,7 @@ pub enum XhrResponseValue {
     Text(String),
     Json(Option<JsonValue>),
     ArrayBuffer(Vec<u8>),
+    Blob(Blob),
     Null,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -219,6 +220,9 @@ impl Xhr {
     pub fn send_invoked(&self) -> bool {
         self.send_flag
     }
+    pub fn is_asynchronous(&self) -> bool {
+        self.asynchronous
+    }
     pub fn generation(&self) -> u64 {
         self.generation
     }
@@ -239,6 +243,9 @@ impl Xhr {
     }
     pub fn request_headers(&self) -> &ApiHeaders {
         &self.request_headers
+    }
+    pub fn is_data_request(&self) -> bool {
+        self.url.as_ref().is_some_and(|url| url.as_parsed().scheme() == "data")
     }
     pub fn set_upload_listeners(&mut self, present: bool) {
         self.upload_has_listeners = present;
@@ -648,9 +655,19 @@ impl Xhr {
     }
     pub fn abort(&mut self) -> Vec<XhrEvent> {
         match self.state {
-            XhrState::Opened if self.send_flag => self.fail(XhrError::Abort).unwrap_or_default(),
+            XhrState::Opened if self.send_flag => {
+                let events = self.fail(XhrError::Abort).unwrap_or_default();
+                self.state = XhrState::Unsent;
+                events
+            }
             XhrState::HeadersReceived | XhrState::Loading => {
-                self.fail(XhrError::Abort).unwrap_or_default()
+                let events = self.fail(XhrError::Abort).unwrap_or_default();
+                self.state = XhrState::Unsent;
+                events
+            }
+            XhrState::Opened => {
+                self.state = XhrState::Unsent;
+                Vec::new()
             }
             XhrState::Done => {
                 self.state = XhrState::Unsent;
@@ -719,7 +736,15 @@ impl Xhr {
             XhrResponseType::Document if self.state == XhrState::Done => {
                 Err(XhrError::UnsupportedDocument)
             }
-            XhrResponseType::Blob if self.state == XhrState::Done => Err(XhrError::UnsupportedBlob),
+            XhrResponseType::Blob if self.state == XhrState::Done => {
+                if self.response.is_none() { return Ok(XhrResponseValue::Null); }
+                let header = self.response.as_ref().and_then(|response|
+                    response.headers.get_string("content-type").ok().flatten());
+                let content_type = self.override_mime.as_deref().or(header.as_deref());
+                let content_type = content_type.and_then(crate::mime::MimeType::parse)
+                    .map_or_else(|| "application/octet-stream".to_owned(), |mime| mime.serialize());
+                Ok(XhrResponseValue::Blob(Blob::from_bytes(self.received.clone(), &content_type)))
+            }
             XhrResponseType::Document | XhrResponseType::Blob => Ok(XhrResponseValue::Null),
             XhrResponseType::Json if self.state != XhrState::Done => Ok(XhrResponseValue::Null),
             XhrResponseType::ArrayBuffer if self.state != XhrState::Done => {
