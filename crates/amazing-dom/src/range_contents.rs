@@ -42,7 +42,19 @@ impl Dom {
             self.get(node).character_data_units.clone();
         self.nodes[copy.0 as usize].prefix = self.get(node).prefix.clone();
         self.clone_form_state(node, copy);
-        if deep {
+        if self.is_html_template(node) {
+            let copy_contents = self.ensure_template_contents(copy)?;
+            if deep {
+                if let Some(contents) = self.template_contents(node) {
+                    let children: Vec<_> = self.children(contents).collect();
+                    for child in children {
+                        let child = self.clone_node(child, true)?;
+                        self.pre_insert(child, copy_contents, None)?;
+                    }
+                }
+            }
+        }
+        if deep && !self.is_html_template(node) {
             let children: Vec<_> = self.children(node).collect();
             for child in children {
                 let child = self.clone_node(child, true)?;

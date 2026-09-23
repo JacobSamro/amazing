@@ -125,9 +125,12 @@ pub(crate) fn invoke<H: BindingHost + FragmentParser + SelectorEngine>(
             let result = host.parse_fragment(parse_context, &markup);
             let parsed = seam_result(host, result)?;
             host.with_dom(|dom| {
-                let document = dom.owner_document(parent).unwrap_or(parent);
+                let insertion = if op == O::ElementSetInnerHTML && dom.is_html_template(node) {
+                    dom.ensure_template_contents(node)?
+                } else { parent };
+                let document = dom.owner_document(insertion).unwrap_or(insertion);
                 let fragment = dom.import_fragment(&parsed, document)?;
-                if op == O::ElementSetInnerHTML { dom.replace_all(node, Some(fragment)) }
+                if op == O::ElementSetInnerHTML { dom.replace_all(insertion, Some(fragment)) }
                 else if op == O::ElementSetOuterHTML { dom.replace(node, fragment, parent).map(|_| ()) }
                 else { dom.pre_insert(fragment, parent, reference).map(|_| ()) }
             })?;

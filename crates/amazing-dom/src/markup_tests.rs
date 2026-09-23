@@ -26,7 +26,8 @@ fn foreign_namespaces_and_template_children_serialize() {
     let math = dom.create_element_ns(root, Some("http://www.w3.org/1998/Math/MathML"), "math").unwrap();
     dom.create_element_ns(math, Some("http://www.w3.org/1998/Math/MathML"), "mi").unwrap();
     let template = dom.create_element(root, "template");
-    dom.create_element(template, "br");
+    let contents = dom.ensure_template_contents(template).unwrap();
+    dom.create_element(contents, "br");
     assert_eq!(markup(&dom, root), "<svg><path xlink:href=\"a&amp;b\"></path></svg><math><mi></mi></math><template><br></template>");
 }
 

@@ -962,6 +962,18 @@ fn node_name_casing_depends_on_namespace_and_owner_document() {
 }
 
 #[test]
+fn template_content_binding_returns_the_persistent_inert_fragment() {
+    let mut h = Host::default();
+    let template = h.dom.create_element(NodeIdx(0), "template");
+    let receiver = V::Node(template);
+    let first = call(&mut h, O::TemplateContent, receiver.clone(), &[]);
+    assert_eq!(call(&mut h, O::TemplateContent, receiver, &[]), first);
+    let contents = node(first);
+    assert_ne!(h.dom.owner_document(contents), Some(NodeIdx(0)));
+    assert_eq!(h.dom.children(template).count(), 0);
+}
+
+#[test]
 fn class_list_is_live_canonical_and_validates_tokens() {
     let mut h = Host::default();
     let element = V::Node(element(&mut h));

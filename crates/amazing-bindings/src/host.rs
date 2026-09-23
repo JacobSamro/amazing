@@ -235,6 +235,7 @@ pub enum Operation {
     AbortSignalAny,
     AbortSignalTimeout,
     ElementInnerHTML,
+    TemplateContent,
     ElementSetInnerHTML,
     ElementOuterHTML,
     ElementSetOuterHTML,
