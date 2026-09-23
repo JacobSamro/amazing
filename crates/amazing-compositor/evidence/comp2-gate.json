@@ -1,0 +1,20 @@
+{
+  "ticket": "COMP-2",
+  "gated_host": "win-002",
+  "gated_parent": "83881419879bea6a829c4c07bdd7c433e44195f3",
+  "crate_nextest": { "passed": 9, "skipped": 0 },
+  "crate_doctests": { "passed": 0, "failed": 0 },
+  "workspace_nextest": { "started": 1795, "exit_code": 0 },
+  "workspace_doctests": { "exit_code": 0 },
+  "frame_trace": {
+    "source": "comp2-frame-trace-win002.csv",
+    "frames_per_scenario": 60,
+    "pixel_parity": "exact against full repaint on all 240 frames",
+    "scenarios": {
+      "scroll": { "full_p50_us": 15716, "full_p95_us": 16170, "compositor_p50_us": 422, "compositor_p95_us": 479, "compositor_raster_calls": 0 },
+      "rotate": { "full_p50_us": 37838, "full_p95_us": 38623, "compositor_p50_us": 32140, "compositor_p95_us": 32890, "compositor_raster_calls": 10 },
+      "fade": { "full_p50_us": 16950, "full_p95_us": 17338, "compositor_p50_us": 12115, "compositor_p95_us": 12483, "compositor_raster_calls": 0 },
+      "animation": { "full_p50_us": 38022, "full_p95_us": 41563, "compositor_p50_us": 32261, "compositor_p95_us": 34919, "compositor_raster_calls": 10 }
+    }
+  }
+}

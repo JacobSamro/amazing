@@ -1,10 +1,9 @@
-//! `cargo run -p amazing-compositor --bin frame_trace --release -- 120`
-//! Emits a reproducible full-repaint / retained-raster frame-time trace.
+//! `cargo run -p amazing-compositor --bin frame_trace --release -- 60`
+//! CSV trace and p50/p95 for full repaint versus damage-driven composition.
 use amazing_compositor::*;
 use amazing_paint::Surface;
 use std::ops::Range;
 use std::time::Instant;
-
 struct Synthetic {
     rects: Vec<(Rect, [u8; 4])>,
 }
@@ -34,12 +33,7 @@ impl PaintSource for Synthetic {
         }
     }
 }
-fn main() {
-    let frames = std::env::args()
-        .nth(1)
-        .and_then(|s| s.parse::<usize>().ok())
-        .filter(|n| *n > 0 && *n <= 10000)
-        .unwrap_or(120);
+fn fixture() -> (Compositor, Synthetic, TransformId, ScrollId, EffectId) {
     let mut trees = PropertyTrees::new();
     let scroll = trees
         .add_scroll(
@@ -77,24 +71,87 @@ fn main() {
             })
         }
     }
-    let mut retained = Compositor::new(trees, chunks, source.item_count()).unwrap();
+    (
+        Compositor::new(trees, chunks, source.item_count()).unwrap(),
+        source,
+        transform,
+        scroll,
+        effect,
+    )
+}
+fn quantile(values: &[u128], p: f64) -> u128 {
+    let mut v = values.to_vec();
+    v.sort_unstable();
+    v[((v.len() - 1) as f64 * p).ceil() as usize]
+}
+fn run(name: &str, frames: usize) {
+    let (mut retained, source, transform, scroll, effect) = fixture();
     retained.render(&source, 640, 480).unwrap();
-    let mut total_full = 0u128;
-    let mut total_retained = 0u128;
-    let mut retained_raster = 0u64;
-    let mut full_raster = 0u64;
-    println!("frame,full_repaint_us,compositor_us,full_raster_calls,compositor_raster_calls");
+    if name == "animation" {
+        let timing = Timing {
+            delay_ms: 0.,
+            duration_ms: 1000.,
+            iterations: 1.,
+            direction: Direction::Normal,
+            fill: Fill::Forwards,
+            easing: Easing::CubicBezier(0.25, 0.1, 0.25, 1.),
+        };
+        retained
+            .add_animation(
+                0.,
+                timing.clone(),
+                AnimationTarget::Transform(transform),
+                vec![
+                    Keyframe {
+                        offset: 0.,
+                        value: AnimatedValue::Transform(Matrix4::IDENTITY),
+                        easing: Easing::Linear,
+                    },
+                    Keyframe {
+                        offset: 1.,
+                        value: AnimatedValue::Transform(Matrix4::rotation_z(0.15)),
+                        easing: Easing::Linear,
+                    },
+                ],
+            )
+            .unwrap();
+        retained
+            .add_animation(
+                0.,
+                timing,
+                AnimationTarget::Opacity(effect),
+                vec![
+                    Keyframe {
+                        offset: 0.,
+                        value: AnimatedValue::Opacity(1.),
+                        easing: Easing::Linear,
+                    },
+                    Keyframe {
+                        offset: 1.,
+                        value: AnimatedValue::Opacity(0.5),
+                        easing: Easing::Linear,
+                    },
+                ],
+            )
+            .unwrap();
+    }
+    let (mut full_times, mut fast_times) = (Vec::new(), Vec::new());
+    let (mut full_calls, mut fast_calls) = (0u64, 0u64);
     for frame in 0..frames {
         let f = frame as f32;
-        retained
-            .set_scroll(scroll, ((f * 3.) % 220., (f * 2.) % 140.))
-            .unwrap();
-        retained
-            .set_transform(transform, Matrix4::rotation_z((f * 0.01).sin() * 0.15))
-            .unwrap();
-        retained
-            .set_opacity(effect, 0.5 + 0.5 * (f * 0.04).cos())
-            .unwrap();
+        match name {
+            "scroll" => retained.set_scroll(scroll, (f + 1., 0.)).unwrap(),
+            "rotate" => retained
+                .set_transform(transform, Matrix4::rotation_z((f + 1.) * 0.0025))
+                .unwrap(),
+            "fade" => retained
+                .set_opacity(effect, 1. - (f + 1.) / (frames as f32 * 2.))
+                .unwrap(),
+            "animation" => {
+                retained.tick((frame as f64 + 1.) * 1000. / 60.).unwrap();
+            }
+            _ => unreachable!(),
+        };
         let mut full = Compositor::new(
             retained.trees().clone(),
             retained.chunks().to_vec(),
@@ -107,14 +164,29 @@ fn main() {
         let b = Instant::now();
         let fast = retained.render(&source, 640, 480).unwrap();
         let fast_us = b.elapsed().as_micros();
-        assert_eq!(baseline, fast, "frame {frame} pixel mismatch");
-        let full_calls = full.stats().raster_calls;
-        let fast_calls = retained.stats().raster_calls;
-        total_full += full_us;
-        total_retained += fast_us;
-        full_raster += full_calls;
-        retained_raster += fast_calls;
-        println!("{frame},{full_us},{fast_us},{full_calls},{fast_calls}")
+        assert_eq!(baseline, fast, "{name} frame {frame} pixel mismatch");
+        full_times.push(full_us);
+        fast_times.push(fast_us);
+        full_calls += full.stats().raster_calls;
+        fast_calls += retained.stats().raster_calls;
+        println!(
+            "{name},{frame},{full_us},{fast_us},{},{},{},{}",
+            full.stats().raster_calls,
+            retained.stats().raster_calls,
+            retained.stats().blitted_pixels,
+            retained.stats().damaged_pixels
+        )
     }
-    eprintln!("frames={frames} full_mean_us={} compositor_mean_us={} full_raster_calls={full_raster} compositor_raster_calls={retained_raster}",total_full/frames as u128,total_retained/frames as u128);
+    eprintln!("scenario={name} frames={frames} full_p50_us={} full_p95_us={} compositor_p50_us={} compositor_p95_us={} full_raster_calls={full_calls} compositor_raster_calls={fast_calls}",quantile(&full_times,0.5),quantile(&full_times,0.95),quantile(&fast_times,0.5),quantile(&fast_times,0.95));
+}
+fn main() {
+    let frames = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|n| *n > 0 && *n <= 10000)
+        .unwrap_or(60);
+    println!("scenario,frame,full_repaint_us,compositor_us,full_raster_calls,compositor_raster_calls,blitted_pixels,damaged_pixels");
+    for name in ["scroll", "rotate", "fade", "animation"] {
+        run(name, if name == "animation" { 60 } else { frames })
+    }
 }
