@@ -105,3 +105,75 @@ fn iterator_removal_moves_reference_to_next_or_previous() {
         assert_eq!(pointer.before, has_following);
     }
 }
+
+#[test]
+fn range_contents_on_one_text_node_clone_extract_and_delete() {
+    // dom/ranges/Range-cloneContents.html, Range-extractContents.html,
+    // Range-deleteContents.html: the same-CharacterData branch creates a
+    // fragment with the selected substring; clone leaves source unchanged.
+    for mode in 0..3 {
+        let mut dom = Dom::new();
+        let parent = dom.create_element(NodeIdx(0), "p");
+        let text = dom.create_text(parent, "abcdef");
+        let range = dom.create_range(NodeIdx(0)).unwrap();
+        dom.range_set_start(range, B::new(text, 1)).unwrap();
+        dom.range_set_end(range, B::new(text, 4)).unwrap();
+        let fragment = match mode {
+            0 => Some(dom.range_clone_contents(range).unwrap()),
+            1 => Some(dom.range_extract_contents(range).unwrap()),
+            _ => { dom.range_delete_contents(range).unwrap(); None },
+        };
+        if let Some(fragment) = fragment {
+            let copied = dom.children(fragment).collect::<Vec<_>>();
+            assert_eq!(copied.len(), 1);
+            assert_ne!(copied[0], text);
+            assert_eq!(dom.character_data_utf16(copied[0]), Some("bcd".encode_utf16().collect()));
+        }
+        assert_eq!(dom.character_data_utf16(text),
+            Some(if mode == 0 { "abcdef" } else { "aef" }.encode_utf16().collect()));
+        if mode != 0 { assert!(dom.range(range).unwrap().collapsed()); }
+    }
+}
+
+#[test]
+fn clone_node_preserves_attributes_and_obeys_deep_flag() {
+    // dom/nodes/Node-cloneNode.html: a clone has distinct identity, matching
+    // attributes, no parent; descendants appear only for cloneNode(true).
+    let mut dom = Dom::new();
+    let original = dom.create_element(NodeIdx(0), "div");
+    dom.set_attribute(original, "data-port", "v").unwrap();
+    let child = dom.create_text(original, "child");
+    let shallow = dom.clone_node(original, false).unwrap();
+    let deep = dom.clone_node(original, true).unwrap();
+    assert_ne!(original, shallow);
+    assert_eq!(dom.get(shallow).parent, None);
+    assert_eq!(dom.get(deep).parent, None);
+    assert_eq!(dom.attribute_utf16(shallow, "data-port"), Some("v".encode_utf16().collect()));
+    assert_eq!(dom.children(shallow).count(), 0);
+    let copied = dom.children(deep).collect::<Vec<_>>();
+    assert_eq!(copied.len(), 1);
+    assert_ne!(copied[0], child);
+    assert_eq!(dom.character_data_utf16(copied[0]), Some("child".encode_utf16().collect()));
+}
+
+#[test]
+fn tree_walker_filter_error_keeps_current_node_and_can_retry() {
+    // dom/traversal/TreeWalker-acceptNode-filter.html: a throwing filter
+    // leaves currentNode at root and the next call asks the filter again.
+    let mut dom = Dom::new();
+    let root = dom.create_element(NodeIdx(0), "root");
+    let child = dom.create_element(root, "child");
+    let walker = dom.create_tree_walker(root, NodeFilter::SHOW_ELEMENT, Some(7)).unwrap();
+    for direction in [Traverse::FirstChild, Traverse::Next] {
+        let request = dom.begin_traversal(walker, direction).unwrap();
+        let TraversalStep::Filter { traversal, callback, node } = request else { panic!("expected filter"); };
+        assert_eq!(callback, 7);
+        assert_eq!(node, child);
+        assert_eq!(dom.resume_traversal(traversal, Err(DomError::TypeError)), Err(DomError::TypeError));
+        assert_eq!(dom.walker_current(walker), Ok(root));
+    }
+    let TraversalStep::Filter { traversal, .. } = dom.begin_traversal(walker, Traverse::Next).unwrap()
+        else { panic!("expected filter"); };
+    assert_eq!(dom.resume_traversal(traversal, Ok(NodeFilter::ACCEPT)), Ok(TraversalStep::Done(Some(child))));
+    assert_eq!(dom.walker_current(walker), Ok(child));
+}
