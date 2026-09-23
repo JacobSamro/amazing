@@ -39,7 +39,11 @@ impl FrameWork {
             uploads: frame.resources.uploads.len(),
             evictions: frame.resources.evictions.len(),
             damage_regions: frame.damage.len(),
-            damaged_pixels: frame.damage.iter().map(|rect| (rect.w * rect.h).max(0.) as u64).sum(),
+            damaged_pixels: frame
+                .damage
+                .iter()
+                .map(|rect| (rect.w * rect.h).max(0.) as u64)
+                .sum(),
         }
     }
 }
@@ -48,7 +52,9 @@ impl EngineCompositor {
     pub fn new(view: &DisplayListView<'_>, width: u32, height: u32) -> Result<Self, String> {
         let source = PaintViewSource::new(view);
         let mode = source.mode();
-        let mut compositor = source.compositor(width, height).map_err(|e| e.to_string())?;
+        let mut compositor = source
+            .compositor(width, height)
+            .map_err(|e| e.to_string())?;
         let cached_before = compositor.cached_tiles();
         let frame = source
             .build_frame(&mut compositor, width, height)
@@ -115,7 +121,10 @@ impl EngineCompositor {
         self.work = FrameWork::from_frame(&frame, raster_tiles);
         #[cfg(test)]
         {
-            self.reference_pixels = self.reference.present(&frame).map_err(|e| format!("{e:?}"))?;
+            self.reference_pixels = self
+                .reference
+                .present(&frame)
+                .map_err(|e| format!("{e:?}"))?;
         }
         self.frame = self
             .presenter
@@ -146,16 +155,24 @@ mod tests {
     fn initial_page_frame_matches_full_painter_and_noop_has_no_damage() {
         let text = TextProvider::new();
         let css = "body{margin:0;background:#fff}div{width:48px;height:32px;background:#b53726}";
-        let root = amazing_layout::layout_document_with_text(
-            "<body><div></div></body>", css, 96., &text,
-        );
+        let root =
+            amazing_layout::layout_document_with_text("<body><div></div></body>", css, 96., &text);
         let view = scene(&root, &text);
         let source = PaintViewSource::new(&view);
         let mut reference_compositor = source.compositor(96, 64).unwrap();
-        let reference_frame = source.build_frame(&mut reference_compositor, 96, 64).unwrap();
-        let composed = ReferenceCpuPresenter::default().present(&reference_frame).unwrap();
+        let reference_frame = source
+            .build_frame(&mut reference_compositor, 96, 64)
+            .unwrap();
+        let composed = ReferenceCpuPresenter::default()
+            .present(&reference_frame)
+            .unwrap();
         let full = amazing_paint::paint_document_with_text_resources_and_controls(
-            &root, 96, 64, &text, &NoImages, &NoControls,
+            &root,
+            96,
+            64,
+            &text,
+            &NoImages,
+            &NoControls,
         );
         assert_eq!(composed.pixels, full.pixels);
 
@@ -163,8 +180,13 @@ mod tests {
         assert_eq!(live.reference_pixels().pixels, full.pixels);
         assert_eq!(live.mode(), source.mode());
         assert!(live.frame().direct_tiles);
-        eprintln!("ia-compositor initial mode={:?} direct={} work={:?} full_pixels={}",
-            live.mode(), live.frame().direct_tiles, live.work(), 96 * 64);
+        eprintln!(
+            "ia-compositor initial mode={:?} direct={} work={:?} full_pixels={}",
+            live.mode(),
+            live.frame().direct_tiles,
+            live.work(),
+            96 * 64
+        );
         assert!(!live.frame().damage.is_empty());
         assert!(!live.update(&view).unwrap());
         assert!(live.frame().damage.is_empty());
@@ -176,15 +198,19 @@ mod tests {
     fn property_updates_keep_tile_resources_and_avoid_raster() {
         let text = TextProvider::new();
         let css = "body{margin:0}div{width:36px;height:24px;background:#b53726;transform:translateX(4px);opacity:.8}";
-        let root = amazing_layout::layout_document_with_text(
-            "<body><div></div></body>", css, 96., &text,
-        );
+        let root =
+            amazing_layout::layout_document_with_text("<body><div></div></body>", css, 96., &text);
         let view = scene(&root, &text);
         assert!(view.transforms().len() > 1);
         assert!(view.effects().len() > 1);
         let mut live = EngineCompositor::new(&view, 96, 64).unwrap();
         let initial = live.work();
-        let ids = live.frame().tiles.iter().map(|tile| tile.quad.resource_id).collect::<Vec<_>>();
+        let ids = live
+            .frame()
+            .tiles
+            .iter()
+            .map(|tile| tile.quad.resource_id)
+            .collect::<Vec<_>>();
         assert!(!ids.is_empty());
         let transform = TransformId(1);
         live.compositor_mut()
@@ -194,17 +220,27 @@ mod tests {
         assert_eq!(live.work().raster_tiles, 0);
         assert_eq!(live.work().uploads, 0);
         assert_eq!(
-            live.frame().tiles.iter().map(|tile| tile.quad.resource_id).collect::<Vec<_>>(),
+            live.frame()
+                .tiles
+                .iter()
+                .map(|tile| tile.quad.resource_id)
+                .collect::<Vec<_>>(),
             ids,
         );
         let translated = live.work();
         let translated_root = amazing_layout::layout_document_with_text(
             "<body><div></div></body>",
             "body{margin:0}div{width:36px;height:24px;background:#b53726;transform:translateX(11px);opacity:.8}",
-            96., &text,
+            96.,
+            &text,
         );
         let translated_full = amazing_paint::paint_document_with_text_resources_and_controls(
-            &translated_root, 96, 64, &text, &NO_IMAGES, &NO_CONTROLS,
+            &translated_root,
+            96,
+            64,
+            &text,
+            &NO_IMAGES,
+            &NO_CONTROLS,
         );
         assert_eq!(live.reference_pixels().pixels, translated_full.pixels);
         live.compositor_mut().set_opacity(EffectId(1), 0.5).unwrap();
@@ -215,17 +251,27 @@ mod tests {
         let faded_root = amazing_layout::layout_document_with_text(
             "<body><div></div></body>",
             "body{margin:0}div{width:36px;height:24px;background:#b53726;transform:translateX(11px);opacity:.5}",
-            96., &text,
+            96.,
+            &text,
         );
         let faded_full = amazing_paint::paint_document_with_text_resources_and_controls(
-            &faded_root, 96, 64, &text, &NO_IMAGES, &NO_CONTROLS,
+            &faded_root,
+            96,
+            64,
+            &text,
+            &NO_IMAGES,
+            &NO_CONTROLS,
         );
         assert_eq!(live.reference_pixels().pixels, faded_full.pixels);
         live.invalidate_item(0);
         assert!(live.update(&view).unwrap());
         assert!(live.work().raster_tiles > 0);
-        eprintln!("ia-compositor property mode={:?} initial={initial:?} translate={translated:?} fade={faded:?} invalidate={:?} full_pixels={}",
-            live.mode(), live.work(), 96 * 64);
+        eprintln!(
+            "ia-compositor property mode={:?} initial={initial:?} translate={translated:?} fade={faded:?} invalidate={:?} full_pixels={}",
+            live.mode(),
+            live.work(),
+            96 * 64
+        );
     }
 
     #[test]
@@ -234,14 +280,18 @@ mod tests {
         let first = amazing_layout::layout_document_with_text(
             "<body><div></div></body>",
             "body{margin:0}div{width:20px;height:20px;background:red}",
-            96., &text,
+            96.,
+            &text,
         );
         let first_view = scene(&first, &text);
         let first_scene = EngineCompositor::new(&first_view, 96, 64).unwrap();
         assert!(!first_scene.frame().damage.is_empty());
 
         let second = amazing_layout::layout_document_with_text(
-            "<body><input type=checkbox></body>", "body{margin:0}", 96., &text,
+            "<body><input type=checkbox></body>",
+            "body{margin:0}",
+            96.,
+            &text,
         );
         let second_view = scene(&second, &text);
         let mut second_scene = EngineCompositor::new(&second_view, 96, 64).unwrap();
@@ -255,23 +305,41 @@ mod tests {
         let text = TextProvider::new();
         let css = "body{margin:0}section{overflow:auto;width:48px;height:24px}div{width:96px;height:72px;background:blue}";
         let root = amazing_layout::layout_document_with_text(
-            "<body><section><div></div></section></body>", css, 96., &text,
+            "<body><section><div></div></section></body>",
+            css,
+            96.,
+            &text,
         );
         let view = scene(&root, &text);
         assert!(view.scrolls().len() > 1);
         let mut live = EngineCompositor::new(&view, 96, 64).unwrap();
         let initial = live.work();
-        let ids = live.frame().tiles.iter().map(|tile| tile.quad.resource_id).collect::<Vec<_>>();
-        live.compositor_mut().set_scroll(ScrollId(1), (0., 8.)).unwrap();
+        let ids = live
+            .frame()
+            .tiles
+            .iter()
+            .map(|tile| tile.quad.resource_id)
+            .collect::<Vec<_>>();
+        live.compositor_mut()
+            .set_scroll(ScrollId(1), (0., 8.))
+            .unwrap();
         assert!(live.update(&view).unwrap());
         assert_eq!(live.work().raster_tiles, 0);
         assert_eq!(live.work().uploads, 0);
         assert_eq!(
-            live.frame().tiles.iter().map(|tile| tile.quad.resource_id).collect::<Vec<_>>(),
+            live.frame()
+                .tiles
+                .iter()
+                .map(|tile| tile.quad.resource_id)
+                .collect::<Vec<_>>(),
             ids,
         );
-        eprintln!("ia-compositor scroll mode={:?} initial={initial:?} scrolled={:?} full_pixels={}",
-            live.mode(), live.work(), 96 * 64);
+        eprintln!(
+            "ia-compositor scroll mode={:?} initial={initial:?} scrolled={:?} full_pixels={}",
+            live.mode(),
+            live.work(),
+            96 * 64
+        );
     }
 
     #[test]
@@ -280,7 +348,8 @@ mod tests {
         let root = amazing_layout::layout_document_with_text(
             "<body><div></div></body>",
             "body{margin:0}div{width:30px;height:20px;background:red;transform:rotate(20deg)}",
-            96., &text,
+            96.,
+            &text,
         );
         let view = scene(&root, &text);
         let live = EngineCompositor::new(&view, 96, 64).unwrap();
