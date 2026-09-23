@@ -288,6 +288,17 @@ impl Tokenizer {
         }
     }
 
+    /// A fragment context changes the initial state without creating an
+    /// appropriate end tag: the context start tag was never tokenized.
+    pub(crate) fn enter_fragment_text_context(&mut self, name: &str) {
+        self.raw_end.clear();
+        self.state = match name {
+            "textarea" | "title" => State::RcData,
+            "style" => State::RawText,
+            _ => return,
+        };
+    }
+
     fn processing_target_disallowed(&self) -> bool {
         self.processing_target.eq_ignore_ascii_case("xml")
             || self
@@ -1110,10 +1121,8 @@ impl Tokenizer {
             None => {
                 // EOF mid-end-tag: dump it back as text (finish_eof also
                 // covers this, but keep behaviour explicit here).
-                self.text_buf.push_str("</");
-                if let Some(t) = self.tag.take() {
-                    self.text_buf.push_str(&t.name);
-                }
+                self.text_buf.extend(self.input[self.tag_start..self.pos].iter());
+                self.tag = None;
                 self.state = self.rawtext_back();
             },
             Some(c) if is_ws(c) => {
@@ -1121,9 +1130,7 @@ impl Tokenizer {
                 if self.raw_end_matches() {
                     self.state = State::BeforeAttrName;
                 } else {
-                    let mut term = String::new();
-                    term.push(c);
-                    self.dump_mismatched_end_tag(&term);
+                    self.dump_mismatched_end_tag();
                 }
             },
             Some('/') => {
@@ -1131,7 +1138,7 @@ impl Tokenizer {
                 if self.raw_end_matches() {
                     self.state = State::SelfClosingStart;
                 } else {
-                    self.dump_mismatched_end_tag("/");
+                    self.dump_mismatched_end_tag();
                 }
             },
             Some('>') => {
@@ -1143,7 +1150,7 @@ impl Tokenizer {
                     self.emit(Token::EndTag { name });
                     self.state = State::Data;
                 } else {
-                    self.dump_mismatched_end_tag(">");
+                    self.dump_mismatched_end_tag();
                 }
             },
             Some(_) => {
@@ -1177,14 +1184,10 @@ impl Tokenizer {
             .unwrap_or(false)
     }
 
-    /// The matched-end-tag shortcut failed: dump "</name…" back into text
-    /// and resume the surrounding raw-text mode.
-    fn dump_mismatched_end_tag(&mut self, terminator: &str) {
-        self.text_buf.push_str("</");
-        if let Some(t) = self.tag.take() {
-            self.text_buf.push_str(&t.name);
-        }
-        self.text_buf.push_str(terminator);
+    /// Replay the original source rather than the lowercased tag builder.
+    fn dump_mismatched_end_tag(&mut self) {
+        self.text_buf.extend(self.input[self.tag_start..self.pos].iter());
+        self.tag = None;
         self.state = self.rawtext_back();
     }
 

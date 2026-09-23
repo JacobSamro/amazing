@@ -108,6 +108,7 @@ enum Mode {
     InHead,
     AfterHead,
     InBody,
+    InSelect,
     Text,
     InTable,
     InTableBody,
@@ -242,6 +243,7 @@ impl TreeBuilder {
             Mode::InHead => self.in_head(tok),
             Mode::AfterHead => self.after_head(tok),
             Mode::InBody => self.in_body(tok),
+            Mode::InSelect => self.in_select(tok),
             Mode::Text => self.text_mode(tok),
             Mode::InTable => self.in_table(tok),
             Mode::InTableBody => self.in_table_body(tok),
@@ -1842,6 +1844,51 @@ impl TreeBuilder {
         }
     }
 
+    /// Bounded select fragment rules. The fragment context is not on the
+    /// open-elements stack, so a stray `</select>` cannot close it.
+    fn in_select(&mut self, tok: Token) {
+        match tok {
+            Token::Characters(data) => self.insert_text(&data),
+            Token::Comment(data) => self.insert_comment_here(&data),
+            Token::StartTag { name, attrs, .. } if name == "option" => {
+                if self.current().is_some_and(|idx| self.dom.name(idx) == Some("option")) {
+                    self.open.pop();
+                }
+                self.insert_and_push("option", attrs);
+            },
+            Token::StartTag { name, attrs, .. } if name == "optgroup" => {
+                if self.current().is_some_and(|idx| self.dom.name(idx) == Some("option")) {
+                    self.open.pop();
+                }
+                if self.current().is_some_and(|idx| self.dom.name(idx) == Some("optgroup")) {
+                    self.open.pop();
+                }
+                self.insert_and_push("optgroup", attrs);
+            },
+            Token::EndTag { name } if name == "option" => {
+                if self.current().is_some_and(|idx| self.dom.name(idx) == Some("option")) {
+                    self.open.pop();
+                }
+            },
+            Token::EndTag { name } if name == "optgroup" => {
+                if self.open.len() > 2
+                    && self.current().is_some_and(|idx| self.dom.name(idx) == Some("option"))
+                    && self.dom.name(self.open[self.open.len() - 2]) == Some("optgroup")
+                {
+                    self.open.pop();
+                }
+                if self.current().is_some_and(|idx| self.dom.name(idx) == Some("optgroup")) {
+                    self.open.pop();
+                }
+            },
+            Token::StartTag { name, attrs, .. } if name == "html" => {
+                self.in_body_start_tag("html", attrs);
+            },
+            Token::Eof => {},
+            _ => {}, // other tags and stray context end tags are ignored
+        }
+    }
+
     fn in_table(&mut self, tok: Token) {
         match tok {
             Token::Characters(data) => {
@@ -2413,24 +2460,33 @@ pub fn build(src: &str) -> Dom {
     builder.into_dom()
 }
 
-/// Fragment tree construction for an ordinary HTML `div` context. The
-/// synthetic `html` root is on the open-elements stack but is not part of the
-/// returned fragment; callers extract its children. Unlike wrapper parsing,
-/// a stray `</div>` cannot close the synthetic root or discard later nodes.
+/// Fragment tree construction with a synthetic `html` root. Older supported
+/// table/body contexts use a wrapper node; text and select contexts set their
+/// initial tokenizer/insertion mode directly and have no wrapper on the stack.
 pub(crate) fn build_fragment(src: &str, context: &str) -> Dom {
     let mut builder = TreeBuilder::new();
     builder.insert_and_push("html", Vec::new());
-    builder.insert_and_push(context, Vec::new());
-    builder.mode = match context {
-        "table" => Mode::InTable,
-        "tbody" | "thead" | "tfoot" => Mode::InTableBody,
-        "tr" => Mode::InRow,
-        "td" | "th" => Mode::InCell,
-        "caption" => Mode::InCaption,
-        "colgroup" => Mode::InColumnGroup,
-        _ => Mode::InBody,
+    let virtual_context = matches!(context, "textarea" | "title" | "style" | "select" | "option");
+    if !virtual_context {
+        builder.insert_and_push(context, Vec::new());
+    }
+    builder.mode = if virtual_context {
+        if context == "select" { Mode::InSelect } else { Mode::InBody }
+    } else {
+        match context {
+            "table" => Mode::InTable,
+            "tbody" | "thead" | "tfoot" => Mode::InTableBody,
+            "tr" => Mode::InRow,
+            "td" | "th" => Mode::InCell,
+            "caption" => Mode::InCaption,
+            "colgroup" => Mode::InColumnGroup,
+            _ => Mode::InBody,
+        }
     };
     let mut tokenizer = Tokenizer::new(src.chars().collect());
+    if matches!(context, "textarea" | "title" | "style") {
+        tokenizer.enter_fragment_text_context(context);
+    }
     loop {
         let tok = tokenizer.next_token();
         let eof = feed_with_tokenizer_feedback(&mut builder, &mut tokenizer, tok);
