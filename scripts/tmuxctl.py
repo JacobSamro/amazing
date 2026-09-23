@@ -144,6 +144,10 @@ LANE_GRANTS["js-lang"] = [
     # JS-3 needs a real Test262 host binary; it lives with the front half
     # the lane owns, not in the runtime half js-runtime took.
     "crates/amazing-js/examples/test262_host.rs",
+    # JS-5 private names add AST variants that break four exhaustive matches in
+    # interp.rs (js-runtime's file). ADDITIVE ARMS ONLY, each raising an explicit
+    # unsupported error; runtime brand semantics stay with js-runtime.
+    "crates/amazing-js/src/interp.rs",
 ]
 LANE_GRANTS["integrator-assist"] = [
     "crates/amazing-shell-gpui/src/session_state.rs",
