@@ -335,6 +335,28 @@ pub fn sanitize_input(
     }
 }
 impl Dom {
+    pub(crate) fn form_tree_inserted(&mut self, root: NodeIdx) {
+        let descendants = self.tree_order(root);
+        for node in descendants {
+            if self.html_tag(node, "input")
+                && self.input_type(node).ok() == Some("radio")
+                && self.input_checked(node).unwrap_or(false)
+            {
+                let dirty = self
+                    .form_state(node)
+                    .is_some_and(|state| state.dirty_checked);
+                let _ = self.set_input_checked(node, true);
+                self.form_state_mut(node).dirty_checked = dirty;
+            }
+            if self.html_tag(node, "option") && self.option_selected(node).unwrap_or(false) {
+                let dirty = self
+                    .form_state(node)
+                    .is_some_and(|state| state.dirty_selected);
+                let _ = self.set_option_selected(node, true);
+                self.form_state_mut(node).dirty_selected = dirty;
+            }
+        }
+    }
     pub(crate) fn clone_form_state(&mut self, from: NodeIdx, to: NodeIdx) {
         if let Some(state) = self.form_state(from).cloned() {
             *self.form_state_mut(to) = state;
@@ -1255,6 +1277,23 @@ mod tests {
         dom.pre_insert(input, form, None).unwrap();
         dom.set_attribute(blocker, "id", "other").unwrap();
         assert_eq!(dom.form_owner(input), Some(form));
+    }
+    #[test]
+    fn reparenting_a_checked_radio_reconciles_its_new_group() {
+        let mut dom = Dom::new();
+        let form = dom.create_element(NodeIdx(0), "form");
+        let outside = dom.create_element(NodeIdx(0), "div");
+        let existing = dom.create_element(form, "input");
+        let moved = dom.create_element(outside, "input");
+        for node in [existing, moved] {
+            dom.set_attribute(node, "type", "radio").unwrap();
+            dom.set_attribute(node, "name", "same").unwrap();
+            dom.set_input_checked(node, true).unwrap();
+        }
+        assert!(dom.input_checked(existing).unwrap());
+        dom.pre_insert(moved, form, None).unwrap();
+        assert!(!dom.input_checked(existing).unwrap());
+        assert!(dom.input_checked(moved).unwrap());
     }
     #[test]
     fn option_selection_and_form_reset() {

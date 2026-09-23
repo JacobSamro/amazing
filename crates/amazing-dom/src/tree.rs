@@ -431,6 +431,7 @@ impl Dom {
         }
         self.reassign_all_slots();
         self.custom_element_tree_inserted(node);
+        self.form_tree_inserted(node);
         if signal_fallback { self.queue_slotchange(parent); }
     }
     pub(crate) fn remove_internal(&mut self, node: NodeIdx, suppress: bool) {
