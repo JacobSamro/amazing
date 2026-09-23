@@ -1005,3 +1005,16 @@ API, js-lang reviews it, and this lane owns the DOM flag semantics. The real
 EventLoop adapter proof must include these two traces plus script A, Promise P,
 queueMicrotask Q, chained R, timer B and frame cancellation after a checkpoint.
 No driver adapter will be built against the draft SchedulingHost signature.
+
+js-runtime answered the final proposed API as
+`Interpreter::enqueue_native_microtask(global: u64, kind: NativeMicrotaskKind)
+-> Result<(), Throw>` and
+`SchedulingRequest::NativeMicrotask { global, kind }`, with
+`NativeMicrotaskKind::MutationObserver`. The adapter's forwarded bit is set
+only after successful outbox admission and prevents duplicate true-to-true
+posts. A test-only real Interpreter/DOM/EventLoop proof is drafted under
+`crates/amazing-dom/tests/dom5-triage/`; the integrator granted exactly one new
+driver integration test file at
+`crates/amazing/tests/js4_event_loop_adapter.rs`. Move and compile the draft
+there only after JS-4 merges to dev. No `amazing-dom` → `amazing-js` test
+dependency or root lockfile change is authorized.
