@@ -5,8 +5,15 @@
 //! Repeated headers (e.g. several `Set-Cookie` lines) are preserved in
 //! arrival order via [`Headers::get_all`].
 //!
-//! Deferred: comma-merging duplicates into one combined value, obsolete
-//! line folding (obs-fold), field-value validation.
+//! Deferred: comma-merging duplicates into one combined value and obsolete
+//! line folding (obs-fold).
+
+/// Why a public header append was rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeaderError {
+    InvalidName,
+    InvalidValue,
+}
 
 /// An ordered multimap of HTTP header fields with case-insensitive names.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -16,13 +23,33 @@ pub struct Headers {
 
 impl Headers {
     pub fn new() -> Self {
-        Self { entries: Vec::new() }
+        Self {
+            entries: Vec::new(),
+        }
     }
 
     /// Appends a header; `name` is lowercased for storage. Values are kept
     /// verbatim (callers trim whitespace before inserting).
     pub(crate) fn insert(&mut self, name: &str, value: String) {
         self.entries.push((name.to_ascii_lowercase(), value));
+    }
+
+    /// Appends a field while preserving duplicate values in insertion order.
+    /// The name must be an RFC 9110 token; CR, LF, and NUL are forbidden in
+    /// the value. Existing internal `insert` callers keep their own policy.
+    pub fn append(&mut self, name: &str, value: String) -> Result<(), HeaderError> {
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
+        {
+            return Err(HeaderError::InvalidName);
+        }
+        if value.bytes().any(|b| matches!(b, b'\r' | b'\n' | b'\0')) {
+            return Err(HeaderError::InvalidValue);
+        }
+        self.insert(name, value);
+        Ok(())
     }
 
     /// First value for `name`, if any (case-insensitive).
@@ -103,5 +130,36 @@ mod tests {
         assert!(h.is_empty());
         assert_eq!(h.get("anything"), None);
         assert!(h.get_all("anything").is_empty());
+    }
+
+    #[test]
+    fn public_append_preserves_duplicates_in_order() {
+        let mut h = Headers::new();
+        h.append("Age", "1".into()).unwrap();
+        h.append("X-Other", "x".into()).unwrap();
+        h.append("age", "2".into()).unwrap();
+        assert_eq!(h.get_all("AGE"), vec!["1", "2"]);
+        assert_eq!(
+            h.iter().collect::<Vec<_>>(),
+            vec![("age", "1"), ("x-other", "x"), ("age", "2")]
+        );
+    }
+
+    #[test]
+    fn public_append_rejects_invalid_names_and_line_breaks() {
+        let mut h = Headers::new();
+        assert_eq!(h.append("", "x".into()), Err(HeaderError::InvalidName));
+        assert_eq!(
+            h.append("bad name", "x".into()),
+            Err(HeaderError::InvalidName)
+        );
+        assert_eq!(h.append("é", "x".into()), Err(HeaderError::InvalidName));
+        for value in ["a\rb", "a\nb", "a\0b"] {
+            assert_eq!(
+                h.append("Age", value.into()),
+                Err(HeaderError::InvalidValue)
+            );
+        }
+        assert!(h.is_empty());
     }
 }
