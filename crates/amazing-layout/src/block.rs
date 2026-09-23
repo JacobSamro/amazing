@@ -15,7 +15,7 @@
 use crate::floats::{self, FloatContext};
 use crate::font::FontSource;
 use crate::values::{self, MaybeLen};
-use crate::{Flow, LayoutBox, Rect};
+use crate::{Flow, InlineNode, LayoutBox, Rect};
 use amazing_css::ComputedStyle;
 
 /// Lays out the root box (`<body>`) against the viewport. Returns the total
@@ -280,6 +280,12 @@ fn layout_block_in_context(
         Flow::Inlines(_) | Flow::Empty => {}
     }
 
+    // Atomic inline flex/grid descendants have their own formatting context,
+    // but their outer boxes take part in this box's line breaking.
+    if matches!(b.flow, Flow::Inlines(_)) {
+        layout_atomic_inlines(b, content_w, fonts);
+    }
+
     // --- children ------------------------------------------------------
     let mut content = match &mut b.flow {
         Flow::Flex(children) => StackResult {
@@ -345,6 +351,9 @@ fn layout_block_in_context(
             }
         }
     }
+    if matches!(b.flow, Flow::Inlines(_)) {
+        place_atomic_inlines(b);
+    }
     let float_extent = if establishes_bfc {
         (floats.bottom() - content_y).max(0.0)
     } else {
@@ -408,6 +417,40 @@ fn layout_block_in_context(
     };
 
     b.border_box.h + b.margin.top.unwrap_or(0.0) + b.margin.bottom.unwrap_or(0.0)
+}
+
+fn layout_atomic_inlines(parent: &mut LayoutBox, available: f32, fonts: &FontSource) {
+    let Flow::Inlines(items) = &mut parent.flow else { return };
+    for child in parent.positioned.iter_mut().filter(|child| child.inline_atomic) {
+        let margin = values::resolve_margins(&child.style, child.font_size, available);
+        let outer_width = if matches!(values::resolve_extent(&child.style, "width", child.font_size, available), MaybeLen::Auto) {
+            let min = crate::flex::min_content_width(child, fonts);
+            let max = crate::flex::max_content_width(child, fonts).max(min);
+            min.max(available).min(max)
+        } else {
+            available
+        };
+        layout_block(child, 0.0, 0.0, outer_width, fonts);
+        let width = child.border_box.w + margin.left.unwrap_or(0.0) + margin.right.unwrap_or(0.0);
+        let height = child.border_box.h + margin.top.unwrap_or(0.0) + margin.bottom.unwrap_or(0.0);
+        if let Some(InlineNode::Atomic { size, .. }) = items.iter_mut().find(|item| {
+            matches!(item, InlineNode::Atomic { node, .. } if Some(*node) == child.node)
+        }) {
+            *size = crate::IntrinsicSize { width, height };
+        }
+    }
+}
+
+pub(crate) fn place_atomic_inlines(parent: &mut LayoutBox) {
+    for child in parent.positioned.iter_mut().filter(|child| child.inline_atomic) {
+        let Some((line, fragment)) = parent.lines.iter().find_map(|line| {
+            line.replaced.iter().find(|fragment| Some(fragment.node) == child.node).map(|fragment| (line, fragment))
+        }) else { continue };
+        let baseline = crate::flex::first_baseline(child) - child.border_box.y;
+        let x = fragment.x + child.margin.left.unwrap_or(0.0);
+        let y = line.baseline - baseline;
+        crate::flex::translate(child, x - child.border_box.x, y - child.border_box.y);
+    }
 }
 
 fn pt(b: &LayoutBox) -> f32 {

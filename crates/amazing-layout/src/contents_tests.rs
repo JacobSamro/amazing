@@ -61,6 +61,40 @@ fn near(a: f32, b: f32) {
 }
 
 #[test]
+fn inline_flex_and_grid_boxes_share_one_parent_line() {
+    for shaped in [false, true] {
+        let (dom, root) = page(
+            "<body><span id=a><i></i></span><span id=b><i></i></span></body>",
+            "span{display:inline-flex;width:20px;height:10px}#b{display:inline-grid}i{display:block;width:20px;height:10px}",
+            shaped,
+        );
+        assert!(matches!(root.flow, Flow::Inlines(_)));
+        assert_eq!(root.lines.len(), 1);
+        let a = get(&root, id(&dom, "a"));
+        let b = get(&root, id(&dom, "b"));
+        assert!(matches!(a.flow, Flow::Flex(_)));
+        assert!(matches!(b.flow, Flow::Grid(_)));
+        near(a.border_box.x, 0.0);
+        near(b.border_box.x, 20.0);
+        near(a.border_box.y, b.border_box.y);
+    }
+}
+
+#[test]
+fn inline_flex_uses_its_first_item_baseline_in_parent_line() {
+    for shaped in [false, true] {
+        let (dom, root) = page(
+            "<body>x<span id=flex><span id=inner>y</span></span>z</body>",
+            "#flex{display:inline-flex}#inner{font-size:20px;line-height:20px}",
+            shaped,
+        );
+        let flex = get(&root, id(&dom, "flex"));
+        assert_eq!(root.lines.len(), 1);
+        near(crate::flex::first_baseline(flex), root.lines[0].baseline);
+    }
+}
+
+#[test]
 fn contents_blocks_ignore_wrapper_size_margin_float_and_position() {
     for shaped in [false, true] {
         for position in ["static", "relative", "absolute", "fixed"] {

@@ -395,7 +395,7 @@ fn outer_cross(items: &[LayoutBox], i: usize) -> f32 {
 
 /// The first in-flow line supplies the alignment baseline. A box without a
 /// usable line synthesizes one at its border-box block end.
-fn first_baseline(item: &LayoutBox) -> f32 {
+pub(crate) fn first_baseline(item: &LayoutBox) -> f32 {
     if let Some(line) = item.lines.first() {
         return line.baseline;
     }
@@ -1082,6 +1082,11 @@ pub(crate) fn translate(b: &mut LayoutBox, dx: f32, dy: f32) {
             }
         },
         Flow::Inlines(_) | Flow::Empty => {},
+    }
+    for child in &mut b.positioned {
+        if child.inline_atomic {
+            translate(child, dx, dy);
+        }
     }
 }
 

@@ -156,6 +156,8 @@ pub struct LayoutBox {
     /// Absolute/fixed descendants removed from this box's formatting context.
     /// They are laid out by the post-normal-flow positioning pass.
     pub positioned: Vec<LayoutBox>,
+    /// An in-flow atomic inline kept in `positioned` for tree traversal.
+    pub(crate) inline_atomic: bool,
     /// Intrinsic dimensions when this box itself is replaced content.
     pub replaced_size: Option<IntrinsicSize>,
     pub(crate) table_decoration: table_decoration::TableDecoration,
@@ -196,6 +198,7 @@ impl LayoutBox {
             line_height,
             flow: Flow::Empty,
             positioned: Vec::new(),
+            inline_atomic: false,
             replaced_size: None,
             table_decoration: Default::default(),
             table_wrapper: false,
@@ -298,6 +301,8 @@ pub enum InlineNode {
         size: IntrinsicSize,
         replaced: Box<replaced::InlineReplaced>,
     },
+    /// An inline formatting-context placeholder for a flex/grid subtree.
+    Atomic { node: NodeIdx, size: IntrinsicSize },
 }
 
 /// One laid-out line of an inline formatting context.
@@ -475,7 +480,8 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
             InlineNode::BidiStart { .. }
             | InlineNode::BidiEnd
             | InlineNode::Break
-            | InlineNode::Replaced { .. } => None,
+            | InlineNode::Replaced { .. }
+            | InlineNode::Atomic { .. } => None,
         });
         if let Some(style) = first_style
             && let Ok(metrics) = text.metrics(style)
@@ -574,6 +580,7 @@ fn apply_shaped_text(layout: &mut LayoutBox, text: &dyn TextSystem) {
     for child in &mut layout.positioned {
         apply_shaped_text(child, text);
     }
+    block::place_atomic_inlines(layout);
 }
 
 /// Lays out an already-mutated DOM without reparsing its original source.

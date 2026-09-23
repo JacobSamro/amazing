@@ -668,3 +668,43 @@ manifest has no failing `grid-template-areas` or `auto-fit` declaration.
 pass guarantees. Intrinsic spanning distribution has no isolated case in this
 sample; span syntax is mostly nested under Grid Lanes/subgrid, so it is not
 assigned independent pass credit.
+
+### LAYOUT-5 completion gate on fixed `bebca0f`
+
+The first-baseline flex slice was proven on a fresh pinned renderer: broad
+flex/grid **61/200 twice**, unchanged from the original 61/200, with no
+classification movement. It changed four pixel outputs, none in a dual-engine
+consensus case. The successor added atomic outer participation for
+non-replaced `inline-flex` and `inline-grid`: the parent line now sizes and
+places their existing flex/grid subtrees, preserves them for paint traversal,
+and repositions them after shaped text establishes the final line baseline.
+Two additional Windows layout tests cover shared-line geometry and the first
+flex-item baseline in both fallback and shaped text paths.
+
+The combined implementation remains **61/200 twice** on the broad selection,
+with identical per-case classification and image hashes within each pair.
+It gains the two dual-engine-consensus `gap-006-rtl/lr` cases and loses two
+consensus Grid Lanes/subgrid cases, for **raw +2/−2, consensus +2/−2, net 0**.
+The lost tests use `display:inline-grid-lanes` and `subgrid`, which CSS does
+not parse yet, while their references use newly supported `inline-grid`.
+Their old matches were exposed by changing the reference's layout, not evidence
+of Grid Lanes/subgrid support. The two baseline multi-item cases remain
+mismatches because their shared reference requires non-replaced `inline-block`.
+No broader pass gain is claimed.
+
+The focused flex/grid gate is **24/24 twice**. Against LAYOUT-4's final reports,
+there are zero per-case pass losses in geometry **39/61**, tables **9/12**,
+floats **6/8**, block collapse **9/9**, position **12/12**, text flow **14/16**,
+contents **6/6**, paint **24/24**, and CSS Images **12/12**; every selection
+was repeated with stable classifications and actual/reference/diff hashes.
+Windows layout nextest passed **205/205**, layout doctests ran **0**; workspace
+nextest passed **1,313** with **3 skipped** twice, and separate workspace
+doctests passed **2/2** twice. The final source manifest, renderer, image
+adapter, logs, oracles, 26 after-render reports, and normalized comparison are
+retained in `crates/amazing-layout/evidence/layout5/`. The source base stayed
+fixed; later `origin/dev` drift did not touch `crates/amazing-layout`.
+
+**Next ticket, not started:** LAYOUT-6 adds Grid Lanes and subgrid algorithms
+after CSS-6 supplies `display:grid-lanes`/`inline-grid-lanes` and `subgrid`
+track grammar. The old accidental broad passes must not be credited as
+implemented capability before that dependency is satisfied.

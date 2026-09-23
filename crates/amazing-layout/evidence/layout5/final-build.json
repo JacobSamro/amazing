@@ -1,0 +1,302 @@
+{
+    "source_manifest_sha256":  "5e0dcc46816f7e9f81895f4177bd20d47862d0a15a8c9ba12a8d1aabed6ede51",
+    "image_executable":  "C:\\Users\\server\\target\\layout\\layout4-layout5-final-v2-images.exe",
+    "sources_verified_before_build_and_after_every_command":  true,
+    "completed_utc":  "2026-09-23T04:54:13.9506128Z",
+    "image_executable_sha256":  "115339067773199b0cdbc2985d98ee5d09ec56258c42abb40a6db2ad0b59533b",
+    "compiler_artifacts":  [
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_common",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_media",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-media#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_net_tls",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net-tls#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_net_brotli",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net-brotli#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_text",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_regex",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-regex#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_dom",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_webrtc",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_webrtc_codecs",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-codecs#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_text_provider",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text-provider#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_html",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_net",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-net#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_webrtc_crypto",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-webrtc-crypto#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_css",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_js",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-js#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_layout",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_paint",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-paint#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "bin"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-renderer.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_common",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-common#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-images-build.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_media",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-media#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-images-build.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_text",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-text#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-images-build.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_dom",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-dom#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-images-build.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_html",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-html#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-images-build.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_css",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-css#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-images-build.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_image",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-image#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-images-build.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_layout",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-layout#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-images-build.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "amazing_paint",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "lib"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-paint#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-images-build.log"
+                               },
+                               {
+                                   "fresh":  false,
+                                   "name":  "render_reftest",
+                                   "test_profile":  false,
+                                   "kind":  [
+                                                "example"
+                                            ],
+                                   "package":  "path+file:///C:/Users/server/src/wt/layout/crates/amazing-image#0.0.1",
+                                   "log":  "layout4-layout5-final-v2-images-build.log"
+                               }
+                           ],
+    "verified_source_files":  218,
+    "started_utc":  "2026-09-23T04:53:33.9253149Z",
+    "executable":  "C:\\Users\\server\\target\\layout\\layout4-layout5-final-v2.exe",
+    "incremental_compilation":  false,
+    "executable_sha256":  "aa25a61260279f2743704efc4a460d877145fa9400b977c3cbd007edc06492ab",
+    "phase":  "layout5-final-v2",
+    "first_party_fingerprints_and_artifacts_removed":  true,
+    "logs":  {
+                 "layout4-layout5-final-v2-tests.log":  "c7edca0c26cb2d4515e704f0b1ccdcde923217dcf898e00b7d522d80da599797",
+                 "layout4-layout5-final-v2-renderer.log":  "45659d1abbd87070aa7c30c5c864aa4e5d666fbfa65b6228f52635bdbd1ad3a0",
+                 "layout4-layout5-final-v2-doc.log":  "a40e7c07280f252dd1010275fd020189c52427d7cdfe3e1e17e4288ebf9c5214",
+                 "layout4-layout5-final-v2-images-build.log":  "77cbd829de791acdf9d0cc27ff21a389c818f77dc519798006d1a6ddf6f32bd3"
+             }
+}
