@@ -1186,11 +1186,14 @@ so this fixed-base gate stands and the integrator will gate the merged head.
 
 ## JS-9 — RegExp UnicodeSets (`v`)
 
-Fixed base: `d8a228dc73eb5f83c9dd4bb95fd7c6b1b17cb79d` on `origin/dev`.
-The JS-8 parser split and lossless pattern commits were rebased onto this base
-as `e8a54df` and `bfd52a8`; they had not yet appeared on `origin/dev` when
-JS-9 began. The win-001 js-lang tree was refreshed to the fixed base and
-lane-owned files were re-synced before gating.
+Initial base: `d8a228dc73eb5f83c9dd4bb95fd7c6b1b17cb79d` on
+`origin/dev`. The JS-8 parser split and lossless pattern commits were rebased
+onto it as `e8a54df` and `bfd52a8`; they had not yet appeared on `origin/dev`
+when JS-9 began. The final fixed base is
+`2c1a3e82160333425ce10e97d2a84d4e550bc26b`, after the required drift
+audit found that JS-8 and JSVM-1 had changed the owned crates. JS-9 is commit
+`3fda674` on that base. The win-001 js-lang tree was refreshed to each base
+and lane-owned files were re-synced before the corresponding gate.
 
 `amazing-regex` now accepts `v` through both constructors and parses nested
 UnicodeSets classes, union, `&&`, `--`, character ranges and `\q{...}` class
@@ -1209,9 +1212,11 @@ classification
 All 114 files in `built-ins/RegExp/unicodeSets` moved from fail to pass;
 there were zero passing file or variant losses. The nine remaining failures
 are in the runtime-owned `RegExp.prototype.unicodeSets` getter and constructor
-surface; the exact work is filed to js-runtime in the lane questions.
+surface; the exact work is filed to js-runtime in the lane questions. The
+focused pair was rerun twice on final base `2c1a3e8` with the same before and
+after counts, classifications and 114-file gain.
 
-The full Test262 BEFORE sweep used upstream pin
+The initial-base full Test262 BEFORE sweep used upstream pin
 `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`, input hash
 `a2ef5e43ff95da279324b6df9a37740a505b9f8b6c7a11406408af70f453b075`
 and runner hash
@@ -1221,8 +1226,29 @@ Its frozen host hash was
 it measured **10,965 pass / 32,636 fail / 16 timeout / 9,961 unsupported /
 294 fixture skips**, classification
 `bfdcb4a0cc96fa1eafe5ac14af911860d6c00b741be5426917a228d5ae0382c5`.
+The final-base full BEFORE sweep repeated these counts and classification
+exactly, with frozen host hash
+`43e7d093b7e025282487c50a59ef608b8826efa5beaffb0c0fe20d435d88d424`.
 
-The two owned crates passed **210/210** nextest tests on win-001. The separate
-doctest runs passed **1/1** for amazing-js and **0/0** for amazing-regex.
-The full AFTER sweep, workspace gate and final dev-drift audit follow in the
-lane report.
+The first final-base full AFTER sweep exposed seven formerly passing `/u`
+negative tests for properties of strings. Commit `e657e96` restores the
+required `v`-only guard; the targeted 28-file property selection is now
+**28/28** pass, including all seven negative `/u` cases. The final-base
+UnicodeSets pair was repeated after the fix and retained the same **29 →
+143** counts and classification hashes above. The corrected full AFTER sweep
+measured **11,086 pass / 32,515 fail / 16 timeout / 9,961 unsupported / 294
+fixture skips**, classification
+`1a2cb758320cebf9fe1f53e18d822cbda17a54de7336eb00076fb8f1fa82e8df`.
+Compared with the final-base BEFORE sweep, 121 files and 242 variants moved
+to pass, with zero passing file or variant losses. The gains are the 114
+UnicodeSets files and seven property-of-strings files.
+
+The two owned crates passed **210/210** nextest tests on the initial base and
+**222/222** on the final base on win-001. The separate doctest runs passed
+**1/1** for amazing-js and **0/0** for amazing-regex on both bases. The
+final-base Windows workspace gate passed **1,739/1,739** nextest tests with
+three skips; 21 separate doctest suites completed with **2 passed, 0 failed**.
+The final drift check found no changes under `crates/amazing-js` or
+`crates/amazing-regex` between fixed base `2c1a3e8` and `origin/dev` at
+`b42383a`, so the fixed-base gate stands. The integrator's merged-head gate
+will prove the combination.
