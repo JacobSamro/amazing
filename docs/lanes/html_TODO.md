@@ -307,3 +307,30 @@ passed **109/109 twice**, package doctests **1/1**, shared-slot workspace
 nextest **1455/1455** with 3 skipped, and separate shared-slot workspace
 doctests **2/2**. Four new unit tests account for the package increase from
 HTML-6's 105. No push or PR; the lane stops for co-integrator preflight.
+
+## HTML-8 — PLAINTEXT tokenizer and fragment context
+
+The tokenizer now enters the PLAINTEXT state after an HTML `plaintext` start
+tag, retaining all subsequent `<` and `&` characters literally through EOF.
+Null becomes U+FFFD; the existing parse and incremental preprocessing handles
+CRLF. The tree builder remains in its insertion mode, as required by the
+HTML parsing rules. A `plaintext` fragment starts directly in the same state
+with a virtual context off the open-element stack, so its apparent end tag is
+text. The fragment returns children of the synthetic `html` root.
+
+The exact pre-change Windows error and two ordinary-document trees, plus
+independent expected trees, were recorded in `.agents/html/html8-fixtures.md`
+before implementation. Three added unit tests assert two changed document
+trees, fragment literal/null/CRLF/EOF behavior, and incremental equivalence
+at every scalar split and a multi-chunk schedule. This bounded work does not
+claim support for other fragment contexts. `template` and `noscript` remain
+explicitly unsupported. No driver, DOM or Encoding implementation changed.
+
+At fixed base `21031f1`, a 279-input Rust source, Cargo manifest and root
+lockfile hash manifest (SHA-256
+`a31db9834484689a28d5bfed8e4a02811c0c464206c2b07582bbad58628d2d7d`)
+matched on Mac and Windows before and after the gates. Package nextest passed
+**112/112 twice**, package doctest **1/1**, shared-slot workspace nextest
+**1529/1529** with 3 skipped, and separate shared-slot workspace doctests
+**2/2**. Three tests account for the package increase from HTML-7's 109.
+No push or PR; the lane stops for co-integrator preflight.
