@@ -264,6 +264,9 @@ LANE_GRANTS.setdefault("storage", []).append("Cargo.lock")
 # coercion gaps that block their Test262 directories in interp_builtins.rs,
 # interp.rs and value.rs: spec-exact, minimal, each listed in the report.
 LANE_GRANTS["js-binary"].append("crates/amazing-js/src/interp_builtins.rs")
+# NET-26: net owns the Fetch/XHR JS bindings. Its own new bindings file, one mod
+# line, and ADDED LINES ONLY in runtime_binding_host.rs.
+LANE_GRANTS.setdefault("net", []).extend(["crates/amazing-bindings/src/fetch_interfaces.rs", "crates/amazing-bindings/src/lib.rs", "crates/amazing/src/runtime_binding_host.rs"])
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
