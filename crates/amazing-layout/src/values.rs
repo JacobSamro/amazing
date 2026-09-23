@@ -18,7 +18,7 @@
 //! - border-width keywords map thin/medium/thick → 1/3/5px regardless of the
 //!   computed font-size scaling browsers apply to them
 
-use amazing_css::ComputedStyle;
+use amazing_css::{ComputedStyle, values::ComputedValue};
 
 /// A length that may be `auto` (margins, width, height).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -202,6 +202,31 @@ pub fn parse_length_percentage(s: &str, em: f32, ch: f32) -> Option<LengthPercen
     (result.px.is_finite() && result.percentage.is_finite()).then_some(result)
 }
 
+/// Read a validated computed math expression while retaining its percentage
+/// term until the caller supplies the used-value basis. CSS maps logical size
+/// names onto physical longhands before this point, so callers use `width`,
+/// `height`, and their min/max counterparts for the actual writing mode.
+pub fn style_length_percentage(
+    style: &ComputedStyle, property: &str, em: f32, ch: f32,
+) -> Option<LengthPercentage> {
+    let source = match style.typed(property) {
+        Some(ComputedValue::LengthPercentageExpression(expression)) => expression.as_str(),
+        _ => style.get(property)?,
+    };
+    parse_length_percentage(source, em, ch)
+}
+
+fn style_maybe_length(
+    style: &ComputedStyle, property: &str, em: f32, basis: f32,
+) -> Option<MaybeLen> {
+    if style.get(property)?.trim().eq_ignore_ascii_case("auto") {
+        return Some(MaybeLen::Auto);
+    }
+    style_length_percentage(style, property, em, em * 0.6)?
+        .resolve(Some(basis))
+        .map(MaybeLen::Px)
+}
+
 /// Parses one `<length>` / `<percentage>` string. `em_base` is the element's
 /// computed font-size; `percent_base` depends on the property being parsed.
 /// A bare `0` is valid without a unit (CSS2.1 §4.3.2); other bare numbers
@@ -319,9 +344,7 @@ fn read_box_sides_auto(
     // shorthand components that fail to parse recover to 0.
     let mut slots: [Option<MaybeLen>; 4] = [None; 4];
     for (i, lh) in longhands.iter().enumerate() {
-        if let Some(v) = style.get(lh) {
-            slots[i] = MaybeLen::parse(v, em_base, percent_base);
-        }
+        slots[i] = style_maybe_length(style, lh, em_base, percent_base);
     }
     if let Some(sh) = style.get(shorthand) {
         let parts: Vec<&str> = sh.split_ascii_whitespace().collect();
@@ -494,18 +517,16 @@ pub(crate) fn replicate_side<'a>(parts: &[&'a str], i: usize) -> Option<&'a str>
 
 /// width/height of the content box (`auto` preserved for §10.3.3).
 pub fn resolve_extent(style: &ComputedStyle, prop: &str, em_base: f32, cbw: f32) -> MaybeLen {
-    match style.get(prop) {
-        Some(v) => MaybeLen::parse(v, em_base, cbw).unwrap_or(MaybeLen::Auto),
-        None => MaybeLen::Auto,
-    }
+    style_length_percentage(style, prop, em_base, em_base * 0.6)
+        .and_then(|value| value.resolve(Some(cbw)))
+        .map_or(MaybeLen::Auto, MaybeLen::Px)
 }
 
 /// Resolve an extent with the selected font's actual zero-glyph advance.
 pub fn resolve_extent_with_ch(
     style: &ComputedStyle, prop: &str, em_base: f32, ch_advance: f32, basis: Option<f32>,
 ) -> MaybeLen {
-    style.get(prop)
-        .and_then(|v| parse_length_percentage(v, em_base, ch_advance))
+    style_length_percentage(style, prop, em_base, ch_advance)
         .and_then(|value| value.resolve(basis))
         .map_or(MaybeLen::Auto, MaybeLen::Px)
 }
@@ -596,6 +617,26 @@ mod tests {
         assert_eq!(parse_len("16ch", 32.0, 100.0), Some(307.2));
         assert_eq!(parse_len("bogus", 16.0, 100.0), None);
         assert_eq!(parse_len("14", 16.0, 100.0), None); // bare nonzero number
+    }
+
+    #[test]
+    fn computed_calc_and_logical_size_use_the_physical_axis() {
+        let dom = amazing_html::parse("<body><div id='target'></div></body>");
+        let sheet = amazing_css::parse_stylesheet(
+            "#target { writing-mode: vertical-lr; inline-size: calc(50% - 2px); block-size: 40px }",
+        );
+        let styled = amazing_css::compute(&dom, &[sheet]);
+        let target = (0..dom.node_count())
+            .map(|index| amazing_dom::NodeIdx(index as u32))
+            .find(|&node| dom.name(node) == Some("div"))
+            .unwrap();
+        let style = styled.get(target).unwrap();
+        assert!(matches!(
+            style.typed("height"),
+            Some(ComputedValue::LengthPercentageExpression(_))
+        ));
+        assert_eq!(resolve_extent(style, "height", 16.0, 200.0), MaybeLen::Px(98.0));
+        assert_eq!(resolve_extent(style, "width", 16.0, 200.0), MaybeLen::Px(40.0));
     }
 
     #[test]

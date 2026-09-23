@@ -7,7 +7,7 @@
 
 use crate::block::layout_block;
 use crate::font::FontSource;
-use crate::values::{self, MaybeLen};
+use crate::values;
 use crate::{Flow, LayoutBox, Rect};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,10 +138,8 @@ fn padding_box(box_: &LayoutBox) -> Rect {
 }
 
 fn resolve_inset(box_: &LayoutBox, property: &str, base: f32) -> Option<f32> {
-    match MaybeLen::parse(box_.style.get(property)?, box_.font_size, base)? {
-        MaybeLen::Px(value) => Some(value),
-        MaybeLen::Auto => None,
-    }
+    values::style_length_percentage(&box_.style, property, box_.font_size, box_.font_size * 0.6)?
+        .resolve(Some(base))
 }
 
 fn relative_offset(box_: &LayoutBox, containing_block: Rect) -> (f32, f32) {
