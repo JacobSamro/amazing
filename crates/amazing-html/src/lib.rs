@@ -35,17 +35,21 @@
 //! ```
 
 pub mod encoding;
+mod byte_stream;
 pub mod entities;
 pub mod tokenizer;
 pub mod tree;
 pub mod xml;
 pub use tree::IncrementalParser;
+pub use byte_stream::IncrementalByteParser;
 pub use xml::{parse_xml, XmlError, XmlErrorKind};
 
 use amazing_dom::{Dom, Namespace, NodeIdx};
 
 #[cfg(test)]
 mod stream_tests;
+#[cfg(test)]
+mod byte_stream_tests;
 
 /// Decodes and parses a complete HTML byte stream. `transport_label` is the
 /// optional charset from out-of-band transport metadata.
