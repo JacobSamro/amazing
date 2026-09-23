@@ -14,6 +14,8 @@ use std::{collections::{BTreeMap, VecDeque}, time::Instant};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ServiceId(pub u64);
+/// Browser request identifier returned by `start_subresource`.
+pub type RequestId = ServiceId;
 
 /// Script-visible response metadata after Fetch policy has accepted the head.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,19 +24,48 @@ pub struct ApiResponseHead {
     pub reason: String,
     pub headers: Vec<(String, String)>,
     pub final_url: String,
+    /// Trusted redirect chain for the navigation controller.
+    pub url_list: Vec<String>,
+    /// An origin transition within the chain or to this response's Location.
+    pub redirect_tainted: bool,
     pub response_type: crate::api::ApiResponseType,
     pub redirected: bool,
 }
 impl ApiResponseHead {
     fn from_response(response: &ApiResponse) -> Self {
+        let chain_tainted = url_chain_tainted(&response.url_list);
+        let location_tainted = response.headers.get_string("location").ok().flatten()
+            .and_then(|location| HttpUrl::parse(&response.url).ok()
+                .and_then(|base| base.resolve(&location).ok()
+                    .map(|target| base.origin() != target.origin())))
+            .unwrap_or(false);
         Self {
             status: response.status,
             reason: response.status_text.clone(),
             headers: response.headers.raw_entries().to_vec(),
             final_url: response.url.clone(),
+            url_list: response.url_list.clone(),
+            redirect_tainted: chain_tainted || location_tainted,
             response_type: response.response_type,
             redirected: response.redirected,
         }
+    }
+}
+
+fn url_chain_tainted(urls: &[String]) -> bool {
+    urls.windows(2).any(|pair| match (HttpUrl::parse(&pair[0]), HttpUrl::parse(&pair[1])) {
+        (Ok(left), Ok(right)) => left.origin() != right.origin(),
+        _ => false,
+    })
+}
+
+fn policy_response_type(kind: crate::api::ApiResponseType) -> crate::ResponseType {
+    match kind {
+        crate::api::ApiResponseType::Default | crate::api::ApiResponseType::Basic => crate::ResponseType::Basic,
+        crate::api::ApiResponseType::Cors => crate::ResponseType::Cors,
+        crate::api::ApiResponseType::Opaque => crate::ResponseType::Opaque,
+        crate::api::ApiResponseType::OpaqueRedirect => crate::ResponseType::OpaqueRedirect,
+        crate::api::ApiResponseType::Error => crate::ResponseType::Error,
     }
 }
 
@@ -117,6 +148,17 @@ pub enum ServiceEvent {
         id: ServiceId,
         result: Result<ApiResponse, ApiError>,
     },
+    /// Browser-internal result; never convert this body into a JS Response.
+    SubresourceFinished { id: RequestId, response: SubresourceResponse },
+    SubresourceFailed { id: RequestId, error: ApiError },
+}
+
+/// Validated network bytes for a trusted renderer consumer.
+#[derive(Debug)]
+pub struct SubresourceResponse {
+    pub response_type: crate::ResponseType,
+    pub head: ApiResponseHead,
+    pub body: Vec<u8>,
 }
 
 struct Task {
@@ -131,7 +173,9 @@ struct Task {
     credentials: CredentialsMode,
     client_origin: Origin,
     head: Option<(u16, HeaderList)>,
+    head_reason: String,
     body: Vec<u8>,
+    trusted_subresource: bool,
 }
 
 pub const INITIAL_STREAM_CREDIT: usize = 64 * 1024;
@@ -177,13 +221,21 @@ fn validated_stream_head(task: &Task, event: &NetEvent) -> Option<ApiResponseHea
     if !task.pending.is_main() || task.revalidating || !task.pending.policy().integrity.is_empty() {
         return None;
     }
-    if (300..400).contains(status) && headers.get("location").is_some() { return None; }
+    let navigation_redirect = (300..400).contains(status) && headers.get("location").is_some()
+        && task.pending.policy().mode == crate::RequestMode::Navigate;
+    if (300..400).contains(status) && headers.get("location").is_some() && !navigation_redirect {
+        return None;
+    }
     let mut policy = task.pending.policy().clone();
     if policy.prepare().ok()?.taint == crate::ResponseType::Opaque { return None; }
     let mut fields = HeaderList::default();
     for (name, value) in headers.iter() { fields.append(name, value).ok()?; }
     let internal = InternalResponse { status: *status, status_text: reason.clone(),
         headers: fields, body: Some(Vec::new()) };
+    if navigation_redirect {
+        crate::redirect_location(&mut policy, &internal, internal.headers.get("location").as_deref())
+            .ok()?;
+    }
     let filtered = filter_response(&policy, &internal).ok()?;
     let response = ApiResponse::from_policy(filtered).ok()?;
     Some(ApiResponseHead::from_response(&response))
@@ -225,6 +277,52 @@ impl NetworkService {
         context.security.destination = Destination::Font;
         context.csp_destination = CspDestination::Font;
         self.start(font.request, context)
+    }
+    /// Browser-only subresource path. The ordinary buffered and JS Fetch paths
+    /// continue to receive filtered (possibly opaque) bodies.
+    pub fn start_subresource(&mut self, mut request: ApiRequest,
+        mut context: ClientContext, destination: Destination) -> RequestId {
+        request.destination = destination;
+        request.cache = ApiCache::NoStore;
+        context.security.destination = destination;
+        context.csp_destination = match destination {
+            Destination::Script => CspDestination::Script,
+            Destination::Style => CspDestination::Style,
+            Destination::Image => CspDestination::Image,
+            Destination::Font => CspDestination::Font,
+            Destination::Audio | Destination::Video => CspDestination::Media,
+            Destination::Worker | Destination::SharedWorker | Destination::ServiceWorker => CspDestination::Worker,
+            Destination::Document => CspDestination::Frame,
+            Destination::Empty | Destination::Other => CspDestination::Connect,
+        };
+        let id = match self.start_at(request, context, Instant::now()) {
+            Ok(id) => id,
+            Err(error) => {
+                let id = ServiceId(self.next_id);
+                self.next_id = self.next_id.wrapping_add(1).max(1);
+                self.ready.push(ServiceEvent::SubresourceFailed { id, error });
+                return id;
+            }
+        };
+        if let Some(task) = self.active.get_mut(&id) {
+            task.trusted_subresource = true;
+        } else if let Some(event) = self.ready.iter_mut().find(|event|
+            matches!(event, ServiceEvent::Finished { id: found, .. } if *found == id)) {
+            let ServiceEvent::Finished { result, .. } = std::mem::replace(event,
+                ServiceEvent::StreamFinished { id }) else {
+                unreachable!()
+            };
+            let result = result.and_then(|mut response| {
+                let head = ApiResponseHead::from_response(&response);
+                let body = response.body.bytes()?;
+                Ok(SubresourceResponse { response_type: policy_response_type(response.response_type), head, body })
+            });
+            *event = match result {
+                Ok(response) => ServiceEvent::SubresourceFinished { id, response },
+                Err(error) => ServiceEvent::SubresourceFailed { id, error },
+            };
+        }
+        id
     }
     pub fn new(limits: DispatchLimits) -> Self {
         Self {
@@ -557,7 +655,9 @@ impl NetworkService {
                 credentials: request.credentials,
                 client_origin,
                 head: None,
+                head_reason: String::new(),
                 body: Vec::new(),
+                trusted_subresource: false,
             },
         );
         Ok(id)
@@ -648,6 +748,7 @@ impl NetworkService {
                         NetEvent::Head {
                             url,
                             status,
+                            reason,
                             headers,
                             ..
                         } => {
@@ -680,9 +781,10 @@ impl NetworkService {
                                 }
                             }
                             task.head = Some((*status, fields));
+                            task.head_reason = reason.clone();
                             task.body.clear();
                         }
-                        NetEvent::Body { bytes, .. } if task.cacheable => {
+                        NetEvent::Body { bytes, .. } if task.cacheable || task.trusted_subresource => {
                             task.body.extend_from_slice(bytes)
                         }
                         _ => {}
@@ -723,6 +825,7 @@ impl NetworkService {
             let wire_done = matches!(&event, NetEvent::Done { .. });
             if !self.streams.contains_key(&id) { result.push(ServiceEvent::Network { id, event }); }
             if let Some(mut outcome) = finished {
+                let mut subresource = None;
                 if let Some(task) = self.active.remove(&id) {
                     if task.revalidating && wire_done {
                         if let Some((304, response_headers)) = &task.head {
@@ -756,6 +859,28 @@ impl NetworkService {
                                 });
                         }
                     }
+                    if task.trusted_subresource {
+                        subresource = Some(outcome.as_ref().map(|response| {
+                            let mut head = ApiResponseHead::from_response(response);
+                            if let Some((status, fields)) = &task.head {
+                                head.status = *status;
+                                head.reason = task.head_reason.clone();
+                                head.headers = fields.iter().filter(|(name, _)|
+                                    !crate::headers::forbidden_response(name))
+                                    .map(|(name, value)| (name.to_owned(), value.to_owned())).collect();
+                            }
+                            head.final_url = task.pending.policy().url().serialize();
+                            head.url_list = task.pending.policy().url_list().iter()
+                                .map(HttpUrl::serialize).collect();
+                            head.redirected = head.url_list.len() > 1;
+                            head.redirect_tainted = url_chain_tainted(&head.url_list);
+                            SubresourceResponse {
+                                response_type: policy_response_type(response.response_type),
+                                head,
+                                body: task.body.clone(),
+                            }
+                        }).map_err(Clone::clone));
+                    }
                     if task.cacheable && outcome.as_ref().is_ok_and(|r| !r.redirected) {
                         if let Some((status, response_headers)) = task.head {
                             let request = CacheRequest {
@@ -778,7 +903,12 @@ impl NetworkService {
                         }
                     }
                 }
-                if self.streams.contains_key(&id) {
+                if let Some(subresource) = subresource {
+                    match subresource {
+                        Ok(response) => result.push(ServiceEvent::SubresourceFinished { id, response }),
+                        Err(error) => result.push(ServiceEvent::SubresourceFailed { id, error }),
+                    }
+                } else if self.streams.contains_key(&id) {
                     self.finish_stream(id, outcome, &mut result);
                 } else {
                     result.push(ServiceEvent::Finished { id, result: outcome });
