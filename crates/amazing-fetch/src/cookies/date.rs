@@ -23,7 +23,7 @@ fn time(token: &[u8]) -> Option<(i64, i64, i64)> {
     Some((h, m, s))
 }
 /// UTC seconds relative to 1970, including representable pre-epoch dates.
-pub(super) fn parse_date(input: &[u8]) -> Option<i64> {
+pub(crate) fn parse_date(input: &[u8]) -> Option<i64> {
     let (mut day, mut month, mut year, mut clock) = (None, None, None, None);
     for token in input
         .split(|b| matches!(*b,9|0x20..=0x2f|0x3b..=0x40|0x5b..=0x60|0x7b..=0x7e))

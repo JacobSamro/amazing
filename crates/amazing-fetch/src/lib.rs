@@ -1,8 +1,9 @@
-//! HTTP Fetch policy and in-memory cookie algorithms. No I/O, persistence, cache or JS bindings.
+//! HTTP Fetch policy, cookie and cache algorithms. No I/O, persistence or JS bindings.
 //! HTTP(S) URL syntax and resolution use amazing-net ParsedUrl; IDNA remains
 //! deferred behind its provider seam. This policy model has no live dispatcher.
 #![forbid(unsafe_code)]
 pub mod cookies;
+pub mod cache;
 mod cors;
 mod headers;
 mod model;
