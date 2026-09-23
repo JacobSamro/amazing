@@ -590,3 +590,26 @@ resource selection contains no applicable polyline resource and remains
 **4/4 raw passes** before and twice after, with identical pixel hashes. It is
 a regression control with **zero new polyline WPT credit**. Final proof,
 hashes, and Windows gates are in `tests/wpt-replaced-content/rc9/`.
+
+## RC-10 — implicit closure for straight-line SVG path fill
+
+Fixed dev base `e6577dc` (RC-9 merge). The bounded, one-subpath `M/L/H/V`
+static SVG path subset accepts an open outline for fill. The existing default
+nonzero winding sampler joins its last and first vertices when testing fill;
+explicit `Z` retains the same result. Paths still require at least three
+finite vertices. The path token/point cap, 4,096-character attribute cap and
+vertex-weighted raster work budget are unchanged. Multiple subpaths, curves,
+arcs, malformed commands, explicit fill-rule, strokes, references and paint
+servers reject the whole image. No stroke behavior is inferred from fill.
+
+The owned 64×64 HTML `<img>` corpus pairs open triangle, concave and
+transformed/alpha paths with shape-based references, and directly compares an
+open path with the same path ending in `Z`. A shared blank control prevents
+inert credit. The fixed-base predecessor was **0/4 non-inert**, with each open
+path actual identical to blank. After implementation the owned corpus is
+**4/4 non-inert twice** with identical classifications and per-page hashes;
+the fills differ from blank at 528, 1,024, 576 and 1,024 pixels. The four
+pinned CSS Images SVG resource controls use SVG files without an applicable
+open `<path>` outline and remain **4/4 raw before and twice after** with
+identical hashes. They carry **zero new path WPT credit**. Exact repeated
+render and Windows gate evidence is under `tests/wpt-replaced-content/rc10/`.

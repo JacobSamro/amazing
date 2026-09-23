@@ -1,4 +1,4 @@
-//! One closed, straight-line SVG outline. This deliberately excludes subpaths and fill rules.
+//! One straight-line SVG outline for fill. This deliberately excludes subpaths and fill rules.
 use crate::DecodeError;
 
 #[derive(Clone, Copy)]
@@ -78,7 +78,6 @@ pub(super) fn parse_path(data: &str, limit: usize) -> Result<Vec<(f64, f64)>, De
     let mut command = 0;
     let mut points = Vec::new();
     let mut current = (0.0_f64, 0.0_f64);
-    let mut closed = false;
     while pos < tokens.len() {
         if let Token::Command(c) = tokens[pos] {
             if (points.is_empty() && !matches!(c, b'M' | b'm'))
@@ -88,7 +87,6 @@ pub(super) fn parse_path(data: &str, limit: usize) -> Result<Vec<(f64, f64)>, De
             command = c;
             pos += 1;
             if matches!(c, b'Z' | b'z') {
-                closed = true;
                 break;
             }
             if matches!(tokens.get(pos), None | Some(Token::Command(_))) {
@@ -124,7 +122,8 @@ pub(super) fn parse_path(data: &str, limit: usize) -> Result<Vec<(f64, f64)>, De
             command = if relative { b'l' } else { b'L' };
         }
     }
-    if !closed || pos != tokens.len() || points.len() < 3 {
+    // Fill implicitly joins the last point to the first, with or without Z.
+    if pos != tokens.len() || points.len() < 3 {
         return Err(DecodeError::UnsupportedSvg);
     }
     Ok(points)

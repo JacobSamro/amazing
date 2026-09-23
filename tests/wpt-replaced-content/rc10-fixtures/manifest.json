@@ -1,0 +1,30 @@
+{
+  "kind": "owned RC-10 implicit path closure proof, not WPT",
+  "viewport": [
+    64,
+    64
+  ],
+  "blank": "blank.html",
+  "tests": [
+    {
+      "id": "open-triangle",
+      "test": "open-triangle.html",
+      "reference": "open-triangle-ref.html"
+    },
+    {
+      "id": "open-concave",
+      "test": "open-concave.html",
+      "reference": "open-concave-ref.html"
+    },
+    {
+      "id": "transformed-alpha",
+      "test": "transformed-alpha.html",
+      "reference": "transformed-alpha-ref.html"
+    },
+    {
+      "id": "z-equivalence",
+      "test": "z-equivalence.html",
+      "reference": "z-equivalence-ref.html"
+    }
+  ]
+}

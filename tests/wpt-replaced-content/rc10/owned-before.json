@@ -1,0 +1,41 @@
+{
+  "cases": [
+    {
+      "actual_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "blank_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "classification": "fail",
+      "different_blank_pixels": 0,
+      "different_reference_pixels": 528,
+      "id": "open-triangle",
+      "reference_sha256": "ecd556546fa73c482eff84abeef2dcb3fa44651ef08bf8a199c0e70b1f3c5d6f"
+    },
+    {
+      "actual_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "blank_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "classification": "fail",
+      "different_blank_pixels": 0,
+      "different_reference_pixels": 1024,
+      "id": "open-concave",
+      "reference_sha256": "9df5944c7559b169fe8f989b76fc19c012c3d5f5c7fb29232c6016fd6d2683f3"
+    },
+    {
+      "actual_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "blank_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "classification": "fail",
+      "different_blank_pixels": 0,
+      "different_reference_pixels": 576,
+      "id": "transformed-alpha",
+      "reference_sha256": "381c7bf2e8fc8cf167572517908fc9f0cb91e7f37a13d8aed10c2a3e5d1be465"
+    },
+    {
+      "actual_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "blank_sha256": "d2f6d1ef302851a667adde508208fded2aea933d1c0b62941b9d0882a3461523",
+      "classification": "fail",
+      "different_blank_pixels": 0,
+      "different_reference_pixels": 1024,
+      "id": "z-equivalence",
+      "reference_sha256": "ca6dc4f37d9ff05a4ed0ead53226cba8480a87e024b47338c6fcd3f6106ea9f6"
+    }
+  ],
+  "executable_sha256": "f6a0534c271f7a51009d82b4b4b3a6488cc87493446fee585e0a0d5c88338eca"
+}
