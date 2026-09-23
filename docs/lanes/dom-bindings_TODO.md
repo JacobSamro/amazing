@@ -1064,3 +1064,50 @@ binaries. Separate `cargo test --workspace --locked --doc` passed 2/2
 doctests; amazing-dom and amazing-bindings each had zero doctests. The JS-4
 adapter proof and driver installer remain follow-up integration work after
 native DOM-5 merge.
+
+### DOM-6 Adapter recipe (JS-4 EventLoop proof)
+
+The runnable reference is `crates/amazing/tests/js4_event_loop_adapter.rs`.
+Construct `Interpreter::new_with_external_scheduler(js_capacity)` before any
+page code, attach the same parsed DOM through `set_dom_host`, create one
+`EventLoop`, register the global, and retain maps from JS timer/frame
+registration IDs to core IDs plus opaque callback payloads.
+
+At every interpreter entry, in this order:
+
+1. Run exactly one script, event dispatch, timer/frame callback via
+   `invoke_one_callback`, or Promise/queueMicrotask job via `invoke_one_job`.
+   If it throws, record the exception but still perform the remaining steps.
+   A native DOM mutation is observed inside the host call: after releasing its
+   DOM borrow and before the next JS statement, the host exposes one pending
+   `MutationObserver` request. The interpreter admits it into its ordered
+   outbox, then acknowledges admission; only then set the adapter's forwarded
+   bit. Keep the DOM queued flag set until the checkpoint executes.
+2. Immediately call `take_scheduling_requests()` and process its vector in
+   order. For timer/frame registration, retain the JS token in a driver-owned
+   callback payload and map the returned core ID by JS registration ID.
+   Apply cancellations against those maps. Queue JS and native microtask
+   requests in the shared EventLoop FIFO in the order received. A native
+   request stores only its kind/global and a driver-owned delivery payload.
+3. Advance the driver clock with `EventLoop::advance_to`; request rendering
+   opportunities when the embedding has one. Repeatedly take `step()`, invoke
+   its one callback/job/native delivery, drain the newly emitted interpreter
+   requests **before** `complete(step.id)`, then complete the step even after a
+   throw. Handle render and checkpoint-cleanup actions without recursively
+   draining a private JS queue. Frame callbacks receive the core timestamp;
+   timers receive no frame timestamp. Retain the Window receiver for JS
+   callbacks. Cancellation removes the driver mapping and core registration.
+4. For native delivery, call `Dom::begin_mutation_checkpoint()` only when the
+   EventLoop reaches M, clear the forwarded bit, then consume
+   `next_mutation_delivery` until empty. A second mutation while the pending
+   flag stays true must not queue another M; a mutation after this checkpoint
+   rearms it. JS-originated requests use only the configured JS capacity; the
+   reserved native slot admits M in order even when a later Q throws a
+   catchable TypeError.
+
+The reference test checks A,P,Q,R,B; frame cancellation at the checkpoint;
+P,M,Q with capacity two; P,M and catchable TypeError with capacity one; one M
+for repeated true-to-true mutations; admission acknowledgment only after
+success; M rearming after its checkpoint; and outbox draining after both a thrown
+callback and a thrown script. The driver must use the same sequence at *every*
+interpreter entry, including error exits.
