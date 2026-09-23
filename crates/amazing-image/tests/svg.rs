@@ -283,9 +283,68 @@ fn same_direction_double_wound_path_uses_default_nonzero_fill() {
 }
 
 #[test]
-fn paths_reject_open_curved_malformed_and_unsupported_paint_whole_image() {
+fn open_straight_line_paths_fill_with_implicit_closure() {
+    let triangle = svg("", r#"<path d="M1 1 L6 1 L6 6" fill="blue"/>"#);
+    assert_eq!(pixel(&triangle, 4, 2), [0, 0, 255, 255]);
+    assert_eq!(pixel(&triangle, 2, 5), [0; 4]);
+
+    let concave = svg("", r#"<path d="M1 1 H7 V3 H3 V7 H1" fill="lime"/>"#);
+    assert_eq!(pixel(&concave, 2, 5), [0, 255, 0, 255]);
+    assert_eq!(pixel(&concave, 5, 5), [0; 4]);
+
+    let transformed = svg("", r#"<g transform="translate(1 1)"><path d="m1 1 3 0 v3 h-3" style="fill: blue; fill-opacity: .5"/></g>"#);
+    assert_eq!(pixel(&transformed, 2, 2), [0, 0, 255, 128]);
+    assert_eq!(pixel(&transformed, 1, 1), [0; 4]);
+}
+
+#[test]
+fn open_and_explicitly_closed_paths_have_identical_fill() {
+    let open = svg("", r#"<path d="M1 1 H6 V6 H1" fill="red"/>"#);
+    let closed = svg("", r#"<path d="M1 1 H6 V6 H1 Z" fill="red"/>"#);
+    assert_eq!(decode(&open, Default::default()).unwrap().pixels,
+               decode(&closed, Default::default()).unwrap().pixels);
+    assert_eq!(pixel(&open, 2, 2), [255, 0, 0, 255]);
+}
+
+#[test]
+fn open_paths_reject_invalid_commands_and_unsupported_paint_whole_image() {
     for path in [
-        r#"<path d="M1 1 L6 1 L6 6"/>"#,
+        r#"<path d="M1 1 L6 1"/>"#,
+        r#"<path d="M1 1 L6 1 L6"/>"#,
+        r#"<path d="M1 1 L6 1 M6 6"/>"#,
+        r#"<path d="M1 1 L6 1 Q4 4 6 6"/>"#,
+        r#"<path d="M1 1 L6 1 A2 2 0 0 0 6 6"/>"#,
+        r#"<path d="M1 1 L6, L6 6"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6 Z L1 6"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6" fill-rule="nonzero"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6" stroke="none"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6" style="stroke: red"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6" href="other.svg"/>"#,
+        r#"<path d="M1 1 L6 1 L6 6" fill="url(#paint)"/>"#,
+    ] {
+        let body = format!(r#"<rect width="8" height="8" fill="red"/>{path}"#);
+        assert_eq!(decode(&svg("", &body), Default::default()).unwrap_err(),
+                   DecodeError::UnsupportedSvg, "{path}");
+    }
+}
+
+#[test]
+fn open_paths_keep_attribute_and_raster_work_limits() {
+    let at_limit = format!("M0 0{}", " 0 0".repeat(1023));
+    assert!(decode(&svg("", &format!(r#"<path d="{at_limit}"/>"#)), Default::default()).is_ok());
+
+    let over_attribute = format!("M0 0{}", " 0 0".repeat(1024));
+    assert_eq!(decode(&svg("", &format!(r#"<path d="{over_attribute}"/>"#)), Default::default()).unwrap_err(),
+               DecodeError::AllocationLimit);
+
+    let costly = format!("M0 0 {}", "0 0 ".repeat(256));
+    let large = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><path d="{costly}"/></svg>"#);
+    assert_eq!(decode(large.as_bytes(), Default::default()).unwrap_err(), DecodeError::AllocationLimit);
+}
+
+#[test]
+fn paths_reject_curved_malformed_and_unsupported_paint_whole_image() {
+    for path in [
         r#"<path d="L1 1 L6 1 L6 6 Z"/>"#,
         r#"<path d="M1 1 L6 1 M2 2 L6 6 Z"/>"#,
         r#"<path d="M1 1 L6 1 Q4 4 6 6 Z"/>"#,
