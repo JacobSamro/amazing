@@ -417,3 +417,26 @@ The five pinned render pairs and owned proof were not rerun: their committed
 pixel evidence is explicitly for `ffb143b` compiled source. This checkpoint
 claims only the named-source workspace gate. Integrator will stage/rebase an
 integration snapshot on later dev and authoritative-gate the merged head.
+
+### RC-4b — pinned render repeat on current dev
+
+Fixed base `253d9ec56a3612df8e495ea0cac49813fffbe2ee`, WPT pin
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. Primary coordinator
+refreshed only replaced-content from origin/dev. Root and isolated-image locked
+metadata passed; 339 current Rust/Cargo/harness/fixture hashes matched before
+and after the counterfactual build. Before was current dev with only the five
+RC-4 source-file changes removed (four first-parent files, new transform module
+absent); after was unmodified current dev. Both renderer pairs were rebuilt on
+win-001. Builds and the complete 20-run pinned sweep used the primary shared
+build slots under REFRESH-HOLD.
+
+All ten within-phase pairs have stable classifications, pixel differences and
+actual/reference/diff hashes. Before and after per-case projections are
+identical. In each phase and repeat: scope **26 pass / 4 mismatch / 0 error /
+0 timeout / 0 unsupported / 18 renderer errors**; controls **22 / 2 / 0 / 0 /
+0 / 0**; PNG **12/12**; SVG **12/12 raw, zero conformance credit**; focused
+paint **24/24**. No result moved. Current after projections also match the
+older ffb143b after packet exactly (aside from an added explicit `error: 0`
+report-count field). Full evidence is in
+`tests/wpt-replaced-content/rc4b/base-253d9ec/`. Owned 9-case proof was not
+part of this five-selection rerun. Stop at RC-4b for integrator review.

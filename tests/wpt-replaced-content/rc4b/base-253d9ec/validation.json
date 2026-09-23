@@ -1,0 +1,51 @@
+{
+  "ticket": "RC-4b",
+  "fixed_dev_base": "253d9ec56a3612df8e495ea0cac49813fffbe2ee",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "platform": "win-001",
+  "locked": true,
+  "incremental": false,
+  "before_definition": "Current dev with only the five RC-4 source-file changes removed: four files restored from b402d84 first parent ed6a44c; new svg_transform.rs absent. Separate before target directories used.",
+  "after_definition": "Unmodified fixed dev 253d9ec; 339 checked source/Cargo/harness/fixture hashes restored and matched",
+  "current_input_count": 339,
+  "current_input_mismatches": 0,
+  "after_restore_mismatches": 0,
+  "metadata_exit_codes": {
+    "root": 0,
+    "isolated_image": 0
+  },
+  "before_and_after_builds": "root driver and isolated image example both rebuilt with --locked and CARGO_INCREMENTAL=0",
+  "executables": [
+    {
+      "sha256": "9534b6f531b9ee627c14ec6cc43a8157a0887b5e134e54d7c4359863c47a6b6f",
+      "file": "rc4b-253d9ec-driver-before.exe",
+      "bytes": 39442432,
+      "built_utc": "2026-09-23T04:54:17.3309887Z"
+    },
+    {
+      "sha256": "fc496acafaeec1fd794f1354de7f2432ae3e9839121c3b13c3f4f32de9b9f572",
+      "file": "rc4b-253d9ec-images-before.exe",
+      "bytes": 5731840,
+      "built_utc": "2026-09-23T04:54:35.6712125Z"
+    },
+    {
+      "sha256": "4ed24f27aa766016f8dc9d232fad964fad5d3d6b4097edca2899761063c1fd1b",
+      "file": "rc4b-253d9ec-driver-after.exe",
+      "bytes": 39446016,
+      "built_utc": "2026-09-23T04:54:49.1075206Z"
+    },
+    {
+      "sha256": "c4825e0b267100478900f7f658620f43a013350e2c00c2bc205c0a788b21c97d",
+      "file": "rc4b-253d9ec-images-after.exe",
+      "bytes": 5749760,
+      "built_utc": "2026-09-23T04:54:56.9077176Z"
+    }
+  ],
+  "sweep": "five pinned selections x before/after x two runs, under primary shared build slot and REFRESH-HOLD",
+  "all_ten_pairs_stable": true,
+  "before_after_changed_cases": 0,
+  "before_after_changed_projections": 0,
+  "current_after_vs_ffb143b": "all five per-case classification/difference/actual/reference/diff projections identical; report count schema now has explicit error=0",
+  "svg_raw_matches_conformance_credit": 0,
+  "recorded_at": "2026-09-23T05:19:28.125465+00:00"
+}

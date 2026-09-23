@@ -1,0 +1,26 @@
+﻿[
+    {
+        "sha256":  "9534b6f531b9ee627c14ec6cc43a8157a0887b5e134e54d7c4359863c47a6b6f",
+        "file":  "rc4b-253d9ec-driver-before.exe",
+        "bytes":  39442432,
+        "built_utc":  "2026-09-23T04:54:17.3309887Z"
+    },
+    {
+        "sha256":  "fc496acafaeec1fd794f1354de7f2432ae3e9839121c3b13c3f4f32de9b9f572",
+        "file":  "rc4b-253d9ec-images-before.exe",
+        "bytes":  5731840,
+        "built_utc":  "2026-09-23T04:54:35.6712125Z"
+    },
+    {
+        "sha256":  "4ed24f27aa766016f8dc9d232fad964fad5d3d6b4097edca2899761063c1fd1b",
+        "file":  "rc4b-253d9ec-driver-after.exe",
+        "bytes":  39446016,
+        "built_utc":  "2026-09-23T04:54:49.1075206Z"
+    },
+    {
+        "sha256":  "c4825e0b267100478900f7f658620f43a013350e2c00c2bc205c0a788b21c97d",
+        "file":  "rc4b-253d9ec-images-after.exe",
+        "bytes":  5749760,
+        "built_utc":  "2026-09-23T04:54:56.9077176Z"
+    }
+]
