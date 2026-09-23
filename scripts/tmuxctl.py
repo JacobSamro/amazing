@@ -267,6 +267,9 @@ LANE_GRANTS["js-binary"].append("crates/amazing-js/src/interp_builtins.rs")
 # NET-26: net owns the Fetch/XHR JS bindings. Its own new bindings file, one mod
 # line, and ADDED LINES ONLY in runtime_binding_host.rs.
 LANE_GRANTS.setdefault("net", []).extend(["crates/amazing-bindings/src/fetch_interfaces.rs", "crates/amazing-bindings/src/lib.rs", "crates/amazing/src/runtime_binding_host.rs"])
+# COMP-4: the GPUI presenter in the shell (its own new file), plus the shell's
+# Cargo.toml dependency line and isolated lockfile edge (additions only).
+LANE_GRANTS.setdefault("compositor", []).extend(["crates/amazing-shell-gpui/src/compositor_presenter.rs", "crates/amazing-shell-gpui/Cargo.toml", "crates/amazing-shell-gpui/Cargo.lock"])
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
