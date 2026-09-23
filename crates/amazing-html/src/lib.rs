@@ -62,6 +62,8 @@ mod custom_element_tests;
 mod declarative_shadow_tests;
 #[cfg(test)]
 mod frameset_tests;
+#[cfg(test)]
+mod tail_mode_tests;
 
 /// Decodes and parses a complete HTML byte stream. `transport_label` is the
 /// optional charset from out-of-band transport metadata.
