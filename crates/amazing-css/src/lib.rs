@@ -52,6 +52,7 @@ pub mod values;
 
 pub use cascade::{
     ElementFill, ElementPaintStyle, ElementStyleSource, ElementStyleValue, StyledDom, compute,
+    compute_with_animations, AnimatedOrigin, AnimatedStyleValue, AnimatedValues,
     compute_element_paint_style,
     recompute_roots, MutationKind, RecalcRoots, RenderMutation, StyleDelta, StyleInvalidator, StyleMismatch,
 };
