@@ -5,7 +5,6 @@
 //! from full spec (all deliberate, all listed in lib.rs):
 //! - encoding sniffing happens in the caller; input is lossy UTF-8 `char`s
 //! - PUBLIC/SYSTEM identifiers are consumed but not captured
-//! - CDATA (`<![CDATA[`) is treated as a bogus comment
 //!
 //! Input is a `Vec<char>` — one `char` = one scalar value, so cursor
 //! arithmetic is per-character and entity names (ASCII) match 1 byte = 1 char.
@@ -62,6 +61,9 @@ enum State {
     CommentEnd,
     CommentEndBang,
     BogusComment,
+    CdataSection,
+    CdataBracket,
+    CdataEnd,
     ProcessingInstructionOpen,
     ProcessingInstructionTarget,
     AfterProcessingInstructionTarget,
@@ -167,6 +169,8 @@ pub struct Tokenizer {
     script_temporary: String,
     eof_sent: bool,
     input_finished: bool,
+    /// Updated by the tree builder after each token from its current node.
+    allow_cdata: bool,
 }
 
 fn is_ws(c: char) -> bool {
@@ -207,6 +211,7 @@ impl Tokenizer {
             script_temporary: String::new(),
             eof_sent: false,
             input_finished: true,
+            allow_cdata: false,
         }
     }
 
@@ -223,6 +228,10 @@ impl Tokenizer {
 
     pub(crate) fn finish_input(&mut self) {
         self.input_finished = true;
+    }
+
+    pub(crate) fn set_allow_cdata(&mut self, allow: bool) {
+        self.allow_cdata = allow;
     }
 
     pub(crate) fn buffered_input_scalars(&self) -> usize {
@@ -404,9 +413,11 @@ impl Tokenizer {
         let markup = &tail[1..];
         let comment = ['-', '-'];
         let doctype = ['d', 'o', 'c', 't', 'y', 'p', 'e'];
+        let cdata = ['[', 'C', 'D', 'A', 'T', 'A', '['];
         (markup.len() < comment.len() && markup == &comment[..markup.len()])
             || (markup.len() < doctype.len()
                 && markup.iter().zip(&doctype).all(|(a, b)| a.eq_ignore_ascii_case(b)))
+            || (markup.len() < cdata.len() && markup == &cdata[..markup.len()])
     }
 
     fn reference_needs_more(&self) -> bool {
@@ -468,6 +479,27 @@ impl Tokenizer {
                     Some('\0') => self.text_buf.push('\u{FFFD}'),
                     Some(c) => self.text_buf.push(c),
                     None => {},
+                },
+
+                State::CdataSection => match self.peek() {
+                    Some(']') => { self.pos += 1; self.state = State::CdataBracket; },
+                    Some('\0') => { self.pos += 1; self.text_buf.push('\u{FFFD}'); },
+                    Some(c) => { self.pos += 1; self.text_buf.push(c); },
+                    None => {},
+                },
+                State::CdataBracket => {
+                    if self.peek() == Some(']') {
+                        self.pos += 1;
+                        self.state = State::CdataEnd;
+                    } else {
+                        self.text_buf.push(']');
+                        self.state = State::CdataSection;
+                    }
+                },
+                State::CdataEnd => match self.peek() {
+                    Some(']') => { self.pos += 1; self.text_buf.push(']'); },
+                    Some('>') => { self.pos += 1; self.state = State::Data; },
+                    _ => { self.text_buf.push_str("]]"); self.state = State::CdataSection; },
                 },
 
                 State::EndTagOpen => match self.peek() {
@@ -1247,9 +1279,13 @@ impl Tokenizer {
                 self.doctype_name = None;
                 self.state = State::BeforeDoctypeName;
             },
+            Some('!') if self.allow_cdata && self.input[self.pos + 2..]
+                .starts_with(&['[', 'C', 'D', 'A', 'T', 'A', '[']) => {
+                self.pos += 9;
+                self.state = State::CdataSection;
+            },
             Some('!') => {
-                // e.g. CDATA / declarations: bogus comment (deviation note
-                // in lib.rs covers CDATA specifically).
+                // CDATA in HTML content, or another unknown declaration.
                 self.pos += 2;
                 self.comment_buf.clear();
                 self.state = State::BogusComment;
@@ -1485,6 +1521,7 @@ impl Tokenizer {
                 return;
             },
             State::Data | State::PlainText | State::RawText | State::RcData | State::ScriptData
+            | State::CdataSection
             | State::ScriptEscaped | State::ScriptEscapedDash | State::ScriptEscapedDashDash
             | State::ScriptDoubleEscapeStart | State::ScriptDoubleEscaped
             | State::ScriptDoubleEscapedDash | State::ScriptDoubleEscapedDashDash
@@ -1492,6 +1529,8 @@ impl Tokenizer {
             | State::ScriptEscapeStartDash => {
                 // just flush text below
             },
+            State::CdataBracket => self.text_buf.push(']'),
+            State::CdataEnd => self.text_buf.push_str("]]"),
             State::EndTagOpen
             | State::TagName
             | State::BeforeAttrName
@@ -1709,6 +1748,18 @@ mod tests {
             out.push(tok);
         }
         out
+    }
+
+    #[test]
+    fn cdata_tokenization_requires_foreign_namespace_feedback() {
+        let mut html = Tokenizer::new("<![CDATA[x<y]]>".chars().collect());
+        assert_eq!(html.next_token(), Token::Comment("[CDATA[x<y]]".into()));
+        assert_eq!(html.next_token(), Token::Eof);
+
+        let mut foreign = Tokenizer::new("<![CDATA[x<y &amp;]]]>".chars().collect());
+        foreign.set_allow_cdata(true);
+        assert_eq!(foreign.next_token(), Token::Characters("x<y &amp;]".into()));
+        assert_eq!(foreign.next_token(), Token::Eof);
     }
 
     #[test]

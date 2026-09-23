@@ -2366,6 +2366,9 @@ fn feed_with_tokenizer_feedback(
         _ => None,
     };
     builder.feed(tok);
+    tokenizer.set_allow_cdata(builder.current().is_some_and(|current| {
+        builder.dom.namespace(current).is_some_and(|namespace| namespace != Namespace::Html)
+    }));
     if let Some(name) = start_name {
         let inserted_html_text_element = (builder.mode == Mode::Text || name == "plaintext")
             && builder.current().is_some_and(|current| {

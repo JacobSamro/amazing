@@ -334,3 +334,31 @@ matched on Mac and Windows before and after the gates. Package nextest passed
 **1529/1529** with 3 skipped, and separate shared-slot workspace doctests
 **2/2**. Three tests account for the package increase from HTML-7's 109.
 No push or PR; the lane stops for co-integrator preflight.
+
+## HTML-9 — CDATA tokenization in foreign content
+
+The tree builder now feeds its adjusted current node's namespace to the
+tokenizer after each token. A complete `<![CDATA[` declaration switches to
+CDATA section, bracket and end states only while that node is outside the
+HTML namespace. Ordinary HTML content still recovers it as a bogus comment.
+The delimiter `]]>` ends the section; `<` and `&` are literal, null becomes
+U+FFFD, and pending brackets are emitted at premature EOF. Streaming input
+waits for a partial CDATA opener, then preserves bracket/end state across
+chunk boundaries.
+
+The exact Windows baseline token and seven DOM trees, together with independent
+expected trees, were fixed in `.agents/html/html9-fixtures.md` before the
+implementation. SVG and MathML foreign nodes now receive CDATA text; an SVG
+`foreignObject` or MathML `mtext` integration point itself is still foreign
+and permits CDATA, while its HTML child takes bogus-comment recovery. This is
+a bounded tokenizer/namespace seam, not a claim of complete foreign-content
+parsing. Existing foreign-attribute adjustments remain incomplete.
+
+At fixed base `f3d2e3f`, a 279-input Rust source, Cargo manifest and root
+lockfile hash manifest (SHA-256
+`eea90bc5b2a41aa9901c6b12b3de5f3c6d417a8094f016a3f36dfb5c8ab4800e`)
+matched on Mac and Windows before and after the gates. Package nextest passed
+**117/117 twice**, package doctest **1/1**, shared-slot workspace nextest
+**1534/1534** with 3 skipped, and separate shared-slot workspace doctests
+**2/2**. Five tests account for the package increase from HTML-8's 112.
+No push or PR; the lane stops for co-integrator preflight.

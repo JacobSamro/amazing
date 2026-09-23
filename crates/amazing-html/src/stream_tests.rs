@@ -61,6 +61,19 @@ fn plaintext_document_is_invariant_across_every_scalar_boundary() {
 }
 
 #[test]
+fn cdata_namespace_and_closing_delimiter_survive_every_scalar_split() {
+    for src in [
+        "<svg><![CDATA[a<b>&amp;]]><circle/></svg>",
+        "<math><mtext><![CDATA[x<y &amp;]]></mtext></math>",
+        "<![CDATA[html]]><p>z",
+        "<svg><foreignObject><![CDATA[foreign]]><div><![CDATA[html]]></div></foreignObject></svg>",
+        "<math><mtext><![CDATA[foreign]]><b><![CDATA[html]]></b></mtext></math>",
+        "<svg><![CDATA[a\0b]",
+        "<svg><![CDATA[a]]",
+    ] { assert_all_splits(src); }
+}
+
+#[test]
 fn script_data_is_invariant_across_every_scalar_boundary() {
     for src in [
         "<script><!-- x --> y </script><p>z",

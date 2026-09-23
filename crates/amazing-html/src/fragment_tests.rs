@@ -68,6 +68,32 @@ fn plaintext_fragment_is_virtual_and_literal_through_eof() {
 }
 
 #[test]
+fn foreign_cdata_is_text_and_html_cdata_is_a_bogus_comment() {
+    assert_eq!(parse("<svg><![CDATA[a<b>&amp;]]><circle/></svg>").dump(NodeIdx(0)),
+        "#document\n  <html>\n    <head>\n    <body>\n      <svg svg>\n        \"a<b>&amp;\"\n        <svg circle>\n");
+    assert_eq!(parse("<math><mtext><![CDATA[x<y &amp;]]></mtext></math>").dump(NodeIdx(0)),
+        "#document\n  <html>\n    <head>\n    <body>\n      <math math>\n        <math mtext>\n          \"x<y &amp;\"\n");
+    assert_eq!(parse("<![CDATA[html]]><p>z").dump(NodeIdx(0)),
+        "#document\n  <!-- [CDATA[html]] -->\n  <html>\n    <head>\n    <body>\n      <p>\n        \"z\"\n");
+}
+
+#[test]
+fn cdata_uses_adjusted_current_node_across_integration_points() {
+    assert_eq!(parse("<svg><foreignObject><![CDATA[foreign]]><div><![CDATA[html]]></div></foreignObject></svg>").dump(NodeIdx(0)),
+        "#document\n  <html>\n    <head>\n    <body>\n      <svg svg>\n        <svg foreignObject>\n          \"foreign\"\n          <div>\n            <!-- [CDATA[html]] -->\n");
+    assert_eq!(parse("<math><mtext><![CDATA[foreign]]><b><![CDATA[html]]></b></mtext></math>").dump(NodeIdx(0)),
+        "#document\n  <html>\n    <head>\n    <body>\n      <math math>\n        <math mtext>\n          \"foreign\"\n          <b>\n            <!-- [CDATA[html]] -->\n");
+}
+
+#[test]
+fn foreign_cdata_null_and_unterminated_brackets_recover_as_text() {
+    assert_eq!(parse("<svg><![CDATA[a\0b]").dump(NodeIdx(0)),
+        "#document\n  <html>\n    <head>\n    <body>\n      <svg svg>\n        \"a�b]\"\n");
+    assert_eq!(parse("<svg><![CDATA[a]]").dump(NodeIdx(0)),
+        "#document\n  <html>\n    <head>\n    <body>\n      <svg svg>\n        \"a]]\"\n");
+}
+
+#[test]
 fn script_fragment_uses_script_data_and_keeps_virtual_context_end_tag() {
     assert_eq!(dump("script", "a<b>&amp;"), "#document\n  \"a<b>&amp;\"\n");
     assert_eq!(dump("script", "x</script><i>y"), "#document\n  \"x</script><i>y\"\n");

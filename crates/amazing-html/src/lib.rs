@@ -21,7 +21,6 @@
 //!   byte-level subset; see [`encoding`] for its precise encoding coverage.
 //! - [`IncrementalParser`] accepts already-decoded chunks and finishes only
 //!   when the caller explicitly ends the document.
-//! - CDATA sections (`<![CDATA[…]]>`) tokenize as bogus comments.
 //! - Doctype PUBLIC/SYSTEM identifiers are consumed but not captured; only
 //!   their presence feeds quirks-mode approximation.
 //! - MathML/SVG namespaces and integration points are implemented; some
