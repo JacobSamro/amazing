@@ -1,0 +1,17 @@
+{
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "host": "win-001",
+  "wpt_root": "C:/Users/server/target/layout/wpt",
+  "files": {
+    "common/reftest-wait.js": "d4a7992dfa6020b92a59955753e2e2ba7219047cd2a4ccb1fcd989a64e899b42",
+    "css/css-lists/marker-dynamic-content-change-ref.html": "ad742a27c0d907213be0df31547aa13b226d1880b437674a12f704a831b085b1",
+    "css/css-lists/marker-counter-ref.html": "0c5bdaa1145f2675a10d777331629e8400e29adc4c31413e24f21f4cd21c07f3",
+    "css/css-lists/list-item-dynamic-padding.html": "8290c04017a55dd7ae298b5f828491e664b6a0b8851c1688bced6c1a13dc9661",
+    "css/css-lists/list-item-dynamic-padding-ref.html": "705ee3b893d06bf749be48c14f7ee931ed4e9997b62c1d02b2412d648f236982",
+    "css/css-lists/list-style-image-gradients-dynamic-ref.html": "c5cb3e0696d4551649f28269a07b70b8435694e13574fb1ba3b699701595fc2e",
+    "css/css-lists/list-style-image-gradients-dynamic.html": "47a32d0e9196f9512dc84c746fff0f44b5b63a2343177435a0316795f0ea6a53",
+    "css/css-lists/marker-counter.html": "4a4b678f512502f6780ad071ce2a71dcff32655f4d2f917b42f443beedbc215e",
+    "css/css-lists/marker-dynamic-content-change.html": "c969ef4043da9fb7bc6185732345b4446994fe9792db886418a9529180ee0aff"
+  },
+  "all_match_selection": true
+}

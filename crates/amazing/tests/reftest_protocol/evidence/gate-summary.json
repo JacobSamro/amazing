@@ -1,0 +1,47 @@
+{
+  "fixed_base": "82d273a1005a5cd77e21003e0f969dbbe4c455f1",
+  "host": "win-002",
+  "package_nextest": {
+    "passed": 147,
+    "skipped": 3
+  },
+  "package_doctests": "N/A: amazing has no library target",
+  "workspace_nextest": {
+    "passed": 1967,
+    "skipped": 5
+  },
+  "workspace_doctests": {
+    "passed": 2
+  },
+  "hash_audit": {
+    "Cargo.lock": {
+      "before": "504fb15698e1cd8faa0c7461a155cc45904be8d34a32c4f3b95928a2f01407bd",
+      "after": "504fb15698e1cd8faa0c7461a155cc45904be8d34a32c4f3b95928a2f01407bd"
+    },
+    "crates/amazing/src/cmd/js.rs": {
+      "before": "d2a166f841208b73ffe6558fd68cb43682af85c7695566226db75ef9a102e97e",
+      "after": "d2a166f841208b73ffe6558fd68cb43682af85c7695566226db75ef9a102e97e"
+    },
+    "crates/amazing/src/cmd/render.rs": {
+      "before": "c552ecab2a7d7649add4b2635f7c209f93d03607d32aba8bb90ca6e159d2789d",
+      "after": "c552ecab2a7d7649add4b2635f7c209f93d03607d32aba8bb90ca6e159d2789d"
+    },
+    "crates/amazing/src/cmd/wpt.rs": {
+      "before": "138892b999720551df769b8d820e340f46b4b35909883cbf2f3b486f89a17b8f",
+      "after": "138892b999720551df769b8d820e340f46b4b35909883cbf2f3b486f89a17b8f"
+    },
+    "crates/amazing/src/document.rs": {
+      "before": "994e464605db46886b624e9dafd23e0e4f8bcfe77c594808f409ec2dfbd135ef",
+      "after": "994e464605db46886b624e9dafd23e0e4f8bcfe77c594808f409ec2dfbd135ef"
+    },
+    "crates/amazing/tests/render_wpt.rs": {
+      "before": "6a16b34995cfab2a81b86d3b6655817627c34f285d75a14865a1f6cb9af29d62",
+      "after": "6a16b34995cfab2a81b86d3b6655817627c34f285d75a14865a1f6cb9af29d62"
+    },
+    "crates/amazing/tests/reftest_protocol/selection.json": {
+      "before": "90182d9a04ea9e052b2e50b9548ac22eb2d5e09c3ea31530ed248313b94c9129",
+      "after": "90182d9a04ea9e052b2e50b9548ac22eb2d5e09c3ea31530ed248313b94c9129"
+    }
+  },
+  "all_hashes_match_mac_before_after": true
+}

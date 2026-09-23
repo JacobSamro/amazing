@@ -610,3 +610,51 @@ matching raw record bytes across rounds. Exact named-pass comparison found
 assertions and earns no conformance credit. Pinned WPT proof and selection
 hashes matched the Linux runs. Full Windows raw reports are retained in the
 lane's `.agents` evidence folders.
+
+## IA-REFTEST-PROTOCOL — TestRendered capture boundary (2026-09-24)
+
+This independent driver ticket starts from fixed pushed `origin/dev`
+`82d273a`, without the unpushed IA-COMPOSITOR shell files. The win-001 IA
+tree was refreshed once at that base. Ordinary `render` retains its existing
+script/checkpoint/capture behavior. `render-wpt` keeps the JS-4 scheduler
+alive across an actual first style/layout/paint, dispatches one
+`TestRendered` event, drains its checkpoint, and advances a bounded virtual
+frame clock while the document root has `reftest-wait`. It then rebuilds CSS,
+fonts, media, layout, and paint from the current DOM. A wait that survives
+120 checkpoints exits with explicit unsupported status and writes no PPM;
+script errors also write no PPM.
+
+The frozen four-pair `css/css-lists` selection at upstream revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` has selection SHA-256
+`90182d9a04ea9e052b2e50b9548ac22eb2d5e09c3ea31530ed248313b94c9129`.
+Its 800×600 manifest records exact Git blob and SHA-256 values for all four
+test sources, four references, and `/common/reftest-wait.js`; all nine staged
+win-001 WPT files matched. Two BEFORE runs were identical at **1 pass, 2
+mismatches, 1 crash**. Two AFTER runs were identical at **1 pass, 1 mismatch,
+1 crash, 1 unsupported**. The only gain is
+`list-item-dynamic-padding` mismatch→pass, with actual image SHA-256 changing
+from `c86a97b952e37dd72d00ce6a77ae4d8090f03c0fc10438fc247c311847de10f4`
+to the reference hash
+`5f14e0d16560e649190a55fb194432f91f68517bb3c1259e128853a980d43269`.
+`marker-dynamic-content-change` pass→unsupported is an exposed previous
+unchanged-image false pass: the event handler's `classList = "tweak"`
+assignment fails on a read-only property, so the wait class stays. The
+gradient case remains a page-script crash; static `marker-counter` retains
+its exact actual/reference image hashes and mismatch classification. No
+net conformance gain is claimed. The exact reports, hashes, and transitions
+are under `crates/amazing/tests/reftest_protocol/evidence/`.
+
+The marker page's Element.classList `[PutForwards=value]` setter and the
+gradient page's bare global `addEventListener` receiver are lower-crate seams
+routed in the lane questions file. Neither behavior was simulated in the
+driver. Owned fixtures cover first-paint ordering, one event, synchronous,
+timer and animation-frame class removal, fresh layout/paint, wait timeout,
+thrown scripts, and static output parity; they earn no WPT credit.
+
+Final locked win-002 gates on the fixed-base tree passed: `amazing` nextest
+**147 passed / 3 skipped**, root workspace nextest **1,967 passed / 5
+skipped**, and separate root workspace doctests **2/2**. The `amazing`
+package has no library target, so its separate doctest command is N/A. The
+five changed Rust source/test files, frozen selection, and unchanged root
+`Cargo.lock` matched Mac SHA-256 before and after the final gate; the audit
+is in `evidence/gate-summary.json`.

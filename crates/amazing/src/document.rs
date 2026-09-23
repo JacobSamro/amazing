@@ -23,12 +23,13 @@ pub(crate) struct StreamMetrics {
     pub(crate) peak_driver_bytes: usize,
 }
 
-/// Exit codes 2 and 3 are the render harness's document-error protocol.
+/// Exit code 2 is a document error; 3 is an unsupported render condition.
 /// Ordinary rendering/JS/IO failures retain the existing exit code 1.
 #[derive(Debug)]
 pub(crate) enum PageError {
     Xml(XmlError),
     Unsupported(&'static str),
+    ReftestWaitTimeout,
     Render(String),
 }
 
@@ -37,6 +38,7 @@ impl PageError {
         ExitCode::from(match self {
             Self::Xml(error) if error.kind == XmlErrorKind::Unsupported => 3,
             Self::Unsupported(_) => 3,
+            Self::ReftestWaitTimeout => 3,
             Self::Xml(_) => 2,
             Self::Render(_) => 1,
         })
@@ -48,6 +50,7 @@ impl fmt::Display for PageError {
         match self {
             Self::Xml(error) => error.fmt(f),
             Self::Unsupported(message) => write!(f, "XML Unsupported: {message}"),
+            Self::ReftestWaitTimeout => write!(f, "Reftest Unsupported: reftest-wait remained after 120 deterministic frame checkpoints"),
             Self::Render(message) => f.write_str(message),
         }
     }

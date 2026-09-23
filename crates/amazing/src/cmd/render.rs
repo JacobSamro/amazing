@@ -1,7 +1,7 @@
 //! Style, layout, raster, and audio commands.
-use std::{cell::RefCell, rc::Rc, process::ExitCode};
+use std::{cell::RefCell, rc::Rc, process::ExitCode, time::Duration};
 use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text_from_sheets, PagePaint}, gui};
-use super::{parse::{read_bytes, read_source}, js::execute_inline_scripts};
+use super::{parse::{read_bytes, read_source}, js::{execute_inline_scripts, prepare_page_scripts}};
 use crate::document::{DocumentKind, PageError, parse_document_bytes};
 /// Phase 2 demo artifact: compute styles for an HTML page.
 ///
@@ -208,6 +208,88 @@ pub(crate) fn render_surface(
         execute_inline_scripts(&host, html_path)?;
     }
 
+    paint_host_surface(&host, html_path, width, fixed_height, extra_css)
+}
+
+/// WPT's capture boundary follows its first paint and the page's explicit
+/// reftest readiness signal. Keep the scheduler alive while handlers and
+/// timers mutate the same DOM, then rebuild every paint input from that DOM.
+pub(crate) fn render_wpt_surface(
+    html_path: &str,
+    html: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<amazing_paint::Surface, PageError> {
+    render_wpt_surface_after_first_paint(html_path, html, width, height, |_| {})
+}
+
+fn render_wpt_surface_after_first_paint(
+    html_path: &str,
+    html: &[u8],
+    width: u32,
+    height: u32,
+    after_first_paint: impl FnOnce(&amazing_paint::Surface),
+) -> Result<amazing_paint::Surface, PageError> {
+    const MAX_REFTEST_FRAMES: u64 = 120;
+    let document = parse_document_bytes(html, html_path, None)?;
+    document.require_static_xml()?;
+    let scripting = document.kind == DocumentKind::Html;
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: document.dom,
+        native_forwarded: false,
+    }));
+    let mut scheduler = if scripting {
+        let mut scheduler = prepare_page_scripts(&host, html_path, true)?
+            .expect("forced page scheduler");
+        scheduler.js.set_viewport_size(width, height);
+        // Flush the script task's microtasks and due zero-delay timers before
+        // the first rendering opportunity. Frame callbacks wait until after it.
+        scheduler.pump_at(Duration::ZERO, false)
+            .map_err(|error| format!("pre-paint event loop failed: {}", error.describe()))?;
+        Some(scheduler)
+    } else {
+        None
+    };
+    let first = paint_host_surface(&host, html_path, width as f32, Some(height), "")?;
+    after_first_paint(&first);
+    let Some(scheduler) = scheduler.as_mut() else {
+        return Ok(first);
+    };
+
+    scheduler.dispatch_dom_event(0, "TestRendered")
+        .map_err(|error| format!("TestRendered listener failed: {}", error.describe()))?;
+    scheduler.pump_at(Duration::ZERO, false)
+        .map_err(|error| format!("TestRendered checkpoint failed: {}", error.describe()))?;
+    for frame in 1..=MAX_REFTEST_FRAMES {
+        if !root_has_reftest_wait(&host)? {
+            break;
+        }
+        scheduler.pump_at(Duration::from_millis(frame * 16), true)
+            .map_err(|error| format!("reftest-wait checkpoint failed: {}", error.describe()))?;
+    }
+    if root_has_reftest_wait(&host)? {
+        return Err(PageError::ReftestWaitTimeout);
+    }
+    paint_host_surface(&host, html_path, width as f32, Some(height), "")
+}
+
+fn root_has_reftest_wait(host: &Rc<RefCell<BrowserDomHost>>) -> Result<bool, PageError> {
+    let host = host.borrow();
+    let root = host.dom.document_element(amazing_dom::NodeIdx(0))
+        .map_err(|error| PageError::Render(format!("document root: {error:?}")))?;
+    Ok(root
+        .and_then(|root| host.dom.get_attribute_ns(root, None, "class"))
+        .is_some_and(|classes| classes.split_ascii_whitespace().any(|name| name == "reftest-wait")))
+}
+
+fn paint_host_surface(
+    host: &Rc<RefCell<BrowserDomHost>>,
+    html_path: &str,
+    width: f32,
+    fixed_height: Option<u32>,
+    extra_css: &str,
+) -> Result<amazing_paint::Surface, PageError> {
+
     let mut sources = Vec::new();
     let dom = host.borrow();
     collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut sources)?;
@@ -317,4 +399,79 @@ pub(crate) fn cmd_play_audio(args: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     }
     gui::play_wav_file(path)
+}
+
+#[cfg(test)]
+mod reftest_protocol_tests {
+    use super::*;
+
+    const STYLE: &str = "<style>body{margin:0}#box{width:12px;height:12px;background:red}.ready #box{width:32px;height:24px;background:lime}</style>";
+
+    fn page(root_class: &str, script: &str) -> String {
+        format!("<!doctype html><html class='{root_class}'>{STYLE}<body><div id='box'></div><script>{script}</script></body></html>")
+    }
+
+    fn ready_reference() -> amazing_paint::Surface {
+        let html = page("ready", "");
+        render_surface("reference.html", html.as_bytes(), 64., Some(48), "").unwrap()
+    }
+
+    #[test]
+    fn test_rendered_follows_first_paint_once_and_repaints_mutated_layout() {
+        let html = page("reftest-wait", "let calls=0; document.addEventListener('TestRendered',()=>{ calls++; document.documentElement.setAttribute('class', calls===1?'ready':'bad'); });");
+        let mut first = None;
+        let final_frame = render_wpt_surface_after_first_paint(
+            "sync.html", html.as_bytes(), 64, 48,
+            |surface| first = Some(surface.pixels.clone()),
+        ).unwrap();
+        assert_ne!(first.unwrap(), final_frame.pixels);
+        assert_eq!(final_frame.pixels, ready_reference().pixels);
+    }
+
+    #[test]
+    fn timer_removes_wait_class_at_bounded_checkpoint() {
+        let html = page("reftest-wait", "document.addEventListener('TestRendered',()=>setTimeout(()=>document.documentElement.setAttribute('class','ready'),32));");
+        let final_frame = render_wpt_surface("timer.html", html.as_bytes(), 64, 48).unwrap();
+        assert_eq!(final_frame.pixels, ready_reference().pixels);
+    }
+
+    #[test]
+    fn animation_frame_removes_wait_class_after_first_paint() {
+        let html = page("reftest-wait", "document.addEventListener('TestRendered',()=>requestAnimationFrame(()=>document.documentElement.setAttribute('class','ready')));");
+        let final_frame = render_wpt_surface("frame.html", html.as_bytes(), 64, 48).unwrap();
+        assert_eq!(final_frame.pixels, ready_reference().pixels);
+    }
+
+    #[test]
+    fn missing_wait_removal_is_explicit_unsupported_without_image() {
+        let html = page("reftest-wait", "");
+        assert!(matches!(
+            render_wpt_surface("timeout.html", html.as_bytes(), 64, 48),
+            Err(PageError::ReftestWaitTimeout)
+        ));
+    }
+
+    #[test]
+    fn page_and_event_exceptions_cannot_become_passing_images() {
+        let thrown = page("reftest-wait", "throw new Error('page sentinel')");
+        assert!(matches!(
+            render_wpt_surface("throw.html", thrown.as_bytes(), 64, 48),
+            Err(PageError::Render(message)) if message.contains("page sentinel")
+        ));
+        let event = page("reftest-wait", "document.addEventListener('TestRendered',()=>{throw new Error('event sentinel')})");
+        // DOM event dispatch reports listener exceptions without propagating
+        // them. The still-present wait class must prevent a passing image.
+        assert!(matches!(
+            render_wpt_surface("event.html", event.as_bytes(), 64, 48),
+            Err(PageError::ReftestWaitTimeout)
+        ));
+    }
+
+    #[test]
+    fn static_page_keeps_ordinary_render_pixels() {
+        let html = page("ready", "");
+        let ordinary = render_surface("static.html", html.as_bytes(), 64., Some(48), "").unwrap();
+        let wpt = render_wpt_surface("static.html", html.as_bytes(), 64, 48).unwrap();
+        assert_eq!(ordinary.pixels, wpt.pixels);
+    }
 }
