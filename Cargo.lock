@@ -81,6 +81,7 @@ name = "amazing"
 version = "0.0.1"
 dependencies = [
  "amazing-bindings",
+ "amazing-canvas",
  "amazing-common",
  "amazing-compositor",
  "amazing-css",
@@ -106,6 +107,7 @@ dependencies = [
 name = "amazing-bindings"
 version = "0.0.1"
 dependencies = [
+ "amazing-canvas",
  "amazing-dom",
  "amazing-fetch",
  "amazing-net",

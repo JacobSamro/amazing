@@ -10,3 +10,4 @@ rust-version.workspace = true
 amazing-dom = { path = "../amazing-dom" }
 amazing-net = { path = "../amazing-net" }
 amazing-fetch = { path = "../amazing-fetch" }
+amazing-canvas = { path = "../amazing-canvas" }
