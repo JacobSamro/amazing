@@ -165,6 +165,14 @@ LANE_GRANTS.setdefault("dom-bindings", []).extend([
 # (grid_template_longhand_rejects_reserved_line_names: 0 -> 100px). That single
 # assertion and its comment only; read the diff at merge.
 LANE_GRANTS.setdefault("layout", []).append("crates/amazing/tests/phase5_flex_grid.rs")
+# JSRT-5 changes JsValue::Str to the opaque JsString. The driver matches on it
+# in exactly these files. Granted for the MECHANICAL string-API migration only
+# (read the diff at merge); no behaviour changes.
+LANE_GRANTS.setdefault("js-runtime", []).extend([
+    "crates/amazing/src/cmd/wpt_harness.rs",
+    "crates/amazing/src/cmd/js.rs",
+    "crates/amazing-shell-gpui/src/dom_runtime.rs",
+])
 LANE_GRANTS["integrator-assist"] = [
     "crates/amazing-shell-gpui/src/session_state.rs",
     "crates/amazing-shell-gpui/src/dom_runtime.rs",
@@ -222,6 +230,11 @@ LANE_GRANTS_REWRITE = {
         "crates/amazing-shell-gpui/Cargo.lock",
     ],
     "layout": ["crates/amazing/tests/phase5_flex_grid.rs"],
+    "js-runtime": [
+        "crates/amazing/src/cmd/wpt_harness.rs",
+        "crates/amazing/src/cmd/js.rs",
+        "crates/amazing-shell-gpui/src/dom_runtime.rs",
+    ],
 }
 # IA-CACHE adds exactly one line, `amazing-fetch = { path = "../amazing-fetch" }`,
 # to the shell manifest. Additive, verified at merge.
