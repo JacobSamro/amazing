@@ -211,3 +211,24 @@ LAYOUT-14 item 0 owns that fix; TEXT-7 must merge after it. Other ruby,
 text-combine, sideways flex, and orthogonal baseline mismatches are routed to
 layout. Evidence: `crates/amazing-text-provider/evidence/text7-gate-summary.json`
 at pinned WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+
+## TEXT-8: exact font matching contract
+
+`TextStyle` now exposes `stretch_percent: f32` and
+`oblique_angle_degrees: Option<f32>`. A zero width value temporarily uses the
+legacy integer `stretch`; `None` uses the CSS default 14-degree oblique angle.
+LAYOUT-14 item 5 will fill both exact computed values in
+`box_tree.rs::text_style`. The provider now preserves fractional face descriptor
+ranges, ranks width then style (including oblique angle) then weight using CSS
+Fonts 4 section 5.2, and applies selected exact width/angle to variable font
+axes. Explicit `font-variation-settings` still overrides matched axes.
+
+On the TEXT-7 base `9eda828`, the pinned font-face selection improved 3/8 to
+4/8 (`font-descriptor-range-reversed-002`), while the 15-case font selection
+stayed 13/15, vertical and vertical/ruby stayed 5/7 and 11/20, and retained
+flow and shaping stayed 14/16 and 12/12. Across 78 cases no classifications
+were lost relative to the retained baselines. The vertical/ruby
+`tcy` line-break loss introduced in TEXT-7 remains pending LAYOUT-14 item 0,
+so the combined series must merge only after that fix. Evidence:
+`crates/amazing-text-provider/evidence/text8-gate-summary.json` at WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.

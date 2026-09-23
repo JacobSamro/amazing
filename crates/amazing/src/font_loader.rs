@@ -218,37 +218,32 @@ fn descriptor_range(
 ) -> Result<FontDescriptorRange, String> {
     let mut parts = value.split_whitespace().map(|part| {
         if part.eq_ignore_ascii_case("normal") {
-            return Ok(default);
+            return Ok(default as f32);
         }
         if part.eq_ignore_ascii_case("bold") && !percentage {
-            return Ok(700);
+            return Ok(700.0);
         }
         let part = if percentage {
             part.strip_suffix('%').ok_or("expected percentage")?
         } else {
             part
         };
-        if percentage {
-            part.parse::<f32>()
-                .ok()
-                .filter(|value| value.is_finite() && *value >= 1.0 && *value <= 1000.0)
-                .map(|value| value.round() as u16)
-                .ok_or("invalid descriptor range")
-        } else {
-            part.parse::<u16>().map_err(|_| "invalid descriptor range")
-        }
+        part.parse::<f32>()
+            .ok()
+            .filter(|value| value.is_finite() && *value >= 1.0 && *value <= 1000.0)
+            .ok_or("invalid descriptor range")
     });
     let min = parts
         .next()
         .transpose()
         .map_err(str::to_owned)?
-        .unwrap_or(default);
+        .unwrap_or(default as f32);
     let max = parts
         .next()
         .transpose()
         .map_err(str::to_owned)?
         .unwrap_or(min);
-    if parts.next().is_some() || min < 1 || max < 1 || min > 1000 || max > 1000 {
+    if parts.next().is_some() || min < 1.0 || max < 1.0 || min > 1000.0 || max > 1000.0 {
         return Err("invalid descriptor range".into());
     }
     Ok(FontDescriptorRange {
@@ -439,11 +434,17 @@ mod tests {
         assert_eq!(descriptor.sources.len(), 2);
         assert_eq!(
             descriptor.weight,
-            FontDescriptorRange { min: 300, max: 700 }
+            FontDescriptorRange {
+                min: 300.0,
+                max: 700.0
+            }
         );
         assert_eq!(
             descriptor.stretch,
-            FontDescriptorRange { min: 80, max: 120 }
+            FontDescriptorRange {
+                min: 80.0,
+                max: 120.0
+            }
         );
         assert_eq!(
             descriptor.unicode_ranges,
@@ -476,9 +477,18 @@ mod tests {
         let descriptor = descriptor_from_css(face).unwrap();
         assert_eq!(
             descriptor.weight,
-            FontDescriptorRange { min: 100, max: 900 }
+            FontDescriptorRange {
+                min: 100.0,
+                max: 900.0
+            }
         );
-        assert_eq!(descriptor.stretch, FontDescriptorRange { min: 63, max: 75 });
+        assert_eq!(
+            descriptor.stretch,
+            FontDescriptorRange {
+                min: 62.5,
+                max: 75.0
+            }
+        );
         assert_eq!(
             descriptor.style,
             FontStyleDescriptor::Oblique {

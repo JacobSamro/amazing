@@ -1,0 +1,148 @@
+{
+  "schema": 1,
+  "ticket": "TEXT-8",
+  "implementation_base": "9eda828",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selections": {
+    "font-face": {
+      "before": "text7-font-face-axes.json",
+      "after": "text8-font-face.json",
+      "before_counts": {
+        "pass": 3,
+        "mismatch": 5,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 4,
+        "mismatch": 4,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [
+        {
+          "id": "css-fonts__variations__font-descriptor-range-reversed-002.html",
+          "before": "mismatch",
+          "after": "pass"
+        }
+      ],
+      "classification_losses": 0
+    },
+    "fonts": {
+      "before": "text7-font-axes.json",
+      "after": "text8-fonts.json",
+      "before_counts": {
+        "pass": 13,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 13,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    },
+    "vertical": {
+      "before": "text7-vertical-bidi.json",
+      "after": "text8-vertical.json",
+      "before_counts": {
+        "pass": 5,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 5,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    },
+    "vertical-ruby": {
+      "before": "text7-vertical-ruby-bidi.json",
+      "after": "text8-vertical-ruby.json",
+      "before_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 11,
+        "mismatch": 9,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    },
+    "flow": {
+      "before": "text6-flow-after.json",
+      "after": "text8-flow.json",
+      "before_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 14,
+        "mismatch": 2,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    },
+    "shaping": {
+      "before": "text6-shaping-after.json",
+      "after": "text8-shaping.json",
+      "before_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "after_counts": {
+        "pass": 12,
+        "mismatch": 0,
+        "error": 0,
+        "timeout": 0,
+        "unsupported": 0,
+        "crash": 0
+      },
+      "classification_changes": [],
+      "classification_losses": 0
+    }
+  },
+  "classification_losses": 0,
+  "note": "TEXT-7 inherited tcy line-break loss remains pending LAYOUT-14 item 0; this gate compares TEXT-8 to TEXT-7 where available."
+}

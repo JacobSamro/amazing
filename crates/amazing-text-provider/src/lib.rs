@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod font_display;
+mod font_matching;
 mod font_variations;
 pub use font_display::FontDisplayPeriods;
 
@@ -11,7 +12,7 @@ use amazing_text::{
     FontMetrics, FontSlant, GlyphCacheKey, GlyphContent, GlyphFlags, GlyphId, GlyphImage,
     GlyphOrientation, GlyphRasterRequest, LineRequest, Paragraph, ShapedGlyph, ShapedLine,
     ShapedParagraph, ShapedRun, ShapingBoundary, TextError, TextOrientation, TextStyle, TextSystem,
-    WritingMode, font_match_rank, resolve_synthesis,
+    WritingMode, resolve_synthesis,
 };
 use harfrust::{
     BufferFlags, Feature, FontRef as HarfFontRef, ShapeOptions, ShaperData, ShaperInstance, Tag,
@@ -69,26 +70,30 @@ pub struct WebFont {
 
 /// Inclusive CSS descriptor range. Values are normalized by the CSS owner
 /// before crossing the provider boundary.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FontDescriptorRange {
-    pub min: u16,
-    pub max: u16,
+    pub min: f32,
+    pub max: f32,
 }
 
 impl FontDescriptorRange {
-    pub const fn single(value: u16) -> Self {
+    pub const fn single(value: f32) -> Self {
         Self {
             min: value,
             max: value,
         }
     }
 
-    fn nearest(self, value: u16) -> u16 {
+    fn nearest(self, value: f32) -> f32 {
         value.clamp(self.min, self.max)
     }
 
     fn valid(self) -> bool {
-        self.min >= 1 && self.min <= self.max && self.max <= 1000
+        self.min.is_finite()
+            && self.max.is_finite()
+            && self.min >= 1.0
+            && self.min <= self.max
+            && self.max <= 1000.0
     }
 }
 
@@ -194,8 +199,8 @@ impl Default for FontFaceDescriptor {
             family: String::new(),
             sources: Vec::new(),
             unicode_ranges: Vec::new(),
-            weight: FontDescriptorRange::single(400),
-            stretch: FontDescriptorRange::single(100),
+            weight: FontDescriptorRange::single(400.0),
+            stretch: FontDescriptorRange::single(100.0),
             style: FontStyleDescriptor::Normal,
             display: FontDisplay::Auto,
             size_adjust: 1.0,
@@ -250,8 +255,11 @@ impl FontRecord {
     fn attributes_for(&self, style: &TextStyle) -> FontAttributes {
         if let Some(face) = &self.author_face {
             FontAttributes {
-                weight: face.weight.nearest(style.weight),
-                stretch: face.stretch.nearest(style.stretch),
+                weight: face.weight.nearest(style.weight as f32).round() as u16,
+                stretch: face
+                    .stretch
+                    .nearest(font_matching::requested_width(style))
+                    .round() as u16,
                 slant: face.style.slant(),
             }
         } else {
@@ -444,8 +452,8 @@ impl TextProvider {
             }
             let font = WebFont {
                 family: family.clone(),
-                weight: metadata.weight.min,
-                stretch: metadata.stretch.min,
+                weight: metadata.weight.min.round() as u16,
+                stretch: metadata.stretch.min.round() as u16,
                 slant: metadata.style.slant(),
                 format,
                 bytes,
@@ -560,14 +568,7 @@ impl TextProvider {
                 {
                     continue;
                 }
-                let rank = font_match_rank(
-                    FontAttributes {
-                        weight: style.weight,
-                        stretch: style.stretch,
-                        slant: style.slant,
-                    },
-                    font.attributes_for(style),
-                );
+                let rank = font_matching::rank(style, font);
                 if best_rank.is_none_or(|current| rank < current) {
                     best_rank = Some(rank);
                     candidates.clear();
@@ -607,16 +608,7 @@ impl TextProvider {
                             && text.is_none_or(|value| font_covers(font, value))
                             && (!require_space || font_covers_space(font))
                     })
-                    .min_by_key(|(_, font)| {
-                        font_match_rank(
-                            FontAttributes {
-                                weight: style.weight,
-                                stretch: style.stretch,
-                                slant: style.slant,
-                            },
-                            font.attributes_for(style),
-                        )
-                    })
+                    .min_by_key(|(_, font)| font_matching::rank(style, font))
                     .map(|(index, _)| index)
             })
     }
@@ -2300,8 +2292,14 @@ mod tests {
                             start: ch as u32,
                             end: ch as u32,
                         }],
-                        weight: FontDescriptorRange { min: 400, max: 800 },
-                        stretch: FontDescriptorRange { min: 75, max: 125 },
+                        weight: FontDescriptorRange {
+                            min: 400.0,
+                            max: 800.0,
+                        },
+                        stretch: FontDescriptorRange {
+                            min: 75.0,
+                            max: 125.0,
+                        },
                         ..FontFaceDescriptor::default()
                     },
                     &mut loader,
@@ -2338,7 +2336,10 @@ mod tests {
         let invalid = FontFaceDescriptor {
             family: "Declared".into(),
             sources: vec![FontFaceSource::Local("missing".into())],
-            weight: FontDescriptorRange { min: 800, max: 400 },
+            weight: FontDescriptorRange {
+                min: 800.0,
+                max: 400.0,
+            },
             ..FontFaceDescriptor::default()
         };
         assert_eq!(

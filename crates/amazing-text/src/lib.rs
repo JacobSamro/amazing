@@ -265,7 +265,13 @@ pub struct TextStyle {
     pub size: f32,
     pub weight: u16,
     pub stretch: u16,
+    /// Exact computed CSS font width percentage. Zero means the legacy
+    /// integer `stretch` is used until the layout caller supplies this value.
+    pub stretch_percent: f32,
     pub slant: FontSlant,
+    /// Exact computed CSS oblique angle in degrees; `None` uses the CSS
+    /// default 14 degrees when `slant` is oblique.
+    pub oblique_angle_degrees: Option<f32>,
     pub direction: Direction,
     pub writing_mode: WritingMode,
     pub text_orientation: TextOrientation,
@@ -289,7 +295,9 @@ impl Default for TextStyle {
             size: 16.0,
             weight: 400,
             stretch: 100,
+            stretch_percent: 0.0,
             slant: FontSlant::Normal,
+            oblique_angle_degrees: None,
             direction: Direction::LeftToRight,
             writing_mode: WritingMode::HorizontalTb,
             text_orientation: TextOrientation::Mixed,

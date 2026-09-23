@@ -9,11 +9,13 @@ pub(super) fn for_face(font: &FontRecord, style: &TextStyle) -> Vec<VariationSet
     if let Some(face) = &font.author_face {
         axes.push(VariationSetting {
             tag: *b"wght",
-            value: face.weight.nearest(style.weight) as f32,
+            value: face.weight.nearest(style.weight as f32),
         });
         axes.push(VariationSetting {
             tag: *b"wdth",
-            value: face.stretch.nearest(style.stretch) as f32,
+            value: face
+                .stretch
+                .nearest(super::font_matching::requested_width(style)),
         });
         match (style.slant, face.style) {
             (FontSlant::Italic, FontStyleDescriptor::Italic) => axes.push(VariationSetting {
@@ -28,7 +30,8 @@ pub(super) fn for_face(font: &FontRecord, style: &TextStyle) -> Vec<VariationSet
                 },
             ) => axes.push(VariationSetting {
                 tag: *b"slnt",
-                value: 14.0f32.clamp(min_degrees, max_degrees),
+                value: super::font_matching::requested_oblique_angle(style)
+                    .clamp(min_degrees, max_degrees),
             }),
             _ => {}
         }
