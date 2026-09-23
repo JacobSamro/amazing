@@ -1,0 +1,327 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "sha256-path-stratified",
+    "per_category": 40,
+    "filters": "local HTML match reference, no scripts/resources/flags"
+  },
+  "sparse_paths": [
+    "css/css-pseudo",
+    "css/css-content"
+  ],
+  "tests": [
+    {
+      "id": "css-pseudo__marker-color.html",
+      "test": "css/css-pseudo/marker-color.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-005.html",
+      "test": "css/css-pseudo/first-letter-005.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-with-quote.html",
+      "test": "css/css-pseudo/first-letter-with-quote.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-punctuation-and-space.html",
+      "test": "css/css-pseudo/first-letter-punctuation-and-space.html"
+    },
+    {
+      "id": "css-pseudo__marker-text-align-001.html",
+      "test": "css/css-pseudo/marker-text-align-001.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-trailing-punctuation.html",
+      "test": "css/css-pseudo/first-letter-trailing-punctuation.html"
+    },
+    {
+      "id": "css-pseudo__marker-word-break.html",
+      "test": "css/css-pseudo/marker-word-break.html"
+    },
+    {
+      "id": "css-pseudo__marker-content-005.html",
+      "test": "css/css-pseudo/marker-content-005.html"
+    },
+    {
+      "id": "css-pseudo__relative-box-order-of-pseudo-elements.html",
+      "test": "css/css-pseudo/relative-box-order-of-pseudo-elements.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-width.html",
+      "test": "css/css-pseudo/first-letter-width.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-with-before-after.html",
+      "test": "css/css-pseudo/first-letter-with-before-after.html"
+    },
+    {
+      "id": "css-pseudo__marker-text-emphasis.html",
+      "test": "css/css-pseudo/marker-text-emphasis.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-002.html",
+      "test": "css/css-pseudo/first-letter-002.html"
+    },
+    {
+      "id": "css-pseudo__first-line-with-out-of-flow-and-nested-span.html",
+      "test": "css/css-pseudo/first-line-with-out-of-flow-and-nested-span.html"
+    },
+    {
+      "id": "css-pseudo__first-line-input-textarea.tentative.html",
+      "test": "css/css-pseudo/first-line-input-textarea.tentative.html"
+    },
+    {
+      "id": "css-pseudo__marker-variable.html",
+      "test": "css/css-pseudo/marker-variable.html"
+    },
+    {
+      "id": "css-pseudo__marker-content-018.html",
+      "test": "css/css-pseudo/marker-content-018.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-skip-empty-span-nested.html",
+      "test": "css/css-pseudo/first-letter-skip-empty-span-nested.html"
+    },
+    {
+      "id": "css-pseudo__placeholder-excluded-properties.html",
+      "test": "css/css-pseudo/placeholder-excluded-properties.html"
+    },
+    {
+      "id": "css-pseudo__marker-content-002.html",
+      "test": "css/css-pseudo/marker-content-002.html"
+    },
+    {
+      "id": "css-pseudo__first-line-with-out-of-flow.html",
+      "test": "css/css-pseudo/first-line-with-out-of-flow.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-003.html",
+      "test": "css/css-pseudo/first-letter-003.html"
+    },
+    {
+      "id": "css-pseudo__marker-content-006.html",
+      "test": "css/css-pseudo/marker-content-006.html"
+    },
+    {
+      "id": "css-pseudo__before-as-flex-container.html",
+      "test": "css/css-pseudo/before-as-flex-container.html"
+    },
+    {
+      "id": "css-pseudo__marker-content-004.html",
+      "test": "css/css-pseudo/marker-content-004.html"
+    },
+    {
+      "id": "css-pseudo__marker-overflow-wrap.html",
+      "test": "css/css-pseudo/marker-overflow-wrap.html"
+    },
+    {
+      "id": "css-pseudo__marker-content-001c.html",
+      "test": "css/css-pseudo/marker-content-001c.html"
+    },
+    {
+      "id": "css-pseudo__marker-and-other-pseudo-elements.html",
+      "test": "css/css-pseudo/marker-and-other-pseudo-elements.html"
+    },
+    {
+      "id": "css-pseudo__marker-text-transform-uppercase.html",
+      "test": "css/css-pseudo/marker-text-transform-uppercase.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-opacity-001.html",
+      "test": "css/css-pseudo/first-letter-opacity-001.html"
+    },
+    {
+      "id": "css-pseudo__marker-list-style-position.html",
+      "test": "css/css-pseudo/marker-list-style-position.html"
+    },
+    {
+      "id": "css-pseudo__marker-text-combine-upright.html",
+      "test": "css/css-pseudo/marker-text-combine-upright.html"
+    },
+    {
+      "id": "css-pseudo__first-line-replaced-001.html",
+      "test": "css/css-pseudo/first-line-replaced-001.html"
+    },
+    {
+      "id": "css-pseudo__first-line-on-ancestor-block.html",
+      "test": "css/css-pseudo/first-line-on-ancestor-block.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-exclude-inline-child-marker.html",
+      "test": "css/css-pseudo/first-letter-exclude-inline-child-marker.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-c0.tentative.html",
+      "test": "css/css-pseudo/first-letter-c0.tentative.html"
+    },
+    {
+      "id": "css-pseudo__marker-text-transform-default.html",
+      "test": "css/css-pseudo/marker-text-transform-default.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-exclude-inline-marker.html",
+      "test": "css/css-pseudo/first-letter-exclude-inline-marker.html"
+    },
+    {
+      "id": "css-pseudo__marker-content-001b.html",
+      "test": "css/css-pseudo/marker-content-001b.html"
+    },
+    {
+      "id": "css-pseudo__first-letter-004.html",
+      "test": "css/css-pseudo/first-letter-004.html"
+    },
+    {
+      "id": "css-content__quotes-019.html",
+      "test": "css/css-content/quotes-019.html"
+    },
+    {
+      "id": "css-content__quotes-020.html",
+      "test": "css/css-content/quotes-020.html"
+    },
+    {
+      "id": "css-content__quotes-017.html",
+      "test": "css/css-content/quotes-017.html"
+    },
+    {
+      "id": "css-content__quotes-001.html",
+      "test": "css/css-content/quotes-001.html"
+    },
+    {
+      "id": "css-content__quotes-021.html",
+      "test": "css/css-content/quotes-021.html"
+    },
+    {
+      "id": "css-content__quotes-009.html",
+      "test": "css/css-content/quotes-009.html"
+    },
+    {
+      "id": "css-content__quotes-035.html",
+      "test": "css/css-content/quotes-035.html"
+    },
+    {
+      "id": "css-content__quotes-005.html",
+      "test": "css/css-content/quotes-005.html"
+    },
+    {
+      "id": "css-content__quotes-033.html",
+      "test": "css/css-content/quotes-033.html"
+    },
+    {
+      "id": "css-content__quotes-034.html",
+      "test": "css/css-content/quotes-034.html"
+    },
+    {
+      "id": "css-content__quotes-024.html",
+      "test": "css/css-content/quotes-024.html"
+    },
+    {
+      "id": "css-content__quotes-015.html",
+      "test": "css/css-content/quotes-015.html"
+    },
+    {
+      "id": "css-content__quotes-007.html",
+      "test": "css/css-content/quotes-007.html"
+    },
+    {
+      "id": "css-content__attr-chained-pseudo-001.html",
+      "test": "css/css-content/attr-chained-pseudo-001.html"
+    },
+    {
+      "id": "css-content__quotes-023.html",
+      "test": "css/css-content/quotes-023.html"
+    },
+    {
+      "id": "css-content__quotes-031.html",
+      "test": "css/css-content/quotes-031.html"
+    },
+    {
+      "id": "css-content__quotes-013.html",
+      "test": "css/css-content/quotes-013.html"
+    },
+    {
+      "id": "css-content__quotes-006.html",
+      "test": "css/css-content/quotes-006.html"
+    },
+    {
+      "id": "css-content__quotes-016.html",
+      "test": "css/css-content/quotes-016.html"
+    },
+    {
+      "id": "css-content__quotes-004.html",
+      "test": "css/css-content/quotes-004.html"
+    },
+    {
+      "id": "css-content__quotes-008.html",
+      "test": "css/css-content/quotes-008.html"
+    },
+    {
+      "id": "css-content__quotes-first-line.html",
+      "test": "css/css-content/quotes-first-line.html"
+    },
+    {
+      "id": "css-content__quotes-014.html",
+      "test": "css/css-content/quotes-014.html"
+    },
+    {
+      "id": "css-content__quotes-010.html",
+      "test": "css/css-content/quotes-010.html"
+    },
+    {
+      "id": "css-content__quotes-011.html",
+      "test": "css/css-content/quotes-011.html"
+    },
+    {
+      "id": "css-content__quotes-030.html",
+      "test": "css/css-content/quotes-030.html"
+    },
+    {
+      "id": "css-content__quotes-018.html",
+      "test": "css/css-content/quotes-018.html"
+    },
+    {
+      "id": "css-content__quotes-003.html",
+      "test": "css/css-content/quotes-003.html"
+    },
+    {
+      "id": "css-content__quotes-025.html",
+      "test": "css/css-content/quotes-025.html"
+    },
+    {
+      "id": "css-content__quotes-022.html",
+      "test": "css/css-content/quotes-022.html"
+    },
+    {
+      "id": "css-content__element-replacement-gradient.html",
+      "test": "css/css-content/element-replacement-gradient.html"
+    },
+    {
+      "id": "css-content__quotes-027.html",
+      "test": "css/css-content/quotes-027.html"
+    },
+    {
+      "id": "css-content__quotes-012.html",
+      "test": "css/css-content/quotes-012.html"
+    },
+    {
+      "id": "css-content__quotes-002.html",
+      "test": "css/css-content/quotes-002.html"
+    },
+    {
+      "id": "css-content__quotes-032.html",
+      "test": "css/css-content/quotes-032.html"
+    },
+    {
+      "id": "css-content__quotes-026.html",
+      "test": "css/css-content/quotes-026.html"
+    },
+    {
+      "id": "css-content__quotes-028.html",
+      "test": "css/css-content/quotes-028.html"
+    },
+    {
+      "id": "css-content__quotes-029.html",
+      "test": "css/css-content/quotes-029.html"
+    }
+  ]
+}

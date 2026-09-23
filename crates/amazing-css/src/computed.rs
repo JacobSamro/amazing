@@ -220,6 +220,8 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "background-attachment", initial: "scroll", inherited: false },
     PropertyMetadata { name: "aspect-ratio", initial: "auto", inherited: false },
     PropertyMetadata { name: "border-spacing", initial: "0px", inherited: true },
+    PropertyMetadata { name: "content", initial: "normal", inherited: false },
+    PropertyMetadata { name: "counter-increment", initial: "none", inherited: false },
     PropertyMetadata { name: "counter-reset", initial: "none", inherited: false },
     PropertyMetadata { name: "counter-set", initial: "none", inherited: false },
     PropertyMetadata {

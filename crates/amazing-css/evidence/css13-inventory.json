@@ -1,0 +1,14 @@
+{
+  "css-pseudo": {
+    "html": 360,
+    "local_reftest": 239,
+    "eligible": 77,
+    "selected": 40
+  },
+  "css-content": {
+    "html": 78,
+    "local_reftest": 59,
+    "eligible": 38,
+    "selected": 38
+  }
+}

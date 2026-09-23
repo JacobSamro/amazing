@@ -1162,3 +1162,24 @@ CSS-5 to chase `dev`: `git diff --name-only 2021707 origin/dev --
 crates/amazing-css` was empty at reporting. The integrator's authoritative
 merged-head gate validates the combined tree. Context-dependent mappings
 listed above remain separate work; CSS-6 is queued below.
+
+## CSS-13 generated content (2026-09-24)
+
+The selector parser now accepts the Selectors 4 pseudo-elements `::before`,
+`::after`, `::marker`, `::placeholder`, `::selection`, `::first-line`,
+`::first-letter`, `::backdrop`, and `::file-selector-button`, including the four
+legacy single-colon forms. Pseudo selectors match an `(element, pseudo)` target
+and add type specificity. `StyledDom::get_pseudo` returns the computed style
+inheriting from its originating element, while `generated_content` returns
+resolved text/image runs and optional alternative text for layout. Before and
+after are omitted when `content` does not create a box. Marker is limited to
+list items that create a marker box.
+
+The `content`, `quotes`, `counter-reset`, `counter-increment`, and `counter-set`
+properties now have parsed grammars. Evaluation walks document order, handles
+reset/increment/set and reversed/list-item counters, tracks quote depth, and
+resolves strings, `attr()` (including fallback), `counter()`/`counters()`,
+quote keywords, and `url()` images. Layout adoption is LAYOUT-13; CSS-owned
+unit tests prove the style/output seam. `css13-manifest.json` freezes 78
+script-free local-reference cases from WPT `css-pseudo/` and `css-content/`
+at revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
