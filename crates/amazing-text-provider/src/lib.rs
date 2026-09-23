@@ -1733,11 +1733,20 @@ fn shape_range(
         }
         buffer.set_flags(flags);
         let scale = (style.size * 64.0).round().clamp(1.0, i32::MAX as f32) as i32;
-        let features = style
-            .features
-            .iter()
-            .map(|feature| Feature::new(Tag::new(&feature.tag), feature.value, ..))
-            .collect::<Vec<_>>();
+        let mut features = Vec::with_capacity(style.features.len() + 2);
+        if style.writing_mode.uses_vertical_metrics() {
+            let upright = orientation == GlyphOrientation::Upright;
+            features.push(Feature::new(Tag::new(b"vert"), u32::from(upright), ..));
+            // CSS selects mixed glyph orientation through UAX50 rather than
+            // delegating it to the font's vrt2 feature.
+            features.push(Feature::new(Tag::new(b"vrt2"), 0, ..));
+        }
+        features.extend(
+            style
+                .features
+                .iter()
+                .map(|feature| Feature::new(Tag::new(&feature.tag), feature.value, ..)),
+        );
         let output = shaper.shape(
             buffer,
             ShapeOptions::new().scale(Some(scale)).features(&features),
@@ -1814,7 +1823,12 @@ fn cluster_orientation(
             TextOrientation::Upright => GlyphOrientation::Upright,
             TextOrientation::Sideways => GlyphOrientation::SidewaysRight,
             TextOrientation::Mixed => {
-                let character = text[cluster].chars().next().unwrap_or('\u{fffd}');
+                let unit = &text[cluster];
+                let character = unit
+                    .chars()
+                    .find(|character| !is_default_ignorable(*character))
+                    .or_else(|| unit.chars().next())
+                    .unwrap_or('\u{fffd}');
                 match unicode_vo::char_orientation(character) {
                     VerticalOrientation::Upright | VerticalOrientation::TransformedOrUpright => {
                         GlyphOrientation::Upright
@@ -2674,6 +2688,113 @@ mod tests {
             };
             assert_eq!(shape(0), 2, "{} disabled", String::from_utf8_lossy(&tag));
             assert_eq!(shape(1), 1, "{} enabled", String::from_utf8_lossy(&tag));
+        }
+    }
+
+    #[test]
+    fn vertical_upright_uses_vert_and_never_defaults_to_vrt2() {
+        let glyph_count = |tag, writing_mode, text_orientation| {
+            let mut provider = TextProvider::new();
+            provider
+                .register_web_font(WebFont {
+                    family: "Vertical feature".into(),
+                    weight: 400,
+                    stretch: 100,
+                    slant: FontSlant::Normal,
+                    format: FontFormat::OpenType,
+                    bytes: synthetic_font_with_feature('A', Some(tag)),
+                })
+                .unwrap();
+            let spans = [TextSpan {
+                range: 0..2,
+                source: 0,
+                style: TextStyle {
+                    families: vec!["Vertical feature".into()],
+                    writing_mode,
+                    text_orientation,
+                    ..TextStyle::default()
+                },
+                boundary_before: ShapingBoundary::Continue,
+            }];
+            provider
+                .shape(Paragraph {
+                    text: "AA",
+                    spans: &spans,
+                    sources: &[],
+                    bidi_scopes: &[],
+                    base_direction: Direction::LeftToRight,
+                })
+                .unwrap()
+                .runs
+                .iter()
+                .map(|run| run.glyphs.len())
+                .sum::<usize>()
+        };
+        for mode in [WritingMode::VerticalRl, WritingMode::VerticalLr] {
+            assert_eq!(glyph_count(*b"vert", mode, TextOrientation::Upright), 1);
+            assert_eq!(glyph_count(*b"vert", mode, TextOrientation::Sideways), 2);
+            assert_eq!(glyph_count(*b"vrt2", mode, TextOrientation::Upright), 2);
+        }
+        assert_eq!(
+            glyph_count(
+                *b"vert",
+                WritingMode::HorizontalTb,
+                TextOrientation::Upright
+            ),
+            2
+        );
+    }
+
+    #[test]
+    fn mixed_vertical_orientation_follows_unicode_vo_for_each_base_character() {
+        for mode in [WritingMode::VerticalRl, WritingMode::VerticalLr] {
+            let style = TextStyle {
+                writing_mode: mode,
+                text_orientation: TextOrientation::Mixed,
+                ..TextStyle::default()
+            };
+            for (text, expected) in [
+                ("A", GlyphOrientation::SidewaysRight),
+                ("漢", GlyphOrientation::Upright),
+                ("Ａ", GlyphOrientation::Upright),
+                ("\u{200d}漢", GlyphOrientation::Upright),
+            ] {
+                assert_eq!(
+                    cluster_orientation(&style, text, 0..text.len()),
+                    expected,
+                    "{text}"
+                );
+            }
+        }
+        let style = TextStyle {
+            writing_mode: WritingMode::SidewaysLr,
+            ..TextStyle::default()
+        };
+        assert_eq!(
+            cluster_orientation(&style, "漢", 0.."漢".len()),
+            GlyphOrientation::SidewaysLeft
+        );
+    }
+
+    #[test]
+    fn upright_vertical_text_forces_left_to_right_bidi_direction() {
+        let text = "אב";
+        for mode in [WritingMode::VerticalRl, WritingMode::VerticalLr] {
+            let spans = [TextSpan {
+                range: 0..text.len(),
+                source: 0,
+                style: TextStyle {
+                    writing_mode: mode,
+                    text_orientation: TextOrientation::Upright,
+                    direction: Direction::RightToLeft,
+                    ..TextStyle::default()
+                },
+                boundary_before: ShapingBoundary::Continue,
+            }];
+            assert_eq!(
+                bidi_directions(text, &spans, &spans, Direction::RightToLeft, &[]).unwrap(),
+                vec![Direction::LeftToRight]
+            );
         }
     }
 

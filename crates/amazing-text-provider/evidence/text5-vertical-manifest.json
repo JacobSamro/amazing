@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "text5-vertical-shaping",
+    "case_count": 7
+  },
+  "sparse_paths": [
+    "css/css-writing-modes",
+    "fonts"
+  ],
+  "tests": [
+    {
+      "id": "css-writing-modes__text-orientation-mixed-vlr-100.html",
+      "test": "css/css-writing-modes/text-orientation-mixed-vlr-100.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-upright-vlr-100.html",
+      "test": "css/css-writing-modes/text-orientation-upright-vlr-100.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-sideways-vlr-100.html",
+      "test": "css/css-writing-modes/text-orientation-sideways-vlr-100.html"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-upright-directionality-001.html",
+      "test": "css/css-writing-modes/text-orientation-upright-directionality-001.html"
+    },
+    {
+      "id": "css-writing-modes__writing-mode-vertical-lr-002.xht",
+      "test": "css/css-writing-modes/writing-mode-vertical-lr-002.xht"
+    },
+    {
+      "id": "css-writing-modes__text-orientation-mixed-vrl-100.html",
+      "test": "css/css-writing-modes/text-orientation-mixed-vrl-100.html"
+    },
+    {
+      "id": "css-writing-modes__direction-upright-001.html",
+      "test": "css/css-writing-modes/direction-upright-001.html"
+    }
+  ]
+}

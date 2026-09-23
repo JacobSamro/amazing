@@ -136,3 +136,24 @@ mismatch because page `@font-face` registration is pending; the provider
 behavior is covered by tests for missing cmap space and excluded unicode-range.
 On win-002, provider nextest passed 50/50 (one skipped), workspace nextest
 passed with 1,782 tests enumerated, and workspace doctests passed 2/2.
+
+## TEXT-5: vertical orientation in provider shaping
+
+Implementation base: local TEXT-4 commit `9714fa2`. In vertical-rl/lr,
+upright clusters select the OpenType `vert` substitution and sideways clusters
+disable it. Both disable `vrt2` as an automatic orientation choice; mixed
+orientation follows Unicode Vertical Orientation for the first visible
+character of each cluster. Existing upright bidi handling forces left-to-right
+ordering. Synthetic-font tests cover feature substitution, mixed Latin/CJK
+orientation, an ignorable prefix, and Hebrew bidi in both vertical modes.
+
+The frozen seven-case vertical selection stayed at 2/7 between TEXT-4 and
+TEXT-5 on win-001. Retained font selection stayed 11/15, flow 14/16, shaping
+12/12, and vertical/ruby 11/20. All 70 cases retained their classifications
+and actual image hashes. The vertical fixture that requires
+`CSSHWOrientationTest.otf` still needs caller-owned `@font-face` registration,
+so the synthetic provider tests are the direct evidence for `vert` behavior.
+Pinned WPT revision: `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+Evidence: `crates/amazing-text-provider/evidence/text5-*-after.json` and
+`text5-vertical-before.json`. Windows unit gate results are in the TEXT-5
+report.
