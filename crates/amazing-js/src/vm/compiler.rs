@@ -1,5 +1,5 @@
 use super::{
-    CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction, Instruction,
+    CallArgument, ClassCode, ClassMethodCode, CompileError, CompiledFunction, Condition, FunctionCode, HoistedFunction, Instruction,
     KeyOperand, Program, Register,
 };
 use crate::ast::{
@@ -42,6 +42,7 @@ impl Compiler {
                 code: vec![],
                 registers: 1,
                 references: 0,
+                spread_slots: 0,
                 hoisted: vec![],
                 functions: vec![],
                 is_function,
@@ -91,6 +92,7 @@ impl Compiler {
             is_arrow: false,
             is_generator: function.is_generator,
             is_async: function.is_async,
+            is_method: false,
         })))
     }
 
@@ -133,7 +135,55 @@ impl Compiler {
             is_arrow: true,
             is_generator: false,
             is_async: arrow.is_async,
+            is_method: false,
         })))
+    }
+
+    fn compile_method(
+        &self,
+        method: &ast::ClassMethod,
+    ) -> Result<FunctionCode, CompileError> {
+        let function = ast::FunctionItem {
+            name: None,
+            params: method.params.clone(),
+            body: method.body.clone(),
+            is_async: method.is_async,
+            is_generator: method.is_generator,
+        };
+        let mut code = self.compile_function(&function, method.span)?;
+        Rc::get_mut(&mut code.0).expect("new method code").is_method = true;
+        Ok(code)
+    }
+
+    fn compile_class(&mut self, class: &ast::ClassItem, span: Span) -> Result<ClassCode, CompileError> {
+        if class.super_class.is_some() {
+            return Err(self.error(span, "derived class"));
+        }
+        let constructor = class.members.iter().find_map(|member| match member {
+            ast::ClassMember::Method(method) if method.kind == ast::MethodKind::Constructor => Some(method),
+            _ => None,
+        });
+        let function = ast::FunctionItem {
+            name: class.name.clone(),
+            params: constructor.map_or_else(Vec::new, |method| method.params.clone()),
+            body: constructor.map_or_else(
+                || ast::Block { body: Vec::new(), span },
+                |method| method.body.clone(),
+            ),
+            is_async: false,
+            is_generator: false,
+        };
+        let constructor = self.compile_function(&function, span)?;
+        let mut methods = Vec::new();
+        for member in &class.members {
+            if let ast::ClassMember::Method(method) = member {
+                if method.kind == ast::MethodKind::Constructor { continue; }
+                let key = self.object_key(&method.key, method.key_utf16.as_deref(), method.span)?;
+                let code = self.compile_method(method)?;
+                methods.push(ClassMethodCode { key, kind: method.kind, code });
+            }
+        }
+        Ok(ClassCode { constructor, methods })
     }
 
     fn hoist_functions(&mut self, statements: &[Stmt]) -> Result<(), CompileError> {
@@ -249,6 +299,13 @@ impl Compiler {
                         declaration.kind,
                     ));
                 }
+            }
+            StmtKind::Class(class) => {
+                let name = class.name.as_ref().ok_or_else(|| self.error(statement.span, "anonymous class declaration"))?;
+                let code = self.compile_class(class, statement.span)?;
+                let dst = self.register(statement.span)?;
+                self.emit(Instruction::MakeClass(dst, code));
+                self.emit(Instruction::Declare(name.name.clone(), dst, VarKind::Let));
             }
             StmtKind::Block(block) => {
                 self.emit(Instruction::Complete(0));
@@ -399,8 +456,11 @@ impl Compiler {
     fn expression_inner(&mut self, expression: &Expr) -> Result<Register, CompileError> {
         let dst = self.register(expression.span)?;
         match &expression.kind {
-            ExprKind::Num(number) if !number.bigint => {
+            ExprKind::Num(number) => {
                 self.emit(Instruction::Numeric(dst, number.clone()));
+            }
+            ExprKind::RegExp(regex) => {
+                self.emit(Instruction::RegExp(dst, regex.clone()));
             }
             ExprKind::Str(value) => {
                 let value = expression
@@ -433,22 +493,41 @@ impl Compiler {
             }
             ExprKind::Array(elements) => {
                 self.emit(Instruction::NewArray(dst));
-                for (index, element) in elements.iter().enumerate() {
-                    if let Some(element) = element {
-                        if matches!(element.kind, ExprKind::Spread(_)) {
-                            return Err(self.error(element.span, "array spread"));
+                if elements.iter().any(|element| element.as_ref().is_some_and(|element| matches!(element.kind, ExprKind::Spread(_)))) {
+                    let index = self.register(expression.span)?;
+                    self.emit(Instruction::Constant(index, JsValue::num(0.0)));
+                    for element in elements {
+                        match element {
+                            Some(Expr { kind: ExprKind::Spread(source), .. }) => {
+                                let source = self.expression(source)?;
+                                self.emit(Instruction::AppendArraySpread(dst, index, source));
+                            }
+                            Some(element) => {
+                                let source = self.expression(element)?;
+                                self.emit(Instruction::AppendArrayElement(dst, index, Some(source)));
+                            }
+                            None => { self.emit(Instruction::AppendArrayElement(dst, index, None)); }
                         }
-                        let value = self.expression(element)?;
-                        self.emit(Instruction::SetArrayElement(dst, index, value));
                     }
+                    self.emit(Instruction::SetArrayLengthFrom(dst, index));
+                } else {
+                    for (index, element) in elements.iter().enumerate() {
+                        if let Some(element) = element {
+                            let value = self.expression(element)?;
+                            self.emit(Instruction::SetArrayElement(dst, index, value));
+                        }
+                    }
+                    self.emit(Instruction::SetArrayLength(dst, elements.len()));
                 }
-                self.emit(Instruction::SetArrayLength(dst, elements.len()));
             }
             ExprKind::Object(elements) => {
                 self.emit(Instruction::NewObject(dst));
                 for element in elements {
                     let ast::ObjElem::Prop(property) = element else {
-                        return Err(self.error(expression.span, "object spread"));
+                        let ast::ObjElem::Spread(source) = element else { unreachable!() };
+                        let source = self.expression(source)?;
+                        self.emit(Instruction::SpreadObject(dst, source));
+                        continue;
                     };
                     let key = self.object_key(
                         &property.key,
@@ -462,8 +541,10 @@ impl Compiler {
                             value
                         }
                         ast::PropValue::Init(value) => self.expression(value)?,
-                        ast::PropValue::Method(_) => {
-                            return Err(self.error(property.span, "object method"));
+                        ast::PropValue::Method(method) => {
+                            let code = self.compile_method(method)?;
+                            self.emit(Instruction::SetObjectMethod(dst, key, code, method.kind));
+                            continue;
                         }
                     };
                     self.emit(Instruction::SetObjectProperty(dst, key, value));
@@ -472,12 +553,26 @@ impl Compiler {
             ExprKind::This => {
                 self.emit(Instruction::LoadThis(dst));
             }
+            ExprKind::Template(template) => {
+                self.emit(Instruction::Constant(dst, JsValue::str("")));
+                for (index, quasi) in template.quasis.iter().enumerate() {
+                    let expression = template.exprs.get(index)
+                        .map(|expression| self.expression(expression)).transpose()?;
+                    let units = template.quasis_utf16.get(index).cloned()
+                        .unwrap_or_else(|| quasi.encode_utf16().collect());
+                    self.emit(Instruction::TemplateAppend(dst, units, expression));
+                }
+            }
             ExprKind::Function(function) => {
                 if function.is_generator && function.name.is_some() {
                     return Err(self.error(expression.span, "named generator expression binding"));
                 }
                 let code = self.compile_function(function, expression.span)?;
                 self.emit(Instruction::MakeFunction(dst, code));
+            }
+            ExprKind::Class(class) => {
+                let code = self.compile_class(class, expression.span)?;
+                self.emit(Instruction::MakeClass(dst, code));
             }
             ExprKind::Arrow(arrow) => {
                 let code = self.compile_arrow(arrow, expression.span)?;
@@ -548,7 +643,16 @@ impl Compiler {
                 };
                 let mut arguments = Vec::new();
                 for argument in args {
-                    arguments.push(self.expression(argument)?);
+                    match &argument.kind {
+                        ExprKind::Spread(source) => {
+                            let source = self.expression(source)?;
+                            let slot = self.program.spread_slots;
+                            self.program.spread_slots += 1;
+                            self.emit(Instruction::CaptureSpread(slot, source));
+                            arguments.push(CallArgument::Spread(slot));
+                        }
+                        _ => arguments.push(CallArgument::Value(self.expression(argument)?)),
+                    }
                 }
                 self.emit(Instruction::Call(dst, callee, this, arguments));
             }
@@ -556,7 +660,16 @@ impl Compiler {
                 let callee = self.expression(callee)?;
                 let mut arguments = Vec::new();
                 for argument in args {
-                    arguments.push(self.expression(argument)?);
+                    match &argument.kind {
+                        ExprKind::Spread(source) => {
+                            let source = self.expression(source)?;
+                            let slot = self.program.spread_slots;
+                            self.program.spread_slots += 1;
+                            self.emit(Instruction::CaptureSpread(slot, source));
+                            arguments.push(CallArgument::Spread(slot));
+                        }
+                        _ => arguments.push(CallArgument::Value(self.expression(argument)?)),
+                    }
                 }
                 self.emit(Instruction::Construct(dst, callee, arguments));
             }

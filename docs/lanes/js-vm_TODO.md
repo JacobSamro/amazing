@@ -157,3 +157,19 @@ Promise/Array.fromAsync built-ins outside the VM lane.
 
 - JSVM-4 async iteration after parser support, then classes and complex bindings.
 - Add tracing GC roots after VM frames become resumable (ADR 0003).
+
+## JSVM-5 coverage, series 1
+
+The VM now compiles BigInt and regular-expression literals, object methods and
+accessors, object/array/call spread, untagged templates, and base classes.
+Spread iteration and numeric/RegExp creation use the interpreter's shared
+helpers. Derived classes remain an atomic fallback until `super` construction
+is implemented.
+
+On pinned Test262 `3655e746`, the complete venus-001 baseline and VM runs used
+the same input SHA-256 `91109b82` and host SHA-256 `3befa104`. The tree walker
+passed 21,246 files / 41,434 variants; VM plus fallback passed 21,420 files /
+41,749 variants. **Zero lost passes**, 174 gained files and 315 gained
+variants. The VM compiled 26,778/40,167 eligible files (66.6667%), up from
+21,743/40,167 (54.1315%) at JSVM-4. Classification hashes were `9c54ada3`
+and `d0741cd0`. Linux amazing-js nextest passed 242 tests (one skipped).
