@@ -1,5 +1,50 @@
 # CSS lane decision map
 
+## CSS-9 — logical sizing and unresolved CSS math (fixed base `bc8aa455`)
+
+The cascade maps logical sizing (`inline-size`, `block-size`, and their
+min/max variants) to width/height using the element's computed writing mode.
+Logical margin, padding, and inset sides map using writing mode and direction.
+Logical and physical declarations compete with their original origin, layer,
+specificity, importance, and source order; both names expose the mapped
+computed value. The source of truth for layout remains the physical longhand.
+
+CSS Values math expressions on width/height, min/max sizing, margin, padding,
+and inset are type checked in CSS and retained as unresolved
+`ComputedValue::LengthPercentageExpression` plus canonical `get()` text.
+Percentages retain their containing-block basis. Border-radius shorthand and
+longhands accept validated length-percentage math without resolving it early.
+The old simple negative-pixel radius clamp remains for compatibility.
+Variable substitution precedes computed-time type validation. The math parser
+supports nested `calc`, `min`, `max`, and `clamp`, sums, products, division by
+a number, and CSS-required whitespace around binary plus/minus. It rejects
+incompatible units and products of two dimensions.
+
+Pinned WPT declaration reach: `calc-max-height-block-1`,
+`calc-min-width-block-intrinsic-1`, `calc-border-radius-1`, and
+`calc-rounding-003`. The CSS reach test uses the exact declarations from
+WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+Layout and paint own used-value evaluation and render movement; the fixed
+base did not yet contain the `parse_length_percentage` and
+`resolve_corner_radii` consumers mentioned in the brief. Requests are in
+`.agents/css/questions.md`.
+
+Evidence on win-001: CSS nextest 193/193 and doctests 0/0; workspace
+nextest 1,611/1,611 with 3 skipped and workspace doctests 2/2. The pinned
+nine-selection sweep ran twice for fixed-base baseline and CSS-9 candidate.
+Cascade remained 56 pass / 14 mismatch / 2 unsupported. Every sampled case
+in all nine selections retained the same classification, differing-pixel
+count, and actual/reference/diff image hashes; zero pass losses or render
+errors. The baseline and candidate executable SHA256 values were
+`41767d974d4f360ac729af13158aea611e8e7ad5e8ed8e15912914ab9852ec08`
+and `2a066579f3a2a3e7d17c6d08cb66a2a770e8c9c30bdc04d32712e5016dd7ef34`.
+Their per-case cascade projection SHA256 was identical:
+`9cfddc3ea3693acdee8aae6055ed99d8d3f2e9b19dc4c66eea02bdb4512dcf37`.
+Fixed base `bc8aa45523d156f7e2f92128df7f585539509993`; pinned WPT
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. A later `origin/dev`
+`0f1afbd` had no changes under `crates/amazing-css` since that base. The
+integrator's merged-head gate remains authoritative for the combination.
+
 ## CSS-8 — cascade corpus triage (final gate base `6fcb990`)
 
 The 32 original mismatches were triaged on base `945ca38`: 21 CSS-owned

@@ -181,6 +181,8 @@ pub enum Transform {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComputedValue {
     LengthPercentage(LengthPercentage),
+    /// Valid CSS math retained until the consumer supplies a percentage basis.
+    LengthPercentageExpression(String),
     Color(Color),
     Number(f64),
     Integer(i32),
@@ -348,6 +350,16 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         }
         _ => {}
     }
+    let physical_property = match property {
+        "inline-size" | "block-size" => "width",
+        "min-inline-size" | "min-block-size" => "min-width",
+        "max-inline-size" | "max-block-size" => "max-width",
+        p if p.starts_with("margin-inline-") || p.starts_with("margin-block-") => "margin-top",
+        p if p.starts_with("padding-inline-") || p.starts_with("padding-block-") => "padding-top",
+        p if p.starts_with("inset-inline-") || p.starts_with("inset-block-") => "top",
+        _ => property,
+    };
+    let property = physical_property;
     let margin = matches!(
         property,
         "margin-top" | "margin-right" | "margin-bottom" | "margin-left"
@@ -420,6 +432,9 @@ pub(crate) fn parse(property: &str, css: &str) -> Option<ComputedValue> {
         )
     {
         return Some(V::Unparsed);
+    }
+    if (margin || inset || size || padding) && crate::math::length_percentage(css, true) {
+        return Some(V::LengthPercentageExpression(crate::syntax::serialize(&tokenize(css))));
     }
     let length = LengthPercentage::parse(css)?;
     if (border || property == "letter-spacing") && matches!(length, LengthPercentage::Percentage(_))

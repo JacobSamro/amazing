@@ -40,6 +40,7 @@
 
 pub mod cascade;
 pub mod color;
+mod math;
 mod computed;
 pub mod parser;
 pub mod selectors;
