@@ -629,3 +629,222 @@ pub fn fetch_api(
     }
     Err(ApiError::Network(FetchError::RedirectLimit))
 }
+
+/// Fetch policy state driven by `amazing_net::dispatch::NetEvent`. The driver
+/// calls `Dispatcher::step` and routes matching events here; each hop remains
+/// asynchronous. The existing `fetch_api` entry point is unchanged.
+pub struct PendingFetchApi {
+    policy: Request,
+    wire_id: amazing_net::dispatch::RequestId,
+    stage: DispatchStage,
+    current: Option<crate::InternalResponse>,
+    redirects: usize,
+    stream_body: bool,
+}
+#[derive(Clone, Copy)]
+enum DispatchStage {
+    Preflight,
+    Main,
+}
+impl PendingFetchApi {
+    pub fn id(&self) -> amazing_net::dispatch::RequestId {
+        self.wire_id
+    }
+    pub fn start<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::Connector>(
+        request: &mut ApiRequest,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now: std::time::Instant,
+    ) -> Result<Self, ApiError> {
+        if request.signal_aborted {
+            return Err(ApiError::Aborted);
+        }
+        if request.body.is_unusable() {
+            return Err(ApiError::BodyUsed);
+        }
+        let mut policy = request.policy_request()?;
+        if request.body.shared_present() && !request.body.body_used() {
+            let bytes = request.body.bytes()?;
+            policy
+                .set_method_body(request.method(), Some(Body::Bytes(bytes)))
+                .map_err(ApiError::Network)?;
+        }
+        let (wire_id, stage) = Self::start_hop(&mut policy, dispatcher, now)?;
+        Ok(Self {
+            policy,
+            wire_id,
+            stage,
+            current: None,
+            redirects: 0,
+            stream_body: request.stream_body,
+        })
+    }
+    fn start_hop<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::Connector>(
+        policy: &mut Request,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now: std::time::Instant,
+    ) -> Result<(amazing_net::dispatch::RequestId, DispatchStage), ApiError> {
+        let plan = policy.prepare().map_err(ApiError::Network)?;
+        if plan.preflight {
+            if let Some(preflight) = preflight(policy).map_err(ApiError::Network)? {
+                let mut probe = Request::new(policy.url().clone(), policy.origin.clone());
+                probe.mode = RequestMode::Cors;
+                probe.credentials = CredentialsMode::Omit;
+                probe.headers = preflight.headers;
+                probe
+                    .set_method_body("OPTIONS", None)
+                    .map_err(ApiError::Network)?;
+                let probe_plan = probe.prepare().map_err(ApiError::Network)?;
+                let id = submit_policy(&probe, &probe_plan, dispatcher, now)?;
+                return Ok((id, DispatchStage::Preflight));
+            }
+        }
+        Ok((
+            submit_policy(policy, &plan, dispatcher, now)?,
+            DispatchStage::Main,
+        ))
+    }
+    /// Returns `None` until the current hop completes. A redirect or
+    /// preflight schedules another hop without blocking this call.
+    pub fn on_event<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::Connector>(
+        &mut self,
+        event: &amazing_net::dispatch::NetEvent,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now: std::time::Instant,
+    ) -> Option<Result<ApiResponse, ApiError>> {
+        use amazing_net::dispatch::NetEvent;
+        let id = match event {
+            NetEvent::Head { id, .. }
+            | NetEvent::Body { id, .. }
+            | NetEvent::Done { id }
+            | NetEvent::Error { id, .. }
+            | NetEvent::Aborted { id } => *id,
+        };
+        if id != self.wire_id {
+            return None;
+        }
+        match event {
+            NetEvent::Head {
+                status,
+                reason,
+                headers,
+                ..
+            } => {
+                let mut fields = crate::HeaderList::default();
+                for (name, value) in headers.iter() {
+                    if let Err(e) = fields.append(name, value) {
+                        return Some(Err(ApiError::Network(e)));
+                    }
+                }
+                self.current = Some(crate::InternalResponse {
+                    status: *status,
+                    status_text: reason.clone(),
+                    headers: fields,
+                    body: Some(Vec::new()),
+                });
+                None
+            }
+            NetEvent::Body { bytes, .. } => {
+                if let Some(current) = &mut self.current {
+                    current.body.as_mut().unwrap().extend_from_slice(bytes);
+                }
+                None
+            }
+            NetEvent::Error { .. } => Some(Err(ApiError::Network(FetchError::Transport))),
+            NetEvent::Aborted { .. } => Some(Err(ApiError::Aborted)),
+            NetEvent::Done { .. } => {
+                let response = match self.current.take() {
+                    Some(r) => r,
+                    None => return Some(Err(ApiError::Network(FetchError::Transport))),
+                };
+                match self.stage {
+                    DispatchStage::Preflight => {
+                        if let Err(e) = check_preflight(&self.policy, &response) {
+                            return Some(Err(ApiError::Network(e)));
+                        }
+                        let plan = match self.policy.prepare() {
+                            Ok(p) => p,
+                            Err(e) => return Some(Err(ApiError::Network(e))),
+                        };
+                        match submit_policy(&self.policy, &plan, dispatcher, now) {
+                            Ok(id) => {
+                                self.wire_id = id;
+                                self.stage = DispatchStage::Main;
+                                None
+                            }
+                            Err(e) => Some(Err(e)),
+                        }
+                    }
+                    DispatchStage::Main => {
+                        if self.stream_body && matches!(self.policy.body(), Some(Body::Bytes(_))) {
+                            let method = self.policy.method().to_owned();
+                            if let Err(e) = self
+                                .policy
+                                .set_method_body(&method, Some(Body::Unreplayable))
+                            {
+                                return Some(Err(ApiError::Network(e)));
+                            }
+                        }
+                        let location = response.headers.get("location");
+                        match redirect_location(&mut self.policy, &response, location.as_deref()) {
+                            Ok(RedirectAction::Follow) => {
+                                self.redirects += 1;
+                                if self.redirects > 20 {
+                                    return Some(Err(ApiError::Network(FetchError::RedirectLimit)));
+                                }
+                                match Self::start_hop(&mut self.policy, dispatcher, now) {
+                                    Ok((id, stage)) => {
+                                        self.wire_id = id;
+                                        self.stage = stage;
+                                        None
+                                    }
+                                    Err(e) => Some(Err(e)),
+                                }
+                            }
+                            Ok(RedirectAction::Manual(r)) => Some(ApiResponse::from_policy(r)),
+                            Ok(RedirectAction::NavigationPending) => {
+                                Some(Err(ApiError::Network(FetchError::Redirect)))
+                            }
+                            Ok(RedirectAction::NotRedirect) => Some(
+                                filter_response(&self.policy, &response)
+                                    .map_err(ApiError::Network)
+                                    .and_then(ApiResponse::from_policy),
+                            ),
+                            Err(e) => Some(Err(ApiError::Network(e))),
+                        }
+                    }
+                }
+            }
+        }
+    }
+    pub fn cancel<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::Connector>(
+        &self,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+    ) {
+        dispatcher.cancel(self.wire_id);
+    }
+}
+fn submit_policy<R: amazing_net::dispatch::Resolver, C: amazing_net::dispatch::Connector>(
+    request: &Request,
+    plan: &crate::FetchPlan,
+    dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+    now: std::time::Instant,
+) -> Result<amazing_net::dispatch::RequestId, ApiError> {
+    let mut options = amazing_net::FetchOptions::default();
+    options.method = request.method().to_owned();
+    options.request_headers = request
+        .headers
+        .iter()
+        .map(|(n, v)| (n.to_owned(), v.to_owned()))
+        .collect();
+    if let Some(referrer) = &plan.referrer {
+        options
+            .request_headers
+            .push(("referer".into(), referrer.clone()));
+    }
+    if let Some(Body::Bytes(bytes)) = request.body() {
+        options.body = bytes.clone();
+    }
+    dispatcher
+        .submit(&request.url().serialize(), options, now)
+        .map_err(|_| ApiError::Network(FetchError::Transport))
+}

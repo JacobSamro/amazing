@@ -3,7 +3,6 @@
 //! deferred behind its provider seam. This policy model has no live dispatcher.
 #![forbid(unsafe_code)]
 pub mod api;
-pub mod xhr;
 pub mod cache;
 pub mod cookies;
 mod cors;
@@ -15,6 +14,7 @@ pub mod psl;
 mod redirect;
 mod referrer;
 mod security;
+pub mod xhr;
 pub use cors::*;
 pub use csp::*;
 pub use headers::*;
@@ -43,6 +43,7 @@ pub enum FetchError {
     Nosniff,
     OpaqueResponse,
     Csp(Vec<CspViolation>),
+    Transport,
 }
 impl std::fmt::Display for FetchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

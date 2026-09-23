@@ -4,6 +4,7 @@
 use crate::api::{
     byte_string, fetch_api, parse_json, usv_string, ApiError, ApiHeaders, ApiRequest,
     ApiRequestInit, ApiRequestInput, ApiResponse, BodyInput, HeaderGuard, JsonValue,
+    PendingFetchApi,
 };
 use crate::{FetchError, HttpUrl, NetworkOrCache, Origin, Site};
 
@@ -505,10 +506,76 @@ impl Xhr {
         if self.expired(now_ms) {
             return self.fail(XhrError::Timeout);
         }
-        let mut response = match result {
+        let response = match result {
             Ok(response) => response,
             Err(error) => return self.fail(XhrError::from(error)),
         };
+        self.install_response(response)
+    }
+    /// Starts a cooperative Fetch request after `send`. The event-loop driver
+    /// owns the pending handle and feeds it dispatcher events via
+    /// `on_dispatch_event`; the blocking `advance` path remains available.
+    pub fn start_dispatch<
+        R: amazing_net::dispatch::Resolver,
+        C: amazing_net::dispatch::Connector,
+    >(
+        &mut self,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now_ms: u64,
+        now: std::time::Instant,
+    ) -> Result<PendingFetchApi, XhrError> {
+        if self.state != XhrState::Opened || !self.send_flag {
+            return Err(XhrError::InvalidStateSend);
+        }
+        if self.expired(now_ms) {
+            return Err(XhrError::Timeout);
+        }
+        PendingFetchApi::start(
+            self.request.as_mut().ok_or(XhrError::InvalidStateSend)?,
+            dispatcher,
+            now,
+        )
+        .map_err(XhrError::from)
+    }
+    pub fn on_dispatch_event<
+        R: amazing_net::dispatch::Resolver,
+        C: amazing_net::dispatch::Connector,
+    >(
+        &mut self,
+        pending: &mut PendingFetchApi,
+        event: &amazing_net::dispatch::NetEvent,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now_ms: u64,
+        now: std::time::Instant,
+    ) -> Result<Vec<XhrEvent>, XhrError> {
+        if self.expired(now_ms) {
+            pending.cancel(dispatcher);
+            return self.fail(XhrError::Timeout);
+        }
+        match pending.on_event(event, dispatcher, now) {
+            None => Ok(Vec::new()),
+            Some(Ok(response)) => self.install_response(response),
+            Some(Err(error)) => self.fail(XhrError::from(error)),
+        }
+    }
+    /// Call on ticks without network events so a stalled request still times
+    /// out at the XHR deadline.
+    pub fn check_dispatch_timeout<
+        R: amazing_net::dispatch::Resolver,
+        C: amazing_net::dispatch::Connector,
+    >(
+        &mut self,
+        pending: &PendingFetchApi,
+        dispatcher: &mut amazing_net::dispatch::Dispatcher<R, C>,
+        now_ms: u64,
+    ) -> Result<Option<Vec<XhrEvent>>, XhrError> {
+        if self.expired(now_ms) {
+            pending.cancel(dispatcher);
+            return self.fail(XhrError::Timeout).map(Some);
+        }
+        Ok(None)
+    }
+    fn install_response(&mut self, mut response: ApiResponse) -> Result<Vec<XhrEvent>, XhrError> {
         let mut events = self.upload_success_events();
         let bytes = match response.body.bytes() {
             Ok(bytes) => bytes,

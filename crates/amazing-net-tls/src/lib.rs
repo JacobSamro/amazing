@@ -71,6 +71,50 @@ impl TlsStream {
     pub fn protocol(&self) -> Protocol {
         self.protocol
     }
+    /// Bounded transport work for a non-blocking dispatcher. A consumed
+    /// plaintext write remains queued in rustls across `WouldBlock`.
+    pub fn write_step(&mut self, bytes: &[u8], io_budget: usize) -> std::io::Result<usize> {
+        if io_budget == 0 {
+            return Err(std::io::ErrorKind::WouldBlock.into());
+        }
+        let n = self
+            .inner
+            .conn
+            .writer()
+            .write(&bytes[..bytes.len().min(io_budget)])?;
+        let mut io = BudgetIo {
+            socket: &mut self.inner.sock,
+            left: io_budget,
+        };
+        match self.inner.conn.complete_io(&mut io) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(e) => return Err(e),
+        }
+        Ok(n)
+    }
+    /// Reads available plaintext, advancing encrypted I/O within `io_budget`.
+    pub fn read_step(&mut self, bytes: &mut [u8], io_budget: usize) -> std::io::Result<usize> {
+        if io_budget == 0 {
+            return Err(std::io::ErrorKind::WouldBlock.into());
+        }
+        let limit = bytes.len().min(io_budget);
+        match self.inner.conn.reader().read(&mut bytes[..limit]) {
+            Ok(n) => return Ok(n),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(e) => return Err(e),
+        }
+        let mut io = BudgetIo {
+            socket: &mut self.inner.sock,
+            left: io_budget,
+        };
+        match self.inner.conn.complete_io(&mut io) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(e) => return Err(e),
+        }
+        self.inner.conn.reader().read(&mut bytes[..limit])
+    }
     pub fn exchange_http1(
         mut self,
         request: &[u8],
@@ -112,6 +156,98 @@ impl TlsStream {
             }
             response.extend_from_slice(&buffer[..count]);
         }
+    }
+}
+
+/// Retained client handshake for a caller-owned, already connected socket.
+/// The socket may be non-blocking. `WouldBlock` preserves all TLS state.
+pub struct PendingTls {
+    inner: Option<StreamOwned<ClientConnection, TcpStream>>,
+}
+
+impl PendingTls {
+    pub fn new_http1(host: &str, socket: TcpStream) -> Result<Self, TlsError> {
+        Self::with_config(host, socket, legacy_config())
+    }
+
+    pub fn new(host: &str, socket: TcpStream) -> Result<Self, TlsError> {
+        Self::with_config(host, socket, client_config())
+    }
+
+    fn with_config(
+        host: &str,
+        socket: TcpStream,
+        config: Arc<ClientConfig>,
+    ) -> Result<Self, TlsError> {
+        let server_name =
+            ServerName::try_from(host.to_owned()).map_err(|_| TlsError::InvalidServerName)?;
+        let connection = ClientConnection::new(config, server_name)
+            .map_err(|error| TlsError::Transport(error.to_string()))?;
+        Ok(Self {
+            inner: Some(StreamOwned::new(connection, socket)),
+        })
+    }
+
+    /// Performs at most `max_io_bytes` of socket I/O. `Ok(None)` means the
+    /// handshake needs another step; cancellation is dropping this value.
+    pub fn step(&mut self, max_io_bytes: usize) -> Result<Option<TlsStream>, TlsError> {
+        let inner = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| TlsError::Transport("TLS handshake already completed".into()))?;
+        if max_io_bytes == 0 {
+            return Ok(None);
+        }
+        let mut io = BudgetIo {
+            socket: &mut inner.sock,
+            left: max_io_bytes,
+        };
+        match inner.conn.complete_io(&mut io) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(error) => return Err(transport_error(error)),
+        }
+        if inner.conn.is_handshaking() || inner.conn.wants_write() {
+            return Ok(None);
+        }
+        let protocol = match inner.conn.alpn_protocol() {
+            Some(b"h2") => Protocol::H2,
+            Some(b"http/1.1") | None => Protocol::Http11,
+            _ => return Err(TlsError::Transport("unsupported ALPN".into())),
+        };
+        Ok(Some(TlsStream {
+            inner: self.inner.take().expect("handshake retained"),
+            protocol,
+        }))
+    }
+}
+
+struct BudgetIo<'a> {
+    socket: &'a mut TcpStream,
+    left: usize,
+}
+impl Read for BudgetIo<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.left == 0 {
+            return Err(std::io::ErrorKind::WouldBlock.into());
+        }
+        let limit = buf.len().min(self.left);
+        let n = self.socket.read(&mut buf[..limit])?;
+        self.left -= n;
+        Ok(n)
+    }
+}
+impl Write for BudgetIo<'_> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.left == 0 {
+            return Err(std::io::ErrorKind::WouldBlock.into());
+        }
+        let n = self.socket.write(&buf[..buf.len().min(self.left)])?;
+        self.left -= n;
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.socket.flush()
     }
 }
 
@@ -191,33 +327,19 @@ fn connect_config(
     timeout: Duration,
     config: Arc<ClientConfig>,
 ) -> Result<TlsStream, TlsError> {
-    let server_name =
-        ServerName::try_from(host.to_owned()).map_err(|_| TlsError::InvalidServerName)?;
+    ServerName::try_from(host.to_owned()).map_err(|_| TlsError::InvalidServerName)?;
     let tcp = TcpStream::connect((host, port)).map_err(transport_error)?;
     tcp.set_read_timeout(Some(timeout))
         .map_err(transport_error)?;
     tcp.set_write_timeout(Some(timeout))
         .map_err(transport_error)?;
 
-    let connection = ClientConnection::new(config, server_name)
-        .map_err(|error| TlsError::Transport(error.to_string()))?;
-    let mut stream = StreamOwned::new(connection, tcp);
-
-    while stream.conn.is_handshaking() {
-        stream
-            .conn
-            .complete_io(&mut stream.sock)
-            .map_err(transport_error)?;
+    let mut pending = PendingTls::with_config(host, tcp, config)?;
+    loop {
+        if let Some(stream) = pending.step(64 * 1024)? {
+            return Ok(stream);
+        }
     }
-    let protocol = match stream.conn.alpn_protocol() {
-        Some(b"h2") => Protocol::H2,
-        Some(b"http/1.1") | None => Protocol::Http11,
-        _ => return Err(TlsError::Transport("unsupported ALPN".into())),
-    };
-    Ok(TlsStream {
-        inner: stream,
-        protocol,
-    })
 }
 #[cfg(feature = "test-support")]
 pub mod test_support;
