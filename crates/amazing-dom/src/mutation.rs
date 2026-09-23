@@ -150,7 +150,12 @@ impl MutationObservers {
                 self.pending.push(id);
             }
         }
-        self.queued = true;
+        // A record that interested no observer must not schedule a delivery.
+        // Embeddings observe the false -> true edge after a native operation
+        // and enqueue that microtask in the same stream as JS jobs.
+        if !self.pending.is_empty() {
+            self.queued = true;
+        }
     }
     pub(crate) fn register_transients(&mut self, node: NodeIdx, ancestors: &[NodeIdx]) {
         let mut sources = vec![];
@@ -237,8 +242,13 @@ impl Dom {
             .map(|o| std::mem::take(&mut o.records))
             .unwrap_or_default()
     }
-    /// The driver queues one microtask when this becomes true. It must finish
-    /// an active checkpoint before starting another (microtasks do not nest).
+    /// One mutation-observer delivery is needed when this changes false -> true.
+    /// A JS embedding must record that transition before the next JS statement,
+    /// in the same ordered outbox as Promise and queueMicrotask jobs. Inspect
+    /// the state even if the native operation returns an error after mutation.
+    /// Queueing the same pending delivery again would change observable order.
+    /// The DOM borrow must end before the embedding posts to its outbox.
+    /// A checkpoint must finish before another starts (microtasks do not nest).
     pub fn mutation_microtask_pending(&self) -> bool {
         self.mutations.queued
     }

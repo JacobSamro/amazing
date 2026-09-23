@@ -966,3 +966,42 @@ Do not open SSH/scp until explicitly cleared. Then retrieve the reference-census
 server metadata and clean up only task-owned reference-browser profiles, review
 and run the draft call tracer, inspect routed runtime/driver adoption, and follow
 fresh rebase/refresh/re-sync gates. The report lists every remaining item.
+
+### DOM-5 resumed triage and native microtask contract (2026-09-23)
+
+The integrator restored SSH and refreshed the lane tree to `origin/dev`
+`ffb143b`; the lane rebased and re-synced its owned files. The 30 reference
+census records were retrieved, and 30 task-owned headless-browser profiles were
+removed after confirming none was in use. The copied-resource call tracer ran
+for 46 historical callable/conversion error sources. Its results, the complete
+627-source historical ranking and their diagnostic limitations are under
+`crates/amazing-dom/tests/dom5-triage/`. None of that changes the pre-outage WPT
+baseline; a fresh current-base full selection is queued in a shared build slot.
+
+JS-4's draft scheduling host is being revised to a bounded interpreter outbox.
+Native MutationObserver delivery must interleave with JS jobs **during** an
+interpreter entry: script queues Promise P, mutates the DOM (M), then calls
+queueMicrotask Q, so the outbox must preserve P,M,Q when it drains into the
+EventLoop after the entry. `BindingHost::with_dom` observes the DOM's mutation
+delivery flag across the native closure, drops the DOM borrow, and appends an
+opaque `NativeMicrotask::MutationObserver` request before the next JS statement.
+It does this even when the closure mutates and then returns an error. The native
+request neither invokes JS nor steps EventLoop synchronously. The DOM flag is
+cleared only by `begin_mutation_checkpoint` when that queued EventLoop microtask
+runs, not when admission is attempted or acknowledged. Mutations with no
+interested observer leave the flag clear; multiple records while it is set
+produce one pending delivery per surrounding agent.
+
+The integrator's capacity decision reserves one native outbox slot per agent
+for this flag-gated request. JS Promise, queueMicrotask, timer and frame requests
+use only unreserved capacity, so native admission cannot fail. Acknowledgement
+means successful M admission. At JS capacity one, P takes the JS slot, M takes
+the native slot and Q throws catchable TypeError without being enqueued: the
+resulting order is P,M. With enough JS capacity for P and Q, the order is
+P,M,Q. A future native kind without a bounded flag would require a different
+failure policy, potentially a poison state; that policy is not part of this
+MutationObserver contract. js-runtime owns the capacity split and exact outbox
+API, js-lang reviews it, and this lane owns the DOM flag semantics. The real
+EventLoop adapter proof must include these two traces plus script A, Promise P,
+queueMicrotask Q, chained R, timer B and frame cancellation after a checkpoint.
+No driver adapter will be built against the draft SchedulingHost signature.

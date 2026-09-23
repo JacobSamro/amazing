@@ -117,3 +117,11 @@ error, but the rewriter is not a complete JS lexer. Its output remains
 non-conformance diagnostic data. `full-selection-ranking.md` accounts for all
 627 historical sources and states the implementable boundary. Those historical
 counts still need replacement by a fresh current-base gate.
+
+`js4-event-loop-adapter-DRAFT.rs` is an uncompiled test-only proof against the
+published but unmerged JS-4 outbox API. It connects a real `Interpreter`, real
+`Dom` mutation observer and real `EventLoop` for A,P,Q,R,B; frame cancellation;
+and the capacity-1 P,M / capacity-2 P,M,Q traces. The integrator granted the
+final location `crates/amazing/tests/js4_event_loop_adapter.rs`. Move it there
+only after JS-4 merges to dev, then compile and run it on win-001. It currently
+earns no test result or WPT credit.
