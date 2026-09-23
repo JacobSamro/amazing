@@ -116,7 +116,10 @@ fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider
 
     for (path, family) in [
         (r"C:\Windows\Fonts\times.ttf", "serif"),
+        (r"C:\Windows\Fonts\times.ttf", "Times"),
+        (r"C:\Windows\Fonts\times.ttf", "Times New Roman"),
         (r"C:\Windows\Fonts\arial.ttf", "sans-serif"),
+        (r"C:\Windows\Fonts\arial.ttf", "Arial"),
         (r"C:\Windows\Fonts\segoeui.ttf", "system-ui"),
         (r"C:\Windows\Fonts\consola.ttf", "monospace"),
     ] {
@@ -135,6 +138,41 @@ fn register_system_text_faces(provider: &mut amazing_text_provider::TextProvider
             format: FontFormat::OpenType,
             bytes: response.body,
         });
+    }
+
+    // The pinned WPT render runner sets this root for its child process. The
+    // CSSTest faces are installed fonts in upstream tests, not @font-face URLs.
+    // Register only the known fixture files, through the same bounded provider
+    // seam used for page fonts, so their family names are available to CSS.
+    if let Some(root) = std::env::var_os("AMAZING_WPT_ROOT") {
+        for (file, family, weight, slant) in [
+            ("csstest-verify.ttf", "CSSTest Verify", 400, FontSlant::Normal),
+            ("csstest-fallback.ttf", "CSSTest Fallback", 400, FontSlant::Normal),
+            ("csstest-ascii.ttf", "CSSTest ASCII", 400, FontSlant::Normal),
+            ("csstest-familyname.ttf", "CSSTest FamilyName", 400, FontSlant::Normal),
+            ("csstest-familyname-bold.ttf", "CSSTest FamilyName", 700, FontSlant::Normal),
+            ("csstest-basic-regular.ttf", "CSSTest Basic", 400, FontSlant::Normal),
+            ("csstest-basic-bold.ttf", "CSSTest Basic", 700, FontSlant::Normal),
+            ("csstest-basic-italic.ttf", "CSSTest Basic", 400, FontSlant::Italic),
+            ("csstest-basic-bolditalic.ttf", "CSSTest Basic", 700, FontSlant::Italic),
+        ] {
+            let path = std::path::Path::new(&root).join("fonts").join("CSSTest").join(file);
+            let options = amazing_net::FetchOptions {
+                max_response_bytes: MAX_PAGE_FONT_BYTES,
+                ..amazing_net::FetchOptions::default()
+            };
+            let Ok(response) = amazing_net::fetch(&path.to_string_lossy(), &options) else {
+                continue;
+            };
+            let _ = provider.register_web_font(WebFont {
+                family: family.into(),
+                weight,
+                stretch: 100,
+                slant,
+                format: FontFormat::OpenType,
+                bytes: response.body,
+            });
+        }
     }
 }
 
