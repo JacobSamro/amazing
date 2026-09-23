@@ -61,7 +61,15 @@ impl Interpreter {
         let fields = self.std_descriptor_fields(descriptor)?;
         let original = if let Some(name) = key.as_string() {
             self.legacy_own_property(target, name, false)?
-        } else { target.borrow().own_prop(key).cloned() };
+        } else { target.borrow().own_prop(key).cloned() }.or_else(|| {
+            if key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length") {
+                target.borrow().func.as_ref().map(|function| Property {
+                    value: JsValue::num(function.params.len() as f64),
+                    writable: false, enumerable: false, configurable: true,
+                    getter: None, setter: None,
+                })
+            } else { None }
+        });
         let new_accessor = fields.get.is_some() || fields.set.is_some();
         let new_data = fields.value.is_some() || fields.writable.is_some();
         let Some(mut property) = original.clone() else {

@@ -188,7 +188,11 @@ impl Interpreter {
 }
 
 fn std_number_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    let value = if let Some(value) = args.first() { i.to_number(value)? } else { 0.0 };
+    let value = if let Some(value) = args.first() {
+        let primitive = i.primitive(value.clone())?;
+        if let JsValue::BigInt(bigint) = &primitive { bigint.to_f64() }
+        else { i.to_number(&primitive)? }
+    } else { 0.0 };
     if let JsValue::Object(object) = &this {
         if object.borrow().constructed {
             object.borrow_mut().set_own("[[NumberData]]", JsValue::num(value));

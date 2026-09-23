@@ -258,7 +258,13 @@ fn std_string_match_all(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) 
     let source = std_string_receiver(i, this)?;
     let value = std_reflect_arg(&args, 0);
     let regex = if let Some(regex) = regexp_data(&value) {
-        if !regex.flags().global { return Err(Throw::type_error("matchAll requires a global RegExp")); }
+        let flags = i.get_prop(&value, "flags")?;
+        if flags.is_null() || flags.is_undefined() {
+            return Err(Throw::type_error("matchAll requires RegExp flags"));
+        }
+        if !i.to_string(&flags)?.contains('g') || !regex.flags().global {
+            return Err(Throw::type_error("matchAll requires a global RegExp"));
+        }
         value
     } else { native_regexp(i, JsValue::Undefined, vec![value, JsValue::str("g")])? };
     let matches = native_string_match(i, JsValue::str(source), vec![regex])?;

@@ -264,7 +264,7 @@ impl StdJsonWriter {
         key: crate::value::JsString, depth: usize) -> Result<Option<String>, Throw> {
         if depth > 512 { return Err(Throw::range_error("JSON nesting limit")); }
         let mut value = i.get_prop(holder, key.clone())?;
-        if value.is_object() {
+        if value.is_object() || matches!(value, JsValue::BigInt(_)) {
             let method = i.get_prop(&value, "toJSON")?;
             if callable_function(&method).is_some() {
                 value = i.call_value(&method, value, vec![JsValue::str(key.clone())])?;
@@ -276,6 +276,7 @@ impl StdJsonWriter {
         let unboxed = if let JsValue::Object(object) = &value {
             let boxed = object.borrow();
             boxed.get_own("[[NumberData]]").or_else(|| boxed.get_own("[[StringData]]"))
+                .or_else(|| boxed.get_own("[[BigIntData]]"))
         } else { None };
         if let Some(unboxed) = unboxed { value = unboxed; }
         match &value {
@@ -285,6 +286,7 @@ impl StdJsonWriter {
             JsValue::Num(v) => return Ok(Some(if v.is_finite() { crate::value::number_to_string(*v) }
                 else { "null".to_string() })),
             JsValue::Str(v) => return Ok(Some(json_escape(v))),
+            JsValue::BigInt(_) => return Err(Throw::type_error("BigInt is not JSON serializable")),
             JsValue::Object(object) if object.borrow().func.is_some() => return Ok(None),
             JsValue::Object(_) => {}
         }
