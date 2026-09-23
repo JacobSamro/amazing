@@ -512,7 +512,10 @@ fn invoke_inner<H: BindingHost + FragmentParser + SelectorEngine + AbortHost + D
         ResultValue::Boolean(v) => host.boolean(v),
         ResultValue::Number(v) => host.number(v),
         ResultValue::String(v) => host.string(&v)?,
-        ResultValue::Node(v) => host.wrap_node(v)?,
+        ResultValue::Node(v) => {
+            if operation == O::DocumentConstructor { host.mark_constructed_document(v); }
+            host.wrap_node(v)?
+        },
         ResultValue::Children(v) => host.child_nodes(v)?,
     })
 }

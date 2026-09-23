@@ -1,6 +1,6 @@
 //! Driver-owned WebIDL installation over the same arena used for page parsing.
 //! DOMString values cross the runtime boundary as exact UTF-16 code units.
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::{HashMap, HashSet}, rc::Rc};
 
 use amazing_bindings::{
     deliver_custom_element_reactions, deliver_mutation_checkpoint, fire_abort_timeout,
@@ -55,6 +55,7 @@ struct BindingState {
     promise_resolvers: HashMap<usize, (JsValue, JsValue)>,
     legacy_document: JsValue,
     legacy_elements: HashMap<u32, JsValue>,
+    constructed_documents: HashSet<NodeIdx>,
     abort_timeouts: Vec<(AbortSignalId, u64)>,
     document_url: Option<String>,
     document_character_set: Option<String>,
@@ -321,10 +322,11 @@ impl RuntimeBindingHost<'_> {
             let node = self
                 .node_from_platform_key(key)
                 .ok_or_else(|| Throw::type_error("Invalid node wrapper"))?;
+            let constructed = self.state.borrow().constructed_documents.contains(&node);
             let host = self.state.borrow().host.clone();
             let host = host.borrow();
             return Ok(match &host.dom.get(node).kind {
-                NodeKind::Document if host.dom.document_metadata(node).ok().flatten()
+                NodeKind::Document if !constructed && host.dom.document_metadata(node).ok().flatten()
                     .is_some_and(|metadata| metadata.content_type != "text/html") => Interface::XMLDocument,
                 NodeKind::Document => Interface::Document,
                 NodeKind::DocumentFragment if host.dom.is_shadow_root(node) => Interface::ShadowRoot,
@@ -401,6 +403,7 @@ pub(crate) fn install(
         promise_resolvers: HashMap::new(),
         legacy_document: js.binding_get_property(&js.binding_global_object(), "document")?,
         legacy_elements: HashMap::new(),
+        constructed_documents: HashSet::new(),
         abort_timeouts: Vec::new(),
         document_url: None,
         document_character_set: None,
@@ -1298,6 +1301,9 @@ impl BindingHost for RuntimeBindingHost<'_> {
     }
     fn current_document(&self) -> NodeIdx {
         NodeIdx(0)
+    }
+    fn mark_constructed_document(&mut self, document: NodeIdx) {
+        self.state.borrow_mut().constructed_documents.insert(document);
     }
     fn with_dom<R>(
         &mut self,
