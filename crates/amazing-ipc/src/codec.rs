@@ -269,3 +269,24 @@ macro_rules! wire_enum { ($(#[$meta:meta])* $vis:vis enum $name:ident {$($varian
         fn decode(d:&mut $crate::codec::Decoder<'_>)->Result<Self,$crate::codec::Error>{d.nested(|d|{use $crate::codec::Wire;match u16::decode(d)? {$($tag=>Ok(Self::$variant(<$ty as Wire>::decode(d)?)),)*_=>Err($crate::codec::Error::Invalid)}})}
     }
 }; }
+
+/// A bounded byte blob for images and frames; unlike a generic sequence it may
+/// use the whole frame budget. Decoding checks the length before allocating.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ByteBuf(pub Vec<u8>);
+impl Wire for ByteBuf {
+    fn encode(&self, e: &mut Encoder) -> Result<(), Error> {
+        if self.0.len() > MAX_FRAME - 8 {
+            return Err(Error::Limit);
+        }
+        (self.0.len() as u32).encode(e)?;
+        e.bytes(&self.0)
+    }
+    fn decode(d: &mut Decoder<'_>) -> Result<Self, Error> {
+        let n = u32::decode(d)? as usize;
+        if n > MAX_FRAME - 8 {
+            return Err(Error::Limit);
+        }
+        Ok(Self(d.take(n)?.to_vec()))
+    }
+}

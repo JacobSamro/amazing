@@ -341,3 +341,32 @@ pub struct SandboxPolicy {
     pub allow_network: bool,
     pub allow_gpu: bool,
 }
+
+pub mod network;
+pub mod protocol;
+pub mod renderer;
+
+/// Browser-side liveness observer. A crash is emitted once per renderer host.
+pub struct RendererMonitor {
+    reported: bool,
+}
+impl RendererMonitor {
+    pub fn new() -> Self {
+        Self { reported: false }
+    }
+    pub fn poll(&mut self, host: &mut ProcessHost) -> Result<Option<protocol::SadTab>, Error> {
+        if self.reported || !host.crashed()? {
+            return Ok(None);
+        }
+        self.reported = true;
+        Ok(Some(protocol::SadTab {
+            pid: host.pid(),
+            reason: "renderer process exited".into(),
+        }))
+    }
+}
+impl Default for RendererMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}

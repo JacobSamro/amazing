@@ -4,13 +4,13 @@ use amazing_process::{
 };
 use std::collections::BTreeMap;
 use std::time::Duration;
-interface! {pub interface Echo(7) => EchoProxy, EchoReceiver {fn echo(message:String) -> String = 1;}}
+interface! {pub interface Echo(17) => EchoProxy, EchoReceiver {fn echo(message:String) -> String = 1;}}
 #[test]
 fn child_roundtrip_crash_and_restart() {
     let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
     let mut host = ProcessHost::spawn(
         exe,
-        Role::Renderer,
+        Role::Utility,
         Capabilities(BTreeMap::new()),
         RestartPolicy::OnCrash { max_restarts: 1 },
     )
