@@ -22,7 +22,12 @@ set -uo pipefail
 
 SLOTS="${BUILD_SLOTS:-3}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIR="$REPO/.agents/.build-slots"
+# Slots must be shared by every lane. From a lane worktree, REPO is that
+# worktree, whose .agents/ is private -- which silently gave each lane its own
+# three slots. Resolve the primary checkout through git's common dir instead.
+MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")"
+[ -d "$MAIN/.agents" ] || MAIN="$REPO"
+DIR="$MAIN/.agents/.build-slots"
 LANE="${1:?usage: with-build-slot.sh <lane> -- <command...>}"
 shift
 [ "${1:-}" = "--" ] && shift

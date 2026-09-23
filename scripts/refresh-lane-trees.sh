@@ -59,11 +59,15 @@ cd "$REPO"
 # A refresh overwrites lane-owned files, so doing it during a final gate
 # invalidates the run -- that has now happened twice, both times because the
 # integrator simply forgot. Remembering is not a mechanism; this is.
+# Holds live in the primary checkout; a lane running this from its worktree
+# would otherwise look in its own private .agents/ and miss every hold.
+HOLDS="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")/.agents"
+[ -d "$HOLDS" ] || HOLDS=".agents"
 held=()
 for l in "${LANES[@]}"; do
-  if [ -f ".agents/$l/REFRESH-HOLD" ]; then
+  if [ -f "$HOLDS/$l/REFRESH-HOLD" ]; then
     held+=("$l")
-    echo "SKIP $l: REFRESH-HOLD set -- $(head -1 ".agents/$l/REFRESH-HOLD" 2>/dev/null)" >&2
+    echo "SKIP $l: REFRESH-HOLD set -- $(head -1 "$HOLDS/$l/REFRESH-HOLD" 2>/dev/null)" >&2
   fi
 done
 if [ ${#held[@]} -gt 0 ]; then

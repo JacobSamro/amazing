@@ -50,7 +50,29 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-AGENTS_DIR = REPO / ".agents"
+
+
+def _main_checkout(start: Path) -> Path:
+    """The primary checkout, even when this script runs from a lane worktree.
+
+    Coordination state -- the agent registry, lane status files, build slots,
+    refresh holds -- lives only in the primary checkout's .agents/. A worktree
+    has its own empty .agents/, so resolving it relative to this file silently
+    gave each lane a private copy: an empty registry and, worse, a private set
+    of build slots, which meant the slot limit was not global at all.
+    """
+    try:
+        common = subprocess.run(
+            ["git", "-C", str(start), "rev-parse", "--path-format=absolute",
+             "--git-common-dir"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        return Path(common).parent
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return start
+
+
+MAIN = _main_checkout(REPO)
+AGENTS_DIR = MAIN / ".agents"
 REGISTRY = AGENTS_DIR / "agents.json"
 
 DEFAULT_SESSION_PREFIX = "termirust-amazing-"
