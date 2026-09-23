@@ -11,6 +11,7 @@ import concurrent.futures
 import hashlib
 import html.parser
 import json
+import math
 from pathlib import Path
 import re
 import subprocess
@@ -148,7 +149,7 @@ def save_round(output, label, records):
             'subtests': {s: sum(r['counts'][s] for r in records) for s in SUBTEST_STATUSES}}
 
 
-def prove(exe, root, output):
+def prove(exe, root, output, timeout):
     expected = {}
     for name in PROOF:
         data = (root / name).read_bytes()
@@ -160,7 +161,7 @@ def prove(exe, root, output):
         expected[name] = sorted((t['name'], codes[t['status_string']]) for t in e['summarized_tests'])
     rounds = []
     for number in (1, 2):
-        records = [run(exe, root, {'test': name}, 10000) for name in PROOF]
+        records = [run(exe, root, {'test': name}, timeout) for name in PROOF]
         for r in records:
             actual = sorted((t['name'], t['status']) for t in r['subtests'])
             if r['harness_status'] != 0 or actual != expected[r['test']]:
@@ -183,9 +184,17 @@ def main():
     ap.add_argument('--output', type=Path, required=True)
     ap.add_argument('--proof-only', action='store_true')
     ap.add_argument('--jobs', type=int, default=3)
+    ap.add_argument('--timeout-multiplier', type=float, default=1.0,
+                    help='multiply normal and long WPT deadlines (default: 1)')
     args = ap.parse_args()
     if args.jobs < 1 or args.jobs > 8:
         ap.error('--jobs must be 1..8')
+    if not math.isfinite(args.timeout_multiplier) or args.timeout_multiplier <= 0:
+        ap.error('--timeout-multiplier must be a finite positive number')
+    normal_deadline = round(10000 * args.timeout_multiplier)
+    long_deadline = round(60000 * args.timeout_multiplier)
+    if normal_deadline < 1 or long_deadline < 1:
+        ap.error('--timeout-multiplier yields a deadline below 1 ms')
     root, exe, output = args.wpt_root.resolve(), args.executable.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     if git(root, 'rev-parse', 'HEAD').decode().strip() != REVISION:
@@ -195,8 +204,9 @@ def main():
         raise RuntimeError('Modified upstream harness')
     summary = {'wpt_revision': REVISION, 'harness_sha256': digest(harness),
                'executable_sha256': digest(exe.read_bytes()), 'viewport': [800, 600],
-               'normal_deadline_ms': 10000, 'long_deadline_ms': 60000,
-               'proof': prove(exe, root, output)}
+               'timeout_multiplier': args.timeout_multiplier,
+               'normal_deadline_ms': normal_deadline, 'long_deadline_ms': long_deadline,
+               'proof': prove(exe, root, output, normal_deadline)}
     (output / 'summary.json').write_bytes(encoded(summary))
     print('Upstream known-pass/known-fail proof verified twice', flush=True)
     if args.proof_only:
@@ -212,7 +222,7 @@ def main():
         records = []
         entries = selection['selected']
         def one(entry):
-            return run(exe, root, entry, 60000 if entry['long_timeout'] else 10000)
+            return run(exe, root, entry, long_deadline if entry['long_timeout'] else normal_deadline)
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
             for r in pool.map(one, entries):
                 records.append(r)
