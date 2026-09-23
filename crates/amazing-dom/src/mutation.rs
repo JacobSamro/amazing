@@ -393,6 +393,7 @@ impl Dom {
         self.sync_attached_attr_value(node, namespace, name, value);
         self.queue_attribute_record(node, namespace, name, old.clone());
         self.custom_element_attribute_changed(node, namespace, name, old, Some(value.into()));
+        if namespace.is_none() { self.form_attribute_changed(node, name); }
         if namespace.is_none() && matches!(name, "name" | "slot") { self.reassign_all_slots(); }
         Ok(())
     }
@@ -453,6 +454,7 @@ impl Dom {
         self.detach_attached_attr(node, namespace, name);
         self.queue_attribute_record(node, namespace, name, Some(old.clone()));
         self.custom_element_attribute_changed(node, namespace, name, Some(old), None);
+        if namespace.is_none() { self.form_attribute_changed(node, name); }
         if namespace.is_none() && matches!(name, "name" | "slot") { self.reassign_all_slots(); }
         Ok(())
     }

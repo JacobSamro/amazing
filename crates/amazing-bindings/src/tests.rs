@@ -219,6 +219,21 @@ impl BindingHost for Host {
         self.custom_element_errors.push(error);
         Ok(())
     }
+    fn form_pattern_matches(&mut self, pattern: &[u16], value: &[u16]) -> Result<Option<bool>, String> {
+        assert!(!self.arena_borrowed);
+        if pattern == "[A-Z]+".encode_utf16().collect::<Vec<_>>() {
+            return Ok(Some(value.iter().all(|unit| (65..=90).contains(unit))));
+        }
+        Err("NotSupportedError".into())
+    }
+    fn form_date_from_epoch_ms(&mut self, milliseconds: f64) -> Result<V, String> {
+        assert!(!self.arena_borrowed);
+        Ok(V::Number(milliseconds))
+    }
+    fn form_date_to_epoch_ms(&mut self, value: &V) -> Result<Option<f64>, String> {
+        assert!(!self.arena_borrowed);
+        match value { V::Number(n) => Ok(Some(*n)), _ => Err("TypeError: Expected Date".into()) }
+    }
     fn install_node_constant(&mut self, n: &'static str, v: u16) -> Result<(), String> {
         self.constants.push((n, v));
         Ok(())
@@ -974,12 +989,13 @@ fn class_list_is_live_canonical_and_validates_tokens() {
 fn html_collection_binding_and_legacy_hooks_are_live() {
     let mut h = Host::default();
     install(&mut h).unwrap();
-    assert_eq!(h.legacy.len(), 5);
+    assert_eq!(h.legacy.len(), 8);
     assert_eq!(h.legacy[0].0, InterfaceBrand::COLLECTION);
     assert_eq!(h.legacy[0].1.named_getter, Some(O::HTMLCollectionNamedGetter));
     assert!(h.legacy[0].1.unenumerable_names);
-    assert!(h.legacy.iter().all(|(_, hooks)| !hooks.override_builtins
-        && hooks.indexed_setter.is_none() && hooks.named_setter.is_none()
+    assert!(h.legacy.iter().all(|(brand, hooks)| !hooks.override_builtins
+        && (hooks.indexed_setter.is_none() || *brand == InterfaceBrand::OPTIONS)
+        && hooks.named_setter.is_none()
         && hooks.named_deleter.is_none()));
     assert!(h.iterables.contains(&(Interface::NodeList, IterableKind::Values)));
     assert!(h.iterables.contains(&(Interface::DOMTokenList, IterableKind::Values)));
@@ -1474,4 +1490,83 @@ fn custom_element_upgrade_drains_each_element_reactions_in_order() {
     call(&mut h, O::CustomElementRegistryDefine, registry,
         &[str_value("x-ordered"), constructor]);
     assert_eq!(h.calls, [31, 32, 31, 32]);
+}
+
+// WPT pin 53bc812da2ed81179ebd1ba76b2d197cc4747d12:
+// html/semantics/forms/the-input-element/valueMode.html and radio.html.
+#[test]
+fn form_input_value_modes_radio_group_and_reset_bindings() {
+    let mut h = Host::default();
+    let form = h.dom.create_element(NodeIdx(0), "form");
+    let a = h.dom.create_element(form, "input");
+    let b = h.dom.create_element(form, "input");
+    for node in [a, b] {
+        h.dom.set_attribute(node, "type", "radio").unwrap();
+        h.dom.set_attribute(node, "name", "answer").unwrap();
+    }
+    assert_eq!(call(&mut h, O::InputValue, V::Node(a), &[]), str_value("on"));
+    call(&mut h, O::InputSetValue, V::Node(a), &[str_value("yes")]);
+    assert_eq!(call(&mut h, O::InputDefaultValue, V::Node(a), &[]), str_value("yes"));
+    call(&mut h, O::InputSetChecked, V::Node(a), &[V::Bool(true)]);
+    call(&mut h, O::InputSetChecked, V::Node(b), &[V::Bool(true)]);
+    assert_eq!(call(&mut h, O::InputChecked, V::Node(a), &[]), V::Bool(false));
+    assert_eq!(call(&mut h, O::InputChecked, V::Node(b), &[]), V::Bool(true));
+    let controls = call(&mut h, O::FormElements, V::Node(form), &[]);
+    assert_eq!(crate::supported_index_count(&mut h, O::FormCollectionSupportedIndexCount, &controls).unwrap(), 2);
+    assert_eq!(call(&mut h, O::FormCollectionNamedItem, controls.clone(), &[str_value("answer")]),
+        call(&mut h, O::FormCollectionNamedGetter, controls, &[str_value("answer")]));
+    call(&mut h, O::FormReset, V::Node(form), &[]);
+    assert_eq!(call(&mut h, O::InputChecked, V::Node(b), &[]), V::Bool(false));
+}
+
+// WPT pin 53bc812da2ed81179ebd1ba76b2d197cc4747d12:
+// html/semantics/forms/the-select-element/selected-index.html and
+// html/semantics/forms/constraints/form-validation-validity-valueMissing.html.
+#[test]
+fn select_and_validity_bindings_follow_live_dom() {
+    let mut h = Host::default();
+    let form = h.dom.create_element(NodeIdx(0), "form");
+    let select = h.dom.create_element(form, "select");
+    let first = h.dom.create_element(select, "option");
+    h.dom.set_attribute(first, "value", "first").unwrap();
+    let second = h.dom.create_element(select, "option");
+    h.dom.set_attribute(second, "value", "second").unwrap();
+    h.dom.set_attribute(second, "selected", "").unwrap();
+    assert_eq!(call(&mut h, O::SelectSelectedIndex, V::Node(select), &[]), V::Number(1.));
+    let options = call(&mut h, O::SelectOptions, V::Node(select), &[]);
+    assert_eq!(crate::supported_index_count(&mut h, O::OptionsSupportedIndexCount, &options).unwrap(), 2);
+    assert_eq!(call(&mut h, O::OptionsItem, options, &[V::Number(0.)]), V::Node(first));
+    call(&mut h, O::SelectSetSelectedIndex, V::Node(select), &[V::Number(0.)]);
+    assert_eq!(call(&mut h, O::SelectValue, V::Node(select), &[]), str_value("first"));
+    call(&mut h, O::FormReset, V::Node(form), &[]);
+    assert_eq!(call(&mut h, O::SelectSelectedIndex, V::Node(select), &[]), V::Number(1.));
+    let input = h.dom.create_element(form, "input");
+    h.dom.set_attribute(input, "required", "").unwrap();
+    let validity = call(&mut h, O::ControlValidity, V::Node(input), &[]);
+    assert_eq!(call(&mut h, O::ValidityValueMissing, validity.clone(), &[]), V::Bool(true));
+    assert_eq!(call(&mut h, O::ValidityValid, validity, &[]), V::Bool(false));
+    assert_eq!(call(&mut h, O::ControlCheckValidity, V::Node(input), &[]), V::Bool(false));
+    call(&mut h, O::InputSetValue, V::Node(input), &[str_value("filled")]);
+    assert_eq!(call(&mut h, O::ControlCheckValidity, V::Node(input), &[]), V::Bool(true));
+}
+
+// WPT pin 53bc812da2ed81179ebd1ba76b2d197cc4747d12:
+// html/semantics/forms/constraints/form-validation-validity-patternMismatch.html and
+// html/semantics/forms/the-input-element/input-valueasdate.html.
+#[test]
+fn pattern_host_seam_and_date_wrapping_run_outside_dom_borrow() {
+    let mut h = Host::default();
+    let input = h.dom.create_element(NodeIdx(0), "input");
+    h.dom.set_attribute(input, "pattern", "[A-Z]+").unwrap();
+    call(&mut h, O::InputSetValue, V::Node(input), &[str_value("abc")]);
+    let validity = call(&mut h, O::ControlValidity, V::Node(input), &[]);
+    assert_eq!(call(&mut h, O::ValidityPatternMismatch, validity.clone(), &[]), V::Bool(true));
+    call(&mut h, O::InputSetValue, V::Node(input), &[str_value("ABC")]);
+    assert_eq!(call(&mut h, O::ValidityPatternMismatch, validity, &[]), V::Bool(false));
+    h.dom.remove_attribute(input, "pattern").unwrap();
+    h.dom.set_attribute(input, "type", "date").unwrap();
+    call(&mut h, O::InputSetValue, V::Node(input), &[str_value("1970-01-02")]);
+    assert_eq!(call(&mut h, O::InputValueAsDate, V::Node(input), &[]), V::Number(86_400_000.));
+    call(&mut h, O::InputSetValueAsDate, V::Node(input), &[V::Number(0.)]);
+    assert_eq!(call(&mut h, O::InputValue, V::Node(input), &[]), str_value("1970-01-01"));
 }

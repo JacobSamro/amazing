@@ -49,6 +49,10 @@ impl InterfaceBrand {
     pub const ABORT_SIGNAL: Self = Self(20);
     pub const FILTERED_NODE_LIST: Self = Self(21);
     pub const CUSTOM_ELEMENT_REGISTRY: Self = Self(22);
+    pub const FORM_CONTROLS: Self = Self(23);
+    pub const OPTIONS: Self = Self(24);
+    pub const RADIO_NODE_LIST: Self = Self(25);
+    pub const VALIDITY_STATE: Self = Self(26);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -150,10 +154,40 @@ pub enum Interface {
     AbortController,
     AbortSignal,
     CustomElementRegistry,
+    HTMLFormControlsCollection,
+    HTMLOptionsCollection,
+    RadioNodeList,
+    ValidityState,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    FormElements, FormLength, FormReset, FormCheckValidity, FormReportValidity,
+    FormControlForm, FormControlName, FormControlSetName,
+    InputValue, InputSetValue, InputDefaultValue, InputSetDefaultValue,
+    InputChecked, InputSetChecked, InputDefaultChecked, InputSetDefaultChecked,
+    InputValueAsNumber, InputSetValueAsNumber, InputValueAsDate, InputSetValueAsDate,
+    InputSelect, InputSetSelectionRange, InputSelectionStart, InputSetSelectionStart,
+    InputSelectionEnd, InputSetSelectionEnd, InputSelectionDirection, InputSetSelectionDirection,
+    TextAreaValue, TextAreaSetValue, TextAreaDefaultValue, TextAreaSetDefaultValue,
+    SelectValue, SelectSetValue, SelectSelectedIndex, SelectSetSelectedIndex,
+    SelectOptions, SelectLength, SelectMultiple, SelectSetMultiple, SelectAdd, SelectRemove,
+    OptionValue, OptionSetValue, OptionSelected, OptionSetSelected,
+    OptionDefaultSelected, OptionSetDefaultSelected, OptionText, OptionSetText,
+    ButtonType, ButtonSetType,
+    ControlWillValidate, ControlValidity, ControlValidationMessage,
+    ControlCheckValidity, ControlReportValidity, ControlSetCustomValidity,
+    ValidityValueMissing, ValidityTypeMismatch, ValidityPatternMismatch,
+    ValidityTooLong, ValidityTooShort, ValidityRangeUnderflow, ValidityRangeOverflow,
+    ValidityStepMismatch, ValidityBadInput, ValidityCustomError, ValidityValid,
+    FormCollectionLength, FormCollectionItem, FormCollectionNamedItem,
+    FormCollectionIndexedGetter, FormCollectionNamedGetter,
+    FormCollectionSupportedIndexCount, FormCollectionSupportedNames,
+    OptionsLength, OptionsSetLength, OptionsSelectedIndex, OptionsSetSelectedIndex,
+    OptionsItem, OptionsNamedItem, OptionsIndexedGetter, OptionsNamedGetter,
+    OptionsIndexedSetter, OptionsSupportedIndexCount, OptionsSupportedNames,
+    RadioNodeListLength, RadioNodeListItem, RadioNodeListIndexedGetter,
+    RadioNodeListSupportedIndexCount, RadioNodeListValue, RadioNodeListSetValue,
     ElementHref, ElementSetHref, ElementTarget, ElementSetTarget,
     ElementRel, ElementSetRel, ElementRelList, ElementDownload, ElementSetDownload,
     ElementSrc, ElementSetSrc, ImageAlt, ImageSetAlt, ImageWidth, ImageSetWidth,
@@ -725,6 +759,18 @@ pub trait BindingHost: Sized {
     }
     fn report_custom_element_exception(&mut self, _error: Self::Error) -> Result<(), Self::Error> {
         self.with_dom::<()>(|_| Err(DomError::NotSupportedError))
+    }
+    /// Full-string `pattern` match using the runtime's JavaScript `v` regexp.
+    fn form_pattern_matches(&mut self, _pattern: &[u16], _value: &[u16]) -> Result<Option<bool>, Self::Error> {
+        self.with_dom::<Option<bool>>(|_| Err(DomError::NotSupportedError))
+    }
+    /// Runtime Date wrapper, preserving the Date value in milliseconds.
+    fn form_date_from_epoch_ms(&mut self, _milliseconds: f64) -> Result<Self::Value, Self::Error> {
+        self.with_dom::<Self::Value>(|_| Err(DomError::NotSupportedError))
+    }
+    /// A Date value returns its time value; invalid Date returns None.
+    fn form_date_to_epoch_ms(&mut self, _value: &Self::Value) -> Result<Option<f64>, Self::Error> {
+        self.with_dom::<Option<f64>>(|_| Err(DomError::NotSupportedError))
     }
     /// Standard Node constants are exposed on Node and its prototype.
     fn install_node_constant(&mut self, name: &'static str, value: u16) -> Result<(), Self::Error>;
