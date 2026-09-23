@@ -1,6 +1,6 @@
 # JS language conformance decision map
 
-Frontier: **JS-4 — external scheduling seam (contract/routing)**. JS-3 is merged as `493e3d0`; JS-2 is merged;
+Frontier: **JS-7 — WPT `dom/` parse barriers**. JS-6 is merged as `0244456`;
 unmodified upstream WPT testharness.js parses and completes.
 
 Ownership: js-lang owns `lexer.rs`, `parser.rs`, `ast.rs`, `tokens.rs` and
@@ -1017,3 +1017,108 @@ operations must read the UTF-16 fields during the `JsString` migration.
 Identifier escapes remain deferred in the lexer. When implemented, they must
 resolve to valid identifier code points; arbitrary UTF-16 code units are for
 string and template values only.
+
+## JS-7 — WPT `dom/` parser barriers
+
+Initial fixed base: `0244456e725f0e97755df756c062fca31aa6bea6`. The lane
+and win-001 build trees were refreshed to this base. Later `dev` movement
+touched `amazing-js`, so the final branch gate was repeated on fixed base
+`bc8aa45523d156f7e2f92128df7f585539509993`; the integrator owns the
+merged-head gate. This ticket changes only the JS parser. A method's `async`
+modifier must have no newline *after* it; a newline
+before it is legal. `await` is likewise legal at the start of a line in an
+async body. Calls permit one trailing argument comma. These changes are paired
+with method-formal early errors so newly recognized async methods retain
+required parse rejections: duplicate bound names, `await` in formals, strict
+`eval`/`arguments` formals, and a `use strict` body with non-simple parameters.
+Non-static class constructors also reject async and generator modifiers; the
+full Test262 sweep found four parse-negative class files that exposed this
+early error after the newline fix.
+
+The before ruler is the full pinned Test262 revision
+`3655e7464de3d52643ecddd4b5f9f4f3e7f62398`: 53,872 files and 102,918
+variants, 8 workers, 60-second variant deadline. On the fixed base it measured
+**10,594 pass / 33,011 fail / 17 timeout / 9,956 unsupported / 294 fixture
+skips**. The full classification hash was
+`d80b8fd8eb5e086aa4a95b7c2619d0ab04e636ee372ff2c2a0f5967c3479c8ea`.
+
+Focused directories were each run twice before and twice after with identical
+per-file and per-variant classifications in each pair. File results:
+
+| Directory | Before pass | After pass | Before fail | After fail | Unsupported |
+|---|---:|---:|---:|---:|---:|
+| `language/expressions/object/method-definition` | 92 | 105 | 110 | 97 | 101 |
+| `language/expressions/await` | 8 | 8 | 1 | 1 | 13 |
+| `language/expressions/call` | 41 | 42 | 50 | 49 | 1 |
+
+The 13 object-method gains are parse-negative early-error cases, and
+`language/expressions/call/trailing-comma.js` now passes in both variants.
+The four `grammar-special-meth-ctor-async` class expression/declaration files
+also pass in both variants, measured before and after twice each with stable
+classifications.
+The pinned WPT `dom/` before pair used revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`, the unmodified upstream
+harness, and the 627-source selection hash
+`9787de028efe5dc83f491ce2a818e2a549b4a07a236e6538c1e6165bb437b0b5`.
+Both rounds had **115 zero-subtest SyntaxErrors**, including 76 in shared
+`testdriver.js`; file totals were 2 pass / 251 fail / 30 timeout / 211 error /
+133 unsupported. The before outcome hash was
+`b040b4290a0fae08866dd2cc17895f483febf662b999f8742352e21261c37ad4`.
+
+The after pair kept the same WPT revision, harness hash, 627-source selection
+hash, viewport, and deadlines. Both rounds had **zero** zero-subtest
+SyntaxErrors; all 115 previously blocked source files moved beyond parsing.
+Their later classifications were 48 fail, 48 timeout, and 19 other error.
+Overall file totals became **2 pass / 299 fail / 78 timeout / 115 error / 133
+unsupported**; registered subtests changed from 83 pass / 2,672 fail to 86
+pass / 2,854 fail. The after outcome hash, identical in both rounds, was
+`2ab0eb54e6aa4814e170dc48eb7e5b454ee5000a344eca6c5576236053491393`.
+The exact 115 moved paths and later diagnostics are recorded in the lane's
+`.agents/js-lang/js7-wpt-moves.json` scratch artifact. The 76 shared
+`testdriver.js` cases now reach 24 failures, 46 timeouts, and 6 other errors;
+their execution/driver follow-up is routed to the owning lanes in
+`.agents/js-lang/questions.md`.
+
+The initial-base Windows workspace gate passed `cargo nextest run
+--workspace --locked`: **1,502 tests passed, 3 skipped, none failed**. A
+separate `cargo test --workspace --locked --doc` ran 19 doctest suites with
+**2 passed and none failed** (the JS and HTML doctests). The parser crate's
+focused gate passed **189/189** nextest tests and its separate **1/1** doctest.
+
+The final-base `bc8aa45` Test262 sweep used the same pin, input hash and runner
+hash as the initial gate. It measured 53,872 files and 102,918 variants before
+and after. Before: **10,594 file pass / 33,012 fail / 16 timeout / 9,956
+unsupported / 294 fixture skips**, with 20,377 passing variants and
+classification hash
+`2cc7eea5f4b32c9a4d88d2be5ccf97160f11493494b51f1cd7c9f3e3d2ff3ebb`.
+After: **10,694 file pass / 32,906 fail / 17 timeout / 9,961 unsupported /
+294 fixture skips**, with 20,572 passing variants. Both after sweeps had
+identical per-file and per-variant classifications, hash
+`5d9e472f8f37b3c1063f50e8dbfdceb0524a8caff7c8cb78e3fba7894a17c113`.
+No previously passing variant regressed. The 100 newly passing files came from
+failures; five previously failing files became unsupported and one timed out.
+The three focused directory pairs were rerun twice on the final base and kept
+the same counts shown above. The parser crate passed **194/194** nextest tests
+and its separate **1/1** doctest on that base.
+
+The final-base WPT `dom/` pair used the same pin, upstream harness, 627-source
+selection, viewport and deadlines as the initial gate. Both before rounds had
+**115 zero-subtest SyntaxErrors**, 76 from shared `testdriver.js`, and file
+totals **2 pass / 251 fail / 30 timeout / 211 error / 133 unsupported**. The
+before outcome hash was
+`598344c1a1f182a28e8e7df181f1542f4c2d47a6320e2e791450ffc0d7c1a34d`.
+Both after rounds had **zero** zero-subtest SyntaxErrors; all 115 sources moved
+beyond parsing, with 48 later failures, 48 timeouts and 19 other errors. The
+after file totals were **2 pass / 299 fail / 78 timeout / 115 error / 133
+unsupported**, and the outcome hash was
+`6d6c69bf22a1ee919645350b9e05778c83c08d399ebc5019b28b3bb7a934853b`.
+Registered subtests changed from 85 pass / 2,670 fail to 88 pass / 2,852
+fail. The exact 115 moved paths, unchanged from the initial-base pair, are in
+`.agents/js-lang/js7-bc8-wpt-moved-files.md`; the matching JSON includes each
+file's old and later diagnostics.
+
+The final-base Windows workspace gate passed `cargo nextest run --workspace
+--locked`: **1,609 passed, 3 skipped, none failed**. Its separate `cargo test
+--workspace --locked --doc` completed 19 doctest suites with **2 passed and
+none failed**. The win-001 build tree was refreshed once to `bc8aa45`, then
+the parser was re-synced; no subsequent refresh altered the gate tree.
