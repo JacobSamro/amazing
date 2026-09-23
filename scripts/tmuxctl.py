@@ -642,6 +642,16 @@ def cmd_status(args) -> int:
     return 0
 
 
+def pane_in_mode(session: str) -> bool:
+    return tmux(["display-message", "-p", "-t", session, "#{pane_in_mode}"]).strip() == "1"
+
+
+def leave_copy_mode(session: str) -> None:
+    if pane_in_mode(session):
+        tmux(["send-keys", "-t", session, "-X", "cancel"])
+        time.sleep(0.3)
+
+
 def submit(session: str, text: str, attempts: int = 2, window: float = 10.0) -> bool:
     """Type a prompt and confirm the TUI accepted it.
 
@@ -652,6 +662,14 @@ def submit(session: str, text: str, attempts: int = 2, window: float = 10.0) -> 
     then poll for acceptance, and only press again if the prompt is provably
     still sitting in the composer.
     """
+    # A pane someone scrolled is left in tmux copy mode, where send-keys goes to
+    # the copy-mode key table instead of the program: the text is read as
+    # scroll commands, the composer underneath stays empty, and the empty
+    # composer made this report success. Leave copy mode first, and refuse to
+    # claim delivery if the pane is still in it.
+    leave_copy_mode(session)
+    if pane_in_mode(session):
+        return False
     tmux(["send-keys", "-t", session, "-l", text])
     time.sleep(0.5)
     for _ in range(attempts):
