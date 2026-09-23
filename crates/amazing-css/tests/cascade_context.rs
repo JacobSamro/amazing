@@ -48,6 +48,16 @@ fn important_reverses_layers_including_unlayered() {
         "green"
     );
 }
+
+#[test]
+fn important_revert_layer_excludes_weaker_important_layers() {
+    let css = "p { background-color: blue } \
+        @layer { p { background-color: green } } \
+        @layer { p { background-color: red; background-color: red !important; \
+                    background-color: revert-layer !important } } \
+        @layer { p { background-color: red; background-color: red !important } }";
+    assert_eq!(value(css, "background-color"), "green");
+}
 #[test]
 fn nested_layers_group_under_parent_and_direct_rules_win() {
     assert_eq!(

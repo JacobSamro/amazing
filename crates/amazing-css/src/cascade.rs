@@ -239,9 +239,11 @@ fn winners<'a>(
                         if c.inline {
                             return false;
                         }
-                        // Important rollback excludes the interval down through the
-                        // layer's normal level, including stronger normal layers.
-                        if winner.important && !c.important {
+                        // Important rollback excludes its layer and every
+                        // weaker important layer, then crosses the normal
+                        // interval down through the same layer. Otherwise
+                        // a later important layer resurfaces after rollback.
+                        if winner.important {
                             return c.layer < winner.layer;
                         }
                         c.layer != winner.layer

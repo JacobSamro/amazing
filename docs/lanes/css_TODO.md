@@ -1,5 +1,52 @@
 # CSS lane decision map
 
+## CSS-8 — cascade corpus triage (fixed base `945ca38`)
+
+The pinned 72-case cascade selection is 38 pass / 32 mismatch / 2 unsupported
+on the fixed base. The table records the **first observed blocker** in each
+mismatch: 21 CSS-owned, 11 routed elsewhere. Chrome 154.0.8016.0 and Safari
+26.6 statuses come from the [exact-revision wpt.fyi search API](https://wpt.fyi/api/search?run_ids=5182906107691008,5141363439173632&q=/css/);
+both runs report WPT `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
+"pass / fail" means Chrome / Safari. A CSS first blocker can still need
+layout or paint adoption after it is removed; the table does not promise a
+render pass from parser work alone.
+
+| Mismatch case | First feature/root cause | Owner | Chrome / Safari |
+|---|---|---|---|
+| `css-cascade__revert-layer-011.html` | @property + paused @keyframes custom-property interpolation; animation stage absent | integrator (animation) | pass / pass |
+| `css-cascade__all-prop-002.html` | `all: inherit` creates inline containers; nested inline/block box layout | layout | pass / pass |
+| `css-cascade__revert-layer-005.html` | important `revert-layer` leaves later important layers eligible | css | pass / pass |
+| `selectors__has-style-sharing-002.html` | `:has(> span)` relational selector unsupported | css | pass / pass |
+| `selectors__dir-style-03a.html` | `:dir(ltr)` directionality selector unsupported | css | pass / pass |
+| `selectors__nth-child-of-no-space-after-of.html` | `:nth-child(3 of S)` syntax unsupported | css | pass / pass |
+| `selectors__selectors-4__lang-016.html` | `:lang(fr)` ancestor/BCP47 prefix matching unsupported | css | pass / pass |
+| `selectors__selectors-4__lang-022.html` | `:lang("i-navajo")` string argument unsupported | css | pass / pass |
+| `selectors__nth-child-of-tagname.html` | `:nth-child(odd of webkit, fast)` selector-list filtering unsupported | css | pass / pass |
+| `selectors__selectors-4__lang-002.html` | `:lang("FR")` case-insensitive language matching unsupported | css | pass / pass |
+| `selectors__nth-last-child-of-complex-selector.html` | `:nth-last-child(4n of complex S)` filtering unsupported | css | pass / pass |
+| `selectors__selectors-4__lang-000.html` | `:lang(en-US)` inherited language matching unsupported | css | pass / pass |
+| `css-values__calc-border-radius-1.html` | `border-radius: calc(...) / calc(...)` shorthand rejects math values | css | pass / pass |
+| `css-values__calc-max-height-block-1.html` | `max-height: calc(length + percentage)` rejected before layout | css | pass / pass |
+| `css-values__calc-min-width-block-intrinsic-1.html` | `min-width: calc(...)` rejected before intrinsic sizing | css | pass / fail |
+| `css-values__ch-unit-008.html` | `5ch` accepted as typed unit but used width lacks zero-glyph metric | layout | pass / pass |
+| `css-values__calc-invalid-range-clamping.html` | `border-radius: calc(-10px)` rejected instead of computed clamping | css | pass / pass |
+| `css-values__calc-rounding-003.html` | `margin-inline` shorthand missing; width `calc()` also rejected | css | pass / pass |
+| `css-color__deprecated-sameas-017.html` | `@supports` system color `ThreeDFace` and ButtonFace palette unsupported | css | pass / pass |
+| `css-color__hwb-005.html` | `hwb()` color conversion unsupported | css | pass / pass |
+| `css-color__a98rgb-001.html` | `color(a98-rgb ...)` color-space conversion unsupported | css | pass / pass |
+| `css-color__deprecated-sameas-019.html` | `@supports` system color `ThreeDLightShadow` and ButtonBorder palette unsupported | css | pass / pass |
+| `css-color__hsl-003.html` | modern `hsl()` color conversion unsupported | css | pass / pass |
+| `css-color__lch-001.html` | `lch()` Lab conversion unsupported | css | pass / pass |
+| `css-fonts__font-family-name-000.xht` | CSSTest Verify/Fallback installed-font fixture and family fallback differ | integrator (text provider) | fail / fail |
+| `css-fonts__font-family-name-022.xht` | multiword family names including `x-large`/`caption` need matching installed fonts | integrator (text provider) | pass / pass |
+| `css-fonts__test-synthetic-italic.html` | synthetic italic glyph shaping/raster missing | integrator (text provider) | pass / pass |
+| `css-fonts__font-family-name-018.xht` | unknown named family must fall back to inherited/available face | integrator (text provider) | pass / pass |
+| `css-fonts__font-variant-ligatures-11.optional.html` | `font-variant-ligatures` / `font-feature-settings` shaping | integrator (text provider) | pass / fail |
+| `css-fonts__matching__font-unicode-PUA-primary-font.html` | PUA glyph fallback restriction/font matching | integrator (text provider) | pass / pass |
+| `css-fonts__font-family-name-024.xht` | system-named family fallback against CSSTest font fixture | integrator (text provider) | fail / fail |
+| `css-fonts__font-family-name-019.xht` | unknown named family fallback against CSSTest font fixture | integrator (text provider) | pass / pass |
+
+
 ## CSS-7 — consumer adoption
 
 Replaced-content's SVG adapter can call `compute_element_paint_style(parent,
