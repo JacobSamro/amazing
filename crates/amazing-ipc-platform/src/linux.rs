@@ -171,6 +171,10 @@ pub struct HandleChannel {
     last_generation: Mutex<u64>,
 }
 impl HandleChannel {
+    /// The only role-specific descriptor retained by the renderer sandbox.
+    pub fn sandbox_keep_fd(&self) -> RawFd {
+        self.socket.as_raw_fd()
+    }
     pub fn nonce_hex(&self) -> String {
         hex(&self.nonce)
     }

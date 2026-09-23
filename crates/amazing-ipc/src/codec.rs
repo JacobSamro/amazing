@@ -128,7 +128,7 @@ macro_rules! number { ($($t:ty),*) => {$ (impl Wire for $t {
     fn encode(&self,e:&mut Encoder)->Result<(),Error>{e.bytes(&self.to_le_bytes())}
     fn decode(d:&mut Decoder<'_>)->Result<Self,Error>{Ok(Self::from_le_bytes(d.take(std::mem::size_of::<Self>())?.try_into().map_err(|_|Error::Invalid)?))}
 })*} }
-number!(u16, u32, u64, i32, i64);
+number!(u16, u32, u64, u128, i32, i64);
 impl Wire for u8 {
     fn encode(&self, e: &mut Encoder) -> Result<(), Error> {
         e.bytes(&[*self])

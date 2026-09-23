@@ -172,6 +172,23 @@ mod unsupported;
 #[cfg(not(any(target_os = "linux", windows)))]
 pub use unsupported::{FrameHandle, FrameView, HandleChannel};
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[allow(unsafe_code)]
+mod linux_sandbox;
+/// Enter the reviewed Linux renderer profile before processing document input.
+/// A caller must abort child bootstrap if this returns an error.
+pub fn enter_renderer_sandbox(frame_fd: i32) -> Result<(), Error> {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        return linux_sandbox::enter(frame_fd).map_err(Error::Io);
+    }
+    #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+    {
+        let _ = frame_fd;
+        Err(Error::Unsupported)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
