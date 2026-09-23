@@ -83,10 +83,12 @@ fn radio_slot<H: BindingHost>(host: &mut H, receiver: &H::Value) -> Result<usize
     Ok(key.slot as usize)
 }
 fn index<H: BindingHost>(host: &mut H, args: &[H::Value], at: usize) -> Result<usize, H::Error> {
-    let value = arg(host, args, at)?;
-    let n = host.to_number(value)?;
-    Ok(if n.is_finite() { n.trunc().rem_euclid(4_294_967_296.) as usize } else { 0 })
+    Ok(unsigned(number(host, args, at)?) as usize)
 }
+fn unsigned(n: f64) -> u32 {
+    if n.is_finite() { n.trunc().rem_euclid(4_294_967_296.) as u32 } else { 0 }
+}
+fn signed(n: f64) -> i32 { unsigned(n) as i32 }
 fn named(nodes: &[NodeIdx], dom: &amazing_dom::Dom, name: &[u16]) -> Vec<NodeIdx> {
     if name.is_empty() { return Vec::new(); }
     nodes.iter().copied().filter(|n| dom.attribute_utf16(*n, "id").as_deref() == Some(name)
@@ -168,15 +170,14 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         return match op {
             O::OptionsSelectedIndex => { let value = host.with_dom(|dom| dom.selected_index(select))?; Ok(host.number(value as f64)) },
             O::OptionsSetSelectedIndex => {
-                let value = number(host, args, 0)? as i32;
+                let value = signed(number(host, args, 0)?);
                 host.with_dom(|dom| dom.set_selected_index(select, value))?;
                 Ok(host.undefined())
             }
             _ => {
-                let desired = number(host, args, 0)? as u32;
+                let desired = unsigned(number(host, args, 0)?);
                 host.with_dom(|dom| {
                     let options = dom.select_options(select)?;
-                    if desired > 10_000 { return Err(DomError::IndexSizeError); }
                     for old in options.iter().skip(desired as usize).rev() {
                         if let Some(parent) = dom.get(*old).parent { dom.pre_remove(*old, parent)?; }
                     }
@@ -248,7 +249,6 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
                     dom.replace(*old, option, parent)?;
                 }
                 else {
-                    if position > 10_000 { return Err(DomError::IndexSizeError); }
                     for _ in options.len()..position { dom.create_element(select, "option"); }
                     dom.pre_insert(option, select, None)?;
                 }
@@ -327,7 +327,7 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
         O::SelectSelectedIndex => { let value = host.with_dom(|dom| dom.selected_index(target))?; Ok(host.number(value as f64)) },
         O::SelectSetSelectedIndex => {
             let n = number(host, args, 0)?;
-            let index = if n.is_finite() { n as i32 } else { 0 };
+            let index = signed(n);
             host.with_dom(|dom| dom.set_selected_index(target, index))?;
             Ok(host.undefined())
         }
@@ -392,12 +392,12 @@ pub(crate) fn invoke<H: BindingHost>(host: &mut H, op: O, receiver: H::Value, ar
             match op {
                 O::InputSelect => { start = 0; end = u32::MAX; },
                 O::InputSetSelectionRange => {
-                    start = number(host, args, 0)? as u32;
-                    end = number(host, args, 1)? as u32;
+                    start = unsigned(number(host, args, 0)?);
+                    end = unsigned(number(host, args, 1)?);
                     if let Some(value) = args.get(2) { let s = host.to_dom_string(value)?; direction = direction_from(&s); }
                 }
-                O::InputSetSelectionStart => start = number(host, args, 0)? as u32,
-                O::InputSetSelectionEnd => end = number(host, args, 0)? as u32,
+                O::InputSetSelectionStart => start = unsigned(number(host, args, 0)?),
+                O::InputSetSelectionEnd => end = unsigned(number(host, args, 0)?),
                 _ => direction = direction_from(&string(host, args, 0)?),
             }
             host.with_dom(|dom| dom.set_selection(target, start, end, direction))?;
