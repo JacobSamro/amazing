@@ -17,7 +17,8 @@ pub(super) fn paint(
         .style
         .get("appearance")
         .or_else(|| b.style.get("-webkit-appearance"));
-    let native = !appearance.is_some_and(|v| v.eq_ignore_ascii_case("none"));
+    let native = control.kind != ReplacedKind::Svg
+        && !appearance.is_some_and(|v| v.eq_ignore_ascii_case("none"));
     let author_background = ["background-color", "background-image"]
         .iter()
         .any(|p| b.style.is_author_specified(p))

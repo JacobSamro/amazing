@@ -218,12 +218,12 @@ fn inline_fill_opacity_and_unsupported_css_fail_closed() {
     for body in [
         r#"<rect width="8" height="8" style="stroke: red"/>"#,
         r#"<rect width="8" height="8" style="fill: url(#paint)"/>"#,
-        r#"<rect width="8" height="8" style="fill: lab(50% 0 0)"/>"#,
         r#"<rect width="8" height="8" style="fill: red; filter: blur(1px)"/>"#,
         r#"<g style="opacity: .5"><rect width="8" height="8"/></g>"#,
     ] {
-        assert_eq!(decode(&svg("", body), Default::default()).unwrap_err(), DecodeError::UnsupportedSvg);
+        assert!(matches!(decode(&svg("", body), Default::default()), Err(DecodeError::UnsupportedSvg)), "{body}");
     }
+    assert!(decode(&svg("", r#"<rect width="8" height="8" style="fill: lab(50% 0 0)"/>"#), Default::default()).is_ok());
     // A missing custom property invalidates the declaration; CSS then uses
     // fill's inherited/initial value instead of reporting unsupported paint.
     let missing = svg("", r#"<rect width="8" height="8" style="fill: var(--color)"/>"#);

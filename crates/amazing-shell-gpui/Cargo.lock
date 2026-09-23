@@ -218,6 +218,7 @@ dependencies = [
  "amazing-layout",
  "amazing-media",
  "amazing-paint",
+ "amazing-svg",
  "image",
 ]
 
@@ -299,6 +300,15 @@ dependencies = [
  "gpui_platform",
  "image",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "amazing-svg"
+version = "0.0.1"
+dependencies = [
+ "amazing-css",
+ "amazing-dom",
+ "amazing-media",
 ]
 
 [[package]]
