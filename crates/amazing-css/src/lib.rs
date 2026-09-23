@@ -5,7 +5,7 @@
 //!
 //! Modules, in dependency order:
 //! - [`syntax`]: CSS Syntax Module Level 3 §4 tokenizer (see its module docs
-//!   for the deviation list: no dedicated `url()` token, simplified EOF
+//!   for the deviation list: simplified EOF
 //!   recovery, comments dropped).
 //! - [`parser`]: qualified rules + declarations (css-syntax-3 §5) with
 //!   spec-style error recovery, layers, scope, and static variable-bearing `@supports`;

@@ -1573,6 +1573,25 @@ mod tests {
     }
 
     #[test]
+    fn generated_content_data_url_and_gradient_image_runs() {
+        let (dom, elements) = fixture();
+        let p = elements[5];
+        let css = parse_stylesheet(
+            "p::before { content: url(data:image/png;base64,AA+10/20==) } \
+             p::after { content: linear-gradient(red, blue) }",
+        );
+        let styles = compute(&dom, &[css]);
+        assert_eq!(
+            styles.generated_content(p, PseudoElement::Before).unwrap().runs,
+            vec![crate::generated::ContentRun::Image("data:image/png;base64,AA+10/20==".into())]
+        );
+        assert_eq!(
+            styles.generated_content(p, PseudoElement::After).unwrap().runs,
+            vec![crate::generated::ContentRun::Image("linear-gradient(red,blue)".into())]
+        );
+    }
+
+    #[test]
     fn pseudo_box_generation_and_selector_specificity() {
         let (dom, elements) = fixture();
         let p = elements[5];

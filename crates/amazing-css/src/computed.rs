@@ -1294,6 +1294,9 @@ fn expand_list_style(value: &str) -> Option<Vec<(String, String)>> {
             [Token::Str(_)] | [Token::Ident(_)] => {
                 if style_type.replace(css).is_some() { return None; }
             }
+            [Token::Url { .. }] => {
+                if image.replace(css).is_some() { return None; }
+            }
             [Token::Function(name), Token::OpenParen, .., Token::CloseParen]
                 if name.eq_ignore_ascii_case("url") || crate::generated::image_function_name(name) => {
                 if image.replace(css).is_some() { return None; }

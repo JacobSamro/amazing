@@ -3,8 +3,7 @@
 //! Produces a flat component-value token stream. Deliberate simplifications
 //! (all documented here and in lib.rs):
 //! - Comments (`/* … */`) are dropped entirely; unclosed comment runs to EOF.
-//! - `url()` is not a dedicated token; it tokenizes as `Function("url")`
-//!   followed by its contents (good enough until images exist).
+//! - Unquoted `url()` is one URL token; quoted arguments remain functions.
 //! - `<EOF-token>` error recovery: unterminated strings/blocks yield what was
 //!   consumed instead of the spec's full replacement logic.
 //! - CRLF handling is the caller's job (HTML parser already normalizes).
@@ -19,6 +18,9 @@ pub enum Token {
     Ident(String),
     /// `name(` — the `(` is also emitted as [`Token::OpenParen`] after it.
     Function(String),
+    /// Unquoted `url(...)`: decoded value and original spelling for serialization.
+    Url { value: String, raw: String },
+    BadUrl,
     AtKeyword(String),
     /// `#name`; only produced when a name char follows `#`.
     Hash(String),
@@ -221,7 +223,57 @@ impl<'a> Lexer<'a> {
             }
         }
     }
+
+    /// CSS Syntax 3 §4.3.6. Cursor starts immediately after `url(`.
+    fn url(&mut self) -> Token {
+        while self.peek().is_some_and(is_whitespace) { self.pos += 1; }
+        let start = self.pos;
+        let mut value = String::new();
+        loop {
+            match self.peek() {
+                Some(')') => {
+                    let raw = self.chars[start..self.pos].iter().collect();
+                    self.pos += 1;
+                    return Token::Url { value, raw };
+                }
+                None => return Token::Url { value, raw: self.chars[start..self.pos].iter().collect() },
+                Some(c) if is_whitespace(c) => {
+                    let end = self.pos;
+                    while self.peek().is_some_and(is_whitespace) { self.pos += 1; }
+                    if matches!(self.peek(), Some(')') | None) {
+                        let raw = self.chars[start..end].iter().collect();
+                        if self.peek() == Some(')') { self.pos += 1; }
+                        return Token::Url { value, raw };
+                    }
+                    self.bad_url_remnants();
+                    return Token::BadUrl;
+                }
+                Some('"' | '\'' | '(') => { self.bad_url_remnants(); return Token::BadUrl; }
+                Some(c) if c.is_control() => { self.bad_url_remnants(); return Token::BadUrl; }
+                Some('\\') => match self.escape() {
+                    Some(c) => value.push(c),
+                    None => { self.bad_url_remnants(); return Token::BadUrl; }
+                },
+                Some(c) => { value.push(c); self.pos += 1; }
+            }
+        }
+    }
+
+    fn bad_url_remnants(&mut self) {
+        loop {
+            match self.peek() {
+                None => return,
+                Some(')') => { self.pos += 1; return; }
+                Some('\\') if self.peek_at(1).is_some_and(|c| c != '\n') => {
+                    let _ = self.escape();
+                }
+                _ => self.pos += 1,
+            }
+        }
+    }
 }
+
+fn is_whitespace(c: char) -> bool { matches!(c, ' ' | '\t' | '\n' | '\r' | '\u{000C}') }
 
 /// Tokenizes an entire stylesheet source into a flat token vector.
 pub fn tokenize(src: &str) -> Vec<Token> {
@@ -343,8 +395,19 @@ pub fn tokenize(src: &str) -> Vec<Token> {
                 let name = lx.ident();
                 if lx.peek() == Some('(') {
                     lx.pos += 1;
-                    out.push(Token::Function(name));
-                    Token::OpenParen
+                    if name.eq_ignore_ascii_case("url") {
+                        let mut offset = 0;
+                        while lx.peek_at(offset).is_some_and(is_whitespace) { offset += 1; }
+                        if matches!(lx.peek_at(offset), Some('"' | '\'')) {
+                            out.push(Token::Function(name));
+                            Token::OpenParen
+                        } else {
+                            lx.url()
+                        }
+                    } else {
+                        out.push(Token::Function(name));
+                        Token::OpenParen
+                    }
                 } else {
                     Token::Ident(name)
                 }
@@ -406,6 +469,8 @@ pub fn serialize(tokens: &[Token]) -> String {
             },
             // The paired OpenParen token supplies the '('.
             Token::Function(s) => out.push_str(s),
+            Token::Url { raw, .. } => { out.push_str("url("); out.push_str(raw); out.push(')'); },
+            Token::BadUrl => out.push_str("url(\""),
             Token::AtKeyword(s) => {
                 out.push('@');
                 out.push_str(s);
@@ -546,5 +611,29 @@ mod tests {
         assert_eq!(serialize(&toks), "10px solid rgba(0,0,0,.5)");
         let toks = tokenize("\"hello world\"");
         assert_eq!(serialize(&toks), "\"hello world\"");
+    }
+
+    #[test]
+    fn unquoted_url_is_one_token_with_verbatim_data_payload() {
+        for payload in ["AA+1/2==", "A+00/09=", "1234567890+/=="] {
+            let css = format!("url(data:font/woff2;base64,{payload})");
+            let tokens = tokenize(&css);
+            assert_eq!(tokens, vec![Token::Url {
+                value: format!("data:font/woff2;base64,{payload}"),
+                raw: format!("data:font/woff2;base64,{payload}"),
+            }]);
+            assert_eq!(serialize(&tokens), css);
+        }
+        assert_eq!(serialize(&tokenize("url( data:a+1/2==  )")), "url(data:a+1/2==)");
+        assert_eq!(tokenize("url('data:a+1/2==')")[0], Token::Function("url".into()));
+        assert_eq!(tokenize("url(bad path)"), vec![Token::BadUrl]);
+    }
+
+    #[test]
+    fn url_escape_has_decoded_value_and_reparseable_raw_spelling() {
+        let css = r"url(a\)b)";
+        let tokens = tokenize(css);
+        assert_eq!(tokens, vec![Token::Url { value: "a)b".into(), raw: r"a\)b".into() }]);
+        assert_eq!(serialize(&tokens), css);
     }
 }
