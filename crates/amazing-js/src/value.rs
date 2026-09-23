@@ -208,6 +208,7 @@ impl fmt::Debug for Obj {
         match (&b.exotic, &b.func) {
             (_, Some(func)) => write!(f, "[function {}]", func.name),
             (Exotic::Array, _) => write!(f, "[array; {} props]", b.props.len()),
+            (Exotic::TypedArray, _) => write!(f, "[typed array]"),
             (Exotic::Error, _) => write!(f, "[error]"),
             (Exotic::Map(_), _) => write!(f, "[map]"),
             (Exotic::Set(_), _) => write!(f, "[set]"),
@@ -342,17 +343,36 @@ pub fn string_to_number(s: &str) -> f64 {
         "Infinity" | "+Infinity" => f64::INFINITY,
         "-Infinity" => f64::NEG_INFINITY,
         _ => {
-            // Strict: reject hex, trailing junk, etc. Rust's parser accepts
-            // "inf", "nan", "+3" — all invalid JS strings — so filter them.
-            let ok = t
-                .as_bytes()
-                .iter()
-                .all(|&b| b.is_ascii_digit() || matches!(b, b'.' | b'e' | b'E' | b'+' | b'-'));
-            if ok && t.bytes().any(|b| b.is_ascii_digit()) {
-                t.parse::<f64>().unwrap_or(f64::NAN)
-            } else {
-                f64::NAN
+            if let Some((radix, digits)) = t.strip_prefix("0b").or_else(|| t.strip_prefix("0B"))
+                .map(|digits| (2u32, digits))
+                .or_else(|| t.strip_prefix("0o").or_else(|| t.strip_prefix("0O")).map(|digits| (8, digits)))
+                .or_else(|| t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")).map(|digits| (16, digits))) {
+                if digits.is_empty() { return f64::NAN; }
+                let mut value = 0.0;
+                for digit in digits.bytes() {
+                    let Some(digit) = (digit as char).to_digit(radix) else { return f64::NAN; };
+                    value = value * radix as f64 + digit as f64;
+                }
+                return value;
             }
+            let bytes = t.as_bytes();
+            let mut at = 0;
+            if bytes.first().is_some_and(|byte| matches!(byte, b'+' | b'-')) { at += 1; }
+            let mut digits = 0;
+            while bytes.get(at).is_some_and(u8::is_ascii_digit) { at += 1; digits += 1; }
+            if bytes.get(at) == Some(&b'.') {
+                at += 1;
+                while bytes.get(at).is_some_and(u8::is_ascii_digit) { at += 1; digits += 1; }
+            }
+            if digits == 0 { return f64::NAN; }
+            if bytes.get(at).is_some_and(|byte| matches!(byte, b'e' | b'E')) {
+                at += 1;
+                if bytes.get(at).is_some_and(|byte| matches!(byte, b'+' | b'-')) { at += 1; }
+                let exponent_start = at;
+                while bytes.get(at).is_some_and(u8::is_ascii_digit) { at += 1; }
+                if at == exponent_start { return f64::NAN; }
+            }
+            if at == bytes.len() { t.parse::<f64>().unwrap_or(f64::NAN) } else { f64::NAN }
         }
     }
 }
@@ -392,6 +412,7 @@ impl Throw {
     /// something inspectable.
     pub fn error(name: &str, message: impl Into<String>) -> Throw {
         let mut obj = JsObject::ordinary();
+        obj.exotic = Exotic::Error;
         obj.set_own("name", JsValue::str(name));
         obj.set_own("message", JsValue::str(message.into()));
         Throw(JsValue::object(obj))
@@ -591,6 +612,7 @@ pub enum Exotic {
     #[default]
     Ordinary,
     Array,
+    TypedArray,
     Error,
     Map(MapState),
     Set(SetState),
@@ -969,7 +991,13 @@ mod tests {
         assert_eq!(string_to_number(""), 0.0);
         assert_eq!(string_to_number("  42 "), 42.0);
         assert_eq!(string_to_number("1.5e2"), 150.0);
-        assert!(string_to_number("0x10").is_nan()); // no hex in ToNumber(str)
+        assert_eq!(string_to_number("0x10"), 16.0);
+        assert_eq!(string_to_number("0b1110"), 14.0);
+        assert_eq!(string_to_number("0O17"), 15.0);
+        assert_eq!(string_to_number("-.5"), -0.5);
+        assert!(string_to_number("+0x10").is_nan());
+        assert!(string_to_number("0b102").is_nan());
+        assert!(string_to_number("1_000").is_nan());
         assert!(string_to_number("inf").is_nan()); // Rust-ism rejected
         assert!(string_to_number("4,5").is_nan());
         assert_eq!(string_to_number("-3"), -3.0);

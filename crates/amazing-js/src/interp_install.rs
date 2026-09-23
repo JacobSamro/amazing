@@ -19,10 +19,12 @@ impl Interpreter {
         handle
             .borrow_mut()
             .set_own("prototype", JsValue::Object(prototype));
-        handle.borrow_mut().set_own("name", JsValue::str(name));
+        let _ = handle.borrow_mut().define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
+        let _ = handle.borrow_mut().define("length", Property { value: JsValue::num(0.0), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
         JsValue::Object(handle)
     }
     fn install_builtins(&mut self) {
+        self.install_binary_builtins();
         self.define_global("undefined", JsValue::Undefined);
         self.define_global("NaN", JsValue::Num(f64::NAN));
         self.define_global("Infinity", JsValue::Num(f64::INFINITY));
@@ -338,6 +340,7 @@ impl Interpreter {
             ("forEach", native_array_for_each as crate::value::NativeFn),
             ("reduce", native_array_reduce as crate::value::NativeFn),
             ("slice", native_array_slice as crate::value::NativeFn),
+            ("splice", native_array_splice as crate::value::NativeFn),
             ("concat", native_array_concat as crate::value::NativeFn),
             ("includes", native_array_includes as crate::value::NativeFn),
             ("indexOf", native_array_index_of as crate::value::NativeFn),

@@ -881,6 +881,7 @@ fn native_object_has_own(
         _ => return Err(Throw::type_error("hasOwn target is not an object")),
     };
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    if let Some(own) = binary_index_descriptor(object, &key) { return Ok(JsValue::Bool(own.is_some())); }
     let own = match key.as_string() {
         Some(name) => i.legacy_own_property(object, name, false)?.is_some(),
         None => object.borrow().own_prop(&key).is_some(),
@@ -904,20 +905,83 @@ fn native_array_from(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let source = args.first().cloned().unwrap_or(JsValue::Undefined);
-    let mut values = i.iterate(&source)?;
-    if let Some(callback) = args.get(1) {
+    if matches!(source, JsValue::Undefined | JsValue::Null) { return Err(Throw::type_error("Array.from requires an object")); }
+    if let Some(callback) = args.get(1).filter(|callback| !matches!(callback, JsValue::Undefined)) {
         if callable_function(callback).is_none() {
             return Err(Throw::type_error("Array.from mapFn is not callable"));
         }
+    }
+    let iterator = i.get_prop(&source, WellKnownSymbol::Iterator.symbol())?;
+    let mut values = if matches!(iterator, JsValue::Undefined | JsValue::Null) {
+        let length = i.get_prop(&source, "length")?;
+        let number = i.to_number(&length)?;
+        let length = if number.is_nan() || number <= 0.0 { 0 }
+            else if !number.is_finite() || number > 1_000_000.0 { return Err(Throw::range_error("Array.from source too large")); }
+            else { number.trunc() as usize };
+        (0..length).map(|index| i.get_prop(&source, index.to_string())).collect::<Result<Vec<_>, _>>()?
+    } else if callable_function(&iterator).is_some() { i.iterate(&source)? }
+    else { return Err(Throw::type_error("Array.from iterator is not callable")); };
+    if let Some(callback) = args.get(1).filter(|callback| !matches!(callback, JsValue::Undefined)) {
         for (index, value) in values.iter_mut().enumerate() {
             *value = i.call_value(
                 callback,
-                JsValue::Undefined,
+                args.get(2).cloned().unwrap_or(JsValue::Undefined),
                 vec![value.clone(), JsValue::num(index as f64)],
             )?;
         }
     }
     array_values(i, values)
+}
+
+fn native_array_splice(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
+    let JsValue::Object(object) = &this else { return Err(Throw::type_error("splice receiver is not an object")); };
+    let len_value = i.get_prop(&this, "length")?;
+    let len_number = i.to_number(&len_value)?;
+    let len = if len_number.is_nan() || len_number <= 0.0 { 0usize }
+        else if len_number > 1_000_000.0 || !len_number.is_finite() { return Err(Throw::range_error("splice array too large")); }
+        else { len_number.trunc() as usize };
+    let start_number = i.to_number(args.first().unwrap_or(&JsValue::Undefined))?;
+    let start_integer = if start_number.is_nan() { 0i64 }
+        else if start_number.is_infinite() { if start_number.is_sign_negative() { i64::MIN } else { i64::MAX } }
+        else { start_number.trunc() as i64 };
+    let start = if start_integer < 0 { (len as i64).saturating_add(start_integer).max(0) as usize }
+        else { (start_integer as usize).min(len) };
+    let delete_count = if args.is_empty() { 0 }
+        else if args.len() == 1 { len - start }
+        else {
+            let count = i.to_number(&args[1])?;
+            if count.is_nan() || count <= 0.0 { 0 }
+            else if !count.is_finite() { len - start }
+            else { (count.trunc() as usize).min(len - start) }
+        };
+    let inserted = args.get(2..).unwrap_or(&[]);
+    let new_len = len - delete_count + inserted.len();
+    if new_len > 1_000_000 { return Err(Throw::range_error("splice result too large")); }
+    let mut values = Vec::with_capacity(len);
+    for index in 0..len {
+        let key = index.to_string();
+        values.push(if object.borrow().has_property(&key) { Some(i.get_prop(&this, &key)?) } else { None });
+    }
+    let deleted = {
+        let mut raw = JsObject::array(); raw.proto = Some(i.array_proto.clone());
+        let array = JsValue::object(raw);
+        for (index, value) in values[start..start+delete_count].iter().enumerate() {
+            if let Some(value) = value { i.set_prop(&array, index.to_string(), value.clone())?; }
+        }
+        i.set_prop(&array, "length", JsValue::num(delete_count as f64))?;
+        array
+    };
+    values.splice(start..start+delete_count, inserted.iter().cloned().map(Some));
+    for (index, value) in values.into_iter().enumerate() {
+        let key = index.to_string();
+        if let Some(value) = value { i.set_prop(&this, &key, value)?; }
+        else if !object.borrow_mut().delete_own(&key) { return Err(Throw::type_error("cannot delete array element")); }
+    }
+    for index in new_len..len {
+        if !object.borrow_mut().delete_own(index.to_string()) { return Err(Throw::type_error("cannot delete array element")); }
+    }
+    i.set_prop(&this, "length", JsValue::num(new_len as f64))?;
+    Ok(deleted)
 }
 
 fn native_array_of(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
@@ -1033,6 +1097,7 @@ fn native_define_property(
         _ => return Err(Throw::type_error("property descriptor is not an object")),
     };
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    if let Some(result) = binary_define_index_object(i, &target, &key, &descriptor) { result?; return Ok(JsValue::Object(target)); }
     let has = |name: &str| descriptor.borrow().has_property(name);
     let accessor = has("get") || has("set");
     let data = has("value") || has("writable");
@@ -1099,6 +1164,7 @@ fn native_define_property(
         getter,
         setter,
     };
+    if let Some(result) = binary_define_index(i, &target, &key, &property) { result?; return Ok(JsValue::Object(target)); }
     if let Some(name) = key.as_string() {
         if i.legacy_define(&target, name, &property)? { return Ok(JsValue::Object(target)); }
     }
@@ -2270,6 +2336,16 @@ fn native_object_get_own_property_descriptor(
     if matches!(target, JsValue::Symbol(_)) { return Ok(JsValue::Undefined); }
     let JsValue::Object(object) = target else { return Err(Throw::type_error("property descriptor target is not an object")); };
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    if let Some(property) = binary_index_descriptor(object, &key) {
+        let Some(property) = property else { return Ok(JsValue::Undefined); };
+        let mut descriptor = JsObject::ordinary();
+        descriptor.proto = Some(i.object_proto.clone());
+        descriptor.set_own("value", property.value);
+        descriptor.set_own("writable", JsValue::Bool(true));
+        descriptor.set_own("enumerable", JsValue::Bool(true));
+        descriptor.set_own("configurable", JsValue::Bool(true));
+        return Ok(JsValue::object(descriptor));
+    }
     let Some(property) = object.borrow().own_prop(&key).cloned() else { return Ok(JsValue::Undefined); };
     let mut descriptor = JsObject::ordinary();
     descriptor.proto = Some(i.object_proto.clone());
@@ -2279,6 +2355,10 @@ fn native_object_get_own_property_descriptor(
         let accessor = |function: Option<Box<JsFunction>>| function.map(|f| {
             let mut object = JsObject::function(*f);
             object.proto = Some(i.function_proto.clone());
+            let name = object.func.as_ref().map(|f| f.name.clone()).unwrap_or_default();
+            let length = if name.starts_with("set ") { 1.0 } else { 0.0 };
+            let _ = object.define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
+            let _ = object.define("length", Property { value: JsValue::num(length), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
             JsValue::object(object)
         }).unwrap_or(JsValue::Undefined);
         descriptor.set_own("get", accessor(property.getter));
@@ -2325,6 +2405,7 @@ fn native_reflect_set(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
 fn native_reflect_has(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = reflect_target(&args)?;
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    if let Some(property) = binary_index_descriptor(&target, &key) { return Ok(JsValue::Bool(property.is_some())); }
     Ok(JsValue::Bool(match key.as_string() {
         Some(name) => i.legacy_has_property(&target, name)?,
         None => target.borrow().has_property(&key),
@@ -2334,6 +2415,7 @@ fn native_reflect_has(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Re
 fn native_reflect_delete_property(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let target = reflect_target(&args)?;
     let key = i.to_property_key(args.get(1).unwrap_or(&JsValue::Undefined))?;
+    if let Some(deleted) = binary_delete_index(&target, &key) { return Ok(JsValue::Bool(deleted)); }
     let deleted = match key.as_string() {
         Some(name) => match i.legacy_delete(&target, name)? {
             Some(value) => value, None => target.borrow_mut().delete_own(&key),
@@ -3348,6 +3430,7 @@ fn native_property_is_enumerable(
 ) -> Result<JsValue, Throw> {
     let JsValue::Object(object) = this else { return Err(Throw::type_error("propertyIsEnumerable receiver is not an object")); };
     let key = i.to_property_key(args.first().unwrap_or(&JsValue::Undefined))?;
+    if let Some(property) = binary_index_descriptor(&object, &key) { return Ok(JsValue::Bool(property.is_some())); }
     let property = match key.as_string() {
         Some(name) => i.legacy_own_property(&object, name, false)?,
         None => object.borrow().own_prop(&key).cloned(),
