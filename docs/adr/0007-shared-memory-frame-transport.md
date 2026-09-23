@@ -40,3 +40,15 @@ IPC-2 returns RGBA frames as bounded copied bytes through stdio. This proves pro
 - Under pressure, the **oldest unpresented** frame is replaced (latest wins), because the
   browser only ever presents the newest frame. An unpublished frame is never allocated
   past the limit.
+
+## Amendment (2026-09-24): demand-driven handle transfer
+
+The IPC-3 unsafe review found that with eager transfer on Unix, a superseded frame's
+descriptor can remain queued in the kernel socket after the renderer replaces the frame,
+so the 256 MiB bound could not be proven under sustained backpressure. Handle transfer is
+therefore **demand-driven**: `FrameReady` carries only metadata, the browser sends
+`AcquireFrame { generation }` for the one frame it will present, and the renderer transfers
+that handle alone, or replies `Superseded` if a newer generation exists. At most one handle
+per renderer is ever in flight. Everything else in this ADR stands. This costs one round
+trip per presented frame, which is acceptable because presentation already waits for vsync.
+
