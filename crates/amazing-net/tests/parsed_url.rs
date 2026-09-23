@@ -148,12 +148,12 @@ fn opaque_host_is_not_lowercased_or_idna_processed() {
     assert_eq!(url.hostname(), "H%C3%A9LLo");
     assert!(matches!(url.host(), Some(Host::Opaque(_))));
     assert_eq!(
-        ParsedUrl::parse("https://é/"),
-        Err(ParseError::IdnaRequired)
+        ParsedUrl::parse("https://é/").unwrap().hostname(),
+        "xn--9ca"
     );
     assert_eq!(
-        ParsedUrl::parse("https://%C3%A9/"),
-        Err(ParseError::IdnaRequired)
+        ParsedUrl::parse("https://%C3%A9/").unwrap().hostname(),
+        "xn--9ca"
     );
 }
 #[test]

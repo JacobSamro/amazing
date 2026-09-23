@@ -85,12 +85,12 @@ fn url_parser_recovery_replaces_the_strict_ascii_shortcut() {
         ("https://a\\b/", "https://a/b/"),
         ("https://a.test/\r\nx", "https://a.test/x"),
         ("https://a%2etest/", "https://a.test/"),
+        ("https://é.test/", "https://xn--9ca.test/"),
     ] {
         assert_eq!(HttpUrl::parse(input).unwrap().serialize(), expected);
     }
-    // These rejections are unchanged: Fetch supports HTTP(S), no IDNA yet,
-    // and the standard still rejects out-of-range ports.
-    for input in ["file:///x", "https://é.test/", "https://a.test:65536/"] {
+    // Fetch supports HTTP(S); out-of-range ports are still rejected.
+    for input in ["file:///x", "https://a.test:65536/"] {
         assert!(HttpUrl::parse(input).is_err(), "{input}");
     }
 }
@@ -742,13 +742,23 @@ fn location_absence_is_distinct_from_invalid_and_unsupported_targets() {
         redirect_location(&mut r, &response(302, &[]), None),
         Ok(RedirectAction::NotRedirect)
     );
-    for input in ["https://x:65536/", "https://é.test/", "file:///x"] {
+    for input in ["https://x:65536/", "file:///x"] {
         assert_eq!(
             redirect_location(&mut r, &response(302, &[]), Some(input)),
             Err(FetchError::InvalidUrl)
         );
         assert_eq!(r.url_list().len(), 1);
     }
+    let mut international = request(false);
+    assert_eq!(
+        redirect_location(
+            &mut international,
+            &response(302, &[]),
+            Some("https://é.test/")
+        ),
+        Ok(RedirectAction::Follow)
+    );
+    assert_eq!(international.url().serialize(), "https://xn--9ca.test/");
     r.redirect = RedirectMode::Manual;
     assert!(matches!(
         redirect_location(&mut r, &response(302, &[]), Some("https://x:65536/")),

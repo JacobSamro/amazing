@@ -1,5 +1,6 @@
 //! Run the pinned URL data without serde, testharness.js, or network access.
 //! Exit nonzero on any mismatch; print every unsupported case independently.
+use amazing_net::url::AsciiOnly;
 use amazing_net::{ParseError, ParsedUrl};
 struct Case {
     index: usize,
@@ -9,14 +10,28 @@ struct Case {
     expected: [Option<&'static str>; 11],
 }
 const CASES: &[Case] = include!("../tests/wpt/cases.rs");
-fn parse(case: &Case) -> Result<ParsedUrl, ParseError> {
-    let base = case.base.map(ParsedUrl::parse).transpose()?;
-    ParsedUrl::parse_with_base(case.input, base.as_ref())
+fn parse(case: &Case, baseline: bool) -> Result<ParsedUrl, ParseError> {
+    let base = case
+        .base
+        .map(|input| {
+            if baseline {
+                ParsedUrl::parse_with_idna(input, None, &AsciiOnly)
+            } else {
+                ParsedUrl::parse(input)
+            }
+        })
+        .transpose()?;
+    if baseline {
+        ParsedUrl::parse_with_idna(case.input, base.as_ref(), &AsciiOnly)
+    } else {
+        ParsedUrl::parse_with_base(case.input, base.as_ref())
+    }
 }
 fn main() {
+    let baseline = std::env::args().any(|arg| arg == "--baseline");
     let (mut passed, mut failed, mut unsupported) = (0, 0, 0);
     for case in CASES {
-        let actual = parse(case);
+        let actual = parse(case, baseline);
         if matches!(actual, Err(ParseError::IdnaRequired)) {
             unsupported += 1;
             println!(

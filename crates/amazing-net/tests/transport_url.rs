@@ -90,17 +90,15 @@ fn network_redirects_cannot_load_local_files_or_unsupported_schemes() {
     }
 }
 #[test]
-fn malformed_and_idna_urls_fail_before_connecting() {
-    for input in [
-        "http://é.test/",
-        "http://%C3%A9.test/",
-        "http://x:65536/",
-        "http://[invalid]/",
-    ] {
+fn malformed_urls_fail_before_connecting_and_idna_hosts_parse() {
+    for input in ["http://x:65536/", "http://[invalid]/"] {
         assert!(matches!(
             fetch(input, &FetchOptions::default()),
             Err(NetError::Url(_))
         ));
+    }
+    for input in ["http://é.test/", "http://%C3%A9.test/"] {
+        assert_eq!(ParsedUrl::parse(input).unwrap().hostname(), "xn--9ca.test");
     }
     assert!(matches!(
         fetch("data:text/plain,ok", &FetchOptions::default()),
