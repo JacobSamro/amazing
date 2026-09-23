@@ -1,6 +1,6 @@
 //! Style, layout, raster, and audio commands.
 use std::{cell::RefCell, rc::Rc, process::ExitCode};
-use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text, PagePaint}, gui};
+use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text_from_sheets, PagePaint}, gui};
 use super::{parse::{read_bytes, read_source}, js::execute_inline_scripts};
 use crate::document::{DocumentKind, PageError, parse_document_bytes};
 /// Phase 2 demo artifact: compute styles for an HTML page.
@@ -35,11 +35,12 @@ pub(crate) fn cmd_style(args: &[String]) -> ExitCode {
 
     // Gather author stylesheets: inline <style> elements first.
     let mut sources = Vec::new();
-    collect_style_text(&dom, amazing_dom::NodeIdx(0), &mut sources);
+    collect_style_text(&dom, amazing_dom::NodeIdx(0), html_path, &mut sources);
     for extra in &args[1..] {
         match read_source(Some(extra), "style") {
             Ok(s) => {
-                let sheet = amazing_css::parse_stylesheet(&s);
+                let mut sheet = amazing_css::parse_stylesheet(&s);
+                sheet.base_url = Some(html_path.to_owned());
                 sources.push((s, sheet));
             }
             Err(code) => return code,
@@ -112,11 +113,12 @@ pub(crate) fn cmd_layout(args: &[String]) -> ExitCode {
 
     // Author CSS: <style> elements + extra files (same policy as `style`).
     let mut sources = Vec::new();
-    collect_style_text(&dom, amazing_dom::NodeIdx(0), &mut sources);
+    collect_style_text(&dom, amazing_dom::NodeIdx(0), html_path, &mut sources);
     for extra in args.get(2..).unwrap_or(&[]) {
         match read_source(Some(extra), "layout") {
             Ok(s) => {
-                let sheet = amazing_css::parse_stylesheet(&s);
+                let mut sheet = amazing_css::parse_stylesheet(&s);
+                sheet.base_url = Some(html_path.to_owned());
                 sources.push((s, sheet));
             }
             Err(code) => return code,
@@ -209,17 +211,19 @@ pub(crate) fn render_surface(
     let mut sources = Vec::new();
     let dom = host.borrow();
     collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut sources)?;
-    sources.push((extra_css.to_owned(), amazing_css::parse_stylesheet(extra_css)));
-    let (sources, sheets): (Vec<_>, Vec<_>) = sources.into_iter().unzip();
-    // Font discovery still uses the legacy text input. Style computation below
-    // consumes the separate sheets, retaining each owner's implicit scope root.
-    let css = sources.join("\n");
+    let mut extra_sheet = amazing_css::parse_stylesheet(extra_css);
+    extra_sheet.base_url = Some(html_path.to_owned());
+    sources.push((extra_css.to_owned(), html_path.to_owned(), extra_sheet));
+    let font_sheets = sources.iter().map(|(source, url, _)| (source.clone(), url.clone())).collect::<Vec<_>>();
+    let sheets = sources.into_iter().map(|(_, _, sheet)| sheet).collect::<Vec<_>>();
+    // Font discovery retains each sheet's URL; style computation retains each
+    // sheet owner's implicit scope root.
 
     let media = load_page_media(&dom.dom, html_path);
     for warning in &media.warnings {
         eprintln!("amazing render: {warning}");
     }
-    let page_text = load_page_text(&css, html_path);
+    let page_text = load_page_text_from_sheets(&font_sheets, html_path);
     for warning in &page_text.warnings {
         eprintln!("amazing render: {warning}");
     }

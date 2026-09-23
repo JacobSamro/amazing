@@ -157,3 +157,32 @@ Pinned WPT revision: `c2a2fce69e5c2509d9dc28440ec8b42532e5c293`.
 Evidence: `crates/amazing-text-provider/evidence/text5-*-after.json` and
 `text5-vertical-before.json`. Windows unit gate results are in the TEXT-5
 report.
+
+## TEXT-6: web-font loading and stylesheet provenance
+
+Implementation base: `a4ab541`. The page loader now passes each sheet's URL to
+font registration, including inline and linked sheets and nested `@import`.
+Linked stylesheets keep the final fetched URL after redirects; inline and render
+extra author sheets use the document URL. The CSS `Stylesheet::base_url` carries
+this provenance for CSS-13. HTTP(S) font URLs resolve against that sheet URL
+and load through `FontRequest` and `NetworkService`, while `data:` and WPT
+`file:` sources use the page resource loader. Registration honors source order,
+`local()`, supported `format()`/`tech()`, unicode ranges, weight/stretch/style
+ranges, display periods, size and metric overrides, and face feature settings.
+The provider exposes pending-load periods and applies size and feature metadata
+to shaping and metrics. Synchronous page loading finishes before first layout.
+
+Evidence: `crates/amazing-text-provider/evidence/text6-gate-summary.json` links
+before and after reports for six frozen selections at WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293`. Font selection improved
+11/15 to 12/15 (`first-available-font-003`), while font-face stayed 2 pass /
+6 crash, vertical 2/7, flow 14/16, shaping 12/12, and vertical/ruby 11/20.
+All 78 cases retained prior passes. The `text-combine-upright-compression-001`
+actual image changed within its existing mismatch classification. On win-002,
+selected nextest passed 389/389 (4 skipped), workspace nextest 1856/1856
+(5 skipped), and workspace doctests 2/2.
+
+Remaining clusters: `first-available-font-002`, PUA primary-font selection, and
+ligature variant mismatch need diagnosis; font-face reftest crashes await the
+DOM-17 `document.fonts.ready` work. Installed `local()` lookup currently covers
+known platform faces and the pinned WPT orientation fixture.

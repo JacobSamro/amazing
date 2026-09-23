@@ -210,8 +210,11 @@ fn malformed_page_font_warns_without_advancing_font_generation() {
         &page,
     );
 
-    assert_eq!(text.provider.generation(), baseline_generation);
-    assert_eq!(text.warnings.len(), 1);
-    assert!(text.warnings[0].contains("broken.woff2"));
+    // CSS Fonts 4 §4.1: the declared author family shadows an installed
+    // family even when all its sources fail; matching can use the next family.
+    assert_eq!(text.provider.generation(), baseline_generation + 1);
+    assert_eq!(text.provider.font_face_registrations().len(), 1);
+    assert!(text.provider.font_face_registrations()[0].key.is_none());
+    assert!(text.warnings.iter().any(|warning| warning.contains("broken.woff2")));
     let _ = std::fs::remove_dir_all(directory);
 }

@@ -1,0 +1,89 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "manifest":  "C:\\Users\\server\\src\\wt\\text\\crates\\amazing-text-provider\\evidence\\text2-font-face-manifest.json",
+    "viewport":  {
+                     "width":  800,
+                     "height":  600,
+                     "device_scale":  1
+                 },
+    "font_set":  "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+    "run_directory":  "C:\\Users\\server\\target\\text\\text6-before-font-face\\run-20260923T203922082Z-100032",
+    "counts":  {
+                   "pass":  2,
+                   "mismatch":  0,
+                   "error":  0,
+                   "timeout":  0,
+                   "unsupported":  0,
+                   "crash":  6
+               },
+    "unexpected":  0,
+    "tests":  [
+                  {
+                      "id":  "css-fonts__matching__fixed-stretch-style-over-weight.html",
+                      "classification":  "crash",
+                      "expected":  "",
+                      "detail":  "renderer exit code 1: amazing render-wpt: page script failed: TypeError: value is not callable"
+                  },
+                  {
+                      "id":  "css-fonts__matching__range-descriptor-reversed.html",
+                      "classification":  "crash",
+                      "expected":  "",
+                      "detail":  "renderer exit code 1: amazing render-wpt: page script failed: TypeError: value is not callable"
+                  },
+                  {
+                      "id":  "css-fonts__matching__stretch-distance-over-weight-distance.html",
+                      "classification":  "crash",
+                      "expected":  "",
+                      "detail":  "renderer exit code 1: amazing render-wpt: page script failed: TypeError: value is not callable"
+                  },
+                  {
+                      "id":  "css-fonts__matching__style-ranges-over-weight-direction.html",
+                      "classification":  "crash",
+                      "expected":  "",
+                      "detail":  "renderer exit code 1: amazing render-wpt: page script failed: TypeError: value is not callable"
+                  },
+                  {
+                      "id":  "css-fonts__variations__font-descriptor-range-reversed.html",
+                      "classification":  "crash",
+                      "expected":  "",
+                      "detail":  "renderer exit code 1: amazing render-wpt: page script failed: TypeError: value is not callable"
+                  },
+                  {
+                      "id":  "css-fonts__variations__font-descriptor-range-reversed-002.html",
+                      "classification":  "crash",
+                      "expected":  "",
+                      "detail":  "renderer exit code 1: amazing render-wpt: page script failed: TypeError: value is not callable"
+                  },
+                  {
+                      "id":  "css-fonts__variations__font-slant-2a.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "font-slant-2-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "cea391d571290f978b7074329eaf75c5efda955f0dc63ba5c054fe1449216b2f",
+                      "reference_sha256":  "cea391d571290f978b7074329eaf75c5efda955f0dc63ba5c054fe1449216b2f",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css-fonts__variations__font-slant-2b.html",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "font-slant-2-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "cea391d571290f978b7074329eaf75c5efda955f0dc63ba5c054fe1449216b2f",
+                      "reference_sha256":  "cea391d571290f978b7074329eaf75c5efda955f0dc63ba5c054fe1449216b2f",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  }
+              ]
+}
