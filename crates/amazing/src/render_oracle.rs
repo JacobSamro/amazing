@@ -92,13 +92,22 @@ pub(crate) struct RenderCoordinator {
     viewport: (u32, u32),
     layout: Option<LayoutTree>,
     paint_generations: BTreeMap<NodeIdx, u64>,
-    compositor: Option<Compositor>,
-    presenter: ReferenceCpuPresenter,
+    session: Option<RetainedCompositorSession>,
     last_work: FrameWork,
+}
+
+/// The compositor and its presenter have one scene lifetime. A full-painter
+/// fallback discards both so a later property update cannot target stale IDs.
+struct RetainedCompositorSession {
+    compositor: Compositor,
+    presenter: ReferenceCpuPresenter,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct FrameWork {
+    pub(crate) style_rebuild_calls: usize,
+    pub(crate) layout_update_calls: usize,
+    pub(crate) paint_view_rebuild_calls: usize,
     pub(crate) style_recalculated: usize,
     pub(crate) layout_dirty: usize,
     pub(crate) layout_full: bool,
@@ -123,6 +132,20 @@ pub(crate) fn report_style_work(candidate: &StyleCandidate) {
 }
 
 impl RenderCoordinator {
+    /// The rendering update offers a retained scene the journal before any
+    /// style, layout or paint work. The CSS value classifier currently takes
+    /// the conservative full-rendering branch; a classified property batch
+    /// will be sent through the runtime compositor adapter here.
+    pub(crate) fn try_property_only(
+        &mut self,
+        _dom: &Dom,
+        _sheets: &[Stylesheet],
+        _viewport: (u32, u32),
+        _journal: &[RenderMutation],
+    ) -> Option<Surface> {
+        None
+    }
+
     /// Compare the previous paint view with the next full view before mutating
     /// the retained layout tree. The full view is also the independent oracle
     /// for the layout update below.
@@ -140,7 +163,8 @@ impl RenderCoordinator {
         viewport_width: f32,
         viewport_height: Option<f32>,
     ) -> (GeometryDelta, Option<PaintViewUpdate>) {
-        self.last_work = FrameWork { style_recalculated: candidate.recalculated, ..FrameWork::default() };
+        self.last_work = FrameWork { style_rebuild_calls: 1, layout_update_calls: 1,
+            style_recalculated: candidate.recalculated, ..FrameWork::default() };
         let resource_change = !candidate.inputs.text.is_empty() || !candidate.inputs.replaced.is_empty()
             || candidate.changed.values().flatten().any(|name| matches!(name.as_str(),
                 "background-image" | "list-style-image" | "content" | "font-family" | "font-size"));
@@ -156,6 +180,7 @@ impl RenderCoordinator {
             );
             Some(before.update(&after))
         });
+        if paint_update.is_some() { self.last_work.paint_view_rebuild_calls += 2; }
         let delta = StyleDelta {
             styles: styled.clone(),
             changed: candidate.changed,
@@ -189,8 +214,7 @@ impl RenderCoordinator {
     pub(crate) fn last_work(&self) -> FrameWork { self.last_work }
 
     pub(crate) fn reset_scene(&mut self) {
-        self.compositor = None;
-        self.presenter = ReferenceCpuPresenter::default();
+        self.session = None;
     }
 
     pub(crate) fn layout_root(&self) -> &LayoutBox {
@@ -199,9 +223,7 @@ impl RenderCoordinator {
 
     /// Drain only the journal prefix visible at this boundary. Node generation
     /// is checked against the prior cache before allowing a CSS root update.
-    pub(crate) fn candidate(&mut self, dom: &mut Dom, sheets: &[Stylesheet], viewport: (u32, u32)) -> StyleCandidate {
-        let epoch = dom.render_mutation_epoch();
-        let journal = dom.take_render_mutations(epoch);
+    pub(crate) fn candidate(&mut self, dom: &Dom, sheets: &[Stylesheet], viewport: (u32, u32), journal: Vec<RenderMutation>) -> StyleCandidate {
         let sheets_changed = self.invalidator.is_none() || self.sheets != sheets;
         let viewport_changed = self.viewport != viewport;
         if sheets_changed {
@@ -400,13 +422,14 @@ pub(crate) fn compositor_candidate(
     paint: &PagePaint<'_>,
     paint_update: Option<&PaintViewUpdate>,
 ) -> Result<CandidateFrame, String> {
+    self.last_work.paint_view_rebuild_calls += 1;
     let root = self.layout.as_ref().expect("oracle layout initialized").root();
     let view = DisplayListView::with_dom_generations(root, width, height, text, paint, &NoControls, dom);
     let paint = PaintSnapshot::from_view(&view);
     let source = PaintViewSource::new(&view);
     let mut dirtied_tiles = 0;
-    let retained = match (self.compositor.as_mut(), paint_update) {
-        (Some(compositor), Some(PaintViewUpdate::Delta(delta))) if delta.retired_resources.is_empty() => {
+    let retained = match (self.session.as_mut(), paint_update) {
+        (Some(session), Some(PaintViewUpdate::Delta(delta))) if delta.retired_resources.is_empty() => {
             let delta = PaintDelta { changes: delta.changes.iter().map(|change|
                 amazing_compositor::PaintItemChange {
                     key: PaintItemKey(change.compositor_id), item_index: change.item_index,
@@ -415,7 +438,7 @@ pub(crate) fn compositor_candidate(
                     new_bounds: amazing_compositor::Rect::new(change.new_bounds.x, change.new_bounds.y,
                         change.new_bounds.width, change.new_bounds.height),
                 }).collect() };
-            match compositor.apply_paint_delta(&delta) {
+            match session.compositor.apply_paint_delta(&delta) {
                 Ok(count) => { dirtied_tiles = count; true }
                 Err(error) => { eprintln!("amazing oracle: paint delta fallback: {error:?}"); false }
             }
@@ -424,21 +447,22 @@ pub(crate) fn compositor_candidate(
     };
     if !retained {
         self.last_work.paint_full = true;
-        self.presenter = ReferenceCpuPresenter::default();
         let mut fresh = source.compositor(width, height).map_err(|error| error.to_string())?;
         if let Some(keys) = view.items().iter().map(|item| item.key.map(|key| PaintItemKey(key.compositor_id())))
             .collect::<Option<Vec<_>>>() {
             let _ = fresh.bind_paint_item_keys(&keys);
         }
-        self.compositor = Some(fresh);
+        self.session = Some(RetainedCompositorSession {
+            compositor: fresh, presenter: ReferenceCpuPresenter::default(),
+        });
     }
-    let compositor = self.compositor.as_mut().expect("oracle compositor initialized");
-    let frame = source.build_frame(compositor, width, height)
+    let session = self.session.as_mut().expect("oracle compositor initialized");
+    let frame = source.build_frame(&mut session.compositor, width, height)
         .map_err(|error| error.to_string())?;
     let uploads = frame.resources.uploads.len();
     self.last_work.tile_uploads = uploads;
     self.last_work.tiles_dirtied = dirtied_tiles;
-    let pixels = self.presenter.present(&frame)
+    let pixels = session.presenter.present(&frame)
         .map_err(|error| format!("{error:?}"))?;
     Ok(CandidateFrame { pixels, paint, uploads, dirtied_tiles })
 }
@@ -466,11 +490,15 @@ mod tests {
             .find(|node| dom.name(*node) == Some("div")).unwrap();
         let sheets = [amazing_css::parse_stylesheet(".changed { color: red }")];
         let mut coordinator = RenderCoordinator::default();
-        let first = coordinator.candidate(&mut dom, &sheets, (64, 64));
+        let epoch = dom.render_mutation_epoch();
+        let journal = dom.take_render_mutations(epoch);
+        let first = coordinator.candidate(&dom, &sheets, (64, 64), journal);
         assert!(first.full_fallback);
         coordinator.commit(&dom, &sheets, (64, 64), &first.styles);
         dom.set_attribute(node, "class", "changed").unwrap();
-        let changed = coordinator.candidate(&mut dom, &sheets, (64, 64));
+        let epoch = dom.render_mutation_epoch();
+        let journal = dom.take_render_mutations(epoch);
+        let changed = coordinator.candidate(&dom, &sheets, (64, 64), journal);
         assert_eq!(changed.mutations, 1);
         assert!(!changed.full_fallback);
         assert!(changed.recalculated > 0);
@@ -478,7 +506,9 @@ mod tests {
         assert_eq!(first_style_mismatch(&dom, &changed.styles, &full), None);
         coordinator.commit(&dom, &sheets, (64, 64), &full);
         dom.create_element(node, "span");
-        let structural = coordinator.candidate(&mut dom, &sheets, (64, 64));
+        let epoch = dom.render_mutation_epoch();
+        let journal = dom.take_render_mutations(epoch);
+        let structural = coordinator.candidate(&dom, &sheets, (64, 64), journal);
         assert!(structural.full_fallback);
         assert_eq!(first_style_mismatch(&dom, &structural.styles, &amazing_css::compute(&dom, &sheets)), None);
     }

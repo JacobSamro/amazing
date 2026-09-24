@@ -354,7 +354,12 @@ fn paint_host_surface_with_updates(
     let mut style_candidate = None;
     if let Some(coordinator) = coordinator.as_deref_mut() {
         let viewport = (width.max(1.0) as u32, fixed_height.unwrap_or(0));
-        let candidate = coordinator.candidate(&mut dom.dom, &sheets, viewport);
+        let epoch = dom.dom.render_mutation_epoch();
+        let journal = dom.dom.take_render_mutations(epoch);
+        if let Some(surface) = coordinator.try_property_only(&dom.dom, &sheets, viewport, &journal) {
+            return Ok(surface);
+        }
+        let candidate = coordinator.candidate(&dom.dom, &sheets, viewport, journal);
         let full = amazing_css::compute(&dom.dom, &sheets);
         style_divergence = crate::render_oracle::first_style_mismatch(&dom.dom, &candidate.styles, &full);
         crate::render_oracle::report_style_work(&candidate);
@@ -409,7 +414,8 @@ fn paint_host_surface_with_updates(
             &page_text.provider, &paint, paint_update.as_ref(),
         );
         let work = coordinator.last_work();
-        eprintln!("amazing oracle: work style_recalculated={} layout_dirty={} layout_full={} paint_changed={} paint_full={} tile_uploads={} tiles_dirtied={}",
+        eprintln!("amazing oracle: work style_calls={} layout_calls={} paint_view_calls={} style_recalculated={} layout_dirty={} layout_full={} paint_changed={} paint_full={} tile_uploads={} tiles_dirtied={}",
+            work.style_rebuild_calls, work.layout_update_calls, work.paint_view_rebuild_calls,
             work.style_recalculated, work.layout_dirty, work.layout_full,
             work.paint_changed, work.paint_full, work.tile_uploads, work.tiles_dirtied);
         let full_styles = amazing_css::compute_with_animations(&dom.dom, &sheets, animated);
@@ -673,6 +679,8 @@ mod oracle_trace_tests {
         let mut candidate_us = Vec::new();
         let mut direct_us = Vec::new();
         let mut style_calls = 0;
+        let mut layout_calls = 0;
+        let mut paint_view_calls = 0;
         let mut layout_full = 0;
         let mut paint_full = 0;
         let mut uploads = 0;
@@ -684,7 +692,9 @@ mod oracle_trace_tests {
             let candidate = paint_host_surface_with_updates(&host, "trace.html", 512., Some(512), "", &animated, Some(&mut coordinator)).unwrap();
             candidate_us.push(start.elapsed().as_micros());
             let work = coordinator.last_work();
-            style_calls += usize::from(work.style_recalculated > 0);
+            style_calls += work.style_rebuild_calls;
+            layout_calls += work.layout_update_calls;
+            paint_view_calls += work.paint_view_rebuild_calls;
             layout_full += usize::from(work.layout_full);
             paint_full += usize::from(work.paint_full);
             uploads += work.tile_uploads;
@@ -695,7 +705,7 @@ mod oracle_trace_tests {
             direct_us.push(start.elapsed().as_micros());
             assert_eq!(candidate.pixels, direct.pixels, "{name} frame {index}");
         }
-        eprintln!("oracle_trace fixture={name} frames=20 p50_us={} p95_us={} full_p50_us={} full_p95_us={} style_calls={style_calls} layout_update_calls=20 layout_full={layout_full} paint_view_calls=20 paint_full={paint_full} uploads={uploads} dirtied_tiles={dirtied}",
+        eprintln!("oracle_trace fixture={name} frames=20 p50_us={} p95_us={} full_p50_us={} full_p95_us={} style_calls={style_calls} layout_update_calls={layout_calls} layout_full={layout_full} paint_view_calls={paint_view_calls} paint_full={paint_full} uploads={uploads} dirtied_tiles={dirtied}",
             percentile(&candidate_us, 0.5), percentile(&candidate_us, 0.95),
             percentile(&direct_us, 0.5), percentile(&direct_us, 0.95));
     }
