@@ -9,13 +9,14 @@ use amazing_css::animation::AnimationMainThreadEvent;
 use amazing_dom::{Dom, NodeIdx};
 use amazing_dom::render_mutation::{RenderMutation, RenderMutationKind};
 use amazing_layout::{Flow, LayoutBox, retained::{GeometryDelta, InputChanges, LayoutTree, UpdateOutcome}};
-use amazing_paint::{Surface, controls::NoControls, display_list_view::{DisplayListView, PaintItem, PaintViewUpdate, TransformNode, ClipNode, EffectNode, ScrollNode}};
+use amazing_paint::{Surface, controls::NoControls, display_list_view::{DisplayListView, PaintItem, PaintViewUpdate, RetainedPaintView, TransformNode, ClipNode, EffectNode, ScrollNode}};
 use amazing_text::TextSystem;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::page::PagePaint;
 use crate::runtime_binding_host::compositor::RetainedPropertyScene;
+use crate::runtime_host_replaced_content::{self, LayoutPaintDamage};
 
 static PARITY_LOSSES: AtomicU64 = AtomicU64::new(0);
 static FULL_FALLBACKS: AtomicU64 = AtomicU64::new(0);
@@ -102,6 +103,7 @@ pub(crate) struct RenderCoordinator {
     layout: Option<LayoutTree>,
     paint_generations: BTreeMap<NodeIdx, u64>,
     session: Option<RetainedCompositorSession>,
+    retained_paint: Option<RetainedPaintView>,
     last_work: FrameWork,
 }
 
@@ -313,6 +315,7 @@ impl RenderCoordinator {
 
     pub(crate) fn reset_scene(&mut self) {
         self.session = None;
+        self.retained_paint = None;
     }
 
     pub(crate) fn layout_root(&self) -> &LayoutBox {
@@ -529,6 +532,49 @@ pub(crate) struct CandidateFrame {
     pub(crate) dirtied_tiles: usize,
 }
 
+/// Translate LAYOUT-17's box damage into RC-20's keyed paint chunks. A node
+/// with several boxes cannot be paired to a paint item's phase ordinal here;
+/// leave that shape for the full-view fallback.
+fn paint_damage_from_layout<'a>(
+    layout: &'a LayoutTree,
+    retained: &RetainedPaintView,
+    view: &DisplayListView<'_>,
+) -> Option<Vec<LayoutPaintDamage<'a>>> {
+    let mut damage = Vec::new();
+    let mut seen = BTreeSet::new();
+    for change in layout.damage() {
+        let node = change.box_ref.key.node;
+        if !seen.insert(node) { return None; }
+        let generation = change.box_ref.key.generation;
+        let old = retained.items().filter_map(|item| item.key)
+            .filter(|key| key.node.node == node && key.node.generation == generation)
+            .collect::<Vec<_>>();
+        let new = view.items().iter().copied()
+            .filter(|item| item.key.is_some_and(|key|
+                key.node.node == node && key.node.generation == generation))
+            .collect::<Vec<_>>();
+        if old.iter().any(|key| key.ordinal != 0)
+            || new.iter().any(|item| item.key.is_none_or(|key| key.ordinal != 0))
+        { return None; }
+        for key in old {
+            if !new.iter().any(|item| item.key == Some(key)) {
+                damage.push(LayoutPaintDamage::Remove(key));
+            }
+        }
+        if change.after.is_some() {
+            let box_ = layout.box_for_ref(change.box_ref)?;
+            for item in new {
+                damage.push(LayoutPaintDamage::Upsert {
+                    box_, item, ordinal: item.key?.ordinal,
+                });
+            }
+        } else if !new.is_empty() {
+            return None;
+        }
+    }
+    Some(damage)
+}
+
 /// Updates the retained compositor when the paint delta is safe; otherwise
 /// creates a fresh scene. The full-paint oracle remains independent.
 impl RenderCoordinator {
@@ -544,11 +590,30 @@ pub(crate) fn compositor_candidate(
     self.last_work.paint_view_rebuild_calls += 1;
     let root = self.layout.as_ref().expect("oracle layout initialized").root();
     let view = DisplayListView::with_dom_generations(root, width, height, text, paint, &NoControls, dom);
-    let paint = PaintSnapshot::from_view(&view);
+    let snapshot = PaintSnapshot::from_view(&view);
     let source = PaintViewSource::new(&view);
     let mut dirtied_tiles = 0;
+    let paint_damage_valid = if let (Some(scene), Some(layout)) =
+        (self.retained_paint.as_mut(), self.layout.as_ref())
+    {
+        if self.last_work.layout_full { false } else {
+            match paint_damage_from_layout(layout, scene, &view) {
+                Some(damage) => match runtime_host_replaced_content::apply_layout_paint_damage(
+                    scene, &damage, dom, text, paint,
+                ) {
+                    Ok(_) => true,
+                    Err(error) => {
+                        eprintln!("amazing oracle: retained paint fallback: {error:?}");
+                        false
+                    }
+                },
+                None => false,
+            }
+        }
+    } else { false };
     let retained = match (self.session.as_mut(), paint_update) {
-        (Some(session), Some(PaintViewUpdate::Delta(delta))) if delta.retired_resources.is_empty() => {
+        (Some(session), Some(PaintViewUpdate::Delta(delta)))
+            if paint_damage_valid && delta.retired_resources.is_empty() => {
             let delta = PaintDelta { changes: delta.changes.iter().map(|change|
                 amazing_compositor::PaintItemChange {
                     key: PaintItemKey(change.compositor_id), item_index: change.item_index,
@@ -593,6 +658,9 @@ pub(crate) fn compositor_candidate(
         };
         self.session = Some(RetainedCompositorSession { scene,
             presenter: ReferenceCpuPresenter::default() });
+        self.retained_paint = runtime_host_replaced_content::seed_retained_paint(
+            root, width, height, text, paint, &NoControls, dom,
+        ).ok();
     }
     let session = self.session.as_mut().expect("oracle compositor initialized");
     let frame = source.build_frame(session.scene.compositor_mut(), width, height)
@@ -602,7 +670,7 @@ pub(crate) fn compositor_candidate(
     self.last_work.tiles_dirtied = dirtied_tiles;
     let pixels = session.presenter.present(&frame)
         .map_err(|error| format!("{error:?}"))?;
-    Ok(CandidateFrame { pixels, paint, uploads, dirtied_tiles })
+    Ok(CandidateFrame { pixels, paint: snapshot, uploads, dirtied_tiles })
 }
 }
 
