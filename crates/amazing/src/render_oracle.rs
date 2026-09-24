@@ -94,6 +94,7 @@ pub(crate) fn enabled() -> bool {
 
 #[derive(Default)]
 pub(crate) struct RenderCoordinator {
+    production: bool,
     previous: Option<StyledDom>,
     sheets: Vec<Stylesheet>,
     generations: Vec<u64>,
@@ -159,6 +160,40 @@ pub(crate) fn report_style_work(candidate: &StyleCandidate) {
 }
 
 impl RenderCoordinator {
+    pub(crate) fn production() -> Self { Self { production: true, ..Self::default() } }
+
+    pub(crate) fn is_production(&self) -> bool { self.production }
+
+    pub(crate) fn update_layout_production(
+        &mut self, dom: &Dom, styled: &StyledDom, candidate: StyleCandidate,
+        text: &dyn TextSystem, paint: &PagePaint<'_>,
+        viewport_width: f32, viewport_height: Option<f32>,
+    ) {
+        self.last_work = FrameWork { style_rebuild_calls: 1, layout_update_calls: 1,
+            style_recalculated: candidate.recalculated, ..FrameWork::default() };
+        let delta = StyleDelta {
+            styles: styled.clone(), changed: candidate.changed,
+            change_kinds: candidate.change_kinds, recalculated: Vec::new(),
+            full_rebuild: candidate.full_fallback,
+        };
+        let geometry = if let Some(layout) = self.layout.as_mut() {
+            layout.update(dom, delta, &candidate.inputs, text, paint.media,
+                viewport_width, viewport_height)
+        } else {
+            self.layout = Some(LayoutTree::new(dom, styled.clone(), text, paint.media,
+                viewport_width, viewport_height));
+            GeometryDelta { outcome: UpdateOutcome::RequiresFullRebuild("initial layout"),
+                dirty: Vec::new(), changed: Vec::new() }
+        };
+        self.last_work.layout_dirty = geometry.dirty.len();
+        self.last_work.layout_full = !matches!(geometry.outcome, UpdateOutcome::Retained);
+        self.last_work.paint_full = true;
+        self.paint_generations = (0..dom.node_count()).filter_map(|index| {
+            let node = NodeIdx(index as u32);
+            dom.node_generation(node).map(|generation| (node, generation))
+        }).collect();
+    }
+
     pub(crate) fn on_vsync(
         &mut self,
         dom: &Dom,

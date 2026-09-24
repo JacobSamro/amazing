@@ -344,9 +344,12 @@ fn paint_host_surface(
     fixed_height: Option<u32>,
     extra_css: &str,
 ) -> Result<amazing_paint::Surface, PageError> {
-    let mut oracle = crate::render_oracle::RenderCoordinator::default();
+    let production = std::env::var_os("AMAZING_INCREMENTAL_PRODUCTION").is_some_and(|value| value == "1");
+    let mut oracle = if production { crate::render_oracle::RenderCoordinator::production() }
+        else { crate::render_oracle::RenderCoordinator::default() };
     paint_host_surface_with_updates(host, html_path, width, fixed_height, extra_css,
-        &amazing_css::AnimatedValues::default(), true, crate::render_oracle::enabled().then_some(&mut oracle))
+        &amazing_css::AnimatedValues::default(), true,
+        (production || crate::render_oracle::enabled()).then_some(&mut oracle))
 }
 
 fn paint_host_surface_with_updates(
@@ -372,6 +375,37 @@ fn paint_host_surface_with_updates(
     let sheets = sources.into_iter().map(|(_, _, sheet)| sheet).collect::<Vec<_>>();
     // Font discovery retains each sheet's URL; style computation retains each
     // sheet owner's implicit scope root.
+
+    if let Some(coordinator) = coordinator.as_deref_mut()
+        && coordinator.is_production() && property_only_allowed
+    {
+        let viewport = (width.max(1.0) as u32, fixed_height.unwrap_or(0));
+        let epoch = dom.dom.render_mutation_epoch();
+        let journal = dom.dom.take_render_mutations(epoch);
+        if let Some(surface) = coordinator.try_property_only(&dom.dom, &sheets, viewport, &journal) {
+            return Ok(surface);
+        }
+        let candidate = coordinator.candidate(&dom.dom, &sheets, viewport, journal);
+        let styled = candidate.styles.clone();
+        coordinator.commit(&dom.dom, &sheets, viewport, &styled);
+        let media = load_page_media(&dom.dom, html_path, &styled);
+        let page_text = load_page_text_from_sheets(&font_sheets, html_path);
+        let paint = PagePaint { media: &media, dom: &dom.dom, styles: &styled };
+        coordinator.update_layout_production(&dom.dom, &styled, candidate,
+            &page_text.provider, &paint, width, fixed_height.map(|height| height as f32));
+        let height = fixed_height.unwrap_or_else(||
+            amazing_layout::layout_overflow_bottom(coordinator.layout_root())
+                .ceil().clamp(1.0, 8192.0) as u32);
+        return match coordinator.compositor_candidate(&dom.dom, viewport.0, height,
+            &page_text.provider, &paint, None) {
+            Ok(frame) => Ok(frame.pixels),
+            Err(_) => {
+                coordinator.reset_scene();
+                Ok(amazing_paint::paint_document_with_text_resources(
+                    coordinator.layout_root(), viewport.0, height, &page_text.provider, &paint))
+            }
+        };
+    }
 
     let mut style_divergence = None;
     let mut style_candidate = None;
@@ -694,7 +728,7 @@ mod oracle_trace_tests {
         sorted[((sorted.len() - 1) as f64 * quantile).ceil() as usize]
     }
 
-    fn trace(name: &str, html: &str, css: &str, tag: &str, base_class: &str) {
+    fn trace(name: &str, html: &str, css: &str, tag: &str, base_class: &str, production: bool) {
         let make_host = || Rc::new(RefCell::new(BrowserDomHost {
             dom: amazing_html::parse(html), native_forwarded: false,
         }));
@@ -707,7 +741,8 @@ mod oracle_trace_tests {
         };
         let node = find_node(&host);
         let direct_node = find_node(&direct_host);
-        let mut coordinator = crate::render_oracle::RenderCoordinator::default();
+        let mut coordinator = if production { crate::render_oracle::RenderCoordinator::production() }
+            else { crate::render_oracle::RenderCoordinator::default() };
         let animated = amazing_css::AnimatedValues::default();
         let _ = paint_host_surface_with_updates(&host, "trace.html", 512., Some(512), css, &animated, true, Some(&mut coordinator)).unwrap();
         let _ = paint_host_surface_with_updates(&direct_host, "trace.html", 512., Some(512), css, &animated, true, None).unwrap();
@@ -746,7 +781,8 @@ mod oracle_trace_tests {
             }
             layer_rounding_pixels += parity.layer_rounding;
         }
-        eprintln!("oracle_trace fixture={name} frames=20 p50_us={} p95_us={} full_p50_us={} full_p95_us={} style_calls={style_calls} layout_update_calls={layout_calls} layout_full={layout_full} paint_view_calls={paint_view_calls} paint_full={paint_full} uploads={uploads} dirtied_tiles={dirtied} layer_rounding_pixels={layer_rounding_pixels}",
+        let mode = if production { "production" } else { "oracle" };
+        eprintln!("{mode}_trace fixture={name} frames=20 p50_us={} p95_us={} full_p50_us={} full_p95_us={} style_calls={style_calls} layout_update_calls={layout_calls} layout_full={layout_full} paint_view_calls={paint_view_calls} paint_full={paint_full} uploads={uploads} dirtied_tiles={dirtied} layer_rounding_pixels={layer_rounding_pixels}",
             percentile(&candidate_us, 0.5), percentile(&candidate_us, 0.95),
             percentile(&direct_us, 0.5), percentile(&direct_us, 0.95));
         if name == "opacity-class" {
@@ -757,9 +793,17 @@ mod oracle_trace_tests {
     #[test]
     #[ignore = "Windows timing trace; run explicitly on win-001"]
     fn incremental_oracle_mutation_trace() {
-        trace("article-class", ARTICLE, "", "main", "");
-        trace("effects-class", EFFECTS, "", "section", "scroller");
-        trace("opacity-class", OPACITY, OPACITY_CSS, "div", "base");
+        trace("article-class", ARTICLE, "", "main", "", false);
+        trace("effects-class", EFFECTS, "", "section", "scroller", false);
+        trace("opacity-class", OPACITY, OPACITY_CSS, "div", "base", false);
+    }
+
+    #[test]
+    #[ignore = "Windows release timing trace; run explicitly on win-001"]
+    fn incremental_production_mutation_trace() {
+        trace("article-class", ARTICLE, "", "main", "", true);
+        trace("effects-class", EFFECTS, "", "section", "scroller", true);
+        trace("opacity-class", OPACITY, OPACITY_CSS, "div", "base", true);
     }
 
     #[test]
