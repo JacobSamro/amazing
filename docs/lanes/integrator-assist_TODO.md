@@ -759,3 +759,11 @@ Current lower-crate limits: layout and paint have no retained `GeometryDelta`/di
 Owned diagnostics cover a TestRendered class mutation and COMP-7's effects scroller at 512×512; both preserve the default PPM bytes and report compositor/full parity. A direct journal unit test proves one stable attribute mutation avoids a full style fallback, then a structural mutation selects full style. Linux locked crate gate with isolated storage: 169 passed, 1 skipped; this is iteration evidence, not the Windows final gate.
 
 Windows diagnostic finding: the 512×512 effects scroller has a one-channel-level compositor/full difference at (38,178), candidate `[95,95,95,255]` versus full `[96,96,96,255]` on both frames. Linux matches exactly. The oracle falls back to the full painter and writes a PPM diff. This is routed to compositor/replaced-content; the effects case has no exact-pixel credit until fixed.
+
+## IA-GENERATED-IMAGES follow-up — data SVG (2026-09-24)
+
+On fixed local `dev` base `544d7e8`, the generated-image URL cache now decodes
+`data:image/svg+xml` with the bounded SVG decoder, including percent-encoded
+and base64 data URL bodies handled by Fetch. Raster data URLs continue through
+the media decoder. A page test proves a data-SVG `list-style-image` enters the
+URL cache, exposes its intrinsic size, and paints red pixels.
