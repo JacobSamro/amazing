@@ -1309,3 +1309,15 @@ other classic status/reason pairs are identical. Windows win-002: amazing-js
 nextest **273 passed, 1 skipped**, workspace nextest **2,154 passed**, separate
 JS and workspace doctests passed. No new VM fallback arms were needed in this
 series.
+
+## JS-10 front-end follow-up
+
+Fixed base `5860d66` plus the module binding-cell compatibility fix
+`c775d02`; front-end commit `8cd37e6`. The pinned full Test262 pair ran
+53,872 sources with identical input and runner hashes: 25,295 to 25,371
+passing files and 48,824 to 48,954 passing variants. There were 76 file and
+130 variant gains with zero passing losses. Windows win-002 passed 292 JS
+tests and 2,226 workspace tests; separate JS and workspace doctests passed.
+The fixed-base classification hashes are `4c618ad3` before and `4446e075`
+after. The changes tighten early errors, `super` and `await` contexts, lexical
+declaration placement, and Annex B HTML comment parsing.
