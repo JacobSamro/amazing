@@ -3,6 +3,10 @@
 use crate::parser::{Parser, Stylesheet};
 use crate::syntax::{Token, serialize, tokenize};
 
+#[path = "animation_handoff.rs"]
+mod handoff;
+pub use handoff::*;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyframesRule {
     pub name: String,

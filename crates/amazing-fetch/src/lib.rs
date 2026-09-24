@@ -1,4 +1,4 @@
-//! HTTP Fetch policy, cookie and cache algorithms. No I/O, persistence or JS bindings.
+//! HTTP Fetch policy, cookie and cache algorithms. Persistence belongs to the embedding.
 //! HTTP(S) URL syntax and resolution use amazing-net ParsedUrl; IDNA remains
 //! deferred behind its provider seam. This policy model has no live dispatcher.
 #![forbid(unsafe_code)]

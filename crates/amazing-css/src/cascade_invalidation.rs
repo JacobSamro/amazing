@@ -162,6 +162,79 @@ impl AttributeStyleUpdate {
     }
 }
 
+/// Match the pre-mutation class set without cloning or mutating the DOM.
+/// Unsupported selector forms return `None`, which forces recomputation.
+fn class_override_matches(dom: &Dom, node: NodeIdx, selector: &Selector, old: Option<&str>) -> Option<bool> {
+    if selector.pseudo_element().is_some() { return Some(false); }
+    class_match_at(dom, node, node, selector, selector.compounds.len().checked_sub(1)?, old)
+}
+
+fn selector_mentions_class(selector: &Selector, old: Option<&str>, new: Option<&str>) -> bool {
+    let contains = |class: &str| old.into_iter().chain(new).flat_map(str::split_ascii_whitespace).any(|name| name == class);
+    fn compound_has(compound: &Compound, contains: &impl Fn(&str) -> bool) -> bool {
+        compound.simple.iter().any(|simple| match simple {
+            Simple::Class(class) => contains(class),
+            Simple::Attr { name, .. } => name == "class",
+            Simple::Negation(args) | Simple::Matches(args) | Simple::Where(args) => args.iter().any(|arg| compound_has(arg, contains)),
+            Simple::ComplexNegation(args) | Simple::ComplexMatches(args) | Simple::ComplexWhere(args) =>
+                args.iter().any(|arg| arg.compounds.iter().any(|comp| compound_has(comp, contains))),
+            Simple::Has(_) | Simple::NthChildOf { .. } => true,
+            _ => false,
+        })
+    }
+    selector.compounds.iter().any(|compound| compound_has(compound, &contains))
+}
+
+fn class_match_at(dom: &Dom, target: NodeIdx, node: NodeIdx, selector: &Selector, pos: usize, old: Option<&str>) -> Option<bool> {
+    if !class_compound_matches(dom, target, node, &selector.compounds[pos], old)? { return Some(false); }
+    if pos == 0 { return Some(true); }
+    let previous = match selector.combinators[pos - 1] {
+        Combinator::Child => dom.get(node).parent.into_iter().filter(|parent| dom.name(*parent).is_some()).collect::<Vec<_>>(),
+        Combinator::Descendant => {
+            let mut nodes = Vec::new();
+            let mut parent = dom.get(node).parent;
+            while let Some(ancestor) = parent {
+                if dom.name(ancestor).is_some() { nodes.push(ancestor); }
+                parent = dom.get(ancestor).parent;
+            }
+            nodes
+        }
+        Combinator::NextSibling | Combinator::LaterSibling => {
+            let mut nodes = Vec::new();
+            let mut sibling = dom.get(node).prev_sibling;
+            while let Some(previous) = sibling {
+                if dom.name(previous).is_some() {
+                    nodes.push(previous);
+                    if selector.combinators[pos - 1] == Combinator::NextSibling { break; }
+                }
+                sibling = dom.get(previous).prev_sibling;
+            }
+            nodes
+        }
+    };
+    for candidate in previous {
+        if class_match_at(dom, target, candidate, selector, pos - 1, old)? { return Some(true); }
+    }
+    Some(false)
+}
+
+fn class_compound_matches(dom: &Dom, target: NodeIdx, node: NodeIdx, compound: &Compound, old: Option<&str>) -> Option<bool> {
+    for simple in &compound.simple {
+        let yes = match simple {
+            Simple::Class(class) if node == target => old.unwrap_or("").split_ascii_whitespace().any(|part| part == class),
+            Simple::Attr { name, .. } if name == "class" => return None,
+            Simple::Negation(args) => !args.iter().map(|arg| class_compound_matches(dom, target, node, arg, old)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
+            Simple::Matches(args) | Simple::Where(args) => args.iter().map(|arg| class_compound_matches(dom, target, node, arg, old)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
+            Simple::ComplexNegation(args) => !args.iter().map(|arg| class_match_at(dom, target, node, arg, arg.compounds.len().checked_sub(1)?, old)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
+            Simple::ComplexMatches(args) | Simple::ComplexWhere(args) => args.iter().map(|arg| class_match_at(dom, target, node, arg, arg.compounds.len().checked_sub(1)?, old)).collect::<Option<Vec<_>>>()?.into_iter().any(|yes| yes),
+            Simple::Has(_) | Simple::NthChildOf { .. } => return None,
+            _ => crate::selectors::matches_simple(dom, node, simple),
+        };
+        if !yes { return Some(false); }
+    }
+    Some(true)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StyleMismatch {
     pub node: NodeIdx,
@@ -201,6 +274,10 @@ impl StyleInvalidator {
     ) -> AttributeStyleUpdate {
         if name.eq_ignore_ascii_case("style") && stylesheet_epoch == self.context.epoch {
             if let Some(delta) = self.try_compositor_inline_change(dom, old_styles, node, old, new, box_size) {
+                return AttributeStyleUpdate::CompositorOnly(delta);
+            }
+        } else if name.eq_ignore_ascii_case("class") && stylesheet_epoch == self.context.epoch {
+            if let Some(delta) = self.try_compositor_class_change(dom, old_styles, node, old, new, box_size) {
                 return AttributeStyleUpdate::CompositorOnly(delta);
             }
         }
@@ -266,6 +343,133 @@ impl StyleInvalidator {
                             transform_value = Some(b);
                             transform_css = Some(new.value.clone());
                         },
+                _ => return None,
+            }
+        }
+        (opacity.is_some() || transform_matrix.is_some()).then_some(CompositorStyleDelta {
+            node, opacity, transform_matrix, transform_value, transform_css,
+        })
+    }
+
+    fn try_compositor_class_change(
+        &self,
+        dom: &Dom,
+        old_styles: &StyledDom,
+        node: NodeIdx,
+        old: Option<&str>,
+        new: Option<&str>,
+        box_size: Option<CachedBoxSize>,
+    ) -> Option<CompositorStyleDelta> {
+        let index = &self.context.features;
+        if index.has_relational || index.has_nth_of || !dom.is_descendant(node, NodeIdx(0)) {
+            return None;
+        }
+        let actual = dom.attrs_of(node)?.iter().find(|(key, _)| key == "class").map(|(_, value)| value.as_str());
+        if actual != new { return None; }
+        let mut keys = vec![Feature::Attribute("class".into())];
+        for class in old.into_iter().chain(new).flat_map(str::split_ascii_whitespace) {
+            keys.push(Feature::Class(class.to_owned()));
+        }
+        if keys.iter().filter_map(|key| index.sets.get(key))
+            .any(|set| set.descendants || set.following_siblings) {
+            return None;
+        }
+        // attr(class), scoped selectors and special cascade origins can change
+        // other computed data even when the selector's own declarations look safe.
+        if self.context.ua_rules.iter().chain(&self.context.author_rules).any(|rule| {
+            !rule.is_unscoped() || rule.decls.iter().any(|d| d.value.to_ascii_lowercase().contains("attr("))
+        }) { return None; }
+        for rule in self.context.ua_rules.iter().chain(&self.context.author_rules) {
+            for (selector, _) in &rule.selectors {
+                if selector.pseudo_element().is_some() {
+                    // A class edit can change generated content or a pseudo style.
+                    // Pseudo matching is not part of this value-only contract.
+                    if selector_mentions_class(selector, old, new) { return None; }
+                    continue;
+                }
+                if rule.ua && class_override_matches(dom, node, selector, old)?
+                    != crate::selectors::matches(dom, node, selector) { return None; }
+            }
+        }
+        let mut old_winners: BTreeMap<&str, (crate::selectors::Specificity, usize, &Declaration)> = BTreeMap::new();
+        let mut new_winners: BTreeMap<&str, (crate::selectors::Specificity, usize, &Declaration)> = BTreeMap::new();
+        let mut changed = BTreeSet::new();
+        for (order, rule) in self.context.author_rules.iter().enumerate() {
+            let before = rule.selectors.iter().filter_map(|(selector, specificity)| {
+                class_override_matches(dom, node, selector, old).and_then(|yes| yes.then_some(*specificity))
+            }).max();
+            let after = rule.matching(dom, node, None).map(|(specificity, _)| specificity);
+            // Unsupported selector forms must take the ordinary recompute path.
+            if rule.selectors.iter().any(|(selector, _)| class_override_matches(dom, node, selector, old).is_none()) {
+                return None;
+            }
+            if before != after {
+                for declaration in &rule.decls {
+                    changed.insert(declaration.property.as_str());
+                }
+            }
+            for (spec, winners) in [(before, &mut old_winners), (after, &mut new_winners)] {
+                let Some(spec) = spec else { continue; };
+                for declaration in &rule.decls {
+                    let key = declaration.property.as_str();
+                    let rank = (spec, order);
+                    if winners.get(key).is_none_or(|(s, o, _)| rank >= (*s, *o)) {
+                        winners.insert(key, (spec, order, declaration));
+                    }
+                }
+            }
+        }
+        if changed.is_empty() { return None; }
+        let inline = dom.attrs_of(node)?.iter().find(|(key, _)| key == "style").map(|(_, value)| value.as_str()).unwrap_or("");
+        if inline.to_ascii_lowercase().contains("attr(") { return None; }
+        if crate::parse_declarations(inline).iter().any(|d| matches!(d.property.as_str(), "all" | "opacity" | "transform")) {
+            return None;
+        }
+        let style = old_styles.get(node)?;
+        let mut opacity = None;
+        let mut transform_value = None;
+        let mut transform_matrix = None;
+        let mut transform_css = None;
+        for property in changed {
+            if property == "all" { return None; }
+            let old_declaration = old_winners.get(property).map(|(_, _, d)| *d);
+            let new_declaration = new_winners.get(property).map(|(_, _, d)| *d);
+            if !matches!(property, "opacity" | "transform") {
+                if old_declaration.map(|d| (d.value.as_str(), d.important))
+                    != new_declaration.map(|d| (d.value.as_str(), d.important)) {
+                    return None;
+                }
+                // Only equal normal unlayered winners can be compared without
+                // resolving a second cascade or affecting inherited values.
+                if self.context.author_rules.iter().any(|rule| rule.decls.iter().any(|d|
+                    d.property == property && (d.important || rule.layer != usize::MAX))) {
+                    return None;
+                }
+                continue;
+            }
+            if self.context.author_rules.iter().any(|rule| rule.decls.iter().any(|d|
+                d.property == property && (d.important || rule.layer != usize::MAX))) {
+                return None;
+            }
+            if !matches!(old_styles.source(node, property), Some(super::ElementStyleSource::Author | super::ElementStyleSource::Initial)) {
+                return None;
+            }
+            let old_value = old_declaration.map(|d| crate::values::parse(property, &d.value)).unwrap_or(Some(if property == "opacity" { ComputedValue::Number(1.0) } else { ComputedValue::Transform(Vec::new()) }))?;
+            let new_value = new_declaration.map(|d| crate::values::parse(property, &d.value)).unwrap_or(Some(if property == "opacity" { ComputedValue::Number(1.0) } else { ComputedValue::Transform(Vec::new()) }))?;
+            if style.typed(property) != Some(&old_value) { return None; }
+            if old_value == new_value { continue; }
+            match (property, old_value, new_value) {
+                ("opacity", ComputedValue::Number(a), ComputedValue::Number(b)) if a < 1.0 && b < 1.0 => opacity = Some(b as f32),
+                ("transform", ComputedValue::Transform(a), ComputedValue::Transform(b))
+                    if !a.is_empty() && !b.is_empty()
+                        && !dom.children(node).any(|child| dom.name(child).is_some())
+                        && !crate::parse_declarations(inline).iter().any(|d| d.property == "transform-origin")
+                        && !self.context.ua_rules.iter().any(|rule| rule.decls.iter().any(|d| d.property == "transform-origin"))
+                        && !self.context.author_rules.iter().any(|rule| rule.decls.iter().any(|d| d.property == "transform-origin")) => {
+                            transform_matrix = Some(local_transform_matrix(&b, box_size)?);
+                            transform_value = Some(b);
+                            transform_css = new_declaration.map(|d| d.value.clone());
+                        }
                 _ => return None,
             }
         }
