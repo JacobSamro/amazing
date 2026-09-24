@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "base": "5860d66e7e1104753f4d7bb8bc171ba607288caa",
+  "oracle": "fresh DisplayListView::new (or generation-aware constructor) at the same mutation epoch, full raster_range and paint_document_with_text_resources_and_controls RGBA",
+  "mutation_cases": [
+    "node-remove-reuse",
+    "sibling-reorder",
+    "stacking-context-reorder",
+    "bounds-crossing-tile-edge",
+    "text-change",
+    "scroll-change",
+    "replaced-resource-change",
+    "property-only-transform"
+  ],
+  "expected_policy": "Each scenario compares stable keys, ordered items, property state, conservative bounds, full RGBA. Unsafe cases return RequiresFullRebuild and present the fresh full result.",
+  "retained_wpt_manifests": [
+    "tests/wpt-replaced-content/rc14/focused-manifest.json",
+    "tests/wpt-replaced-content/rc11-svg-manifest.json",
+    "tests/wpt-replaced-content/rc18/manifest.json"
+  ],
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "viewport": [
+    800,
+    600
+  ],
+  "device_scale": 1,
+  "base_note": "Started at 7c61b9f; primary directed DOM node-generation adoption, driver API and storage fixes, then paired helper/compositor merge. Final RC-19 delta gate uses pushed 5860d66; earlier helper and paint-only WPT pairs are retained in the lane scratch checkpoints."
+}
