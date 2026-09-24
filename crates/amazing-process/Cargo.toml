@@ -23,3 +23,5 @@ amazing-media = { path = "../amazing-media" }
 amazing-svg = { path = "../amazing-svg" }
 amazing-net = { path = "../amazing-net" }
 amazing-compositor = { path = "../amazing-compositor" }
+amazing-text-provider = { path = "../amazing-text-provider" }
+amazing-storage = { path = "../amazing-storage" }

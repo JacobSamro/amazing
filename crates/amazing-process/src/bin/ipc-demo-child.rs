@@ -4,7 +4,7 @@ use amazing_process::protocol::{
     AcquireFrame, AcquireResult, BrowserEvents, BrowserEventsReceiver, FrameReady, Navigate,
     RendererProxy, Viewport,
 };
-use amazing_process::{bootstrap_child, Capabilities, Ping, Role};
+use amazing_process::{bootstrap_child, Capabilities, Role};
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::time::Duration;
@@ -152,10 +152,23 @@ fn main() {
             Role::Renderer => amazing_process::renderer::serve_renderer(conn, channel),
             Role::Gpu => amazing_process::gpu::serve_gpu(conn),
             Role::Network => amazing_process::network::serve_network(conn),
-            _ => {
-                conn.bind(0, Ping);
+            Role::Utility => {
                 conn.bind(17, EchoReceiver(EchoHandler));
+                amazing_process::utility::serve_utility(conn, channel);
             }
+            Role::Storage => {
+                let root = parent
+                    .0
+                    .get("__storage_root")
+                    .ok_or(amazing_process::Error::Role)?;
+                let quota = parent
+                    .0
+                    .get("__storage_quota")
+                    .and_then(|s| s.parse().ok())
+                    .ok_or(amazing_process::Error::Role)?;
+                amazing_process::storage::serve_storage(conn, std::path::Path::new(root), quota)?;
+            }
+            Role::Browser => return Err(amazing_process::Error::Role),
         }
         Ok(())
     }) else {

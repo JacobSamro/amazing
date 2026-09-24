@@ -85,6 +85,8 @@ fn versioned_contract_roundtrip_and_malformed_frames() {
         }],
         response_type: "Basic".into(),
         redirected: false,
+        url_list: vec!["http://example.test/index".into()],
+        redirect_tainted: true,
     };
     let packets = vec![
         codec::encode(&start).unwrap(),
@@ -299,6 +301,97 @@ fn browser_navigation_uses_explicit_initiator_context() {
     server.join().unwrap();
     assert_eq!(response.body, b"nav");
     assert_eq!(response.head.status, 200);
+}
+
+#[test]
+fn browser_restarts_manual_navigation_redirect_in_same_epoch() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        for response in [
+            b"HTTP/1.1 302 Found\r\nLocation: /final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndone".as_slice(),
+        ] {
+            let (mut stream, _) = listener.accept().unwrap();
+            read_request(&mut stream);
+            stream.write_all(response).unwrap();
+        }
+    });
+    let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
+    let session = NetworkSession::launch(exe, 23, Duration::from_secs(5)).unwrap();
+    let mut nav = request(&format!("{origin}/start"), &origin);
+    nav.mode = "navigate".into();
+    nav.credentials = "include".into();
+    nav.redirect = "manual".into();
+    let first = session.start(nav.clone()).unwrap();
+    let mut head = None;
+    loop {
+        match next_reply(&session, &first, NETWORK_CHUNK) {
+            NetworkReply::Head(value) => head = Some(value),
+            NetworkReply::Complete(done) => {
+                assert!(done.error.is_none());
+                break;
+            }
+            NetworkReply::Body(_) => (),
+            NetworkReply::Pending(()) => unreachable!(),
+        }
+    }
+    let head = head.expect("navigation redirect head");
+    assert_eq!(head.status, 302);
+    assert_eq!(head.url, format!("{origin}/start"));
+    assert_eq!(head.url_list, vec![format!("{origin}/start")]);
+    assert!(!head.redirect_tainted);
+    assert!(head
+        .headers
+        .iter()
+        .any(|h| h.name.eq_ignore_ascii_case("location") && h.value == "/final"));
+    let mut invalid = head.clone();
+    invalid.epoch += 1;
+    assert!(session
+        .restart_navigation(&first, &invalid, nav.clone())
+        .is_err());
+    nav.url = format!("{origin}/final");
+    let second = session.restart_navigation(&first, &head, nav).unwrap();
+    assert_eq!(first.epoch, second.epoch);
+    let mut final_head = None;
+    let mut body = Vec::new();
+    loop {
+        match next_reply(&session, &second, NETWORK_CHUNK) {
+            NetworkReply::Head(value) => final_head = Some(value),
+            NetworkReply::Body(chunk) => body.extend_from_slice(&chunk.bytes.0),
+            NetworkReply::Complete(done) => {
+                assert!(done.error.is_none());
+                break;
+            }
+            NetworkReply::Pending(()) => unreachable!(),
+        }
+    }
+    assert_eq!(final_head.unwrap().status, 200);
+    assert_eq!(body, b"done");
+    server.join().unwrap();
+}
+
+#[test]
+fn browser_only_subresource_receives_validated_no_cors_body() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        read_request(&mut stream);
+        stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/css\r\nContent-Length: 13\r\nConnection: close\r\n\r\nbody{color:r}").unwrap();
+    });
+    let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
+    let session = NetworkSession::launch(exe, 24, Duration::from_secs(5)).unwrap();
+    let mut style = request(&format!("{origin}/site.css"), "http://other.test");
+    style.mode = "no-cors".into();
+    style.destination = "style".into();
+    style.context.top_level_navigation = false;
+    style.context.cookie_site = WireCookieSite::CrossSite(());
+    let response = session.fetch_subresource(style).unwrap();
+    assert_eq!(response.head.status, 200);
+    assert_eq!(response.head.response_type, "Opaque");
+    assert_eq!(response.body, b"body{color:r}");
+    server.join().unwrap();
 }
 
 #[test]
