@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "explicit frozen union",
+    "description": "CSS2 and CSS Tables 3 HTML reftests",
+    "case_count": 12
+  },
+  "sparse_paths": [
+    "css/CSS2",
+    "css/css-tables"
+  ],
+  "tests": [
+    {
+      "id": "border-collapse-005",
+      "test": "css/CSS2/tables/border-collapse-005.html"
+    },
+    {
+      "id": "border-collapse-006",
+      "test": "css/CSS2/tables/border-collapse-006.html"
+    },
+    {
+      "id": "border-collapse-empty-row",
+      "test": "css/CSS2/tables/border-collapse-empty-row.html"
+    },
+    {
+      "id": "collapsing-border-model-011",
+      "test": "css/CSS2/tables/collapsing-border-model-011.html"
+    },
+    {
+      "id": "collapsing-border-model-012",
+      "test": "css/CSS2/tables/collapsing-border-model-012.html"
+    },
+    {
+      "id": "collapsing-border-model-013",
+      "test": "css/CSS2/tables/collapsing-border-model-013.html"
+    },
+    {
+      "id": "collapsing-border-model-014",
+      "test": "css/CSS2/tables/collapsing-border-model-014.html"
+    },
+    {
+      "id": "anonymous-table-ws-001",
+      "test": "css/css-tables/anonymous-table-ws-001.html"
+    },
+    {
+      "id": "baseline-empty-cell-001",
+      "test": "css/css-tables/baseline-empty-cell-001.html"
+    },
+    {
+      "id": "zero-rowspan-001",
+      "test": "css/css-tables/zero-rowspan-001.html"
+    },
+    {
+      "id": "zero-rowspan-002",
+      "test": "css/css-tables/zero-rowspan-002.html"
+    },
+    {
+      "id": "table-row-group-nested-anonymous-001",
+      "test": "css/css-tables/table-row-group-nested-anonymous-001.html"
+    }
+  ]
+}

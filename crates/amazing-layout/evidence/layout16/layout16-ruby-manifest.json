@@ -1,0 +1,281 @@
+﻿{
+    "schema":  1,
+    "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "selection":  {
+                      "kind":  "sha256-path-stratified",
+                      "per_category":  120
+                  },
+    "sparse_paths":  [
+                         "css/css-ruby"
+                     ],
+    "tests":  [
+                  {
+                      "id":  "css-ruby__ruby-box-model-001.html",
+                      "test":  "css/css-ruby/ruby-box-model-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__break-within-bases__no-break-opportunity-at-end.html",
+                      "test":  "css/css-ruby/break-within-bases/no-break-opportunity-at-end.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-align-002.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-align-002.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-align-005.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-align-005.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-003.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-003.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-013.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-013.html"
+                  },
+                  {
+                      "id":  "css-ruby__empty-ruby-text-container-abs.html",
+                      "test":  "css/css-ruby/empty-ruby-text-container-abs.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-base-container-float.html",
+                      "test":  "css/css-ruby/ruby-base-container-float.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-008.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-008.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-line-break-suppression-004.html",
+                      "test":  "css/css-ruby/ruby-line-break-suppression-004.html"
+                  },
+                  {
+                      "id":  "css-ruby__pseudo-first-letter.html",
+                      "test":  "css/css-ruby/pseudo-first-letter.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-align-003.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-align-003.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-vertical-001.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-vertical-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-007.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-007.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-align-001.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-align-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-010.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-010.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-intrinsic-isize-003.html",
+                      "test":  "css/css-ruby/ruby-intrinsic-isize-003.html"
+                  },
+                  {
+                      "id":  "css-ruby__rt-display-001.html",
+                      "test":  "css/css-ruby/rt-display-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-line-break-suppression-005.html",
+                      "test":  "css/css-ruby/ruby-line-break-suppression-005.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-intrinsic-isize-001.html",
+                      "test":  "css/css-ruby/ruby-intrinsic-isize-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-011.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-011.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-vertical-004.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-vertical-004.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-base-container-abs.html",
+                      "test":  "css/css-ruby/ruby-base-container-abs.html"
+                  },
+                  {
+                      "id":  "css-ruby__interlinear-block-margin-box.html",
+                      "test":  "css/css-ruby/interlinear-block-margin-box.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-012.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-012.html"
+                  },
+                  {
+                      "id":  "css-ruby__rbc-rtc-basic-001.html",
+                      "test":  "css/css-ruby/rbc-rtc-basic-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__rb-display-001.html",
+                      "test":  "css/css-ruby/rb-display-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-with-floats-003.html",
+                      "test":  "css/css-ruby/ruby-with-floats-003.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-autohide-001.html",
+                      "test":  "css/css-ruby/ruby-autohide-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-inlinize-recursive-simple.html",
+                      "test":  "css/css-ruby/ruby-inlinize-recursive-simple.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-autohide-003.html",
+                      "test":  "css/css-ruby/ruby-autohide-003.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-004.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-004.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-layout-internal-boxes.html",
+                      "test":  "css/css-ruby/ruby-layout-internal-boxes.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-vertical-005.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-vertical-005.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-non-bmp-001.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-non-bmp-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-inlinize-blocks-002.html",
+                      "test":  "css/css-ruby/ruby-inlinize-blocks-002.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-intrinsic-isize-002.html",
+                      "test":  "css/css-ruby/ruby-intrinsic-isize-002.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-016.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-016.html"
+                  },
+                  {
+                      "id":  "css-ruby__nested-ruby-pairing-001.html",
+                      "test":  "css/css-ruby/nested-ruby-pairing-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-021.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-021.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-vertical-002.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-vertical-002.html"
+                  },
+                  {
+                      "id":  "css-ruby__empty-ruby-text-container-float.html",
+                      "test":  "css/css-ruby/empty-ruby-text-container-float.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-005.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-005.html"
+                  },
+                  {
+                      "id":  "css-ruby__empty-ruby-text-container.html",
+                      "test":  "css/css-ruby/empty-ruby-text-container.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-006.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-006.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-bidi-003.html",
+                      "test":  "css/css-ruby/ruby-bidi-003.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-019.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-019.html"
+                  },
+                  {
+                      "id":  "css-ruby__improperly-contained-annotation-001.html",
+                      "test":  "css/css-ruby/improperly-contained-annotation-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-009.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-009.html"
+                  },
+                  {
+                      "id":  "css-ruby__break-within-bases__nowrap.html",
+                      "test":  "css/css-ruby/break-within-bases/nowrap.html"
+                  },
+                  {
+                      "id":  "css-ruby__empty-ruby-base-container.html",
+                      "test":  "css/css-ruby/empty-ruby-base-container.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-with-floats-002.html",
+                      "test":  "css/css-ruby/ruby-with-floats-002.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-text-spacing-trim-001.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-text-spacing-trim-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-022.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-022.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-text-collapse.html",
+                      "test":  "css/css-ruby/ruby-text-collapse.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-014.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-014.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-bidi-001.html",
+                      "test":  "css/css-ruby/ruby-bidi-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-002.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-002.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-001.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-bidi-004.html",
+                      "test":  "css/css-ruby/ruby-bidi-004.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-autohide-004.html",
+                      "test":  "css/css-ruby/ruby-autohide-004.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-non-bmp-002.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-non-bmp-002.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-017.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-017.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-with-floats-001.html",
+                      "test":  "css/css-ruby/ruby-with-floats-001.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-align-004.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-align-004.html"
+                  },
+                  {
+                      "id":  "css-ruby__pseudo-first-line.html",
+                      "test":  "css/css-ruby/pseudo-first-line.html"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-015.html",
+                      "test":  "css/css-ruby/ruby-overhang-spaces-015.html"
+                  }
+              ]
+}
