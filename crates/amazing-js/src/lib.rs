@@ -51,6 +51,8 @@ pub mod value;
 pub use ast::{Module, Program};
 pub use errors::SyntaxError;
 pub use interp::{DomHost, HostResponse, Interpreter};
+pub use interp::{SerializedAtom, SerializedBoxKind, SerializedHostValue,
+    SerializedNode, SerializedValue, StructuredCloneHost};
 pub use parser::{parse_module, parse_script};
 
 #[cfg(test)]

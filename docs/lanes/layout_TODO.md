@@ -1220,3 +1220,47 @@ fixed dev base `f676798`: the 192-case retained/vertical union was
 classifications, actual pixel hashes and reference hashes matched exactly;
 zero gains and zero losses. The raw paired reports and source hashes are in
 `crates/amazing-layout/evidence/layout15/`.
+
+## LAYOUT-16 — flex/grid breadth, table and ruby follow-through
+
+The dirty checkpoint source was preserved as `57706d03`, then local `dev` was
+merged. Grid placement now stages definite positions before auto placement in
+order-modified order; single-line flex cross sizing and safe alignment parsing
+were corrected; ruby columns share the paragraph shaper and preserve legal Han
+breaks; collapsed-table segment joins extend across short empty rows. The
+replaced-content paint contract was merged as `d70aec65`, and layout's final
+branch incorporates it at `ff3a7569`. The fixed WPT revision and before/after
+reports are under `crates/amazing-layout/evidence/layout16/`.
+
+The six-case merged paint focus changes `border-collapse-empty-row` from 1,700
+differing pixels to exact; five ruby cases remain mismatches. On the fixed
+`d70aec65` dev source and pinned 449-case WPT selection, the final candidate
+changes **273 passes / 176 mismatches** to **276 passes / 173 mismatches**:
+two grid gains and the collapsed-table gain, with **zero pass losses**. The
+dev checkout temporarily omitted 17 sparse WPT paths; their separate dev
+completion run is included in the combined baseline. Raw and combined reports
+are under `crates/amazing-layout/evidence/layout16/`. The win-002 final gate
+passed 285 layout nextest cases, 2,362 workspace nextest cases and two
+workspace doctests; its raw log is under `evidence/layout17/`.
+
+## LAYOUT-17 — retained contained relayout and paint damage
+
+`LayoutTree::update` now relayouts one existing `display: flow-root` block
+inside `contain: layout` when a single supported size, margin or padding
+property changes and the DOM generations, intrinsic inputs and viewport stay
+fixed. The boundary must preserve its border box and margins; every other case
+uses the explicit full-layout fallback. The debug parity oracle compares the
+retained tree with a fresh layout and replaces the retained result on mismatch.
+
+`LayoutTree::damage()` owns the old and new geometry and their union rectangle
+for every changed or repaint-dirty box. Each `BoxRef` carries the DOM slot
+generation, source order and local ordinal; `box_for_ref` resolves current
+upserts, while removed boxes keep their old key. The replaced-content adapter
+handoff is recorded in `.agents/replaced-content/questions.md`.
+
+The release layout-only diagnostic with 500 unchanged sibling paragraphs and
+40 contained width mutations improved from **28.15 ms to 15.53 ms p95** on
+the Linux iteration host after caching the prior geometry snapshot; the same
+diagnostic measured **14.766 ms p95** on win-002. ADR 0010's
+20 ms target measures the complete Windows article mutation-to-frame path;
+that target remains for coordinator and paint-adapter integration to prove.

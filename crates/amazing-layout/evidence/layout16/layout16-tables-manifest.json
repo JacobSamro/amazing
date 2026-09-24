@@ -1,0 +1,33 @@
+﻿{
+    "schema":  1,
+    "revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "selection":  {
+                      "kind":  "sha256-path-stratified",
+                      "per_category":  120
+                  },
+    "sparse_paths":  [
+                         "css/css-tables"
+                     ],
+    "tests":  [
+                  {
+                      "id":  "css-tables__zero-rowspan-001.html",
+                      "test":  "css/css-tables/zero-rowspan-001.html"
+                  },
+                  {
+                      "id":  "css-tables__table-row-group-nested-anonymous-001.html",
+                      "test":  "css/css-tables/table-row-group-nested-anonymous-001.html"
+                  },
+                  {
+                      "id":  "css-tables__zero-rowspan-002.html",
+                      "test":  "css/css-tables/zero-rowspan-002.html"
+                  },
+                  {
+                      "id":  "css-tables__baseline-empty-cell-001.html",
+                      "test":  "css/css-tables/baseline-empty-cell-001.html"
+                  },
+                  {
+                      "id":  "css-tables__anonymous-table-ws-001.html",
+                      "test":  "css/css-tables/anonymous-table-ws-001.html"
+                  }
+              ]
+}

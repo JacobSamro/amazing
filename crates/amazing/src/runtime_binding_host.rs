@@ -36,7 +36,7 @@ use runtime_host_storage::StorageRuntime;
 use crate::dom_host::BrowserDomHost;
 use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
 use self::compositor::{CanvasObject, CanvasTarget};
-#[path = "runtime_host_compositor.rs"] mod compositor;
+#[path = "runtime_host_compositor.rs"] pub(crate) mod compositor;
 
 #[path = "runtime_host_dom_bindings.rs"]
 mod dom_bindings;
