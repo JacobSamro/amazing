@@ -30,7 +30,7 @@
 //!   the `??`-mixing restriction.
 //! - [`errors`] — [`SyntaxError`] with line/column positions.
 //!
-//! Deferred: tagged templates, destructuring everywhere, modules,
+//! Deferred: tagged templates, destructuring everywhere, asynchronous modules,
 //! private class members, strict-mode early errors, generators, symbols,
 //! and a true asynchronous Promise job queue. Runtime errors are represented
 //! by [`value::Throw`]; no input is allowed to panic the engine.
@@ -40,6 +40,7 @@ pub mod env;
 pub mod errors;
 pub mod interp;
 pub mod lexer;
+pub mod module;
 pub mod parser;
 #[cfg(test)]
 mod regexp_tests;

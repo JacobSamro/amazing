@@ -1917,6 +1917,12 @@ impl Interpreter {
                     let o = self.eval_expr(obj, env)?;
                     let k = self.member_key(prop, env)?;
                     if let JsValue::Object(o) = o {
+                        if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
+                            if o.borrow().own_prop(&k).is_some() {
+                                return Err(Throw::type_error("module namespace export cannot be deleted"));
+                            }
+                            return Ok(JsValue::Bool(true));
+                        }
                         if let Some(deleted) = binary_delete_index(&o, &k) { return Ok(JsValue::Bool(deleted)); }
                         if let Some(deleted) = match k.as_string() {
                             Some(name) => self.legacy_delete(&o, name)?,
@@ -2188,6 +2194,9 @@ impl Interpreter {
     // testharness.js exports its API by assigning properties of global_scope.
     // Unresolved lexical names must therefore consult the global object record.
     fn identifier_value(&mut self, env: &EnvHandle, name: &str) -> Result<Option<JsValue>, Throw> {
+        if env.is_uninitialized(name) {
+            return Err(Throw::reference_error(format!("{name} is uninitialized")));
+        }
         if let Some(value) = env.resolve(name) {
             return Ok(Some(value));
         }
@@ -3260,6 +3269,13 @@ impl Interpreter {
         let k = text.as_deref().unwrap_or("");
         match v {
             JsValue::Object(o) => {
+                if let Exotic::ModuleNamespace(exports) = &o.borrow().exotic {
+                    if let Some(name) = key.as_string() {
+                        return match exports.get(&name.to_utf8_lossy()).cloned() {
+                            Some(cell) => cell.read(), None => Ok(JsValue::Undefined),
+                        };
+                    }
+                }
                 if let Some(result) = binary_get_index(self, o, key) { return result; }
                 if key.as_string().is_some() {
                 if let Some(node) = Self::dom_dataset_id(o) {
@@ -3350,6 +3366,9 @@ impl Interpreter {
             JsValue::Object(o) => o.clone(),
             _ => return Err(Throw::type_error("cannot set property on primitive")),
         };
+        if matches!(o.borrow().exotic, Exotic::ModuleNamespace(_)) {
+            return Err(Throw::type_error("module namespace properties cannot be assigned"));
+        }
         if let Some(result) = binary_set_index(self, &o, &key, x.clone()) { return result; }
         if let Some(forward_to) = self.binding_put_forwards_target(&o, k) {
             let target = self.get_prop(v, k)?;
