@@ -1866,13 +1866,7 @@ fn valid_transform_number(tokens: &[Token]) -> bool {
 }
 
 fn valid_transform_length(tokens: &[Token]) -> bool {
-    matches!(
-        trim_tokens(tokens),
-        [Token::Number(value)] if *value == 0.0
-    ) || matches!(
-        trim_tokens(tokens),
-        [Token::Dimension(value, unit)] if value.is_finite() && unit.eq_ignore_ascii_case("px")
-    )
+    crate::values::LengthPercentage::parse(&serialize(trim_tokens(tokens))).is_some()
 }
 
 fn valid_transform_angle(tokens: &[Token]) -> bool {
