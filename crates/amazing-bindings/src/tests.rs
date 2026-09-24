@@ -1397,6 +1397,24 @@ fn class_list_is_live_canonical_and_validates_tokens() {
 }
 
 #[test]
+fn forced_token_toggle_without_a_change_queues_no_attribute_mutation() {
+    let mut h = Host::default();
+    let node = element(&mut h);
+    h.dom.set_attribute(node, "class", "present").unwrap();
+    let list = call(&mut h, O::ElementClassList, V::Node(node), &[]);
+    let observer = h.dom.create_mutation_observer(1);
+    h.dom.observe(observer, node, amazing_dom::mutation::ObserveOptions {
+        attributes: Some(true),
+        ..Default::default()
+    }).unwrap();
+
+    assert_eq!(call(&mut h, O::TokenListToggle, list.clone(), &[str_value("present"), V::Bool(true)]), V::Bool(true));
+    assert_eq!(call(&mut h, O::TokenListToggle, list, &[str_value("absent"), V::Bool(false)]), V::Bool(false));
+    assert!(h.dom.take_mutation_records(observer).is_empty());
+    assert_eq!(h.dom.get_attribute_ns(node, None, "class"), Some("present"));
+}
+
+#[test]
 fn html_collection_binding_and_legacy_hooks_are_live() {
     let mut h = Host::default();
     install(&mut h).unwrap();

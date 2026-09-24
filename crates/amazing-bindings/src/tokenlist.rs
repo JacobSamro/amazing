@@ -139,6 +139,7 @@ pub(crate) fn invoke<H: BindingHost>(
         O::TokenListToggle => {
             let force = args.get(1).map(|v| host.to_boolean(v));
             let add = force.unwrap_or(!present);
+            if force.is_some() && add == present { return Ok(host.boolean(add)); }
             if add { if !present { current.push(first.clone()); } }
             else { current.retain(|token| token != first); }
             Some(add)
