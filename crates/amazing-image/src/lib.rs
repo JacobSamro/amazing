@@ -1,5 +1,5 @@
 //! Bounded, first-frame web-image decoding. Codec types never cross this adapter.
-//! Animation, ICC color management and EXIF orientation are not implemented.
+//! Animation and ICC color management are not implemented.
 #![forbid(unsafe_code)]
 
 pub use amazing_svg as svg;
@@ -13,14 +13,33 @@ use std::io::Cursor;
 /// Decoder allocation limits are best-effort inside codecs; input, dimensions,
 /// and RGBA output are independently checked. Panics become closed errors.
 pub fn decode(bytes: &[u8], limits: DecodeLimits) -> Result<amazing_media::Image, DecodeError> {
+    decode_with_orientation(bytes, limits, true)
+}
+
+/// Decode with control over EXIF orientation (`image-orientation: none` opts out).
+/// The default `decode` entry point applies embedded orientation before exposing
+/// intrinsic dimensions or pixels to layout and paint.
+pub fn decode_with_orientation(
+    bytes: &[u8],
+    limits: DecodeLimits,
+    apply_exif: bool,
+) -> Result<amazing_media::Image, DecodeError> {
     if bytes.len() > limits.max_input_bytes {
         return Err(DecodeError::InputLimit);
     }
-    std::panic::catch_unwind(|| decode_inner(bytes, limits))
+    std::panic::catch_unwind(|| decode_inner(bytes, limits, apply_exif))
         .unwrap_or(Err(DecodeError::DecoderPanic))
 }
-fn decode_inner(bytes: &[u8], limits: DecodeLimits) -> Result<amazing_media::Image, DecodeError> {
-    if std::str::from_utf8(bytes).is_ok_and(|s| s.trim_start_matches('\u{feff}').trim_start().starts_with('<')) {
+fn decode_inner(
+    bytes: &[u8],
+    limits: DecodeLimits,
+    apply_exif: bool,
+) -> Result<amazing_media::Image, DecodeError> {
+    if std::str::from_utf8(bytes).is_ok_and(|s| {
+        s.trim_start_matches('\u{feff}')
+            .trim_start()
+            .starts_with('<')
+    }) {
         return svg::decode(bytes, limits);
     }
     let mut reader = image::ImageReader::new(Cursor::new(bytes))
@@ -29,7 +48,10 @@ fn decode_inner(bytes: &[u8], limits: DecodeLimits) -> Result<amazing_media::Ima
     // Feature unification with GPUI can enable extra image codecs. Keep the
     // web adapter's accepted formats independent of the enclosing graph.
     use image::ImageFormat::{Bmp, Gif, Ico, Jpeg, Png, Pnm, WebP};
-    if !matches!(reader.format(), Some(Bmp | Gif | Ico | Jpeg | Png | Pnm | WebP)) {
+    if !matches!(
+        reader.format(),
+        Some(Bmp | Gif | Ico | Jpeg | Png | Pnm | WebP)
+    ) {
         return Err(DecodeError::InvalidImage);
     }
     let mut codec_limits = image::Limits::default();
@@ -37,9 +59,16 @@ fn decode_inner(bytes: &[u8], limits: DecodeLimits) -> Result<amazing_media::Ima
     codec_limits.max_image_height = Some(limits.max_dimension);
     codec_limits.max_alloc = Some(limits.max_decoder_bytes);
     reader.limits(codec_limits);
-    let decoder = reader
+    let mut decoder = reader
         .into_decoder()
         .map_err(|_| DecodeError::InvalidImage)?;
+    let orientation = if apply_exif {
+        decoder
+            .orientation()
+            .map_err(|_| DecodeError::InvalidImage)?
+    } else {
+        image::metadata::Orientation::NoTransforms
+    };
     let (width, height) = decoder.dimensions();
     if width == 0 || height == 0 || width > limits.max_dimension || height > limits.max_dimension {
         return Err(DecodeError::GeometryLimit);
@@ -48,24 +77,35 @@ fn decode_inner(bytes: &[u8], limits: DecodeLimits) -> Result<amazing_media::Ima
         .checked_mul(u64::from(height))
         .and_then(|n| n.checked_mul(4))
         .ok_or(DecodeError::AllocationLimit)?;
+    let working_rgba = if orientation == image::metadata::Orientation::NoTransforms {
+        rgba_bytes
+    } else {
+        rgba_bytes
+            .checked_mul(2)
+            .ok_or(DecodeError::AllocationLimit)?
+    };
     if rgba_bytes > limits.max_rgba_bytes
         || rgba_bytes > usize::MAX as u64
         || decoder
             .total_bytes()
-            .checked_add(rgba_bytes)
+            .checked_add(working_rgba)
             .is_none_or(|n| n > limits.max_decoder_bytes)
     {
         return Err(DecodeError::AllocationLimit);
     }
-    let rgba = image::DynamicImage::from_decoder(decoder)
-        .map_err(|_| DecodeError::InvalidImage)?
-        .into_rgba8();
-    if rgba.dimensions() != (width, height) || rgba.as_raw().len() as u64 != rgba_bytes {
+    let mut decoded =
+        image::DynamicImage::from_decoder(decoder).map_err(|_| DecodeError::InvalidImage)?;
+    decoded.apply_orientation(orientation);
+    let rgba = decoded.into_rgba8();
+    let (oriented_width, oriented_height) = rgba.dimensions();
+    if u64::from(oriented_width) * u64::from(oriented_height) * 4 != rgba_bytes
+        || rgba.as_raw().len() as u64 != rgba_bytes
+    {
         return Err(DecodeError::InvalidImage);
     }
     Ok(amazing_media::Image {
-        width,
-        height,
+        width: oriented_width,
+        height: oriented_height,
         pixels: rgba.into_raw(),
     })
 }
@@ -206,5 +246,25 @@ mod tests {
                 );
             }
         }
+    }
+    #[test]
+    fn exif_rotation_changes_intrinsic_size_and_can_be_disabled() {
+        let upright = include_bytes!("../tests/fixtures/exif-orientation-1-ul.jpg");
+        let rotated = include_bytes!("../tests/fixtures/exif-orientation-6-ru.jpg");
+        let limits = DecodeLimits::default();
+        let upright = decode(upright, limits).unwrap();
+        let oriented = decode(rotated, limits).unwrap();
+        let raw = decode_with_orientation(rotated, limits, false).unwrap();
+        assert_eq!((upright.width, upright.height), (100, 50));
+        assert_eq!((oriented.width, oriented.height), (50, 100));
+        assert_eq!((raw.width, raw.height), (100, 50));
+    }
+    #[test]
+    fn avif_remains_unsupported_without_native_decoder() {
+        let bytes = include_bytes!("../tests/fixtures/green.avif");
+        assert_eq!(
+            decode(bytes, DecodeLimits::default()),
+            Err(DecodeError::InvalidImage)
+        );
     }
 }
