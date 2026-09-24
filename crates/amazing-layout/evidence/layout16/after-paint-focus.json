@@ -1,0 +1,113 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "manifest":  "C:\\Users\\server\\src\\wt\\layout\\crates\\amazing-layout\\evidence\\layout16\\focus-manifest.json",
+    "viewport":  {
+                     "width":  800,
+                     "height":  600,
+                     "device_scale":  1
+                 },
+    "font_set":  "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+    "run_directory":  "C:\\Users\\server\\target\\layout\\layout16-paint-focus\\run-20260924T025427690Z-44880",
+    "counts":  {
+                   "pass":  1,
+                   "mismatch":  5,
+                   "error":  0,
+                   "timeout":  0,
+                   "unsupported":  0,
+                   "crash":  0
+               },
+    "unexpected":  0,
+    "tests":  [
+                  {
+                      "id":  "border-collapse-empty-row",
+                      "classification":  "pass",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "border-collapse-empty-row-ref.html",
+                      "differing_pixels":  0,
+                      "max_difference":  0,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "674b09abe8fa6e22218a69c0248311c5ad1cc80faf1f7e34628546ab9b6e3dcc",
+                      "reference_sha256":  "674b09abe8fa6e22218a69c0248311c5ad1cc80faf1f7e34628546ab9b6e3dcc",
+                      "diff_sha256":  "85097db14cb06328593111dfb8ded3208044e656c7d8c8201d620fb5a072e44e",
+                      "detail":  "maxDifference=0/0; totalPixels=0/0"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-013.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "ruby-overhang-spaces-013-ref.html",
+                      "differing_pixels":  804,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "9879eb5ea1eba15b05cc8edfe99c90d2b2de748b43211e02454929a72021c59b",
+                      "reference_sha256":  "a608ff9cdbcd9a6d499336247956d84e8d0f6e3abb944ce659d5c17be9437e29",
+                      "diff_sha256":  "e67c6d021e158ebe15d895e00a698f3defa012a6dfd91f8b2e4ffbdd873e9fd1",
+                      "detail":  "maxDifference=255/0; totalPixels=804/0"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-008.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "ruby-overhang-spaces-008-ref.html",
+                      "differing_pixels":  280,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "8968dd0b7801450bda76c371fab6f8f1b031db22f524b4fcd310e92a0c901979",
+                      "reference_sha256":  "71e2b7586d16eaecd7a1a91e1ab32c307c6e566d725af75ac94c5872bd470ca2",
+                      "diff_sha256":  "5c62157e40a66697a4af614d73f9a1f9f7b86dfe1469d7eec9ef054b989c6f89",
+                      "detail":  "maxDifference=255/0; totalPixels=280/0"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-vertical-001.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "ruby-overhang-spaces-vertical-001-ref.html",
+                      "differing_pixels":  280,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "e7c9b160c6090a8820874d352e49af8bf49ab3407e304d95fcf6a614bf5f7f5e",
+                      "reference_sha256":  "fc3ce9ab8ee46066d330e523dd6a36a76fbf44344082ff70599a85826d294f37",
+                      "diff_sha256":  "56bad1e71bae4546473943f33e49a59fbc5dd21fe03c4a9241911bd32826d8b3",
+                      "detail":  "maxDifference=255/0; totalPixels=280/0"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-overhang-spaces-align-001.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "ruby-overhang-spaces-align-001-ref.html",
+                      "differing_pixels":  1120,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "a1740abf387120e6458808737d40dfa68e8e86753843e9906a897013aac97d48",
+                      "reference_sha256":  "b12987ef96160c7fba4b3958a0922473b814c07d485a5d2e54ef54cf19fb47a4",
+                      "diff_sha256":  "fd484ed6e5099f36575af639cc19bca693f85fc97c928d54826fec541fe9ee66",
+                      "detail":  "maxDifference=255/0; totalPixels=1120/0"
+                  },
+                  {
+                      "id":  "css-ruby__nested-ruby-pairing-001.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "nested-ruby-pairing-001-ref.html",
+                      "differing_pixels":  1692,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "0edc3d80d467c3a1be85252098aa98dc3ea37c3038849b5026e6fe1aedebf9d0",
+                      "reference_sha256":  "1b3c385a5c5f3deac3ccd007f2c18ce3712a29c7338ea95bd9233e708ce4d9de",
+                      "diff_sha256":  "fc51ad138d34f6ccdb893020cee765e07428c2bef92a72a89fe901e384482fe2",
+                      "detail":  "maxDifference=255/0; totalPixels=1692/0"
+                  }
+              ]
+}
