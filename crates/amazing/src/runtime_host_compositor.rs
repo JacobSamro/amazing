@@ -3,10 +3,12 @@ use super::*;
 use amazing_bindings::canvas_interfaces::{self, MemberKind as CanvasMemberKind};
 use amazing_canvas::{self as canvas, FillRule, ImageData as CanvasImageData, PaintStyle, Path2D, Transform};
 use amazing_compositor::{BoundProperty, BoundPropertyChange, BoundPropertyNode, BoundPropertyValue,
-    Compositor, CompositorFrame, DrawQuad, Matrix4, NodePropertyKey, PaintViewRasterMode,
+    Compositor, CssCompositorTimeline, CompositorFrame, DrawQuad, HandoffError,
+    HandoffCompletion, HandoffTickOutput, Matrix4, NodePropertyKey, PaintViewRasterMode,
     PropertyBindingError, Rect, SceneError,
     SolidColorQuad, BlendMode};
-use amazing_css::{AttributeStyleUpdate, StyledDom};
+use amazing_css::{AttributeStyleUpdate, AnimatedValues, StyledDom};
+use amazing_css::animation::AnimationMainThreadEvent;
 
 /// Driver-owned scene held across rendering updates. CSS supplies already
 /// classified property values; a miss sends the update through full rendering.
@@ -21,6 +23,7 @@ pub(crate) enum PropertySceneError {
     StaleNode,
     UnsupportedPaintMode,
     NeedsFullRendering,
+    Animation(HandoffError),
     Binding(PropertyBindingError),
     NeedsPaint(SceneError),
 }
@@ -106,6 +109,56 @@ impl RetainedPropertyScene {
         Ok(frame)
     }
 
+    /// Vsync path after CSS hands off a resolved opacity/transform animation.
+    /// CSS's pure sampler is shared with computed-style reads. Only the
+    /// completion path returns to the main thread for cascade/events.
+    pub(crate) fn on_vsync(
+        &mut self,
+        dom: &Dom,
+        timeline: &mut CssCompositorTimeline,
+        animated: &mut AnimatedValues,
+        now_ms: f64,
+        mut dispatch: impl FnMut(AnimationMainThreadEvent),
+    ) -> Result<(CompositorFrame, HandoffTickOutput), PropertySceneError> {
+        for key in timeline.active_keys() {
+            if dom.node_generation(NodeIdx(key.node)) != Some(key.generation) {
+                return Err(PropertySceneError::StaleNode);
+            }
+        }
+        let (output, completions) = timeline.tick_css(now_ms, &mut self.compositor)
+            .map_err(PropertySceneError::Animation)?;
+        let frame = self.apply_property_only(dom, &[])?;
+        for completion in completions {
+            if !animated.commit_property_update(completion, &mut dispatch) {
+                return Err(PropertySceneError::NeedsFullRendering);
+            }
+        }
+        Ok((frame, output))
+    }
+
+    /// Revoke compositor ownership for a mutation that invalidates CSS's
+    /// resolved handoff, then let CSS commit the sampled cascade value/event.
+    pub(crate) fn cancel_animation(
+        &mut self,
+        dom: &Dom,
+        timeline: &mut CssCompositorTimeline,
+        animated: &mut AnimatedValues,
+        key: NodePropertyKey,
+        now_ms: f64,
+        mut dispatch: impl FnMut(AnimationMainThreadEvent),
+    ) -> Result<(CompositorFrame, HandoffCompletion), PropertySceneError> {
+        if dom.node_generation(NodeIdx(key.node)) != Some(key.generation) {
+            return Err(PropertySceneError::StaleNode);
+        }
+        let (completion, update) = timeline.cancel_css(key, now_ms, &mut self.compositor)
+            .map_err(PropertySceneError::Animation)?;
+        let frame = self.apply_property_only(dom, &[])?;
+        if !animated.commit_property_update(update, &mut dispatch) {
+            return Err(PropertySceneError::NeedsFullRendering);
+        }
+        Ok((frame, completion))
+    }
+
     pub(crate) fn compositor(&self) -> &Compositor { &self.compositor }
     pub(crate) fn compositor_mut(&mut self) -> &mut Compositor { &mut self.compositor }
 }
@@ -117,16 +170,24 @@ mod property_scene_tests {
         EffectId, PaintChunk, Presenter, PropertyTreeState, PropertyTrees, ReferenceCpuPresenter,
         TransformId};
     use amazing_paint::Surface;
+    use amazing_css::animation::{
+        AnimationDirection, AnimationEasing, AnimationFill, AnimationProperty,
+        AnimationTiming, CompositorAnimation,
+    };
     use std::cell::Cell;
 
     #[test]
-    fn preclassified_opacity_class_mutation_skips_upstream_fallback() {
+    fn css13b_opacity_class_mutation_skips_upstream_and_matches_full_frame() {
         let mut dom = Dom::new();
         let element = dom.create_element(NodeIdx(0), "div");
-        dom.set_attribute(element, "class", "opaque").unwrap();
+        dom.set_attribute(element, "class", "base").unwrap();
+        let sheet = amazing_css::parse_stylesheet(
+            ".base { opacity:.4 } .dim { opacity:.6 }");
+        let invalidator = amazing_css::StyleInvalidator::new(&[sheet.clone()], 1);
+        let mut styles = amazing_css::compute(&dom, &[sheet]);
         let generation = dom.node_generation(element).unwrap();
         let mut trees = PropertyTrees::new();
-        let effect = trees.add_effect(EffectId(0), 1., BlendMode::Normal, None).unwrap();
+        let effect = trees.add_effect(EffectId(0), 0.4, BlendMode::Normal, None).unwrap();
         let mut compositor = Compositor::new(trees, vec![PaintChunk {
             items: 0..1,
             state: PropertyTreeState { effect, ..Default::default() },
@@ -145,24 +206,40 @@ mod property_scene_tests {
             &[(key, BoundPropertyNode::Opacity(effect))], PaintViewRasterMode::RawLocal,
             32, 32).unwrap();
 
-        // This is the driver's rendering-update boundary after CSS has
-        // classified the class diff as a value-only opacity change.
-        dom.set_attribute(element, "class", "faded").unwrap();
+        dom.set_attribute(element, "class", "dim").unwrap();
+        let update = invalidator.update_attribute(&dom, &styles, element, "class",
+            Some("base"), Some("dim"), 1);
+        assert!(matches!(update, AttributeStyleUpdate::CompositorOnly(_)));
         let style_calls = Cell::new(0);
         let layout_calls = Cell::new(0);
         let paint_view_calls = Cell::new(0);
-        let frame = scene.apply_property_only(&dom, &[BoundPropertyChange {
-            key, value: BoundPropertyValue::Opacity(0.5),
-        }]).unwrap_or_else(|_| {
+        let frame = scene.apply_attribute_style_update(&dom, &mut styles, &update)
+            .unwrap_or_else(|_| {
             style_calls.set(style_calls.get() + 1);
             layout_calls.set(layout_calls.get() + 1);
             paint_view_calls.set(paint_view_calls.get() + 1);
             panic!("property-only class mutation unexpectedly needed full rendering")
         });
         let pixels = presenter.present(&frame).unwrap();
-        assert_eq!(pixels.get_pixel(0, 0), Some([127, 191, 127, 255]));
+        let mut full_trees = PropertyTrees::new();
+        let full_effect = full_trees.add_effect(EffectId(0), 0.6,
+            BlendMode::Normal, None).unwrap();
+        let mut full = Compositor::new(full_trees, vec![PaintChunk {
+            items: 0..1,
+            state: PropertyTreeState { effect: full_effect, ..Default::default() },
+            bounds: Rect::new(0., 0., 32., 32.),
+            reasons: CompositingReasons::WILL_CHANGE,
+        }], 1).unwrap();
+        let mut full_frame = full.build_frame(&source, 32, 32).unwrap();
+        let viewport = Rect::new(0., 0., 32., 32.);
+        full_frame.passes[0].quads.insert(0, DrawQuad::SolidColor(SolidColorQuad {
+            rect: viewport, color: [255; 4], clip_rect: viewport,
+            opacity: 1., blend: BlendMode::Normal,
+        }));
+        assert_eq!(pixels, ReferenceCpuPresenter::default().present(&full_frame).unwrap());
         assert!(frame.resources.uploads.is_empty());
         assert_eq!(scene.compositor().dirty_tiles(), 0);
+        assert_eq!(styles.get(element).unwrap().get("opacity"), Some("0.6"));
         assert_eq!((style_calls.get(), layout_calls.get(), paint_view_calls.get()), (0, 0, 0));
     }
 
@@ -215,6 +292,71 @@ mod property_scene_tests {
         assert_ne!(pixels.get_pixel(2, 2), Some([255; 4]));
     }
 
+    #[test]
+    fn animation_vsync_uses_retained_scene_and_returns_final_css_update() {
+        let mut dom = Dom::new();
+        let element = dom.create_element(NodeIdx(0), "div");
+        let generation = dom.node_generation(element).unwrap();
+        let mut trees = PropertyTrees::new();
+        let effect = trees.add_effect(EffectId(0), 1., BlendMode::Normal, None).unwrap();
+        let mut compositor = Compositor::new(trees, vec![PaintChunk {
+            items: 0..1,
+            state: PropertyTreeState { effect, ..Default::default() },
+            bounds: Rect::new(0., 0., 32., 32.),
+            reasons: CompositingReasons::WILL_CHANGE,
+        }], 1).unwrap();
+        let mut source = Surface::new(32, 32);
+        source.clear([20, 60, 100, 255]);
+        compositor.build_frame(&source, 32, 32).unwrap();
+        let key = NodePropertyKey { node: element.0, generation, property: BoundProperty::Opacity };
+        let mut scene = RetainedPropertyScene::new(&dom, compositor,
+            &[(key, BoundPropertyNode::Opacity(effect))], PaintViewRasterMode::RawLocal,
+            32, 32).unwrap();
+        let animation = CompositorAnimation::for_transition(
+            4, element, generation, AnimationProperty::Opacity, "1", "0",
+            AnimationTiming { duration_ms: 100., delay_ms: 0., iterations: 1.,
+                direction: AnimationDirection::Normal, fill: AnimationFill::Forwards,
+                easing: AnimationEasing::Linear },
+            0., None,
+        ).unwrap();
+        let mut animated = AnimatedValues::default();
+        assert!(animated.handoff(animation.clone()));
+        let mut timeline = CssCompositorTimeline::default();
+        timeline.install_css(animation).unwrap();
+        let mut events = Vec::new();
+        let (frame, mid) = scene.on_vsync(&dom, &mut timeline, &mut animated, 50.,
+            |event| events.push(event)).unwrap();
+        assert_eq!(mid.compositor_updates, 1);
+        assert!(mid.completions.is_empty());
+        assert!(events.is_empty());
+        assert!(frame.resources.uploads.is_empty());
+        assert_eq!(scene.compositor().dirty_tiles(), 0);
+        let (_, end) = scene.on_vsync(&dom, &mut timeline, &mut animated, 100.,
+            |event| events.push(event)).unwrap();
+        assert_eq!(end.completions.len(), 1);
+        assert_eq!(end.completions[0].update.property, "opacity");
+        assert_eq!(end.completions[0].update.value,
+            amazing_compositor::AnimationValue::Opacity(0.));
+        assert_eq!(animated.get(element, "opacity").unwrap().css, "0");
+        assert_eq!(events.len(), 1);
+        let second = CompositorAnimation::for_transition(
+            5, element, generation, AnimationProperty::Opacity, "0", "1",
+            AnimationTiming { duration_ms: 100., delay_ms: 0., iterations: 1.,
+                direction: AnimationDirection::Normal, fill: AnimationFill::Forwards,
+                easing: AnimationEasing::Linear },
+            0., None,
+        ).unwrap();
+        assert!(animated.handoff(second.clone()));
+        timeline.install_css(second).unwrap();
+        let (_, canceled) = scene.cancel_animation(&dom, &mut timeline, &mut animated,
+            key, 50., |event| events.push(event)).unwrap();
+        assert_eq!(canceled.end, amazing_compositor::HandoffEnd::Canceled);
+        assert_eq!(canceled.update.value,
+            amazing_compositor::AnimationValue::Opacity(0.5));
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[1].kind,
+            amazing_css::animation::AnimationMainThreadEventKind::TransitionCancel);
+    }
 }
 
 #[derive(Clone, Copy)]
