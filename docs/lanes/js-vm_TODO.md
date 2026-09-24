@@ -173,3 +173,37 @@ passed 21,246 files / 41,434 variants; VM plus fallback passed 21,420 files /
 variants. The VM compiled 26,778/40,167 eligible files (66.6667%), up from
 21,743/40,167 (54.1315%) at JSVM-4. Classification hashes were `9c54ada3`
 and `d0741cd0`. Linux amazing-js nextest passed 242 tests (one skipped).
+
+### Orphaned Test262 host investigation
+
+An interrupted venus-003 coverage runner left six host processes alive for
+over two hours. Their stdin was gone after termination, so the exact PID-to-
+test mapping cannot be recovered. The six earliest timeout paths in the
+complete pinned report were the likely sources:
+
+- `built-ins/Array/prototype/indexOf/15.4.4.14-5-12.js`
+- `built-ins/Array/prototype/indexOf/15.4.4.14-5-16.js`
+- `built-ins/Array/prototype/indexOf/15.4.4.14-9-9.js`
+- `built-ins/Array/prototype/map/15.4.4.19-3-28.js`
+- `built-ins/Array/prototype/map/15.4.4.19-3-29.js`
+- `built-ins/Array/prototype/map/15.4.4.19-3-8.js`
+
+Both the tree walker and VM used the same Array builtins and timed out on these
+tests. The `indexOf` builtin eagerly collected an array with length near 2^32,
+even when `fromIndex` was Infinity or near the end; `map` walked objects whose
+length exceeded the maximum Array length. The shared builtins now terminate
+these cases. Focused replay at 10 seconds: five of these six paths pass in
+both modes; the sparse-array `9-9` path terminates but exposes a separate
+Array length error (it remains a failure).
+
+The VM coverage runner now uses an independent `timeout 120` host watchdog on
+POSIX and kills its process group at the 60-second per-test deadline. A full
+53,872-file venus-001 baseline/VM replay on the repaired binary had zero lost
+files, 171 gained files, one lost variant, and 312 gained variants. The sole
+lost variant was `staging/sm/TypedArray/sort_sorted.js` strict mode; its two
+VM variants also timed out against the previous VM report. This unrelated
+typed-array stress test has passed and timed out across complete runs. A
+focused replay at 120 seconds passed both variants. The v3 paired host SHA-256
+was `31388346`, corpus input SHA-256 `91109b82`; VM compiled
+26,784/40,173 eligible files (66.6716%). Linux amazing-js nextest passed 242
+tests (one skipped). No orphaned `js-vm` host remained after the full run.
