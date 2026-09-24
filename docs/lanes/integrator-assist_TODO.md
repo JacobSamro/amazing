@@ -749,3 +749,13 @@ Final locked win-002 gates passed: `amazing` nextest **155/155** (3 skipped),
 workspace nextest **2,097/2,097** (5 skipped), and workspace doctests **2/2**.
 The three source hashes matched the win-002 gate tree. The driver package has
 no library target for a separate doctest run.
+
+## IA-INVALIDATION-ORACLE — diagnostic coordinator (2026-09-24)
+
+Fixed base: local `dev` `0075614` (DOM-21 render journal and CSS-15 invalidator). `AMAZING_INVALIDATION_ORACLE=1` keeps style state across WPT rendering updates, drains the DOM journal at a frozen epoch, validates node generations, and feeds attribute/state changes to `StyleInvalidator`. Stylesheet, viewport, structural, text and unknown mutations conservatively request a full style result. The candidate style is compared with a fresh computation before layout. The coordinator also rebuilds a separate full layout, display-list view and full-painter surface; it compares styles, layout geometry/fragments, paint item order/property trees and final RGBA bytes before presenting the compositor candidate. Any difference presents the full result, records the first divergence and writes a PPM pixel diff when candidate pixels exist.
+
+Current lower-crate limits: layout and paint have no retained `GeometryDelta`/display-list update seam. The coordinator therefore runs full layout and paint on every update and does not claim the ADR's frame-time or property-only zero-work targets. A request for those additive seams is in `.agents/integrator-assist/questions.md`.
+
+Owned diagnostics cover a TestRendered class mutation and COMP-7's effects scroller at 512×512; both preserve the default PPM bytes and report compositor/full parity. A direct journal unit test proves one stable attribute mutation avoids a full style fallback, then a structural mutation selects full style. Linux locked crate gate with isolated storage: 169 passed, 1 skipped; this is iteration evidence, not the Windows final gate.
+
+Windows diagnostic finding: the 512×512 effects scroller has a one-channel-level compositor/full difference at (38,178), candidate `[95,95,95,255]` versus full `[96,96,96,255]` on both frames. Linux matches exactly. The oracle falls back to the full painter and writes a PPM diff. This is routed to compositor/replaced-content; the effects case has no exact-pixel credit until fixed.
