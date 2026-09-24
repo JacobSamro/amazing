@@ -1355,6 +1355,7 @@ Linux CSS nextest: 270/270. Linux workspace nextest: 2029/2029 plus five skipped
 - `StyleInvalidator::update_attribute_with_box` compares old/new class selector matches without CSS compute, rejects descendant and sibling invalidation sets, relational and pseudo dependencies, and non-compositor declaration changes.
 - Normal unlayered opacity and transform winners produce the existing resolved `CompositorStyleDelta`; retained style source, stable effect node, and cached transform geometry remain required. Layered or important competitors recompute.
 - `css13b_class_delta.rs` covers the IA opacity class fixture, unchanged shared declarations, cached transform geometry, combinators, `:has()`, inherited declarations, pseudo content, class attributes, and layered important competition.
+- The follow-up admits fixed implicit `<style>` scopes and stable explicit `@scope` roots. It evaluates scope start/end limits before comparing the old/new subject selector match and rejects scopes whose selectors depend on the edited class.
 
 
 ## CSS-14 compositor animation handoff (COMP-12)
