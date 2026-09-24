@@ -749,3 +749,14 @@ Final locked win-002 gates passed: `amazing` nextest **155/155** (3 skipped),
 workspace nextest **2,097/2,097** (5 skipped), and workspace doctests **2/2**.
 The three source hashes matched the win-002 gate tree. The driver package has
 no library target for a separate doctest run.
+
+## IA driver render test isolation (2026-09-24)
+
+The `css3_stylesheets` and `render_wpt` integration fixtures now give every
+renderer subprocess a unique storage profile. Their temp/output paths also
+include a process ID and timestamp to avoid reuse across runs. The earlier
+IPC 50-cycle stress logs showed both named tests failing in all 50 runs when
+the shared profile was corrupt. On fixed local `dev` base `544d7e8`, 50 new
+full-workspace parallel Linux cycles selected and passed both tests, and each
+workspace run exited 0 with **2,154 passed / 5 skipped**. The per-cycle summary
+is under `crates/amazing/tests/driver_flakes/evidence/`.
