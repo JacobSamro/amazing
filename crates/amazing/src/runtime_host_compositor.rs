@@ -12,12 +12,12 @@ pub(crate) struct RetainedPropertyScene {
     compositor: Compositor,
     width: u32,
     height: u32,
-    raw_local: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PropertySceneError {
     StaleNode,
+    UnsupportedPaintMode,
     Binding(PropertyBindingError),
     NeedsPaint(SceneError),
 }
@@ -31,13 +31,16 @@ impl RetainedPropertyScene {
         width: u32,
         height: u32,
     ) -> Result<Self, PropertySceneError> {
+        if mode != PaintViewRasterMode::RawLocal {
+            return Err(PropertySceneError::UnsupportedPaintMode);
+        }
         for &(key, _) in bindings {
             if dom.node_generation(NodeIdx(key.node)) != Some(key.generation) {
                 return Err(PropertySceneError::StaleNode);
             }
         }
         compositor.bind_property_nodes(bindings).map_err(PropertySceneError::Binding)?;
-        Ok(Self { compositor, width, height, raw_local: mode == PaintViewRasterMode::RawLocal })
+        Ok(Self { compositor, width, height })
     }
 
     /// Returns a frame without style computation, layout, paint-view creation,
@@ -56,13 +59,11 @@ impl RetainedPropertyScene {
             .map_err(PropertySceneError::Binding)?;
         let mut frame = self.compositor.build_cached_frame(self.width, self.height)
             .map_err(PropertySceneError::NeedsPaint)?;
-        if self.raw_local {
-            let viewport = Rect::new(0., 0., self.width as f32, self.height as f32);
-            frame.passes[0].quads.insert(0, DrawQuad::SolidColor(SolidColorQuad {
-                rect: viewport, color: [255; 4], clip_rect: viewport,
-                opacity: 1., blend: BlendMode::Normal,
-            }));
-        }
+        let viewport = Rect::new(0., 0., self.width as f32, self.height as f32);
+        frame.passes[0].quads.insert(0, DrawQuad::SolidColor(SolidColorQuad {
+            rect: viewport, color: [255; 4], clip_rect: viewport,
+            opacity: 1., blend: BlendMode::Normal,
+        }));
         Ok(frame)
     }
 

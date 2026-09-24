@@ -180,6 +180,18 @@ mod tests {
         assert_eq!(compositor.dirty_tiles(), 0);
         assert_ne!(before.pixels, after.pixels);
         assert_eq!(after.get_pixel(0, 0), Some([40, 80, 120, 128]));
+
+        let mut full_trees = PropertyTrees::new();
+        let full_effect = full_trees.add_effect(EffectId(0), 0.5, BlendMode::Normal, None).unwrap();
+        let mut full = Compositor::new(full_trees, vec![PaintChunk {
+            items: 0..1,
+            state: PropertyTreeState { effect: full_effect, ..Default::default() },
+            bounds: Rect::new(0., 0., 64., 64.),
+            reasons: CompositingReasons::WILL_CHANGE,
+        }], 1).unwrap();
+        let freshly_painted = full.build_frame(&CountingSource(&raster_calls), 64, 64).unwrap();
+        let expected = ReferenceCpuPresenter::default().present(&freshly_painted).unwrap();
+        assert_eq!(after.pixels, expected.pixels, "cached property frame versus full render");
     }
 
     #[test]
