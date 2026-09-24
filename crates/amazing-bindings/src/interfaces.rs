@@ -540,6 +540,8 @@ const TEXT: &[Member] = &[
     method("splitText", O::TextSplit, 1),
 ];
 const HTML_ELEMENT: &[Member] = &[
+    method("focus", O::ElementFocus, 0),
+    method("blur", O::ElementBlur, 0),
     getter("innerText", O::ElementInnerText), setter("innerText", O::ElementSetInnerText),
     getter("title", O::HTMLTitle), setter("title", O::HTMLSetTitle),
     getter("lang", O::HTMLLang), setter("lang", O::HTMLSetLang),
@@ -847,6 +849,8 @@ pub static INTERFACES: &[D] = &[
         members: ELEMENT,
     },
     D { interface: I::HTMLElement, name: "HTMLElement", parent: Some(I::Element), constructor: None, members: HTML_ELEMENT },
+    D { interface: I::SVGElement, name: "SVGElement", parent: Some(I::Element), constructor: None,
+        members: &[method("focus", O::ElementFocus, 0), method("blur", O::ElementBlur, 0)] },
     D { interface: I::HTMLUnknownElement, name: "HTMLUnknownElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHtmlElement, name: "HTMLHtmlElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },
     D { interface: I::HTMLHeadElement, name: "HTMLHeadElement", parent: Some(I::HTMLElement), constructor: None, members: &[] },

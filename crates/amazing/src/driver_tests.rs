@@ -5,6 +5,25 @@ use amazing_text::TextSystem;
 use std::{cell::RefCell, rc::Rc};
 
 #[test]
+fn focus_updates_active_element_and_dispatches_ordered_focus_events() {
+    let host = Rc::new(RefCell::new(BrowserDomHost {
+        dom: amazing_html::parse("<body><input id='a'><input id='b' disabled><div id='c' tabindex='-1'></div></body>"),
+        native_forwarded: false,
+    }));
+    let mut scheduler = crate::js_scheduler::DriverScheduler::new(host, crate::js_scheduler::JS_CAPACITY).unwrap();
+    let result = scheduler.run_script(
+        "let a=document.getElementById('a'), b=document.getElementById('b'), c=document.getElementById('c'); \
+         let events=[]; for (let el of [a,c]) for (let type of ['focus','focusin','blur','focusout']) \
+         el.addEventListener(type, function(e) { events.push(e.type+':'+this.id+':'+(e.relatedTarget&&e.relatedTarget.id)); }); \
+         a.focus(); let first=document.activeElement===a; b.focus(); let disabled=document.activeElement===a; \
+         c.focus({preventScroll:true,focusVisible:true}); let second=document.activeElement===c; \
+         c.blur(); [first,disabled,second,document.activeElement===document.body,events.join(',')].join('|')"
+    ).unwrap();
+    assert_eq!(result, amazing_js::value::JsValue::str(
+        "true|true|true|true|focus:a:null,focusin:a:null,blur:a:c,focusout:a:c,focus:c:a,focusin:c:a,blur:c:null,focusout:c:null"));
+}
+
+#[test]
 fn detached_created_element_has_live_style() {
     let host = Rc::new(RefCell::new(BrowserDomHost {
         dom: amazing_html::parse("<body><div id='content'></div></body>"),
