@@ -3225,6 +3225,15 @@ fn native_array_map(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    let callback = args.first().ok_or_else(|| Throw::type_error("array callback is not a function"))?;
+    if callable_function(callback).is_none() {
+        return Err(Throw::type_error("array callback is not a function"));
+    }
+    // The result is an Array, whose length cannot exceed 2^32 - 1.
+    // Reject that size before walking a sparse array-like object.
+    if i.array_length(&this) > u32::MAX as usize {
+        return Err(Throw::range_error("invalid array length"));
+    }
     let out = JsValue::object({
         let mut object = JsObject::array();
         object.proto = Some(i.array_proto.clone());
@@ -3365,8 +3374,41 @@ fn native_array_index_of(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     let search = args.first().cloned().unwrap_or(JsValue::Undefined);
-    for (index, value) in i.iterate(&this)?.into_iter().enumerate() {
-        if value == search {
+    let length = i.array_length(&this);
+    // Preserve the existing generic iterator path for ordinary lengths. It
+    // handles boxed strings and typed-array receivers that are not represented
+    // by ordinary indexed properties. Large sparse Arrays cannot be eagerly
+    // collected: their length may be nearly 2^32 with only one own element.
+    if length <= 1_000_000 {
+        for (index, value) in i.iterate(&this)?.into_iter().enumerate() {
+            if value == search {
+                return Ok(JsValue::num(index as f64));
+            }
+        }
+        return Ok(JsValue::num(-1.0));
+    }
+    let from = i.to_number(args.get(1).unwrap_or(&JsValue::num(0.0)))?;
+    if from == f64::INFINITY {
+        return Ok(JsValue::num(-1.0));
+    }
+    let start = if from.is_nan() || from == f64::NEG_INFINITY {
+        0
+    } else if from < 0.0 {
+        (length as f64 + from.trunc()).max(0.0) as usize
+    } else {
+        from.trunc() as usize
+    };
+    if length.saturating_sub(start) > 1_000_000 {
+        return Err(Throw::range_error("array search exceeds iteration limit"));
+    }
+    for index in start..length {
+        if let JsValue::Object(object) = &this {
+            if !i.legacy_has_property(object, index.to_string())? {
+                continue;
+            }
+        }
+        let value = i.get_prop(&this, &index.to_string())?;
+        if i.strict_eq(&value, &search) {
             return Ok(JsValue::num(index as f64));
         }
     }
