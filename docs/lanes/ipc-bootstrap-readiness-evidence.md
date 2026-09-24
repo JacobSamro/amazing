@@ -21,12 +21,15 @@ each launch, so profile-name reuse was not the observed cause.
   namespace UID/GID mapping. Per-cycle logs:
   `venus-001:~/amazing/out/ipc-ping-50-complete/1.log` through `50.log`;
   local summary: `/tmp/ipc8-ping-linux50-complete.log`.
-- Windows win-002: pending 50-cycle result. Per-cycle logs:
-  `C:\Users\win-002\out\ipc-ping-50\1.log` onward; local summary:
-  `/tmp/ipc8-ping-win50.log`.
+- Windows win-002: 50 consecutive `cargo nextest run --workspace --locked
+  --no-fail-fast` cycles, 25/25 `amazing-process` tests passed per cycle
+  (1,250/1,250 executions). Per-cycle logs:
+  `C:\Users\win-002\out\ipc-ping-50\1.log` through `50.log`;
+  local summary: `/tmp/ipc8-ping-win50.log`.
 
 The Linux workspace command itself was not green in every cycle: unrelated
 `amazing` driver tests failed with IndexedDB `Corrupt` and render errors.
 `--no-fail-fast` ensured all process tests ran in every cycle; the 50/50
-claim above is for `amazing-process`, not the whole workspace. Windows
-workspace cycles have been green so far.
+claim above is for `amazing-process`, not the whole workspace. Some Windows
+cycles also failed unrelated `amazing` driver/storage/render tests (for
+example cycle 24); these were routed to their owners.
