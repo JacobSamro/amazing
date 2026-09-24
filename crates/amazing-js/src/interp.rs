@@ -36,6 +36,10 @@ mod bindings;
 pub use bindings::BindingPropertyFlags;
 #[path = "interp_legacy.rs"]
 mod legacy;
+#[path = "interp_class.rs"]
+mod class;
+#[path = "interp_async_iter.rs"]
+mod async_iter;
 pub use legacy::{LegacyPlatformHooks, PairIterableHooks};
 
 /// The embedding's per-interpreter native entry point. `new_target` is present
@@ -141,6 +145,7 @@ struct CallFrame {
     home: Option<Obj>,
     super_constructor: Option<JsValue>,
     new_target: Option<JsValue>,
+    class_constructor: Option<Obj>,
 }
 
 #[derive(Clone)]
@@ -154,6 +159,7 @@ struct DomListener {
 enum Reference {
     Binding(String),
     Property(JsValue, PropertyKey),
+    Private(JsValue, JsSymbol),
 }
 
 /// Host hooks for the small browser-facing DOM surface.
@@ -1199,7 +1205,11 @@ impl Interpreter {
             },
             Binding::Default(inner, expression) => {
                 let value = if value.is_undefined() {
-                    self.eval_expr(expression, env)?
+                    let mut value = self.eval_expr(expression, env)?;
+                    if let Binding::Ident(name) = inner.as_ref() {
+                        self.infer_function_name(&mut value, &name.name);
+                    }
+                    value
                 } else {
                     value
                 };
@@ -1207,23 +1217,54 @@ impl Interpreter {
             }
             Binding::Rest(inner) => self.bind_pattern(inner, value, kind, env)?,
             Binding::Array(elements) => {
-                let items = self.iterate(&value).unwrap_or_default();
-                let mut index = 0usize;
+                let method = self.get_prop(&value, WellKnownSymbol::Iterator.symbol())?;
+                if callable_function(&method).is_none() {
+                    return Err(Throw::type_error("value is not iterable"));
+                }
+                let iterator = self.call_value(&method, value, Vec::new())?;
+                if !iterator.is_object() {
+                    return Err(Throw::type_error("iterator is not an object"));
+                }
+                let next = self.get_prop(&iterator, "next")?;
+                if callable_function(&next).is_none() {
+                    return Err(Throw::type_error("iterator next is not callable"));
+                }
+                let mut exhausted = false;
                 for element in elements {
-                    if let Some(element) = element {
-                        if let Binding::Rest(rest) = element.as_ref() {
-                            let rest_value = array_values(self, items[index..].to_vec())?;
-                            self.bind_pattern(rest, rest_value, kind, env)?;
-                            index = items.len();
-                        } else {
-                            let item = items.get(index).cloned().unwrap_or(JsValue::Undefined);
-                            self.bind_pattern(element, item, kind, env)?;
-                            index += 1;
+                    if let Some(Binding::Rest(rest)) = element.as_deref() {
+                        let mut values = Vec::new();
+                        if !exhausted {
+                            for _ in 0..100_000 {
+                                match self.binding_iterator_step(&iterator, &next) {
+                                    Ok(Some(value)) => values.push(value),
+                                    Ok(None) => { exhausted = true; break; }
+                                    Err(error) => { self.close_iterator(&iterator); return Err(error); }
+                                }
+                            }
                         }
+                        if !exhausted {
+                            self.close_iterator(&iterator);
+                            return Err(Throw::range_error("iterator exceeded the iteration limit"));
+                        }
+                        let rest_value = array_values(self, values)?;
+                        self.bind_pattern(rest, rest_value, kind, env)?;
                     } else {
-                        index += 1;
+                        let item = if exhausted { JsValue::Undefined } else {
+                            match self.binding_iterator_step(&iterator, &next) {
+                                Ok(Some(value)) => value,
+                                Ok(None) => { exhausted = true; JsValue::Undefined }
+                                Err(error) => { self.close_iterator(&iterator); return Err(error); }
+                            }
+                        };
+                        if let Some(element) = element {
+                            if let Err(error) = self.bind_pattern(element, item, kind, env) {
+                                if !exhausted { self.close_iterator(&iterator); }
+                                return Err(error);
+                            }
+                        }
                     }
                 }
+                if !exhausted { self.close_iterator(&iterator); }
             }
             Binding::Object(properties) => {
                 let source = match value {
@@ -1362,7 +1403,11 @@ impl Interpreter {
                 let v = self.eval_expr(right, env)?;
                 self.exec_for_of(left, &v, body, env)
             }
-            StmtKind::ForAwaitOf { .. } => Err(Throw::type_error("async iteration is not implemented")),
+            StmtKind::ForAwaitOf { left, right, body } => {
+                self.completion = JsValue::Undefined;
+                let iterable = self.eval_expr(right, env)?;
+                self.exec_for_await_of(left, &iterable, body, env)
+            }
             StmtKind::Switch { disc, cases } => {
                 self.completion = JsValue::Undefined;
                 let d = self.eval_expr(disc, env)?;
@@ -1615,8 +1660,8 @@ impl Interpreter {
                 let th = self.normalize_throw(th);
                 if let Some(c) = &t.catch {
                     let ce = EnvHandle::new(EnvKind::Block, Some(env.clone()));
-                    if let Some(p) = &c.param {
-                        ce.declare_lexical(&p.name, th.0, true)?;
+                    if let Some(binding) = &c.binding {
+                        self.bind_pattern(binding, th.0, ast::VarKind::Let, &ce)?;
                     }
                     self.hoist(&c.body.body, env)?;
                     self.exec_stmts(&c.body.body, &ce)
@@ -1778,7 +1823,16 @@ impl Interpreter {
                 Ok(o)
             }
             ExprKind::Spread(x) => self.eval_expr(x, env),
-            ExprKind::Function(f) => Ok(self.make_function(f, env)),
+            ExprKind::Function(f) => {
+                if let Some(name) = &f.name {
+                    let named_env = EnvHandle::new(EnvKind::Block, Some(env.clone()));
+                    let value = self.make_function(f, &named_env);
+                    named_env.declare_lexical(&name.name, value.clone(), false)?;
+                    Ok(value)
+                } else {
+                    Ok(self.make_function(f, env))
+                }
+            }
             ExprKind::Arrow(a) => Ok(self.make_arrow(a, env)),
             ExprKind::Class(c) => self.eval_class(c, env),
             ExprKind::Paren(x) => self.eval_expr(x, env),
@@ -1792,6 +1846,13 @@ impl Interpreter {
             ExprKind::Unary { op, operand } => self.unary(*op, operand, env),
             ExprKind::Update { op, prefix, target } => self.update(*op, *prefix, target, env),
             ExprKind::Binary { op, left, right } => {
+                if *op == ast::BinOp::In {
+                    if let ExprKind::PrivateName(name) = &left.kind {
+                        let id = self.private_name(env, &name.name)?;
+                        let receiver = self.eval_expr(right, env)?;
+                        return Ok(JsValue::Bool(self.private_has(&receiver, &id)?));
+                    }
+                }
                 if *op == ast::BinOp::Add {
                     return self.eval_add_chain(e, env);
                 }
@@ -1842,6 +1903,9 @@ impl Interpreter {
                 let o = self.eval_expr(obj, env)?;
                 if *optional && (o.is_null() || o.is_undefined()) {
                     Ok(JsValue::Undefined)
+                } else if let MemberProp::Private(name) = prop {
+                    let id = self.private_name(env, &name.name)?;
+                    self.private_get(&o, &id)
                 } else {
                     let k = self.member_key(prop, env)?;
                     self.get_prop(&o, &k)
@@ -2120,6 +2184,15 @@ impl Interpreter {
         r: &ast::Expr,
         e: &EnvHandle,
     ) -> Result<JsValue, Throw> {
+        if op == ast::AssignOp::Assign {
+            if let ExprKind::Member { obj, prop: MemberProp::Private(name), .. } = &t.kind {
+                let receiver = self.eval_expr(obj, e)?;
+                let id = self.private_name(e, &name.name)?;
+                let value = self.eval_expr(r, e)?;
+                self.private_set(&receiver, &id, value.clone())?;
+                return Ok(value);
+            }
+        }
         if op == ast::AssignOp::Assign && is_destructuring_expr(t) {
             let value = self.eval_expr(r, e)?;
             self.assign_pattern_expr(t, &value, e)?;
@@ -2231,6 +2304,11 @@ impl Interpreter {
             }
             ExprKind::Member { obj, prop, .. } => {
                 let base = self.eval_expr(obj, env)?;
+                if let MemberProp::Private(name) = prop {
+                    let id = self.private_name(env, &name.name)?;
+                    let value = self.private_get(&base, &id)?;
+                    return Ok((Reference::Private(base, id), value));
+                }
                 let key = match prop {
                     MemberProp::Ident(identifier) => identifier.name.clone().into(),
                     MemberProp::Private(_) => {
@@ -2279,6 +2357,7 @@ impl Interpreter {
                 Ok(())
             }
             Reference::Property(base, key) => self.set_prop(&base, &key, value),
+            Reference::Private(base, id) => self.private_set(&base, &id, value),
         }
     }
     fn assign_target(&mut self, t: &ast::Expr, v: JsValue, e: &EnvHandle) -> Result<(), Throw> {
@@ -2386,6 +2465,9 @@ impl Interpreter {
             let new_target = frame.new_target.clone().ok_or_else(|| Throw::type_error("derived constructor requires new"))?;
             let argv = self.eval_args(args, e)?;
             let result = self.construct_with_new_target(&constructor, argv, new_target)?;
+            if let Some(class_constructor) = self.frames.last().and_then(|frame| frame.class_constructor.clone()) {
+                self.initialize_instance_elements(&class_constructor, &result)?;
+            }
             e.initialize_this(result.clone())?;
             if let Some(frame) = self.frames.last_mut() {
                 frame.this = result.clone();
@@ -2402,13 +2484,19 @@ impl Interpreter {
             if (optional || *m) && (o.is_null() || o.is_undefined()) {
                 return Ok(JsValue::Undefined);
             }
-            let k = self.member_key(prop, e)?;
             let receiver = if matches!(&obj.kind, ExprKind::Super) {
                 e.resolve_this_checked()?
             } else {
                 o.clone()
             };
-            (self.get_prop(&o, &k)?, receiver)
+            let function = if let MemberProp::Private(name) = prop {
+                let id = self.private_name(e, &name.name)?;
+                self.private_get(&receiver, &id)?
+            } else {
+                let k = self.member_key(prop, e)?;
+                self.get_prop(&o, &k)?
+            };
+            (function, receiver)
         } else {
             (self.eval_expr(c, e)?, JsValue::Undefined)
         };
@@ -2487,9 +2575,14 @@ impl Interpreter {
             .clone()
             .ok_or_else(|| Throw::type_error("value is not callable"))?;
         let derived_constructor = o.borrow().derived_constructor.clone();
+        if o.borrow().class_constructor && new_target.is_none() {
+            return Err(Throw::type_error("class constructor requires new"));
+        }
         let lexical_super_constructor = o.borrow().lexical_super_constructor.clone();
         let lexical_new_target = o.borrow().lexical_new_target.clone();
-        let bytecode_async = fun.is_async && matches!(&fun.body, FunctionBody::Bytecode(_));
+        let bytecode_async = fun.is_async && !fun.is_generator
+            && matches!(&fun.body, FunctionBody::Bytecode(_));
+        let async_generator = fun.is_async && fun.is_generator;
         if self.depth >= MAX_CALL_DEPTH {
             return Err(Throw::range_error("maximum call stack size exceeded"));
         }
@@ -2499,21 +2592,15 @@ impl Interpreter {
             home: fun.home.clone(),
             super_constructor: derived_constructor.as_ref().map(|meta| meta.parent.clone()).or(lexical_super_constructor),
             new_target: new_target.clone().or(lexical_new_target),
+            class_constructor: o.borrow().class_constructor.then_some(o.clone()),
         });
         let previous_completion = self.completion.clone();
         self.completion = JsValue::Undefined;
         let r = (|| -> Result<JsValue, Throw> {
             match fun.body {
                 FunctionBody::Bytecode(code) => {
-                    let generator_proto = if fun.is_generator {
-                        match o.borrow().get_own("prototype") {
-                            Some(JsValue::Object(proto)) => Some(proto),
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    };
-                    code.call(self, fun.env.clone(), fun.is_arrow, this, args, generator_proto)
+                    code.call(self, fun.env.clone(), fun.is_arrow, this, args,
+                        fun.is_generator.then_some(o.clone()))
                 }
                 FunctionBody::Native(n) => {
                     self.native_stack.push(o.clone());
@@ -2558,6 +2645,7 @@ impl Interpreter {
                             let parent = &derived_constructor.as_ref().expect("derived parent").parent;
                             let bound = self.construct_with_new_target(parent, args.clone(), new_target.clone().expect("newTarget"))?;
                             e.initialize_this(bound.clone())?;
+                            self.initialize_instance_elements(&o, &bound)?;
                             if let Some(frame) = self.frames.last_mut() {
                                 frame.this = bound;
                             }
@@ -2586,7 +2674,12 @@ impl Interpreter {
         self.completion = previous_completion;
         self.frames.pop();
         self.depth -= 1;
-        if bytecode_async {
+        if async_generator {
+            // Parameter binding runs when an async generator is called. An
+            // abrupt binding completion is synchronous, before any iterator
+            // result promise exists.
+            r
+        } else if bytecode_async {
             match r {
                 Ok(value) => Ok(value),
                 Err(Throw(value)) => Ok(new_promise(self, PromiseFate::Rejected(value))),
@@ -2609,12 +2702,19 @@ impl Interpreter {
         for (i, p) in ps.iter().enumerate() {
             let v = if p.rest {
                 array_values(self, args.iter().skip(i).cloned().collect())?
-            } else if let Some(v) = args.get(i) {
-                v.clone()
-            } else if let Some(d) = &p.default {
-                self.eval_expr(d, e)?
+            } else if args.get(i).is_none_or(JsValue::is_undefined) {
+                match &p.default {
+                    Some(default) => {
+                        let mut value = self.eval_expr(default, e)?;
+                        if let Binding::Ident(name) = &p.binding {
+                            self.infer_function_name(&mut value, &name.name);
+                        }
+                        value
+                    }
+                    None => JsValue::Undefined,
+                }
             } else {
-                JsValue::Undefined
+                args.get(i).cloned().unwrap_or(JsValue::Undefined)
             };
             self.bind_pattern(&p.binding, v, ast::VarKind::Let, e)?;
         }
@@ -2678,6 +2778,7 @@ impl Interpreter {
             x.constructed = true;
             x
         })));
+        self.initialize_instance_elements(&o, &JsValue::Object(obj.clone()))?;
         let v = self.call_value_with_new_target(
             f,
             JsValue::Object(obj.clone()),
@@ -2701,6 +2802,11 @@ impl Interpreter {
         }
     }
     fn make_function(&self, f: &ast::FunctionItem, e: &EnvHandle) -> JsValue {
+        if f.is_generator {
+            if let Ok(code) = vm::compile_function_item(f, f.body.span) {
+                return code.instantiate(self, e);
+            }
+        }
         let mut o = JsObject::function(JsFunction {
             name: f.name.as_ref().map(|x| x.name.clone()).unwrap_or_default(),
             params: f.params.clone(),
@@ -2760,6 +2866,18 @@ impl Interpreter {
         JsValue::Object(handle)
     }
     fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle) -> JsValue {
+        if m.kind != ast::MethodKind::Constructor {
+            if let Ok(code) = vm::compile_class_method(m) {
+                let value = code.instantiate(self, e);
+                if let JsValue::Object(function) = &value {
+                    function.borrow_mut().constructible = false;
+                    if !m.is_generator {
+                        function.borrow_mut().delete_own("prototype");
+                    }
+                }
+                return value;
+            }
+        }
         let mut o = JsObject::function(JsFunction {
             name: "".into(),
             params: m.params.clone(),
@@ -2776,124 +2894,6 @@ impl Interpreter {
         handle.borrow_mut().set_own("name", JsValue::str(""));
         JsValue::Object(handle)
     }
-    fn eval_class(&mut self, c: &ast::ClassItem, e: &EnvHandle) -> Result<JsValue, Throw> {
-        let ctor = c.members.iter().find_map(|m| {
-            if let ast::ClassMember::Method(x) = m {
-                (x.kind == ast::MethodKind::Constructor).then_some(x)
-            } else {
-                None
-            }
-        });
-        let f = if let Some(x) = ctor {
-            self.method_value(x, e)
-        } else {
-            self.make_function(
-                &ast::FunctionItem {
-                    name: c.name.clone(),
-                    params: Vec::new(),
-                    body: ast::Block {
-                        body: Vec::new(),
-                        span: crate::tokens::Span::new(
-                            crate::tokens::SourceLocation::new(1, 1),
-                            crate::tokens::SourceLocation::new(1, 1),
-                        ),
-                    },
-                    is_async: false,
-                    is_generator: false,
-                },
-                e,
-            )
-        };
-        if let JsValue::Object(o) = &f {
-            if o.borrow().get_own("prototype").is_none() {
-                let prototype = Obj(Rc::new(RefCell::new({
-                    let mut object = JsObject::ordinary();
-                    object.proto = Some(self.object_proto.clone());
-                    object
-                })));
-                o.borrow_mut()
-                    .set_own("prototype", JsValue::Object(prototype.clone()));
-                o.borrow_mut().func.as_mut().unwrap().proto_for_new = Some(prototype);
-            }
-            let prototype = o.borrow().get_own("prototype");
-            if let Some(JsValue::Object(p)) = prototype {
-                p.borrow_mut().set_own("constructor", f.clone());
-                if let Some(super_class) = &c.super_class {
-                    let super_value = self.eval_expr(super_class, e)?;
-                    let super_prototype = match &super_value {
-                        JsValue::Object(super_constructor) => match super_constructor
-                            .borrow()
-                            .get_own("prototype")
-                        {
-                            Some(JsValue::Object(prototype)) => prototype,
-                            _ => {
-                                return Err(Throw::type_error("super constructor has no prototype"))
-                            }
-                        },
-                        _ => return Err(Throw::type_error("super class is not a constructor")),
-                    };
-                    p.borrow_mut().proto = Some(super_prototype);
-                    o.borrow_mut().proto = match &super_value {
-                        JsValue::Object(parent) => Some(parent.clone()),
-                        _ => unreachable!(),
-                    };
-                    o.borrow_mut().derived_constructor = Some(DerivedConstructor {
-                        parent: super_value,
-                        implicit: ctor.is_none(),
-                    });
-                }
-                let mut class_function = o.borrow_mut();
-                if let Some(function) = &mut class_function.func {
-                    function.home = Some(p.clone());
-                }
-                drop(class_function);
-                for m in &c.members {
-                    if let ast::ClassMember::Method(x) = m {
-                        if x.kind != ast::MethodKind::Constructor {
-                            let k = match &x.key_utf16 {
-                                Some(units) => PropertyKey::String(crate::value::JsString::from_units(units.clone())),
-                                None => self.prop_key(&x.key, e)?,
-                            };
-                            let method = self.method_value(x, e);
-                            if let JsValue::Object(method_object) = &method {
-                                method_object.borrow_mut().func.as_mut().unwrap().home =
-                                    Some(p.clone());
-                            }
-                            if matches!(x.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
-                                let function = match method {
-                                    JsValue::Object(method_object) => {
-                                        method_object.borrow().func.clone().unwrap()
-                                    }
-                                    _ => unreachable!(),
-                                };
-                                let mut property =
-                                    p.borrow().own_prop(&k).cloned().unwrap_or(Property {
-                                        value: JsValue::Undefined,
-                                        writable: false,
-                                        enumerable: false,
-                                        configurable: true,
-                                        getter: None,
-                                        setter: None,
-                                    });
-                                if x.kind == ast::MethodKind::Get {
-                                    property.getter = Some(Box::new(function));
-                                } else {
-                                    property.setter = Some(Box::new(function));
-                                }
-                                p.borrow_mut().define(&k, property).map_err(|_| {
-                                    Throw::type_error("could not define class accessor")
-                                })?;
-                            } else {
-                                self.set_prop(&JsValue::Object(p.clone()), &k, method)?;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Ok(f)
-    }
-
     fn object_value(&self) -> JsValue {
         let mut o = JsObject::ordinary();
         o.proto = Some(self.object_proto.clone());
@@ -3901,6 +3901,7 @@ fn reference_name(reference: &Reference) -> Option<String> {
     match reference {
         Reference::Binding(name) => Some(name.clone()),
         Reference::Property(_, key) => key.as_string().map(|name| name.to_utf8_lossy()),
+        Reference::Private(_, _) => None,
     }
 }
 

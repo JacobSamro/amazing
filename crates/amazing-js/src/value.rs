@@ -595,6 +595,36 @@ pub(crate) struct DerivedConstructor {
     pub implicit: bool,
 }
 
+/// Private elements use identities scoped to one class evaluation. They are
+/// separate from ordinary and Symbol properties and cannot be reflected.
+#[derive(Debug, Clone)]
+pub(crate) enum PrivateElement {
+    Field(JsValue),
+    Method(JsValue),
+    Accessor { getter: Option<JsValue>, setter: Option<JsValue> },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ClassFieldKey {
+    Public(PropertyKey),
+    Private(JsSymbol),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ClassFieldDefinition {
+    pub key: ClassFieldKey,
+    pub initializer: Option<ast::Expr>,
+    pub accessor: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ClassInstanceElements {
+    pub fields: Vec<ClassFieldDefinition>,
+    pub methods: Vec<(JsSymbol, PrivateElement)>,
+    pub env: crate::env::EnvHandle,
+    pub home: Obj,
+}
+
 /// Function body: block for declarations/functions/methods, expression for
 /// concise arrows, native for built-ins.
 #[derive(Debug, Clone)]
@@ -797,6 +827,9 @@ pub struct JsObject {
     /// Built-in methods are callable but lack [[Construct]].
     pub(crate) constructible: bool,
     pub(crate) derived_constructor: Option<DerivedConstructor>,
+    pub(crate) class_constructor: bool,
+    pub(crate) class_instance_elements: Option<ClassInstanceElements>,
+    pub(crate) private_elements: Vec<(JsSymbol, PrivateElement)>,
     pub(crate) lexical_super_constructor: Option<JsValue>,
     pub(crate) lexical_new_target: Option<JsValue>,
     /// Engine-private brand and identity; never reflected as a JS property.
@@ -822,6 +855,9 @@ impl JsObject {
             constructed: false,
             constructible: true,
             derived_constructor: None,
+            class_constructor: false,
+            class_instance_elements: None,
+            private_elements: Vec::new(),
             lexical_super_constructor: None,
             lexical_new_target: None,
             host_identity: None,

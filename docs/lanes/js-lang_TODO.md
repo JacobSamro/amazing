@@ -1337,3 +1337,30 @@ timeouts. The 120-second pair had one staging string timeout only; that test's
 two variants both passed when selected alone. Win-002 ran 295 JS and 2,279
 workspace nextest cases; both commands and separate JS/workspace doctests
 passed.
+
+## JS-11 — class methods, binding patterns, and async iteration
+
+Fixed base `831bd0757a605cdf690b88c6d3f7c201ece08c87`. The ranked Test262
+targets were `language/statements/class` (3,271 failing files),
+`language/expressions/class` (3,111), and `language/statements/for-await-of`
+(1,140). The implementation adds class private elements and field initialization,
+compiles method and generator bodies through the VM function path, binds default
+and destructured parameters, advances array binding iterators lazily, and keeps
+`for await` state in suspended VM frames with iterator closing. The compiler
+falls back atomically for catch binding patterns and generator direct `eval`.
+
+Pinned Test262 `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`, 53,872 files,
+identical input and runner hashes, 60-second timeout on venus-001:
+
+| Mode | Passing files before → after | Passing variants before → after | Baseline pass losses |
+| --- | ---: | ---: | ---: |
+| Treewalk | 26,206 → 33,867 | 50,624 → 65,783 | 0 files, 0 variants |
+| `AMAZING_JS_VM=1` | 26,333 → 33,857 | 50,872 → 65,777 | 0 files, 0 variants |
+
+Both modes gained 2,518 passing files in `statements/class`, 2,454 in
+`expressions/class`, and 790 in `for-await-of`. Remaining nonpasses are 757,
+671, and 350 respectively; the next clusters include iterator error identity,
+class element edge cases, and async job ordering. Full result files are
+`/tmp/js-lang-js11-{before,after5,vm-before,vm-after}.json`; classification
+hashes, in table order, are `33ea5465` → `63e584cf` and `35939179` →
+`3b466656`. The branch binary hash is identical between the two after runs.

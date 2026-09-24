@@ -28,6 +28,24 @@ pub fn compile(ast: &ast::Program) -> Result<Program, CompileError> {
     Ok(c.program)
 }
 
+/// Compile a method body with the same path used for function declarations.
+/// Callers retain the AST body when an instruction is not yet supported.
+pub(crate) fn compile_class_method(method: &ast::ClassMethod) -> Result<FunctionCode, CompileError> {
+    Compiler::new(false).compile_function(&ast::FunctionItem {
+        name: None,
+        params: method.params.clone(),
+        body: method.body.clone(),
+        is_async: method.is_async,
+        is_generator: method.is_generator,
+    }, method.span)
+}
+
+pub(crate) fn compile_function_item(function: &ast::FunctionItem, span: Span)
+    -> Result<FunctionCode, CompileError>
+{
+    Compiler::new(false).compile_function(function, span)
+}
+
 struct Compiler {
     program: Program,
     depth: usize,
@@ -46,6 +64,7 @@ impl Compiler {
                 hoisted: vec![],
                 functions: vec![],
                 is_function,
+                async_iterator_slots: 0,
             },
             depth: 0,
             is_generator: false,
@@ -58,19 +77,7 @@ impl Compiler {
         function: &ast::FunctionItem,
         span: Span,
     ) -> Result<FunctionCode, CompileError> {
-        if function.is_async && function.is_generator {
-            return Err(self.error(span, "async generator function"));
-        }
-        let mut params = Vec::new();
-        for param in &function.params {
-            if param.default.is_some() || param.rest {
-                return Err(self.error(param.span, "parameter pattern"));
-            }
-            let Binding::Ident(name) = &param.binding else {
-                return Err(self.error(param.span, "parameter pattern"));
-            };
-            params.push(name.name.clone());
-        }
+        let params = function.params.clone();
         let mut child = Self::new(true);
         child.is_generator = function.is_generator;
         child.is_async = function.is_async;
@@ -104,16 +111,7 @@ impl Compiler {
         if arrow.is_generator {
             return Err(self.error(span, "generator arrow"));
         }
-        let mut params = Vec::new();
-        for param in &arrow.params {
-            if param.default.is_some() || param.rest {
-                return Err(self.error(param.span, "parameter pattern"));
-            }
-            let Binding::Ident(name) = &param.binding else {
-                return Err(self.error(param.span, "parameter pattern"));
-            };
-            params.push(name.name.clone());
-        }
+        let params = arrow.params.clone();
         let mut child = Self::new(true);
         child.is_async = arrow.is_async;
         match &arrow.body {
@@ -384,11 +382,52 @@ impl Compiler {
                     self.patch(end);
                 }
             }
+            StmtKind::ForAwaitOf { left, right, body } if self.is_async => {
+                self.emit(Instruction::Complete(0));
+                let iterable = self.expression(right)?;
+                let slot = self.program.async_iterator_slots;
+                self.program.async_iterator_slots += 1;
+                self.emit(Instruction::AsyncIteratorStart(slot, iterable));
+                let handler = self.emit(Instruction::PushTry { catch: None, finally: None, end: 0 });
+                let start = self.program.code.len();
+                let next = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorNext(next, slot));
+                let result = self.register(statement.span)?;
+                self.emit(Instruction::Await(result, next));
+                let done = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorDone(done, slot, result));
+                let end = self.emit(Instruction::Branch(done, Condition::Truthy, 0));
+                let value = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorValue(value, result));
+                let awaited = self.register(statement.span)?;
+                self.emit(Instruction::Await(awaited, value));
+                self.emit(Instruction::BindFor(left.clone(), awaited));
+                self.statement(body)?;
+                self.emit(Instruction::LeaveScope);
+                self.emit(Instruction::Jump(start));
+                self.patch(end);
+                self.emit(Instruction::TryNormal);
+                let finally = self.program.code.len();
+                let closed = self.register(statement.span)?;
+                self.emit(Instruction::AsyncIteratorClose(closed, slot));
+                let result = self.register(statement.span)?;
+                self.emit(Instruction::Await(result, closed));
+                self.emit(Instruction::AsyncIteratorCloseCheck(result));
+                self.emit(Instruction::EndFinally);
+                let end = self.program.code.len();
+                self.program.code[handler] = Instruction::PushTry {
+                    catch: None, finally: Some(finally), end,
+                };
+            }
             StmtKind::Throw(expression) => {
                 let value = self.expression(expression)?;
                 self.emit(Instruction::Throw(value));
             }
             StmtKind::Try(statement) => {
+                if statement.catch.as_ref().is_some_and(|catch|
+                    catch.binding.as_ref().is_some_and(|binding| !matches!(binding, Binding::Ident(_)))) {
+                    return Err(self.error(statement.block.span, "catch binding pattern"));
+                }
                 self.emit(Instruction::Complete(0));
                 let handler = self.emit(Instruction::PushTry {
                     catch: None,
@@ -633,6 +672,10 @@ impl Compiler {
                 args,
                 optional: false,
             } => {
+                if self.is_generator && matches!(&callee.kind,
+                    ExprKind::Ident(name) if name.name == "eval") {
+                    return Err(self.error(expression.span, "generator direct eval"));
+                }
                 let (callee, this) = match &callee.kind {
                     ExprKind::Member {
                         obj,

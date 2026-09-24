@@ -3,6 +3,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn class_static_method_parameters_and_setter_length() {
+        let mut i = Interpreter::new();
+        let result = i.run_script(
+            "class C { static method({}) {} set m(x = 42) {} } \
+             let failed = false; try { C.method(null); } catch (e) { failed = e instanceof TypeError; } \
+             failed && Object.getOwnPropertyDescriptor(C.prototype, 'm').set.length === 0"
+        ).unwrap();
+        assert_eq!(i.run_script("failed").unwrap(), JsValue::Bool(true), "null object binding should throw");
+        assert_eq!(i.run_script("Object.getOwnPropertyDescriptor(C.prototype, 'm').set.length").unwrap(), JsValue::num(0.0));
+        assert_eq!(result, JsValue::Bool(true));
+    }
+
+    #[test]
     fn loose_equality_handles_html_dda_internal_slot() {
         let mut interpreter = Interpreter::new();
         let mut html_dda = JsObject::ordinary();

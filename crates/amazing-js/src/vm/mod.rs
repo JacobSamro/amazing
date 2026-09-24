@@ -6,15 +6,17 @@ mod compiler;
 #[cfg(test)]
 mod tests;
 
-use super::{adopt_promise_result, callable_function, native_promise_reject, native_promise_resolve, new_promise, promise_callback, reference_name, settle_promise, Interpreter, Reference};
-use crate::ast::{BinOp, UnOp, VarKind};
+use super::{adopt_promise_result, callable_function, for_iteration_env, native_promise_reject, native_promise_resolve, new_promise, promise_callback, reference_name, settle_promise, Interpreter, Reference};
+use crate::ast::{BinOp, ForLeft, UnOp, VarKind};
 use crate::env::{EnvHandle, EnvKind};
 use crate::tokens::{Numeric, Span};
-use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw};
+use crate::value::{Exotic, FunctionBody, JsFunction, JsObject, JsString, JsValue, Obj, PromiseFate, Property, PropertyKey, Throw, WellKnownSymbol};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub use compiler::compile;
+pub(crate) use compiler::compile_class_method;
+pub(crate) use compiler::compile_function_item;
 
 pub const DEFAULT_INSTRUCTION_LIMIT: usize = 10_000_000;
 type Register = usize;
@@ -149,6 +151,13 @@ enum Instruction {
     Yield(Register, Register),
     YieldDelegate(Register, Register),
     Await(Register, Register),
+    AsyncIteratorStart(usize, Register),
+    AsyncIteratorNext(Register, usize),
+    AsyncIteratorDone(Register, usize, Register),
+    AsyncIteratorValue(Register, Register),
+    AsyncIteratorClose(Register, usize),
+    AsyncIteratorCloseCheck(Register),
+    BindFor(ForLeft, Register),
     Update(Register, usize, Register, crate::ast::UpdateOp, bool),
 }
 
@@ -158,7 +167,7 @@ pub struct FunctionCode(Rc<CompiledFunction>);
 #[derive(Debug)]
 struct CompiledFunction {
     name: String,
-    params: Vec<String>,
+    params: Vec<crate::ast::Param>,
     program: Program,
     is_arrow: bool,
     is_generator: bool,
@@ -182,6 +191,7 @@ pub struct Program {
     hoisted: Vec<String>,
     functions: Vec<HoistedFunction>,
     is_function: bool,
+    async_iterator_slots: usize,
 }
 
 /// Mutable execution state owned by a heap allocation. The try stack is empty
@@ -202,6 +212,12 @@ struct VmFrame {
     delegate: Option<DelegateState>,
     delegate_input: Option<(u8, JsValue)>,
     await_dst: Option<Register>,
+    async_iterators: Vec<Option<AsyncIteratorState>>,
+}
+
+enum AsyncIteratorState {
+    Values { values: Vec<JsValue>, index: usize, exhausted: bool },
+    Iterator { value: JsValue, next: JsValue, exhausted: bool },
 }
 
 struct DelegateState {
@@ -307,6 +323,7 @@ impl Program {
             delegate: None,
             delegate_input: None,
             await_dst: None,
+            async_iterators: (0..self.async_iterator_slots).map(|_| None).collect(),
         });
         for name in &self.hoisted {
             consume(&mut frame.fuel)?;
@@ -353,6 +370,7 @@ impl Program {
             delegate,
             delegate_input,
             await_dst,
+            async_iterators,
         } = frame.as_mut();
         let mut steps = 0;
         while let Some(op) = self.code.get(*pc) {
@@ -746,6 +764,92 @@ impl Program {
                         *await_dst = Some(*dst);
                         return Ok(None);
                     }
+                    Instruction::AsyncIteratorStart(slot, source) => {
+                        let iterable = registers[*source].clone();
+                        let method = i.get_prop(&iterable, WellKnownSymbol::AsyncIterator.symbol())?;
+                        let state = if !method.is_undefined() && !method.is_null() {
+                            if callable_function(&method).is_none() {
+                                return Err(Throw::type_error("@@asyncIterator is not callable"));
+                            }
+                            let value = i.call_value(&method, iterable, Vec::new())?;
+                            if !value.is_object() {
+                                return Err(Throw::type_error("async iterator is not an object"));
+                            }
+                            let next = i.get_prop(&value, "next")?;
+                            if callable_function(&next).is_none() {
+                                return Err(Throw::type_error("async iterator next is not callable"));
+                            }
+                            AsyncIteratorState::Iterator { value, next, exhausted: false }
+                        } else if let Some(value) = i.custom_iterator(&iterable)? {
+                            let next = i.get_prop(&value, "next")?;
+                            AsyncIteratorState::Iterator { value, next, exhausted: false }
+                        } else {
+                            AsyncIteratorState::Values { values: i.iterate(&iterable)?, index: 0, exhausted: false }
+                        };
+                        async_iterators[*slot] = Some(state);
+                    }
+                    Instruction::AsyncIteratorNext(dst, slot) => {
+                        let state = async_iterators[*slot].as_mut()
+                            .ok_or_else(|| Throw::type_error("missing async iterator frame"))?;
+                        registers[*dst] = match state {
+                            AsyncIteratorState::Values { values, index, .. } => {
+                                let value = values.get(*index).cloned().unwrap_or(JsValue::Undefined);
+                                let done = *index >= values.len();
+                                *index += 1;
+                                generator_result(i, value, done)
+                            }
+                            AsyncIteratorState::Iterator { value, next, .. } =>
+                                i.call_value(next, value.clone(), Vec::new())?,
+                        };
+                    }
+                    Instruction::AsyncIteratorDone(dst, slot, source) => {
+                        let result = registers[*source].clone();
+                        if !result.is_object() {
+                            return Err(Throw::type_error("async iterator result is not an object"));
+                        }
+                        let done = i.get_prop(&result, "done")?.to_boolean();
+                        if done {
+                            match async_iterators[*slot].as_mut().expect("iterator started") {
+                                AsyncIteratorState::Values { exhausted, .. }
+                                | AsyncIteratorState::Iterator { exhausted, .. } => *exhausted = true,
+                            }
+                        }
+                        registers[*dst] = JsValue::Bool(done);
+                    }
+                    Instruction::AsyncIteratorValue(dst, source) => {
+                        registers[*dst] = i.get_prop(&registers[*source], "value")?;
+                    }
+                    Instruction::AsyncIteratorClose(dst, slot) => {
+                        registers[*dst] = match async_iterators[*slot].as_ref()
+                            .ok_or_else(|| Throw::type_error("missing async iterator frame"))? {
+                            AsyncIteratorState::Values { .. }
+                            | AsyncIteratorState::Iterator { exhausted: true, .. } =>
+                                generator_result(i, JsValue::Undefined, true),
+                            AsyncIteratorState::Iterator { value, .. } => {
+                                let method = i.get_prop(value, "return")?;
+                                if method.is_undefined() || method.is_null() {
+                                    generator_result(i, JsValue::Undefined, true)
+                                } else {
+                                    if callable_function(&method).is_none() {
+                                        return Err(Throw::type_error("async iterator return is not callable"));
+                                    }
+                                    i.call_value(&method, value.clone(), Vec::new())?
+                                }
+                            }
+                        };
+                    }
+                    Instruction::AsyncIteratorCloseCheck(source) => {
+                        if !registers[*source].is_object() {
+                            return Err(Throw::type_error("async iterator return result is not an object"));
+                        }
+                    }
+                    Instruction::BindFor(left, source) => {
+                        let previous = env.clone();
+                        let iteration = for_iteration_env(left, env);
+                        i.bind_for(left, registers[*source].clone(), &iteration)?;
+                        scopes.push(previous);
+                        *env = iteration;
+                    }
                 }
                 Ok(None)
             })();
@@ -826,11 +930,11 @@ fn route_abrupt(
 }
 
 impl FunctionCode {
-    fn instantiate(&self, i: &Interpreter, env: &EnvHandle) -> JsValue {
+    pub(crate) fn instantiate(&self, i: &Interpreter, env: &EnvHandle) -> JsValue {
         let name = self.0.name.clone();
         let mut object = JsObject::function(JsFunction {
             name: name.clone(),
-            params: vec![],
+            params: self.0.params.clone(),
             body: FunctionBody::Bytecode(self.clone()),
             is_arrow: self.0.is_arrow,
             is_generator: self.0.is_generator,
@@ -847,7 +951,8 @@ impl FunctionCode {
         handle
             .borrow_mut()
             .set_own("name", JsValue::str(name.as_str()));
-        if !self.0.is_arrow && !self.0.is_async && !self.0.is_method {
+        if !self.0.is_arrow && (!self.0.is_async || self.0.is_generator)
+            && (!self.0.is_method || self.0.is_generator) {
             let mut prototype = JsObject::ordinary();
             prototype.proto = Some(i.object_proto.clone());
             if self.0.is_generator {
@@ -856,7 +961,14 @@ impl FunctionCode {
                 methods.set_own("next", Interpreter::native("next", generator_next, &i.function_proto));
                 methods.set_own("return", Interpreter::native("return", generator_return, &i.function_proto));
                 methods.set_own("throw", Interpreter::native("throw", generator_throw, &i.function_proto));
-                methods.set_own("@@iterator", Interpreter::native("[Symbol.iterator]", generator_iterator, &i.function_proto));
+                let iterator_symbol = if self.0.is_async {
+                    WellKnownSymbol::AsyncIterator
+                } else {
+                    WellKnownSymbol::Iterator
+                };
+                methods.set_own(iterator_symbol.symbol(), Interpreter::native(
+                    if self.0.is_async { "[Symbol.asyncIterator]" } else { "[Symbol.iterator]" },
+                    generator_iterator, &i.function_proto));
                 prototype.proto = Some(Obj(Rc::new(RefCell::new(methods))));
             }
             let prototype = Obj(Rc::new(RefCell::new(prototype)));
@@ -875,7 +987,7 @@ impl FunctionCode {
         is_arrow: bool,
         this: JsValue,
         args: Vec<JsValue>,
-        generator_proto: Option<Obj>,
+        generator_function: Option<Obj>,
     ) -> Result<JsValue, Throw> {
         let bound_this = if is_arrow {
             parent.resolve_this()
@@ -884,20 +996,14 @@ impl FunctionCode {
         };
         let env = EnvHandle::new(EnvKind::Function, Some(parent));
         env.bind_this(bound_this);
-        for (index, name) in self.0.params.iter().enumerate() {
-            env.declare_lexical(
-                name,
-                args.get(index).cloned().unwrap_or(JsValue::Undefined),
-                true,
-            )?;
-        }
-        let arguments = JsValue::object(JsObject::array());
-        for (index, value) in args.iter().enumerate() {
-            i.set_prop(&arguments, &index.to_string(), value.clone())?;
-        }
-        i.set_prop(&arguments, "length", JsValue::num(args.len() as f64))?;
-        env.declare_var("arguments", arguments)?;
+        i.bind_params(&env, &self.0.params, args)?;
         if self.0.is_generator {
+            // Parameter defaults can replace the function's prototype.
+            let generator_proto = generator_function.and_then(|function|
+                match function.borrow().get_own("prototype") {
+                    Some(JsValue::Object(proto)) => Some(proto),
+                    _ => None,
+                });
             let mut object = JsObject::ordinary();
             object.proto = generator_proto.or_else(|| Some(i.object_proto.clone()));
             object.exotic = crate::value::Exotic::Generator(Rc::new(RefCell::new(GeneratorState {
@@ -1134,15 +1240,28 @@ fn generator_iterator(_: &mut Interpreter, this: JsValue, _: Vec<JsValue>) -> Re
 }
 
 fn generator_next(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    generator_resume(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 0)
+    generator_call(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 0)
 }
 
 fn generator_return(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    generator_resume(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 1)
+    generator_call(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 1)
 }
 
 fn generator_throw(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
-    generator_resume(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 2)
+    generator_call(i, this, args.into_iter().next().unwrap_or(JsValue::Undefined), 2)
+}
+
+fn generator_call(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8) -> Result<JsValue, Throw> {
+    let is_async = generator_state(this.clone())?.borrow().code.0.is_async;
+    let result = generator_resume(i, this, value, kind);
+    if !is_async { return result; }
+    let promise = new_promise(i, PromiseFate::Pending);
+    let JsValue::Object(target) = &promise else { unreachable!() };
+    match result {
+        Ok(value) => settle_promise(target, PromiseFate::Fulfilled(value), i)?,
+        Err(Throw(error)) => settle_promise(target, PromiseFate::Rejected(error), i)?,
+    }
+    Ok(promise)
 }
 
 fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8) -> Result<JsValue, Throw> {
@@ -1182,19 +1301,39 @@ fn generator_resume(i: &mut Interpreter, this: JsValue, value: JsValue, kind: u8
         }
     }
     let previous_completion = std::mem::replace(&mut i.completion, completion);
-    let outcome = code.0.program.resume_frame(i, &mut frame, usize::MAX);
+    let mut outcome = code.0.program.resume_frame(i, &mut frame, usize::MAX);
+    if code.0.is_async {
+        for _ in 0..1_000 {
+            let value = match &outcome {
+                Ok(FrameOutcome::Awaited(value)) => value.clone(),
+                _ => break,
+            };
+            let destination = frame.await_dst.take().expect("await instruction destination");
+            match i.await_iteration_value(value) {
+                Ok(value) => frame.registers[destination] = value,
+                Err(error) => frame.pending_resume = Some(Abrupt::Throw(error)),
+            }
+            outcome = code.0.program.resume_frame(i, &mut frame, usize::MAX);
+        }
+    }
     let completion = std::mem::replace(&mut i.completion, previous_completion);
-    let mut state = state.borrow_mut();
-    state.executing = false;
-    state.completion = completion;
+    {
+        let mut state = state.borrow_mut();
+        state.executing = false;
+        state.completion = completion;
+    }
     match outcome {
         Ok(FrameOutcome::Yielded(value)) => {
-            state.frame = Some(frame);
+            state.borrow_mut().frame = Some(frame);
+            let value = if code.0.is_async { i.await_iteration_value(value)? } else { value };
             Ok(generator_result(i, value, false))
         }
-        Ok(FrameOutcome::Completed(value)) => Ok(generator_result(i, value, true)),
+        Ok(FrameOutcome::Completed(value)) => {
+            let value = if code.0.is_async { i.await_iteration_value(value)? } else { value };
+            Ok(generator_result(i, value, true))
+        }
         Ok(FrameOutcome::Suspended) => unreachable!("unbounded generator slice suspended"),
-        Ok(FrameOutcome::Awaited(_)) => unreachable!("generator awaited"),
+        Ok(FrameOutcome::Awaited(_)) => Err(Throw::range_error("async generator await limit exceeded")),
         Err(error) => Err(error),
     }
 }

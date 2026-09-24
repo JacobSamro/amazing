@@ -2366,10 +2366,11 @@ fn native_object_get_own_property_descriptor(
     descriptor.set_own("configurable", JsValue::Bool(property.configurable));
     if property.getter.is_some() || property.setter.is_some() {
         let accessor = |function: Option<Box<JsFunction>>| function.map(|f| {
+            let length = f.params.iter().take_while(|param|
+                !param.rest && param.default.is_none()).count() as f64;
             let mut object = JsObject::function(*f);
             object.proto = Some(i.function_proto.clone());
             let name = object.func.as_ref().map(|f| f.name.clone()).unwrap_or_default();
-            let length = if name.starts_with("set ") { 1.0 } else { 0.0 };
             let _ = object.define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
             let _ = object.define("length", Property { value: JsValue::num(length), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
             JsValue::object(object)
