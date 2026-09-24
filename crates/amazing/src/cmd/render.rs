@@ -277,6 +277,26 @@ fn render_wpt_surface_after_first_paint(
         scheduler.pump_at(Duration::from_millis(frame * 16), true)
             .map_err(|error| format!("reftest-wait checkpoint failed: {}", error.describe()))?;
         sampled_at = (frame * 16) as f64;
+        let handoff_events = {
+            let dom = host.borrow();
+            let (timeline, animated) = animations.handoff_state_mut();
+            oracle.on_vsync(&dom.dom, timeline, animated, sampled_at)
+                .map(|(_, events)| events).unwrap_or_default()
+        };
+        for event in handoff_events {
+            use amazing_compositor::CssAnimationEventKind as Kind;
+            use amazing_css::animation::AnimationMainThreadEventKind as MainKind;
+            let kind = match event.kind {
+                MainKind::AnimationEnd => Kind::AnimationEnd,
+                MainKind::AnimationCancel => Kind::AnimationCancel,
+                MainKind::TransitionEnd => Kind::TransitionEnd,
+                MainKind::TransitionCancel => Kind::TransitionCancel,
+            };
+            scheduler.dispatch_animation_event(&amazing_compositor::CssAnimationEvent {
+                element: event.node.0 as u64, kind, name: event.name,
+                elapsed_time_ms: event.elapsed_time_ms,
+            }).map_err(|error| format!("animation listener failed: {}", error.describe()))?;
+        }
         let output = sample_animation_frame(&host, html_path, &mut animations, sampled_at)?;
         for event in &output.events {
             scheduler.dispatch_animation_event(event)
@@ -665,8 +685,8 @@ mod oracle_trace_tests {
 
     const ARTICLE: &str = "<body><style>body{margin:0;background:white;color:#223}main{width:220px}main.changed{width:205px}p{margin:12px 0}</style><header>Long article</header><main><h1>Chapter one</h1><p>Text wraps through a narrow column of paragraphs.</p><p>More text follows beneath the fold.</p><p>And more lines continue for scrolling.</p><p>Final paragraph at the bottom.</p></main></body>";
     const EFFECTS: &str = "<body><style>body{margin:0;background:white}.fixed{position:fixed;left:2px;top:2px;background:red}.scroller{width:300px;height:180px;overflow:scroll;background:#ddd}.scroller.changed{width:280px}.moving{will-change:transform;background:blue;width:120px;height:80px}.fade{opacity:.5;background:green;width:120px;height:80px}</style><div class='fixed'>Fixed</div><section class='scroller'><div class='moving'>Move</div><div class='fade'>Fade</div><p>Overflow content</p><p>More overflow content</p></section></body>";
-    const OPACITY: &str = "<body><div id='box' class='base'></div></body>";
-    const OPACITY_CSS: &str = "body{margin:0}#box{width:120px;height:80px;background:green}.base{opacity:.4}.changed{opacity:.6}";
+    const OPACITY: &str = "<body><style>body{margin:0}#box{width:120px;height:80px;background:green}.base{opacity:.4}.changed{opacity:.6}</style><div id='box' class='base'></div></body>";
+    const OPACITY_CSS: &str = "";
 
     fn percentile(values: &[u128], quantile: f64) -> u128 {
         let mut sorted = values.to_vec();
@@ -768,8 +788,8 @@ mod oracle_trace_tests {
 
     #[test]
     fn class_opacity_uses_validated_property_scene() {
-        const HTML: &str = "<body style='margin:0'><div id='box' class='base' style='width:64px;height:64px;background:green'></div></body>";
-        const CSS: &str = ".base{opacity:.4}.changed{opacity:.6}";
+        const HTML: &str = "<body style='margin:0'><style>.base{opacity:.4}.changed{opacity:.6}</style><div id='box' class='base' style='width:64px;height:64px;background:green'></div></body>";
+        const CSS: &str = "";
         let make_host = || Rc::new(RefCell::new(BrowserDomHost {
             dom: amazing_html::parse(HTML), native_forwarded: false,
         }));

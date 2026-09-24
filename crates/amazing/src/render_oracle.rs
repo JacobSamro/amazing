@@ -3,8 +3,9 @@
 //! The driver retains CSS, layout and compositor state across rendering updates.
 //! A fresh style, layout and paint result at the same frozen DOM epoch remains
 //! the pixel reference until the retained path has exact parity.
-use amazing_compositor::{Compositor, PaintDelta, PaintItemKey, PaintViewSource, PixelParity, Presenter, ReferenceCpuPresenter, classify_pixel_parity};
-use amazing_css::{AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RenderMutation as StyleMutation, StyleChangeKind, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
+use amazing_compositor::{Compositor, CssCompositorTimeline, PaintDelta, PaintItemKey, PaintViewSource, PixelParity, Presenter, ReferenceCpuPresenter, classify_pixel_parity};
+use amazing_css::{AnimatedValues, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RenderMutation as StyleMutation, StyleChangeKind, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
+use amazing_css::animation::AnimationMainThreadEvent;
 use amazing_dom::{Dom, NodeIdx};
 use amazing_dom::render_mutation::{RenderMutation, RenderMutationKind};
 use amazing_layout::{Flow, LayoutBox, retained::{GeometryDelta, InputChanges, LayoutTree, UpdateOutcome}};
@@ -117,13 +118,6 @@ enum RetainedScene {
 }
 
 impl RetainedScene {
-    fn compositor(&self) -> &Compositor {
-        match self {
-            Self::Plain(compositor) => compositor,
-            Self::Property(scene) => scene.compositor(),
-        }
-    }
-
     fn compositor_mut(&mut self) -> &mut Compositor {
         match self {
             Self::Plain(compositor) => compositor,
@@ -162,6 +156,30 @@ pub(crate) fn report_style_work(candidate: &StyleCandidate) {
 }
 
 impl RenderCoordinator {
+    pub(crate) fn on_vsync(
+        &mut self,
+        dom: &Dom,
+        timeline: &mut CssCompositorTimeline,
+        animated: &mut AnimatedValues,
+        now_ms: f64,
+    ) -> Option<(Surface, Vec<AnimationMainThreadEvent>)> {
+        if timeline.active_count() == 0 { return None; }
+        let session = self.session.as_mut()?;
+        let RetainedScene::Property(scene) = &mut session.scene else { return None; };
+        let mut events = Vec::new();
+        let result = scene.on_vsync(dom, timeline, animated, now_ms, |event| events.push(event))
+            .and_then(|(frame, _)| session.presenter.present(&frame)
+                .map(|pixels| (pixels, events))
+                .map_err(|_| crate::runtime_binding_host::compositor::PropertySceneError::NeedsFullRendering));
+        match result {
+            Ok((pixels, events)) => {
+                self.last_work = FrameWork::default();
+                Some((pixels, events))
+            }
+            Err(_) => { self.reset_scene(); None }
+        }
+    }
+
     pub(crate) fn pixel_parity(&self, candidate: &Surface, full: &Surface) -> PixelParity {
         self.session.as_ref().map_or_else(
             || PixelParity { losses: 1, ..PixelParity::default() },
