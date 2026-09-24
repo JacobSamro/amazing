@@ -10,7 +10,7 @@ use crate::{
     HeaderList, HttpUrl, InternalResponse, Origin, SecurityContext,
 };
 use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent, WebSocketEvent, WebSocketId};
-use std::{collections::{BTreeMap, VecDeque}, time::Instant};
+use std::{collections::{BTreeMap, VecDeque}, io, time::Instant};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ServiceId(pub u64);
@@ -256,10 +256,17 @@ fn opaque_stream_head(task: &Task, event: &NetEvent)
         headers: fields, body: Some(Vec::new()) }))
 }
 
+/// The network process owns durable storage; Fetch only asks it to persist
+/// the bounded policy store after a mutation.
+pub trait CachePersistence {
+    fn save(&self, cache: &CacheStore) -> io::Result<()>;
+}
+
 pub struct NetworkService {
     pub dispatcher: Dispatcher,
     pub cookies: CookieStore,
     pub cache: CacheStore,
+    cache_persistence: Option<Box<dyn CachePersistence>>,
     pub preflight_cache: crate::PreflightCache,
     next_id: u64,
     active: BTreeMap<ServiceId, Task>,
@@ -330,6 +337,7 @@ impl NetworkService {
             cookies: CookieStore::default(),
             cache: CacheStore::new(CacheKind::Private, CacheLimits::default())
                 .expect("valid cache limits"),
+            cache_persistence: None,
             preflight_cache: crate::PreflightCache::default(),
             next_id: 1,
             active: BTreeMap::new(),
@@ -337,6 +345,18 @@ impl NetworkService {
             websockets: BTreeMap::new(),
             prefer_websocket: false,
             ready: Vec::new(),
+        }
+    }
+    /// Install a restored cache and its persistence hook before requests start.
+    pub fn install_cache(&mut self, cache: CacheStore, persistence: Box<dyn CachePersistence>) {
+        self.cache = cache;
+        self.cache_persistence = Some(persistence);
+    }
+    fn persist_cache(&self) {
+        if let Some(persistence) = &self.cache_persistence {
+            if let Err(error) = persistence.save(&self.cache) {
+                eprintln!("HTTP cache persistence failed: {error}");
+            }
         }
     }
     pub fn open_websocket(
@@ -567,15 +587,29 @@ impl NetworkService {
         } else {
             String::new()
         };
+        if matches!(request.cache, ApiCache::NoCache | ApiCache::NoStore) {
+            if request.headers.get_string("cache-control")?.is_none() {
+                let value = if request.cache == ApiCache::NoCache { "max-age=0" } else { "no-cache" };
+                request.headers.append_string("Cache-Control", value)?;
+            }
+            if request.cache == ApiCache::NoStore && request.headers.get_string("pragma")?.is_none() {
+                request.headers.append_string("Pragma", "no-cache")?;
+            }
+        }
         let headers = request.headers.to_header_list()?;
-        let cacheable = method == "GET" && request.cache == ApiCache::Default;
+        let cacheable = method == "GET" && matches!(request.cache,
+            ApiCache::Default | ApiCache::NoCache | ApiCache::Reload);
         let mut revalidating = false;
         let mut conditional_headers = HeaderList::default();
-        if cacheable {
+        if cacheable && request.cache != ApiCache::Reload {
+            let mut lookup_headers = headers.clone();
+            if request.cache == ApiCache::NoCache {
+                lookup_headers.append("Cache-Control", "no-cache").map_err(ApiError::Network)?;
+            }
             let cache_request = CacheRequest {
                 uri: &url,
                 method: &method,
-                headers: &headers,
+                headers: &lookup_headers,
                 cookie: &cookie,
             };
             match self
@@ -827,6 +861,25 @@ impl NetworkService {
             if let Some(mut outcome) = finished {
                 let mut subresource = None;
                 if let Some(task) = self.active.remove(&id) {
+                    if outcome.is_ok() {
+                        if let Some((status, response_headers)) = &task.head {
+                            let before = self.cache.len();
+                            self.cache.invalidate_unsafe(&task.method, &task.url, *status);
+                            if let Ok(base) = HttpUrl::parse(&task.url) {
+                                for field in ["location", "content-location"] {
+                                    if let Some(value) = response_headers.get(field) {
+                                        if let Ok(target) = base.resolve(&value) {
+                                            if target.origin() == base.origin() {
+                                                self.cache.invalidate_unsafe(
+                                                    &task.method, &target.serialize(), *status);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if self.cache.len() != before { self.persist_cache(); }
+                        }
+                    }
                     if task.revalidating && wire_done {
                         if let Some((304, response_headers)) = &task.head {
                             let request = CacheRequest {
@@ -835,14 +888,16 @@ impl NetworkService {
                                 headers: &task.headers,
                                 cookie: &task.cookie,
                             };
-                            outcome = self
-                                .cache
-                                .update_304(
+                            let updated = self.cache.update_304(
                                     &request,
                                     response_headers,
                                     task.context.now_unix,
                                     task.context.now_unix,
-                                )
+                                );
+                            if updated.as_ref().is_ok_and(Option::is_some) {
+                                self.persist_cache();
+                            }
+                            outcome = updated
                                 .ok()
                                 .flatten()
                                 .ok_or(ApiError::Network(FetchError::Transport))
@@ -894,12 +949,14 @@ impl NetworkService {
                                 headers: response_headers,
                                 body: task.body,
                             };
-                            let _ = self.cache.store(
+                            if self.cache.store(
                                 &request,
                                 response,
                                 task.context.now_unix,
                                 task.context.now_unix,
-                            );
+                            ).unwrap_or(false) {
+                                self.persist_cache();
+                            }
                         }
                     }
                 }
