@@ -756,6 +756,10 @@ const PROPERTIES: &[PropertyMetadata] = &[
         initial: "normal",
         inherited: false,
     },
+    PropertyMetadata { name: "ruby-align", initial: "space-around", inherited: true },
+    PropertyMetadata { name: "ruby-position", initial: "alternate", inherited: true },
+    PropertyMetadata { name: "ruby-overhang", initial: "auto", inherited: true },
+    PropertyMetadata { name: "ruby-merge", initial: "separate", inherited: true },
     PropertyMetadata {
         name: "text-align",
         initial: "start",
@@ -3014,6 +3018,8 @@ fn compute_normal_value(
         canonical_font_feature_value(property.name, &computed).unwrap_or(computed)
     } else if property.name == "display" {
         values::display_canonical(&computed).unwrap_or(&computed).to_owned()
+    } else if matches!(property.name, "ruby-align" | "ruby-position" | "ruby-overhang" | "ruby-merge") {
+        values::ruby_canonical(property.name, &computed).unwrap_or(property.initial).to_owned()
     } else if matches!(property.name, "opacity" | "fill-opacity") {
         computed_opacity(&computed).unwrap_or_else(|| property.initial.to_owned())
     } else if property.name == "zoom" {
