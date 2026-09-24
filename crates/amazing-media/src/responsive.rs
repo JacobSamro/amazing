@@ -56,6 +56,19 @@ pub fn select_source(
     media_matches: impl Fn(&str) -> bool,
     supports_type: impl Fn(&str) -> bool,
 ) -> Option<SelectedSource> {
+    select_source_with_sizes(sources, environment, media_matches, supports_type,
+        |sizes, environment, media_matches| source_size(sizes, environment, media_matches))
+}
+
+/// Driver form that delegates `sizes` evaluation to the CSS media and length
+/// parser. This keeps CSS grammar in the CSS crate while selection stays here.
+pub fn select_source_with_sizes(
+    sources: ImageSources<'_>,
+    environment: SourceEnvironment,
+    media_matches: impl Fn(&str) -> bool,
+    supports_type: impl Fn(&str) -> bool,
+    source_size: impl Fn(Option<&str>, SourceEnvironment, &dyn Fn(&str) -> bool) -> f32,
+) -> Option<SelectedSource> {
     for source in sources.picture {
         if source.srcset.trim().is_empty()
             || source.media.is_some_and(|query| !media_matches(query))
@@ -71,6 +84,7 @@ pub fn select_source(
             source.sizes,
             environment,
             &media_matches,
+            &source_size,
         ) {
             return Some(SelectedSource { from_picture: true, ..chosen });
         }
@@ -81,6 +95,7 @@ pub fn select_source(
         sources.sizes,
         environment,
         &media_matches,
+        &source_size,
     )
 }
 
@@ -90,6 +105,7 @@ fn choose<'a>(
     sizes: Option<&str>,
     environment: SourceEnvironment,
     media_matches: &impl Fn(&str) -> bool,
+    size_for: &impl Fn(Option<&str>, SourceEnvironment, &dyn Fn(&str) -> bool) -> f32,
 ) -> Option<SelectedSource> {
     let has_width = candidates.iter().any(|c| matches!(c.descriptor, Descriptor::Width(_)));
     if !has_width && !candidates.iter().any(|c| c.descriptor == Descriptor::Density(1.0)) {
@@ -97,7 +113,7 @@ fn choose<'a>(
             candidates.push(Candidate { url, descriptor: Descriptor::Density(1.0) });
         }
     }
-    let slot = source_size(sizes, environment, media_matches);
+    let slot = size_for(sizes, environment, media_matches);
     let mut ranked = candidates.into_iter().filter_map(|candidate| {
         let density = match candidate.descriptor {
             Descriptor::Density(value) if !has_width => value,
@@ -155,7 +171,7 @@ fn parse_srcset(input: &str) -> Vec<Candidate<'_>> {
 fn source_size(
     sizes: Option<&str>,
     env: SourceEnvironment,
-    media_matches: &impl Fn(&str) -> bool,
+    media_matches: &dyn Fn(&str) -> bool,
 ) -> f32 {
     let viewport = env.viewport_width.max(0.0);
     for entry in sizes.unwrap_or("").split(',') {

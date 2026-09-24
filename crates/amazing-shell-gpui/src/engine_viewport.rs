@@ -26,9 +26,17 @@ struct PageImage {
     density: f32,
 }
 
+#[derive(Clone)]
+struct DeferredImage {
+    node: amazing_dom::NodeIdx,
+    address: String,
+    density: f32,
+}
+
 #[derive(Clone, Default)]
 struct PageResources {
     images: Vec<PageImage>,
+    deferred_images: Vec<DeferredImage>,
     backgrounds: Vec<(String, amazing_media::Image)>,
 }
 
@@ -44,6 +52,8 @@ impl amazing_layout::ReplacedElementProvider for PageResources {
                 width: entry.image.width as f32 / entry.density,
                 height: entry.image.height as f32 / entry.density,
             })
+            .or_else(|| self.deferred_images.iter().any(|entry| entry.node == node)
+                .then_some(amazing_layout::IntrinsicSize { width: 300.0, height: 150.0 }))
     }
 }
 
@@ -1245,7 +1255,7 @@ fn load_page_resources(
             .map(|(_, value)| value.as_str())
     }
     fn source_for(dom: &amazing_dom::Dom, node: amazing_dom::NodeIdx) -> Option<amazing_media::responsive::SelectedSource> {
-        use amazing_media::responsive::{ImageSources, PictureSource, SourceEnvironment, select_source};
+        use amazing_media::responsive::{ImageSources, PictureSource, SourceEnvironment, select_source_with_sizes};
         let mut picture = Vec::new();
         if let Some(parent) = dom.get(node).parent.filter(|parent| dom.name(*parent) == Some("picture")) {
             for sibling in dom.children(parent) {
@@ -1260,27 +1270,31 @@ fn load_page_resources(
                 }
             }
         }
-        select_source(ImageSources {
+        select_source_with_sizes(ImageSources {
             src: attr(dom, node, "src"), srcset: attr(dom, node, "srcset"),
             sizes: attr(dom, node, "sizes"), picture: &picture,
         }, SourceEnvironment {
             viewport_width: VIEWPORT_WIDTH as f32, device_pixel_ratio: 1.0,
             slot_width: None, allow_auto_sizes: false,
         }, |query| {
-            let query = query.trim().to_ascii_lowercase();
-            if query == "all" || query == "screen" { return true; }
-            let condition = query.strip_prefix('(').and_then(|s| s.strip_suffix(')'));
-            let Some((feature, width)) = condition.and_then(|s| s.split_once(':')) else { return false; };
-            let Some(width) = width.trim().strip_suffix("px").and_then(|n| n.trim().parse::<f32>().ok()) else { return false; };
-            match feature.trim() {
-                "min-width" => VIEWPORT_WIDTH as f32 >= width,
-                "max-width" => (VIEWPORT_WIDTH as f32) <= width,
-                _ => false,
-            }
+            amazing_css::evaluate_media_query(&amazing_css::MediaQueryList::parse(query),
+                &amazing_css::MediaEnvironment {
+                    viewport_width_px: VIEWPORT_WIDTH as f32,
+                    viewport_height_px: VIEWPORT_HEIGHT as f32,
+                    ..Default::default()
+                })
         }, |mime| matches!(mime.to_ascii_lowercase().as_str(),
             "image/png" | "image/jpeg" | "image/gif" | "image/webp" |
             "image/bmp" | "image/x-ms-bmp" | "image/x-icon" |
-            "image/x-portable-pixmap" | "image/svg+xml"))
+            "image/x-portable-pixmap" | "image/svg+xml"), |sizes, env, _| {
+                amazing_css::parse_sizes_attribute(sizes.unwrap_or(""),
+                    &amazing_css::MediaEnvironment {
+                        viewport_width_px: env.viewport_width,
+                        viewport_height_px: VIEWPORT_HEIGHT as f32,
+                        device_pixel_ratio: env.device_pixel_ratio,
+                        ..Default::default()
+                    }, env.allow_auto_sizes.then_some(env.slot_width).flatten())
+            })
     }
     fn walk(
         dom: &amazing_dom::Dom,
@@ -1290,23 +1304,22 @@ fn load_page_resources(
         session: Option<&Rc<RefCell<BrowserSession>>>,
         resources: &mut PageResources,
     ) {
-        if resources.images.len() >= MAX_PAGE_IMAGES {
+        if resources.images.len() + resources.deferred_images.len() >= MAX_PAGE_IMAGES {
             return;
         }
         if dom.name(node) == Some("img")
             && let Some(source) = source_for(dom, node)
-            && let Some(address) = resolve_resource_address(document_url, &source.url)
-            && let Ok(response) = fetch_resource(session, &address, options)
-            && response.status == 200
-            && let Some(image) = decode_web_image(&response.body)
-        {
-            let retained: usize = resources.images.iter().map(|entry| entry.image.pixels.len()).sum();
-            if retained.saturating_add(image.pixels.len()) > 128 * 1024 * 1024 { return; }
-            resources.images.push(PageImage {
-                node,
-                image,
-                density: source.density,
-            });
+            && let Some(address) = resolve_resource_address(document_url, &source.url) {
+            if attr(dom, node, "loading").is_some_and(|value| value.eq_ignore_ascii_case("lazy")) {
+                resources.deferred_images.push(DeferredImage { node, address, density: source.density });
+            } else if let Ok(response) = fetch_resource(session, &address, options)
+                && response.status == 200
+                && let Some(image) = decode_web_image(&response.body) {
+                let retained: usize = resources.images.iter().map(|entry| entry.image.pixels.len()).sum();
+                if retained.saturating_add(image.pixels.len()) <= 128 * 1024 * 1024 {
+                    resources.images.push(PageImage { node, image, density: source.density });
+                }
+            }
         }
 
         for child in dom.children(node) {
@@ -1323,6 +1336,49 @@ fn load_page_resources(
         session,
         &mut resources,
     );
+    if !resources.deferred_images.is_empty() {
+        fn image_rect(layout: &amazing_layout::LayoutBox, node: amazing_dom::NodeIdx) -> Option<amazing_layout::Rect> {
+            for line in &layout.lines {
+                if let Some(fragment) = line.replaced.iter().find(|fragment| fragment.node == node) {
+                    return Some(amazing_layout::Rect {
+                        x: fragment.x, y: fragment.y, w: fragment.width, h: fragment.height,
+                    });
+                }
+            }
+            if layout.node == Some(node) { return Some(layout.content_box); }
+            let children = match &layout.flow {
+                amazing_layout::Flow::Blocks(children) | amazing_layout::Flow::Flex(children)
+                | amazing_layout::Flow::Grid(children) => children.as_slice(),
+                _ => &[],
+            };
+            children.iter().chain(&layout.positioned).find_map(|child| image_rect(child, node))
+        }
+        let preliminary = amazing_layout::layout_dom_document_with_text_and_replaced_in_viewport(
+            dom, css, VIEWPORT_WIDTH as f32, Some(VIEWPORT_HEIGHT as f32),
+            &amazing_text::FallbackTextSystem::new(), &resources,
+        );
+        let viewport = amazing_media::loading::ViewportRect {
+            x: 0.0, y: 0.0, width: VIEWPORT_WIDTH as f32, height: VIEWPORT_HEIGHT as f32,
+        };
+        let pending = std::mem::take(&mut resources.deferred_images);
+        for entry in pending {
+            let rect = image_rect(&preliminary, entry.node).map(|rect| amazing_media::loading::ViewportRect {
+                x: rect.x, y: rect.y, width: rect.w, height: rect.h,
+            });
+            if !amazing_media::loading::should_fetch(amazing_media::loading::Loading::Lazy,
+                rect, viewport, 0.0) {
+                resources.deferred_images.push(entry);
+                continue;
+            }
+            if resources.images.len() >= MAX_PAGE_IMAGES { break; }
+            let Ok(response) = fetch_resource(session, &entry.address, options) else { continue; };
+            if response.status != 200 { continue; }
+            let Some(image) = decode_web_image(&response.body) else { continue; };
+            let retained: usize = resources.images.iter().map(|entry| entry.image.pixels.len()).sum();
+            if retained.saturating_add(image.pixels.len()) > 128 * 1024 * 1024 { continue; }
+            resources.images.push(PageImage { node: entry.node, image, density: entry.density });
+        }
+    }
     let styles = amazing_css::compute(dom, &[amazing_css::parse_stylesheet(css)]);
     let mut retained: usize = resources.images.iter().map(|image| image.image.pixels.len()).sum();
     let mut pending = vec![amazing_dom::NodeIdx(0)];
@@ -1348,7 +1404,41 @@ fn load_page_resources(
 }
 
 fn decode_web_image(bytes: &[u8]) -> Option<amazing_media::Image> {
-    amazing_image::decode(bytes, amazing_image::DecodeLimits::default()).ok()
+    #[cfg(test)]
+    { return amazing_image::decode(bytes, amazing_image::DecodeLimits::default()).ok(); }
+    #[cfg(not(test))]
+    {
+        thread_local! {
+            static DECODER: RefCell<Option<amazing_process::ProcessHost>> = const { RefCell::new(None) };
+        }
+        DECODER.with(|decoder| {
+            use amazing_process::{Capabilities, ProcessHost, RestartPolicy};
+            let mut host = decoder.borrow_mut();
+            if host.is_none() {
+                let exe = std::env::current_exe().ok()?;
+                match ProcessHost::spawn_sandboxed_utility(&exe,
+                    Capabilities(std::collections::BTreeMap::new()), RestartPolicy::Never) {
+                    Ok(process) => *host = Some(process),
+                    Err(_) => {
+                        #[cfg(target_os = "linux")]
+                        if bytes.starts_with(b"BM") || bytes.starts_with(b"P3")
+                            || bytes.starts_with(b"P6") || bytes.starts_with(b"<") {
+                            return amazing_image::decode(bytes, amazing_image::DecodeLimits::default()).ok();
+                        }
+                        return None;
+                    }
+                }
+            }
+            let result = host.as_mut()?.decode_untrusted(amazing_process::utility::IMAGE,
+                bytes, std::time::Duration::from_secs(5));
+            match result {
+                Ok(frame) => Some(amazing_media::Image {
+                    width: frame.width, height: frame.height, pixels: frame.bytes().to_vec(),
+                }),
+                Err(_) => { *host = None; None }
+            }
+        })
+    }
 }
 
 fn document_title(dom: &amazing_dom::Dom) -> Option<String> {
@@ -1671,7 +1761,7 @@ fn descriptor_range(
     if parts.next().is_some() || min < 1 || max < min || max > 1000 {
         return Err("invalid descriptor range".into());
     }
-    Ok(FontDescriptorRange { min, max })
+    Ok(FontDescriptorRange { min: min as f32, max: max as f32 })
 }
 
 fn parse_unicode_ranges(value: &str) -> Result<Vec<UnicodeRange>, String> {

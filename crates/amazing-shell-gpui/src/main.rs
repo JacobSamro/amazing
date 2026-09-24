@@ -2433,6 +2433,21 @@ impl Render for BrowserShell {
 }
 
 fn main() {
+    if std::env::args().any(|argument| argument == "--type=utility") {
+        let child = amazing_process::bootstrap_child(
+            amazing_process::Role::Utility,
+            amazing_process::Capabilities(std::collections::BTreeMap::new()),
+            |connection, _, channel| {
+                amazing_process::utility::serve_utility(connection, channel);
+                Ok(())
+            },
+        );
+        let Ok(connection) = child else { std::process::exit(1); };
+        while !connection.is_closed() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        return;
+    }
     let start_with_sidebar = std::env::args().any(|argument| argument == "--sidebar");
     let start_with_video = std::env::args().any(|argument| argument == "--video");
     let start_with_secure_video = std::env::args().any(|argument| argument == "--secure-video");

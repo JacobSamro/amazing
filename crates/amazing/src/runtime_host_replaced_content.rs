@@ -160,7 +160,7 @@ pub(crate) fn select_image_source(
     media_matches: impl Fn(&str) -> bool,
     supports_type: impl Fn(&str) -> bool,
 ) -> Option<amazing_media::responsive::SelectedSource> {
-    use amazing_media::responsive::{ImageSources, PictureSource, select_source};
+    use amazing_media::responsive::{ImageSources, PictureSource, select_source_with_sizes};
     if dom.name(img) != Some("img") { return None; }
     let attrs = dom.attrs_of(img)?;
     let attr = |name| attribute(attrs, name);
@@ -178,12 +178,18 @@ pub(crate) fn select_image_source(
             });
         }
     }
-    select_source(ImageSources {
+    select_source_with_sizes(ImageSources {
         src: attr("src"),
         srcset: attr("srcset"),
         sizes: attr("sizes"),
         picture: &picture,
-    }, environment, media_matches, supports_type)
+    }, environment, media_matches, supports_type, |sizes, env, _| {
+        amazing_css::parse_sizes_attribute(sizes.unwrap_or(""), &amazing_css::MediaEnvironment {
+            viewport_width_px: env.viewport_width,
+            device_pixel_ratio: env.device_pixel_ratio,
+            ..Default::default()
+        }, env.allow_auto_sizes.then_some(env.slot_width).flatten())
+    })
 }
 
 fn attribute<'a>(attrs: &'a [(String, String)], name: &str) -> Option<&'a str> {
@@ -229,38 +235,13 @@ pub(crate) fn decode_image_decision(
     }
 }
 
-/// Temporary driver matcher until CSS exports its viewport media evaluator.
-/// Unknown conditions do not select a `<picture>` branch.
+/// Select picture sources with the same media evaluator as CSS @media rules.
 pub(crate) fn matches_image_media(query: &str, viewport_width: f32) -> bool {
-    query.split(',').any(|alternative| {
-        let mut clause = alternative.trim().to_ascii_lowercase();
-        if clause.is_empty() { return false; }
-        let mut negated = false;
-        if let Some(rest) = clause.strip_prefix("not ") {
-            clause = rest.trim().to_owned();
-            negated = true;
-        }
-        let mut matches = true;
-        for part in clause.split(" and ") {
-            let part = part.trim();
-            let part_matches = match part {
-                "all" | "screen" => true,
-                "print" => false,
-                _ => {
-                    let condition = part.strip_prefix('(').and_then(|s| s.strip_suffix(')'));
-                    let Some((feature, value)) = condition.and_then(|s| s.split_once(':')) else { return false; };
-                    let width = value.trim().strip_suffix("px").and_then(|n| n.trim().parse::<f32>().ok());
-                    match (feature.trim(), width) {
-                        ("min-width", Some(width)) => viewport_width >= width,
-                        ("max-width", Some(width)) => viewport_width <= width,
-                        _ => false,
-                    }
-                }
-            };
-            matches &= part_matches;
-        }
-        matches ^ negated
-    })
+    let environment = amazing_css::MediaEnvironment {
+        viewport_width_px: viewport_width,
+        ..Default::default()
+    };
+    amazing_css::evaluate_media_query(&amazing_css::MediaQueryList::parse(query), &environment)
 }
 
 /// The process utility currently supports only BMP/PPM/SVG. Once IPC's image
