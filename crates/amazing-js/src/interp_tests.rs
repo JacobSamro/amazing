@@ -860,6 +860,19 @@ mod tests {
     }
 
     #[test]
+    fn direct_eval_uses_callers_environment_for_this_and_var_conflicts() {
+        let mut i = Interpreter::new();
+        for source in [
+            "function f(){'use strict'; return eval('this')}; f()===undefined",
+            "var f=(p=eval('var arguments=1'),arguments)=>{}; try { f(); false } catch(e) { e instanceof SyntaxError }",
+        ] {
+            assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true), "{source}");
+        }
+        let mut i = Interpreter::new();
+        assert_eq!(i.run_script("Object.preventExtensions(globalThis); try { eval('var newGlobalName'); false } catch(e) { e instanceof TypeError }").unwrap(), JsValue::Bool(true));
+    }
+
+    #[test]
     fn native_error_constructors_inherit_error_constructor() {
         let mut i = Interpreter::new();
         let source = "['EvalError','RangeError','ReferenceError','SyntaxError','TypeError','URIError'].every(name => Object.getPrototypeOf(globalThis[name])===Error && Object.getPrototypeOf(globalThis[name].prototype)===Error.prototype)";
