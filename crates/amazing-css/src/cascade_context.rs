@@ -149,6 +149,10 @@ fn compile_scope(scope: &Scope, nested: bool) -> Option<CompiledScope> {
 }
 
 impl CompiledRule {
+    pub(super) fn is_unscoped(&self) -> bool {
+        self.scopes.is_empty() && self.owner.is_none()
+    }
+
     pub(super) fn targets(&self, pseudo: PseudoElement) -> bool {
         self.selectors
             .iter()
