@@ -42,6 +42,26 @@ fn intl_data(locale: &str) -> &'static IntlNumberData {
     INTL_NUMBER_DATA.iter().find(|data| data.locale == locale).unwrap_or(&INTL_NUMBER_DATA[0])
 }
 
+fn intl_empty_options() -> JsValue {
+    // ECMA-402 uses ObjectCreate(null) when the options argument is absent.
+    JsValue::object(JsObject::ordinary())
+}
+
+fn intl_unicode_keyword(tag: &str, wanted: &str) -> Option<String> {
+    let extension = tag.split("-u-").nth(1)?;
+    let subtags: Vec<&str> = extension.split('-').take_while(|part| part.len() != 1).collect();
+    let mut index = 0;
+    while index < subtags.len() {
+        if subtags[index].len() != 2 { index += 1; continue; }
+        let key = subtags[index];
+        index += 1;
+        let start = index;
+        while index < subtags.len() && subtags[index].len() > 2 { index += 1; }
+        if key == wanted { return Some(subtags[start..index].join("-")); }
+    }
+    None
+}
+
 fn intl_alias(aliases: &'static [(&'static str, &'static str)], input: &str) -> Option<&'static str> {
     aliases.iter().find(|(old, _)| old.eq_ignore_ascii_case(input)).map(|(_, new)| *new)
 }

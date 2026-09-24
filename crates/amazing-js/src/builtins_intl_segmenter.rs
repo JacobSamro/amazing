@@ -33,7 +33,7 @@ fn intl_segmenter_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
     let JsValue::Object(object) = this else { return Err(Throw::type_error("Segmenter requires new")); };
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
-    let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(|| i.object_value());
+    let options = args.get(1).filter(|value| !value.is_undefined()).cloned().unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null Segmenter options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let granularity = intl_string_option(i, &options, "granularity", &["grapheme", "word", "sentence"], "grapheme")?;

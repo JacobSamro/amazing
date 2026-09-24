@@ -19,6 +19,7 @@ struct IntlNumberState {
     max_fraction: usize,
     min_significant: Option<usize>,
     max_significant: Option<usize>,
+    rounding_priority: String,
     rounding_mode: String,
     rounding_increment: usize,
     trailing_zero_display: String,
@@ -94,7 +95,7 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !matches!(value, JsValue::Undefined)).cloned()
-        .unwrap_or_else(|| i.object_value());
+        .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null NumberFormat options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let numbering_system = intl_string_option(i, &options, "numberingSystem", &[], intl_data(&locale).numbering_system)?;
@@ -142,10 +143,17 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     if min_fraction > max_fraction { return Err(Throw::range_error("minimumFractionDigits exceeds maximumFractionDigits")); }
     let min_sig_value = i.get_prop(&options, "minimumSignificantDigits")?;
     let max_sig_value = i.get_prop(&options, "maximumSignificantDigits")?;
-    let min_significant = if matches!(min_sig_value, JsValue::Undefined) { None }
-        else { Some(intl_integer_option(i, &options, "minimumSignificantDigits", 1, 21, 1)?) };
-    let max_significant = if matches!(max_sig_value, JsValue::Undefined) { None }
-        else { Some(intl_integer_option(i, &options, "maximumSignificantDigits", 1, 21, 21)?) };
+    let has_significant = !min_sig_value.is_undefined() || !max_sig_value.is_undefined();
+    let min_significant = if has_significant {
+        Some(if min_sig_value.is_undefined() { 1 } else {
+            intl_integer_option(i, &options, "minimumSignificantDigits", 1, 21, 1)?
+        })
+    } else { None };
+    let max_significant = if has_significant {
+        Some(if max_sig_value.is_undefined() { 21 } else {
+            intl_integer_option(i, &options, "maximumSignificantDigits", 1, 21, 21)?
+        })
+    } else { None };
     if min_significant.zip(max_significant).is_some_and(|(min, max)| min > max) {
         return Err(Throw::range_error("significant digits range"));
     }
@@ -155,12 +163,27 @@ fn intl_number_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> R
     if ![1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000].contains(&rounding_increment) {
         return Err(Throw::range_error("invalid rounding increment"));
     }
+    let rounding_priority = intl_string_option(i, &options, "roundingPriority",
+        &["auto", "morePrecision", "lessPrecision"], "auto")?;
     let trailing_zero_display = intl_string_option(i, &options, "trailingZeroDisplay",
         &["auto", "stripIfInteger"], "auto")?;
+    if rounding_increment != 1 {
+        if has_significant || rounding_priority != "auto" || notation == "compact" {
+            return Err(Throw::type_error("roundingIncrement requires fraction digits"));
+        }
+        if min_fraction != max_fraction {
+            return Err(Throw::range_error("roundingIncrement requires equal fraction digits"));
+        }
+    }
+    let compact_defaults = notation == "compact" && rounding_priority == "auto"
+        && !has_significant && min_fraction == 0 && max_fraction == 0;
+    let rounding_priority = if compact_defaults { "morePrecision".into() } else { rounding_priority };
+    let min_significant = if compact_defaults { Some(1) } else { min_significant };
+    let max_significant = if compact_defaults { Some(2) } else { max_significant };
     let state = IntlNumberState {
         locale, numbering_system, style, currency, currency_display, currency_sign, unit, unit_display,
         notation, compact_display, sign_display, use_grouping, min_integer,
-        min_fraction, max_fraction, min_significant, max_significant, rounding_mode,
+        min_fraction, max_fraction, min_significant, max_significant, rounding_priority, rounding_mode,
         rounding_increment, trailing_zero_display,
     };
     let object = if let JsValue::Object(object) = this {
@@ -217,7 +240,8 @@ fn intl_number_resolved_options(i: &mut Interpreter, this: JsValue, _: Vec<JsVal
         ("locale", state.locale.as_str()), ("numberingSystem", state.numbering_system.as_str()),
         ("style", state.style.as_str()), ("notation", state.notation.as_str()),
         ("signDisplay", state.sign_display.as_str()), ("useGrouping", state.use_grouping.as_str()),
-        ("roundingMode", state.rounding_mode.as_str()), ("trailingZeroDisplay", state.trailing_zero_display.as_str()),
+        ("roundingMode", state.rounding_mode.as_str()), ("roundingPriority", state.rounding_priority.as_str()),
+        ("trailingZeroDisplay", state.trailing_zero_display.as_str()),
     ] { i.set_prop(&object, name, JsValue::str(value))?; }
     for (name, value) in [("currency", state.currency.as_ref()), ("unit", state.unit.as_ref())] {
         if let Some(value) = value { i.set_prop(&object, name, JsValue::str(value))?; }
@@ -376,16 +400,20 @@ fn intl_format_number(state: &IntlNumberState, input: f64) -> (String, Vec<(&'st
         number_parts.push(("infinity", data.infinity.to_string()));
     } else {
         let digits_before = if value == 0.0 { 1 } else { value.log10().floor() as i32 + 1 };
-        let min_fraction = state.min_significant.map_or(state.min_fraction, |digits| {
-            (digits as i32 - digits_before).max(0) as usize
-        });
-        let compact_defaults = state.notation == "compact" && state.min_fraction == 0
-            && state.max_fraction == 0 && state.min_significant.is_none() && state.max_significant.is_none();
-        let max_fraction = if compact_defaults {
-            (2 - digits_before).max(0) as usize
-        } else if let Some(max_significant) = state.max_significant {
-            (max_significant as i32 - digits_before).clamp(min_fraction as i32, 100) as usize
-        } else { state.max_fraction };
+        let sig_min = (state.min_significant.unwrap_or(1) as i32 - digits_before).max(0) as usize;
+        let sig_max = (state.max_significant.unwrap_or(21) as i32 - digits_before)
+            .clamp(sig_min as i32, 100) as usize;
+        let use_significant = match state.rounding_priority.as_str() {
+            "morePrecision" | "lessPrecision" => {
+                let fixed_more_precise = -(state.max_fraction as i32)
+                    < digits_before - state.max_significant.unwrap_or(21) as i32;
+                (state.rounding_priority == "morePrecision" && !fixed_more_precise)
+                    || (state.rounding_priority == "lessPrecision" && fixed_more_precise)
+            }
+            _ => state.max_significant.is_some(),
+        };
+        let (min_fraction, max_fraction) = if use_significant { (sig_min, sig_max) }
+            else { (state.min_fraction, state.max_fraction) };
         let scale = 10f64.powi(max_fraction.min(100) as i32);
         let increment = state.rounding_increment as f64;
         let signed = if negative { -value } else { value };
@@ -560,5 +588,12 @@ mod intl_number_tests {
         assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,minimumSignificantDigits:3,maximumSignificantDigits:5}).format(0)"), "0.00");
         assert_eq!(eval("new Intl.NumberFormat('en',{notation:'engineering'}).format(0.000345)"), "345E-6");
         assert_eq!(eval("new Intl.NumberFormat('en',{notation:'scientific'}).format(543211.1)"), "5.432E5");
+    }
+
+    #[test]
+    fn rounding_priority_selects_precision() {
+        assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,roundingPriority:'morePrecision',maximumSignificantDigits:2,maximumFractionDigits:2}).format(1.23)"), "1.23");
+        assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,roundingPriority:'lessPrecision',maximumSignificantDigits:2,maximumFractionDigits:2}).format(1.23)"), "1.2");
+        assert_eq!(eval("new Intl.NumberFormat('en',{useGrouping:false,roundingPriority:'morePrecision',minimumSignificantDigits:3,minimumFractionDigits:2}).format(1)"), "1.00");
     }
 }

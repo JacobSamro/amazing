@@ -173,3 +173,25 @@ all canonical IANA IDs before js-stdlib migrates Temporal.ZonedDateTime lost
 three previously passing Test262 files, which construct a ZonedDateTime for
 every enumerated ID. The full list can be exposed after that integration and
 must be gated together with it.
+
+The second JSB-4 series adds null-prototype default options across Intl
+constructors, Collator `kn`/`kf` Unicode extension handling and bounded Latin
+canonical equivalence, NumberFormat `roundingPriority` and increment option
+validation, and an English textual-month component pattern. On the fixed
+JSB-3 base `3494c85f629e67a782bbd8e582f3e6949625725f`, the pinned
+win-001 full Test262 corpus moved from 25,632 to 25,645 passing files relative
+to the first JSB-4 checkpoint. All 13 gains are in `intl402/`, now 764/3,357;
+there were zero lost passing files or variants. The 53,872-file input SHA-256
+was `a2ef5e43ff95da279324b6df9a37740a505b9f8b6c7a11406408af70f453b075`,
+and the final classification SHA-256 was
+`5742efeff8c21c1b29d7e0fb6bce871067d0218ccc9602c9a92478ae86876062`.
+The full result is at `C:\Users\server\target\js-binary\jsb4b-final-source.json`.
+The Windows nextest and doctest crate/workspace gates passed. Linux validation
+also found zero lost passing files or variants; its full corpus result is at
+`~/amazing/out/js-binary-jsb4b-full-linux.json` on venus-001.
+
+Remaining work includes full Unicode collation normalization and tailoring,
+DateTimeFormat range contraction and source-tagged parts, broader locale data,
+and Temporal adoption of the shared IANA resolver before the time-zone list can
+be published. The current generated TZif rules cover 1800–2500; dates beyond
+that interval still need POSIX-tail handling.

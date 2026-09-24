@@ -66,7 +66,7 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     let requested = intl_canonical_locale_list(i, args.first().unwrap_or(&JsValue::Undefined))?;
     let locale = intl_lookup(&requested);
     let options = args.get(1).filter(|value| !matches!(value, JsValue::Undefined)).cloned()
-        .unwrap_or_else(|| i.object_value());
+        .unwrap_or_else(intl_empty_options);
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null DateTimeFormat options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let calendar_option = intl_string_option(i, &options, "calendar", &[], "gregory")?;
@@ -198,6 +198,7 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
     };
     let day = match state.day.as_deref() { Some("2-digit") => "dd", Some(_) => "d", None => "" };
     let year = match state.year.as_deref() { Some("2-digit") => "yy", Some(_) => "y", None => "" };
+    let textual_month = ["MMM", "MMMM", "MMMMM"].contains(&month);
     let fields: Vec<&str> = if ["de", "fr", "es", "ru"].contains(&state.locale.as_str()) {
         [day, month, year].into_iter().filter(|part| !part.is_empty()).collect()
     } else if ["ja", "zh-Hans"].contains(&state.locale.as_str()) {
@@ -205,7 +206,16 @@ fn intl_date_pattern(state: &IntlDateState) -> String {
     } else {
         [month, day, year].into_iter().filter(|part| !part.is_empty()).collect()
     };
-    date.push_str(&fields.join(if ["de", "fr", "es", "ru"].contains(&state.locale.as_str()) { "." } else { "/" }));
+    if ["en", "en-GB"].contains(&state.locale.as_str()) && textual_month {
+        date.push_str(month);
+        if !day.is_empty() { date.push(' '); date.push_str(day); }
+        if !year.is_empty() {
+            if !day.is_empty() { date.push_str(", "); } else { date.push(' '); }
+            date.push_str(year);
+        }
+    } else {
+        date.push_str(&fields.join(if ["de", "fr", "es", "ru"].contains(&state.locale.as_str()) { "." } else { "/" }));
+    }
     let mut time = String::new();
     if let Some(hour) = &state.hour { time.push_str(if hour == "2-digit" { "HH" } else { "H" }); }
     if let Some(minute) = &state.minute {
