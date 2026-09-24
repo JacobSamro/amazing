@@ -649,3 +649,9 @@ Two stable baseline rounds measured **313 pass / 11 fail / 20 unsupported / 3 cr
 HTML-21 retention stayed **489 / 11 / 0 / 1**, HTML-22 improved **303 / 11 / 75 / 0** to **305 / 9 / 75 / 0** with two foreign-fragment gains, and HTML-23 stayed **355 / 11 / 7 / 0**. Full per-case classifications, raw hashes and transition tables are under `evidence/html24/`.
 
 Final fixed-base win-002 gate: `amazing-html` nextest **162/162**, separate doctest **1/1**; workspace nextest **2,149/2,149 with 5 skipped**, separate doctests **2/2**. The 64-file source/fixture/lock audit matched before and after. Two Windows after rounds for the new and all three retention selections matched Linux per-case classifications and raw hashes.
+
+## HTML-17 add-on — processing-instruction expectation conflict
+
+The current WHATWG HTML tag-open state parses a valid `<?target ...?>` as a processing instruction. The pinned upstream WPT tree fixture `html/syntax/parsing/resources/processing-instructions.dat` at revision `53bc812da2ed81179ebd1ba76b2d197cc4747d12` expects that behavior. A single tag-open change to emit bogus comments moved 81 previously passing cases to fail (75 expected PI trees and six incomplete-input cases); the full and minimal edits produced the same per-case output hash. The change was discarded, and the upstream fixture was left intact.
+
+Pinned `dom/nodes/MutationObserver-characterData.html` at WPT revision `c2a2fce69e5c2509d9dc28440ec8b42532e5c293` expects the older bogus-comment data `?processing data?` in one subtest. Its 22/23 result is a known stale expectation relative to the current HTML parser; dom-bindings was notified. XML parsing continues to use XML processing instructions.
