@@ -2,7 +2,6 @@
 //! DOMString values cross the runtime boundary as exact UTF-16 code units.
 use std::{cell::RefCell, collections::{HashMap, HashSet}, rc::Rc};
 use std::collections::{BTreeMap, VecDeque};
-use std::{path::PathBuf, rc::Weak};
 
 use amazing_bindings::{
     deliver_custom_element_reactions, deliver_mutation_checkpoint, fire_abort_timeout,
@@ -25,7 +24,7 @@ use amazing_js::{
     env::{EnvHandle, EnvKind},
     interp::{BindingPropertyFlags, HostNativeDispatch, Interpreter, LegacyPlatformHooks as RuntimeLegacyHooks},
     value::{
-        FunctionBody, HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsValue, Throw,
+        FunctionBody, HostCallPolicy as JsCallPolicy, HostFunctionId, HostHandle, JsString, JsValue, Throw,
     },
 };
 
@@ -46,6 +45,7 @@ enum NativeEntry {
     CapturePromiseResolvers,
     Storage(SI, &'static str, SM),
     StorageTick,
+    WindowStorageListener(bool),
 }
 
 enum WebObject {
@@ -83,6 +83,10 @@ struct BindingState {
     font_sets: HashMap<NodeIdx, u64>,
     storage: Option<StorageRuntime>,
     storage_classes: HashMap<SI, (JsValue, JsValue)>,
+    storage_inbox: VecDeque<runtime_host_storage::StorageEventDelivery>,
+    storage_listeners: Vec<JsValue>,
+    window_add_listener: Option<JsValue>,
+    window_remove_listener: Option<JsValue>,
 }
 
 /// A short-lived adapter. JS calls never hold a borrow of BindingState or Dom.
@@ -438,6 +442,10 @@ pub(crate) fn install(
         font_sets: HashMap::new(),
         storage: None,
         storage_classes: HashMap::new(),
+        storage_inbox: VecDeque::new(),
+        storage_listeners: Vec::new(),
+        window_add_listener: None,
+        window_remove_listener: None,
     }));
     let for_dispatch = state.clone();
     let dispatch: Rc<HostNativeDispatch> = Rc::new(move |js, id, this, args, _new_target| {
@@ -464,6 +472,7 @@ pub(crate) fn install(
             }
             NativeEntry::Storage(interface, member, kind) => adapter.storage_invoke(interface, member, kind, this, &args),
             NativeEntry::StorageTick => adapter.storage_tick(),
+            NativeEntry::WindowStorageListener(add) => adapter.window_storage_listener(add, this, &args),
         }
     });
     js.set_host_native_dispatcher(dispatch);
@@ -486,6 +495,17 @@ pub(crate) fn install(
     }
     let window = adapter.js.binding_global_object();
     adapter.js.binding_install_put_forwards(&window, "location", "href")?;
+    let add = adapter.js.binding_get_property(&window, "addEventListener")?;
+    let remove = adapter.js.binding_get_property(&window, "removeEventListener")?;
+    {
+        let mut state = adapter.state.borrow_mut();
+        state.window_add_listener = Some(add);
+        state.window_remove_listener = Some(remove);
+    }
+    let add = adapter.native("addEventListener", 2, NativeEntry::WindowStorageListener(true), HostCallPolicy::CallOnly);
+    let remove = adapter.native("removeEventListener", 2, NativeEntry::WindowStorageListener(false), HostCallPolicy::CallOnly);
+    adapter.js.binding_define_data_property(&window, "addEventListener", add, BindingPropertyFlags::METHOD)?;
+    adapter.js.binding_define_data_property(&window, "removeEventListener", remove, BindingPropertyFlags::METHOD)?;
     let document = adapter.wrap_node(NodeIdx(0))?;
     // set_dom_host installs an immutable lexical legacy document. Shadow it in
     // a new global environment so every new page script sees the canonical
