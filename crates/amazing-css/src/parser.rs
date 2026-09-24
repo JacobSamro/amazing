@@ -777,7 +777,8 @@ fn supports_declaration(name_tokens: &[Token], value_tokens: &[Token]) -> bool {
         ) || if name.eq_ignore_ascii_case("font-synthesis") {
             crate::font_properties::expand_synthesis(&serialize(value_tokens)).is_some()
         } else if crate::font_properties::is_audited_longhand(&name.to_ascii_lowercase())
-            || matches!(name.to_ascii_lowercase().as_str(), "font-feature-settings" | "font-variant-ligatures") {
+            || matches!(name.to_ascii_lowercase().as_str(), "font-feature-settings" | "font-variant-ligatures"
+                | "image-orientation" | "object-fit" | "object-position") {
             let value = serialize(value_tokens);
             matches!(value.to_ascii_lowercase().as_str(), "inherit" | "initial" | "unset" | "revert" | "revert-layer")
                 || crate::values::parse(&name.to_ascii_lowercase(), &value).is_some()

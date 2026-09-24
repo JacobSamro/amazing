@@ -2,9 +2,9 @@
 use crate::protocol::*;
 use amazing_fetch::api::{
     ApiHeaders, ApiRequest, ApiRequestInit, ApiRequestInput, BodyInput, HeaderGuard,
-    NavigationRequestInit,
+    NavigationRequestInit, NavigableContext,
 };
-use amazing_fetch::cookies::CookieSite;
+use amazing_fetch::cookies::{CookieAccess, CookieSite};
 use amazing_fetch::service::{
     ApiResponseHead, ClientContext, NetworkService, ServiceEvent, ServiceId,
 };
@@ -160,9 +160,22 @@ fn build_request(wire: NetworkStart) -> Result<(ApiRequest, ClientContext), Erro
             .append_string(&h.name, &h.value)
             .map_err(|_| invalid("invalid request header"))?;
     }
+    let child_navigation = wire.mode == "navigate" && wire.destination == "frame";
+    let top_level_navigation = wire.mode == "navigate" && wire.destination == "document";
+    if wire.context.ancestor_origins.len() > 32 || wire.context.sandbox_flags & !0xffff != 0 {
+        return Err(invalid("invalid ancestor context"));
+    }
+    let frame_ancestors: Vec<Origin> = wire.context.ancestor_origins.iter()
+        .map(origin).collect::<Result<_, _>>()?;
+    let top_level_origin = wire.context.top_level_origin.as_ref().map(origin).transpose()?;
+    if child_navigation && (wire.context.top_level_navigation
+        || frame_ancestors.is_empty()
+        || frame_ancestors.last() != Some(&request_origin)
+        || frame_ancestors.first() != top_level_origin.as_ref()) {
+        return Err(invalid("invalid child navigation context"));
+    }
     let mut request = if wire.mode == "navigate" {
-        if wire.destination != "document"
-            || !wire.context.top_level_navigation
+        if !(top_level_navigation && wire.context.top_level_navigation || child_navigation)
             || wire.credentials != "include"
             || wire.redirect != "manual"
             || wire.cache != "default"
@@ -170,7 +183,22 @@ fn build_request(wire: NetworkStart) -> Result<(ApiRequest, ClientContext), Erro
             return Err(invalid("invalid navigation options"));
         }
         let url = HttpUrl::parse(&wire.url).map_err(|_| invalid("invalid navigation URL"))?;
-        let mut navigation = ApiRequest::navigation(
+        let mut navigation = if child_navigation {
+            if wire.method != "GET" || wire.body_present || !wire.body.0.is_empty()
+                || wire.navigation_reload_or_history || wire.navigation_client_reserved_id.is_some() {
+                return Err(invalid("invalid child navigation method"));
+            }
+            ApiRequest::child_navigation(url, &NavigableContext {
+                top_level_origin: top_level_origin.clone().unwrap(),
+                parent_origin: request_origin.clone(),
+                ancestor_origins: frame_ancestors.clone(),
+                sandbox_flags: wire.context.sandbox_flags,
+                frame_csp: csp.clone(),
+                referrer: wire.referrer.clone(),
+                referrer_policy: wire.referrer_policy.clone(),
+                now_unix: wire.context.now_unix,
+            })
+        } else { ApiRequest::navigation(
             url,
             NavigationRequestInit {
                 method: wire.method,
@@ -181,7 +209,7 @@ fn build_request(wire: NetworkStart) -> Result<(ApiRequest, ClientContext), Erro
                 reload_or_history: wire.navigation_reload_or_history,
                 client_reserved_id: wire.navigation_client_reserved_id,
             },
-        )
+        ) }
         .map_err(|e| Error::Remote(format!("navigation: {e:?}")))?;
         for h in &wire.headers {
             navigation
@@ -225,7 +253,15 @@ fn build_request(wire: NetworkStart) -> Result<(ApiRequest, ClientContext), Erro
     Ok((
         request,
         ClientContext {
-            cookie_site,
+            cookie_site: if child_navigation {
+                let site = top_level_origin.as_ref().unwrap().site(&amazing_fetch::psl::PublicSuffixList);
+                if frame_ancestors.iter().all(|ancestor| ancestor.site(&amazing_fetch::psl::PublicSuffixList) == site) {
+                    CookieSite::Origin(top_level_origin.as_ref().unwrap().clone())
+                } else { CookieSite::CrossSite }
+            } else { cookie_site },
+            partition_key: top_level_origin.as_ref()
+                .map(|origin| origin.site(&amazing_fetch::psl::PublicSuffixList)),
+            frame_ancestors: if child_navigation { frame_ancestors } else { Vec::new() },
             security: SecurityContext {
                 client_restricts_mixed_content: wire.context.restricts_mixed_content,
                 destination,
@@ -289,6 +325,28 @@ struct State {
     active: BTreeMap<u64, Active>,
     epochs: BTreeMap<u64, u64>,
 }
+fn http_cache_dir() -> std::path::PathBuf {
+    if let Some(path) = std::env::var_os("AMAZING_HTTP_CACHE_DIR") {
+        return path.into();
+    }
+    if let Some(path) = std::env::var_os("LOCALAPPDATA") {
+        return std::path::PathBuf::from(path)
+            .join("Amazing")
+            .join("http-cache");
+    }
+    if let Some(path) = std::env::var_os("XDG_CACHE_HOME") {
+        return std::path::PathBuf::from(path)
+            .join("amazing")
+            .join("http-cache");
+    }
+    if let Some(path) = std::env::var_os("HOME") {
+        return std::path::PathBuf::from(path)
+            .join(".cache")
+            .join("amazing")
+            .join("http-cache");
+    }
+    std::env::temp_dir().join("amazing-http-cache")
+}
 impl Drop for State {
     fn drop(&mut self) {
         for id in self.active.keys().copied() {
@@ -298,9 +356,59 @@ impl Drop for State {
     }
 }
 impl State {
+    fn document_cookie(&mut self, request: DocumentCookie) -> Result<String, Error> {
+        if request.client_id == 0 || request.epoch == 0
+            || request.document_url.len() > MAX_URL_BYTES
+            || request.assignment.as_ref().is_some_and(|value| value.len() > 65536)
+            || self.epochs.get(&request.client_id).is_some_and(|epoch| *epoch != request.epoch)
+        {
+            return Err(invalid("invalid document cookie request"));
+        }
+        let url = HttpUrl::parse(&request.document_url).map_err(|_| invalid("invalid document URL"))?;
+        if !matches!(url.as_parsed().scheme(), "http" | "https") {
+            return Err(invalid("invalid document scheme"));
+        }
+        let top = origin(&request.top_level_origin)?;
+        let access = CookieAccess {
+            url: &url,
+            site_for_cookies: CookieSite::Origin(top.clone()),
+            http_api: false,
+            top_level_navigation: false,
+            method: "GET",
+            partition_key: Some(top.site(&amazing_fetch::psl::PublicSuffixList)),
+        };
+        if let Some(assignment) = request.assignment {
+            // HTML's setter silently ignores a rejected cookie.
+            if self.service.cookies.set_cookie(assignment.as_bytes(), &access, request.now_unix).is_ok() {
+                self.service.persist_cookies(request.now_unix);
+            }
+            Ok(String::new())
+        } else {
+            let bytes = self.service.cookies.cookie_header(&access, request.now_unix)
+                .map_err(|_| invalid("cookie retrieval failed"))?;
+            String::from_utf8(bytes).map_err(|_| invalid("cookie bytes are not UTF-8"))
+        }
+    }
     fn new() -> Self {
+        let mut service = NetworkService::new(DispatchLimits::default());
+        match crate::network_cache::DiskCache::open(
+            http_cache_dir(), amazing_fetch::cache::CacheLimits::default(),
+        ) {
+            Ok((cache, disk)) => service.install_cache(cache, Box::new(disk)),
+            Err(error) => eprintln!("HTTP cache unavailable: {error}"),
+        }
+        let wall = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+        match crate::network_hsts::DiskHsts::open(&http_cache_dir(), wall) {
+            Ok((hsts, disk)) => service.install_hsts(hsts, Box::new(disk)),
+            Err(error) => eprintln!("HSTS store unavailable: {error}"),
+        }
+        match crate::network_cookies::DiskCookies::open(&http_cache_dir(), wall) {
+            Ok((cookies, disk)) => service.install_cookies(cookies, Box::new(disk)),
+            Err(error) => eprintln!("cookie store unavailable: {error}"),
+        }
         Self {
-            service: NetworkService::new(DispatchLimits::default()),
+            service,
             active: BTreeMap::new(),
             epochs: BTreeMap::new(),
         }
@@ -626,6 +734,7 @@ enum Command {
     Read(NetworkRead, mpsc::Sender<Result<NetworkReply, Error>>),
     Cancel(NetworkCancel, mpsc::Sender<Result<NetworkComplete, Error>>),
     CancelEpoch(NetworkEpoch, mpsc::Sender<Vec<NetworkComplete>>),
+    DocumentCookie(DocumentCookie, mpsc::Sender<Result<String, Error>>),
 }
 pub struct NetworkEndpointV2 {
     tx: mpsc::SyncSender<Command>,
@@ -651,6 +760,9 @@ impl NetworkEndpointV2 {
                     }
                     Command::CancelEpoch(v, out) => {
                         let _ = out.send(state.cancel_epoch(v));
+                    }
+                    Command::DocumentCookie(v, out) => {
+                        let _ = out.send(state.document_cookie(v));
                     }
                 }
             }
@@ -685,6 +797,9 @@ impl NetworkRequestsV2 for NetworkEndpointV2 {
     }
     fn subresource(&self, request: NetworkStart) -> Result<NetworkStarted, Error> {
         self.ask(|tx| Command::Subresource(request, tx))?
+    }
+    fn document_cookie(&self, request: DocumentCookie) -> Result<String, Error> {
+        self.ask(|tx| Command::DocumentCookie(request, tx))?
     }
 }
 pub fn serve(connection: &Arc<Connection>) {
@@ -738,6 +853,12 @@ pub fn get_request(
     }
 }
 impl NetworkSession {
+    /// Browser-owned synchronous document.cookie access in the network process.
+    pub fn document_cookie(&self, mut request: DocumentCookie) -> Result<String, Error> {
+        request.client_id = self.client_id;
+        request.epoch = self.epoch;
+        self.remote.document_cookie(request)
+    }
     pub fn launch(
         exe: &std::path::Path,
         client_id: u64,
@@ -822,8 +943,8 @@ impl NetworkSession {
                 .any(|h| h.name.eq_ignore_ascii_case("location") && !h.value.is_empty())
             || request.mode != "navigate"
             || request.redirect != "manual"
-            || request.destination != "document"
-            || !request.context.top_level_navigation
+            || !(request.destination == "document" && request.context.top_level_navigation
+                || request.destination == "frame" && !request.context.top_level_navigation)
         {
             return Err(invalid("invalid navigation restart"));
         }

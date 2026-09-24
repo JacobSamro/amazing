@@ -5,6 +5,7 @@ use crate::{
     FetchError, HeaderList, HttpUrl, InternalResponse, RegistrableDomain, Request, RequestMode,
     ResponseType, Site,
 };
+use crate::csp::{CspDisposition, CspPolicyList};
 use std::net::IpAddr;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -104,10 +105,12 @@ pub fn upgrade_mixed_content(request: &mut Request) -> Result<bool, FetchError> 
     let context = request.security;
     if !context.client_restricts_mixed_content
         || a_priori_authenticated(request.url())
-        || request.mode == RequestMode::Cors
         || !context.destination.upgradeable()
         || (context.destination == Destination::Image && context.image_set_initiator)
         || request.url().as_parsed().scheme() != "http"
+        || request.url().as_parsed().host().is_some_and(|host| {
+            host.serialize().trim_matches(&['[', ']'][..]).parse::<IpAddr>().is_ok()
+        })
     {
         return Ok(false);
     }
@@ -128,6 +131,42 @@ pub fn check_request_security(request: &Request) -> Result<(), FetchError> {
             && request.security.top_level_navigation)
     {
         return Err(FetchError::MixedContent);
+    }
+    Ok(())
+}
+
+/// Check each embedding ancestor against the response's enforced
+/// frame-ancestors policy, or X-Frame-Options when no enforced directive exists.
+pub fn check_frame_embedding(
+    response_url: &HttpUrl, headers: &HeaderList, ancestors: &[crate::Origin],
+) -> Result<(), FetchError> {
+    if ancestors.is_empty() { return Ok(()); }
+    let policies = CspPolicyList::from_headers(headers).map_err(|_| FetchError::FrameEmbedding)?;
+    let mut has_frame_ancestors = false;
+    for policy in &policies.policies {
+        if policy.disposition != CspDisposition::Enforce { continue; }
+        let Some(directive) = policy.directives.iter().find(|d| d.name == "frame-ancestors") else { continue; };
+        has_frame_ancestors = true;
+        for ancestor in ancestors {
+            let parsed = HttpUrl::parse(&ancestor.serialize()).map_err(|_| FetchError::FrameEmbedding)?;
+            if !directive.sources.iter().any(|source|
+                crate::csp::csp_source_matches(source, parsed.as_parsed(), response_url.origin(), false)) {
+                return Err(FetchError::FrameEmbedding);
+            }
+        }
+    }
+    if has_frame_ancestors { return Ok(()); }
+    for (_, value) in headers.iter().filter(|(name, _)| *name == "x-frame-options") {
+        let value = value.trim();
+        if value.eq_ignore_ascii_case("deny") { return Err(FetchError::FrameEmbedding); }
+        if value.eq_ignore_ascii_case("sameorigin") {
+            if ancestors.iter().any(|origin| origin != response_url.origin()) {
+                return Err(FetchError::FrameEmbedding);
+            }
+        } else {
+            // Conflicting or malformed XFO values must not relax an existing denial.
+            return Err(FetchError::FrameEmbedding);
+        }
     }
     Ok(())
 }

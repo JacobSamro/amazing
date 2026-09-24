@@ -46,6 +46,22 @@ impl Default for ComputedStyle {
 }
 
 impl ComputedStyle {
+    pub(crate) fn apply_compositor_values(
+        &mut self,
+        opacity: Option<f32>,
+        transform: Option<(&str, Vec<crate::values::Transform>)>,
+    ) {
+        if let Some(value) = opacity {
+            let css = value.to_string();
+            self.typed.insert("opacity".into(), ComputedValue::Number(css.parse().expect("finite opacity")));
+            self.props.insert("opacity".into(), css);
+        }
+        if let Some((css, value)) = transform {
+            self.props.insert("transform".into(), css.to_owned());
+            self.typed.insert("transform".into(), ComputedValue::Transform(value));
+        }
+    }
+
     /// Source stylesheet URL of a winning URL-bearing property.
     pub fn url_base(&self, property: &str) -> Option<&str> {
         self.url_bases.get(property).map(String::as_str)
@@ -258,6 +274,9 @@ const PROPERTIES: &[PropertyMetadata] = &[
     PropertyMetadata { name: "background-repeat", initial: "repeat", inherited: false },
     PropertyMetadata { name: "background-origin", initial: "padding-box", inherited: false },
     PropertyMetadata { name: "background-attachment", initial: "scroll", inherited: false },
+    PropertyMetadata { name: "image-orientation", initial: "from-image", inherited: true },
+    PropertyMetadata { name: "object-fit", initial: "fill", inherited: false },
+    PropertyMetadata { name: "object-position", initial: "50% 50%", inherited: false },
     PropertyMetadata { name: "aspect-ratio", initial: "auto", inherited: false },
     PropertyMetadata { name: "border-spacing", initial: "0px", inherited: true },
     PropertyMetadata { name: "content", initial: "normal", inherited: false },
@@ -1850,13 +1869,7 @@ fn valid_transform_number(tokens: &[Token]) -> bool {
 }
 
 fn valid_transform_length(tokens: &[Token]) -> bool {
-    matches!(
-        trim_tokens(tokens),
-        [Token::Number(value)] if *value == 0.0
-    ) || matches!(
-        trim_tokens(tokens),
-        [Token::Dimension(value, unit)] if value.is_finite() && unit.eq_ignore_ascii_case("px")
-    )
+    crate::values::LengthPercentage::parse(&serialize(trim_tokens(tokens))).is_some()
 }
 
 fn valid_transform_angle(tokens: &[Token]) -> bool {

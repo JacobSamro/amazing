@@ -58,6 +58,9 @@ fn request(url: &str, origin: &str) -> NetworkStart {
         context: NetworkContext {
             origin: WireOrigin::Tuple(origin.into()),
             cookie_site: WireCookieSite::NoClient(()),
+            top_level_origin: None,
+            ancestor_origins: Vec::new(),
+            sandbox_flags: 0,
             now_unix: 1_780_000_000,
             restricts_mixed_content: false,
             image_set_initiator: false,
@@ -227,6 +230,32 @@ fn network_session_preserves_non_success_head_and_body() {
 }
 
 #[test]
+fn document_cookie_roundtrips_in_network_child_and_hides_httponly() {
+    let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
+    let session = NetworkSession::launch(exe, 71, Duration::from_secs(5)).unwrap();
+    let host = format!("cookie-ipc-{}.test", std::process::id());
+    let mut request = DocumentCookie {
+        client_id: 0,
+        epoch: 0,
+        document_url: format!("https://{host}/path"),
+        top_level_origin: WireOrigin::Tuple(format!("https://{host}")),
+        now_unix: 1_780_000_000,
+        assignment: Some("visible=yes; Secure; SameSite=None".into()),
+    };
+    assert_eq!(session.document_cookie(request.clone()).unwrap(), "");
+    request.assignment = Some("hidden=no; HttpOnly".into());
+    assert_eq!(session.document_cookie(request.clone()).unwrap(), "");
+    request.assignment = None;
+    assert_eq!(session.document_cookie(request.clone()).unwrap(), "visible=yes");
+    request.assignment = Some("partitioned=one; Secure; SameSite=None; Partitioned".into());
+    session.document_cookie(request.clone()).unwrap();
+    request.assignment = None;
+    assert_eq!(session.document_cookie(request.clone()).unwrap(), "visible=yes; partitioned=one");
+    request.top_level_origin = WireOrigin::Tuple("https://other.test".into());
+    assert_eq!(session.document_cookie(request).unwrap(), "visible=yes");
+}
+
+#[test]
 fn v2_matches_direct_http_bytes_status_and_content_type() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -301,6 +330,52 @@ fn browser_navigation_uses_explicit_initiator_context() {
     server.join().unwrap();
     assert_eq!(response.body, b"nav");
     assert_eq!(response.head.status, 200);
+}
+
+#[test]
+fn child_navigation_checks_embedding_and_keeps_manual_redirect_epoch() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        for response in [
+            b"HTTP/1.1 200 OK\r\nX-Frame-Options: DENY\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice(),
+            b"HTTP/1.1 302 Found\r\nLocation: /final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice(),
+            b"HTTP/1.1 200 OK\r\nX-Frame-Options: SAMEORIGIN\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".as_slice(),
+        ] {
+            let (mut stream, _) = listener.accept().unwrap();
+            read_request(&mut stream);
+            stream.write_all(response).unwrap();
+        }
+    });
+    let exe = std::path::Path::new(env!("CARGO_BIN_EXE_ipc-demo-child"));
+    let session = NetworkSession::launch(exe, 72, Duration::from_secs(5)).unwrap();
+    let mut nav = request(&format!("{origin}/blocked"), &origin);
+    nav.destination = "frame".into();
+    nav.mode = "navigate".into();
+    nav.credentials = "include".into();
+    nav.redirect = "manual".into();
+    nav.context.top_level_navigation = false;
+    nav.context.top_level_origin = Some(WireOrigin::Tuple(origin.clone()));
+    nav.context.ancestor_origins = vec![WireOrigin::Tuple(origin.clone())];
+    assert!(session.fetch(nav.clone()).is_err());
+    nav.url = format!("{origin}/start");
+    let first = session.fetch(nav.clone()).unwrap();
+    assert_eq!(first.head.status, 302);
+    let started = NetworkStarted { id: first.head.id, client_id: first.head.client_id, epoch: first.head.epoch };
+    nav.url = format!("{origin}/final");
+    let second = session.restart_navigation(&started, &first.head, nav).unwrap();
+    assert_eq!(second.epoch, started.epoch);
+    let mut final_head = None;
+    loop {
+        match next_reply(&session, &second, NETWORK_CHUNK) {
+            NetworkReply::Head(head) => final_head = Some(head),
+            NetworkReply::Complete(done) => { assert!(done.error.is_none()); break; }
+            NetworkReply::Body(_) => {},
+            NetworkReply::Pending(()) => unreachable!(),
+        }
+    }
+    assert_eq!(final_head.unwrap().status, 200);
+    server.join().unwrap();
 }
 
 #[test]

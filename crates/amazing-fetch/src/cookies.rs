@@ -4,7 +4,8 @@
 //! address-bar URL. Cookie octets remain bytes, never percent-decoded or UTF-8 replaced.
 pub(crate) mod date;
 mod parse;
-use crate::{HttpUrl, Origin, RegistrableDomain};
+mod snapshot;
+use crate::{HttpUrl, Origin, RegistrableDomain, Site};
 
 pub const MAX_LIFETIME: i64 = 400 * 86400;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +27,8 @@ pub enum CookieError {
     HttpOnly,
     SameSite,
     Prefix,
+    Partition,
+    Snapshot,
     Limits,
     HeaderTooLarge,
 }
@@ -50,6 +53,8 @@ pub struct CookieAccess<'a> {
     pub top_level_navigation: bool,
     /// Current hop's method, after any redirect rewrite. Safe methods are case-sensitive.
     pub method: &'a str,
+    /// Schemeful site of the top-level document, minted by the browser.
+    pub partition_key: Option<Site>,
 }
 impl CookieAccess<'_> {
     fn same_site(&self, domains: &impl RegistrableDomain) -> bool {
@@ -91,6 +96,7 @@ pub struct Cookie {
     secure: bool,
     http_only: bool,
     same_site: SameSite,
+    partition_key: Option<Site>,
 }
 impl Cookie {
     pub fn name(&self) -> &[u8] {
@@ -125,6 +131,9 @@ impl Cookie {
     }
     pub fn same_site(&self) -> SameSite {
         self.same_site
+    }
+    pub fn partition_key(&self) -> Option<&Site> {
+        self.partition_key.as_ref()
     }
     pub fn persistent(&self) -> bool {
         self.expires.is_some()
@@ -230,7 +239,15 @@ impl<P: RegistrableDomain> CookieStore<P> {
             secure: parsed.secure,
             http_only: parsed.http_only,
             same_site: parsed.same_site,
+            partition_key: if parsed.partitioned {
+                Some(context.partition_key.clone().ok_or(CookieError::Partition)?)
+            } else {
+                None
+            },
         };
+        if parsed.partitioned && (!cookie.secure || !context.url.is_secure()) {
+            return Err(CookieError::Partition);
+        }
         if cookie.secure && !context.url.is_secure() {
             return Err(CookieError::Secure);
         }
@@ -276,6 +293,7 @@ impl<P: RegistrableDomain> CookieStore<P> {
                 && old.domain == cookie.domain
                 && old.host_only == cookie.host_only
                 && old.path == cookie.path
+                && old.partition_key == cookie.partition_key
         });
         let mut cookie = cookie;
         if let Some(index) = existing {
@@ -328,6 +346,7 @@ impl<P: RegistrableDomain> CookieStore<P> {
                     && path_matches(path.as_bytes(), &c.path)
                     && (!c.secure || context.url.is_secure())
                     && (!c.http_only || context.http_api)
+                    && (c.partition_key.is_none() || c.partition_key == context.partition_key)
                     && (same || c.same_site == SameSite::None || lax))
                     .then_some(i)
             })
