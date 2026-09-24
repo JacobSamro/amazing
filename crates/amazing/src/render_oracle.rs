@@ -103,6 +103,15 @@ struct RetainedCompositorSession {
     presenter: ReferenceCpuPresenter,
 }
 
+enum PropertyOnlyClassification {
+    FullRendering,
+}
+
+fn classify_css_value_deltas(_journal: &[RenderMutation]) -> PropertyOnlyClassification {
+    // CSS-13 will replace this conservative classifier with resolved values.
+    PropertyOnlyClassification::FullRendering
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct FrameWork {
     pub(crate) style_rebuild_calls: usize,
@@ -141,9 +150,11 @@ impl RenderCoordinator {
         _dom: &Dom,
         _sheets: &[Stylesheet],
         _viewport: (u32, u32),
-        _journal: &[RenderMutation],
+        journal: &[RenderMutation],
     ) -> Option<Surface> {
-        None
+        match classify_css_value_deltas(journal) {
+            PropertyOnlyClassification::FullRendering => None,
+        }
     }
 
     /// Compare the previous paint view with the next full view before mutating
