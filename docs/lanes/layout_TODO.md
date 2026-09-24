@@ -1274,14 +1274,17 @@ cases had a current-dev baseline of 4 passes and 13 mismatches. Layout WIP
 adds used-size `max()`/`min()` and `calc-size()` handling where the intrinsic
 basis is available, auto-height relative offset resolution, flex wrap-reverse,
 and grid-lanes fill-reverse. Linux `amazing-layout` nextest and doctests pass
-(290 tests, one ignored; zero doctests). The full directory baseline is still
-being collected; no candidate Windows render or final win-002 gate has run.
+(290 tests, one ignored; zero doctests). The fixed-dev full directory baseline is complete: **614 passes / 832 mismatches**
+across 1,446 cases, with zero errors, timeouts, unsupported cases or crashes.
+Grid ranks first at **634 mismatches / 294 passes** across 928 cases; flexbox
+second at **198 mismatches / 320 passes** across 518 cases. The compact raw
+report is `crates/amazing-layout/evidence/layout18/flex-grid-before.json`.
+Tested WIP is `c2cfe242`; no candidate Windows render or final win-002 gate has run.
 
 CSS must preserve `calc-size()` in computed min/max sizing and resolve typed
 `attr()` inside math before those layout handlers can pass the corresponding
 WPT. Exact requests are in `.agents/css/questions.md`. On RESUME, use the
-pinned baseline under `crates/amazing-layout/evidence/layout18/`, rank grid
-and flexbox by their completed failure counts, continue directory fixes, then
+pinned baseline under `crates/amazing-layout/evidence/layout18/`, fix grid and then flexbox as whole directories, then
 run the candidate win-001 render sweep and win-002 crate/workspace gate. The
 integrator-assist article-width oracle command ran successfully on win-002,
 but its p95 output needs recapture in durable evidence before a final report.
