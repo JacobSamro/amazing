@@ -981,7 +981,8 @@ fn processing_instruction_and_range_point_queries_preserve_units() {
     let pi = call(&mut h, O::CreateProcessingInstruction, V::Node(xml),
         &[str_value("p"), V::String(vec![0xD800])]);
     assert_eq!(call(&mut h, O::NodeType, pi.clone(), &[]), V::Number(7.));
-    assert_eq!(call(&mut h, O::Data, pi, &[]), V::String(vec![0xD800]));
+    assert_eq!(call(&mut h, O::Data, pi.clone(), &[]), V::String(vec![0xD800]));
+    assert_eq!(call(&mut h, O::ProcessingInstructionTarget, pi, &[]), str_value("p"));
     let text = node(call(&mut h, O::CreateText, V::Node(xml), &[str_value("abcd")]));
     let range = call(&mut h, O::RangeConstructor, V::Undefined, &[]);
     call(&mut h, O::RangeSetStart, range.clone(), &[V::Node(text), V::Number(1.)]);
@@ -1394,6 +1395,24 @@ fn class_list_is_live_canonical_and_validates_tokens() {
     assert_eq!(call(&mut h, O::ElementClassName, element, &[]), V::String(vec![0xD800]));
     h.reject_lone_surrogate = true;
     assert_eq!(invoke(&mut h, O::TokenListValue, list, &[]), Err("TypeError: cannot represent lone surrogate".into()));
+}
+
+#[test]
+fn forced_token_toggle_without_a_change_queues_no_attribute_mutation() {
+    let mut h = Host::default();
+    let node = element(&mut h);
+    h.dom.set_attribute(node, "class", "present").unwrap();
+    let list = call(&mut h, O::ElementClassList, V::Node(node), &[]);
+    let observer = h.dom.create_mutation_observer(1);
+    h.dom.observe(observer, node, amazing_dom::mutation::ObserveOptions {
+        attributes: Some(true),
+        ..Default::default()
+    }).unwrap();
+
+    assert_eq!(call(&mut h, O::TokenListToggle, list.clone(), &[str_value("present"), V::Bool(true)]), V::Bool(true));
+    assert_eq!(call(&mut h, O::TokenListToggle, list, &[str_value("absent"), V::Bool(false)]), V::Bool(false));
+    assert!(h.dom.take_mutation_records(observer).is_empty());
+    assert_eq!(h.dom.get_attribute_ns(node, None, "class"), Some("present"));
 }
 
 #[test]

@@ -888,7 +888,7 @@ pub static INTERFACES: &[D] = &[
         name: "ProcessingInstruction",
         parent: Some(I::CharacterData),
         constructor: None,
-        members: &[],
+        members: &[getter("target", O::ProcessingInstructionTarget)],
     },
     D {
         interface: I::AbstractRange,

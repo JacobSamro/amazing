@@ -431,6 +431,7 @@ pub enum Operation {
     DocumentTypeName,
     DocumentTypePublicId,
     DocumentTypeSystemId,
+    ProcessingInstructionTarget,
     NodeValue,
     SetNodeValue,
     TextContent,
