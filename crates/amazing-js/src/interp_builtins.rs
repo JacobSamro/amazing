@@ -3009,6 +3009,15 @@ fn native_array_map(
     this: JsValue,
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
+    let callback = args.first().ok_or_else(|| Throw::type_error("array callback is not a function"))?;
+    if callable_function(callback).is_none() {
+        return Err(Throw::type_error("array callback is not a function"));
+    }
+    // The result is an Array, whose length cannot exceed 2^32 - 1.
+    // Reject that size before walking a sparse array-like object.
+    if i.array_length(&this) > u32::MAX as usize {
+        return Err(Throw::range_error("invalid array length"));
+    }
     let out = JsValue::object({
         let mut object = JsObject::array();
         object.proto = Some(i.array_proto.clone());
@@ -3159,6 +3168,9 @@ fn native_array_index_of(
     if length == 0 { return Ok(JsValue::num(-1.0)); }
     let search = args.first().cloned().unwrap_or(JsValue::Undefined);
     let start = array_index(i, args.get(1), length, 0.0)?;
+    if length.saturating_sub(start) > 1_000_000 {
+        return Err(Throw::range_error("array search exceeds iteration limit"));
+    }
     for index in start..length {
         if array_has(i, &object, index)? && array_get_index(i, &object, index)? == search {
             return Ok(JsValue::num(index as f64));
