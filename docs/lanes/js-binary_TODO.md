@@ -254,3 +254,36 @@ the three constructor clusters, run full pinned Test262 zero-loss on Linux,
 then the required Windows nextest/doctest and corpus gates. No JSB-5 full
 gate has run yet. This is a work-in-progress commit for restart, not ticket
 completion.
+
+## JSB-5 completion — Intl constructor clusters (2026-09-24)
+
+Merged local `dev` with Temporal IANA support and the shared Capabilities
+refactor. Fixed base: `5ac342c46da6481931bb4cdd637ac44125a1edba`.
+The four cluster commits are `4fdd2ac8` (Locale), `291d2c8c`
+(DateTimeFormat), `5303b2c1` (NumberFormat), and `7832142d`
+(`supportedValuesOf`). No changes were made to `test262_host.rs`.
+
+The pinned Test262 revision is `3655e7464de3d52643ecddd4b5f9f4f3e7f62398`.
+The 53,872-file input SHA-256 is
+`91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`.
+Full Linux comparison at the exact committed source: 26,206 → 26,546
+passing files (+340), with zero lost passing files or variants. `intl402/`
+increased 805/3,357 → 921/3,357 (+116). The base classification SHA-256
+was `33ea5465a093cbe4a3f03eea5954e91febdd56f07319e5aa79feb18d71ec89f7`;
+the final classification SHA-256 was
+`65675a848b77c47df9e2d6da0ebdc9f4d46a7705588eb699842201c1e081550d`.
+Results remain on venus-001 at `~/amazing/out/js-binary-jsb5-base-full.json`
+and `~/amazing/out/js-binary-jsb5-committed-full.json`. Targeted constructor
+passes moved DateTimeFormat 103→110, NumberFormat 146→164, Locale 79→154,
+and `supportedValuesOf` 8→15, each with zero lost files.
+
+The aim of more than 1,000 new `intl402/` passes was not reached. The named
+constructor groups contained far fewer failures than that target. Remaining
+DateTimeFormat range tests need the shared Date constructor to read all
+arguments; NumberFormat unit cases need `Object.entries`; range parts tests
+need generator support. These cross-lane requests are recorded in
+`.agents/js-binary/questions.md`.
+
+The final win-002 gate at `7832142d32f008d1fa0345045160bd003a9332dc`
+passed: amazing-js nextest 297/297 (one skipped), amazing-js doctests 1/1,
+workspace nextest 2,352/2,352 (six skipped), and workspace doctests 2/2.
