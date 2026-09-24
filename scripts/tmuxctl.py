@@ -317,6 +317,8 @@ LANE_GRANTS["dom-bindings"].append("crates/amazing/src/dom_host.rs")
 LANE_GRANTS.setdefault("js-runtime", []).append("crates/amazing-js/src/builtins_std_number_math.rs")
 # JSRT: JsFunction gains a strict bit; mechanical initializer edits in two external files.
 LANE_GRANTS.setdefault("js-runtime", []).extend(["crates/amazing/src/cmd/wpt_harness.rs", "crates/amazing-js/examples/test262_host.rs"])
+# HTML-25: iframe getters/insertion hooks (additive) across bindings, driver, scheduler, WPT runner.
+LANE_GRANTS.setdefault("html", []).extend(["crates/amazing-bindings/src/interfaces.rs", "crates/amazing-bindings/src/host.rs", "crates/amazing/src/runtime_binding_host.rs", "crates/amazing/src/js_scheduler.rs", "crates/amazing/src/cmd/wpt_harness.rs"])
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
