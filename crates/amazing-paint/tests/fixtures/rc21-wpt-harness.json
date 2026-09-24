@@ -2,7 +2,13 @@
   "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
   "sparse_paths": [
     "html/semantics/embedded-content/the-img-element",
-    "css/css-images"
+    "html/resources",
+    "css/css-images",
+    "css/support",
+    "images",
+    "common",
+    "resources",
+    "service-workers/service-worker/resources"
   ],
   "tests": [
     "css/css-images/animation/object-position-composition.html",

@@ -24,6 +24,7 @@ fn load_resource(url: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
 struct PageImage {
     node: amazing_dom::NodeIdx,
     url: String,
+    html_image: bool,
     density: f32,
     loading: amazing_media::loading::Loading,
     decoding: amazing_media::loading::Decoding,
@@ -55,7 +56,7 @@ pub(crate) struct PageMedia {
 
 impl PageMedia {
     pub(crate) fn image_snapshots(&self) -> Vec<PageImageSnapshot> {
-        self.images.iter().filter_map(|entry| Some(PageImageSnapshot {
+        self.images.iter().filter(|entry| entry.html_image).filter_map(|entry| Some(PageImageSnapshot {
             node: entry.node,
             state: self.image_state(entry.node)?,
             generation: entry.request.generation,
@@ -67,7 +68,7 @@ impl PageMedia {
     }
 
     pub(crate) fn image_state(&self, node: amazing_dom::NodeIdx) -> Option<PageImageState> {
-        let entry = self.images.iter().find(|entry| entry.node == node)?;
+        let entry = self.images.iter().find(|entry| entry.node == node && entry.html_image)?;
         let image = self.decoded.get(&entry.url);
         let density = entry.density.max(f32::MIN_POSITIVE);
         Some(PageImageState {
@@ -366,8 +367,31 @@ pub(crate) fn load_page_media_in_viewport(
                     load_image(media, &resolved, attempted);
                     request.finish(request.generation, media.decoded.contains_key(&resolved));
                 }
-                media.images.push(PageImage { node, url: resolved, density: selected.density,
+                media.images.push(PageImage { node, url: resolved, html_image: true, density: selected.density,
                     loading, decoding, request });
+            }
+        } else if let Some(attribute) = match dom.name(node) {
+            Some("embed") => Some("src"),
+            Some("object") => Some("data"),
+            Some("video") => Some("poster"),
+            _ => None,
+        } {
+            if let Some(source) = dom.attrs_of(node).unwrap_or(&[]).iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(attribute))
+                .map(|(_, value)| value.as_str())
+                .filter(|value| !value.trim().is_empty()) {
+                let resolved = resolve_script_url(page, source);
+                let mut request = amazing_media::loading::ImageRequest::default();
+                request.select(Some(&resolved));
+                request.fetch_started = true;
+                load_image(media, &resolved, attempted);
+                request.finish(request.generation, media.decoded.contains_key(&resolved));
+                media.images.push(PageImage {
+                    node, url: resolved, html_image: false, density: 1.0,
+                    loading: amazing_media::loading::Loading::Eager,
+                    decoding: amazing_media::loading::Decoding::Sync,
+                    request,
+                });
             }
         }
         for pseudo in [
@@ -552,6 +576,23 @@ mod tests {
         assert_eq!(sheets.len(), 1);
         assert_eq!(sheets[0].0, "body{color:red}");
         assert_eq!(sheets[0].2.base_url.as_deref(), Some("data:text/css,body%7Bcolor%3Ared%7D"));
+    }
+
+    #[test]
+    fn image_resources_for_replaced_elements_share_paint_decoding() {
+        let source = "data:image/x-portable-pixmap,P6%0A1%201%0A255%0A%FF%00%00";
+        let dom = amazing_html::parse(&format!(
+            "<img src='{source}'><embed src='{source}'><object data='{source}'></object><video poster='{source}'></video>"
+        ));
+        let styled = amazing_css::compute(&dom, &[]);
+        let media = load_page_media(&dom, "https://example.test/page", &styled);
+        assert!(media.warnings.is_empty(), "{:?}", media.warnings);
+        assert_eq!(media.images.len(), 4);
+        assert_eq!(media.image_snapshots().len(), 1);
+        for entry in &media.images {
+            let image = amazing_paint::ImageProvider::image(&media, entry.node).unwrap();
+            assert_eq!((image.width, image.height), (1, 1));
+        }
     }
 
     #[test]

@@ -1320,6 +1320,23 @@ fn load_page_resources(
                     resources.images.push(PageImage { node, image, density: source.density });
                 }
             }
+        } else if let Some(attribute) = match dom.name(node) {
+            Some("embed") => Some("src"),
+            Some("object") => Some("data"),
+            Some("video") => Some("poster"),
+            _ => None,
+        } {
+            if let Some(address) = attr(dom, node, attribute)
+                .filter(|source| !source.trim().is_empty())
+                .and_then(|source| resolve_resource_address(document_url, source))
+                && let Ok(response) = fetch_resource(session, &address, options)
+                && response.status == 200
+                && let Some(image) = decode_web_image(&response.body) {
+                let retained: usize = resources.images.iter().map(|entry| entry.image.pixels.len()).sum();
+                if retained.saturating_add(image.pixels.len()) <= 128 * 1024 * 1024 {
+                    resources.images.push(PageImage { node, image, density: 1.0 });
+                }
+            }
         }
 
         for child in dom.children(node) {
