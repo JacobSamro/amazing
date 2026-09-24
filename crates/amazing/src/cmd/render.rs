@@ -357,7 +357,10 @@ fn paint_host_surface(
     extra_css: &str,
 ) -> Result<amazing_paint::Surface, PageError> {
     let production = std::env::var_os("AMAZING_INCREMENTAL_PRODUCTION").is_some_and(|value| value == "1");
-    let mut oracle = if production { crate::render_oracle::RenderCoordinator::production() }
+    let parallel = std::env::var_os("AMAZING_PARALLEL_TILES").is_some_and(|value| value == "1");
+    let mut oracle = if production && parallel {
+        crate::render_oracle::RenderCoordinator::production_parallel()
+    } else if production { crate::render_oracle::RenderCoordinator::production() }
         else { crate::render_oracle::RenderCoordinator::default() };
     paint_host_surface_with_updates(host, html_path, width, fixed_height, extra_css,
         &amazing_css::AnimatedValues::default(), true,
@@ -399,6 +402,9 @@ fn paint_host_surface_with_updates(
         let viewport = (width.max(1.0) as u32, fixed_height.unwrap_or(600));
         let epoch = dom.dom.render_mutation_epoch();
         let journal = dom.dom.take_render_mutations(epoch);
+        if let Some(surface) = coordinator.parallel_frame_if_idle(&journal) {
+            return Ok(surface);
+        }
         if let Some(surface) = coordinator.try_property_only(&dom.dom, &sheets, viewport, &journal) {
             return Ok(surface);
         }
@@ -832,6 +838,44 @@ mod oracle_trace_tests {
         trace("article-class", ARTICLE, "", "main", "", true);
         trace("effects-class", EFFECTS, "", "section", "scroller", true);
         trace("opacity-class", OPACITY, OPACITY_CSS, "div", "base", true);
+    }
+
+    #[test]
+    fn parallel_tiles_present_a_complete_frame_after_vsync() {
+        let html = "<body><style>body{margin:0}.block{width:64px;height:64px;background:red}.block.changed{background:blue}</style><div class='block'></div></body>";
+        let make_host = || Rc::new(RefCell::new(BrowserDomHost {
+            dom: amazing_html::parse(html), native_forwarded: false,
+        }));
+        let host = make_host();
+        let direct_host = make_host();
+        let node = (0..host.borrow().dom.node_count()).map(|index| NodeIdx(index as u32))
+            .find(|node| host.borrow().dom.name(*node) == Some("div")).unwrap();
+        let direct_node = (0..direct_host.borrow().dom.node_count())
+            .map(|index| NodeIdx(index as u32))
+            .find(|node| direct_host.borrow().dom.name(*node) == Some("div")).unwrap();
+        let animated = amazing_css::AnimatedValues::default();
+        let mut coordinator = crate::render_oracle::RenderCoordinator::production_parallel();
+        paint_host_surface_with_updates(&host, "parallel.html", 512., Some(512), "",
+            &animated, true, Some(&mut coordinator)).unwrap();
+        host.borrow_mut().dom.set_attribute(node, "class", "block changed").unwrap();
+        direct_host.borrow_mut().dom.set_attribute(direct_node, "class", "block changed").unwrap();
+        let mut candidate = paint_host_surface_with_updates(&host, "parallel.html", 512., Some(512), "",
+            &animated, true, Some(&mut coordinator)).unwrap();
+        let scheduled = coordinator.last_work().tile_jobs_scheduled;
+        assert!(scheduled > 0, "paint mutation should queue worker tiles");
+        let full = paint_host_surface_with_updates(&direct_host, "parallel.html", 512., Some(512), "",
+            &animated, true, None).unwrap();
+        let mut timeline = amazing_compositor::CssCompositorTimeline::default();
+        let mut animated_values = amazing_css::AnimatedValues::default();
+        let deadline = Instant::now() + std::time::Duration::from_secs(2);
+        while coordinator.pixel_parity(&candidate, &full).losses != 0 && Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            if let Some((ready, _)) = coordinator.on_vsync(
+                &host.borrow().dom, &mut timeline, &mut animated_values, 16.) {
+                candidate = ready;
+            }
+        }
+        assert_eq!(coordinator.pixel_parity(&candidate, &full).losses, 0);
     }
 
     #[test]
