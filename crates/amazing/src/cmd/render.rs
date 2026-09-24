@@ -3,8 +3,7 @@ use std::{cell::RefCell, rc::Rc, process::ExitCode, time::Duration};
 use crate::{dom_host::BrowserDomHost, page::{collect_style_text, collect_author_css, load_page_media, load_page_text_from_sheets, PagePaint}, gui};
 use super::{parse::{read_bytes, read_source}, js::{execute_inline_scripts, prepare_page_scripts}};
 use crate::document::{DocumentKind, PageError, parse_document_bytes};
-use crate::animation_scene::{AnimationScene, apply_to_layout};
-use amazing_compositor::PropertyUpdate;
+use crate::animation_scene::AnimationScene;
 /// Phase 2 demo artifact: compute styles for an HTML page.
 ///
 /// Stylesheets come from every `<style>` element in document order plus any
@@ -255,7 +254,7 @@ fn render_wpt_surface_after_first_paint(
     let mut animations = AnimationScene::new();
     let mut oracle = crate::render_oracle::RenderCoordinator::default();
     let first_updates = sample_animation_frame(&host, html_path, &mut animations, 0.)?;
-    let first = paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "", &first_updates.main_thread_updates,
+    let first = paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "",
         animations.animated(), crate::render_oracle::enabled().then_some(&mut oracle))?;
     after_first_paint(&first);
     let Some(scheduler) = scheduler.as_mut() else {
@@ -292,7 +291,7 @@ fn render_wpt_surface_after_first_paint(
         scheduler.dispatch_animation_event(event)
             .map_err(|error| format!("animation listener failed: {}", error.describe()))?;
     }
-    paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "", &final_updates.main_thread_updates,
+    paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "",
         animations.animated(), crate::render_oracle::enabled().then_some(&mut oracle))
 }
 
@@ -326,7 +325,7 @@ fn paint_host_surface(
     extra_css: &str,
 ) -> Result<amazing_paint::Surface, PageError> {
     let mut oracle = crate::render_oracle::RenderCoordinator::default();
-    paint_host_surface_with_updates(host, html_path, width, fixed_height, extra_css, &[],
+    paint_host_surface_with_updates(host, html_path, width, fixed_height, extra_css,
         &amazing_css::AnimatedValues::default(), crate::render_oracle::enabled().then_some(&mut oracle))
 }
 
@@ -336,7 +335,6 @@ fn paint_host_surface_with_updates(
     width: f32,
     fixed_height: Option<u32>,
     extra_css: &str,
-    updates: &[PropertyUpdate],
     animated: &amazing_css::AnimatedValues,
     coordinator: Option<&mut crate::render_oracle::RenderCoordinator>,
 ) -> Result<amazing_paint::Surface, PageError> {
@@ -370,18 +368,14 @@ fn paint_host_surface_with_updates(
     for warning in &page_text.warnings {
         eprintln!("amazing render: {warning}");
     }
-    let mut root = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
+    let root = amazing_layout::layout_styled_document(
         &dom.dom,
-        &sheets,
-        width,
-        fixed_height.map(|height| height as f32),
+        &styled,
         &page_text.provider,
         &media,
+        width,
+        fixed_height.map(|height| height as f32),
     );
-    if apply_to_layout(&mut root, updates) {
-        amazing_layout::block::layout_root_in_viewport(&mut root, width,
-            fixed_height.map(|height| height as f32), &amazing_layout::font::FontSource::fallback());
-    }
     let page_height = fixed_height.unwrap_or_else(|| {
         // Normal document rendering follows content height; WPT rendering
         // supplies a fixed viewport instead.
@@ -398,14 +392,10 @@ fn paint_host_surface_with_updates(
             &root, width.max(1.0) as u32, page_height, &page_text.provider, &paint,
         );
         let full_styles = amazing_css::compute_with_animations(&dom.dom, &sheets, animated);
-        let mut full_root = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
-            &dom.dom, &sheets, width, fixed_height.map(|height| height as f32),
-            &page_text.provider, &media,
+        let full_root = amazing_layout::layout_styled_document(
+            &dom.dom, &full_styles, &page_text.provider, &media,
+            width, fixed_height.map(|height| height as f32),
         );
-        if apply_to_layout(&mut full_root, updates) {
-            amazing_layout::block::layout_root_in_viewport(&mut full_root, width,
-                fixed_height.map(|height| height as f32), &amazing_layout::font::FontSource::fallback());
-        }
         let full_paint = PagePaint { media: &media, dom: &dom.dom, styles: &full_styles };
         let full_view = amazing_paint::display_list_view::DisplayListView::new(
             &full_root, width.max(1.0) as u32, page_height, &page_text.provider,
@@ -553,6 +543,15 @@ mod reftest_protocol_tests {
         let html = "<!doctype html><html class='reftest-wait'><style>body{margin:0}@keyframes grow{from{width:8px}to{width:32px}}#box{height:16px;background:lime;animation:grow 32ms linear forwards}</style><body><div id='box'></div><script>document.querySelector('#box').addEventListener('animationend',e=>{if(e.animationName==='grow'&&e.elapsedTime===0.032)document.documentElement.setAttribute('class','ready')})</script></body></html>";
         let result = render_wpt_surface("animation.html", html.as_bytes(), 64, 48).unwrap();
         let reference = "<!doctype html><html><style>body{margin:0}#box{width:32px;height:16px;background:lime}</style><body><div id='box'></div></body></html>";
+        let expected = render_surface("reference.html", reference.as_bytes(), 64., Some(48), "").unwrap();
+        assert_eq!(result.pixels, expected.pixels);
+    }
+
+    #[test]
+    fn important_width_overrides_animation_in_layout() {
+        let html = "<!doctype html><html class='reftest-wait'><style>body{margin:0}@keyframes grow{from{width:8px}to{width:32px}}#box{width:8px!important;height:16px;background:lime;animation:grow 32ms linear forwards}</style><body><div id='box'></div><script>document.querySelector('#box').addEventListener('animationend',()=>document.documentElement.setAttribute('class','ready'))</script></body></html>";
+        let result = render_wpt_surface("important-animation.html", html.as_bytes(), 64, 48).unwrap();
+        let reference = "<!doctype html><html><style>body{margin:0}#box{width:8px;height:16px;background:lime}</style><body><div id='box'></div></body></html>";
         let expected = render_surface("reference.html", reference.as_bytes(), 64., Some(48), "").unwrap();
         assert_eq!(result.pixels, expected.pixels);
     }

@@ -181,34 +181,6 @@ fn css_value(value: &AnimationValue) -> Option<String> {
     }
 }
 
-/// Apply supported sampled styles to the freshly built box tree, without
-/// modifying DOM style attributes or feeding samples back into transition
-/// detection. Geometry changes then require a layout pass before raster.
-pub(crate) fn apply_to_layout(
-    root: &mut amazing_layout::LayoutBox,
-    updates: &[PropertyUpdate],
-) -> bool {
-    let mut changed = false;
-    if let Some(node) = root.node {
-        for update in updates.iter().filter(|update| update.element == node.0 as u64) {
-            if let Some(value) = css_value(&update.value) {
-                root.style.set(&update.property, &value);
-                changed = true;
-            }
-        }
-    }
-    match &mut root.flow {
-        amazing_layout::Flow::Blocks(children)
-        | amazing_layout::Flow::Flex(children)
-        | amazing_layout::Flow::Grid(children) => {
-            for child in children { changed |= apply_to_layout(child, updates); }
-        }
-        _ => {}
-    }
-    for child in &mut root.positioned { changed |= apply_to_layout(child, updates); }
-    changed
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

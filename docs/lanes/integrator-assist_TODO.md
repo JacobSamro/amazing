@@ -806,3 +806,15 @@ samples by the compositor's documented animation-before-transition order and
 transition lifecycle events; a compositor origin field would remove that
 inference. Tests cover animation and transition cascade sources and retained
 precedence.
+
+## IA-ANIMATIONS-2 — styled layout adoption (2026-09-24)
+
+On fixed local `dev` base `ac04822`, WPT rendering and the Windows GUI pass
+their sampled `StyledDom` directly to `layout_styled_document`. Media, layout,
+and paint therefore use the same animation and transition cascade result. The
+old box-tree style mutation and second layout pass are removed. The
+invalidation oracle keeps its plain-style candidate check and lays out its
+independent reference from freshly computed sampled styles. A render test
+checks that an important width declaration beats the sampled animation in
+layout; existing tests cover animated width, color, opacity, and transition
+events.
