@@ -5,7 +5,9 @@
 //! with a neutral property state.
 
 use super::*;
-use amazing_paint::display_list_view::{DisplayListView, PaintBounds, RawRasterError};
+use amazing_paint::display_list_view::{
+    DisplayListView, PaintBounds, RawRasterError, RetainedPaintView,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaintViewRasterMode {
@@ -60,22 +62,34 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
             owners.transforms.len() + owners.effects.len() + owners.scrolls.len(),
         );
         for (owner, id) in owners.transforms {
-            bindings.push((NodePropertyKey {
-                node: owner.node.0, generation: owner.generation,
-                property: BoundProperty::Transform,
-            }, BoundPropertyNode::Transform(TransformId(id as usize))));
+            bindings.push((
+                NodePropertyKey {
+                    node: owner.node.0,
+                    generation: owner.generation,
+                    property: BoundProperty::Transform,
+                },
+                BoundPropertyNode::Transform(TransformId(id as usize)),
+            ));
         }
         for (owner, id) in owners.effects {
-            bindings.push((NodePropertyKey {
-                node: owner.node.0, generation: owner.generation,
-                property: BoundProperty::Opacity,
-            }, BoundPropertyNode::Opacity(EffectId(id as usize))));
+            bindings.push((
+                NodePropertyKey {
+                    node: owner.node.0,
+                    generation: owner.generation,
+                    property: BoundProperty::Opacity,
+                },
+                BoundPropertyNode::Opacity(EffectId(id as usize)),
+            ));
         }
         for (owner, id) in owners.scrolls {
-            bindings.push((NodePropertyKey {
-                node: owner.node.0, generation: owner.generation,
-                property: BoundProperty::Scroll,
-            }, BoundPropertyNode::Scroll(ScrollId(id as usize))));
+            bindings.push((
+                NodePropertyKey {
+                    node: owner.node.0,
+                    generation: owner.generation,
+                    property: BoundProperty::Scroll,
+                },
+                BoundPropertyNode::Scroll(ScrollId(id as usize)),
+            ));
         }
         Some(bindings)
     }
@@ -110,9 +124,25 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
         width: u32,
         height: u32,
     ) -> Result<CompositorFrame, SceneError> {
-        let mut frame = compositor.build_frame(self, width, height)?;
+        let frame = compositor.build_frame(self, width, height)?;
+        Ok(self.with_canvas_background(frame))
+    }
+
+    /// Assemble a frame from ready worker tiles. The caller retains its last
+    /// complete frame when this returns `MissingCachedTile`.
+    pub fn build_cached_frame(
+        &self,
+        compositor: &mut Compositor,
+        width: u32,
+        height: u32,
+    ) -> Result<CompositorFrame, SceneError> {
+        let frame = compositor.build_cached_frame(width, height)?;
+        Ok(self.with_canvas_background(frame))
+    }
+
+    fn with_canvas_background(&self, mut frame: CompositorFrame) -> CompositorFrame {
         if self.mode == PaintViewRasterMode::RawLocal {
-            let viewport = Rect::new(0., 0., width as f32, height as f32);
+            let viewport = Rect::new(0., 0., frame.width as f32, frame.height as f32);
             frame.passes[0].quads.insert(
                 0,
                 DrawQuad::SolidColor(SolidColorQuad {
@@ -124,7 +154,19 @@ impl<'view, 'paint> PaintViewSource<'view, 'paint> {
                 }),
             );
         }
-        Ok(frame)
+        frame
+    }
+
+    /// Build from RC-20's owned rasters while preserving the paint-view
+    /// canvas background used by the ordinary raw-local frame path.
+    pub fn build_parallel_frame(
+        &self,
+        compositor: &mut Compositor,
+        retained: &RetainedPaintView,
+        request: TileRasterRequest,
+    ) -> Result<(CompositorFrame, TileRasterBatch), SceneError> {
+        let (frame, batch) = compositor.build_parallel_frame(retained, request)?;
+        Ok((self.with_canvas_background(frame), batch))
     }
 }
 
@@ -177,6 +219,43 @@ impl PaintSource for DisplayListView<'_> {
     }
 }
 
+/// RC-20's owned item rasters are immutable and thread-safe, so tile workers
+/// can replay them without borrowing layout, text, images or the main thread.
+impl PaintSource for RetainedPaintView {
+    fn item_count(&self) -> usize {
+        self.items().count()
+    }
+
+    fn rasterize(&self, items: Range<usize>, tile: Rect, out: &mut Surface) {
+        for item in self.items().skip(items.start).take(items.len()) {
+            let Some(raster) = item.key.and_then(|key| self.raster(key)) else {
+                continue;
+            };
+            let (ox, oy) = raster.origin;
+            let src = raster.surface;
+            let x0 = (tile.x as i32).max(ox);
+            let y0 = (tile.y as i32).max(oy);
+            let x1 = ((tile.x + tile.w) as i32).min(ox + src.width as i32);
+            let y1 = ((tile.y + tile.h) as i32).min(oy + src.height as i32);
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let si = (((y - oy) as usize * src.width as usize) + (x - ox) as usize) * 4;
+                    let di = (((y - tile.y as i32) as usize * out.width as usize)
+                        + (x - tile.x as i32) as usize)
+                        * 4;
+                    let source = <[u8; 4]>::try_from(&src.pixels[si..si + 4]).unwrap();
+                    if source[3] == 0 {
+                        continue;
+                    }
+                    let dest = <[u8; 4]>::try_from(&out.pixels[di..di + 4]).unwrap();
+                    out.pixels[di..di + 4]
+                        .copy_from_slice(&amazing_paint::blend_source_over(source, dest, 255));
+                }
+            }
+        }
+    }
+}
+
 /// Converts the view's stable per-build property IDs and direct hints.
 pub fn paint_view_metadata(
     view: &DisplayListView<'_>,
@@ -215,8 +294,12 @@ pub fn paint_view_metadata(
     for node in view.scrolls().iter().skip(1) {
         let bounds = rect(node.bounds);
         trees
-            .add_scroll(ScrollId(node.parent as usize), node.initial_offset, bounds,
-                rect(node.contents))
+            .add_scroll(
+                ScrollId(node.parent as usize),
+                node.initial_offset,
+                bounds,
+                rect(node.contents),
+            )
             .map_err(|_| SceneError::InvalidState)?;
     }
     let chunks = view

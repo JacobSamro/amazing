@@ -68,7 +68,10 @@ impl Compositor {
     }
     /// Scroll a known node, bubbling unused movement to scrollable ancestors.
     pub fn scroll_by_node(
-        &mut self, start: ScrollId, dx: f32, dy: f32,
+        &mut self,
+        start: ScrollId,
+        dx: f32,
+        dy: f32,
     ) -> Result<WheelResult, TreeError> {
         if !dx.is_finite() || !dy.is_finite() {
             return Err(TreeError::NonFinite);
@@ -101,7 +104,9 @@ impl Compositor {
     }
     /// Clamp a direct programmatic, drag or animation target to the scrollport.
     pub fn scroll_to_clamped(
-        &mut self, id: ScrollId, target: (f32, f32),
+        &mut self,
+        id: ScrollId,
+        target: (f32, f32),
     ) -> Result<Option<(f32, f32)>, TreeError> {
         if !target.0.is_finite() || !target.1.is_finite() {
             return Err(TreeError::NonFinite);

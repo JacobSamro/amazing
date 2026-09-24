@@ -7,23 +7,25 @@ mod frame;
 mod hit;
 mod paint_delta;
 mod paint_view;
-mod property_binding;
 mod property;
+mod property_binding;
 mod quad;
 mod scroll_input;
 mod snapshot;
+mod tile_raster;
 use amazing_paint::Surface;
 pub use animation::*;
 pub use hit::*;
 pub use paint_delta::*;
 pub use paint_view::*;
-pub use property_binding::*;
 pub use property::*;
+pub use property_binding::*;
 pub use quad::*;
 pub use scroll_input::*;
 pub use snapshot::*;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
+pub use tile_raster::*;
 
 pub const TILE_SIZE: i32 = 256;
 const MAX_VISIBLE_TILES: usize = 1024;
@@ -159,6 +161,9 @@ struct TileKey {
 struct Tile {
     surface: Surface,
     dirty: bool,
+    damage: Option<Rect>,
+    updated: bool,
+    last_used: u64,
 }
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FrameStats {
@@ -178,7 +183,11 @@ pub struct Compositor {
     property_bindings: HashMap<NodePropertyKey, BoundPropertyNode>,
     layers: Vec<Layer>,
     tiles: HashMap<TileKey, Tile>,
+    tile_budget: usize,
+    tile_clock: u64,
+    raster_epoch: u64,
     scroll_generation: u64,
+    free_tile_surfaces: Vec<Surface>,
     last_frame: FrameStats,
     previous_frame: Option<Surface>,
     previous_layers: Vec<frame::LayerSnapshot>,
@@ -248,7 +257,11 @@ impl Compositor {
             property_bindings: HashMap::new(),
             layers,
             tiles: HashMap::new(),
+            tile_budget: 256,
+            tile_clock: 0,
+            raster_epoch: 0,
             scroll_generation: 0,
+            free_tile_surfaces: Vec::new(),
             last_frame: FrameStats::default(),
             previous_frame: None,
             previous_layers: Vec::new(),
@@ -276,11 +289,13 @@ impl Compositor {
         let Some(chunk) = self.chunks.get(index) else {
             return;
         };
+        self.raster_epoch = self.raster_epoch.wrapping_add(1);
         for (li, layer) in self.layers.iter().enumerate() {
             if layer.chunks.contains(&index) {
                 for key in tile_keys(li, chunk.bounds) {
                     if let Some(tile) = self.tiles.get_mut(&key) {
-                        tile.dirty = true
+                        tile.dirty = true;
+                        tile.damage = None;
                     }
                 }
             }
@@ -298,31 +313,42 @@ impl Compositor {
         }
     }
     pub fn repaint_all(&mut self) {
+        self.raster_epoch = self.raster_epoch.wrapping_add(1);
         for tile in self.tiles.values_mut() {
-            tile.dirty = true
+            tile.dirty = true;
+            tile.damage = None;
         }
     }
     pub fn set_transform(&mut self, id: TransformId, matrix: Matrix4) -> Result<(), TreeError> {
         self.trees.set_transform(id, matrix)
     }
     pub fn set_scroll(&mut self, id: ScrollId, offset: (f32, f32)) -> Result<(), TreeError> {
-        let previous = self.trees.scroll(id).map(|node| node.offset);
+        let before = self.trees.scroll(id).map(|node| node.offset);
         self.trees.set_scroll(id, offset)?;
-        if previous != Some(offset) {
+        if before != Some(offset) {
             self.scroll_generation = self.scroll_generation.wrapping_add(1);
         }
         Ok(())
     }
+    /// Current local offset for any property-tree scroll node.
     pub fn scroll_offset(&self, id: ScrollId) -> Option<(f32, f32)> {
         self.trees.scroll(id).map(|node| node.offset)
     }
+    /// Offset of the first top-level scroll node, or zero when no root
+    /// scroller exists in this scene. Node zero is the identity sentinel.
+    pub fn root_scroll_offset(&self) -> (f32, f32) {
+        self.root_scroll_id()
+            .and_then(|id| self.scroll_offset(id))
+            .unwrap_or((0., 0.))
+    }
     pub fn root_scroll_id(&self) -> Option<ScrollId> {
-        self.trees.scrolls.iter().enumerate().skip(1)
+        self.trees
+            .scrolls
+            .iter()
+            .enumerate()
+            .skip(1)
             .find(|(_, node)| node.parent == ScrollId(0))
             .map(|(index, _)| ScrollId(index))
-    }
-    pub fn root_scroll_offset(&self) -> (f32, f32) {
-        self.root_scroll_id().and_then(|id| self.scroll_offset(id)).unwrap_or((0., 0.))
     }
     pub fn scroll_generation(&self) -> u64 {
         self.scroll_generation
@@ -349,6 +375,87 @@ impl Compositor {
     }
     pub fn dirty_tiles(&self) -> usize {
         self.tiles.values().filter(|t| t.dirty).count()
+    }
+    /// Maximum number of retained RGBA tiles. Visible tiles are pinned for
+    /// the frame even when the viewport itself exceeds this budget.
+    pub fn set_tile_budget(&mut self, tiles: usize) {
+        self.tile_budget = tiles.max(1);
+        self.free_tile_surfaces
+            .truncate(self.tile_budget.saturating_sub(self.tiles.len()));
+    }
+}
+fn install_rasterized_tile(
+    tiles: &mut HashMap<TileKey, Tile>,
+    free_tile_surfaces: &mut Vec<Surface>,
+    tile_budget: usize,
+    tile_clock: &mut u64,
+    key: TileKey,
+    surface: Surface,
+) {
+    *tile_clock = tile_clock.wrapping_add(1);
+    if let Some(old) = tiles.get_mut(&key) {
+        if let Some(damage) = old.damage.take() {
+            let local = tile_rect(key);
+            let x0 = (damage.x - local.x).floor().clamp(0., TILE_SIZE as f32) as usize;
+            let y0 = (damage.y - local.y).floor().clamp(0., TILE_SIZE as f32) as usize;
+            let x1 = (damage.x + damage.w - local.x)
+                .ceil()
+                .clamp(0., TILE_SIZE as f32) as usize;
+            let y1 = (damage.y + damage.h - local.y)
+                .ceil()
+                .clamp(0., TILE_SIZE as f32) as usize;
+            for y in y0..y1 {
+                let start = (y * TILE_SIZE as usize + x0) * 4;
+                let end = (y * TILE_SIZE as usize + x1) * 4;
+                old.surface.pixels[start..end].copy_from_slice(&surface.pixels[start..end]);
+            }
+            old.dirty = false;
+            old.updated = true;
+            old.last_used = *tile_clock;
+            if free_tile_surfaces.len() < tile_budget.saturating_sub(tiles.len()) {
+                free_tile_surfaces.push(surface);
+            }
+            return;
+        }
+    }
+    let old = tiles.insert(
+        key,
+        Tile {
+            surface,
+            dirty: false,
+            damage: None,
+            updated: true,
+            last_used: *tile_clock,
+        },
+    );
+    if let Some(old) = old {
+        if free_tile_surfaces.len() < tile_budget.saturating_sub(tiles.len()) {
+            free_tile_surfaces.push(old.surface);
+        }
+    }
+}
+fn evict_tile_cache(
+    tiles: &mut HashMap<TileKey, Tile>,
+    free_tile_surfaces: &mut Vec<Surface>,
+    tile_budget: usize,
+    pinned: &HashSet<TileKey>,
+) {
+    let keep = tile_budget.max(pinned.len());
+    if tiles.len() <= keep {
+        return;
+    }
+    let mut victims: Vec<_> = tiles
+        .iter()
+        .filter(|(key, _)| !pinned.contains(key))
+        .map(|(key, tile)| (*key, tile.last_used))
+        .collect();
+    victims.sort_by_key(|(key, used)| (*used, key.layer, key.y, key.x));
+    for (key, _) in victims.into_iter().take(tiles.len() - keep) {
+        if let Some(tile) = tiles.remove(&key) {
+            if free_tile_surfaces.len() < tile_budget.saturating_sub(tiles.len()) {
+                free_tile_surfaces.push(tile.surface);
+            }
+        }
     }
 }
 fn tile_count(r: Rect) -> i64 {

@@ -329,20 +329,38 @@ mod tests {
     }
 
     #[test]
-    fn root_offset_generation_tracks_compositor_scroll_input() {
+    fn scroll_offsets_and_generation_follow_compositor_input() {
         let (mut compositor, scroll) = scene();
-        let before = compositor.scroll_generation();
+        let mut controller = ScrollController::default();
+        let generation = compositor.scroll_generation();
         assert_eq!(compositor.root_scroll_id(), Some(scroll));
         assert_eq!(compositor.root_scroll_offset(), (0., 0.));
-        let mut controller = ScrollController::default();
-        controller.handle_input(&mut compositor,
-            ScrollInput::Trackpad { x: 10., y: 10., delta: (0., 32.) }, false, 16.).unwrap();
+        assert_eq!(compositor.scroll_offset(scroll), Some((0., 0.)));
+        assert_eq!(
+            controller
+                .handle_input(
+                    &mut compositor,
+                    ScrollInput::Trackpad {
+                        x: 10.,
+                        y: 10.,
+                        delta: (0., 32.)
+                    },
+                    false,
+                    16.
+                )
+                .unwrap(),
+            ScrollInputResult::Scrolled {
+                node: scroll,
+                offset: (0., 32.)
+            }
+        );
         assert_eq!(compositor.scroll_offset(scroll), Some((0., 32.)));
         assert_eq!(compositor.root_scroll_offset(), (0., 32.));
-        assert!(compositor.scroll_changed_since(before));
+        assert!(compositor.scroll_changed_since(generation));
         let current = compositor.scroll_generation();
         compositor.set_scroll(scroll, (0., 32.)).unwrap();
         assert!(!compositor.scroll_changed_since(current));
+        assert_eq!(compositor.scroll_offset(ScrollId(999)), None);
     }
 
     struct OverlaySource;

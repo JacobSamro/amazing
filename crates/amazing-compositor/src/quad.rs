@@ -164,7 +164,7 @@ fn intersect(a: Rect, b: Rect) -> Rect {
     let bottom = (a.y + a.h).min(b.y + b.h);
     Rect::new(x, y, (right - x).max(0.), (bottom - y).max(0.))
 }
-fn clip_rect(trees: &PropertyTrees, state: PropertyTreeState, viewport: Rect) -> Rect {
+pub(super) fn clip_rect(trees: &PropertyTrees, state: PropertyTreeState, viewport: Rect) -> Rect {
     let mut result = viewport;
     let mut id = state.clip;
     while id.0 != 0 {
@@ -272,7 +272,9 @@ impl Compositor {
                 let matrix = self.trees.matrix(layer.state).unwrap_or(Matrix4::IDENTITY);
                 let scissor = clip_rect(&self.trees, layer.state, viewport);
                 for key in tile_keys(li, layer.bounds) {
-                    if matrix.map_bounds(tile_rect(key)).is_some_and(|r| r.intersects(scissor))
+                    if matrix
+                        .map_bounds(tile_rect(key))
+                        .is_some_and(|r| r.intersects(scissor))
                         && self.tiles.get(&key).is_none_or(|tile| tile.dirty)
                     {
                         return Err(SceneError::MissingCachedTile);
@@ -356,19 +358,24 @@ impl Compositor {
                 let needs = self.tiles.get(&key).is_none_or(|t| t.dirty);
                 if needs {
                     let source = source.ok_or(SceneError::MissingCachedTile)?;
-                    let mut surface = Surface::new(TILE_SIZE as u32, TILE_SIZE as u32);
+                    let mut surface = self
+                        .free_tile_surfaces
+                        .pop()
+                        .unwrap_or_else(|| Surface::new(TILE_SIZE as u32, TILE_SIZE as u32));
+                    surface.clear([0, 0, 0, 0]);
                     for &ci in &layer.chunks {
                         let chunk = &self.chunks[ci];
                         if chunk.bounds.intersects(local) {
                             source.rasterize(chunk.items.clone(), local, &mut surface)
                         }
                     }
-                    self.tiles.insert(
+                    install_rasterized_tile(
+                        &mut self.tiles,
+                        &mut self.free_tile_surfaces,
+                        self.tile_budget,
+                        &mut self.tile_clock,
                         key,
-                        Tile {
-                            surface,
-                            dirty: false,
-                        },
+                        surface,
                     );
                     if let Some(r) = matrix.map_bounds(local) {
                         add_damage(&mut damage, intersect(r, viewport))
@@ -387,6 +394,9 @@ impl Compositor {
                 };
                 let surface = &self.tiles[&key].surface;
                 if self.resources.get(id) != Some(surface) {
+                    if let Some(r) = matrix.map_bounds(local) {
+                        add_damage(&mut damage, intersect(r, viewport));
+                    }
                     let upload = ResourceUpload {
                         id,
                         width: surface.width,
@@ -413,6 +423,8 @@ impl Compositor {
                     state: layer.state,
                     layer: li,
                 }));
+                self.tile_clock = self.tile_clock.wrapping_add(1);
+                self.tiles.get_mut(&key).unwrap().last_used = self.tile_clock;
             }
         }
         let old_keys: Vec<_> = self
@@ -428,7 +440,15 @@ impl Compositor {
             }
         }
         delta.evictions.sort_unstable();
-        self.tiles.retain(|key, _| visible.contains(key));
+        // Keep offscreen rasters for reverse scrolling and prepaint. Evict
+        // least recently used offscreen tiles only after the visible set is
+        // pinned; the resource table independently tracks displayed tiles.
+        evict_tile_cache(
+            &mut self.tiles,
+            &mut self.free_tile_surfaces,
+            self.tile_budget,
+            &visible,
+        );
         if self.previous_quad_size != Some((width, height))
             || self.previous_quad_layers.len() != snapshots.len()
         {
@@ -511,13 +531,18 @@ pub fn classify_pixel_parity(
             if a == b {
                 result.exact += 1;
             } else if presenter.is_layer_boundary(x, y)
-                && a.iter().zip(b).all(|(left, right)| left.abs_diff(right) <= 1)
+                && a.iter()
+                    .zip(b)
+                    .all(|(left, right)| left.abs_diff(right) <= 1)
             {
                 result.layer_rounding += 1;
             } else {
                 result.losses += 1;
                 result.first_loss.get_or_insert(PixelParityLoss {
-                    x, y, candidate: a, full: b,
+                    x,
+                    y,
+                    candidate: a,
+                    full: b,
                 });
             }
         }
@@ -707,13 +732,19 @@ impl ReferenceCpuPresenter {
                             let dst = out.get_pixel(x, y).unwrap_or([0; 4]);
                             let index = y as usize * frame.width as usize + x as usize;
                             let alpha = (src[3] as u32
-                                * amazing_paint::quantize_opacity(q.opacity) as u32 + 127) / 255;
-                            if alpha > 0 && alpha < 255 && dst[3] > 0
-                                && owner[index] != Some(layer) {
+                                * amazing_paint::quantize_opacity(q.opacity) as u32
+                                + 127)
+                                / 255;
+                            if alpha > 0 && alpha < 255 && dst[3] > 0 && owner[index] != Some(layer)
+                            {
                                 boundaries[index] = true;
                             }
-                            if alpha == 255 { boundaries[index] = false; }
-                            if alpha > 0 { owner[index] = Some(layer); }
+                            if alpha == 255 {
+                                boundaries[index] = false;
+                            }
+                            if alpha > 0 {
+                                owner[index] = Some(layer);
+                            }
                             out.set_pixel(x, y, blend(dst, src, q.opacity, q.blend))
                         }
                     }
@@ -735,13 +766,19 @@ impl ReferenceCpuPresenter {
                             let dst = out.get_pixel(x, y).unwrap_or([0; 4]);
                             let index = y as usize * frame.width as usize + x as usize;
                             let alpha = (q.color[3] as u32
-                                * amazing_paint::quantize_opacity(q.opacity) as u32 + 127) / 255;
-                            if alpha > 0 && alpha < 255 && dst[3] > 0
-                                && owner[index] != Some(layer) {
+                                * amazing_paint::quantize_opacity(q.opacity) as u32
+                                + 127)
+                                / 255;
+                            if alpha > 0 && alpha < 255 && dst[3] > 0 && owner[index] != Some(layer)
+                            {
                                 boundaries[index] = true;
                             }
-                            if alpha == 255 { boundaries[index] = false; }
-                            if alpha > 0 { owner[index] = Some(layer); }
+                            if alpha == 255 {
+                                boundaries[index] = false;
+                            }
+                            if alpha > 0 {
+                                owner[index] = Some(layer);
+                            }
                             out.set_pixel(x, y, blend(dst, q.color, q.opacity, q.blend))
                         }
                     }
@@ -770,12 +807,15 @@ impl ReferenceCpuPresenter {
                             let dst = out.get_pixel(x, y).unwrap_or([0; 4]);
                             let index = y as usize * frame.width as usize + x as usize;
                             let alpha = (src[3] as u32
-                                * amazing_paint::quantize_opacity(q.opacity) as u32 + 127) / 255;
+                                * amazing_paint::quantize_opacity(q.opacity) as u32
+                                + 127)
+                                / 255;
                             if alpha > 0 {
-                                if alpha == 255 { boundaries[index] = false; }
+                                if alpha == 255 {
+                                    boundaries[index] = false;
+                                }
                                 boundaries[index] |= sub_boundaries[index];
-                                if alpha < 255 && dst[3] > 0
-                                    && owner[index] != Some(layer) {
+                                if alpha < 255 && dst[3] > 0 && owner[index] != Some(layer) {
                                     boundaries[index] = true;
                                 }
                                 owner[index] = Some(layer);
@@ -823,13 +863,16 @@ mod tests {
             width: 3,
             height: 1,
             passes: vec![RenderPass {
-                id: 0, effect_node: None, clip_node: None,
+                id: 0,
+                effect_node: None,
+                clip_node: None,
                 quads: vec![
                     DrawQuad::SolidColor(SolidColorQuad {
                         rect: Rect::new(0., 0., 3., 1.),
                         color: [221, 221, 221, 255],
                         clip_rect: Rect::new(0., 0., 3., 1.),
-                        opacity: 1., blend: BlendMode::Normal,
+                        opacity: 1.,
+                        blend: BlendMode::Normal,
                     }),
                     DrawQuad::Tile(TileQuad {
                         resource_id: ResourceId(1),
@@ -837,14 +880,19 @@ mod tests {
                         content_rect: Rect::new(0., 0., 2., 1.),
                         transform: Matrix4::IDENTITY,
                         clip_rect: Rect::new(0., 0., 3., 1.),
-                        opacity: 1., blend: BlendMode::Normal,
-                        state: PropertyTreeState::default(), layer: 0,
+                        opacity: 1.,
+                        blend: BlendMode::Normal,
+                        state: PropertyTreeState::default(),
+                        layer: 0,
                     }),
                 ],
             }],
             resources: ResourceDelta {
                 uploads: vec![ResourceUpload {
-                    id: ResourceId(1), width: 256, height: 256, pixels,
+                    id: ResourceId(1),
+                    width: 256,
+                    height: 256,
+                    pixels,
                 }],
                 evictions: Vec::new(),
             },
@@ -861,15 +909,24 @@ mod tests {
         let mut changed = full.get_pixel(0, 0).unwrap();
         changed[0] += 1;
         full.set_pixel(0, 0, changed);
-        assert_eq!(classify_pixel_parity(&presenter, &candidate, &full).layer_rounding, 1);
+        assert_eq!(
+            classify_pixel_parity(&presenter, &candidate, &full).layer_rounding,
+            1
+        );
         changed[0] += 1;
         full.set_pixel(0, 0, changed);
-        assert_eq!(classify_pixel_parity(&presenter, &candidate, &full).losses, 1);
+        assert_eq!(
+            classify_pixel_parity(&presenter, &candidate, &full).losses,
+            1
+        );
         full = candidate.clone();
         let mut changed = full.get_pixel(1, 0).unwrap();
         changed[0] += 1;
         full.set_pixel(1, 0, changed);
-        assert_eq!(classify_pixel_parity(&presenter, &candidate, &full).losses, 1);
+        assert_eq!(
+            classify_pixel_parity(&presenter, &candidate, &full).losses,
+            1
+        );
     }
 
     struct Colors(Cell<u8>);
