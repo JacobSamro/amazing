@@ -519,6 +519,7 @@ impl Interpreter {
         self.install_std_string();
         self.install_std_number_math();
         self.install_std_json_global();
+        self.install_structured_clone();
         self.install_intl_builtins();
     }
     fn define_global(&self, n: &str, v: JsValue) {

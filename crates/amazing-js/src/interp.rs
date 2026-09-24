@@ -3438,7 +3438,13 @@ impl Interpreter {
                 return Err(Throw::range_error("invalid array length"));
             }
         }
-        o.borrow_mut().set_own(&key, x);
+        if k == "length" && matches!(o.borrow().exotic, Exotic::Array) {
+            let mut length = o.borrow().own_prop("length").cloned().unwrap();
+            length.value = x;
+            o.borrow_mut().define("length", length).unwrap();
+        } else {
+            o.borrow_mut().set_own(&key, x);
+        }
         if let Ok(n) = k.parse::<usize>() {
             if matches!(o.borrow().exotic, Exotic::Array) {
                 let len = match o.borrow().get_own("length") {
@@ -3446,8 +3452,9 @@ impl Interpreter {
                     _ => 0.0,
                 };
                 if n as f64 + 1.0 > len {
-                    o.borrow_mut()
-                        .set_own("length", JsValue::num(n as f64 + 1.0));
+                    let mut length = o.borrow().own_prop("length").cloned().unwrap();
+                    length.value = JsValue::num(n as f64 + 1.0);
+                    o.borrow_mut().define("length", length).unwrap();
                 }
             }
         }
@@ -3958,5 +3965,6 @@ include!("builtins_temporal_epoch.rs");
 include!("builtins_std_string.rs");
 include!("builtins_std_number_math.rs");
 include!("builtins_std_json_global.rs");
+include!("structured_clone.rs");
 include!("interp_regexp.rs");
 include!("interp_tests.rs");
