@@ -100,3 +100,40 @@ fetch("http://web-platform.test/fetch/api/resources/data.json", { signal: contro
 HTML
 AMAZING_WPT_SHIM_ADDR="${base#http://}" \
   "$CARGO_TARGET_DIR/debug/amazing" wpt-harness --scaffold "$root" fetch_abort_body.html 800 600 5000
+cat > "$root/fetch_null_signal.html" <<'HTML'
+<!doctype html>
+<script src="scaffold-harness.js"></script>
+<script>
+var t = async_test("Explicit null signal replaces an aborted Request signal");
+var controller = new AbortController();
+controller.abort();
+var request = new Request("http://web-platform.test/fetch/api/resources/data.json",
+  { signal: controller.signal });
+fetch(request, { signal: null }).then(function(response) {
+  return response.json();
+}).then(function(value) {
+  assert_equals(value.key, "value");
+  t.done();
+  done();
+});
+</script>
+HTML
+AMAZING_WPT_SHIM_ADDR="${base#http://}" \
+  "$CARGO_TARGET_DIR/debug/amazing" wpt-harness --scaffold "$root" fetch_null_signal.html 800 600 5000
+mkdir -p "$root/fetch/api/abort"
+cat > "$root/fetch/api/abort/relative_json.html" <<'HTML'
+<!doctype html>
+<script src="../../../scaffold-harness.js"></script>
+<script>
+var t = async_test("WPT abort page relative data.json resolution");
+fetch("../resources/data.json").then(function(response) {
+  return response.json();
+}).then(function(value) {
+  assert_equals(value.key, "value");
+  t.done();
+  done();
+});
+</script>
+HTML
+AMAZING_WPT_SHIM_ADDR="${base#http://}" \
+  "$CARGO_TARGET_DIR/debug/amazing" wpt-harness --scaffold "$root" fetch/api/abort/relative_json.html 800 600 5000

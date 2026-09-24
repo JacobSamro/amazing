@@ -5,6 +5,13 @@ use amazing_fetch::{api::{ApiError, ApiRequest, ApiResponse, PendingFetchApi}, s
 use amazing_net::dispatch::{DispatchLimits, NetEvent};
 use std::time::{Duration, Instant};
 
+#[derive(Clone, Copy)]
+pub(super) enum NetNativeEntry {
+    Operation(FetchOperation),
+    PromiseExecutor,
+    Pump,
+}
+
 enum XhrTransport {
     Data,
     Dispatch(PendingFetchApi),
@@ -57,6 +64,30 @@ impl Drop for XhrStateOverrideGuard {
 }
 
 impl RuntimeBindingHost<'_> {
+    pub(super) fn install_net(&mut self) -> Result<(), Throw> {
+        amazing_bindings::fetch_interfaces::install(self)?;
+        let fetch = self.js.binding_get_property(&self.js.binding_global_object(), "fetch")?;
+        let env = EnvHandle::new(EnvKind::Global, Some(self.js.global_env.clone()));
+        env.declare_lexical("fetch", fetch, false)?;
+        self.js.global_env = env;
+        Ok(())
+    }
+
+    pub(super) fn invoke_net(&mut self, entry: NetNativeEntry, this: JsValue,
+        args: &[JsValue]) -> Result<JsValue, Throw> {
+        match entry {
+            NetNativeEntry::Operation(operation) =>
+                amazing_bindings::fetch_interfaces::invoke(self, operation, this, args),
+            NetNativeEntry::PromiseExecutor => {
+                let resolve = args.first().cloned().ok_or_else(|| Throw::type_error("Missing promise resolver"))?;
+                let reject = args.get(1).cloned().ok_or_else(|| Throw::type_error("Missing promise rejector"))?;
+                self.state.borrow_mut().net.fetch_resolver_capture = Some((resolve, reject));
+                Ok(JsValue::Undefined)
+            }
+            NetNativeEntry::Pump => self.fetch_pump(),
+        }
+    }
+
     pub(crate) fn fetch_request_record(&self, value: &JsValue) -> Result<ApiRequest, Throw> {
         let record = self.fetch_record(value, FetchInterface::Request)?;
         let record = record.borrow();
@@ -80,7 +111,7 @@ impl RuntimeBindingHost<'_> {
         if self.state.borrow().net.fetch_pump_scheduled { return Ok(()); }
         self.state.borrow_mut().net.fetch_pump_scheduled = true;
         let result = (|| {
-            let callback = self.native("fetch network step", 0, NativeEntry::FetchPump, HostCallPolicy::CallOnly);
+            let callback = self.native("fetch network step", 0, NativeEntry::Net(NetNativeEntry::Pump), HostCallPolicy::CallOnly);
             let global = self.js.binding_global_object();
             let timer = self.js.binding_get_property(&global, "setTimeout")?;
             binding_call(self.js, &timer, &global, &[callback, JsValue::num(1.0)])?;
@@ -241,7 +272,7 @@ impl FetchHost for RuntimeBindingHost<'_> {
             let global = self.js.binding_global_object();
             self.state.borrow_mut().net.legacy_fetch = self.js.binding_get_property(&global, "fetch").ok();
         }
-        self.native(name, length, NativeEntry::Fetch(operation), policy)
+        self.native(name, length, NativeEntry::Net(NetNativeEntry::Operation(operation)), policy)
     }
     fn fetch_register(
         &mut self,
@@ -369,7 +400,7 @@ impl FetchHost for RuntimeBindingHost<'_> {
             Err(error) => return self.fetch_promise(Err(error)),
         };
         let executor = self.native("fetch promise executor", 2,
-            NativeEntry::FetchPromiseExecutor, HostCallPolicy::CallOnly);
+            NativeEntry::Net(NetNativeEntry::PromiseExecutor), HostCallPolicy::CallOnly);
         let promise_class = self.js.binding_get_property(&self.js.binding_global_object(), "Promise")?;
         let promise = self.js.binding_construct(&promise_class, vec![executor])?;
         let (resolve, reject) = self.state.borrow_mut().net.fetch_resolver_capture.take()
@@ -630,11 +661,11 @@ impl FetchHost for RuntimeBindingHost<'_> {
         kind: HeaderIterationKind) -> Result<JsValue, Throw> {
         if self.state.borrow().net.fetch_header_iterator_prototype.is_none() {
             let prototype = self.js.binding_create_object(None)?;
-            let next = self.native("next", 0, NativeEntry::Fetch(FetchOperation::HeaderIteratorNext), HostCallPolicy::CallOnly);
+            let next = self.native("next", 0, NativeEntry::Net(NetNativeEntry::Operation(FetchOperation::HeaderIteratorNext)), HostCallPolicy::CallOnly);
             self.js.binding_define_data_property(&prototype, "next", next,
                 BindingPropertyFlags { writable: true, enumerable: true, configurable: true })?;
             let self_method = self.native("[Symbol.iterator]", 0,
-                NativeEntry::Fetch(FetchOperation::HeaderIteratorSelf), HostCallPolicy::CallOnly);
+                NativeEntry::Net(NetNativeEntry::Operation(FetchOperation::HeaderIteratorSelf)), HostCallPolicy::CallOnly);
             self.js.binding_define_symbol_data_property(&prototype,
                 amazing_js::value::WellKnownSymbol::Iterator.symbol(), self_method,
                 BindingPropertyFlags { writable: true, enumerable: false, configurable: true })?;
