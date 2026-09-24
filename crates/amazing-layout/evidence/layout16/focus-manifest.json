@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "selection": {
+    "kind": "diagnostic subset",
+    "description": "LAYOUT-16 contextual ruby and table focus",
+    "case_count": 6
+  },
+  "sparse_paths": [
+    "css/CSS2",
+    "css/compositing",
+    "css/css-backgrounds",
+    "css/css-box",
+    "css/css-display",
+    "css/css-flexbox",
+    "css/css-grid",
+    "css/css-images",
+    "css/css-inline",
+    "css/css-overflow",
+    "css/css-position",
+    "css/css-ruby",
+    "css/css-sizing",
+    "css/css-tables",
+    "css/css-text",
+    "css/css-transforms",
+    "css/css-writing-modes"
+  ],
+  "tests": [
+    {
+      "id": "border-collapse-empty-row",
+      "test": "css/CSS2/tables/border-collapse-empty-row.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-013.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-013.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-008.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-008.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-vertical-001.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-vertical-001.html"
+    },
+    {
+      "id": "css-ruby__ruby-overhang-spaces-align-001.html",
+      "test": "css/css-ruby/ruby-overhang-spaces-align-001.html"
+    },
+    {
+      "id": "css-ruby__nested-ruby-pairing-001.html",
+      "test": "css/css-ruby/nested-ruby-pairing-001.html"
+    }
+  ]
+}

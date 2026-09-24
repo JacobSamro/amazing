@@ -67,7 +67,32 @@ impl Interpreter {
                 return result;
             }
         }
-        let fields = self.std_descriptor_fields(descriptor)?;
+
+        let mut fields = self.std_descriptor_fields(descriptor)?;
+        let is_array = matches!(target.borrow().exotic, Exotic::Array);
+        if is_array && key.as_string().is_some_and(|name| name.to_utf8_lossy() == "length") {
+            if let Some(value) = fields.value.take() {
+                let number = self.to_number(&value)?;
+                if !number.is_finite() || number < 0.0 || number.fract() != 0.0 || number > u32::MAX as f64 {
+                    return Err(Throw::range_error("invalid array length"));
+                }
+                if target.borrow().own_prop("length").is_some_and(|old| !old.writable && old.value != JsValue::num(number)) {
+                    return Ok(false);
+                }
+                if !array_prepare_length_change(target, number as u32) { return Ok(false); }
+                fields.value = Some(JsValue::num(number));
+            }
+        }
+        let extending_array_index = if is_array {
+            array_index_key(key).and_then(|index| {
+                let length = target.borrow().get_own("length")?.to_number().ok()?;
+                (index as f64 >= length).then_some(index)
+            })
+        } else { None };
+        if extending_array_index.is_some() && target.borrow().own_prop("length").is_some_and(|p| !p.writable) {
+            return Ok(false);
+        }
+
         let original = if let Some(name) = key.as_string() {
             self.legacy_own_property(target, name, false)?
         } else { target.borrow().own_prop(key).cloned() }.or_else(|| {
@@ -88,8 +113,8 @@ impl Interpreter {
                 configurable: fields.configurable.unwrap_or(false), getter: None, setter: None,
             };
             if new_accessor {
-                property.getter = fields.get.as_ref().and_then(callable_function).map(Box::new);
-                property.setter = fields.set.as_ref().and_then(callable_function).map(Box::new);
+                property.getter = fields.get.as_ref().filter(|value| callable_function(value).is_some()).cloned();
+                property.setter = fields.set.as_ref().filter(|value| callable_function(value).is_some()).cloned();
             } else {
                 property.value = fields.value.unwrap_or(JsValue::Undefined);
                 property.writable = fields.writable.unwrap_or(false);
@@ -98,6 +123,11 @@ impl Interpreter {
                 if self.legacy_define(target, name, &property)? { return Ok(true); }
             }
             target.borrow_mut().define(key, property).unwrap();
+            if let Some(index) = extending_array_index {
+                let mut length = target.borrow().own_prop("length").cloned().unwrap();
+                length.value = JsValue::num(index as f64 + 1.0);
+                target.borrow_mut().define("length", length).unwrap();
+            }
             return Ok(true);
         };
         let old_accessor = property.getter.is_some() || property.setter.is_some();
@@ -111,7 +141,7 @@ impl Interpreter {
                     if let Some(requested) = requested {
                         let same = match (requested, old) {
                             (JsValue::Undefined, None) => true,
-                            (JsValue::Object(object), Some(function)) => object.borrow().func.as_ref().is_some_and(|candidate| candidate.name == function.name),
+                            (requested, Some(function)) => std_same_value(requested, function),
                             _ => false,
                         };
                         if !same { return Ok(false); }
@@ -136,18 +166,39 @@ impl Interpreter {
         if let Some(writable) = fields.writable { property.writable = writable; }
         if let Some(enumerable) = fields.enumerable { property.enumerable = enumerable; }
         if let Some(configurable) = fields.configurable { property.configurable = configurable; }
-        if let Some(get) = fields.get { property.getter = callable_function(&get).map(Box::new); }
-        if let Some(set) = fields.set { property.setter = callable_function(&set).map(Box::new); }
+        if let Some(get) = fields.get { property.getter = callable_function(&get).map(|_| get); }
+        if let Some(set) = fields.set { property.setter = callable_function(&set).map(|_| set); }
         if let Some(name) = key.as_string() {
             if self.legacy_define(target, name, &property)? { return Ok(true); }
         }
         target.borrow_mut().define(key, property).unwrap();
+        if let Some(index) = extending_array_index {
+            let mut length = target.borrow().own_prop("length").cloned().unwrap();
+            length.value = JsValue::num(index as f64 + 1.0);
+            target.borrow_mut().define("length", length).unwrap();
+        }
         Ok(true)
     }
 
     fn set_with_receiver(&mut self, target: &Obj, key: &PropertyKey, value: JsValue, receiver: JsValue) -> Result<bool, Throw> {
         if matches!(target.borrow().exotic, Exotic::ModuleNamespace(_)) {
             return Ok(false);
+        }
+        if let Some(name) = key.as_string() {
+            let name = name.to_utf8_lossy();
+            if let Some(forward_to) = self.binding_put_forwards_target(target, &name) {
+                let forwarded = self.get_prop(&receiver, &name)?;
+                self.set_prop(&forwarded, forward_to, value)?;
+                return Ok(true);
+            }
+        }
+        if let JsValue::Object(object) = &receiver {
+            if Rc::ptr_eq(&object.0, &target.0) {
+                if let Some(result) = binary_set_index(self, target, key, value.clone()) {
+                    result?;
+                    return Ok(true);
+                }
+            }
         }
         let mut cursor = Some(target.clone());
         while let Some(object) = cursor {
@@ -156,7 +207,7 @@ impl Interpreter {
             } else { object.borrow().own_prop(key).cloned() };
             if let Some(property) = property {
                 if let Some(setter) = property.setter {
-                    self.call_value(&JsValue::object(JsObject::function(*setter)), receiver, vec![value])?;
+                    self.call_value(&setter, receiver, vec![value])?;
                     return Ok(true);
                 }
                 if property.getter.is_some() || !property.writable { return Ok(false); }
@@ -165,11 +216,30 @@ impl Interpreter {
             cursor = object.borrow().proto.clone();
         }
         let JsValue::Object(receiver_object) = receiver else { return Ok(false); };
-        if let Some(property) = receiver_object.borrow().own_prop(key).cloned() {
+        let existing = receiver_object.borrow().own_prop(key).cloned();
+        if let Some(property) = &existing {
             if property.getter.is_some() || property.setter.is_some() || !property.writable { return Ok(false); }
         } else if !receiver_object.borrow().extensible { return Ok(false); }
-        self.set_prop(&JsValue::Object(receiver_object), key, value)?;
-        Ok(true)
+        if let Some(result) = binary_set_index(self, &receiver_object, key, value.clone()) {
+            result?;
+            return Ok(true);
+        }
+        if self.legacy_for(&receiver_object).is_some()
+            || Self::dom_style_id(&receiver_object).is_some()
+            || Self::dom_dataset_id(&receiver_object).is_some()
+            || dom_node_id(&receiver_object).is_some()
+        {
+            self.set_prop(&JsValue::Object(receiver_object), key, value)?;
+            return Ok(true);
+        }
+        let mut descriptor = JsObject::ordinary();
+        descriptor.set_own("value", value);
+        if existing.is_none() {
+            for name in ["writable", "enumerable", "configurable"] {
+                descriptor.set_own(name, JsValue::Bool(true));
+            }
+        }
+        self.define_own_property(&receiver_object, key, &JsValue::object(descriptor))
     }
 
     fn create_list_from_array_like(&mut self, value: &JsValue) -> Result<Vec<JsValue>, Throw> {

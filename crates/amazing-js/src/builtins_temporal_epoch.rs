@@ -72,7 +72,7 @@ impl Interpreter {
                 let getter = symbol_method(self, &format!("get {field}"), std_epoch_getter);
                 let property = Property { value: JsValue::Undefined, writable: false,
                     enumerable: false, configurable: true,
-                    getter: callable_function(&getter).map(Box::new), setter: None };
+                    getter: Some(getter), setter: None };
                 prototype.borrow_mut().define(*field, property).unwrap();
             }
             let mut methods: Vec<(&str, u32, crate::value::NativeFn)> = vec![
@@ -166,20 +166,24 @@ fn std_epoch_offset_text(offset_ns: i128) -> String {
 }
 
 fn std_epoch_parse_offset(text: &str) -> Result<i128, Throw> {
-    if let Ok(minutes) = std_temporal_fixed_offset(text) {
-        return Ok(minutes as i128 * 60 * STD_TEMPORAL_NS_SECOND);
-    }
     let invalid = || Throw::range_error("invalid Temporal offset");
     let (sign, digits) = if let Some(rest) = text.strip_prefix('+') { (1, rest) }
         else if let Some(rest) = text.strip_prefix('-') { (-1, rest) } else { return Err(invalid()); };
-    let mut parts = digits.split(':');
-    let hour = parts.next().ok_or_else(invalid)?;
-    let minute = parts.next().ok_or_else(invalid)?;
-    let seconds = parts.next().ok_or_else(invalid)?;
-    if parts.next().is_some() || hour.len() != 2 || minute.len() != 2 { return Err(invalid()); }
-    let (second, fraction) = seconds.split_once('.').unwrap_or((seconds, ""));
-    if second.len() != 2 || fraction.len() > 9 || !hour.bytes().chain(minute.bytes())
-        .chain(second.bytes()).chain(fraction.bytes()).all(|c| c.is_ascii_digit()) {
+    let (whole, fraction) = digits.split_once(['.', ',']).unwrap_or((digits, ""));
+    let parts: Vec<&str> = whole.split(':').collect();
+    let (hour, minute, second) = match parts.as_slice() {
+        [hour] if matches!(hour.len(), 2 | 4 | 6) =>
+            (&hour[..2], if hour.len() >= 4 { &hour[2..4] } else { "00" },
+                if hour.len() == 6 { &hour[4..6] } else { "00" }),
+        [hour, minute] if hour.len() == 2 && minute.len() == 2 => (*hour, *minute, "00"),
+        [hour, minute, second] if hour.len() == 2 && minute.len() == 2 && second.len() == 2 =>
+            (*hour, *minute, *second),
+        _ => return Err(invalid()),
+    };
+    let has_seconds = (parts.len() == 1 && whole.len() == 6) || parts.len() == 3;
+    let has_fraction = digits.contains(['.', ',']);
+    if fraction.len() > 9 || (has_fraction && (fraction.is_empty() || !has_seconds))
+        || !whole.bytes().filter(|c| *c != b':').chain(fraction.bytes()).all(|c| c.is_ascii_digit()) {
         return Err(invalid());
     }
     let hour = hour.parse::<i128>().map_err(|_| invalid())?;
@@ -242,6 +246,9 @@ fn std_epoch_parse(text: &str, kind: StdEpochKind, offset_option: &str,
     std_temporal_parse_time(clock, &mut fields)?;
     std_temporal_validate(StdTemporalKind::PlainDateTime, &fields)?;
     let epoch_ns = std_temporal_epoch_ns(&fields) - offset;
+    if !(-8_640_000_000_000_000_000_000i128..=8_640_000_000_000_000_000_000i128).contains(&epoch_ns) {
+        return Err(Throw::range_error("instant outside Temporal range"));
+    }
     if kind == StdEpochKind::ZonedDateTime && !exact {
         let actual_offset = tz_offset_ns(&zone, epoch_ns);
         let minute_precision = time[clock.len()..].matches(':').count() == 1;
@@ -308,12 +315,7 @@ fn std_epoch_constructor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>,
     let zone = if kind == StdEpochKind::ZonedDateTime {
         let zone = std_epoch_zone_value(i, &std_reflect_arg(&args, 1))?;
         let calendar = std_reflect_arg(&args, 2);
-        if !calendar.is_undefined() && !matches!(calendar, JsValue::Str(_)) {
-            return Err(Throw::type_error("Temporal calendar must be a string"));
-        }
-        if !calendar.is_undefined() && !i.to_string(&calendar)?.eq_ignore_ascii_case("iso8601") {
-            return Err(Throw::range_error("unsupported Temporal calendar"));
-        }
+        std_temporal_iso_calendar(i, &calendar)?;
         zone
     } else { "UTC".into() };
     std_epoch_make(i, kind, epoch_ns, zone)
@@ -517,7 +519,7 @@ fn std_epoch_with_zone(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -
 }
 fn std_epoch_with_calendar(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {
     let data = std_epoch_record(&this, Some(StdEpochKind::ZonedDateTime))?;
-    std_temporal_iso_calendar(i, &std_reflect_arg(&args, 0))?;
+    std_temporal_calendar_from_value(i, &std_reflect_arg(&args, 0))?;
     std_epoch_make(i, data.kind, data.epoch_ns, data.zone_id.clone())
 }
 fn std_epoch_with(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Result<JsValue, Throw> {

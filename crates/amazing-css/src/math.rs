@@ -110,3 +110,118 @@ pub(crate) fn length_percentage(css: &str, allow_percentage: bool) -> bool {
         _ => false,
     }
 }
+
+/// Resolve font-size math once its parent and root font sizes are known.
+/// Viewport and font-metric units stay unresolved for the layout consumer.
+pub(crate) fn font_size_px(css: &str, parent_px: f64, root_px: f64) -> Option<f64> {
+    if !length_percentage(css, true) { return None; }
+    #[derive(Clone, Copy)]
+    enum Value { Number(f64), Length(f64) }
+    impl Value {
+        fn add(self, other: Self, subtract: bool) -> Option<Self> {
+            let sign = if subtract { -1.0 } else { 1.0 };
+            match (self, other) {
+                (Self::Number(a), Self::Number(b)) => Some(Self::Number(a + sign * b)),
+                (Self::Length(a), Self::Length(b)) => Some(Self::Length(a + sign * b)),
+                _ => None,
+            }
+        }
+        fn multiply(self, other: Self) -> Option<Self> {
+            match (self, other) {
+                (Self::Number(a), Self::Number(b)) => Some(Self::Number(a * b)),
+                (Self::Number(a), Self::Length(b)) | (Self::Length(b), Self::Number(a)) => Some(Self::Length(a * b)),
+                _ => None,
+            }
+        }
+        fn divide(self, other: Self) -> Option<Self> {
+            let Self::Number(divisor) = other else { return None; };
+            if divisor == 0.0 { return None; }
+            match self {
+                Self::Number(value) => Some(Self::Number(value / divisor)),
+                Self::Length(value) => Some(Self::Length(value / divisor)),
+            }
+        }
+        fn length(self) -> Option<f64> {
+            match self { Self::Length(value) if value.is_finite() => Some(value), _ => None }
+        }
+    }
+    struct Eval { tokens: Vec<Token>, pos: usize, parent_px: f64, root_px: f64 }
+    impl Eval {
+        fn skip(&mut self) { while matches!(self.tokens.get(self.pos), Some(Token::Whitespace)) { self.pos += 1; } }
+        fn eat(&mut self) -> Option<Token> { self.skip(); let token = self.tokens.get(self.pos).cloned(); self.pos += usize::from(token.is_some()); token }
+        fn peek(&mut self) -> Option<Token> { self.skip(); self.tokens.get(self.pos).cloned() }
+        fn expression(&mut self) -> Option<Value> {
+            let mut value = self.product()?;
+            loop {
+                let subtract = match self.peek() {
+                    Some(Token::Delim('+')) => false,
+                    Some(Token::Delim('-')) => true,
+                    Some(Token::Ident(ref sign)) if sign == "-" => true,
+                    _ => break,
+                };
+                self.eat();
+                value = value.add(self.product()?, subtract)?;
+            }
+            Some(value)
+        }
+        fn product(&mut self) -> Option<Value> {
+            let mut value = self.atom()?;
+            loop {
+                match self.peek() {
+                    Some(Token::Delim('*')) => { self.eat(); value = value.multiply(self.atom()?)?; }
+                    Some(Token::Delim('/')) => { self.eat(); value = value.divide(self.atom()?)?; }
+                    _ => break,
+                }
+            }
+            Some(value)
+        }
+        fn atom(&mut self) -> Option<Value> {
+            match self.eat()? {
+                Token::Number(value) if value.is_finite() => Some(Value::Number(value)),
+                Token::Percentage(value) if value.is_finite() => Some(Value::Length(self.parent_px * value / 100.0)),
+                Token::Dimension(value, unit) if value.is_finite() => {
+                    use crate::values::{LengthPercentage as L, RelativeUnit as R};
+                    let length = L::parse(&format!("{value}{unit}"))?;
+                    match length {
+                        L::Px(px) => Some(Value::Length(px)),
+                        L::Relative(n, R::Em) => Some(Value::Length(n * self.parent_px)),
+                        L::Relative(n, R::Rem) => Some(Value::Length(n * self.root_px)),
+                        _ => None,
+                    }
+                }
+                Token::OpenParen => {
+                    let value = self.expression()?;
+                    matches!(self.eat(), Some(Token::CloseParen)).then_some(value)
+                }
+                Token::Function(name) => {
+                    if !matches!(self.eat(), Some(Token::OpenParen)) { return None; }
+                    let first = self.expression()?;
+                    let value = match name.to_ascii_lowercase().as_str() {
+                        "calc" => first,
+                        "min" | "max" | "clamp" => {
+                            let mut values = vec![first];
+                            while matches!(self.peek(), Some(Token::Comma)) {
+                                self.eat(); values.push(self.expression()?);
+                            }
+                            let values: Option<Vec<f64>> = values.into_iter().map(Value::length).collect();
+                            let values = values?;
+                            Value::Length(match name.to_ascii_lowercase().as_str() {
+                                "min" => values.into_iter().reduce(f64::min)?,
+                                "max" => values.into_iter().reduce(f64::max)?,
+                                _ if values.len() == 3 => values[1].clamp(values[0], values[2]),
+                                _ => return None,
+                            })
+                        }
+                        _ => return None,
+                    };
+                    matches!(self.eat(), Some(Token::CloseParen)).then_some(value)
+                }
+                _ => None,
+            }
+        }
+    }
+    let mut parser = Eval { tokens: tokenize(css), pos: 0, parent_px, root_px };
+    let value = parser.atom()?.length()?;
+    parser.skip();
+    (parser.pos == parser.tokens.len()).then_some(value)
+}

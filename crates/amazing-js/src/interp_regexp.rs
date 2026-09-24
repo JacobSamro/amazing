@@ -117,9 +117,8 @@ impl Interpreter {
                 native_regexp_getter,
                 &self.function_proto,
             );
-            let getter = callable_function(&getter).expect("native getter");
             let mut prop = regexp_property(JsValue::Undefined, false);
-            prop.getter = Some(Box::new(getter));
+            prop.getter = Some(getter);
             let _ = self.regexp_proto.borrow_mut().define(name, prop);
         }
         self.define_global("RegExp", constructor);

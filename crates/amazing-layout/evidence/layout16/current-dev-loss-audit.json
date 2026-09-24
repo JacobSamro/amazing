@@ -1,0 +1,53 @@
+﻿{
+    "schema":  1,
+    "wpt_revision":  "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+    "manifest":  "C:\\Users\\server\\src\\wt\\layout\\crates\\amazing-layout\\evidence\\layout16\\current-dev-loss-audit-manifest.json",
+    "viewport":  {
+                     "width":  800,
+                     "height":  600,
+                     "device_scale":  1
+                 },
+    "font_set":  "Amazing text provider: WPT @font-face via HarfRust 0.13.2 + Swash 0.2.10; deterministic fallback otherwise",
+    "run_directory":  "C:\\Users\\server\\target\\layout\\layout16-dev-audit\\run-20260924T032958768Z-765788",
+    "counts":  {
+                   "pass":  0,
+                   "mismatch":  2,
+                   "error":  0,
+                   "timeout":  0,
+                   "unsupported":  0,
+                   "crash":  0
+               },
+    "unexpected":  0,
+    "tests":  [
+                  {
+                      "id":  "baseline-empty-cell-001",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "baseline-empty-cell-ref.html",
+                      "differing_pixels":  72,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "c8ba9531b75ce15c0090996a8b1079ba0373027c66223baf90f2381b6bf85df3",
+                      "reference_sha256":  "b33b0bac03aee23be76cdf2e7120e9400cf23d8af9235b103c9023bcc77e36f7",
+                      "diff_sha256":  "bba1a8b969f04ab90d4c678d73013899b1a12b08c6a08f55b91870c1f0ae4ff7",
+                      "detail":  "maxDifference=255/0; totalPixels=72/0"
+                  },
+                  {
+                      "id":  "css-ruby__ruby-line-break-suppression-004.html",
+                      "classification":  "mismatch",
+                      "expected":  "",
+                      "relation":  "match",
+                      "reference_href":  "ruby-line-break-suppression-004-ref.html",
+                      "differing_pixels":  104,
+                      "max_difference":  255,
+                      "allowed_max_difference":  0,
+                      "allowed_differing_pixels":  0,
+                      "actual_sha256":  "4bf8f63f410b107a5a805b0e9a93c9a443d4c5480c2cd25322df259b4cc2b559",
+                      "reference_sha256":  "cd817bb5bdfdda1ab3e7e6240c86dd8b8a49d4c22c131f460f6e4a043dcf419a",
+                      "diff_sha256":  "9404b31d4571ceafa148063aefc8d65adf62aaa5c37c38b3941e11910c6728c6",
+                      "detail":  "maxDifference=255/0; totalPixels=104/0"
+                  }
+              ]
+}
