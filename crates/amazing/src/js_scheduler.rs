@@ -2,7 +2,7 @@
 //! `enter`, which transfers the complete ordered outbox before another entry.
 use std::{cell::RefCell, collections::{BTreeMap, VecDeque}, rc::Rc, time::{Duration, Instant}};
 
-use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, TaskSource, TimerId};
+use amazing_dom::event_loop::{Action, AnimationFrameId, CallbackId, EventLoop, GlobalId, RenderPhase, TaskSource, TimerId};
 use amazing_dom::abort::AbortSignalId;
 use amazing_js::{DomHost, interp::{Interpreter, NativeMicrotaskKind, SchedulingRequest, SchedulingToken}, value::{JsValue, Throw}};
 
@@ -38,6 +38,9 @@ pub(crate) struct DriverScheduler {
     started: Instant,
     now: Duration,
     trace: Vec<String>,
+    pending_resize: bool,
+    pending_scroll: Vec<u32>,
+    render_hook: Option<Rc<dyn Fn()>>,
 }
 
 impl DriverScheduler {
@@ -51,6 +54,7 @@ impl DriverScheduler {
             js, host, bindings, loop_, pending: VecDeque::new(), payloads: BTreeMap::new(),
             timers: BTreeMap::new(), frames: BTreeMap::new(), next_callback: 1,
             started: Instant::now(), now: Duration::ZERO, trace: Vec::new(),
+            pending_resize: false, pending_scroll: Vec::new(), render_hook: None,
         })
     }
 
@@ -73,6 +77,13 @@ impl DriverScheduler {
     pub(crate) fn set_form_navigation_hook(&mut self,
         hook: crate::runtime_binding_host::html::FormNavigationHook) {
         self.bindings.set_form_navigation_hook(hook);
+    }
+    pub(crate) fn queue_resize_event(&mut self) { self.pending_resize = true; }
+    pub(crate) fn queue_scroll_event(&mut self, node: u32) {
+        if !self.pending_scroll.contains(&node) { self.pending_scroll.push(node); }
+    }
+    pub(crate) fn set_render_hook(&mut self, hook: Rc<dyn Fn()>) {
+        self.render_hook = Some(hook);
     }
     pub(crate) fn dispatch_pending_iframe_loads(&mut self) -> Result<(), Throw> {
         for (frame, document) in self.bindings.take_iframe_loads() {
@@ -267,6 +278,24 @@ impl DriverScheduler {
         }
     }
 
+    fn update_rendering(&mut self, phase: RenderPhase) -> Result<(), Throw> {
+        match phase {
+            RenderPhase::BeforeAnimationFrames => {
+                if self.pending_resize {
+                    self.pending_resize = false;
+                    self.dispatch_dom_event(0, "resize")?;
+                }
+                for node in std::mem::take(&mut self.pending_scroll) {
+                    self.dispatch_dom_event(node, "scroll")?;
+                }
+            }
+            RenderPhase::AfterAnimationFrames => {
+                if let Some(hook) = &self.render_hook { hook(); }
+            }
+        }
+        Ok(())
+    }
+
     /// Pump one explicit driver clock/render opportunity until the loop is idle.
     /// Callback exceptions are returned after the step has been completed and
     /// all newly emitted requests have been admitted.
@@ -275,12 +304,21 @@ impl DriverScheduler {
         self.dispatch_pending_iframe_loads()?;
         self.now = self.now.max(now);
         self.loop_.advance_to(self.now).map_err(loop_error)?;
-        if render { self.loop_.rendering_opportunity(GLOBAL, self.now).map_err(loop_error)?; }
+        // Update rendering follows the task and microtask checkpoint for this
+        // turn. In particular, a timer may register a frame callback before
+        // this opportunity begins.
         let mut did_work = false;
         let mut first_error = None;
+        let mut rendering_queued = !render;
         for _ in 0..10_000 {
-            let Some(step) = self.loop_.step().map_err(loop_error)? else {
-                return first_error.map_or(Ok(did_work), Err);
+            let step = match self.loop_.step().map_err(loop_error)? {
+                Some(step) => step,
+                None if !rendering_queued => {
+                    rendering_queued = true;
+                    self.loop_.rendering_opportunity(GLOBAL, self.now).map_err(loop_error)?;
+                    continue;
+                }
+                None => return first_error.map_or(Ok(did_work), Err),
             };
             let result = match step.action {
                 Action::Task { callback, .. } | Action::Microtask { callback, .. } => {
@@ -292,7 +330,7 @@ impl DriverScheduler {
                     self.invoke(callback, Some(timestamp))
                 }
                 Action::CheckpointCleanup => { self.bindings.storage_deactivate_transactions(); Ok(()) },
-                Action::Render { .. } => Ok(()),
+                Action::Render { phase, .. } => self.update_rendering(phase),
             };
             if let Err(error) = result { first_error.get_or_insert(error); }
             // Even a throw or admission failure must release the in-flight step.
@@ -352,6 +390,19 @@ mod tests {
             driver.pump_at(Duration::from_millis(frame * 16), true).unwrap();
         }
         assert!(matches!(driver.run_script("settled").unwrap(), JsValue::Bool(true)));
+    }
+
+    #[test]
+    fn rendering_dispatches_resize_before_frames_and_paints_after() {
+        let (mut driver, _) = adapter(64, false);
+        let painted = Rc::new(RefCell::new(false));
+        let painted_for_hook = painted.clone();
+        driver.set_render_hook(Rc::new(move || *painted_for_hook.borrow_mut() = true));
+        driver.run_script("globalThis.order = ''; window.addEventListener('resize', () => { order += 'R'; }); requestAnimationFrame(() => { order += 'F'; });").unwrap();
+        driver.queue_resize_event();
+        driver.pump_at(Duration::from_micros(16_667), true).unwrap();
+        assert_eq!(driver.run_script("order").unwrap(), JsValue::str("RF"));
+        assert!(*painted.borrow());
     }
 
     #[test]

@@ -478,9 +478,14 @@ fn execute(options: &Options) -> Result<(), String> {
         scheduler.dispatch_dom_event(body, "load")
             .map_err(|e| e.describe())?;
     }
+    // WPT runs against a deterministic 60 Hz virtual display. Each completed
+    // turn gets one rendering opportunity, including a stable rAF timestamp.
+    let mut frame = 0_u64;
     while !COMPLETE.get() {
-        scheduler.pump_now(true).map_err(|e| e.describe())?;
-        std::thread::sleep(Duration::from_millis(1));
+        let now = Duration::from_micros(frame.saturating_mul(16_667));
+        scheduler.pump_at(now, true).map_err(|e| e.describe())?;
+        frame = frame.saturating_add(1);
+        if frame % 1024 == 0 { std::thread::yield_now(); }
     }
     Ok(())
 }
