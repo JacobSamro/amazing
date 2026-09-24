@@ -1317,3 +1317,24 @@ pass losses. The 72-case cascade selection remained **68 pass / 2 mismatch /
 classifications are in `crates/amazing-css/evidence/css17-*-case-results.jsonl`
 and the summary in `css17-color-results.json`. Windows exact-source gate:
 CSS **266/266**, workspace **2027/2027** plus five skipped, doctests **2/2**.
+
+## CSS-18 selector serialization and complex logical lists
+
+Commit `3172976` re-escapes decoded identifiers when declaration and selector
+tokens are serialized, so `:lang(\*-FR)` retains its wildcard language range
+through stylesheet parsing. `:is()`, `:where()`, and `:not()` accept complex
+selector-list arguments with combinators. The first two drop invalid list
+items and match nothing when none remain. Complex arguments use their full
+selector specificity, while `:where()` stays zero. Style invalidation takes
+the conservative relational fallback for these complex arguments.
+
+The pinned 259-case broad WPT selection moved from **202 pass / 57 mismatch**
+to **204 pass / 55 mismatch**, gaining `is-where-pseudo-elements` and
+`lang-015` with zero losses. Both are Chrome/Safari pass-consensus cases.
+The 72-case cascade selection remained **68 pass / 2 mismatch / 2
+unsupported** with identical classifications. Per-case classifications and
+pixel hashes are in `crates/amazing-css/evidence/css18-*-case-results.jsonl`;
+`css18-selector-results.json` records counts and report hashes. Linux CSS
+**268/268** and workspace **2027/2027** plus five skipped passed.
+The exact-source Windows gate passed CSS **268/268**, workspace **2029/2029**
+plus five skipped, and doctests **2/2**.
