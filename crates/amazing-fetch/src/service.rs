@@ -5,9 +5,10 @@ use crate::{
         PendingFetchApi,
     },
     cache::{CacheKind, CacheLimits, CacheLookup, CacheRequest, CacheResponse, CacheStore},
+    hsts::HstsStore,
     cookies::{CookieAccess, CookieSite, CookieStore},
     filter_response, CredentialsMode, CspDestination, CspPolicyList, Destination, FetchError,
-    HeaderList, HttpUrl, InternalResponse, Origin, SecurityContext,
+    HeaderList, HttpUrl, InternalResponse, Origin, SecurityContext, Site,
 };
 use amazing_net::dispatch::{DispatchLimits, Dispatcher, NetEvent, WebSocketEvent, WebSocketId};
 use std::{collections::{BTreeMap, VecDeque}, io, time::Instant};
@@ -72,6 +73,8 @@ fn policy_response_type(kind: crate::api::ApiResponseType) -> crate::ResponseTyp
 #[derive(Clone)]
 pub struct ClientContext {
     pub cookie_site: CookieSite,
+    pub partition_key: Option<Site>,
+    pub frame_ancestors: Vec<Origin>,
     pub security: SecurityContext,
     pub csp: CspPolicyList,
     pub csp_destination: CspDestination,
@@ -119,6 +122,8 @@ impl Default for ClientContext {
     fn default() -> Self {
         Self {
             cookie_site: CookieSite::NoClient,
+            partition_key: None,
+            frame_ancestors: Vec::new(),
             security: SecurityContext::default(),
             csp: CspPolicyList::default(),
             csp_destination: CspDestination::None,
@@ -261,11 +266,20 @@ fn opaque_stream_head(task: &Task, event: &NetEvent)
 pub trait CachePersistence {
     fn save(&self, cache: &CacheStore) -> io::Result<()>;
 }
+pub trait HstsPersistence {
+    fn save(&self, hsts: &HstsStore, now: i64) -> io::Result<()>;
+}
+pub trait CookiePersistence {
+    fn save(&self, cookies: &mut CookieStore<crate::psl::PublicSuffixList>, now: i64) -> io::Result<()>;
+}
 
 pub struct NetworkService {
     pub dispatcher: Dispatcher,
-    pub cookies: CookieStore,
+    pub cookies: CookieStore<crate::psl::PublicSuffixList>,
+    cookie_persistence: Option<Box<dyn CookiePersistence>>,
     pub cache: CacheStore,
+    pub hsts: HstsStore,
+    hsts_persistence: Option<Box<dyn HstsPersistence>>,
     cache_persistence: Option<Box<dyn CachePersistence>>,
     pub preflight_cache: crate::PreflightCache,
     next_id: u64,
@@ -276,6 +290,31 @@ pub struct NetworkService {
     ready: Vec<ServiceEvent>,
 }
 impl NetworkService {
+    pub fn start_child_navigation(&mut self, target: HttpUrl,
+        parent: &crate::api::NavigableContext) -> Result<ServiceId, ApiError> {
+        let request = ApiRequest::child_navigation(target, parent)?;
+        let top = parent.top_level_origin.site(&crate::psl::PublicSuffixList);
+        let same_site = parent.ancestor_origins.iter()
+            .all(|origin| origin.site(&crate::psl::PublicSuffixList) == top);
+        let context = ClientContext {
+            cookie_site: if same_site {
+                CookieSite::Origin(parent.top_level_origin.clone())
+            } else { CookieSite::CrossSite },
+            partition_key: Some(top),
+            frame_ancestors: parent.ancestor_origins.clone(),
+            security: SecurityContext {
+                destination: Destination::Other,
+                client_restricts_mixed_content: parent.top_level_origin.serialize().starts_with("https://")
+                    || parent.parent_origin.serialize().starts_with("https://"),
+                top_level_navigation: false,
+                ..SecurityContext::default()
+            },
+            csp: parent.frame_csp.clone(),
+            csp_destination: CspDestination::Frame,
+            now_unix: parent.now_unix,
+        };
+        self.start(request, context)
+    }
     pub fn start_font(
         &mut self,
         font: FontRequest,
@@ -334,9 +373,13 @@ impl NetworkService {
     pub fn new(limits: DispatchLimits) -> Self {
         Self {
             dispatcher: Dispatcher::new(limits),
-            cookies: CookieStore::default(),
+            cookies: CookieStore::new(crate::psl::PublicSuffixList, Default::default())
+                .expect("valid cookie limits"),
+            cookie_persistence: None,
             cache: CacheStore::new(CacheKind::Private, CacheLimits::default())
                 .expect("valid cache limits"),
+            hsts: HstsStore::new(),
+            hsts_persistence: None,
             cache_persistence: None,
             preflight_cache: crate::PreflightCache::default(),
             next_id: 1,
@@ -351,6 +394,22 @@ impl NetworkService {
     pub fn install_cache(&mut self, cache: CacheStore, persistence: Box<dyn CachePersistence>) {
         self.cache = cache;
         self.cache_persistence = Some(persistence);
+    }
+    pub fn install_hsts(&mut self, hsts: HstsStore, persistence: Box<dyn HstsPersistence>) {
+        self.hsts = hsts;
+        self.hsts_persistence = Some(persistence);
+    }
+    pub fn install_cookies(&mut self,
+        cookies: CookieStore<crate::psl::PublicSuffixList>, persistence: Box<dyn CookiePersistence>) {
+        self.cookies = cookies;
+        self.cookie_persistence = Some(persistence);
+    }
+    pub fn persist_cookies(&mut self, now: i64) {
+        if let Some(disk) = &self.cookie_persistence {
+            if let Err(error) = disk.save(&mut self.cookies, now) {
+                eprintln!("cookie persistence failed: {error}");
+            }
+        }
     }
     fn persist_cache(&self) {
         if let Some(persistence) = &self.cache_persistence {
@@ -398,6 +457,7 @@ impl NetworkService {
             http_api: true,
             top_level_navigation: false,
             method: "GET",
+            partition_key: client.context.partition_key,
         };
         let cookie = self
             .cookies
@@ -532,7 +592,7 @@ impl NetworkService {
         mut context: ClientContext,
         now: Instant,
     ) -> Result<ServiceId, ApiError> {
-        if request.mode == crate::RequestMode::Navigate {
+        if request.mode == crate::RequestMode::Navigate && context.frame_ancestors.is_empty() {
             context.security.destination = Destination::Document;
             context.security.top_level_navigation = true;
         }
@@ -541,6 +601,9 @@ impl NetworkService {
         }
         if request.body.is_unusable() {
             return Err(ApiError::BodyUsed);
+        }
+        if let Some(upgraded) = self.hsts.upgrade(request.url(), context.now_unix) {
+            request.upgrade_hsts(upgraded);
         }
         let id = ServiceId(self.next_id);
         self.next_id = self.next_id.wrapping_add(1).max(1);
@@ -578,6 +641,7 @@ impl NetworkService {
                 http_api: true,
                 top_level_navigation: context.security.top_level_navigation,
                 method: &method,
+                partition_key: context.partition_key.clone(),
             };
             let bytes = self
                 .cookies
@@ -741,6 +805,28 @@ impl NetworkService {
                 }
                 continue;
             };
+            if let NetEvent::Head { url, status, headers, .. } = &event {
+                let ancestors = &self.active[&id].context.frame_ancestors;
+                let redirects = matches!(status, 301 | 302 | 303 | 307 | 308)
+                    && headers.iter().any(|(name, value)| name.eq_ignore_ascii_case("location") && !value.is_empty());
+                if !ancestors.is_empty() && !redirects {
+                    let mut fields = HeaderList::default();
+                    let check = headers.iter().try_for_each(|(name, value)| fields.append(name, value))
+                        .and_then(|_| HttpUrl::parse(url)
+                            .and_then(|parsed| crate::check_frame_embedding(&parsed, &fields, ancestors)));
+                    if check.is_err() {
+                        self.dispatcher.cancel(wire_id);
+                        self.active.remove(&id);
+                        let error = ApiError::Network(FetchError::FrameEmbedding);
+                        if self.streams.contains_key(&id) {
+                            self.finish_stream(id, Err(error), &mut result);
+                        } else {
+                            result.push(ServiceEvent::Finished { id, result: Err(error) });
+                        }
+                        continue;
+                    }
+                }
+            }
             let mut finished = None;
             let cookies = &mut self.cookies;
             if let Some(task) = self.active.get_mut(&id) {
@@ -791,6 +877,13 @@ impl NetworkService {
                                 let _ = fields.append(name, value);
                             }
                             if let Ok(parsed) = HttpUrl::parse(url) {
+                                if let Some(hsts) = headers.get_all("strict-transport-security").into_iter().next() {
+                                    if self.hsts.observe(&parsed, hsts, task.context.now_unix) {
+                                        if let Some(disk) = &self.hsts_persistence {
+                                            let _ = disk.save(&self.hsts, task.context.now_unix);
+                                        }
+                                    }
+                                }
                                 let accept = task.credentials == CredentialsMode::Include
                                     || (task.credentials == CredentialsMode::SameOrigin
                                         && parsed.origin() == &task.client_origin);
@@ -804,13 +897,20 @@ impl NetworkService {
                                             .security
                                             .top_level_navigation,
                                         method: &task.method,
+                                        partition_key: task.context.partition_key.clone(),
                                     };
+                                    let mut changed = false;
                                     for cookie in headers.get_all("set-cookie") {
-                                        let _ = cookies.set_cookie(
+                                        changed |= cookies.set_cookie(
                                             cookie.as_bytes(),
                                             &access,
                                             task.context.now_unix,
-                                        );
+                                        ).is_ok();
+                                    }
+                                    if changed {
+                                        if let Some(disk) = &self.cookie_persistence {
+                                            let _ = disk.save(cookies, task.context.now_unix);
+                                        }
                                     }
                                 }
                             }
@@ -829,6 +929,7 @@ impl NetworkService {
                 let site = task.context.cookie_site.clone();
                 let top_level = task.context.security.top_level_navigation;
                 let wall_time = task.context.now_unix;
+                let partition_key = task.context.partition_key.clone();
                 finished = task.pending.on_event_with_cache(
                     &event,
                     &mut self.dispatcher,
@@ -846,6 +947,7 @@ impl NetworkService {
                             http_api: true,
                             top_level_navigation: top_level,
                             method: policy.method(),
+                            partition_key: partition_key.clone(),
                         };
                         cookies
                             .cookie_header(&access, wall_time)
@@ -853,6 +955,7 @@ impl NetworkService {
                             .and_then(|bytes| String::from_utf8(bytes).ok())
                             .filter(|value| !value.is_empty())
                     },
+                    |url| self.hsts.upgrade(url, wall_time),
                     Some(&mut self.preflight_cache),
                 );
             }
@@ -1125,6 +1228,7 @@ mod tests {
                     http_api: true,
                     top_level_navigation: false,
                     method: "GET",
+                    partition_key: None,
                 },
                 100,
             )

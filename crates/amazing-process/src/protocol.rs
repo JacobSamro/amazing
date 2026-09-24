@@ -41,7 +41,7 @@ interface! {pub interface NetworkRequests(8) => NetworkProxy, NetworkReceiver {
 /// Version 3 adds redirect metadata and browser-only subresource starts. It
 /// remains isolated from the IPC-2 demo interface (8). The browser
 /// constructs NetworkContext; page input must never supply its trust fields.
-pub const NETWORK_VERSION: u16 = 3;
+pub const NETWORK_VERSION: u16 = 5;
 pub const NETWORK_MAX_REQUEST_BODY: usize = 1024 * 1024;
 pub const NETWORK_MAX_RESPONSE_BODY: u32 = 32 * 1024 * 1024;
 pub const NETWORK_CHUNK: u32 = 32 * 1024;
@@ -49,7 +49,8 @@ wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct HeaderField {nam
 wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum WireOrigin {Tuple(String)=1, Opaque(u128)=2}}
 wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum WireCookieSite {NoClient(())=1, Origin(WireOrigin)=2, CrossSite(())=3}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkContext {
-    origin:WireOrigin, cookie_site:WireCookieSite, now_unix:i64,
+    origin:WireOrigin, cookie_site:WireCookieSite, top_level_origin:Option<WireOrigin>,
+    ancestor_origins:Vec<WireOrigin>, sandbox_flags:u32, now_unix:i64,
     restricts_mixed_content:bool, image_set_initiator:bool,
     top_level_navigation:bool, embedder_policy:String,
     no_cors_media_state:String, csp_headers:Vec<HeaderField>
@@ -73,6 +74,10 @@ wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkHead {
 }}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkBody {id:u64, epoch:u64, bytes:ByteBuf}}
 wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct NetworkComplete {id:u64, epoch:u64, error:Option<String>}}
+wire_struct! {#[derive(Debug, Clone, PartialEq, Eq)] pub struct DocumentCookie {
+    client_id:u64, epoch:u64, document_url:String,
+    top_level_origin:WireOrigin, now_unix:i64, assignment:Option<String>
+}}
 wire_enum! {#[derive(Debug, Clone, PartialEq, Eq)] pub enum NetworkReply {
     Pending(())=0, Head(NetworkHead)=1, Body(NetworkBody)=2, Complete(NetworkComplete)=3
 }}
@@ -82,6 +87,7 @@ interface! {pub interface NetworkRequestsV2(10) => NetworkProxyV2, NetworkReceiv
     fn cancel(request:NetworkCancel) -> NetworkComplete = 3;
     fn cancel_epoch(request:NetworkEpoch) -> Vec<NetworkComplete> = 4;
     fn subresource(request:NetworkStart) -> NetworkStarted = 5;
+    fn document_cookie(request:DocumentCookie) -> String = 6;
 }}
 interface! {pub interface BrowserEvents(9) => BrowserEventsProxy, BrowserEventsReceiver {
     fn frame_ready(event:FrameReady) -> () = 1;

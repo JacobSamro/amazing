@@ -100,11 +100,22 @@ pub fn redirect_location(
     response: &InternalResponse,
     location: Option<&str>,
 ) -> Result<RedirectAction, FetchError> {
+    redirect_location_with_upgrade(request, response, location, |url| url)
+}
+
+/// The network process applies HSTS to the Location before Fetch evaluates
+/// cross-origin redirect rules and dispatches the next hop.
+pub fn redirect_location_with_upgrade(
+    request: &mut Request,
+    response: &InternalResponse,
+    location: Option<&str>,
+    mut upgrade: impl FnMut(HttpUrl) -> HttpUrl,
+) -> Result<RedirectAction, FetchError> {
     let target = if matches!(response.status, 301 | 302 | 303 | 307 | 308)
         && request.redirect == RedirectMode::Follow
     {
         location
-            .map(|value| request.url().resolve(value))
+            .map(|value| request.url().resolve(value).map(&mut upgrade))
             .transpose()?
     } else {
         None
