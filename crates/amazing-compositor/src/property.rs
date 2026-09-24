@@ -259,6 +259,15 @@ pub struct EffectNode {
     pub filter: Option<u64>,
     pub accumulated_opacity: f32,
 }
+
+/// Painter effect groups blend into an RGBA8 intermediate at each nesting
+/// level. Preserve that 8-bit rounding when flattening their opacity into a
+/// retained layer; multiplying CSS floats and quantizing once loses a channel.
+fn nested_effect_opacity(parent: f32, child: f32) -> f32 {
+    let parent = u32::from(amazing_paint::quantize_opacity(parent));
+    let child = u32::from(amazing_paint::quantize_opacity(child));
+    ((parent * child + 127) / 255) as f32 / 255.
+}
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScrollNode {
     pub parent: ScrollId,
@@ -424,7 +433,7 @@ impl PropertyTrees {
         }
         let id = EffectId(self.effects.len());
         let accumulated_opacity =
-            self.effects[parent.0].accumulated_opacity * opacity.clamp(0., 1.);
+            nested_effect_opacity(self.effects[parent.0].accumulated_opacity, opacity);
         self.effects.push(EffectNode {
             parent,
             opacity: opacity.clamp(0., 1.),
@@ -445,7 +454,7 @@ impl PropertyTrees {
         for i in 1..self.effects.len() {
             let p = self.effects[i].parent.0;
             self.effects[i].accumulated_opacity =
-                self.effects[p].accumulated_opacity * self.effects[i].opacity;
+                nested_effect_opacity(self.effects[p].accumulated_opacity, self.effects[i].opacity);
         }
         Ok(())
     }
