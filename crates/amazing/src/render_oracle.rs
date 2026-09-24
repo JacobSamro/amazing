@@ -9,7 +9,7 @@ use amazing_css::animation::AnimationMainThreadEvent;
 use amazing_dom::{Dom, NodeIdx};
 use amazing_dom::render_mutation::{RenderMutation, RenderMutationKind};
 use amazing_layout::{Flow, LayoutBox, retained::{GeometryDelta, InputChanges, LayoutTree, UpdateOutcome}};
-use amazing_paint::{Surface, controls::NoControls, display_list_view::{DisplayListView, PaintItem, PaintViewUpdate, RetainedPaintView, TransformNode, ClipNode, EffectNode, ScrollNode}};
+use amazing_paint::{Surface, controls::NoControls, display_list_view::{DisplayListView, PaintFallbackReason, PaintItem, PaintViewUpdate, RetainedPaintView, TransformNode, ClipNode, EffectNode, ScrollNode}};
 use amazing_text::TextSystem;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -104,6 +104,7 @@ pub(crate) struct RenderCoordinator {
     paint_generations: BTreeMap<NodeIdx, u64>,
     session: Option<RetainedCompositorSession>,
     retained_paint: Option<RetainedPaintView>,
+    retained_paint_ambiguous: bool,
     last_work: FrameWork,
 }
 
@@ -316,6 +317,7 @@ impl RenderCoordinator {
     pub(crate) fn reset_scene(&mut self) {
         self.session = None;
         self.retained_paint = None;
+        self.retained_paint_ambiguous = false;
     }
 
     pub(crate) fn layout_root(&self) -> &LayoutBox {
@@ -596,8 +598,7 @@ pub(crate) fn compositor_candidate(
     let paint_damage_valid = if let (Some(scene), Some(layout)) =
         (self.retained_paint.as_mut(), self.layout.as_ref())
     {
-        if self.last_work.layout_full { false } else {
-            match paint_damage_from_layout(layout, scene, &view) {
+        match paint_damage_from_layout(layout, scene, &view) {
                 Some(damage) => match runtime_host_replaced_content::apply_layout_paint_damage(
                     scene, &damage, dom, text, paint,
                 ) {
@@ -608,9 +609,8 @@ pub(crate) fn compositor_candidate(
                     }
                 },
                 None => false,
-            }
         }
-    } else { false };
+    } else { !self.retained_paint_ambiguous };
     let retained = match (self.session.as_mut(), paint_update) {
         (Some(session), Some(PaintViewUpdate::Delta(delta)))
             if paint_damage_valid && delta.retired_resources.is_empty() => {
@@ -658,9 +658,15 @@ pub(crate) fn compositor_candidate(
         };
         self.session = Some(RetainedCompositorSession { scene,
             presenter: ReferenceCpuPresenter::default() });
-        self.retained_paint = runtime_host_replaced_content::seed_retained_paint(
+        self.retained_paint = match runtime_host_replaced_content::seed_retained_paint(
             root, width, height, text, paint, &NoControls, dom,
-        ).ok();
+        ) {
+            Ok(scene) => { self.retained_paint_ambiguous = false; Some(scene) },
+            Err(error) => {
+                self.retained_paint_ambiguous = error == PaintFallbackReason::AmbiguousGeneration;
+                None
+            }
+        };
     }
     let session = self.session.as_mut().expect("oracle compositor initialized");
     let frame = source.build_frame(session.scene.compositor_mut(), width, height)
