@@ -328,6 +328,8 @@ LANE_GRANTS.setdefault("ipc", []).extend(["crates/amazing/Cargo.toml", "crates/a
 LANE_GRANTS.setdefault("js-lang", []).extend(["crates/amazing-js/src/vm/compiler.rs", "crates/amazing-js/src/vm/mod.rs"])
 # IPC-10: headless navigation controller shared by the GUI and the WPT harness.
 LANE_GRANTS.setdefault("ipc", []).extend(["crates/amazing/src/navigator.rs", "crates/amazing/src/gui.rs", "crates/amazing/src/cmd/wpt_harness.rs"])
+# HTML-26: forms move to html for the duration of the ticket.
+LANE_GRANTS.setdefault("html", []).extend(["crates/amazing-dom/src/forms.rs", "crates/amazing-bindings/src/form_bindings.rs"])
 LANE_GRANTS.setdefault("js-stdlib", []).append("crates/amazing-js/src/structured_clone.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
