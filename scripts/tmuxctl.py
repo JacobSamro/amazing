@@ -307,7 +307,7 @@ LANE_GRANTS["dom-bindings"].append("crates/amazing/src/runtime_binding_host.rs")
 # STORE-3: one IndexedDB transaction-cleanup call in js_scheduler.rs (additive).
 LANE_GRANTS["storage"].append("crates/amazing/src/js_scheduler.rs")
 # Per-lane driver adapters: each binding-owning lane owns crates/amazing/src/runtime_host_<lane>.rs.
-for _lane in ("net", "storage", "compositor", "dom-bindings", "ipc", "layout", "replaced-content"):
+for _lane in ("net", "storage", "compositor", "dom-bindings", "ipc", "layout", "replaced-content", "html"):
     LANE_GRANTS.setdefault(_lane, []).append(f"crates/amazing/src/runtime_host_{_lane.replace('-', '_')}.rs")
 # RC-19: two phase6_paint opacity assertions move to 127 under the shared integer blend.
 LANE_GRANTS.setdefault("replaced-content", []).append("crates/amazing/tests/phase6_paint.rs")
