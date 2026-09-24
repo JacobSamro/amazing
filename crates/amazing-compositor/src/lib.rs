@@ -178,6 +178,7 @@ pub struct Compositor {
     property_bindings: HashMap<NodePropertyKey, BoundPropertyNode>,
     layers: Vec<Layer>,
     tiles: HashMap<TileKey, Tile>,
+    scroll_generation: u64,
     last_frame: FrameStats,
     previous_frame: Option<Surface>,
     previous_layers: Vec<frame::LayerSnapshot>,
@@ -247,6 +248,7 @@ impl Compositor {
             property_bindings: HashMap::new(),
             layers,
             tiles: HashMap::new(),
+            scroll_generation: 0,
             last_frame: FrameStats::default(),
             previous_frame: None,
             previous_layers: Vec::new(),
@@ -304,7 +306,29 @@ impl Compositor {
         self.trees.set_transform(id, matrix)
     }
     pub fn set_scroll(&mut self, id: ScrollId, offset: (f32, f32)) -> Result<(), TreeError> {
-        self.trees.set_scroll(id, offset)
+        let previous = self.trees.scroll(id).map(|node| node.offset);
+        self.trees.set_scroll(id, offset)?;
+        if previous != Some(offset) {
+            self.scroll_generation = self.scroll_generation.wrapping_add(1);
+        }
+        Ok(())
+    }
+    pub fn scroll_offset(&self, id: ScrollId) -> Option<(f32, f32)> {
+        self.trees.scroll(id).map(|node| node.offset)
+    }
+    pub fn root_scroll_id(&self) -> Option<ScrollId> {
+        self.trees.scrolls.iter().enumerate().skip(1)
+            .find(|(_, node)| node.parent == ScrollId(0))
+            .map(|(index, _)| ScrollId(index))
+    }
+    pub fn root_scroll_offset(&self) -> (f32, f32) {
+        self.root_scroll_id().and_then(|id| self.scroll_offset(id)).unwrap_or((0., 0.))
+    }
+    pub fn scroll_generation(&self) -> u64 {
+        self.scroll_generation
+    }
+    pub fn scroll_changed_since(&self, generation: u64) -> bool {
+        self.scroll_generation != generation
     }
     pub fn set_scroll_contents(&mut self, id: ScrollId, contents: Rect) -> Result<(), TreeError> {
         self.trees.set_scroll_contents(id, contents)

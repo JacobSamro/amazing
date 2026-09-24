@@ -219,6 +219,19 @@ fn add_damage(damage: &mut Vec<Rect>, rect: Rect) {
     damage.push(current)
 }
 impl Compositor {
+    /// Uploads the current retained visible resources into a new presenter.
+    /// This is used when a shell adopts a cached frame after the initial
+    /// presenter was created, without rerasterizing the paint source.
+    pub fn resource_snapshot(&self) -> ResourceDelta {
+        let mut uploads = self.tile_resource_ids.iter().filter_map(|(key, id)| {
+            let surface = &self.tiles.get(key)?.surface;
+            Some(ResourceUpload { id: *id, width: surface.width, height: surface.height,
+                pixels: surface.pixels.clone() })
+        }).collect::<Vec<_>>();
+        uploads.sort_by_key(|upload| upload.id);
+        ResourceDelta { uploads, evictions: Vec::new() }
+    }
+
     /// Builds passes and resource deltas without flattening any layer into an
     /// output frame. A renderer may upload deltas, then execute pass 0.
     pub fn build_frame(

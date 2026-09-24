@@ -13,6 +13,20 @@ pub enum PaintViewRasterMode {
     BakedFallback,
 }
 
+/// Apply the paint view's opaque page canvas to a source-free retained frame.
+pub fn add_paint_view_canvas_background(
+    mode: PaintViewRasterMode,
+    frame: &mut CompositorFrame,
+) {
+    if mode == PaintViewRasterMode::RawLocal {
+        let viewport = Rect::new(0., 0., frame.width as f32, frame.height as f32);
+        frame.passes[0].quads.insert(0, DrawQuad::SolidColor(SolidColorQuad {
+            rect: viewport, color: [255, 255, 255, 255], clip_rect: viewport,
+            opacity: 1., blend: BlendMode::Normal,
+        }));
+    }
+}
+
 /// The raw mode rasterizes document-space item pixels once. Unsupported
 /// commands use the existing baked full-paint path for pixel correctness.
 pub struct PaintViewSource<'view, 'paint> {

@@ -328,6 +328,23 @@ mod tests {
         assert_eq!(actual.pixels, expected.pixels);
     }
 
+    #[test]
+    fn root_offset_generation_tracks_compositor_scroll_input() {
+        let (mut compositor, scroll) = scene();
+        let before = compositor.scroll_generation();
+        assert_eq!(compositor.root_scroll_id(), Some(scroll));
+        assert_eq!(compositor.root_scroll_offset(), (0., 0.));
+        let mut controller = ScrollController::default();
+        controller.handle_input(&mut compositor,
+            ScrollInput::Trackpad { x: 10., y: 10., delta: (0., 32.) }, false, 16.).unwrap();
+        assert_eq!(compositor.scroll_offset(scroll), Some((0., 32.)));
+        assert_eq!(compositor.root_scroll_offset(), (0., 32.));
+        assert!(compositor.scroll_changed_since(before));
+        let current = compositor.scroll_generation();
+        compositor.set_scroll(scroll, (0., 32.)).unwrap();
+        assert!(!compositor.scroll_changed_since(current));
+    }
+
     struct OverlaySource;
     impl PaintSource for OverlaySource {
         fn item_count(&self) -> usize { 3 }
