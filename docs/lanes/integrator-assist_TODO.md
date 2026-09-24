@@ -818,3 +818,10 @@ independent reference from freshly computed sampled styles. A render test
 checks that an important width declaration beats the sampled animation in
 layout; existing tests cover animated width, color, opacity, and transition
 events.
+
+Locked win-002 `amazing`, workspace nextest, and workspace doctest gates passed.
+The pinned Win-001 three-case animation render selection at WPT revision
+`c2a2fce69e5c2509d9dc28440ec8b42532e5c293` stayed **2 pass / 1 mismatch**
+before and after. Every actual image hash and differing-pixel count matched;
+the remaining `animation-important-002` mismatch is unchanged. Reports and
+comparison are under `crates/amazing/tests/animations/evidence/layout-*.json`.
