@@ -313,6 +313,8 @@ for _lane in ("net", "storage", "compositor", "dom-bindings"):
 LANE_GRANTS.setdefault("replaced-content", []).append("crates/amazing/tests/phase6_paint.rs")
 # DOM: BrowserDomHost::set_attribute calls Dom::set_attribute directly (MutationObserver records).
 LANE_GRANTS["dom-bindings"].append("crates/amazing/src/dom_host.rs")
+# JSRT: one-line [[NumberData]] non-enumerable fix in js-stdlib's Number installer.
+LANE_GRANTS.setdefault("js-runtime", []).append("crates/amazing-js/src/builtins_std_number_math.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
 # wptserve's AnyHtmlHandler generates them at the pinned WPT revision (META
