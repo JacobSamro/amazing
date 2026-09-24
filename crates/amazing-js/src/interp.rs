@@ -1767,6 +1767,20 @@ impl Interpreter {
                                 }
                                 ast::PropValue::Method(m) => self.method_value(m, env),
                             };
+                            // A non-computed colon definition of __proto__ sets
+                            // [[Prototype]] rather than creating an own property.
+                            if matches!(&p.value, ast::PropValue::Init(_))
+                                && !matches!(&p.key, PropKey::Computed(_))
+                                && k.as_string().is_some_and(|name| *name == "__proto__")
+                            {
+                                let JsValue::Object(object) = &o else { unreachable!() };
+                                match v {
+                                    JsValue::Object(prototype) => object.borrow_mut().proto = Some(prototype),
+                                    JsValue::Null => object.borrow_mut().proto = None,
+                                    _ => {}
+                                }
+                                continue;
+                            }
                             // Object-literal PropertyDefinition uses CreateDataProperty,
                             // which replaces a preceding accessor of the same name.
                             let JsValue::Object(object) = &o else { unreachable!() };
@@ -2719,6 +2733,9 @@ impl Interpreter {
             x.proto = Some(self.object_proto.clone());
             x
         })));
+        if !f.is_generator {
+            p.borrow_mut().define("constructor", symbol_data(JsValue::Object(h.clone()), true, true)).unwrap();
+        }
         h.borrow_mut()
             .set_own("prototype", JsValue::Object(p.clone()));
         h.borrow_mut().set_own(
