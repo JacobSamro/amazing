@@ -34,9 +34,13 @@ mod runtime_host_storage;
 use runtime_host_storage::StorageRuntime;
 
 use crate::dom_host::BrowserDomHost;
+use amazing_bindings::canvas_interfaces::{CanvasSlot, Member};
+use self::compositor::{CanvasObject, CanvasTarget};
+#[path = "runtime_host_compositor.rs"] mod compositor;
 
 #[derive(Clone, Copy)]
 enum NativeEntry {
+    Canvas(CanvasTarget, Member),
     Operation(Operation),
     IllegalConstructor,
     CapturePromiseResolvers,
@@ -55,6 +59,11 @@ enum WebObject {
 }
 
 struct BindingState {
+    canvas_text_system: Option<Rc<dyn amazing_text::TextSystem>>,
+    canvas_dirty: HashSet<NodeIdx>,
+    canvas_style_values: HashMap<(NodeIdx, &'static str), JsValue>,
+    canvas_slots: HashMap<NodeIdx, CanvasSlot>,
+    canvas_objects: Vec<(JsValue, CanvasObject)>,
     host: Rc<RefCell<BrowserDomHost>>,
     arena: u64,
     functions: Vec<NativeEntry>,
@@ -405,6 +414,11 @@ pub(crate) fn install(
 ) -> Result<RuntimeBindings, Throw> {
     let arena = Rc::as_ptr(&host) as u64;
     let state = Rc::new(RefCell::new(BindingState {
+        canvas_text_system: None,
+        canvas_dirty: HashSet::new(),
+        canvas_style_values: HashMap::new(),
+        canvas_slots: HashMap::new(),
+        canvas_objects: Vec::new(),
         host,
         arena,
         functions: Vec::new(),
@@ -438,7 +452,8 @@ pub(crate) fn install(
             state: for_dispatch.clone(),
         };
         match entry {
-            NativeEntry::Operation(operation) => invoke(&mut adapter, operation, this, &args),
+            NativeEntry::Canvas(target, member) => adapter.invoke_canvas(target, member, this, &args),
+            NativeEntry::Operation(operation) => adapter.invoke_operation_with_canvas_reset(operation, this, &args),
             NativeEntry::IllegalConstructor => Err(Throw::type_error("Illegal constructor")),
             NativeEntry::CapturePromiseResolvers => {
                 let (Some(resolve), Some(reject)) = (args.first(), args.get(1)) else {
@@ -458,6 +473,7 @@ pub(crate) fn install(
     };
     install_interfaces(&mut adapter)?;
     adapter.install_storage_interfaces()?;
+    adapter.install_canvas()?;
     let location = adapter.wrap_platform_object(PlatformKey {
         arena, slot: 0, generation: 1,
     }, InterfaceBrand::LOCATION)?;

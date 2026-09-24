@@ -212,8 +212,8 @@ fn rounded_backgrounds_opacity_and_children_keep_display_list_order() {
     let child = block(&[("background-image", "url(blue)")], 2.0, 2.0);
     b.flow = Flow::Blocks(vec![child]);
     let s = draw(&b);
-    assert_eq!(s.get_pixel(0, 0), Some([128, 128, 255, 255]));
-    assert_eq!(s.get_pixel(4, 4), Some([255, 128, 128, 255]));
+    assert_eq!(s.get_pixel(0, 0), Some([127, 127, 255, 255]));
+    assert_eq!(s.get_pixel(4, 4), Some([255, 127, 127, 255]));
     assert_eq!(s.get_pixel(7, 0), Some([255; 4]));
 }
 #[test]

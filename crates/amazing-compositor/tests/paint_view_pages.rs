@@ -79,6 +79,29 @@ fn raw_real_pages_match_full_painter() {
 }
 
 #[test]
+fn effects_scroller_512_matches_full_painter_at_opacity_edge() {
+    const SIZE: u32 = 512;
+    const CSS: &str = "body{margin:0;background:white}.fixed{position:fixed;left:2px;top:2px;background:red}.scroller{width:300px;height:180px;overflow:scroll;background:#ddd}.scroller.changed{width:280px}.moving{will-change:transform;background:blue;width:120px;height:80px}.fade{opacity:.5;background:green;width:120px;height:80px}";
+    let text = FallbackTextSystem::new();
+    for (name, html) in [
+        ("initial", EFFECTS_PAGE.to_owned()),
+        ("changed", EFFECTS_PAGE.replace("class='scroller'", "class='scroller changed'")),
+    ] {
+        let root = amazing_layout::layout_document_with_text(&html, CSS, SIZE as f32, &text);
+        let view = DisplayListView::new(&root, SIZE, SIZE, &text, &NoImages, &NoControls);
+        let source = PaintViewSource::new(&view);
+        assert_eq!(source.mode(), PaintViewRasterMode::RawLocal);
+        let mut compositor = source.compositor(SIZE, SIZE).unwrap();
+        let frame = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
+        let actual = ReferenceCpuPresenter::default().present(&frame).unwrap();
+        let expected = paint_document_with_text_resources_and_controls(
+            &root, SIZE, SIZE, &text, &NoImages, &NoControls,
+        );
+        assert_eq!(actual.pixels, expected.pixels, "{name} 512x512 opacity parity");
+    }
+}
+
+#[test]
 fn retained_real_page_property_trace() {
     const SIZE: u32 = 512;
     let html = format!("{EFFECTS_PAGE}<main>{LONG_ARTICLE}</main>");

@@ -1,0 +1,191 @@
+{
+  "schema": 1,
+  "ticket": "COMP-10",
+  "suite": "installed-browser-wpt-harness",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "baseline_commit": "682d13e2b7e97f817a8ed240c335e31e56169aab",
+  "after_source_commit": "980b7d13a1f4ada927655c345ffd070d04296fac",
+  "platform": "win-001",
+  "viewport": [
+    800,
+    600
+  ],
+  "before": {
+    "passed": 0,
+    "total": 14
+  },
+  "after": {
+    "passed": 13,
+    "total": 14
+  },
+  "cases": [
+    {
+      "test": "html/canvas/element/drawing-rectangles-to-the-canvas/2d.fillRect.basic.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "fillRect works",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/drawing-rectangles-to-the-canvas/2d.clearRect.globalalpha.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "clearRect is not affected by globalAlpha",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/drawing-rectangles-to-the-canvas/2d.fillRect.negative.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "fillRect of negative sizes works",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/drawing-rectangles-to-the-canvas/2d.fillRect.clip.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "fillRect is affected by clipping regions",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/the-canvas-state/2d.state.saverestore.path.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "save()/restore() does not affect the current path",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/transformations/2d.transformation.translate.basic.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "translate() works",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/path-objects/2d.path.rect.basic.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "Canvas test: 2d.path.rect.basic",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/compositing/2d.composite.clip.copy.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "fill() does not affect pixels outside the clip region.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/compositing/2d.composite.clip.source-in.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "fill() does not affect pixels outside the clip region.",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/canvas-context/2d.canvas.context.exists.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "The 2D context is implemented",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/canvas-context/2d.canvas.context.unique.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "getContext('2d') returns the same object",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/canvas-context/2d.canvas.context.invalid.args.html",
+      "before": "fail",
+      "after": "fail",
+      "after_subtests": [
+        {
+          "name": "Calling getContext with invalid arguments.",
+          "status": 1,
+          "message": "${function_name}: ${description}${constructor} is not an Error subtype"
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/canvas-host/2d.canvas.host.initial.reset.same.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "Setting size (not changing the value) resets canvas to transparent black",
+          "status": 0,
+          "message": null
+        }
+      ]
+    },
+    {
+      "test": "html/canvas/element/canvas-host/2d.canvas.host.initial.reset.different.html",
+      "before": "fail",
+      "after": "pass",
+      "after_subtests": [
+        {
+          "name": "Changing size resets canvas to transparent black",
+          "status": 0,
+          "message": null
+        }
+      ]
+    }
+  ]
+}
