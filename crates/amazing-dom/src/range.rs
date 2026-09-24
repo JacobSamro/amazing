@@ -400,7 +400,8 @@ impl Dom {
         self.check_node(root)?;
         let descendants = self.tree_order(root);
         for node in descendants.into_iter().skip(1) {
-            if !self.is_text(node) || !self.contains(root, Some(node)) {
+            if !matches!(self.get(node).kind, NodeKind::Text { .. })
+                || !self.contains(root, Some(node)) {
                 continue;
             }
             let mut length = self.node_length(node);
@@ -412,7 +413,7 @@ impl Dom {
             let mut next = self.get(node).next_sibling;
             let mut data = Vec::new();
             while let Some(n) = next {
-                if !self.is_text(n) {
+                if !matches!(self.get(n).kind, NodeKind::Text { .. }) {
                     break;
                 }
                 siblings.push(n);

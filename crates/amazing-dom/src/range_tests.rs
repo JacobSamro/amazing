@@ -415,6 +415,27 @@ fn normalize_merges_ranges_before_removing_text_nodes() {
     );
     assert_eq!(d.range(e).unwrap().start, P::new(a, 8));
 }
+
+#[test]
+fn normalize_only_touches_exclusive_text_nodes() {
+    let mut dom = Dom::new();
+    let root = dom.create_element(NodeIdx(0), "div");
+    let first = dom.create_text(root, "a");
+    let pi = dom.append_child(root, NodeKind::ProcessingInstruction {
+        target: "pi".into(), data: String::new(),
+    });
+    let second = dom.create_text(root, "b");
+    let cdata = dom.append_child(root, NodeKind::CDATASection { data: String::new() });
+    let third = dom.create_text(root, "c");
+    let comment = dom.append_child(root, NodeKind::Comment { data: String::new() });
+    let fourth = dom.create_text(root, "d");
+    let expected = vec![first, pi, second, cdata, third, comment, fourth];
+    dom.normalize(root).unwrap();
+    assert_eq!(dom.children(root).collect::<Vec<_>>(), expected);
+    assert_eq!(dom.character_data(cdata), Some(""));
+    assert_eq!(dom.character_data(first), Some("a"));
+    assert_eq!(dom.character_data(second), Some("b"));
+}
 #[test]
 fn normalize_reunites_surrogates_and_ignores_self() {
     let (mut d, root, a, b) = setup();
