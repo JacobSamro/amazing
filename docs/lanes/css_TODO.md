@@ -1338,3 +1338,9 @@ pixel hashes are in `crates/amazing-css/evidence/css18-*-case-results.jsonl`;
 **268/268** and workspace **2027/2027** plus five skipped passed.
 The exact-source Windows gate passed CSS **268/268**, workspace **2029/2029**
 plus five skipped, and doctests **2/2**.
+
+## CSS Ruby 1 property handoff for LAYOUT-16
+
+The ruby display values were already accepted by the typed `display` parser and the UA sheet already mapped `ruby`, `rb`, `rt`, `rtc`, and `rp`. Add `rbc` mapping and complete the UA defaults (annotation size only once within `rtc`, nonwrapping bases/annotations, ruby font variant, and isolation). Register the inherited `ruby-align`, `ruby-position`, `ruby-overhang`, and `ruby-merge` properties with their CSS Ruby 1 initials and value grammars. The `ruby-position` unordered two-keyword form canonicalizes to `alternate over/under`; legacy `ruby-overhang: none` computes to `spaces`. See [CSS Ruby 1](https://drafts.csswg.org/css-ruby-1/).
+
+Linux CSS nextest: 270/270. Linux workspace nextest: 2029/2029 plus five skipped. Windows exact-source gate and doctests are recorded in `.agents/css/report.md`.
