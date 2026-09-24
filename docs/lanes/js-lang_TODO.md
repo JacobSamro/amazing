@@ -1321,3 +1321,19 @@ tests and 2,226 workspace tests; separate JS and workspace doctests passed.
 The fixed-base classification hashes are `4c618ad3` before and `4446e075`
 after. The changes tighten early errors, `super` and `await` contexts, lexical
 declaration placement, and Annex B HTML comment parsing.
+
+## Test262 host capability consistency
+
+Fixed local `dev` base `ef925d7`; commit `d351fd47`. Both
+`--capabilities` and `--capabilities-v2` serialize one `Capabilities`
+value. Protocol 1 alone masks `module`; all shared flags, including
+`intl402`, are set once. The emitted v1 and v2 JSON lines are byte-identical
+to the fixed base. Pinned Test262 `intl402/` selection: 805 passing files and
+1,610 passing variants before and after, zero losses, identical classification
+SHA-256 `f9bcf0576e6247ca2fc2cae6b3e7a3ff5ddd875a2f0605ea8c8b27f24583dd69`.
+The full-tree pair on earlier base `2cc7347` retained 720 Intl passes and
+had no passing losses at 60 seconds; four staging variants moved out of
+timeouts. The 120-second pair had one staging string timeout only; that test's
+two variants both passed when selected alone. Win-002 ran 295 JS and 2,279
+workspace nextest cases; both commands and separate JS/workspace doctests
+passed.
