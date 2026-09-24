@@ -289,6 +289,28 @@ struct State {
     active: BTreeMap<u64, Active>,
     epochs: BTreeMap<u64, u64>,
 }
+fn http_cache_dir() -> std::path::PathBuf {
+    if let Some(path) = std::env::var_os("AMAZING_HTTP_CACHE_DIR") {
+        return path.into();
+    }
+    if let Some(path) = std::env::var_os("LOCALAPPDATA") {
+        return std::path::PathBuf::from(path)
+            .join("Amazing")
+            .join("http-cache");
+    }
+    if let Some(path) = std::env::var_os("XDG_CACHE_HOME") {
+        return std::path::PathBuf::from(path)
+            .join("amazing")
+            .join("http-cache");
+    }
+    if let Some(path) = std::env::var_os("HOME") {
+        return std::path::PathBuf::from(path)
+            .join(".cache")
+            .join("amazing")
+            .join("http-cache");
+    }
+    std::env::temp_dir().join("amazing-http-cache")
+}
 impl Drop for State {
     fn drop(&mut self) {
         for id in self.active.keys().copied() {
@@ -299,8 +321,15 @@ impl Drop for State {
 }
 impl State {
     fn new() -> Self {
+        let mut service = NetworkService::new(DispatchLimits::default());
+        match crate::network_cache::DiskCache::open(
+            http_cache_dir(), amazing_fetch::cache::CacheLimits::default(),
+        ) {
+            Ok((cache, disk)) => service.install_cache(cache, Box::new(disk)),
+            Err(error) => eprintln!("HTTP cache unavailable: {error}"),
+        }
         Self {
-            service: NetworkService::new(DispatchLimits::default()),
+            service,
             active: BTreeMap::new(),
             epochs: BTreeMap::new(),
         }

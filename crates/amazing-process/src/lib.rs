@@ -829,6 +829,7 @@ pub mod gpu;
 pub mod gpu_snapshot_wire;
 pub mod history;
 pub mod network;
+pub mod network_cache;
 pub mod network_v2;
 pub mod protocol;
 pub mod renderer;

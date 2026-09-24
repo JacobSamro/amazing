@@ -128,6 +128,29 @@ fn effects_scroller_512_matches_full_painter_at_opacity_edge() {
 }
 
 #[test]
+fn nested_opacity_matches_full_painter() {
+    const SIZE: u32 = 64;
+    let text = FallbackTextSystem::new();
+    let html = "<body><div class='outer'><div class='inner'></div></div></body>";
+    for (outer, inner) in [(0.5, 0.5), (0.3, 0.5), (0.5, 0.3),
+        (0.7, 0.5), (0.5, 0.7), (0.25, 0.75), (0.6, 0.6)] {
+        let css = format!("body{{margin:0;background:white}}.outer{{width:20px;height:20px;opacity:{outer}}}.inner{{width:20px;height:20px;background:rgb(0 128 0);opacity:{inner}}}");
+        let root = amazing_layout::layout_document_with_text(html, &css, SIZE as f32, &text);
+        let view = DisplayListView::new(&root, SIZE, SIZE, &text, &NoImages, &NoControls);
+        assert!(view.effects().len() >= 3, "nested effects must survive the view");
+        let source = PaintViewSource::new(&view);
+        assert_eq!(source.mode(), PaintViewRasterMode::RawLocal);
+        let mut compositor = source.compositor(SIZE, SIZE).unwrap();
+        let frame = source.build_frame(&mut compositor, SIZE, SIZE).unwrap();
+        let actual = ReferenceCpuPresenter::default().present(&frame).unwrap();
+        let expected = paint_document_with_text_resources_and_controls(
+            &root, SIZE, SIZE, &text, &NoImages, &NoControls);
+        assert_eq!(actual.pixels, expected.pixels, "nested opacity {outer} × {inner}: compositor {:?}, paint {:?}",
+            actual.get_pixel(5, 5), expected.get_pixel(5, 5));
+    }
+}
+
+#[test]
 fn retained_real_page_property_trace() {
     const SIZE: u32 = 512;
     let html = format!("{EFFECTS_PAGE}<main>{LONG_ARTICLE}</main>");

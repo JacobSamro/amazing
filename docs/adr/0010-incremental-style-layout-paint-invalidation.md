@@ -110,3 +110,25 @@ transform/opacity/scroll frame targets **zero style, layout and paint calls and
 zero tile uploads**. Every target also requires zero unexplained parity losses;
 no target may be met by skipping an observable update. The [Blink style invalidation design](https://chromium.googlesource.com/chromium/src/+/master/third_party/blink/renderer/core/css/style-invalidation.md)
 is a reference for feature-indexed descendant/sibling sets, not a dependency.
+
+## Amendment: RGBA8 rounding at composited layer boundaries (2026-09-24)
+
+Pixel parity remains exact away from composited layer boundaries. When a
+partially transparent pixel from one layer meets a pixel from another layer,
+the compositor may differ from the single-pass full painter by at most one
+unit in each RGBA8 channel. Rasterizing onto a transparent tile and then
+blending it over a backdrop introduces an intermediate RGBA8 rounding step;
+integer source-over composition is not associative across that step.
+
+The oracle records these qualifying pixels separately as `layer-rounding`.
+They are neither parity losses nor reasons to present the full-paint fallback.
+The compositor's reference presenter records the boundary during composition,
+and its parity helper applies the one-unit limit only at those recorded
+pixels. A larger difference, or any difference away from a recorded
+boundary, remains a loss and triggers the existing fallback. This rule does
+not relax style, geometry, display-item, or hit-test parity.
+
+The Windows effects-scroller fixture at 512×512 motivated this amendment:
+two antialiased text pixels differ by one RGB unit after a transparent text
+tile is placed over an opaque gray layer. The nested-opacity quantization fix
+remains in force; its regression test exercises a separate effect-tree issue.
