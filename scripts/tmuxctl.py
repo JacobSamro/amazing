@@ -324,6 +324,8 @@ LANE_GRANTS.setdefault("replaced-content", []).extend(["crates/amazing-shell-gpu
 # IPC-10: adapter dependency and module line.
 LANE_GRANTS.setdefault("ipc", []).extend(["crates/amazing/Cargo.toml", "crates/amazing/src/main.rs", "Cargo.lock"])
 # Structured serialize/deserialize (HTML StructuredSerializeInternal) lives in one amazing-js module.
+# JS-11: class generator/async-generator methods and parameter patterns need VM compiler entry points.
+LANE_GRANTS.setdefault("js-lang", []).extend(["crates/amazing-js/src/vm/compiler.rs", "crates/amazing-js/src/vm/mod.rs"])
 LANE_GRANTS.setdefault("js-stdlib", []).append("crates/amazing-js/src/structured_clone.rs")
 LANE_GRANTS.setdefault("js-stdlib", []).extend(["crates/amazing-js/src/interp.rs", "crates/amazing-js/src/interp_install.rs", "crates/amazing-js/src/interp_builtins.rs", "crates/amazing-js/src/value.rs"])
 # DOM-17: WPT .any.js window-variant wrappers in the installed runner, as
