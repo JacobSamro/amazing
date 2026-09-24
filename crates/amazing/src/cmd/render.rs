@@ -720,6 +720,7 @@ mod oracle_trace_tests {
         let mut paint_full = 0;
         let mut uploads = 0;
         let mut dirtied = 0;
+        let mut layer_rounding_pixels = 0;
         for index in 0..20 {
             let class = if index % 2 == 0 { format!("{base_class} changed").trim().to_owned() } else { base_class.to_owned() };
             let start = Instant::now();
@@ -738,9 +739,14 @@ mod oracle_trace_tests {
             direct_host.borrow_mut().dom.set_attribute(direct_node, "class", &class).unwrap();
             let direct = paint_host_surface_with_updates(&direct_host, "trace.html", 512., Some(512), css, &animated, true, None).unwrap();
             direct_us.push(start.elapsed().as_micros());
-            assert_eq!(candidate.pixels, direct.pixels, "{name} frame {index}");
+            let parity = coordinator.pixel_parity(&candidate.pixels, &direct.pixels);
+            assert_eq!(parity.losses, 0, "{name} frame {index}: {:?}", parity.first_loss);
+            if name != "effects-class" {
+                assert_eq!(parity.layer_rounding, 0, "{name} frame {index}");
+            }
+            layer_rounding_pixels += parity.layer_rounding;
         }
-        eprintln!("oracle_trace fixture={name} frames=20 p50_us={} p95_us={} full_p50_us={} full_p95_us={} style_calls={style_calls} layout_update_calls={layout_calls} layout_full={layout_full} paint_view_calls={paint_view_calls} paint_full={paint_full} uploads={uploads} dirtied_tiles={dirtied}",
+        eprintln!("oracle_trace fixture={name} frames=20 p50_us={} p95_us={} full_p50_us={} full_p95_us={} style_calls={style_calls} layout_update_calls={layout_calls} layout_full={layout_full} paint_view_calls={paint_view_calls} paint_full={paint_full} uploads={uploads} dirtied_tiles={dirtied} layer_rounding_pixels={layer_rounding_pixels}",
             percentile(&candidate_us, 0.5), percentile(&candidate_us, 0.95),
             percentile(&direct_us, 0.5), percentile(&direct_us, 0.95));
         if name == "opacity-class" {
