@@ -767,3 +767,14 @@ On fixed local `dev` base `544d7e8`, the generated-image URL cache now decodes
 and base64 data URL bodies handled by Fetch. Raster data URLs continue through
 the media decoder. A page test proves a data-SVG `list-style-image` enters the
 URL cache, exposes its intrinsic size, and paints red pixels.
+
+## IA driver render test isolation (2026-09-24)
+
+The `css3_stylesheets` and `render_wpt` integration fixtures now give every
+renderer subprocess a unique storage profile. Their temp/output paths also
+include a process ID and timestamp to avoid reuse across runs. The earlier
+IPC 50-cycle stress logs showed both named tests failing in all 50 runs when
+the shared profile was corrupt. On fixed local `dev` base `544d7e8`, 50 new
+full-workspace parallel Linux cycles selected and passed both tests, and each
+workspace run exited 0 with **2,154 passed / 5 skipped**. The per-cycle summary
+is under `crates/amazing/tests/driver_flakes/evidence/`.
