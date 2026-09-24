@@ -1,16 +1,16 @@
 //! Diagnostic compositor comparison at one frozen rendering update.
 //!
-//! The driver currently rebuilds style, layout and paint after DOM changes.
-//! This is the pixel boundary of the incremental oracle: an eventual retained
-//! candidate can be substituted without changing the full reference path.
-use amazing_compositor::{PaintViewSource, Presenter, ReferenceCpuPresenter};
-use amazing_css::{MutationKind, RenderMutation as StyleMutation, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
+//! The driver retains CSS, layout and compositor state across rendering updates.
+//! A fresh style, layout and paint result at the same frozen DOM epoch remains
+//! the pixel reference until the retained path has exact parity.
+use amazing_compositor::{Compositor, PaintDelta, PaintItemKey, PaintViewSource, Presenter, ReferenceCpuPresenter};
+use amazing_css::{MutationKind, RenderMutation as StyleMutation, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
 use amazing_dom::{Dom, NodeIdx};
 use amazing_dom::render_mutation::{RenderMutation, RenderMutationKind};
-use amazing_layout::{Flow, LayoutBox};
-use amazing_paint::{Surface, controls::NoControls, display_list_view::{DisplayListView, PaintItem, TransformNode, ClipNode, EffectNode, ScrollNode}};
+use amazing_layout::{Flow, LayoutBox, retained::{GeometryDelta, InputChanges, LayoutTree, UpdateOutcome}};
+use amazing_paint::{Surface, controls::NoControls, display_list_view::{DisplayListView, PaintItem, PaintViewUpdate, TransformNode, ClipNode, EffectNode, ScrollNode}};
 use amazing_text::TextSystem;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::page::PagePaint;
@@ -90,6 +90,22 @@ pub(crate) struct RenderCoordinator {
     invalidator: Option<StyleInvalidator>,
     stylesheet_epoch: u64,
     viewport: (u32, u32),
+    layout: Option<LayoutTree>,
+    paint_generations: BTreeMap<NodeIdx, u64>,
+    compositor: Option<Compositor>,
+    presenter: ReferenceCpuPresenter,
+    last_work: FrameWork,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct FrameWork {
+    pub(crate) style_recalculated: usize,
+    pub(crate) layout_dirty: usize,
+    pub(crate) layout_full: bool,
+    pub(crate) paint_changed: usize,
+    pub(crate) paint_full: bool,
+    pub(crate) tile_uploads: usize,
+    pub(crate) tiles_dirtied: usize,
 }
 
 pub(crate) struct StyleCandidate {
@@ -97,6 +113,8 @@ pub(crate) struct StyleCandidate {
     pub(crate) mutations: usize,
     pub(crate) recalculated: usize,
     pub(crate) full_fallback: bool,
+    pub(crate) changed: BTreeMap<NodeIdx, Vec<String>>,
+    pub(crate) inputs: InputChanges,
 }
 
 pub(crate) fn report_style_work(candidate: &StyleCandidate) {
@@ -105,6 +123,80 @@ pub(crate) fn report_style_work(candidate: &StyleCandidate) {
 }
 
 impl RenderCoordinator {
+    /// Compare the previous paint view with the next full view before mutating
+    /// the retained layout tree. The full view is also the independent oracle
+    /// for the layout update below.
+    pub(crate) fn update_layout_and_paint(
+        &mut self,
+        dom: &Dom,
+        styled: &StyledDom,
+        candidate: StyleCandidate,
+        style_divergence: bool,
+        full_root: &LayoutBox,
+        width: u32,
+        height: u32,
+        text: &dyn TextSystem,
+        paint: &PagePaint<'_>,
+        viewport_width: f32,
+        viewport_height: Option<f32>,
+    ) -> (GeometryDelta, Option<PaintViewUpdate>) {
+        self.last_work = FrameWork { style_recalculated: candidate.recalculated, ..FrameWork::default() };
+        let resource_change = !candidate.inputs.text.is_empty() || !candidate.inputs.replaced.is_empty()
+            || candidate.changed.values().flatten().any(|name| matches!(name.as_str(),
+                "background-image" | "list-style-image" | "content" | "font-family" | "font-size"));
+        let paint_update = self.layout.as_ref().and_then(|old| {
+            if resource_change { return None; }
+            let old_paint = PagePaint { media: paint.media, dom, styles: old.styles() };
+            let before = DisplayListView::with_node_generations(
+                old.root(), width, height, text, &old_paint, &NoControls,
+                &|node| self.paint_generations.get(&node).copied(),
+            );
+            let after = DisplayListView::with_dom_generations(
+                full_root, width, height, text, paint, &NoControls, dom,
+            );
+            Some(before.update(&after))
+        });
+        let delta = StyleDelta {
+            styles: styled.clone(),
+            changed: candidate.changed,
+            recalculated: Vec::new(),
+            full_rebuild: candidate.full_fallback || style_divergence
+                || first_style_mismatch(dom, &candidate.styles, styled).is_some(),
+        };
+        let geometry = if let Some(layout) = self.layout.as_mut() {
+            layout.update(dom, delta, &candidate.inputs, text, paint.media,
+                viewport_width, viewport_height)
+        } else {
+            self.layout = Some(LayoutTree::new(dom, styled.clone(), text, paint.media,
+                viewport_width, viewport_height));
+            GeometryDelta { outcome: UpdateOutcome::RequiresFullRebuild("initial layout"),
+                dirty: Vec::new(), changed: Vec::new() }
+        };
+        self.last_work.layout_dirty = geometry.dirty.len();
+        self.last_work.layout_full = !matches!(geometry.outcome, UpdateOutcome::Retained);
+        self.last_work.paint_changed = match &paint_update {
+            Some(PaintViewUpdate::Delta(delta)) => delta.changes.len(),
+            _ => 0,
+        };
+        self.last_work.paint_full = !matches!(paint_update, Some(PaintViewUpdate::Delta(_)));
+        self.paint_generations = (0..dom.node_count()).filter_map(|index| {
+            let node = NodeIdx(index as u32);
+            dom.node_generation(node).map(|generation| (node, generation))
+        }).collect();
+        (geometry, paint_update)
+    }
+
+    pub(crate) fn last_work(&self) -> FrameWork { self.last_work }
+
+    pub(crate) fn reset_scene(&mut self) {
+        self.compositor = None;
+        self.presenter = ReferenceCpuPresenter::default();
+    }
+
+    pub(crate) fn layout_root(&self) -> &LayoutBox {
+        self.layout.as_ref().expect("oracle layout initialized").root()
+    }
+
     /// Drain only the journal prefix visible at this boundary. Node generation
     /// is checked against the prior cache before allowing a CSS root update.
     pub(crate) fn candidate(&mut self, dom: &mut Dom, sheets: &[Stylesheet], viewport: (u32, u32)) -> StyleCandidate {
@@ -118,10 +210,19 @@ impl RenderCoordinator {
         }
         let full = self.previous.is_none() || sheets_changed || viewport_changed;
         let mutations = journal.len();
+        let inputs = InputChanges {
+            text: journal.iter().filter_map(|entry| matches!(entry.kind, RenderMutationKind::CharacterData { .. })
+                .then_some(entry.target.node)).collect(),
+            replaced: journal.iter().filter_map(|entry| match &entry.kind {
+                RenderMutationKind::Attribute { local_name, .. } if matches!(local_name.as_str(), "src" | "srcset" | "width" | "height") => Some(entry.target.node),
+                _ => None,
+            }).collect(),
+        };
         if full {
             return StyleCandidate {
                 styles: amazing_css::compute(dom, sheets), mutations,
                 recalculated: dom.node_count(), full_fallback: true,
+                changed: BTreeMap::new(), inputs,
             };
         }
         let changes = journal.iter().map(|entry| self.to_style_mutation(entry)).collect::<Vec<_>>();
@@ -132,6 +233,8 @@ impl RenderCoordinator {
             mutations,
             recalculated: delta.recalculated.len(),
             full_fallback: delta.full_rebuild,
+            changed: delta.changed,
+            inputs,
         }
     }
 
@@ -281,26 +384,64 @@ impl PaintSnapshot {
 pub(crate) struct CandidateFrame {
     pub(crate) pixels: Surface,
     pub(crate) paint: PaintSnapshot,
+    pub(crate) uploads: usize,
+    pub(crate) dirtied_tiles: usize,
 }
 
-/// Builds a fresh compositor frame without touching the full-paint reference.
-/// The DOM borrow held by the caller freezes script-visible state for both.
+/// Updates the retained compositor when the paint delta is safe; otherwise
+/// creates a fresh scene. The full-paint oracle remains independent.
+impl RenderCoordinator {
 pub(crate) fn compositor_candidate(
+    &mut self,
+    dom: &Dom,
     root: &LayoutBox,
     width: u32,
     height: u32,
     text: &dyn TextSystem,
     paint: &PagePaint<'_>,
+    paint_update: Option<&PaintViewUpdate>,
 ) -> Result<CandidateFrame, String> {
-    let view = DisplayListView::new(root, width, height, text, paint, &NoControls);
+    let view = DisplayListView::with_dom_generations(root, width, height, text, paint, &NoControls, dom);
     let paint = PaintSnapshot::from_view(&view);
     let source = PaintViewSource::new(&view);
-    let mut compositor = source.compositor(width, height).map_err(|error| error.to_string())?;
-    let frame = source.build_frame(&mut compositor, width, height)
+    let mut dirtied_tiles = 0;
+    let retained = match (self.compositor.as_mut(), paint_update) {
+        (Some(compositor), Some(PaintViewUpdate::Delta(delta))) if delta.retired_resources.is_empty() => {
+            let delta = PaintDelta { changes: delta.changes.iter().map(|change|
+                amazing_compositor::PaintItemChange {
+                    key: PaintItemKey(change.compositor_id), item_index: change.item_index,
+                    old_bounds: amazing_compositor::Rect::new(change.old_bounds.x, change.old_bounds.y,
+                        change.old_bounds.width, change.old_bounds.height),
+                    new_bounds: amazing_compositor::Rect::new(change.new_bounds.x, change.new_bounds.y,
+                        change.new_bounds.width, change.new_bounds.height),
+                }).collect() };
+            match compositor.apply_paint_delta(&delta) {
+                Ok(count) => { dirtied_tiles = count; true }
+                Err(error) => { eprintln!("amazing oracle: paint delta fallback: {error:?}"); false }
+            }
+        }
+        _ => false,
+    };
+    if !retained {
+        self.last_work.paint_full = true;
+        self.presenter = ReferenceCpuPresenter::default();
+        let mut fresh = source.compositor(width, height).map_err(|error| error.to_string())?;
+        if let Some(keys) = view.items().iter().map(|item| item.key.map(|key| PaintItemKey(key.compositor_id())))
+            .collect::<Option<Vec<_>>>() {
+            let _ = fresh.bind_paint_item_keys(&keys);
+        }
+        self.compositor = Some(fresh);
+    }
+    let compositor = self.compositor.as_mut().expect("oracle compositor initialized");
+    let frame = source.build_frame(compositor, width, height)
         .map_err(|error| error.to_string())?;
-    let pixels = ReferenceCpuPresenter::default().present(&frame)
+    let uploads = frame.resources.uploads.len();
+    self.last_work.tile_uploads = uploads;
+    self.last_work.tiles_dirtied = dirtied_tiles;
+    let pixels = self.presenter.present(&frame)
         .map_err(|error| format!("{error:?}"))?;
-    Ok(CandidateFrame { pixels, paint })
+    Ok(CandidateFrame { pixels, paint, uploads, dirtied_tiles })
+}
 }
 
 #[cfg(test)]
