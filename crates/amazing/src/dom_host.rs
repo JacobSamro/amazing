@@ -418,18 +418,9 @@ impl amazing_js::DomHost for BrowserDomHost {
         if node as usize >= self.dom.node_count() {
             return Err("unknown DOM node".into());
         }
-        let mut attrs = self
-            .dom
-            .attrs_of(idx)
-            .ok_or_else(|| "attribute requires an element".to_string())?
-            .to_vec();
-        if let Some((_, current)) = attrs.iter_mut().find(|(key, _)| key == name) {
-            *current = value.to_string();
-        } else {
-            attrs.push((name.to_string(), value.to_string()));
-        }
-        self.dom.set_attrs(idx, attrs);
-        Ok(())
+        self.dom
+            .set_attribute(idx, name, value)
+            .map_err(|error| error.to_string())
     }
 
     fn remove_attribute(&mut self, node: u32, name: &str) -> Result<(), String> {

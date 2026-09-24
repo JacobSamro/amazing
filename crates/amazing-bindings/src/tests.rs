@@ -46,6 +46,7 @@ struct Host {
     arena_borrowed: bool,
     callbacks: Vec<Option<V>>,
     calls: Vec<u64>,
+    call_receivers: Vec<(V, Vec<V>)>,
     reject_lone_surrogate: bool,
     legacy: Vec<(InterfaceBrand, LegacyPlatformHooks)>,
     iterables: Vec<(Interface, IterableKind)>,
@@ -172,8 +173,9 @@ impl BindingHost for Host {
             .then(|| NodeIdx(key.slot as u32))
     }
     fn is_callable(&self, value: &V) -> bool { matches!(value, V::Callable(_)) }
-    fn call(&mut self, function: &V, _this: &V, _arguments: &[V]) -> Result<V, String> {
+    fn call(&mut self, function: &V, this: &V, arguments: &[V]) -> Result<V, String> {
         assert!(!self.arena_borrowed);
+        self.call_receivers.push((this.clone(), arguments.to_vec()));
         if let V::Callable(id) = function { self.calls.push(*id); self.abort_trace.push(*id); }
         match function { V::Callable(1) => Ok(V::Number(1.)), V::Callable(_) => Ok(V::Undefined), _ => Err("not callable".into()) }
     }
@@ -741,6 +743,45 @@ fn mutation_observer_records_are_snapshots_and_callback_survives_disconnect() {
     h.dom.pre_insert(second, root, None).unwrap();
     crate::deliver_mutation_checkpoint(&mut h).unwrap();
     assert_eq!(h.calls, [7]);
+    assert_eq!(h.call_receivers.last().unwrap().0, observer);
+    assert_eq!(h.call_receivers.last().unwrap().1.len(), 2);
+    assert_eq!(call(&mut h, O::MutationTakeRecords, observer, &[]), V::Array(vec![]));
+}
+
+#[test]
+fn take_records_retains_each_attribute_child_list_and_character_data_mutation() {
+    let mut h = Host::default();
+    let target = element(&mut h);
+    call(&mut h, O::ElementSetId, V::Node(target), &[str_value("n00")]);
+    let observer = call(&mut h, O::MutationObserverConstructor, V::Undefined, &[V::Callable(7)]);
+    let options = V::Dictionary(vec![
+        ("subtree", V::Bool(true)), ("childList", V::Bool(true)),
+        ("attributes", V::Bool(true)), ("characterData", V::Bool(true)),
+        ("attributeOldValue", V::Bool(true)), ("characterDataOldValue", V::Bool(true)),
+    ]);
+    call(&mut h, O::MutationObserve, observer.clone(), &[V::Node(target), options]);
+    for id in ["foo", "bar"] {
+        call(&mut h, O::ElementSetId, V::Node(target), &[str_value(id)]);
+    }
+    call(&mut h, O::ElementSetClassName, V::Node(target), &[str_value("bar")]);
+    call(&mut h, O::SetTextContent, V::Node(target), &[str_value("old data")]);
+    let text = h.dom.get(target).first_child.unwrap();
+    call(&mut h, O::SetData, V::Node(text), &[str_value("new data")]);
+    let V::Array(records) = call(&mut h, O::MutationTakeRecords, observer.clone(), &[]) else {
+        panic!("expected records array")
+    };
+    let types: Vec<_> = records.iter().map(|record|
+        call(&mut h, O::MutationRecordType, record.clone(), &[])).collect();
+    let names: Vec<_> = records.iter().map(|record|
+        call(&mut h, O::MutationRecordAttributeName, record.clone(), &[])).collect();
+    assert_eq!(records.len(), 5);
+    assert_eq!(types, vec![str_value("attributes"), str_value("attributes"),
+        str_value("attributes"), str_value("childList"), str_value("characterData")]);
+    assert_eq!(names, vec![str_value("id"), str_value("id"), str_value("class"),
+        V::Null, V::Null]);
+    assert_eq!(call(&mut h, O::MutationRecordOldValue, records[0].clone(), &[]), str_value("n00"));
+    assert_eq!(call(&mut h, O::MutationRecordOldValue, records[1].clone(), &[]), str_value("foo"));
+    assert_eq!(call(&mut h, O::MutationRecordOldValue, records[4].clone(), &[]), str_value("old data"));
     assert_eq!(call(&mut h, O::MutationTakeRecords, observer, &[]), V::Array(vec![]));
 }
 
