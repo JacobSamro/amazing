@@ -305,7 +305,7 @@ impl<S: CacheStorage> CacheStore<S> {
         if request_time > response_time {
             return Err(CacheError::InvalidTime);
         }
-        if !request.method.eq_ignore_ascii_case("GET") || response.status != 200 {
+        if !request.method.eq_ignore_ascii_case("GET") || !storable_status(&response) {
             return Ok(false);
         }
         if response.body.len() > self.limits.entry_bytes {
@@ -503,6 +503,18 @@ impl<S: CacheStorage> CacheStore<S> {
             self.bytes = self.bytes.saturating_sub(entry_size(&entry).unwrap_or(0));
         }
     }
+}
+
+fn storable_status(response: &CacheResponse) -> bool {
+    if !(200..=599).contains(&response.status) || matches!(response.status, 206 | 304) {
+        return false;
+    }
+    if matches!(response.status, 200 | 203 | 204 | 300 | 301 | 308 | 404 | 405 | 410 | 414 | 501) {
+        return true;
+    }
+    let cc = directives(&response.headers);
+    cc.max_age.is_some() || cc.s_maxage.is_some()
+        || header_date(&response.headers, "expires").is_some()
 }
 
 #[derive(Default)]

@@ -140,6 +140,9 @@ pub(super) fn paint(
     clip: ClipRect,
     budget: &mut usize,
 ) -> bool {
+    if b.table_decoration().suppress_background {
+        return true;
+    }
     let Some(node) = b.node else {
         return true;
     };
@@ -226,6 +229,12 @@ pub(super) fn paint(
                 .min(image.height as f64 - 1.0) as usize;
             for x in x0..x1 {
                 if !painting.contains(x as f32 + 0.5, y as f32 + 0.5) {
+                    continue;
+                }
+                if b.table_decoration().background_holes.iter().any(|hole| {
+                    let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                    px >= hole.x && px < hole.x + hole.w && py >= hole.y && py < hole.y + hole.h
+                }) {
                     continue;
                 }
                 let Some(u) = x_axis.sample(x as f64 + 0.5) else {

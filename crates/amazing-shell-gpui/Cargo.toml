@@ -53,4 +53,4 @@ debug = false
 
 [workspace]
 resolver = "2"
-members = ["../amazing-image"]
+members = []
