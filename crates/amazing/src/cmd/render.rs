@@ -256,7 +256,7 @@ fn render_wpt_surface_after_first_paint(
     let mut oracle = crate::render_oracle::RenderCoordinator::default();
     let first_updates = sample_animation_frame(&host, html_path, &mut animations, 0.)?;
     let first = paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "", &first_updates.main_thread_updates,
-        crate::render_oracle::enabled().then_some(&mut oracle))?;
+        animations.animated(), crate::render_oracle::enabled().then_some(&mut oracle))?;
     after_first_paint(&first);
     let Some(scheduler) = scheduler.as_mut() else {
         return Ok(first);
@@ -293,7 +293,7 @@ fn render_wpt_surface_after_first_paint(
             .map_err(|error| format!("animation listener failed: {}", error.describe()))?;
     }
     paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "", &final_updates.main_thread_updates,
-        crate::render_oracle::enabled().then_some(&mut oracle))
+        animations.animated(), crate::render_oracle::enabled().then_some(&mut oracle))
 }
 
 fn sample_animation_frame(
@@ -327,7 +327,7 @@ fn paint_host_surface(
 ) -> Result<amazing_paint::Surface, PageError> {
     let mut oracle = crate::render_oracle::RenderCoordinator::default();
     paint_host_surface_with_updates(host, html_path, width, fixed_height, extra_css, &[],
-        crate::render_oracle::enabled().then_some(&mut oracle))
+        &amazing_css::AnimatedValues::default(), crate::render_oracle::enabled().then_some(&mut oracle))
 }
 
 fn paint_host_surface_with_updates(
@@ -337,6 +337,7 @@ fn paint_host_surface_with_updates(
     fixed_height: Option<u32>,
     extra_css: &str,
     updates: &[PropertyUpdate],
+    animated: &amazing_css::AnimatedValues,
     coordinator: Option<&mut crate::render_oracle::RenderCoordinator>,
 ) -> Result<amazing_paint::Surface, PageError> {
 
@@ -352,17 +353,15 @@ fn paint_host_surface_with_updates(
     // sheet owner's implicit scope root.
 
     let mut style_divergence = None;
-    let styled = if let Some(coordinator) = coordinator {
+    if let Some(coordinator) = coordinator {
         let viewport = (width.max(1.0) as u32, fixed_height.unwrap_or(0));
         let candidate = coordinator.candidate(&mut dom.dom, &sheets, viewport);
         let full = amazing_css::compute(&dom.dom, &sheets);
         style_divergence = crate::render_oracle::first_style_mismatch(&dom.dom, &candidate.styles, &full);
         crate::render_oracle::report_style_work(&candidate);
         coordinator.commit(&dom.dom, &sheets, viewport, &full);
-        if style_divergence.is_some() { full } else { candidate.styles }
-    } else {
-        amazing_css::compute(&dom.dom, &sheets)
-    };
+    }
+    let styled = amazing_css::compute_with_animations(&dom.dom, &sheets, animated);
     let media = load_page_media(&dom.dom, html_path, &styled);
     for warning in &media.warnings {
         eprintln!("amazing render: {warning}");
@@ -398,7 +397,7 @@ fn paint_host_surface_with_updates(
         let candidate = crate::render_oracle::compositor_candidate(
             &root, width.max(1.0) as u32, page_height, &page_text.provider, &paint,
         );
-        let full_styles = amazing_css::compute(&dom.dom, &sheets);
+        let full_styles = amazing_css::compute_with_animations(&dom.dom, &sheets, animated);
         let mut full_root = amazing_layout::layout_dom_document_with_stylesheets_and_text_and_replaced_in_viewport(
             &dom.dom, &sheets, width, fixed_height.map(|height| height as f32),
             &page_text.provider, &media,

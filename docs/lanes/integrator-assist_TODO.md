@@ -791,3 +791,18 @@ test covers set, remove, clear, same-origin filtering, task timing, and listener
 removal. Session storage remains per arena: a browsing-context-group seam from
 storage is needed before sessionStorage can share data and notify related
 documents.
+
+## IA-ANIMATIONS-2 — CSS sampled style adoption (2026-09-24)
+
+On fixed local `dev` base `544d7e8`, the animation scene now serializes
+compositor samples into `AnimatedValues`, preserves animation and transition
+origins while a transition runs, and removes the transition origin after its
+end/cancel event. The driver passes those values to
+`compute_with_animations` for the rendering style and media/paint resources.
+The existing stylesheet-based layout entry point and its sampled box-style
+application remain until LAYOUT-14 item 8 provides `layout_styled_document`.
+`PropertyUpdate` currently omits an origin field, so the driver classifies
+samples by the compositor's documented animation-before-transition order and
+transition lifecycle events; a compositor origin field would remove that
+inference. Tests cover animation and transition cascade sources and retained
+precedence.
