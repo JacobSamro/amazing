@@ -134,7 +134,8 @@ pub struct Dom {
     token_lists: Vec<(NodeIdx, String)>,
     mutation_generation: u64,
     node_generations: Vec<u64>,
-    next_node_generation: u64,
+    node_slot_live: Vec<bool>,
+    free_node_slots: Vec<NodeIdx>,
     render_epoch: u64,
     render_mutations: Vec<render_mutation::RenderMutation>,
     dom_exceptions: Vec<DomExceptionData>,
@@ -188,7 +189,8 @@ impl Dom {
             token_lists: Vec::new(),
             mutation_generation: 0,
             node_generations: Vec::new(),
-            next_node_generation: 1,
+            node_slot_live: Vec::new(),
+            free_node_slots: Vec::new(),
             render_epoch: 0,
             render_mutations: Vec::new(),
             dom_exceptions: Vec::new(),
@@ -215,8 +217,8 @@ impl Dom {
             next_sibling: None,
             prev_sibling: None,
         });
-        dom.node_generations.push(dom.next_node_generation);
-        dom.next_node_generation += 1;
+        dom.node_generations.push(1);
+        dom.node_slot_live.push(true);
         dom
     }
 
@@ -228,7 +230,8 @@ impl Dom {
     /// [`attach_before`] it. Used by the tree builder for foster-parented
     /// insertions where the final position isn't known at creation time.
     pub fn alloc_unattached(&mut self, kind: NodeKind) -> NodeIdx {
-        let index = u32::try_from(self.nodes.len()).expect("DOM arena exhausted u32 handles");
+        let index = self.free_node_slots.pop().map_or_else(||
+            u32::try_from(self.nodes.len()).expect("DOM arena exhausted u32 handles"), |node| node.0);
         let owner_document = if matches!(kind, NodeKind::Document) {
             NodeIdx(index)
         } else {
@@ -239,7 +242,7 @@ impl Dom {
                 namespace_uri: None, local_name: name.clone(),
             }).collect()
         } else { Vec::new() };
-        self.nodes.push(Node {
+        let node = Node {
             owner_document,
             namespaced_attributes: Vec::new(),
             attribute_order,
@@ -251,11 +254,31 @@ impl Dom {
             last_child: None,
             next_sibling: None,
             prev_sibling: None,
-        });
-        self.node_generations.push(self.next_node_generation);
-        self.next_node_generation = self.next_node_generation.checked_add(1)
-            .expect("DOM node generation exhausted");
+        };
+        if (index as usize) < self.nodes.len() {
+            self.nodes[index as usize] = node;
+            self.node_generations[index as usize] = self.node_generations[index as usize]
+                .checked_add(1).expect("DOM node generation exhausted");
+            self.node_slot_live[index as usize] = true;
+        } else {
+            self.nodes.push(node);
+            self.node_generations.push(1);
+            self.node_slot_live.push(true);
+        }
         NodeIdx(index)
+    }
+
+    /// GC seam: the caller must prove no DOM side table or script wrapper can
+    /// still reach this unattached leaf. Detaching alone never retires a node.
+    #[allow(dead_code)] // Reserved for the DOM wrapper collector; exercised by the reuse test.
+    pub(crate) fn retire_unreachable_node(&mut self, node: NodeIdx) -> Result<(), DomError> {
+        self.check_node(node)?;
+        if node.0 == 0 || self.get(node).parent.is_some() || self.get(node).first_child.is_some() {
+            return Err(DomError::InvalidNode);
+        }
+        self.node_slot_live[node.0 as usize] = false;
+        self.free_node_slots.push(node);
+        Ok(())
     }
 
     pub fn get(&self, idx: NodeIdx) -> &Node {

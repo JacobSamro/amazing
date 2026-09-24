@@ -37,7 +37,7 @@ impl DocumentPosition {
 }
 impl Dom {
     pub(crate) fn check_node(&self, node: NodeIdx) -> Result<(), DomError> {
-        if (node.0 as usize) < self.nodes.len() {
+        if self.node_slot_live.get(node.0 as usize) == Some(&true) {
             Ok(())
         } else {
             Err(DomError::InvalidNode)
