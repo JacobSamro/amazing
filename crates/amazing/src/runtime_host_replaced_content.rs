@@ -14,6 +14,37 @@ use amazing_paint::display_list_view::{
 use amazing_paint::ImageProvider;
 use amazing_text::TextSystem;
 use std::{collections::BTreeMap, process::ExitCode, time::Duration};
+use std::collections::HashSet;
+
+/// Map image and preceding picture-source attribute changes to image owners.
+/// The DOM journal carries node generations so recycled slots cannot retarget
+/// a pending request.
+pub(crate) fn affected_images(
+    dom: &Dom,
+    mutations: &[amazing_dom::mutation::ImageRelevantMutation],
+) -> HashSet<amazing_dom::NodeIdx> {
+    let mut affected = HashSet::new();
+    for mutation in mutations {
+        if dom.node_generation(mutation.node) != Some(mutation.generation) { continue; }
+        match dom.name(mutation.node) {
+            Some("img") => { affected.insert(mutation.node); }
+            Some("source") => {
+                if let Some(parent) = dom.get(mutation.node).parent
+                    && dom.name(parent) == Some("picture") {
+                    let mut after_source = false;
+                    for sibling in dom.children(parent) {
+                        if sibling == mutation.node { after_source = true; continue; }
+                        if after_source && dom.name(sibling) == Some("img") {
+                            affected.insert(sibling);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    affected
+}
 
 /// The same browser executable serves the IMAGE utility role. The process
 /// library enters the platform sandbox before it accepts decoder requests.

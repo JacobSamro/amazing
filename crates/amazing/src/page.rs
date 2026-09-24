@@ -38,6 +38,13 @@ pub(crate) struct PageImageState {
     pub(crate) natural_height: u32,
 }
 
+pub(crate) struct PageImageSnapshot {
+    pub(crate) node: amazing_dom::NodeIdx,
+    pub(crate) state: PageImageState,
+    pub(crate) generation: u64,
+    pub(crate) decode: crate::runtime_host_replaced_content::ImageDecodeDecision,
+}
+
 #[derive(Default)]
 pub(crate) struct PageMedia {
     images: Vec<PageImage>,
@@ -47,6 +54,14 @@ pub(crate) struct PageMedia {
 }
 
 impl PageMedia {
+    pub(crate) fn image_snapshots(&self) -> Vec<PageImageSnapshot> {
+        self.images.iter().filter_map(|entry| Some(PageImageSnapshot {
+            node: entry.node,
+            state: self.image_state(entry.node)?,
+            generation: entry.request.generation,
+            decode: crate::runtime_host_replaced_content::decode_image_decision(&entry.request),
+        })).collect()
+    }
     pub(crate) fn has_pending_lazy(&self) -> bool {
         self.images.iter().any(|entry| entry.loading == amazing_media::loading::Loading::Lazy && !entry.request.fetch_started)
     }

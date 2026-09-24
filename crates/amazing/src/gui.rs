@@ -562,6 +562,9 @@ mod windows {
                     width.max(1) as f32, Some(viewport_height),
                 );
             }
+            if let Err(error) = runtime.js.set_image_loader_states(&media) {
+                eprintln!("amazing gui: image decode promise: {}", error.describe());
+            }
             let height = amazing_layout::layout_overflow_bottom(&layout)
                 .ceil()
                 .clamp(1.0, 8192.0) as u32;
@@ -1075,6 +1078,9 @@ mod windows {
                 &host_ref.dom, &styled, &page_text.provider, &media,
                 width.max(1) as f32, Some(700.0),
             );
+        }
+        if let Err(error) = js.set_image_loader_states(&media) {
+            eprintln!("amazing gui: image decode promise: {}", error.describe());
         }
         let height = amazing_layout::layout_overflow_bottom(&root)
             .ceil()

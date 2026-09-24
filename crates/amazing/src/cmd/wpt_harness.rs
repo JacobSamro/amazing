@@ -374,6 +374,14 @@ fn execute(options: &Options) -> Result<(), String> {
     scheduler.set_location_url(format!("http://web-platform.test/{}", options.test));
     // This runner reads a UTF-8 HTML source directly as its top-level page.
     scheduler.set_document_metadata("UTF-8", "text/html", "");
+    let refresh_images = |scheduler: &mut crate::js_scheduler::DriverScheduler| -> Result<(), String> {
+        let page = host.borrow();
+        let styles = amazing_css::compute(&page.dom, &[]);
+        let media = crate::page::load_page_media_in_viewport(&page.dom,
+            &file.to_string_lossy(), &styles, options.width as f32, 1.0);
+        scheduler.set_image_loader_states(&media).map_err(|error| error.describe())
+    };
+    refresh_images(&mut scheduler)?;
     // The engine's browser-global identity also supplies the standard self alias.
     let global = JsValue::Object(scheduler.js.global_obj.clone());
     scheduler.js.global_obj.borrow_mut().set_own("self", global.clone());
@@ -435,6 +443,7 @@ fn execute(options: &Options) -> Result<(), String> {
     if !installed {
         return Err("no harness script loaded".into());
     }
+    refresh_images(&mut scheduler)?;
     for event in ["DOMContentLoaded", "load"] {
         scheduler.dispatch_dom_event(0, event).map_err(|e| e.describe())?;
     }

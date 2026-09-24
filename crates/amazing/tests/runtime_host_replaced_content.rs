@@ -10,6 +10,20 @@ use runtime_host_replaced_content::{
 };
 
 #[test]
+fn picture_source_mutation_invalidates_only_following_images() {
+    let mut dom = Dom::new();
+    let picture = dom.create_element(NodeIdx(0), "picture");
+    let before = dom.create_element(picture, "img");
+    let source = dom.create_element(picture, "source");
+    let after = dom.create_element(picture, "img");
+    dom.set_attribute(source, "srcset", "new.webp").unwrap();
+    let mutations = dom.take_image_relevant_mutations();
+    let affected = runtime_host_replaced_content::affected_images(&dom, &mutations);
+    assert!(!affected.contains(&before));
+    assert!(affected.contains(&after));
+}
+
+#[test]
 fn picture_selects_only_preceding_compatible_source() {
     let dom = amazing_html::parse(
         "<picture><source srcset='wide.webp 1x, wide2.webp 2x' media='(min-width: 600px)' type='image/webp'><img src='fallback.png' srcset='small.png 1x'><source srcset='late.webp' type='image/webp'></picture>",
