@@ -221,12 +221,45 @@ impl Compositor {
         width: u32,
         height: u32,
     ) -> Result<CompositorFrame, SceneError> {
+        self.build_frame_inner(Some(source), width, height)
+    }
+
+    /// Recompose from retained tiles without consulting a paint source. A
+    /// newly exposed or dirty tile makes the caller rebuild through paint.
+    pub fn build_cached_frame(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<CompositorFrame, SceneError> {
+        self.build_frame_inner(None, width, height)
+    }
+
+    fn build_frame_inner(
+        &mut self,
+        source: Option<&dyn PaintSource>,
+        width: u32,
+        height: u32,
+    ) -> Result<CompositorFrame, SceneError> {
         if self
             .chunks
             .last()
-            .is_some_and(|c| c.items.end > source.item_count())
+            .is_some_and(|c| source.is_some_and(|source| c.items.end > source.item_count()))
         {
             return Err(SceneError::InvalidRange);
+        }
+        if source.is_none() {
+            let viewport = Rect::new(0., 0., width as f32, height as f32);
+            for (li, layer) in self.layers.iter().enumerate() {
+                let matrix = self.trees.matrix(layer.state).unwrap_or(Matrix4::IDENTITY);
+                let scissor = clip_rect(&self.trees, layer.state, viewport);
+                for key in tile_keys(li, layer.bounds) {
+                    if matrix.map_bounds(tile_rect(key)).is_some_and(|r| r.intersects(scissor))
+                        && self.tiles.get(&key).is_none_or(|tile| tile.dirty)
+                    {
+                        return Err(SceneError::MissingCachedTile);
+                    }
+                }
+            }
         }
         let viewport = Rect::new(0., 0., width as f32, height as f32);
         let mut passes = vec![RenderPass {
@@ -303,6 +336,7 @@ impl Compositor {
                 }
                 let needs = self.tiles.get(&key).is_none_or(|t| t.dirty);
                 if needs {
+                    let source = source.ok_or(SceneError::MissingCachedTile)?;
                     let mut surface = Surface::new(TILE_SIZE as u32, TILE_SIZE as u32);
                     for &ci in &layer.chunks {
                         let chunk = &self.chunks[ci];

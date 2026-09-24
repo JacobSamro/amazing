@@ -148,3 +148,35 @@ nextest tests with five skipped and 2/2 doctests.
 Remaining Temporal failures include calendar/time-zone behavior beyond the
 UTC/fixed-offset ISO scope, Proxy behavior, and other shared engine semantics.
 They remain failures in the pinned corpus.
+
+## JSB-4 IANA time-zone integration
+
+`Temporal.ZonedDateTime` now retains a canonical time-zone identifier and uses
+JSB-4's pinned resolver at each instant for local fields, offset accessors,
+formatting, and arithmetic. Local-to-instant conversion handles gaps and folds
+with `compatible`, `earlier`, `later`, and `reject` disambiguation. String and
+property-bag construction honor offset choices, including historical offsets
+with seconds. `startOfDay`, `hoursInDay`, and `getTimeZoneTransition` use the
+zone's rules. Fixed offsets and UTC still use the same resolver interface.
+
+The fixed source base is JSB-4 commit `4c5c62d0f0b5afd184267a96a6eb9dc44de44443`.
+Pinned Test262 revision `3655e7464de3d52643ecddd4b5f9f4f3e7f62398` and full-input
+SHA-256 `91109b8248e3825d658903f2496535b9500c8a776794355da7f32b6942ceddc5`
+were identical in both Linux release-host runs:
+
+| Run | Pass | Fail | Timeout | Unsupported | Skipped |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| JSB-4 base | 25,632 | 26,784 | 22 | 1,140 | 294 |
+| IANA integration | 25,704 | 26,712 | 22 | 1,140 | 294 |
+
+At `(path, variant)` granularity, **144 variants newly pass and zero previously
+passing variants are lost**. The final full classification SHA-256 is
+`5688f1b751255b50ab3a794941512da7569e62175318e11c677ff5a08eb310c4`.
+The `built-ins/Temporal/` selection passes 3,319/4,603 files on two
+consecutive runs with identical classification SHA-256
+`e2ec39b1c51d7bbf4efb68e7d48f78d18c2d0b0676e90b69e6016eb84f4d79b1`.
+The new full-suite passes include IANA DST disambiguation, offset getters,
+transition queries, day lengths, and zone-aware date arithmetic.
+
+Linux `amazing-js` nextest passed 283/283 tests with one skipped; its doctest
+passed 1/1. The final Windows workspace gate is recorded in the lane report.
