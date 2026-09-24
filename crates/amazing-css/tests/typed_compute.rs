@@ -27,7 +27,7 @@ fn deprecated_system_color_alias_has_a_typed_value() {
     let mut dom = Dom::new();
     let element = dom.create_element(NodeIdx(0), "div");
     let styled = compute(&dom, &[parse_stylesheet("div { color: InfoText; }")]);
-    assert_eq!(styled.get(element).unwrap().get("color"), Some("InfoText"));
+    assert_eq!(styled.get(element).unwrap().get("color"), Some("#000000ff"));
     assert_eq!(styled.get(element).unwrap().typed("color"),
         Some(&ComputedValue::Color(amazing_css::values::Color::Rgba([0, 0, 0, 255]))));
 }

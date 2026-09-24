@@ -914,8 +914,18 @@ mod tests {
     #[test]
     fn native_error_constructors_inherit_error_constructor() {
         let mut i = Interpreter::new();
-        let source = "['EvalError','RangeError','ReferenceError','SyntaxError','TypeError','URIError'].every(name => Object.getPrototypeOf(globalThis[name])===Error && Object.getPrototypeOf(globalThis[name].prototype)===Error.prototype)";
-        assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
+        let error_constructor = i.global_env.resolve("Error").unwrap();
+        let eval_error_constructor = i.global_env.resolve("EvalError").unwrap();
+        let JsValue::Object(eval_error_object) = &eval_error_constructor else { unreachable!() };
+        assert_eq!(eval_error_object.borrow().proto.clone().map(JsValue::Object), Some(error_constructor));
+        for name in ["EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError", "URIError"] {
+            for source in [
+                format!("Object.getPrototypeOf({name})===Error"),
+                format!("Object.getPrototypeOf({name}.prototype)===Error.prototype"),
+            ] {
+                assert_eq!(i.run_script(&source).unwrap(), JsValue::Bool(true), "{source}");
+            }
+        }
         let sort = i.array_proto.borrow().get_own("sort").unwrap();
         let thrown = i.call_value(&sort, JsValue::Null, vec![]).unwrap_err();
         let JsValue::Object(error) = thrown.0 else { panic!("native TypeError is not an object") };
