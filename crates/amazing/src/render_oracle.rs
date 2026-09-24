@@ -4,7 +4,7 @@
 //! A fresh style, layout and paint result at the same frozen DOM epoch remains
 //! the pixel reference until the retained path has exact parity.
 use amazing_compositor::{Compositor, CssCompositorTimeline, PaintDelta, PaintItemKey, PaintViewSource, PixelParity, Presenter, ReferenceCpuPresenter, classify_pixel_parity};
-use amazing_css::{AnimatedValues, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MutationKind, RenderMutation as StyleMutation, StyleChangeKind, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
+use amazing_css::{AnimatedValues, AttributeStyleUpdate, CachedBoxSize, CompositorStyleDelta, MediaEnvironment, MutationKind, RenderMutation as StyleMutation, StyleChangeKind, StyleDelta, StyleInvalidator, StyledDom, Stylesheet, recompute_roots, selectors::PseudoElement};
 use amazing_css::animation::AnimationMainThreadEvent;
 use amazing_dom::{Dom, NodeIdx};
 use amazing_dom::render_mutation::{RenderMutation, RenderMutationKind};
@@ -362,11 +362,17 @@ impl RenderCoordinator {
     /// Drain only the journal prefix visible at this boundary. Node generation
     /// is checked against the prior cache before allowing a CSS root update.
     pub(crate) fn candidate(&mut self, dom: &Dom, sheets: &[Stylesheet], viewport: (u32, u32), journal: Vec<RenderMutation>) -> StyleCandidate {
+        let environment = MediaEnvironment {
+            viewport_width_px: viewport.0 as f32,
+            viewport_height_px: viewport.1.max(1) as f32,
+            ..MediaEnvironment::default()
+        };
         let sheets_changed = self.invalidator.is_none() || self.sheets != sheets;
         let viewport_changed = self.viewport != viewport;
-        if sheets_changed {
+        if sheets_changed || viewport_changed {
             self.stylesheet_epoch = self.stylesheet_epoch.wrapping_add(1);
-            self.invalidator = Some(StyleInvalidator::new(sheets, self.stylesheet_epoch));
+            self.invalidator = Some(StyleInvalidator::new_with_environment(
+                sheets, self.stylesheet_epoch, environment));
         }
         let full = self.previous.is_none() || sheets_changed || viewport_changed;
         let mutations = journal.len();
@@ -380,7 +386,7 @@ impl RenderCoordinator {
         };
         if full {
             return StyleCandidate {
-                styles: amazing_css::compute(dom, sheets), mutations,
+                styles: amazing_css::compute_with_environment(dom, sheets, &environment), mutations,
                 recalculated: dom.node_count(), full_fallback: true,
                 changed: BTreeMap::new(), change_kinds: BTreeMap::new(), inputs,
             };

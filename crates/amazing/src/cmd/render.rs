@@ -127,7 +127,11 @@ pub(crate) fn cmd_layout(args: &[String]) -> ExitCode {
     }
 
     let (_, sheets): (Vec<_>, Vec<_>) = sources.into_iter().unzip();
-    let styled = amazing_css::compute(&dom, &sheets);
+    let styled = amazing_css::compute_with_environment(&dom, &sheets,
+        &amazing_css::MediaEnvironment {
+            viewport_width_px: width.max(1.0),
+            ..amazing_css::MediaEnvironment::default()
+        });
     let fonts = amazing_layout::font::FontSource::fallback();
     let mut root = amazing_layout::box_tree::build_layout_tree(&dom, &styled, &fonts);
     amazing_layout::block::layout_root_in_viewport(&mut root, width, None, &fonts);
@@ -253,7 +257,7 @@ fn render_wpt_surface_after_first_paint(
     };
     let mut animations = AnimationScene::new();
     let mut oracle = crate::render_oracle::RenderCoordinator::default();
-    let first_updates = sample_animation_frame(&host, html_path, &mut animations, 0.)?;
+    let first_updates = sample_animation_frame(&host, html_path, &mut animations, width, height, 0.)?;
     let first = paint_host_surface_with_updates(&host, html_path, width as f32, Some(height), "",
         animations.animated(), false, crate::render_oracle::enabled().then_some(&mut oracle))?;
     after_first_paint(&first);
@@ -297,7 +301,7 @@ fn render_wpt_surface_after_first_paint(
                 elapsed_time_ms: event.elapsed_time_ms,
             }).map_err(|error| format!("animation listener failed: {}", error.describe()))?;
         }
-        let output = sample_animation_frame(&host, html_path, &mut animations, sampled_at)?;
+        let output = sample_animation_frame(&host, html_path, &mut animations, width, height, sampled_at)?;
         for event in &output.events {
             scheduler.dispatch_animation_event(event)
                 .map_err(|error| format!("animation listener failed: {}", error.describe()))?;
@@ -306,7 +310,7 @@ fn render_wpt_surface_after_first_paint(
     if root_has_reftest_wait(&host)? {
         return Err(PageError::ReftestWaitTimeout);
     }
-    let final_updates = sample_animation_frame(&host, html_path, &mut animations, sampled_at)?;
+    let final_updates = sample_animation_frame(&host, html_path, &mut animations, width, height, sampled_at)?;
     for event in &final_updates.events {
         scheduler.dispatch_animation_event(event)
             .map_err(|error| format!("animation listener failed: {}", error.describe()))?;
@@ -319,13 +323,21 @@ fn sample_animation_frame(
     host: &Rc<RefCell<BrowserDomHost>>,
     html_path: &str,
     animations: &mut AnimationScene,
+    width: u32,
+    height: u32,
     now_ms: f64,
 ) -> Result<amazing_compositor::AnimationFrameOutput, PageError> {
     let dom = host.borrow();
     let mut sources = Vec::new();
     collect_author_css(&dom.dom, amazing_dom::NodeIdx(0), html_path, &mut sources)?;
     let sheets = sources.into_iter().map(|(_, _, sheet)| sheet).collect::<Vec<_>>();
-    animations.frame(&dom.dom, &sheets, now_ms).map_err(PageError::Render)
+    let environment = amazing_css::MediaEnvironment {
+        viewport_width_px: width.max(1) as f32,
+        viewport_height_px: height.max(1) as f32,
+        ..amazing_css::MediaEnvironment::default()
+    };
+    animations.frame_with_environment(&dom.dom, &sheets, &environment, now_ms)
+        .map_err(PageError::Render)
 }
 
 fn root_has_reftest_wait(host: &Rc<RefCell<BrowserDomHost>>) -> Result<bool, PageError> {
@@ -373,13 +385,18 @@ fn paint_host_surface_with_updates(
     sources.push((extra_css.to_owned(), html_path.to_owned(), extra_sheet));
     let font_sheets = sources.iter().map(|(source, url, _)| (source.clone(), url.clone())).collect::<Vec<_>>();
     let sheets = sources.into_iter().map(|(_, _, sheet)| sheet).collect::<Vec<_>>();
+    let environment = amazing_css::MediaEnvironment {
+        viewport_width_px: width.max(1.0) as u32 as f32,
+        viewport_height_px: fixed_height.unwrap_or(600).max(1) as f32,
+        ..amazing_css::MediaEnvironment::default()
+    };
     // Font discovery retains each sheet's URL; style computation retains each
     // sheet owner's implicit scope root.
 
     if let Some(coordinator) = coordinator.as_deref_mut()
         && coordinator.is_production() && property_only_allowed
     {
-        let viewport = (width.max(1.0) as u32, fixed_height.unwrap_or(0));
+        let viewport = (width.max(1.0) as u32, fixed_height.unwrap_or(600));
         let epoch = dom.dom.render_mutation_epoch();
         let journal = dom.dom.take_render_mutations(epoch);
         if let Some(surface) = coordinator.try_property_only(&dom.dom, &sheets, viewport, &journal) {
@@ -410,7 +427,7 @@ fn paint_host_surface_with_updates(
     let mut style_divergence = None;
     let mut style_candidate = None;
     if let Some(coordinator) = coordinator.as_deref_mut() {
-        let viewport = (width.max(1.0) as u32, fixed_height.unwrap_or(0));
+        let viewport = (width.max(1.0) as u32, fixed_height.unwrap_or(600));
         let epoch = dom.dom.render_mutation_epoch();
         let journal = dom.dom.take_render_mutations(epoch);
         if property_only_allowed {
@@ -419,13 +436,14 @@ fn paint_host_surface_with_updates(
             }
         }
         let candidate = coordinator.candidate(&dom.dom, &sheets, viewport, journal);
-        let full = amazing_css::compute(&dom.dom, &sheets);
+        let full = amazing_css::compute_with_environment(&dom.dom, &sheets, &environment);
         style_divergence = crate::render_oracle::first_style_mismatch(&dom.dom, &candidate.styles, &full);
         crate::render_oracle::report_style_work(&candidate);
         coordinator.commit(&dom.dom, &sheets, viewport, &full);
         style_candidate = Some(candidate);
     }
-    let styled = amazing_css::compute_with_animations(&dom.dom, &sheets, animated);
+    let styled = amazing_css::compute_with_animations_and_environment(
+        &dom.dom, &sheets, animated, &environment);
     let media = load_page_media(&dom.dom, html_path, &styled);
     for warning in &media.warnings {
         eprintln!("amazing render: {warning}");
@@ -477,7 +495,8 @@ fn paint_host_surface_with_updates(
             work.style_rebuild_calls, work.layout_update_calls, work.paint_view_rebuild_calls,
             work.style_recalculated, work.layout_dirty, work.layout_full,
             work.paint_changed, work.paint_full, work.tile_uploads, work.tiles_dirtied);
-        let full_styles = amazing_css::compute_with_animations(&dom.dom, &sheets, animated);
+        let full_styles = amazing_css::compute_with_animations_and_environment(
+            &dom.dom, &sheets, animated, &environment);
         let full_root = amazing_layout::layout_styled_document(
             &dom.dom, &full_styles, &page_text.provider, &media,
             width, fixed_height.map(|height| height as f32),
@@ -708,6 +727,15 @@ mod reftest_protocol_tests {
         let ordinary = render_surface("static.html", html.as_bytes(), 64., Some(48), "").unwrap();
         let wpt = render_wpt_surface("static.html", html.as_bytes(), 64, 48).unwrap();
         assert_eq!(ordinary.pixels, wpt.pixels);
+    }
+
+    #[test]
+    fn root_viewport_font_size_uses_the_render_width() {
+        let html = b"<style>html{font-size:10vw}body{margin:0}.box{width:1rem;height:20px;background:black}</style><div class=box></div>";
+        let narrow = render_surface("viewport.html", html, 200., Some(60), "").unwrap();
+        let wide = render_surface("viewport.html", html, 400., Some(60), "").unwrap();
+        assert_eq!(narrow.get_pixel(30, 10), Some([255; 4]));
+        assert_eq!(wide.get_pixel(30, 10), Some([0, 0, 0, 255]));
     }
 }
 

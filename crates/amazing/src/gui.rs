@@ -531,7 +531,13 @@ mod windows {
                 sheet.base_url = Some(url.clone());
                 sheet
             }).collect::<Vec<_>>();
-            let styled = amazing_css::compute_with_animations(&host_ref.dom, &sheets, runtime.animations.animated());
+            let environment = amazing_css::MediaEnvironment {
+                viewport_width_px: width.max(1) as f32,
+                viewport_height_px: viewport_height,
+                ..amazing_css::MediaEnvironment::default()
+            };
+            let styled = amazing_css::compute_with_animations_and_environment(
+                &host_ref.dom, &sheets, runtime.animations.animated(), &environment);
             let media = load_page_media(&host_ref.dom, &page, &styled);
             for warning in &media.warnings {
                 eprintln!("amazing gui: {warning}");
@@ -1027,17 +1033,23 @@ mod windows {
             sheet.base_url = Some(url.clone());
             sheet
         }).collect::<Vec<_>>();
+        let environment = amazing_css::MediaEnvironment {
+            viewport_width_px: width.max(1) as f32,
+            viewport_height_px: 700.0,
+            ..amazing_css::MediaEnvironment::default()
+        };
         let mut animations = AnimationScene::new();
         let animation_started = Instant::now();
         let initial_animation = {
             let host_ref = host.borrow();
-            animations.frame(&host_ref.dom, &sheets, 0.)?
+            animations.frame_with_environment(&host_ref.dom, &sheets, &environment, 0.)?
         };
         for event in &initial_animation.events {
             js.dispatch_animation_event(event).map_err(|error| error.describe())?;
         }
         let host_ref = host.borrow();
-        let styled = amazing_css::compute_with_animations(&host_ref.dom, &sheets, animations.animated());
+        let styled = amazing_css::compute_with_animations_and_environment(
+            &host_ref.dom, &sheets, animations.animated(), &environment);
         let media = load_page_media(&host_ref.dom, input, &styled);
         for warning in &media.warnings {
             eprintln!("amazing gui: {warning}");
