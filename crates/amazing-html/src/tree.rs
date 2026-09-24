@@ -658,6 +658,13 @@ impl TreeBuilder {
                         return;
                     }
                     if self.dom.namespace(node) == Some(Namespace::Html) {
+                        // The in-body rules synthesize an element for a stray
+                        // </p> or </br>. Those recovery elements belong after
+                        // the foreign subtree. Other unmatched end tags must
+                        // leave that subtree open.
+                        if matches!(name.as_str(), "p" | "br") {
+                            self.open.truncate(position + 1);
+                        }
                         self.process_token_in_html(Token::EndTag { name });
                         return;
                     }
@@ -3089,6 +3096,27 @@ mod tests {
             dom.dump(NodeIdx(0)),
             "#document\n  <html>\n    <head>\n    <body>\n      <a>\n        <svg svg>\n          <svg tr>\n            <svg input>\n"
         );
+    }
+
+    #[test]
+    fn unmatched_p_and_br_end_tags_leave_foreign_content_before_html_recovery() {
+        for (foreign, ending, html_child) in [
+            ("svg", "p", "p"), ("svg", "br", "br"),
+            ("math", "p", "p"), ("math", "br", "br"),
+        ] {
+            let dom = build(&format!("<{foreign}></{ending}><foo>"));
+            assert_eq!(dom.dump(NodeIdx(0)), format!(
+                "#document\n  <html>\n    <head>\n    <body>\n      <{foreign} {foreign}>\n      <{html_child}>\n      <foo>\n"
+            ), "{foreign} / {ending}");
+        }
+    }
+
+    #[test]
+    fn other_unmatched_end_tags_keep_the_foreign_stack_open() {
+        assert_eq!(build("<math><annotation-xml></svg>x").dump(NodeIdx(0)),
+            "#document\n  <html>\n    <head>\n    <body>\n      <math math>\n        <math annotation-xml>\n          \"x\"\n");
+        assert_eq!(build("<svg><tfoot></mi><td>").dump(NodeIdx(0)),
+            "#document\n  <html>\n    <head>\n    <body>\n      <svg svg>\n        <svg tfoot>\n          <svg td>\n");
     }
 
     #[test]
