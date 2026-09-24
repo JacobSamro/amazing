@@ -257,10 +257,9 @@ impl Interpreter {
         enumerable: bool,
         configurable: bool,
     ) -> Result<(), Throw> {
-        fn callable(value: Option<&JsValue>) -> Result<Option<Box<JsFunction>>, Throw> {
+        fn callable(value: Option<&JsValue>) -> Result<Option<JsValue>, Throw> {
             value.map(|value| match value {
-                JsValue::Object(object) => object.borrow().func.clone()
-                    .map(Box::new).ok_or_else(|| Throw::type_error("accessor is not callable")),
+                JsValue::Object(object) if object.borrow().func.is_some() => Ok(value.clone()),
                 _ => Err(Throw::type_error("accessor is not callable")),
             }).transpose()
         }
@@ -320,8 +319,7 @@ impl Interpreter {
                     let descriptor = prototype.borrow().own_prop(name).cloned();
                     if let Some(descriptor) = descriptor {
                         if let Some(setter) = descriptor.setter {
-                            let callable = JsValue::object(JsObject::function(*setter));
-                            self.call_value(&callable, object.clone(), vec![value])?;
+                            self.call_value(&setter, object.clone(), vec![value])?;
                             return Ok(());
                         }
                         if descriptor.getter.is_some() || !descriptor.writable {

@@ -1376,8 +1376,7 @@ fn promise_callback(
 ) -> JsValue {
     let value = Interpreter::native(name, f, &i.function_proto);
     if let JsValue::Object(o) = &value {
-        o.borrow_mut()
-            .set_own("[[PromiseTarget]]", JsValue::Object(target.clone()));
+        o.borrow_mut().promise_target = Some(target.clone());
     }
     value
 }
@@ -1398,10 +1397,7 @@ fn native_promise(i: &mut Interpreter, _: JsValue, args: Vec<JsValue>) -> Result
 
 fn current_promise_target(i: &Interpreter) -> Option<Obj> {
     let function = i.native_stack.last()?;
-    match function.borrow().get_own("[[PromiseTarget]]") {
-        Some(JsValue::Object(target)) => Some(target),
-        _ => None,
-    }
+    function.borrow().promise_target.clone()
 }
 
 fn native_promise_resolve(
@@ -1410,9 +1406,11 @@ fn native_promise_resolve(
     args: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
     if let Some(target) = current_promise_target(i) {
+        let value = args.first().cloned().unwrap_or(JsValue::Undefined);
+        if adopt_promise_result(&target, &value, i)? { return Ok(JsValue::Undefined); }
         settle_promise(
             &target,
-            PromiseFate::Fulfilled(args.first().cloned().unwrap_or(JsValue::Undefined)),
+            PromiseFate::Fulfilled(value),
             i,
         )?;
         return Ok(JsValue::Undefined);
@@ -1474,15 +1472,13 @@ fn settle_promise(target: &Obj, fate: PromiseFate, i: &mut Interpreter) -> Resul
 fn run_promise_reaction(reaction: PendingReaction, fate: PromiseFate, i: &mut Interpreter) -> Result<(), Throw> {
     let result = match (reaction.handler, fate) {
         (Some(handler), PromiseFate::Fulfilled(value)) => {
-            let function = JsValue::Object(Obj(Rc::new(RefCell::new(JsObject::function(handler)))));
-            match i.call_value(&function, JsValue::Undefined, vec![value]) {
+            match i.call_value(&handler, JsValue::Undefined, vec![value]) {
                 Ok(value) => PromiseFate::Fulfilled(value),
                 Err(Throw(value)) => PromiseFate::Rejected(value),
             }
         }
         (Some(handler), PromiseFate::Rejected(value)) if reaction.is_reject_handler => {
-            let function = JsValue::Object(Obj(Rc::new(RefCell::new(JsObject::function(handler)))));
-            match i.call_value(&function, JsValue::Undefined, vec![value]) {
+            match i.call_value(&handler, JsValue::Undefined, vec![value]) {
                 Ok(value) => PromiseFate::Fulfilled(value),
                 Err(Throw(value)) => PromiseFate::Rejected(value),
             }
@@ -1559,8 +1555,8 @@ fn native_promise_then(
 ) -> Result<JsValue, Throw> {
     let promise = promise_object(&this)?;
     let result = promise_object(&new_promise(i, PromiseFate::Pending))?;
-    let fulfilled = args.get(0).and_then(callable_function);
-    let rejected = args.get(1).and_then(callable_function);
+    let fulfilled = args.get(0).filter(|value| callable_function(value).is_some()).cloned();
+    let rejected = args.get(1).filter(|value| callable_function(value).is_some()).cloned();
     let state = {
         let mut object = promise.borrow_mut();
         let state = match &mut object.exotic {
@@ -2131,17 +2127,8 @@ fn native_object_get_own_property_descriptor(
     descriptor.set_own("enumerable", JsValue::Bool(property.enumerable));
     descriptor.set_own("configurable", JsValue::Bool(property.configurable));
     if property.getter.is_some() || property.setter.is_some() {
-        let accessor = |function: Option<Box<JsFunction>>| function.map(|f| {
-            let mut object = JsObject::function(*f);
-            object.proto = Some(i.function_proto.clone());
-            let name = object.func.as_ref().map(|f| f.name.clone()).unwrap_or_default();
-            let length = if name.starts_with("set ") { 1.0 } else { 0.0 };
-            let _ = object.define("name", Property { value: JsValue::str(name), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
-            let _ = object.define("length", Property { value: JsValue::num(length), writable: false, enumerable: false, configurable: true, getter: None, setter: None });
-            JsValue::object(object)
-        }).unwrap_or(JsValue::Undefined);
-        descriptor.set_own("get", accessor(property.getter));
-        descriptor.set_own("set", accessor(property.setter));
+        descriptor.set_own("get", property.getter.unwrap_or(JsValue::Undefined));
+        descriptor.set_own("set", property.setter.unwrap_or(JsValue::Undefined));
     } else {
         descriptor.set_own("value", property.value);
         descriptor.set_own("writable", JsValue::Bool(property.writable));
@@ -2478,11 +2465,14 @@ fn native_object_to_string(
     Ok(JsValue::str_units(units))
 }
 fn native_object_value_of(
-    _: &mut Interpreter,
+    i: &mut Interpreter,
     this: JsValue,
     _: Vec<JsValue>,
 ) -> Result<JsValue, Throw> {
-    Ok(this)
+    if matches!(this, JsValue::Null | JsValue::Undefined) {
+        return Err(Throw::type_error("Object.prototype.valueOf called on null or undefined"));
+    }
+    native_object(i, JsValue::Undefined, vec![this])
 }
 fn native_array_push(
     i: &mut Interpreter,
@@ -3273,7 +3263,11 @@ fn native_function_constructor(
         return Err(Throw::syntax_error("invalid Function constructor source"));
     }
     if let ast::StmtKind::Function(function) = &script.body[0].kind {
-        Ok(i.make_function(function, &i.global_env))
+        let previous_strict = i.strict_eval_context;
+        i.strict_eval_context = false;
+        let value = i.make_function(function, &i.global_env);
+        i.strict_eval_context = previous_strict;
+        Ok(value)
     } else {
         Err(Throw::syntax_error("invalid Function constructor source"))
     }

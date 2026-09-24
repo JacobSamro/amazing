@@ -935,7 +935,7 @@ impl Interpreter {
                         writable: false,
                         enumerable: false,
                         configurable: true,
-                        getter: callable_function(&getter).map(Box::new),
+                        getter: Some(getter),
                         setter: None,
                     },
                 )

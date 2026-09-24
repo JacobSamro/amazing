@@ -215,6 +215,9 @@ pub struct Interpreter {
     pub global_obj: Obj,
     pub object_proto: Obj,
     pub function_proto: Obj,
+    pub async_function_proto: Obj,
+    pub generator_function_proto: Obj,
+    pub async_generator_function_proto: Obj,
     pub array_proto: Obj,
     pub string_proto: Obj,
     pub number_proto: Obj,
@@ -245,6 +248,7 @@ pub struct Interpreter {
     frames: Vec<CallFrame>,
     strict_eval_context: bool,
     direct_eval_call: bool,
+    direct_eval_env: Option<EnvHandle>,
     in_eval: bool,
     dom_host: Option<Rc<RefCell<dyn DomHost>>>,
     dom_listeners: Vec<DomListener>,
@@ -273,6 +277,14 @@ impl Interpreter {
             o.constructible = false;
             o
         })));
+        let function_subproto = || {
+            let mut object = JsObject::ordinary();
+            object.proto = Some(function_proto.clone());
+            Obj(Rc::new(RefCell::new(object)))
+        };
+        let async_function_proto = function_subproto();
+        let generator_function_proto = function_subproto();
+        let async_generator_function_proto = function_subproto();
         let array_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::array();
             o.proto = Some(object_proto.clone());
@@ -305,11 +317,6 @@ impl Interpreter {
             o
         })));
         let symbol_proto = Obj(Rc::new(RefCell::new({
-            let mut o = JsObject::ordinary();
-            o.proto = Some(object_proto.clone());
-            o
-        })));
-        let boolean_proto = Obj(Rc::new(RefCell::new({
             let mut o = JsObject::ordinary();
             o.proto = Some(object_proto.clone());
             o
@@ -361,6 +368,9 @@ impl Interpreter {
             global_obj,
             object_proto,
             function_proto,
+            async_function_proto,
+            generator_function_proto,
+            async_generator_function_proto,
             array_proto,
             string_proto,
             number_proto,
@@ -391,6 +401,7 @@ impl Interpreter {
             frames: Vec::new(),
             strict_eval_context: false,
             direct_eval_call: false,
+            direct_eval_env: None,
             in_eval: false,
             dom_host: None,
             dom_listeners: Vec::new(),
@@ -496,14 +507,6 @@ impl Interpreter {
         location.proto = Some(self.object_proto.clone());
         let href_getter = Self::native("get href", native_location_href_get, &self.function_proto);
         let href_setter = Self::native("set href", native_location_href_set, &self.function_proto);
-        let href_getter = match href_getter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native href getter"),
-            _ => unreachable!(),
-        };
-        let href_setter = match href_setter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native href setter"),
-            _ => unreachable!(),
-        };
         let _ = location.define(
             "href",
             Property {
@@ -511,8 +514,8 @@ impl Interpreter {
                 writable: false,
                 enumerable: true,
                 configurable: true,
-                getter: Some(Box::new(href_getter)),
-                setter: Some(Box::new(href_setter)),
+                getter: Some(href_getter),
+                setter: Some(href_setter),
             },
         );
         location.set_own(
@@ -541,14 +544,6 @@ impl Interpreter {
             native_window_location_set,
             &self.function_proto,
         );
-        let location_getter = match location_getter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native location getter"),
-            _ => unreachable!(),
-        };
-        let location_setter = match location_setter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native location setter"),
-            _ => unreachable!(),
-        };
         let _ = self.global_obj.borrow_mut().define(
             "location",
             Property {
@@ -556,8 +551,8 @@ impl Interpreter {
                 writable: false,
                 enumerable: true,
                 configurable: true,
-                getter: Some(Box::new(location_getter)),
-                setter: Some(Box::new(location_setter)),
+                getter: Some(location_getter),
+                setter: Some(location_setter),
             },
         );
         let _ = self.global_env.declare_var("location", location);
@@ -1074,7 +1069,8 @@ impl Interpreter {
     }
 
     fn run_program_inner(&mut self, p: &ast::Program) -> Result<JsValue, Throw> {
-        if std::env::var_os("AMAZING_JS_VM").is_some() {
+        let direct_eval_env = self.direct_eval_env.take();
+        if direct_eval_env.is_none() && std::env::var_os("AMAZING_JS_VM").is_some() {
             match vm::compile(p) {
                 Ok(code) => {
                     if std::env::var_os("AMAZING_JS_VM_TRACE").is_some() { eprintln!("AMAZING_VM compiled"); }
@@ -1087,7 +1083,7 @@ impl Interpreter {
         }
         let previous_completion = self.completion.clone();
         self.completion = JsValue::Undefined;
-        let env = self.global_env.clone();
+        let env = direct_eval_env.unwrap_or_else(|| self.global_env.clone());
         self.hoist(&p.body, &env)?;
         for s in &p.body {
             if let StmtKind::Expression(e) = &s.kind {
@@ -1182,6 +1178,12 @@ impl Interpreter {
         match binding {
             Binding::Ident(identifier) => {
                 if self.in_eval {
+                    if env.kind() == EnvKind::Global {
+                        let global = self.global_obj.borrow();
+                        if !global.extensible && global.own_prop(identifier.name.as_str()).is_none() {
+                            return Err(Throw::type_error("cannot declare global var on non-extensible object"));
+                        }
+                    }
                     env.declare_var(&identifier.name, JsValue::Undefined)?;
                 } else {
                     env.hoist_var(&identifier.name)?;
@@ -1774,9 +1776,7 @@ impl Interpreter {
                             };
                             if let ast::PropValue::Method(method) = &p.value {
                                 if matches!(method.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
-                                    let function_value = self.method_value(method, env);
-                                    let JsValue::Object(function_object) = function_value else { unreachable!() };
-                                    let function = function_object.borrow().func.clone().unwrap();
+                                    let function_value = self.method_value(method, env, false);
                                     let JsValue::Object(object) = &o else { unreachable!() };
                                     let mut property = object.borrow().own_prop(&k).cloned()
                                         .filter(|property| property.getter.is_some() || property.setter.is_some())
@@ -1785,8 +1785,8 @@ impl Interpreter {
                                             enumerable: true, configurable: true,
                                             getter: None, setter: None,
                                         });
-                                    if method.kind == ast::MethodKind::Get { property.getter = Some(Box::new(function)); }
-                                    else { property.setter = Some(Box::new(function)); }
+                                    if method.kind == ast::MethodKind::Get { property.getter = Some(function_value); }
+                                    else { property.setter = Some(function_value); }
                                     object.borrow_mut().define(&k, property)
                                         .map_err(|_| Throw::type_error("could not define object accessor"))?;
                                     continue;
@@ -1800,7 +1800,7 @@ impl Interpreter {
                                 ast::PropValue::CoverInitializedName { .. } => {
                                     return Err(Throw::syntax_error("cover initialized name outside assignment pattern"));
                                 }
-                                ast::PropValue::Method(m) => self.method_value(m, env),
+                                ast::PropValue::Method(m) => self.method_value(m, env, false),
                             };
                             // Object-literal PropertyDefinition uses CreateDataProperty,
                             // which replaces a preceding accessor of the same name.
@@ -2471,9 +2471,12 @@ impl Interpreter {
         }
         let argv = self.eval_args(args, e)?;
         let previous_direct_eval = self.direct_eval_call;
+        let previous_direct_eval_env = self.direct_eval_env.take();
         self.direct_eval_call = matches!(&c.kind, ExprKind::Ident(name) if name.name == "eval");
+        self.direct_eval_env = self.direct_eval_call.then(|| e.clone());
         let result = self.call_value(&f, this, argv);
         self.direct_eval_call = previous_direct_eval;
+        self.direct_eval_env = previous_direct_eval_env;
         result
     }
     fn eval_args(&mut self, xs: &[ast::Expr], e: &EnvHandle) -> Result<Vec<JsValue>, Throw> {
@@ -2603,12 +2606,14 @@ impl Interpreter {
                     let dispatch = self.host_native_dispatch.clone().ok_or_else(|| {
                         Throw::type_error("host function dispatcher is not installed")
                     })?;
-                    dispatch(self, id, this, args, new_target)
+                    let result = dispatch(self, id, this, args, new_target);
+                    self.flush_native_microtasks()?;
+                    result
                 }
                 FunctionBody::Expr(x) => {
                     let e = EnvHandle::new(if fun.is_arrow { EnvKind::Arrow } else { EnvKind::Function }, Some(fun.env.clone()));
                     if !fun.is_arrow { e.bind_this(this); }
-                    self.bind_params(&e, &fun.params, args)?;
+                    self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
                     self.eval_expr(&x, &e)
                 }
                 FunctionBody::Block(b) => {
@@ -2630,7 +2635,7 @@ impl Interpreter {
                     } else {
                         if !fun.is_arrow { e.bind_this(this); }
                     }
-                    self.bind_params(&e, &fun.params, args)?;
+                    self.bind_params(&e, &fun.params, args, fun.is_arrow)?;
                     self.hoist(&b.body, &e)?;
                     let completion = self.exec_stmts(&b.body, &e)?;
                     if derived {
@@ -2671,6 +2676,7 @@ impl Interpreter {
         e: &EnvHandle,
         ps: &[ast::Param],
         args: Vec<JsValue>,
+        is_arrow: bool,
     ) -> Result<(), Throw> {
         for (i, p) in ps.iter().enumerate() {
             let v = if p.rest {
@@ -2684,6 +2690,7 @@ impl Interpreter {
             };
             self.bind_pattern(&p.binding, v, ast::VarKind::Let, e)?;
         }
+        if is_arrow { return Ok(()); }
         let argument_count = args.len();
         let a = self.object_value();
         for (i, v) in args.into_iter().enumerate() {
@@ -2789,7 +2796,15 @@ impl Interpreter {
             home: None,
             proto_for_new: None,
         });
-        o.proto = Some(self.function_proto.clone());
+        o.proto = Some(if f.is_async && f.is_generator {
+            self.async_generator_function_proto.clone()
+        } else if f.is_async {
+            self.async_function_proto.clone()
+        } else if f.is_generator {
+            self.generator_function_proto.clone()
+        } else {
+            self.function_proto.clone()
+        });
         o.strict_function = self.strict_eval_context || has_use_strict_directive(&f.body.body);
         let h = Obj(Rc::new(RefCell::new(o)));
         let p = Obj(Rc::new(RefCell::new({
@@ -2828,7 +2843,7 @@ impl Interpreter {
         }
         JsValue::Object(handle)
     }
-    fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle) -> JsValue {
+    fn method_value(&self, m: &ast::ClassMethod, e: &EnvHandle, class_method: bool) -> JsValue {
         let mut o = JsObject::function(JsFunction {
             name: "".into(),
             params: m.params.clone(),
@@ -2840,8 +2855,16 @@ impl Interpreter {
             home: None,
             proto_for_new: None,
         });
-        o.proto = Some(self.function_proto.clone());
-        o.strict_function = true;
+        o.proto = Some(if m.is_async && m.is_generator {
+            self.async_generator_function_proto.clone()
+        } else if m.is_async {
+            self.async_function_proto.clone()
+        } else if m.is_generator {
+            self.generator_function_proto.clone()
+        } else {
+            self.function_proto.clone()
+        });
+        o.strict_function = class_method || self.strict_eval_context || has_use_strict_directive(&m.body.body);
         let handle = Obj(Rc::new(RefCell::new(o)));
         JsValue::Object(handle)
     }
@@ -2854,7 +2877,7 @@ impl Interpreter {
             }
         });
         let f = if let Some(x) = ctor {
-            self.method_value(x, e)
+            self.method_value(x, e, true)
         } else {
             self.make_function(
                 &ast::FunctionItem {
@@ -2923,18 +2946,12 @@ impl Interpreter {
                                 Some(units) => PropertyKey::String(crate::value::JsString::from_units(units.clone())),
                                 None => self.prop_key(&x.key, e)?,
                             };
-                            let method = self.method_value(x, e);
+                            let method = self.method_value(x, e, true);
                             if let JsValue::Object(method_object) = &method {
                                 method_object.borrow_mut().func.as_mut().unwrap().home =
                                     Some(p.clone());
                             }
                             if matches!(x.kind, ast::MethodKind::Get | ast::MethodKind::Set) {
-                                let function = match method {
-                                    JsValue::Object(method_object) => {
-                                        method_object.borrow().func.clone().unwrap()
-                                    }
-                                    _ => unreachable!(),
-                                };
                                 let mut property =
                                     p.borrow().own_prop(&k).cloned().unwrap_or(Property {
                                         value: JsValue::Undefined,
@@ -2945,9 +2962,9 @@ impl Interpreter {
                                         setter: None,
                                     });
                                 if x.kind == ast::MethodKind::Get {
-                                    property.getter = Some(Box::new(function));
+                                    property.getter = Some(method);
                                 } else {
-                                    property.setter = Some(Box::new(function));
+                                    property.setter = Some(method);
                                 }
                                 p.borrow_mut().define(&k, property).map_err(|_| {
                                     Throw::type_error("could not define class accessor")
@@ -3047,14 +3064,6 @@ impl Interpreter {
         );
         let title_getter = Self::native("get title", native_dom_title_get, &self.function_proto);
         let title_setter = Self::native("set title", native_dom_title_set, &self.function_proto);
-        let title_getter = match title_getter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native title getter"),
-            _ => unreachable!(),
-        };
-        let title_setter = match title_setter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native title setter"),
-            _ => unreachable!(),
-        };
         let _ = document.define(
             "title",
             Property {
@@ -3062,8 +3071,8 @@ impl Interpreter {
                 writable: false,
                 enumerable: true,
                 configurable: true,
-                getter: Some(Box::new(title_getter)),
-                setter: Some(Box::new(title_setter)),
+                getter: Some(title_getter),
+                setter: Some(title_setter),
             },
         );
         JsValue::Object(Obj(Rc::new(RefCell::new(document))))
@@ -3075,14 +3084,6 @@ impl Interpreter {
         element.set_own("[[DomNode]]", JsValue::num(id as f64));
         let getter = Self::native("get textContent", native_dom_text_get, &self.function_proto);
         let setter = Self::native("set textContent", native_dom_text_set, &self.function_proto);
-        let getter = match getter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native getter"),
-            _ => unreachable!(),
-        };
-        let setter = match setter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native setter"),
-            _ => unreachable!(),
-        };
         let _ = element.define(
             "textContent",
             Property {
@@ -3090,20 +3091,12 @@ impl Interpreter {
                 writable: false,
                 enumerable: true,
                 configurable: true,
-                getter: Some(Box::new(getter)),
-                setter: Some(Box::new(setter)),
+                getter: Some(getter),
+                setter: Some(setter),
             },
         );
         let inner_getter = Self::native("get innerText", native_dom_text_get, &self.function_proto);
         let inner_setter = Self::native("set innerText", native_dom_text_set, &self.function_proto);
-        let inner_getter = match inner_getter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native innerText getter"),
-            _ => unreachable!(),
-        };
-        let inner_setter = match inner_setter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native innerText setter"),
-            _ => unreachable!(),
-        };
         let _ = element.define(
             "innerText",
             Property {
@@ -3111,8 +3104,8 @@ impl Interpreter {
                 writable: false,
                 enumerable: true,
                 configurable: true,
-                getter: Some(Box::new(inner_getter)),
-                setter: Some(Box::new(inner_setter)),
+                getter: Some(inner_getter),
+                setter: Some(inner_setter),
             },
         );
         let inner_getter = Self::native(
@@ -3125,14 +3118,6 @@ impl Interpreter {
             native_dom_inner_html_set,
             &self.function_proto,
         );
-        let inner_getter = match inner_getter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native innerHTML getter"),
-            _ => unreachable!(),
-        };
-        let inner_setter = match inner_setter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native innerHTML setter"),
-            _ => unreachable!(),
-        };
         let _ = element.define(
             "innerHTML",
             Property {
@@ -3140,8 +3125,8 @@ impl Interpreter {
                 writable: false,
                 enumerable: true,
                 configurable: true,
-                getter: Some(Box::new(inner_getter)),
-                setter: Some(Box::new(inner_setter)),
+                getter: Some(inner_getter),
+                setter: Some(inner_setter),
             },
         );
         element.set_own(
@@ -3262,14 +3247,6 @@ impl Interpreter {
             Self::native("get onclick", native_dom_onclick_get, &self.function_proto);
         let onclick_setter =
             Self::native("set onclick", native_dom_onclick_set, &self.function_proto);
-        let onclick_getter = match onclick_getter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native onclick getter"),
-            _ => unreachable!(),
-        };
-        let onclick_setter = match onclick_setter {
-            JsValue::Object(o) => o.borrow().func.clone().expect("native onclick setter"),
-            _ => unreachable!(),
-        };
         let _ = element.define(
             "onclick",
             Property {
@@ -3277,8 +3254,8 @@ impl Interpreter {
                 writable: false,
                 enumerable: true,
                 configurable: true,
-                getter: Some(Box::new(onclick_getter)),
-                setter: Some(Box::new(onclick_setter)),
+                getter: Some(onclick_getter),
+                setter: Some(onclick_setter),
             },
         );
         JsValue::Object(Obj(Rc::new(RefCell::new(element))))
@@ -3397,10 +3374,7 @@ impl Interpreter {
                 let prototype = o.borrow().proto.clone();
                 if let Some(property) = property {
                     if let Some(getter) = property.getter {
-                        let function = JsValue::Object(Obj(Rc::new(RefCell::new(
-                            JsObject::function(*getter),
-                        ))));
-                        self.call_value(&function, receiver, Vec::new())
+                        self.call_value(&getter, receiver, Vec::new())
                     } else {
                         Ok(property.value)
                     }
@@ -3473,8 +3447,7 @@ impl Interpreter {
                 let descriptor = prototype.borrow().own_prop(&key).cloned();
                 if let Some(descriptor) = descriptor {
                     if let Some(setter) = descriptor.setter {
-                        let callable = JsValue::object(JsObject::function(*setter));
-                        self.call_value(&callable, JsValue::Object(o.clone()), vec![x])?;
+                        self.call_value(&setter, JsValue::Object(o.clone()), vec![x])?;
                         return Ok(());
                     }
                     if descriptor.getter.is_some() || !descriptor.writable {
@@ -3487,9 +3460,7 @@ impl Interpreter {
         }
         if let Some(property) = o.borrow().own_prop(&key).cloned() {
             if let Some(setter) = property.setter {
-                let function =
-                    JsValue::Object(Obj(Rc::new(RefCell::new(JsObject::function(*setter)))));
-                self.call_value(&function, JsValue::Object(o.clone()), vec![x])?;
+                self.call_value(&setter, JsValue::Object(o.clone()), vec![x])?;
                 return Ok(());
             }
             if !property.writable {
@@ -3910,43 +3881,6 @@ impl Interpreter {
     fn to_uint32(&mut self, v: &JsValue) -> Result<u32, Throw> {
         Ok(self.to_int32(v)? as u32)
     }
-    fn strict_eq(&self, a: &JsValue, b: &JsValue) -> bool {
-        a == b
-    }
-    fn loose_eq(&mut self, a: &JsValue, b: &JsValue) -> Result<bool, Throw> {
-        use JsValue::*;
-        Ok(match (a, b) {
-            (Undefined, Undefined) | (Null, Null) => true,
-            (Bool(_), Bool(_)) | (Num(_), Num(_)) | (BigInt(_), BigInt(_))
-            | (Str(_), Str(_)) | (Symbol(_), Symbol(_)) | (Object(_), Object(_)) => self.strict_eq(a, b),
-            (Undefined, Null) | (Null, Undefined) => true,
-            (Num(_), Str(_)) => self.loose_eq(a, &Num(b.to_number()?))?,
-            (Str(_), Num(_)) => self.loose_eq(&Num(a.to_number()?), b)?,
-            (BigInt(x), Str(y)) | (Str(y), BigInt(x)) =>
-                BinaryBigInt::parse_string(&y.to_utf8_lossy()).is_some_and(|parsed| x.as_ref() == &parsed),
-            (Bool(_), _) => {
-                let n = a.to_number()?;
-                self.loose_eq(&Num(n), b)?
-            }
-            (_, Bool(_)) => {
-                let n = b.to_number()?;
-                self.loose_eq(a, &Num(n))?
-            }
-            (Num(_) | BigInt(_) | Str(_) | Symbol(_), Object(_)) => {
-                let p = self.primitive(b.clone())?;
-                self.loose_eq(a, &p)?
-            }
-            (Object(_), Num(_) | BigInt(_) | Str(_) | Symbol(_)) => {
-                let p = self.primitive(a.clone())?;
-                self.loose_eq(&p, b)?
-            }
-            (BigInt(x), Num(y)) | (Num(y), BigInt(x)) =>
-                Self::compare_bigint_number(x, *y) == Some(std::cmp::Ordering::Equal),
-            (Null | Undefined, Object(object)) | (Object(object), Null | Undefined) =>
-                object.borrow().is_html_dda,
-            _ => false,
-        })
-    }
     fn instanceof(&mut self, a: &JsValue, b: &JsValue) -> Result<JsValue, Throw> {
         if !b.is_object() { return Err(Throw::type_error("right operand is not callable")); }
         let method = self.get_prop(b, WellKnownSymbol::HasInstance.symbol())?;
@@ -3965,6 +3899,7 @@ impl Interpreter {
     fn ordinary_has_instance(&mut self, a: &JsValue, b: &JsValue) -> Result<JsValue, Throw> {
         let JsValue::Object(r) = b else { return Ok(JsValue::Bool(false)); };
         if r.borrow().func.is_none() { return Ok(JsValue::Bool(false)); }
+        if !a.is_object() { return Ok(JsValue::Bool(false)); }
         let p = match r.borrow().get_own("prototype") {
             Some(JsValue::Object(p)) => p,
             _ => return Err(Throw::type_error("prototype is not an object")),
@@ -3993,6 +3928,7 @@ impl Interpreter {
 }
 
 include!("interp_helpers.rs");
+include!("interp_equality.rs");
 include!("interp_install.rs");
 include!("interp_symbol.rs");
 include!("interp_builtins.rs");

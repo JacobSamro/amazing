@@ -285,6 +285,37 @@ mod tests {
     }
 
     #[test]
+    fn host_mutation_microtask_precedes_await_continuation() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let (mut i, state) = with_native_host(4, false);
+            i.set_host_native_dispatcher(Rc::new(|runtime, _, _, _, _| {
+                runtime.dom_host.as_ref().unwrap().borrow_mut()
+                    .set_attribute(1, "x", "y").map_err(Throw::type_error)?;
+                Ok(JsValue::Undefined)
+            }));
+            let mutate = i.binding_create_native_function(
+                HostFunctionId(1), "mutate", 0, HostCallPolicy::CallOnly,
+            );
+            i.global_obj.borrow_mut().set_own("mutate", mutate);
+            let source = if backend == ExecutionBackend::Bytecode {
+                "async function f(){ mutate(); await Promise.resolve(); console.log('continued') } f()"
+            } else {
+                "mutate(); Promise.resolve().then(() => console.log('continued'))"
+            };
+            i.run_script_with_backend(source, backend).unwrap();
+            let requests = i.take_scheduling_requests();
+            assert!(matches!(&requests[..], [
+                SchedulingRequest::NativeMicrotask { global: 7, kind: NativeMicrotaskKind::MutationObserver },
+                SchedulingRequest::Microtask { .. },
+            ]), "{backend:?}: {requests:?}");
+            assert!(state.borrow().forwarded);
+            assert!(i.output.borrow().is_empty());
+            i.invoke_one_job(job(requests[1])).unwrap();
+            assert_eq!(&*i.output.borrow(), &["continued"]);
+        }
+    }
+
+    #[test]
     fn native_mutation_is_forwarded_even_when_operation_throws() {
         let (mut i, state) = with_native_host(3, true);
         assert!(i.run_script("Promise.resolve().then(()=>{}); document.querySelector('x').setAttribute('x','y'); queueMicrotask(()=>{})").is_err());
@@ -787,10 +818,59 @@ mod tests {
     }
 
     #[test]
+    fn bound_native_then_forwards_receiver_and_executor_arguments() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            i.run_script_with_backend("var p=Promise.reject(new TypeError('x')); var direct=new Promise((resolve,reject)=>p.then(resolve,reject)); var bound=new Promise(p.then.bind(p)); var a='pending', b='pending'; direct.then(()=>a='fulfilled',e=>a=e instanceof TypeError?'rejected':'wrong'); bound.then(()=>b='fulfilled',e=>b=e instanceof TypeError?'rejected':'wrong');", backend).unwrap();
+            assert_eq!(i.run_script_with_backend("a+','+b", backend).unwrap(), JsValue::str("rejected,rejected"));
+            assert_eq!(i.run_script_with_backend(
+                "var target; new Promise((resolve) => { target=resolve; }); Object.keys(target).length===0 && Object.getOwnPropertyNames(target).every(k => k!=='[[PromiseTarget]]')",
+                backend,
+            ).unwrap(), JsValue::Bool(true));
+        }
+    }
+
+    #[test]
+    fn resolving_with_pending_promise_keeps_outer_pending() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let source = "var settled=false; var inner=new Promise(()=>{}); new Promise(resolve=>resolve(inner)).then(()=>settled=true); settled";
+            assert_eq!(i.run_script_with_backend(source, backend).unwrap(), JsValue::Bool(false));
+        }
+    }
+
+    #[test]
+    fn accessors_keep_callable_identity_and_strict_receiver() {
+        for backend in [ExecutionBackend::TreeWalk, ExecutionBackend::Bytecode] {
+            let mut i = Interpreter::new();
+            let source = "var get=function(){'use strict'; return this}; var set=function(v){'use strict'; this.saved=v}; Object.defineProperty(Number.prototype,'slot',{get:get,set:set,configurable:true}); var d=Object.getOwnPropertyDescriptor(Number.prototype,'slot'); var r=Reflect.getOwnPropertyDescriptor(Number.prototype,'slot'); d.get===get && d.set===set && r.get===get && r.set===set && (5).slot===5";
+            assert_eq!(i.run_script_with_backend(source, backend).unwrap(), JsValue::Bool(true), "{backend:?}");
+        }
+    }
+
+    #[test]
+    fn arrows_capture_enclosing_arguments_across_native_calls() {
+        let mut i = Interpreter::new();
+        for source in [
+            "function outer(a,b){ return [0].map(() => arguments.length)[0] }; outer(1,2)===2",
+            "var inner; function outer(x){ inner=()=>arguments[0] }; outer(42); inner()===42",
+        ] {
+            assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true), "{source}");
+        }
+    }
+
+    #[test]
     fn native_error_constructors_inherit_error_constructor() {
         let mut i = Interpreter::new();
         let source = "['EvalError','RangeError','ReferenceError','SyntaxError','TypeError','URIError'].every(name => Object.getPrototypeOf(globalThis[name])===Error && Object.getPrototypeOf(globalThis[name].prototype)===Error.prototype)";
         assert_eq!(i.run_script(source).unwrap(), JsValue::Bool(true));
+        let sort = i.array_proto.borrow().get_own("sort").unwrap();
+        let thrown = i.call_value(&sort, JsValue::Null, vec![]).unwrap_err();
+        let JsValue::Object(error) = thrown.0 else { panic!("native TypeError is not an object") };
+        let type_error = i.global_env.resolve("TypeError").unwrap();
+        let prototype = i.get_prop(&type_error, "prototype").unwrap();
+        assert_eq!(error.borrow().proto.clone().map(JsValue::Object), Some(prototype));
+        assert_eq!(i.run_script("try { Array.prototype.sort.call(null) } catch(e) { e.constructor===TypeError && e instanceof TypeError && e instanceof Error }").unwrap(), JsValue::Bool(true));
     }
 
     #[test]

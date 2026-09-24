@@ -67,6 +67,9 @@ fn primitive_and_operator_differential_corpus() {
         "(function(){ return this===globalThis })()",
         "(function(){ 'use strict'; return this===undefined })()",
         "(function(){ return Object.getPrototypeOf(this)===Number.prototype }).call(5)",
+        "function outer(a,b){ return [0].map(() => arguments.length)[0] }; outer(1,2)",
+        "var inner; function outer(x){ inner=()=>arguments[0] }; outer(42); inner()",
+
         "'10' < '2'",
         "'10' > 2",
         "2 <= 2",

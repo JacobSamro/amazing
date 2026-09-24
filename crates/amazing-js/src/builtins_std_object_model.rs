@@ -113,8 +113,8 @@ impl Interpreter {
                 configurable: fields.configurable.unwrap_or(false), getter: None, setter: None,
             };
             if new_accessor {
-                property.getter = fields.get.as_ref().and_then(callable_function).map(Box::new);
-                property.setter = fields.set.as_ref().and_then(callable_function).map(Box::new);
+                property.getter = fields.get.as_ref().filter(|value| callable_function(value).is_some()).cloned();
+                property.setter = fields.set.as_ref().filter(|value| callable_function(value).is_some()).cloned();
             } else {
                 property.value = fields.value.unwrap_or(JsValue::Undefined);
                 property.writable = fields.writable.unwrap_or(false);
@@ -141,7 +141,7 @@ impl Interpreter {
                     if let Some(requested) = requested {
                         let same = match (requested, old) {
                             (JsValue::Undefined, None) => true,
-                            (JsValue::Object(object), Some(function)) => object.borrow().func.as_ref().is_some_and(|candidate| candidate.name == function.name),
+                            (requested, Some(function)) => std_same_value(requested, function),
                             _ => false,
                         };
                         if !same { return Ok(false); }
@@ -166,8 +166,8 @@ impl Interpreter {
         if let Some(writable) = fields.writable { property.writable = writable; }
         if let Some(enumerable) = fields.enumerable { property.enumerable = enumerable; }
         if let Some(configurable) = fields.configurable { property.configurable = configurable; }
-        if let Some(get) = fields.get { property.getter = callable_function(&get).map(Box::new); }
-        if let Some(set) = fields.set { property.setter = callable_function(&set).map(Box::new); }
+        if let Some(get) = fields.get { property.getter = callable_function(&get).map(|_| get); }
+        if let Some(set) = fields.set { property.setter = callable_function(&set).map(|_| set); }
         if let Some(name) = key.as_string() {
             if self.legacy_define(target, name, &property)? { return Ok(true); }
         }
@@ -199,7 +199,7 @@ impl Interpreter {
             } else { object.borrow().own_prop(key).cloned() };
             if let Some(property) = property {
                 if let Some(setter) = property.setter {
-                    self.call_value(&JsValue::object(JsObject::function(*setter)), receiver, vec![value])?;
+                    self.call_value(&setter, receiver, vec![value])?;
                     return Ok(true);
                 }
                 if property.getter.is_some() || !property.writable { return Ok(false); }

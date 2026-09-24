@@ -6,6 +6,7 @@ fn has_use_strict_directive(statements: &[ast::Stmt]) -> bool {
 
 // Interpreter binding and reference helpers.
 
+
 fn reference_name(reference: &Reference) -> Option<String> {
     match reference {
         Reference::Binding(name) => Some(name.clone()),
@@ -45,4 +46,3 @@ fn for_iteration_env(left: &ForLeft, env: &EnvHandle) -> EnvHandle {
         _ => env.clone(),
     }
 }
-

@@ -115,13 +115,8 @@ fn std_reflect_get_own_property_descriptor(i: &mut Interpreter, _: JsValue, args
     let mut descriptor = JsObject::ordinary();
     descriptor.proto = Some(i.object_proto.clone());
     if property.getter.is_some() || property.setter.is_some() {
-        let accessor = |function: Option<Box<JsFunction>>| function.map(|function| {
-            let mut object = JsObject::function(*function);
-            object.proto = Some(i.function_proto.clone());
-            JsValue::object(object)
-        }).unwrap_or(JsValue::Undefined);
-        descriptor.set_own("get", accessor(property.getter));
-        descriptor.set_own("set", accessor(property.setter));
+        descriptor.set_own("get", property.getter.unwrap_or(JsValue::Undefined));
+        descriptor.set_own("set", property.setter.unwrap_or(JsValue::Undefined));
     } else {
         descriptor.set_own("value", property.value);
         descriptor.set_own("writable", JsValue::Bool(property.writable));

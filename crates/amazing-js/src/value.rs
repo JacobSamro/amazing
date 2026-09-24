@@ -547,9 +547,9 @@ pub struct Property {
     pub writable: bool,
     pub enumerable: bool,
     pub configurable: bool,
-    /// Getter/setter payloads reserved for accessor properties.
-    pub getter: Option<Box<JsFunction>>,
-    pub setter: Option<Box<JsFunction>>,
+    /// Original callable objects retain strictness, identity, and private slots.
+    pub getter: Option<JsValue>,
+    pub setter: Option<JsValue>,
 }
 
 impl Property {
@@ -773,7 +773,7 @@ pub enum PromiseFate {
 /// One queued `then` reaction: callback + resolution capability placeholder.
 #[derive(Debug, Clone)]
 pub struct PendingReaction {
-    pub handler: Option<JsFunction>,
+    pub handler: Option<JsValue>,
     /// Which promise the reaction settles (chained .then result).
     pub capability: Obj,
     /// `true` when this is the reject path of a `then(on_ful, on_rej)` pair.
@@ -805,6 +805,8 @@ pub struct JsObject {
     pub(crate) is_html_dda: bool,
     /// Strictness captured when an ECMAScript function is created.
     pub(crate) strict_function: bool,
+    /// Promise capability captured by a native resolve or reject function.
+    pub(crate) promise_target: Option<Obj>,
 }
 
 impl Default for JsObject {
@@ -829,6 +831,7 @@ impl JsObject {
             host_identity: None,
             is_html_dda: false,
             strict_function: false,
+            promise_target: None,
         }
     }
 

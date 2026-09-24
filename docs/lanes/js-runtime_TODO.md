@@ -500,3 +500,10 @@ integrity model is made complete.
 ## Queued JSRT-8 internal-slot cleanup
 
 Move `[[...]]` pseudo-properties such as `[[NumberData]]`, `[[StringData]]`, and `[[DateValue]]` out of ordinary property storage into a real `JsObject` internal-slot field. Reflection through `getOwnPropertyNames`, `for...in`, JSON, and `Object.create` must never reveal them. Coordinate the call-site migration with js-stdlib and js-binary. The current Number constructor has a narrow non-enumerable descriptor fix to preserve Object.create conformance until this migration.
+## JSRT-9 — multiple realms in one agent (after built-in audit)
+
+Give each realm its own intrinsics, global object, and global environment in the shared agent heap. Switch to a callable's [[Realm]] during a call, allow shared cross-realm objects, and expose host creation with a custom Window global for HTML-25 iframes. Add `$262.createRealm` to both Test262 hosts and report the resulting full-corpus gain; preserve `intl402: true`.
+
+Accepted seam: `binding_create_realm(global) -> RealmHandle` plus realm-scoped eval and call. Include a host-created WindowProxy exotic whose target global swaps on navigation while identity remains stable; one agent-wide microtask/job queue; current, entry, and incumbent realm accessors; realm-specific Error prototypes; and Test262 `$262.createRealm` through this same API. Ask html for any remaining hooks before locking.
+
+HTML-25 additionally needs scoped realm entry/restoration for realm-specific `binding_global_object`, constructor/prototype installation, and `binding_wrap_host`; WindowProxy get/set hooks with entry/incumbent realm and target origin for cross-origin checks after navigation; and host-native dispatch/`HostHandle` identity across parent-to-child calls, with child-realm error intrinsics.

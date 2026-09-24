@@ -687,7 +687,15 @@ impl FunctionCode {
             home: None,
             proto_for_new: None,
         });
-        object.proto = Some(i.function_proto.clone());
+        object.proto = Some(if self.0.is_async && self.0.is_generator {
+            i.async_generator_function_proto.clone()
+        } else if self.0.is_async {
+            i.async_function_proto.clone()
+        } else if self.0.is_generator {
+            i.generator_function_proto.clone()
+        } else {
+            i.function_proto.clone()
+        });
         object.strict_function = self.0.strict;
         let handle = Obj(Rc::new(RefCell::new(object)));
         if self.0.is_generator || self.0.is_async {
@@ -740,12 +748,14 @@ impl FunctionCode {
                 true,
             )?;
         }
-        let arguments = JsValue::object(JsObject::array());
-        for (index, value) in args.iter().enumerate() {
-            i.set_prop(&arguments, &index.to_string(), value.clone())?;
+        if !is_arrow {
+            let arguments = JsValue::object(JsObject::array());
+            for (index, value) in args.iter().enumerate() {
+                i.set_prop(&arguments, &index.to_string(), value.clone())?;
+            }
+            i.set_prop(&arguments, "length", JsValue::num(args.len() as f64))?;
+            env.declare_var("arguments", arguments)?;
         }
-        i.set_prop(&arguments, "length", JsValue::num(args.len() as f64))?;
-        env.declare_var("arguments", arguments)?;
         if self.0.is_generator {
             let mut object = JsObject::ordinary();
             object.proto = generator_proto.or_else(|| Some(i.object_proto.clone()));

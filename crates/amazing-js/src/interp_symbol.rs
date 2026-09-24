@@ -57,10 +57,9 @@ impl Interpreter {
                 prototype.define(name, symbol_data(symbol_method(self, name, native), true, true)).unwrap();
             }
             let getter = symbol_method(self, "get description", native_symbol_description);
-            let getter = match getter { JsValue::Object(object) => object.borrow().func.clone().unwrap(), _ => unreachable!() };
             prototype.define("description", Property {
                 value: JsValue::Undefined, writable: false, enumerable: false, configurable: true,
-                getter: Some(Box::new(getter)), setter: None,
+                getter: Some(getter), setter: None,
             }).unwrap();
             let to_primitive = symbol_method(self, "[Symbol.toPrimitive]", native_symbol_value_of);
             symbol_method_length(&to_primitive, 1);

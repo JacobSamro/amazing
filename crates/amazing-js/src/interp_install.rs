@@ -507,7 +507,11 @@ impl Interpreter {
         self.install_intl_builtins();
     }
     fn define_global(&self, n: &str, v: JsValue) {
-        self.global_obj.borrow_mut().set_own(n, v.clone());
+        let constant = matches!(n, "undefined" | "NaN" | "Infinity");
+        let _ = self.global_obj.borrow_mut().define(n, Property {
+            value: v.clone(), writable: !constant, enumerable: false,
+            configurable: !constant, getter: None, setter: None,
+        });
         let _ = self.global_env.declare_var(n, v);
     }
 }
