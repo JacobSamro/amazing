@@ -153,6 +153,7 @@ impl ContainerSpec {
 }
 
 fn parse_pack(v: Option<&str>, default: Pack) -> Pack {
+    let v = v.map(strip_overflow_position);
     match v {
         Some(v) if v.eq_ignore_ascii_case("flex-end") || v.eq_ignore_ascii_case("end") => Pack::End,
         Some(v) if v.eq_ignore_ascii_case("center") => Pack::Center,
@@ -165,6 +166,7 @@ fn parse_pack(v: Option<&str>, default: Pack) -> Pack {
 }
 
 fn parse_align(v: Option<&str>, default: Pack) -> Pack {
+    let v = v.map(strip_overflow_position);
     match v {
         Some(v) if v.eq_ignore_ascii_case("baseline") || v.eq_ignore_ascii_case("first baseline") => Pack::Baseline,
         Some(v) if v.eq_ignore_ascii_case("flex-start") || v.eq_ignore_ascii_case("start") => {
@@ -174,6 +176,17 @@ fn parse_align(v: Option<&str>, default: Pack) -> Pack {
         Some(v) if v.eq_ignore_ascii_case("center") => Pack::Center,
         Some(v) if v.eq_ignore_ascii_case("stretch") => Pack::Stretch,
         _ => default,
+    }
+}
+
+pub(crate) fn strip_overflow_position(value: &str) -> &str {
+    let value = value.trim();
+    if let Some((keyword, position)) = value.split_once(' ')
+        && (keyword.eq_ignore_ascii_case("safe") || keyword.eq_ignore_ascii_case("unsafe"))
+    {
+        position.trim()
+    } else {
+        value
     }
 }
 
@@ -663,10 +676,10 @@ fn layout_row(
         if let Some((ascent, descent)) = baseline_metrics {
             line_cross = line_cross.max(ascent + descent);
         }
-        // A single line under default `align-content: stretch` first
-        // grows to the container's definite cross size; items then
-        // stretch into the grown line below.
-        if lines.len() == 1 && spec.align_content == Pack::Stretch {
+        // A single-line flex container's line fills its definite cross size
+        // regardless of align-content. That property distributes *lines* in
+        // multi-line containers; align-items positions items within this line.
+        if lines.len() == 1 {
             if let Some(def_h) = spec.definite_height {
                 line_cross = line_cross.max(def_h);
             }
@@ -1502,6 +1515,12 @@ mod tests {
     }
 
     #[test]
+    fn safe_alignment_uses_position_when_space_is_available() {
+        assert_eq!(parse_pack(Some("safe center"), Pack::Start), Pack::Center);
+        assert_eq!(parse_align(Some("safe flex-end"), Pack::Start), Pack::End);
+    }
+
+    #[test]
     fn justify_space_between_pins_to_edges() {
         let root = lay(
             "<body><div style=\"display:flex;justify-content:space-between\"><div style=\"width:50px;height:10px\"></div><div style=\"width:50px;height:10px\"></div></div></body>",
@@ -1522,6 +1541,17 @@ mod tests {
         );
         let k = kids(&root);
         assert!(close(k[0].border_box.y - 8.0, 30.0), "y={}", k[0].border_box.y);
+    }
+
+    #[test]
+    fn single_flex_line_fills_cross_size_even_with_align_content_center() {
+        let root = lay(
+            "<body><div style='display:flex;height:100px;align-content:center;align-items:start'><div style='width:50px;height:20px'></div></div></body>",
+            "",
+            800.0,
+        );
+        let item = &kids(&root)[0];
+        assert!(close(item.border_box.y, 8.0), "y={}", item.border_box.y);
     }
 
     #[test]
