@@ -1,0 +1,16 @@
+{
+  "ticket": "LAYOUT-15",
+  "base": "f676798d01963a49fbb1826a2b3c9902c5335662",
+  "candidate": "811c3852cf5637a2b7bed403b4c5065b778ee0b7",
+  "wpt_revision": "c2a2fce69e5c2509d9dc28440ec8b42532e5c293",
+  "files": [
+    {
+      "path": "crates/amazing-layout/src/lib.rs",
+      "sha256": "93185f2010ec51d230f90c18d5669b96fa6297ff751fa30b7d8be6487f86d661"
+    },
+    {
+      "path": "crates/amazing-layout/src/retained.rs",
+      "sha256": "0cacbae4bd20d74a0be0cf1d4d32f2776b3597065bff965c44796f0449e1512b"
+    }
+  ]
+}

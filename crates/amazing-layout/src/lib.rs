@@ -90,6 +90,7 @@ mod grid_algorithm;
 pub mod inline;
 pub mod position;
 pub mod replaced;
+pub mod retained;
 mod svg;
 pub mod values;
 
@@ -313,7 +314,7 @@ pub enum InlineNode {
         style: Box<amazing_text::TextStyle>,
         /// Used CSS letter spacing in px; applied between visual character units.
         letter_spacing: f32,
-        /// Used CSS word spacing; the percentage is relative to the space advance.
+        /// Used CSS word spacing; the percentage is relative to the current font size.
         word_spacing: values::LengthPercentage,
         color: String,
         background_color: String,
