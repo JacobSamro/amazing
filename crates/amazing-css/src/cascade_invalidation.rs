@@ -513,8 +513,8 @@ impl StyleInvalidator {
     }
 
     pub fn new_with_environment(author_sheets: &[Stylesheet], stylesheet_epoch: u64, environment: MediaEnvironment) -> Self {
-        let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true);
-        let author_rules = compile_sheets(author_sheets, false);
+        let ua_rules = compile_sheets(&[parse_stylesheet(UA_SHEET)], true, &environment);
+        let author_rules = compile_sheets(author_sheets, false, &environment);
         let mut features = FeatureIndex::default();
         for (is_ua, rules) in [(true, &ua_rules), (false, &author_rules)] {
             for (index, rule) in rules.iter().enumerate() {
@@ -673,8 +673,10 @@ impl StyleInvalidator {
                 if inline || matched { roots.push(node); }
             }
         }
+        let conditional_media = self.context.author_sheets.iter().any(|sheet|
+            sheet.rules.iter().any(|rule| !rule.media.is_empty()));
         RecalcRoots { roots, following_siblings: Vec::new(),
-            full: stylesheet_epoch != self.context.epoch, stylesheet_epoch,
+            full: stylesheet_epoch != self.context.epoch || (changed && conditional_media), stylesheet_epoch,
             context: Arc::clone(&self.context), environment }
     }
 
@@ -897,7 +899,7 @@ pub fn recompute_roots(dom: &Dom, old_styles: &StyledDom, roots: RecalcRoots) ->
         recalculated.sort();
         if !recalculated.is_empty() {
             out.generated.clear();
-            crate::generated::resolve_document(dom, &mut out);
+            crate::generated::resolve_document(dom, &mut out, &roots.context.author_sheets, &roots.environment);
         }
         (out, recalculated)
     };
