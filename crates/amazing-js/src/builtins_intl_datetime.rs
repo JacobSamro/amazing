@@ -70,8 +70,8 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     if matches!(options, JsValue::Null) { return Err(Throw::type_error("null DateTimeFormat options")); }
     let _matcher = intl_string_option(i, &options, "localeMatcher", &["lookup", "best fit"], "best fit")?;
     let calendar_option = intl_string_option(i, &options, "calendar", &[], "gregory")?;
-    if !(3..=8).contains(&calendar_option.len())
-        || !calendar_option.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+    if calendar_option.split('-').any(|part| !(3..=8).contains(&part.len())
+        || !part.bytes().all(|byte| byte.is_ascii_alphanumeric())) {
         return Err(Throw::range_error("invalid calendar"));
     }
     // A well-formed but unavailable calendar falls back to the locale default.
@@ -88,9 +88,9 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     let time_style = intl_optional_string(i, &options, "timeStyle", &["full", "long", "medium", "short"])?;
     let weekday = intl_optional_string(i, &options, "weekday", &["narrow", "short", "long"])?;
     let era = intl_optional_string(i, &options, "era", &["narrow", "short", "long"])?;
-    let year = intl_optional_string(i, &options, "year", &["2-digit", "numeric"])?;
-    let month = intl_optional_string(i, &options, "month", &["2-digit", "numeric", "narrow", "short", "long"])?;
-    let day = intl_optional_string(i, &options, "day", &["2-digit", "numeric"])?;
+    let mut year = intl_optional_string(i, &options, "year", &["2-digit", "numeric"])?;
+    let mut month = intl_optional_string(i, &options, "month", &["2-digit", "numeric", "narrow", "short", "long"])?;
+    let mut day = intl_optional_string(i, &options, "day", &["2-digit", "numeric"])?;
     let day_period = intl_optional_string(i, &options, "dayPeriod", &["narrow", "short", "long"])?;
     let hour = intl_optional_string(i, &options, "hour", &["2-digit", "numeric"])?;
     let minute = intl_optional_string(i, &options, "minute", &["2-digit", "numeric"])?;
@@ -107,11 +107,19 @@ fn intl_date_ctor(i: &mut Interpreter, this: JsValue, args: Vec<JsValue>) -> Res
     {
         return Err(Throw::type_error("dateStyle/timeStyle conflicts with components"));
     }
+    if date_style.is_none() && time_style.is_none()
+        && [weekday.as_ref(), era.as_ref(), year.as_ref(), month.as_ref(), day.as_ref(), day_period.as_ref(),
+            hour.as_ref(), minute.as_ref(), second.as_ref(), time_zone_name.as_ref()].iter().all(|field| field.is_none())
+        && fractional_second_digits.is_none() {
+        year = Some("numeric".into());
+        month = Some("numeric".into());
+        day = Some("numeric".into());
+    }
     let hour_cycle_option = intl_optional_string(i, &options, "hourCycle", &["h11", "h12", "h23", "h24"])?;
     let hour12 = i.get_prop(&options, "hour12")?;
     let default_cycle = if ["en", "ar"].contains(&locale.as_str()) { "h12" } else { "h23" };
     let hour_cycle = if !hour12.is_undefined() {
-        if hour12.to_boolean() { "h12" } else { "h23" }.to_string()
+        if hour12.to_boolean() { if locale == "ja" { "h11" } else { "h12" } } else { "h23" }.to_string()
     } else { hour_cycle_option.unwrap_or_else(|| default_cycle.into()) };
     let state = IntlDateState {
         locale, calendar, numbering_system, time_zone,

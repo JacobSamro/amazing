@@ -85,7 +85,7 @@ pub(crate) fn tz_canonicalize(id: &str) -> Option<String> {
         return Some(["UTC", "Etc/UTC", "Etc/GMT"].into_iter()
             .find(|name| name.eq_ignore_ascii_case(id)).unwrap().into());
     }
-    if id.eq_ignore_ascii_case("GMT") { return Some("UTC".into()); }
+    if id.eq_ignore_ascii_case("GMT") { return Some("GMT".into()); }
     if let Some(seconds) = tz_fixed_offset_seconds(id) {
         let minutes = seconds.unsigned_abs() / 60;
         return Some(format!("{}{:02}:{:02}", if seconds < 0 { '-' } else { '+' },
