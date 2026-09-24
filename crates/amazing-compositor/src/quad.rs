@@ -95,6 +95,12 @@ pub enum DrawQuad {
     SolidColor(SolidColorQuad),
     Pass(PassQuad),
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QuadLayer {
+    Tile(usize),
+    Solid(usize),
+    Pass(usize),
+}
 #[derive(Debug, Clone, PartialEq)]
 pub struct RenderPass {
     pub id: usize,
@@ -440,6 +446,70 @@ impl Compositor {
 #[derive(Default)]
 pub struct ReferenceCpuPresenter {
     pub resources: ResourceTable,
+    layer_boundaries: Vec<bool>,
+    presented_size: (u32, u32),
+}
+impl ReferenceCpuPresenter {
+    /// True after present where a partially transparent layer pixel was
+    /// blended over a pixel contributed by a different quad.
+    pub fn is_layer_boundary(&self, x: u32, y: u32) -> bool {
+        if x >= self.presented_size.0 || y >= self.presented_size.1 {
+            return false;
+        }
+        self.layer_boundaries
+            .get(y as usize * self.presented_size.0 as usize + x as usize)
+            .copied()
+            .unwrap_or(false)
+    }
+}
+/// Comparison of a presented frame against a full-paint reference.
+/// A one-unit channel difference is tolerated only at a recorded layer
+/// boundary; all other differing pixels are parity losses.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PixelParity {
+    pub exact: u64,
+    pub layer_rounding: u64,
+    pub losses: u64,
+    pub first_loss: Option<PixelParityLoss>,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PixelParityLoss {
+    pub x: u32,
+    pub y: u32,
+    pub candidate: [u8; 4],
+    pub full: [u8; 4],
+}
+pub fn classify_pixel_parity(
+    presenter: &ReferenceCpuPresenter,
+    candidate: &Surface,
+    full: &Surface,
+) -> PixelParity {
+    let mut result = PixelParity::default();
+    if (candidate.width, candidate.height) != (full.width, full.height)
+        || (candidate.width, candidate.height) != presenter.presented_size
+    {
+        result.losses = 1;
+        return result;
+    }
+    for y in 0..candidate.height {
+        for x in 0..candidate.width {
+            let a = candidate.get_pixel(x, y).unwrap_or([0; 4]);
+            let b = full.get_pixel(x, y).unwrap_or([0; 4]);
+            if a == b {
+                result.exact += 1;
+            } else if presenter.is_layer_boundary(x, y)
+                && a.iter().zip(b).all(|(left, right)| left.abs_diff(right) <= 1)
+            {
+                result.layer_rounding += 1;
+            } else {
+                result.losses += 1;
+                result.first_loss.get_or_insert(PixelParityLoss {
+                    x, y, candidate: a, full: b,
+                });
+            }
+        }
+    }
+    result
 }
 fn resource_pixel(
     resources: &ResourceTable,
@@ -560,7 +630,7 @@ impl ReferenceCpuPresenter {
         frame: &CompositorFrame,
         pass_id: usize,
         depth: usize,
-    ) -> Result<Surface, PresenterError> {
+    ) -> Result<(Surface, Vec<bool>), PresenterError> {
         if depth > 16 {
             return Err(PresenterError::PassCycle);
         }
@@ -569,7 +639,15 @@ impl ReferenceCpuPresenter {
             .get(pass_id)
             .ok_or(PresenterError::MissingPass(pass_id))?;
         let mut out = Surface::new(frame.width, frame.height);
-        for quad in &pass.quads {
+        let len = frame.width as usize * frame.height as usize;
+        let mut boundaries = vec![false; len];
+        let mut owner = vec![None; len];
+        for (quad_index, quad) in pass.quads.iter().enumerate() {
+            let layer = match quad {
+                DrawQuad::Tile(q) => QuadLayer::Tile(q.layer),
+                DrawQuad::SolidColor(_) => QuadLayer::Solid(quad_index),
+                DrawQuad::Pass(q) => QuadLayer::Pass(q.pass_id),
+            };
             match quad {
                 DrawQuad::Tile(q) => {
                     if self.resources.get(q.resource_id).is_none() {
@@ -614,6 +692,15 @@ impl ReferenceCpuPresenter {
                                 continue;
                             }
                             let dst = out.get_pixel(x, y).unwrap_or([0; 4]);
+                            let index = y as usize * frame.width as usize + x as usize;
+                            let alpha = (src[3] as u32
+                                * amazing_paint::quantize_opacity(q.opacity) as u32 + 127) / 255;
+                            if alpha > 0 && alpha < 255 && dst[3] > 0
+                                && owner[index] != Some(layer) {
+                                boundaries[index] = true;
+                            }
+                            if alpha == 255 { boundaries[index] = false; }
+                            if alpha > 0 { owner[index] = Some(layer); }
                             out.set_pixel(x, y, blend(dst, src, q.opacity, q.blend))
                         }
                     }
@@ -633,12 +720,21 @@ impl ReferenceCpuPresenter {
                                 continue;
                             }
                             let dst = out.get_pixel(x, y).unwrap_or([0; 4]);
+                            let index = y as usize * frame.width as usize + x as usize;
+                            let alpha = (q.color[3] as u32
+                                * amazing_paint::quantize_opacity(q.opacity) as u32 + 127) / 255;
+                            if alpha > 0 && alpha < 255 && dst[3] > 0
+                                && owner[index] != Some(layer) {
+                                boundaries[index] = true;
+                            }
+                            if alpha == 255 { boundaries[index] = false; }
+                            if alpha > 0 { owner[index] = Some(layer); }
                             out.set_pixel(x, y, blend(dst, q.color, q.opacity, q.blend))
                         }
                     }
                 }
                 DrawQuad::Pass(q) => {
-                    let sub = self.draw_pass(frame, q.pass_id, depth + 1)?;
+                    let (sub, sub_boundaries) = self.draw_pass(frame, q.pass_id, depth + 1)?;
                     let draw = intersect(
                         intersect(q.rect, q.clip_rect),
                         Rect::new(0., 0., frame.width as f32, frame.height as f32),
@@ -659,13 +755,25 @@ impl ReferenceCpuPresenter {
                                 continue;
                             }
                             let dst = out.get_pixel(x, y).unwrap_or([0; 4]);
+                            let index = y as usize * frame.width as usize + x as usize;
+                            let alpha = (src[3] as u32
+                                * amazing_paint::quantize_opacity(q.opacity) as u32 + 127) / 255;
+                            if alpha > 0 {
+                                if alpha == 255 { boundaries[index] = false; }
+                                boundaries[index] |= sub_boundaries[index];
+                                if alpha < 255 && dst[3] > 0
+                                    && owner[index] != Some(layer) {
+                                    boundaries[index] = true;
+                                }
+                                owner[index] = Some(layer);
+                            }
                             out.set_pixel(x, y, blend(dst, src, q.opacity, q.blend))
                         }
                     }
                 }
             }
         }
-        Ok(out)
+        Ok((out, boundaries))
     }
 }
 impl Presenter for ReferenceCpuPresenter {
@@ -673,7 +781,10 @@ impl Presenter for ReferenceCpuPresenter {
     type Error = PresenterError;
     fn present(&mut self, frame: &CompositorFrame) -> Result<Surface, PresenterError> {
         self.resources.apply(&frame.resources)?;
-        self.draw_pass(frame, 0, 0)
+        let (out, boundaries) = self.draw_pass(frame, 0, 0)?;
+        self.layer_boundaries = boundaries;
+        self.presented_size = (frame.width, frame.height);
+        Ok(out)
     }
 }
 
@@ -688,6 +799,64 @@ mod tests {
             blend([191, 191, 191, 255], [0, 0, 0, 255], 0.5, BlendMode::Normal),
             [95, 95, 95, 255],
         );
+    }
+
+    #[test]
+    fn parity_tolerates_one_unit_only_at_translucent_layer_boundary() {
+        let mut pixels = vec![0; 256 * 256 * 4];
+        pixels[3] = 145;
+        pixels[4..8].copy_from_slice(&[0, 0, 0, 255]);
+        let frame = CompositorFrame {
+            width: 3,
+            height: 1,
+            passes: vec![RenderPass {
+                id: 0, effect_node: None, clip_node: None,
+                quads: vec![
+                    DrawQuad::SolidColor(SolidColorQuad {
+                        rect: Rect::new(0., 0., 3., 1.),
+                        color: [221, 221, 221, 255],
+                        clip_rect: Rect::new(0., 0., 3., 1.),
+                        opacity: 1., blend: BlendMode::Normal,
+                    }),
+                    DrawQuad::Tile(TileQuad {
+                        resource_id: ResourceId(1),
+                        rect: Rect::new(0., 0., 2., 1.),
+                        content_rect: Rect::new(0., 0., 2., 1.),
+                        transform: Matrix4::IDENTITY,
+                        clip_rect: Rect::new(0., 0., 3., 1.),
+                        opacity: 1., blend: BlendMode::Normal,
+                        state: PropertyTreeState::default(), layer: 0,
+                    }),
+                ],
+            }],
+            resources: ResourceDelta {
+                uploads: vec![ResourceUpload {
+                    id: ResourceId(1), width: 256, height: 256, pixels,
+                }],
+                evictions: Vec::new(),
+            },
+            damage: Vec::new(),
+            trees: PropertyTrees::new(),
+            tile_lookup: HashMap::from([((0, 0, 0), ResourceId(1))]),
+        };
+        let mut presenter = ReferenceCpuPresenter::default();
+        let candidate = presenter.present(&frame).unwrap();
+        assert!(presenter.is_layer_boundary(0, 0));
+        assert!(!presenter.is_layer_boundary(1, 0));
+        assert!(!presenter.is_layer_boundary(2, 0));
+        let mut full = candidate.clone();
+        let mut changed = full.get_pixel(0, 0).unwrap();
+        changed[0] += 1;
+        full.set_pixel(0, 0, changed);
+        assert_eq!(classify_pixel_parity(&presenter, &candidate, &full).layer_rounding, 1);
+        changed[0] += 1;
+        full.set_pixel(0, 0, changed);
+        assert_eq!(classify_pixel_parity(&presenter, &candidate, &full).losses, 1);
+        full = candidate.clone();
+        let mut changed = full.get_pixel(1, 0).unwrap();
+        changed[0] += 1;
+        full.set_pixel(1, 0, changed);
+        assert_eq!(classify_pixel_parity(&presenter, &candidate, &full).losses, 1);
     }
 
     struct Colors(Cell<u8>);
